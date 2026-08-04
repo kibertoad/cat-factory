@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import type { AgentKind, Pipeline } from '~/types/domain'
 import { companionForProducer } from '~/utils/catalog'
 import type { PipelinesContext } from './context'
+import { createPipelineGateConfigActions } from './draftGateConfig'
 import { createPipelineStepConfigActions } from './draftStepConfig'
 
 /**
@@ -192,6 +193,7 @@ export function createPipelineDraftActions(ctx: PipelinesContext) {
 
   return {
     ...createPipelineStepConfigActions(ctx),
+    ...createPipelineGateConfigActions(ctx),
     addToDraft,
     removeFromDraft,
     moveInDraft,

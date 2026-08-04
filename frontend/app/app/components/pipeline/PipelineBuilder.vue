@@ -6,6 +6,7 @@ import AgentPalette from '~/components/palettes/AgentPalette.vue'
 import AgentKindIcon from '~/components/pipeline/AgentKindIcon.vue'
 import AgentPromptEditor from '~/components/pipeline/AgentPromptEditor.vue'
 import EstimateThresholdFields from '~/components/pipeline/EstimateThresholdFields.vue'
+import GateConfigFields from '~/components/pipeline/GateConfigFields.vue'
 import OutputBudgetInput from '~/components/pipeline/OutputBudgetInput.vue'
 import BinaryOutputStepPicker from '~/components/pipeline/BinaryOutputStepPicker.vue'
 import { ESTIMATE_AXES, ESTIMATE_AXIS_FIELD, type EstimateAxis } from '~/utils/estimateGating'
@@ -162,6 +163,23 @@ function inheritedOutputBudget(kind: AgentKind): number | undefined {
 function showVariantPicker(index: number, kind: AgentKind): boolean {
   if (!agents.variantsForKind(kind).length) return false
   return showOverrideField(uiMode.isAdvanced, pipelines.draftAgentVariantId(index) ?? null)
+}
+
+/**
+ * Whether to offer this step's GATE configuration (approvers + required approvals, and any
+ * parameters its registered gate declares). There has to be something to configure: either the
+ * step carries a human approval gate, or its kind has a registered gate that declares parameters.
+ *
+ * Then it is an OVERRIDE like the variant picker above — advanced-only until a value is actually
+ * set, and visible in both tiers from then on. That second half is load-bearing here rather than
+ * cosmetic: the builder saves the whole step-options bag, so a configured policy invisible to a
+ * basic-mode editor would be a policy they silently save over.
+ */
+function showGateConfig(index: number, kind: AgentKind): boolean {
+  const gated = pipelines.draftGates[index] === true
+  const declaresFields = pipelines.gateConfigForms.some((form) => form.kind === kind)
+  if (!gated && !declaresFields) return false
+  return showOverrideField(uiMode.isAdvanced, pipelines.draftGateConfig(index) ?? null)
 }
 
 /**
@@ -842,6 +860,19 @@ async function clone(p: Pipeline) {
                   "
                 />
               </div>
+
+              <!-- Gate configuration: who may clear this step's approval gate and how many of
+                 them, plus the parameters its registered gate declares. An OVERRIDE of the
+                 defaults (one approval from anyone entitled to write, the gate's shipped knobs),
+                 so it is advanced-only until a step actually configures something — at which point
+                 it must stay visible in both tiers, or a member editing the pipeline would save
+                 over a policy they were never shown. -->
+              <GateConfigFields
+                v-if="showGateConfig(unit.index, unit.kind)"
+                :index="unit.index"
+                :gated="pipelines.draftGates[unit.index] === true"
+                :kind="unit.kind"
+              />
 
               <!-- Binary-output picker: a generator kind's step is parametrized by the
                  foundational STORAGE service its artifacts go through (`stepOptions.binaryOutput`)

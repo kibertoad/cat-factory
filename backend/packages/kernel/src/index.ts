@@ -344,6 +344,8 @@ export {
   type GateDefinition,
   type GateContext,
   type GateFactory,
+  type GateRegistration,
+  type GateConfigFields,
   recordGateAttempt,
   GateRegistry,
   defaultGateRegistry,
@@ -463,6 +465,20 @@ export {
   describeRegressedSignals,
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
+
+// Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
+// `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve
+// button and renders the tally), and is re-exported here so the engine reaches it alongside the
+// rest of its vocabulary.
+export {
+  type GateActor,
+  type GateApprovalRefusal,
+  UNATTRIBUTED_GATE_ACTOR,
+  foldGateApproval,
+  hasApproverPolicy,
+  refuseGateResolution,
+  requiredGateApprovals,
+} from '@cat-factory/contracts'
 
 // Infrastructure REACHABILITY: the pure decision the watcher sweep and the board snapshot share
 // — what to record, which transitions to announce, and how a recorded outage folds into the

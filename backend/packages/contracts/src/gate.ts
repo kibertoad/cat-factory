@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 import { releaseSignalSchema } from './release.js'
 
 // ---------------------------------------------------------------------------
@@ -118,6 +119,16 @@ export const gateStepStateSchema = v.object({
    * (failing → a helper is fixing) vs idle-passing. Set on every probe.
    */
   lastVerdict: v.optional(v.nullable(v.picklist(['pass', 'pending', 'fail']))),
+  /**
+   * The step's own parameters for this gate (`stepOptions.gateConfig.fields`), copied onto the
+   * gate state ONCE on first entry alongside `maxAttempts` and validated, before it got here,
+   * against the descriptor fields the gate registered. This is how a gate reads a knob off the
+   * STEP rather than off the engine or the workspace-wide merge preset: `probe` receives the live
+   * gate state, so a registered gate reads `gateState.config` with no new plumbing per parameter.
+   *
+   * Absent ⇒ the gate's shipped defaults (which for the built-ins means the preset's values).
+   */
+  config: v.optional(v.nullable(descriptorFieldValuesSchema)),
   /**
    * Human-readable summary of the latest failing precheck (the failing CI checks /
    * the conflict reason) — the conclusion detail that used to be fed only to the

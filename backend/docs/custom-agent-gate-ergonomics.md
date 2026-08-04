@@ -130,6 +130,43 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
   and register the component in `StepResultViewHost.vue`. A structured agent with no bespoke UI
   uses `generic-structured`.
 
+## Per-step gate settings (declared, not hard-coded)
+
+A gate's knobs belong to the gate, not to the engine or to the workspace merge preset. Declare them
+on the REGISTRATION as descriptor fields and they drive three things at once: validation at pipeline
+save, re-validation at run start, and the authoring form the SPA renders in the pipeline builder
+(projected onto the board snapshot as `gateConfigForms`, rendered by the shared
+`DescriptorFields.vue`).
+
+```ts
+gateRegistry.register(MY_GATE_KIND, myGate, {
+  configFields: [
+    { key: 'maxAttempts', label: 'Helper attempts', type: 'number', min: 0, max: 20 },
+    { key: 'soakMinutes', label: 'Soak window (minutes)', type: 'number', min: 1, max: 1440 },
+  ],
+})
+```
+
+The filled values are validated (unknown keys and out-of-range numbers are refused at SAVE, not
+clamped at read) and copied onto the live gate state once on first entry, so the gate reads them off
+`gateState.config` on every poll with no plumbing per parameter:
+
+```ts
+probe: async (workspaceId, blockId, gateState) => {
+  const soak = gateConfigNumber(gateState.config, 'soakMinutes') ?? DEFAULT_SOAK_MINUTES
+  …
+},
+// The GATE decides how its own budget is overridden — the engine never learns the field's name.
+attemptBudget: (preset, config) => gateConfigNumber(config, 'maxAttempts') ?? preset.ciMaxAttempts,
+```
+
+A gate that declares nothing accepts no per-step fields, which is the honest default: an undeclared
+key is indistinguishable from a typo'd one. The built-ins are the worked example
+(`@cat-factory/gates`' `gateConfigFields.ts`); the design record is
+[ADR 0038](./adr/0038-per-step-gate-config.md), which also covers the OTHER half of a step's gate
+config — the approver policy and quorum on a human approval gate, which the platform owns rather
+than the gate.
+
 ## Runtime symmetry rules (recap)
 
 Per CLAUDE.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
@@ -143,6 +180,7 @@ The gates package depends only on kernel + contracts, never on orchestration.
    the surface drives the prompt directives and the container requirement; `presentation.resultView`
    (if set) must be a `RESULT_VIEW_IDS` id.
 3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
-   The `helperKind` must be a registered container kind (or a built-in helper).
+   The `helperKind` must be a registered container kind (or a built-in helper). Pass
+   `{ configFields }` for anything a pipeline step should be able to tune per step.
 4. `pipelineRegistry.register(...)` to chain the kinds.
 5. The facade wires the provider impl onto its `providerRegistry` at startup and (already) calls `validateRegistrationsOnce()`.

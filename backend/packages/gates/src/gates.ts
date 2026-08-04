@@ -41,6 +41,7 @@ import {
   PULL_REQUEST_REVIEW_PROVIDER,
   RELEASE_HEALTH_PROVIDER,
 } from './providers.js'
+import { gateConfigNumber } from './gateConfigFields.js'
 import {
   classifyHumanReview,
   isApproved,
@@ -79,6 +80,10 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
   helperKind: CI_FIXER_AGENT_KIND,
   wired: () => ctx.isProviderWired(CI_STATUS_PROVIDER),
   unwiredOutput: 'CI gate skipped (no CI status provider configured).',
+  // The step's own budget wins over the task's merge preset — the preset is a workspace-wide
+  // policy, and "this pipeline's CI gate gets three rounds" is a property of the pipeline.
+  attemptBudget: (preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? preset.ciMaxAttempts,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
     // Aggregate across EVERY PR the task opened (own-service + peer-service repos on a
     // multi-repo block): a red check in ANY repo fails the gate, and the ci-fixer runs
@@ -140,7 +145,8 @@ export const conflictsGate = (ctx: GateContext): GateDefinition => ({
   helperKind: CONFLICT_RESOLVER_AGENT_KIND,
   wired: () => ctx.isProviderWired(MERGEABILITY_PROVIDER),
   unwiredOutput: 'Conflict gate skipped (no mergeability provider configured).',
-  attemptBudget: () => CONFLICT_RESOLVER_MAX_ATTEMPTS,
+  attemptBudget: (_preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? CONFLICT_RESOLVER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
     // Mergeability is probed PER PR across the task's own + peer repos. Any PR still
     // computing → keep polling; the FIRST conflicted PR (own-service or a peer) becomes the
@@ -226,7 +232,8 @@ export const docQualityGate = (ctx: GateContext): GateDefinition => ({
   helperKind: DOC_FIXER_AGENT_KIND,
   wired: () => ctx.isProviderWired(DOC_QUALITY_PROVIDER),
   unwiredOutput: 'Document-quality gate skipped (no document-quality provider configured).',
-  attemptBudget: () => DOC_FIXER_MAX_ATTEMPTS,
+  attemptBudget: (_preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? DOC_FIXER_MAX_ATTEMPTS,
   probe: async (workspaceId, blockId): Promise<GateProbe> => {
     const report = await ctx.requireProvider(DOC_QUALITY_PROVIDER).check(workspaceId, blockId)
     if (report.ok) {
@@ -344,7 +351,8 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
   helperKind: ON_CALL_AGENT_KIND,
   wired: () => ctx.isProviderWired(RELEASE_HEALTH_PROVIDER),
   unwiredOutput: 'Post-release health gate skipped (no release-health provider configured).',
-  attemptBudget: (preset) => preset.releaseMaxAttempts,
+  attemptBudget: (preset, config) =>
+    gateConfigNumber(config, 'maxAttempts') ?? preset.releaseMaxAttempts,
   // Running out of poll budget while still watching means the window outlasted the driver's
   // budget with NO regression observed — a healthy pass, not a timeout.
   pollExhaustion: 'pass',
@@ -380,8 +388,11 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     // The watch window is resolved ONCE on first entry and stashed on the gate state (see
     // evaluateGate), so the probe doesn't re-load the block + re-resolve the merge preset on
     // every poll over the window.
+    // The step's own window wins over the one stashed from the merge preset (see gateConfigFields).
     const windowMinutes =
-      gateState.watchWindowMinutes ?? DEFAULT_RISK_POLICY.releaseWatchWindowMinutes
+      gateConfigNumber(gateState.config, 'watchWindowMinutes') ??
+      gateState.watchWindowMinutes ??
+      DEFAULT_RISK_POLICY.releaseWatchWindowMinutes
     const windowElapsed = ctx.clock.now() - since >= windowMinutes * 60_000
     const verdict = classifyReleaseHealth({ report, windowElapsed })
     if (verdict === 'pass') {
@@ -578,7 +589,9 @@ export const humanReviewGate = (ctx: GateContext): GateDefinition => ({
       gateState.pendingThreadIds = stillOpen.length > 0 ? stillOpen : null
     }
     const graceMinutes =
-      gateState.humanReviewGraceMinutes ?? DEFAULT_RISK_POLICY.humanReviewGraceMinutes
+      gateConfigNumber(gateState.config, 'graceMinutes') ??
+      gateState.humanReviewGraceMinutes ??
+      DEFAULT_RISK_POLICY.humanReviewGraceMinutes
     // Surface the approval progress for the UI (persisted via the caller's `...step.gate` spread),
     // and cache the static branch-protection required count so later polls skip re-reading it.
     // The UI derives the displayed "required" count from `requiredApprovingReviewCount` via the

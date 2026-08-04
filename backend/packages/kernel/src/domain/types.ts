@@ -504,6 +504,11 @@ export type {
   TesterQualityConfig,
   // Extensible per-step options bag (the new home for per-step pipeline parameters).
   StepOptions,
+  // Per-step gate configuration: who may resolve a human gate and how many of them, plus the
+  // parameters of the registered gate the step's kind runs.
+  StepGateConfig,
+  GateApproverPolicy,
+  GateApprovalRecord,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,

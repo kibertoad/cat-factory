@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import { gateApprovalRecordSchema, gateApproverPolicySchema } from './gate-config.js'
 
 // ---------------------------------------------------------------------------
 // The HUMAN decisions a run's step can be holding: a question an agent raised, the review comments
@@ -8,8 +9,9 @@ import * as v from 'valibot'
 // Split out of `execution.ts` (which keeps the run/step runtime state that COMPOSES these), for the
 // same reason `gate.ts` and `human-verdict-gates.ts` are separate: they are one cohesive cluster,
 // they are what a decision-answering surface reads, and `execution.ts` is at its size budget. Both
-// files are re-exported from the package barrel, so consumers are unaffected. This file depends on
-// nothing else in the package; `execution.ts` composes it, not the other way round.
+// files are re-exported from the package barrel, so consumers are unaffected. This file depends
+// only on `gate-config.ts` (the per-step gate configuration an approval gate snapshots when it is
+// raised), never on `execution.ts`: that one composes this, not the other way round.
 // ---------------------------------------------------------------------------
 
 /**
@@ -124,5 +126,25 @@ export const stepApprovalSchema = v.object({
   feedback: v.optional(v.string()),
   /** When changes were requested, per-block review comments fed into the re-run. */
   comments: v.optional(v.array(stepReviewCommentSchema)),
+  /**
+   * How many distinct approvals this gate needs before the run advances, SNAPSHOTTED from the
+   * step's `stepOptions.gateConfig.minApprovals` when the gate was raised. Absent ⇒ 1.
+   *
+   * Snapshotted rather than re-read on each approval for the reason a run's merge role is pinned
+   * at admission: the pipeline definition is editable while a run is parked on it, and a bar that
+   * moved under the people already counted toward it is a bar nobody agreed to.
+   */
+  requiredApprovals: v.optional(v.number()),
+  /**
+   * Who may resolve this gate, snapshotted alongside {@link requiredApprovals}. Absent ⇒ anyone
+   * the workspace RBAC gate admits to write. See {@link gateApproverPolicySchema}.
+   */
+  approverPolicy: v.optional(gateApproverPolicySchema),
+  /**
+   * The approvals recorded so far, one per distinct identity, oldest first. Reaching
+   * {@link requiredApprovals} entries is what flips `status` to `approved`; below it the gate
+   * stays `pending` and the run stays parked. Absent/empty on a gate nobody has cleared yet.
+   */
+  approvals: v.optional(v.array(gateApprovalRecordSchema)),
 })
 export type StepApproval = v.InferOutput<typeof stepApprovalSchema>

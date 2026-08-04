@@ -1937,7 +1937,11 @@
         "notRun": "non eseguito",
         "attempts": "Tentativo {attempts} di {maxAttempts}",
         "omittedTestPaths": "{count} file di test dichiarato è stato scartato prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta. | {count} file di test dichiarati sono stati scartati prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta."
-      }
+      },
+      "quorumProgress": "{recorded} di {required} approvazioni",
+      "quorumYours": "(la tua è conteggiata)",
+      "notAnApprover": "Questo gate indica chi può risolverlo e tu non sei tra loro.",
+      "approverIdentityRequired": "Questo gate indica chi può risolverlo, quindi deve farlo una di quelle persone dopo aver effettuato l’accesso."
     },
     "inspector": {
       "frameStatus": {
@@ -4081,6 +4085,17 @@
       "hint": "Il massimo a cui puo arrivare una singola risposta di questo agente. Lasciarlo vuoto eredita dal livello superiore, non toglie il limite. Il valore di uno step della pipeline prevale sul predefinito dello spazio di lavoro.",
       "inherits": "Ereditato",
       "inheritsValue": "Ereditato ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Chi può approvare",
+      "roleAdmin": "Amministratori",
+      "roleMember": "Membri",
+      "namedApproversLabel": "Approvatori designati",
+      "namedApproversPlaceholder": "Chiunque abbia permessi di scrittura",
+      "requiredApprovalsLabel": "Approvazioni richieste",
+      "requiredApprovalsHint": "Ciascuna da una persona diversa prima che l'esecuzione prosegua.",
+      "anyoneHint": "Chiunque possa modificare questa board può approvare questo passo.",
+      "gateParametersLabel": "Impostazioni del gate"
     }
   },
   "agentPrompt": {

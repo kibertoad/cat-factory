@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Pipeline } from '~/types/domain'
-import type { PipelinePurpose, RetiredPipelineWire } from '@cat-factory/contracts'
+import type { GateConfigForm, PipelinePurpose, RetiredPipelineWire } from '@cat-factory/contracts'
 import { useUpsertList } from '~/composables/useUpsertList'
 import { createDraftStepState, type PipelinesContext } from '~/stores/pipelines/context'
 import { createPipelineDraftActions } from '~/stores/pipelines/draftActions'
@@ -39,6 +39,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    * `usePipelineHealth`). Disjoint from {@link catalogVersions} by construction.
    */
   const retiredPipelines = ref<RetiredPipelineWire[]>([])
+  /**
+   * The per-step parameters each registered GATE declares, projected from the deployment's gate
+   * registry onto the board snapshot. The builder renders a gated step's own config form from
+   * these, so what it can save is exactly what run admission validates. Empty on a deployment
+   * whose gates declare nothing.
+   */
+  const gateConfigForms = ref<GateConfigForm[]>([])
 
   // The per-step, index-aligned draft arrays (kept in lockstep — see `createDraftStepState`).
   const {
@@ -83,6 +90,16 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     retiredPipelines.value = retired ?? []
   }
 
+  /**
+   * Replace the registered gates' declared config forms from a snapshot. Applied even when EMPTY,
+   * for the reason `retired` is: carrying the previous board's forward would offer a form for a
+   * parameter this deployment's gates do not declare, and a value saved through it would then be
+   * refused at save by the very registry that never declared it.
+   */
+  function hydrateGateConfigForms(forms: GateConfigForm[]) {
+    gateConfigForms.value = forms
+  }
+
   function getPipeline(id: string) {
     return pipelines.value.find((p) => p.id === id)
   }
@@ -117,6 +134,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     pipelines,
     catalogVersions,
     retiredPipelines,
+    gateConfigForms,
     draft,
     draftGates,
     draftEnabled,
@@ -132,6 +150,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     draftDescription,
     editingId,
     hydrate,
+    hydrateGateConfigForms,
     getPipeline,
     ...draftActions,
     ...persistence,

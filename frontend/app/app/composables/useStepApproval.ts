@@ -1,6 +1,9 @@
 import { ref, computed, nextTick } from 'vue'
+import { refuseGateResolution, UNATTRIBUTED_GATE_ACTOR } from '@cat-factory/contracts'
+import type { GateActor, GateApprovalRefusal } from '@cat-factory/contracts'
 import type { PipelineStep } from '~/types/execution'
 import { useProseComments } from '~/composables/useProseComments'
+import { useWorkspaceAccess } from '~/composables/useWorkspaceAccess'
 
 /**
  * The GitHub-style approval/review state machine for a pending gate step. When the
@@ -23,6 +26,8 @@ export function useStepApproval(opts: {
   close: () => void
 }) {
   const execution = useExecutionStore()
+  const auth = useAuthStore()
+  const access = useWorkspaceAccess()
 
   const feedback = ref('')
   const submitting = ref(false)
@@ -59,6 +64,48 @@ export function useStepApproval(opts: {
   const canRequestChanges = computed(
     () => !!feedback.value.trim() || reviewComments.value.length > 0,
   )
+
+  // ---- The gate's own POLICY, as the pipeline step configured it -------------------------
+  //
+  // Read from the SAME `@cat-factory/contracts` rules the engine enforces, never a local
+  // reimplementation: a button enabled by a second copy of the rule is a request the server
+  // refuses, and the person pressing it has no way to tell which of the two is right.
+
+  const approval = computed(() => opts.step()?.approval ?? null)
+
+  /**
+   * The gate's quorum, or null when it needs the usual single approval. Non-null is what makes
+   * the rail say "1 of 2 approvals" — otherwise an approve that correctly leaves the run parked
+   * looks exactly like one that failed.
+   */
+  const quorum = computed(() => {
+    const required = approval.value?.requiredApprovals ?? 1
+    if (required <= 1) return null
+    return { required, recorded: approval.value?.approvals?.length ?? 0 }
+  })
+
+  /** Whether the viewer's own approval is already counted (so the rail can say so). */
+  const viewerHasApproved = computed(() => {
+    const userId = auth.user?.id
+    return !!userId && !!approval.value?.approvals?.some((a) => a.actorId === userId)
+  })
+
+  /**
+   * Why the viewer may not resolve this gate, or null when they may. Drives the disabled state of
+   * all three verbs, since the policy governs every resolution and not just approve.
+   *
+   * With auth off there is no signed-in user, and the actor is `unattributed` — exactly what the
+   * server will decide with, so the rail refuses ahead of it rather than offering a button whose
+   * request comes back 403.
+   */
+  const refusal = computed<GateApprovalRefusal | null>(() => {
+    if (!approval.value) return null
+    const user = auth.user
+    const actor: GateActor = user
+      ? { id: user.id, kind: 'user', role: access.role.value }
+      : { id: UNATTRIBUTED_GATE_ACTOR, kind: 'unattributed', role: access.role.value }
+    return refuseGateResolution(approval.value.approverPolicy, actor)
+  })
 
   // Plain approve: accept the agent's proposal verbatim and advance. Every action below
   // closes the overlay ONLY when the command actually ran — a server refusal (surfaced as
@@ -159,6 +206,9 @@ export function useStepApproval(opts: {
     draftProposal,
     rejectArmed,
     canRequestChanges,
+    quorum,
+    viewerHasApproved,
+    refusal,
     syncHighlights,
     onProseClick,
     addDraftComment,

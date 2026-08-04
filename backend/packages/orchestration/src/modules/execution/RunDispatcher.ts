@@ -31,8 +31,10 @@ import type {
   StepResolverRegistry,
 } from '@cat-factory/kernel'
 import {
+  hasApproverPolicy,
   isAsyncAgentExecutor,
   noopLogger,
+  requiredGateApprovals,
   runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
@@ -908,10 +910,20 @@ export class RunDispatcher {
     // wake it. Never gates the final step (nothing downstream to feed) and is
     // idempotent: an already-approved step falls through to advance/finish.
     if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
+      // The gate's POLICY is snapshotted here, not read at approve time: the pipeline definition
+      // stays editable while a run is parked on it, and a bar that moved under the people already
+      // counted toward it is a bar nobody agreed to. Same reasoning as pinning a run's initiator
+      // role at admission.
+      const gateConfig = step.stepOptions?.gateConfig
+      const requiredApprovals = requiredGateApprovals(gateConfig)
       step.approval = {
         id: this.idGenerator.next('appr'),
         status: 'pending',
         proposal: step.output,
+        ...(requiredApprovals > 1 ? { requiredApprovals } : {}),
+        ...(hasApproverPolicy(gateConfig?.approvers)
+          ? { approverPolicy: gateConfig!.approvers }
+          : {}),
       }
       return this.parkStepAwaitingInput(workspaceId, instance, step, step.approval.id)
     }

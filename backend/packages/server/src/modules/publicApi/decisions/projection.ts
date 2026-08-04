@@ -154,6 +154,12 @@ export function toApprovalDecision(
     status: approval.status,
     proposal: approval.proposal,
     feedback: approval.feedback ?? null,
+    // The quorum, as SNAPSHOTTED on the gate when it was raised — never re-derived from the
+    // pipeline, which stays editable while the run is parked. Projected because a quorum makes
+    // `approve` legitimately not advance the run, and without the tally a caller could not tell
+    // that from a call that failed.
+    requiredApprovals: approval.requiredApprovals ?? 1,
+    approvals: approval.approvals?.length ?? 0,
     exceeded: step.companion?.exceeded === true,
   }
 }

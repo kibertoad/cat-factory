@@ -786,6 +786,72 @@ function registerPipelineCatalogTests(harness: ConformanceHarness): void {
       })
       expect(stored.stepOptions?.[1]).toEqual({ autoRecommend: false })
     })
+
+    it('round-trips a step GATE CONFIG (approver policy + quorum + gate parameters) on every store', async () => {
+      // Per-step gate config rides `step_options` too, so it needs no column of its own — but
+      // the round-trip is asserted here rather than assumed, because it is the one per-step
+      // field whose loss is SILENT AND UNSAFE: an approver policy that does not come back
+      // reads to the engine as "anyone may approve", which is exactly the checkpoint the
+      // pipeline author added the policy to prevent. Both halves are covered: the
+      // platform-enforced approvals, and the parameters the `ci` gate itself declares.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      const gateConfig = {
+        approvers: { roles: ['admin' as const], userIds: ['usr_release_captain'] },
+        minApprovals: 2,
+      }
+      const created = await call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Gated',
+        agentKinds: ['coder', 'ci', 'merger'],
+        gates: [true, false, false],
+        stepOptions: [{ gateConfig }, { gateConfig: { fields: { maxAttempts: 3 } } }, null],
+      })
+      expect(created.status).toBe(201)
+      expect(created.body.stepOptions?.[0]?.gateConfig).toEqual(gateConfig)
+      expect(created.body.stepOptions?.[1]?.gateConfig).toEqual({ fields: { maxAttempts: 3 } })
+
+      const snapshot = await call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+      const stored = snapshot.body.pipelines.find((p) => p.id === created.body.id)!
+      expect(stored.stepOptions?.[0]?.gateConfig).toEqual(gateConfig)
+      expect(stored.stepOptions?.[1]?.gateConfig).toEqual({ fields: { maxAttempts: 3 } })
+    })
+
+    it('refuses gate config that has no gate to configure, on every facade', async () => {
+      // The three refusals `assertValidGateConfig` makes, each of which would otherwise land as
+      // configuration nobody reads or a run that parks forever. Asserted cross-runtime because
+      // the gate registry the parameter check consults is facade-wired: a facade that forgot to
+      // thread it would accept a pipeline the other refuses.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const wsId = workspace.id
+
+      const ungated = await call('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Policy without a gate',
+        agentKinds: ['coder', 'merger'],
+        stepOptions: [{ gateConfig: { approvers: { roles: ['admin'] } } }, null],
+      })
+      expect(ungated.status).toBe(422)
+
+      const unreachableQuorum = await call('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Quorum nobody can reach',
+        agentKinds: ['coder', 'merger'],
+        gates: [true, false],
+        stepOptions: [
+          { gateConfig: { approvers: { userIds: ['usr_only_one'] }, minApprovals: 2 } },
+          null,
+        ],
+      })
+      expect(unreachableQuorum.status).toBe(422)
+
+      const undeclaredParameter = await call('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Parameter no gate declares',
+        agentKinds: ['coder', 'ci', 'merger'],
+        stepOptions: [null, { gateConfig: { fields: { nosuchknob: 3 } } }, null],
+      })
+      expect(undeclaredParameter.status).toBe(422)
+    })
   })
 }
 

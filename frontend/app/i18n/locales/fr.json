@@ -1449,7 +1449,11 @@
         "notRun": "non exécuté",
         "attempts": "Tentative {attempts} sur {maxAttempts}",
         "omittedTestPaths": "{count} fichier de test déclaré a été écarté avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète. | {count} fichiers de test déclarés ont été écartés avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète."
-      }
+      },
+      "quorumProgress": "{recorded} approbations sur {required}",
+      "quorumYours": "(la vôtre est comptée)",
+      "notAnApprover": "Ce contrôle désigne qui peut le lever, et vous n'en faites pas partie.",
+      "approverIdentityRequired": "Ce contrôle désigne qui peut le lever : l'une de ces personnes doit être connectée pour le faire."
     },
     "inspector": {
       "frameStatus": {
@@ -4462,6 +4466,17 @@
       "hint": "La longueur maximale d'une seule reponse de cet agent. Laisser vide herite du niveau superieur, cela ne leve pas la limite. La valeur propre a une etape du pipeline l'emporte sur la valeur par defaut de l'espace de travail.",
       "inherits": "Hérité",
       "inheritsValue": "Hérité ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Qui peut approuver",
+      "roleAdmin": "Administrateurs",
+      "roleMember": "Membres",
+      "namedApproversLabel": "Approbateurs désignés",
+      "namedApproversPlaceholder": "Toute personne autorisée à écrire",
+      "requiredApprovalsLabel": "Approbations requises",
+      "requiredApprovalsHint": "Chacune d'une personne différente avant que l'exécution reprenne.",
+      "anyoneHint": "Toute personne pouvant modifier ce tableau peut approuver cette étape.",
+      "gateParametersLabel": "Paramètres du contrôle"
     }
   },
   "agentPrompt": {

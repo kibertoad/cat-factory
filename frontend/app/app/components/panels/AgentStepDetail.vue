@@ -13,6 +13,7 @@ import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import type { GateApprovalRefusal } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
@@ -227,6 +228,9 @@ const {
   draftProposal,
   rejectArmed,
   canRequestChanges,
+  quorum: gateQuorum,
+  viewerHasApproved,
+  refusal: gateRefusal,
   onProseClick,
   addDraftComment,
   cancelDraft,
@@ -240,6 +244,16 @@ const {
   disarmReject,
   reject,
 } = approval
+
+/**
+ * Why the gate refuses this viewer, worded for them. An exhaustive Record over the shared refusal
+ * vocabulary with LITERAL keys, so the typed-message-key check sees them and a new refusal reason
+ * fails the typecheck instead of rendering as a blank line under a disabled button.
+ */
+const GATE_REFUSAL_KEYS: Record<GateApprovalRefusal, string> = {
+  not_a_gate_approver: 'panels.stepDetail.notAnApprover',
+  gate_approver_identity_required: 'panels.stepDetail.approverIdentityRequired',
+}
 
 const resolvingCap = ref(false)
 async function resolveCompanionCap(choice: IterationCapChoice) {
@@ -691,6 +705,30 @@ async function copyOutput() {
             </div>
             <p class="mt-1 text-[12px] text-slate-400">
               {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
+            </p>
+            <!-- The gate's configured POLICY, when it has one. Both lines exist because an
+               approve on such a gate legitimately may not advance the run: without the tally, a
+               correctly-recorded approval is indistinguishable from a call that failed, and
+               without the refusal a person would press a button the server answers 403. -->
+            <p
+              v-if="gateQuorum"
+              class="mt-1 text-[12px] text-amber-300/90"
+              data-testid="gate-quorum"
+            >
+              {{
+                t('panels.stepDetail.quorumProgress', {
+                  recorded: gateQuorum.recorded,
+                  required: gateQuorum.required,
+                })
+              }}
+              <span v-if="viewerHasApproved">{{ t('panels.stepDetail.quorumYours') }}</span>
+            </p>
+            <p
+              v-if="gateRefusal"
+              class="mt-1 text-[12px] text-slate-400"
+              data-testid="gate-not-approver"
+            >
+              {{ t(GATE_REFUSAL_KEYS[gateRefusal]) }}
             </p>
           </div>
 

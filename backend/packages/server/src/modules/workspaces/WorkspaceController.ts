@@ -19,6 +19,7 @@ import type {
   AgentKindVariant,
   CustomAgentKind,
   CustomTaskType,
+  GateConfigForm,
   InitiativePresetDescriptor,
   RegisteredBinaryGenerator,
   SkillSummary,
@@ -286,6 +287,7 @@ async function snapshotRegistryProjections(container: ServerContainer): Promise<
   customAgentKinds: CustomAgentKind[] | undefined
   agentKindVariants: AgentKindVariant[] | undefined
   customTaskTypes: CustomTaskType[] | undefined
+  gateConfigForms: GateConfigForm[] | undefined
   binaryGenerators: RegisteredBinaryGenerator[] | undefined
   /** Set only when the set could not be READ — never alongside `binaryGenerators`. */
   binaryGeneratorsUnavailable: true | undefined
@@ -296,6 +298,15 @@ async function snapshotRegistryProjections(container: ServerContainer): Promise<
     customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
     agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
     customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry),
+    // The per-step parameters each registered gate declares, so the pipeline builder can render a
+    // gate's own config form. Read off the SAME registry instance run admission validates against,
+    // so what the builder offers is exactly what a run will accept.
+    gateConfigForms: definedIfPresent(
+      container.gateRegistry.configForms().map(({ kind, fields }) => ({
+        kind,
+        fields: [...fields],
+      })),
+    ),
     binaryGenerators: binaryGenerators.generators,
     binaryGeneratorsUnavailable: binaryGenerators.unavailable,
     // The registered initiative presets (built-in generic + any a deployment mixed in), driving

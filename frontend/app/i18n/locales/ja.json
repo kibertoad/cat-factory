@@ -1449,7 +1449,11 @@
         "notRun": "未実行",
         "attempts": "{maxAttempts} 回中 {attempts} 回目の試行",
         "omittedTestPaths": "宣言されたテストファイル {count} 件が証跡の実行前に除外されたため、修正前のツリーは不完全な再現から再構築されました。 | 宣言されたテストファイル {count} 件が証跡の実行前に除外されたため、修正前のツリーは不完全な再現から再構築されました。"
-      }
+      },
+      "quorumProgress": "承認 {recorded} / {required}",
+      "quorumYours": "(あなたの承認は集計済み)",
+      "notAnApprover": "このゲートは解除できる人を指定しており、あなたは含まれていません。",
+      "approverIdentityRequired": "このゲートは解除できる人を指定しているため、その人がサインインして解除する必要があります。"
     },
     "inspector": {
       "frameStatus": {
@@ -4462,6 +4466,17 @@
       "hint": "このエージェントの1回の応答の上限です。空欄にすると上位の設定を継承します。上限が無くなるわけではありません。パイプラインのステップに設定した値はワークスペースの既定値より優先されます。",
       "inherits": "継承",
       "inheritsValue": "継承（{tokens}）"
+    },
+    "gateConfig": {
+      "approversLabel": "承認できる人",
+      "roleAdmin": "管理者",
+      "roleMember": "メンバー",
+      "namedApproversLabel": "指名した承認者",
+      "namedApproversPlaceholder": "書き込み権限のある全員",
+      "requiredApprovalsLabel": "必要な承認数",
+      "requiredApprovalsHint": "実行を再開する前に、それぞれ別の人からの承認が必要です。",
+      "anyoneHint": "このボードを編集できる人なら誰でもこのステップを承認できます。",
+      "gateParametersLabel": "ゲートの設定"
     }
   },
   "agentPrompt": {

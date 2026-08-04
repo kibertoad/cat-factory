@@ -24,6 +24,7 @@ import { trackerSettingsSchema } from './tracker.js'
 import { workspaceSettingsSchema } from './workspace-settings.js'
 import { agentKindVariantSchema, customAgentKindSchema } from './agent-presentation.js'
 import { customTaskTypeSchema } from './task-types.js'
+import { gateConfigFormSchema } from './gate-config.js'
 import { registeredBinaryGeneratorSchema } from './binary-generators.js'
 import { infraEngineSchema } from './environments.js'
 import { infraSetupSchema } from './infra-setup.js'
@@ -245,6 +246,16 @@ export const workspaceSnapshotSchema = v.object({
    * on the wire and omitted when no custom task type is registered.
    */
   customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
+  /**
+   * The per-step parameters each registered GATE declares (`GateRegistry.register(kind, factory,
+   * { configFields })`), so the pipeline builder renders a gate's own config form through the
+   * shared `DescriptorFields` component instead of hard-coding one form per gate. This is the
+   * ambient half of per-step gate config: a deployment's gate gets an authoring form from its
+   * registration alone, and what the builder can save is exactly what run admission validates.
+   * Static (app-owned registry), workspace-independent; attached by the facade, so optional on
+   * the wire and omitted when no registered gate declares any fields.
+   */
+  gateConfigForms: v.optional(v.array(gateConfigFormSchema)),
   /**
    * The GENERATIVE BINARY INTEGRATIONS a deployment registered in CODE on its app-owned
    * `BinaryGeneratorRegistry` — identity and the content types each produces, never a credential

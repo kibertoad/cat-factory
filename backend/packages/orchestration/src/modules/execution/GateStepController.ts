@@ -102,10 +102,16 @@ export class GateStepController {
     // task's merge preset (stable across polls once set).
     if (!step.gate) {
       const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+      // The step's OWN parameters for this gate, validated against the gate's declared fields at
+      // pipeline save and again at run admission. Copied onto the gate state once, alongside the
+      // budget it may itself override, so every subsequent poll reads one settled snapshot rather
+      // than re-deriving from a pipeline definition that is editable mid-run.
+      const config = step.stepOptions?.gateConfig?.fields ?? {}
       step.gate = {
         phase: 'checking',
         attempts: 0,
-        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset) : preset.ciMaxAttempts,
+        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset, config) : preset.ciMaxAttempts,
+        ...(Object.keys(config).length ? { config } : {}),
         headSha: null,
         // Stash the watch window once (read on every poll by a time-windowed gate's
         // probe; harmless/unused for the CI/conflicts gates).

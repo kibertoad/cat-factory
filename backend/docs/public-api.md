@@ -590,6 +590,17 @@ Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
   the `proposal` itself, and the last `feedback`. **`exceeded: true` changes the verb**: the gate is
   a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
   `resolve-exceeded` is what settles it.
+
+  **`requiredApprovals` / `approvals` are why an `approve` may legitimately not advance the run.**
+  A pipeline step can configure its gate to need several DISTINCT approvals (ADR 0038); until the
+  count is reached your call returns `200`, the approval is recorded, and the decision stays
+  `pending`. Read the tally back rather than treating a still-parked run as a failed call. Your key
+  counts as ONE approval, and calling twice does not make it two. A gate whose pipeline NAMES its
+  approvers cannot be answered by a key at all (`403 not_a_gate_approver` /
+  `gate_approver_identity_required`) — a shared credential is not one of the people it named — and
+  that applies to `request-changes` and `reject` as much as to `approve`. A gate with no such
+  configuration behaves exactly as it always has.
+
 - **`agent-decision`**: an agent hit a fork mid-work and asked. Carries the `decisionId`, the
   `question` and the `options` it offered. Resolving **re-runs** the asking step with the choice
   folded in rather than advancing past it — the difference from an approval gate. Your `choice` is

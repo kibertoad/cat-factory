@@ -656,16 +656,18 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   `awaiting_job`.
 - **Polling gates**: `ci`, `conflicts`, `post-release-health`. A gate runs a **programmatic precheck**
   against a provider and only escalates to a helper container agent (`ci-fixer` / `conflict-resolver` /
-  `on-call`) on a negative verdict; skip-unless-needed is the whole point. ONE generic machine drives every
-  gate (`evaluateGate` / `dispatchGateHelper` / `pollGate`, parking on `awaiting_gate`); a
-  `GateDefinition` supplies only `wired()`, `probe()`, `helperKind` and `onExhausted`, and live state is
-  `step.gate`. **Adding a gate is a new registry entry, never another `evaluateX`/`pollX`/`awaiting_x`
+  `on-call`) on a negative verdict; skip-unless-needed is the whole point. ONE generic machine drives
+  every gate (parking on `awaiting_gate`, live state `step.gate`); a `GateDefinition` supplies only its
+  differentiators. **Adding a gate is a new registry entry, never another `evaluateX`/`pollX`/`awaiting_x`
   triple**; ergonomics:
   [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md). Pure gate logic
   lives in kernel (`domain/gate-logic.ts`); `defaultGateRegistry()` is EMPTY and the built-ins
   (`@cat-factory/gates`) install themselves through the same public seam a deployment uses.
   **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
-  reverts), settling the gate without re-probing.
+  reverts), settling the gate without re-probing. **A gate's own KNOBS are DECLARED on its
+  registration** (`register(kind, factory, { configFields })`) and read off `gateState.config`, so
+  the engine never learns a gate's parameter names and a workspace-wide preset field stops being the
+  only home for "this step gets three attempts".
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
 - **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
@@ -678,6 +680,12 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
+
+**A human gate carries a POLICY, PINNED when the gate is raised** (`stepOptions.gateConfig`: who may
+resolve it, how many distinct people must), because the pipeline stays editable while a run is parked
+on it. It governs approve/request-changes/reject alike; an admin always passes it; a machine key or
+auth-disabled caller is refused by ANY policy. Rules live in contracts (`gate-approval.ts`), never
+restated in the SPA. Both halves: [ADR 0038](./backend/docs/adr/0038-per-step-gate-config.md).
 
 **A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
 (`StepGating` → `shouldRunGatedStep` → `RunDispatcher.skipGatedStep`) skips a step when an earlier

@@ -1449,7 +1449,11 @@
         "notRun": "no ejecutado",
         "attempts": "Intento {attempts} de {maxAttempts}",
         "omittedTestPaths": "Se descartó {count} archivo de prueba declarado antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta. | Se descartaron {count} archivos de prueba declarados antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta."
-      }
+      },
+      "quorumProgress": "{recorded} de {required} aprobaciones",
+      "quorumYours": "(la tuya está contada)",
+      "notAnApprover": "Esta compuerta designa quién puede resolverla y tú no estás en la lista.",
+      "approverIdentityRequired": "Esta compuerta designa quién puede resolverla, así que debe resolverla una de esas personas con la sesión iniciada."
     },
     "inspector": {
       "frameStatus": {
@@ -4462,6 +4466,17 @@
       "hint": "El maximo al que puede llegar una sola respuesta de este agente. Dejarlo vacio hereda del nivel superior; no elimina el limite. El valor propio de un paso del pipeline prevalece sobre el predeterminado del espacio de trabajo.",
       "inherits": "Heredado",
       "inheritsValue": "Heredado ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Quién puede aprobar",
+      "roleAdmin": "Administradores",
+      "roleMember": "Miembros",
+      "namedApproversLabel": "Aprobadores designados",
+      "namedApproversPlaceholder": "Cualquiera con permiso de escritura",
+      "requiredApprovalsLabel": "Aprobaciones necesarias",
+      "requiredApprovalsHint": "Cada una de una persona distinta antes de que la ejecución continúe.",
+      "anyoneHint": "Cualquiera que pueda editar este tablero puede aprobar este paso.",
+      "gateParametersLabel": "Ajustes de la compuerta"
     }
   },
   "agentPrompt": {
