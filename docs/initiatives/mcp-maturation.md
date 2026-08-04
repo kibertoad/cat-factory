@@ -148,40 +148,40 @@ dump and never uses the word MCP).
 Every finding from the review, with its disposition. "Slice N" means the slice's checklist above
 carries it.
 
-| Finding                                                                          | Disposition                  |
-| -------------------------------------------------------------------------------- | ---------------------------- |
-| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                      |
-| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                      |
-| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                      |
-| No cap on server count/size, unlike the context-file corpus                       | Slice 1                      |
-| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                      |
-| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                      |
-| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                      |
-| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                      |
-| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6  |
-| Tool filtering is group-coarse, startup-only                                      | Slice 2                      |
-| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                      |
-| `destructiveHint` unset on the four spending tools                                | Slice 2                      |
-| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                      |
-| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                      |
-| No probe/health check; `allowedTools` never checked against reality               | Slice 4                      |
-| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                      |
-| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                      |
-| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                      |
-| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                      |
-| Tool servers asserted nowhere cross-runtime                                       | Slice 4                      |
-| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                      |
-| Capability credentials absent from the public API                                 | Slice 5                      |
-| No OAuth for remote tool servers                                                  | Slice 6                      |
-| No MCP authorization on the serving side                                          | Slice 6                      |
-| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)          |
-| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)          |
-| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)          |
-| No marketplace/catalog of known vendor servers                                    | Not pursued (below)          |
+| Finding                                                                           | Disposition                   |
+| --------------------------------------------------------------------------------- | ----------------------------- |
+| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                       |
+| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                       |
+| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                       |
+| No cap on server count/size, unlike the context-file corpus                       | Slice 1                       |
+| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                       |
+| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                       |
+| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                       |
+| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                       |
+| API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
+| Tool filtering is group-coarse, startup-only                                      | Slice 2                       |
+| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                       |
+| `destructiveHint` unset on the four spending tools                                | Slice 2                       |
+| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                       |
+| stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
+| No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
+| Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
+| Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 4                       |
+| Older harness image silently drops `mcpServers` (blind run)                       | Slice 4                       |
+| `McpSecretRef` lacks the `usage` note the checklist can render                    | Slice 4                       |
+| Tool servers asserted nowhere cross-runtime                                       | Slice 4                       |
+| No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 5                       |
+| Capability credentials absent from the public API                                 | Slice 5                       |
+| No OAuth for remote tool servers                                                  | Slice 6                       |
+| No MCP authorization on the serving side                                          | Slice 6                       |
+| `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
+| No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
+| Declared `additionalProperties: false` not enforced locally                       | Not pursued (below)           |
+| No marketplace/catalog of known vendor servers                                    | Not pursued (below)           |
 | Checklist granularity ((workspace, key) sharing, unscoped list)                   | Standing decisions, unchanged |
-| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)    |
-| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)             |
-| Pi has no MCP client                                                              | Standing non-goal (ADR 0029) |
+| Env-fallback default `true`; `allowKeys` unset                                    | Tracked elsewhere (below)     |
+| No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
+| Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
 
 ## Deliberately not pursued
 
