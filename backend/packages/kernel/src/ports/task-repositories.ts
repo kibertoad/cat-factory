@@ -109,13 +109,41 @@ export interface TaskRepository {
   getByUrl(workspaceId: string, url: string): Promise<TaskRecord | null>
   /** Live issues attached to a board block (resolved during execution). */
   listByBlock(workspaceId: string, blockId: string): Promise<TaskRecord[]>
-  /** Attach an issue to a board block (or detach with null). */
+  /**
+   * Attach an issue to a board block (or detach with null), UNCONDITIONALLY.
+   *
+   * This is the deliberate re-point: the manual "link this issue to this block" action and the
+   * recurring intake's per-fire link move, where the caller's whole intent is to overwrite
+   * whatever was there. A caller whose intent is instead "file this issue, once" must use
+   * {@link claimBlockLink}, or it races.
+   */
   linkBlock(
     workspaceId: string,
     source: TaskSourceKind,
     externalId: string,
     blockId: string | null,
   ): Promise<void>
+  /**
+   * Attach an issue to a block ONLY IF it is not already attached to one, resolving `true` when
+   * this caller took it and `false` when someone else already held it.
+   *
+   * An issue carries a single `linkedBlockId`, so "one task per ticket" is an invariant on this
+   * column, and a read-then-{@link linkBlock} cannot enforce it: at Postgres' default READ
+   * COMMITTED two concurrent filings of one ticket both read it free and both write, so the
+   * second silently strips the first task of the context it was created with, and both tasks
+   * survive. That is exactly the shape a redelivering webhook produces. The guard therefore has to
+   * live in the WHERE clause (`… AND linked_block_id IS NULL`), which both engines evaluate under
+   * the row lock the UPDATE itself takes.
+   *
+   * Re-claiming with the block that already holds it is a WIN, not a loss: the operation is then
+   * idempotent, so a retry after a lost response settles rather than refusing against itself.
+   */
+  claimBlockLink(
+    workspaceId: string,
+    source: TaskSourceKind,
+    externalId: string,
+    blockId: string,
+  ): Promise<boolean>
   /**
    * Detach EVERY issue currently linked to a block, across sources, in one write
    * (`UPDATE … WHERE linked_block_id = ?` — never a loop of per-issue point

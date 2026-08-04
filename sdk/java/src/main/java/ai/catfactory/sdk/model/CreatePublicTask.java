@@ -12,6 +12,7 @@ import org.jspecify.annotations.Nullable;
  * The {@code CreatePublicTask} wire model.
  * @param description May be absent entirely. Length 0..2000.
  * @param taskType May be absent entirely.
+ * @param ticket May be absent entirely.
  * @param title Length 1..200.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -21,6 +22,9 @@ public record CreatePublicTask(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("taskType") @Nullable String taskType,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("ticket") @Nullable PublicTaskTicket ticket,
 
     /** Length 1..200. */
     @JsonProperty("title") String title
@@ -40,6 +44,7 @@ public record CreatePublicTask(
     public static final class Builder {
         private @Nullable String description;
         private @Nullable String taskType;
+        private @Nullable PublicTaskTicket ticket;
         private @Nullable String title;
 
         /** Set {@code description}. */
@@ -54,6 +59,12 @@ public record CreatePublicTask(
             return this;
         }
 
+        /** Set {@code ticket}. */
+        public Builder ticket(@Nullable PublicTaskTicket ticket) {
+            this.ticket = ticket;
+            return this;
+        }
+
         /** Set {@code title}. */
         public Builder title(@Nullable String title) {
             this.title = title;
@@ -62,7 +73,7 @@ public record CreatePublicTask(
 
         /** Build the {@link CreatePublicTask}. */
         public CreatePublicTask build() {
-            return new CreatePublicTask(description, taskType, title);
+            return new CreatePublicTask(description, taskType, ticket, title);
         }
     }
 }
