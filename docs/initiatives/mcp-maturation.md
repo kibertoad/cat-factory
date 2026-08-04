@@ -1,6 +1,7 @@
 # MCP support maturation
 
-Status: **in progress; slices 1 and 2 landed.** Source: the 2026-08-04 review of both MCP surfaces.
+Status: **in progress; slices 1, 2 and 3 landed.** Source: the 2026-08-04 review of both MCP
+surfaces.
 
 ## Goal
 
@@ -57,7 +58,8 @@ dump and never uses the word MCP).
   (environments, runners, local models, user secrets).
 - **The hosted endpoint mounts what already exists**: `createCatFactoryMcpServer` returns a bare
   `Server` decoupled from transport, and the pinned `@modelcontextprotocol/sdk` 1.30 ships
-  `StreamableHTTPServerTransport`.
+  `WebStandardStreamableHTTPServerTransport` (the `Request → Response` sibling of the Node-only
+  `StreamableHTTPServerTransport`, which is what let slice 3 land in the shared controller layer).
 - **OAuth tokens live in the capability-credential store**
   ([capability-credential-store.md](./capability-credential-store.md)): sealed, per-workspace,
   already composed in front of the environment resolver per key.
@@ -90,16 +92,14 @@ dump and never uses the word MCP).
       the run, since the per-run home is wiped in `finally`), and the `allowedTools` boundary.
 - [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped. Two
       decisions it had to make on the way, and the cost it leaves behind, are below.
-- [ ] **3. Hosted MCP endpoint.** Mount the existing server behind
-      `StreamableHTTPServerTransport` on BOTH facades, behind the public-API key auth and scope
-      ladder, with a conformance assertion so the facades cannot drift. This is the adoption
-      lever: today "drive cat-factory from Claude" requires npm, a local process and a key pasted
-      into host config; a hosted endpoint makes the platform reachable from claude.ai, Claude
-      Desktop and hosted agents with zero install. The slice decides statefulness (per-request
-      server instance vs a session manager) and how the read-only/group filtering maps onto key
-      scopes. The endpoint joins the public surface, so it ships under the stability contract
-      from its first release. The stdio binary stays: it is the path that needs no backend
-      deployment and the only one for hosts without HTTP MCP support.
+- [x] **3. Hosted MCP endpoint.** `POST /api/v1/mcp`, mounted by `PublicMcpController` in the
+      SHARED controller layer, so both facades serve it from one implementation rather than two that
+      could drift. `handleMcpHttpRequest` lives in `sdk/mcp` beside the server it wraps, which is
+      what keeps the MCP SDK (and its Node-reaching types) out of the backend's Web-standard HTTP
+      layer and makes the endpoint something any deployment of this API can stand up. Tool calls
+      reach `/api/v1` through `http/loopback.ts` under the CALLER's forwarded key, so nothing is
+      reachable there that the same key could not reach with `curl`. The three decisions the slice
+      owed, and the two things it turned out not to need, are below.
 - [ ] **4. Tool-server operability.** A probe seam that speaks `initialize` + `tools/list` to a
       declared server, surfaced as the same `/test` shape every neighbouring connection type has,
       plus a Test button beside the capability-credential checklist. The probe is also the first
@@ -239,8 +239,90 @@ Recorded so the next iteration does not re-propose them.
   count dimension had one and the byte dimension did not, so a fat declaration was refused at
   dispatch by a rule boot never mentioned.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
-  the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
-  internal-first soft launch for an endpoint whose whole point is external callers.
+  the hosted endpoint fall under the ADR 0034 stability contract immediately; there is no
+  internal-first soft launch for an endpoint whose whole point is external callers. It carries that
+  obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
+  decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 3's three decisions, and the two it did not need
+
+- **The transport is `WebStandardStreamableHTTPServerTransport`, not the `StreamableHTTPServerTransport`
+  this tracker originally named.** That one wraps Node's `IncomingMessage`/`ServerResponse`, so a
+  Worker facade could not mount it, and "the hosted endpoint exists on one runtime" is the facade
+  asymmetry this repo treats as a showstopper. The web-standard sibling is `Request → Response`, which
+  is what let the endpoint land in the SHARED controller layer rather than once per facade.
+- **Stateless, one server per request, JSON responses.** A session-keyed server holds its state in the
+  memory of the process that minted the session id, and neither runtime can promise the next request
+  lands there: a Worker request gets whichever isolate the edge picks, and a Node deployment scaled
+  past one instance has the same problem without sticky routing. So a stateful endpoint works on a
+  developer's single process and fails intermittently in production. Nothing needs the state anyway.
+  `GET`/`DELETE` are therefore `405` with `Allow: POST`, in the transport's OWN JSON-RPC error frame
+  rather than the deployment's error envelope, because the reader is a protocol client that wants the
+  header and the frame. Auth failures go the other way (thrown `DomainError` → the envelope), since
+  the MCP spec puts those at the HTTP layer and an operator needs `details.reason`.
+- **Scope decides the tool list; the per-host filters do not apply.** A `read` key gets exactly the
+  `readOnly` tools, which is EXACT rather than approximate (every `/api/v1` GET requires `read` and
+  every write requires more), and the new `readOnlyReason: 'key-scope'` makes the instructions name a
+  wider key as the fix rather than a host-config edit. Above `read` the whole table is listed and the
+  refusal comes from the ONE authority on the question, the endpoint itself: the tool table carries no
+  per-operation scope, so filtering further would mean guessing, and a wrong guess WITHHOLDS a
+  capability the key genuinely has. Making it exact would mean emitting the required scope into the
+  spec (structured `security` per operation, additive, `info.version` minor) and threading it through
+  `emit-mcp.mjs`; deliberately not done here, since it is an `/api/v1` spec change with its own
+  regeneration of four clients.
+- **It did not need a deployment-wide filter.** The stdio filters exist because a stdio server is
+  per-host; a hosted one is per-DEPLOYMENT, so the same knob would narrow what an already-scoped key
+  may do for every caller at once, which is a break rather than a convenience. Per-workspace selection
+  is slice 5's job and has a tenant to attribute the decision to.
+- **It did not need an OpenAPI entry, and must not have one.** A JSON-RPC endpoint has no operation
+  shape to describe, and the generator's own rule (an `/api/v1` operation MUST have a
+  `scripts/sdk/surface.mjs` entry) would mint an SDK method in four languages plus an MCP tool for the
+  protocol none of them speaks. The two hand-documented SSE routes are not a precedent: those ARE
+  operations, which is why they need `MCP_OMITTED_OPERATIONS` entries.
+
+## Gotchas slice 3 surfaced
+
+- **`sdk/mcp` is now bundled into a Worker, so its runtime-neutral half may import NO Node built-in.**
+  This is invisible to every typecheck: the package opts into `@types/node` (its `bin` genuinely is a
+  process), so `import { readFileSync } from 'node:fs'` in `config.ts` compiled perfectly and would
+  break a deployment's Worker BUILD, since `node:fs` does not resolve there. `optionsFromEnv` therefore
+  takes its file reader as a required dependency, `bin.ts` supplies `readFileSync`, and
+  `test/runtime-neutral.test.ts` pins the closed neutral module list AGAINST the import graph, so a new
+  module reached from `http.ts` cannot join it unguarded.
+- **The loopback is a dispatch through `app.fetch`, not a `fetch` to the deployment's own origin.** A
+  network loopback needs an origin to aim at, which a facade behind a proxy, a preview URL or a private
+  hostname cannot reliably derive, and spends a connection to reach code already in memory. Forward
+  BOTH runtime handles: `env` (without it a Worker's inner request cannot build a container at all) and
+  `executionCtx` (without it an inner handler's post-response telemetry write is silently dropped, the
+  exact failure `makeWaitUntil` exists to prevent). Hono's `c.executionCtx` THROWS when absent, so
+  reading it is a try/catch.
+- **Recursion is prevented by construction rather than by a guard.** The tool table is generated from
+  the OpenAPI spec, and the endpoint is deliberately not in it, so no tool can name a path that
+  re-enters the endpoint. That argument is what a future composed or hand-authored tool would break.
+- **Three test layers, and each sees something the others cannot.** `sdk/mcp`'s `http.test.ts` drives a
+  real MCP client whose `fetch` is the handler (protocol negotiation, statelessness, the 405 shape);
+  `publicMcp.spec.ts` drives the controller over a real `appLoopback` with a stub `/api/v1` route (the
+  refusal shapes, the scope mapping, that the CALLER's key is what reaches the API);
+  `integration-public-mcp.ts` drives each facade to a real row. The gap only the last one closes: a
+  facade that mounted the endpoint but wired the loopback wrongly answers `initialize` and `tools/list`
+  perfectly and returns nothing from every tool, which reads as an empty workspace.
+- **The `sdk-smoketest` MCP phases are now two, against ONE backend.** `--only=mcp` spawns the binary,
+  `--only=mcp-hosted` connects a real Streamable HTTP client to the running deployment. Running both
+  against one seeded board is the only thing in the repo that can see the two access paths answer
+  differently.
+- **Import `@cat-factory/mcp-server/http`, never the package root, from anything that bundles.** The
+  root re-exports the stdio boot, which drags `@modelcontextprotocol/sdk/server/stdio.js` and its
+  `node:process` import along: esbuild cannot shake it out, because dropping it would drop an import
+  of a package that does not declare itself side-effect-free. The `./http` subpath exists for exactly
+  this, and it is the only entry with the runtime-neutrality guarantee.
+- **What the Worker bundle pays for it, measured:** about **1.1 MiB unminified** (zod 640 KiB via the
+  SDK's `types.js`, ajv + ajv-formats 226 KiB via the eager validator in `server/index.js`, the SDK
+  itself 142 KiB, this package 94 KiB, `@cat-factory/sdk` 37 KiB), taking the Worker from 6.8 to
+  7.9 MiB raw and **0.96 MiB minified+gzipped**, so comfortably inside the 3 MiB limit. None of it is
+  avoidable while using the SDK's `Server`: both heavy imports are static and unconditional. ajv is
+  never asked to COMPILE anything on this path (the low-level server uses it only for elicitation,
+  which this facade never performs), which matters because `new Function` is unavailable on workerd;
+  constructing an `Ajv` does not compile.
 
 ## Slice 2's two decisions, and what they cost
 

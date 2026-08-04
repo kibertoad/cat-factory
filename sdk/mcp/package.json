@@ -21,12 +21,19 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": [
+    "./dist/bin.js"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
     },
     "./package.json": "./package.json"
   },

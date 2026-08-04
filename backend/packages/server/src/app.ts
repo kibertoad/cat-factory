@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
+import { appLoopback } from './http/loopback.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { platformObservabilityController } from './modules/observability/PlatformObservabilityController.js'
 import { reportsController } from './modules/reports/ReportsController.js'
@@ -101,6 +102,7 @@ import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
+import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
 
 /**
@@ -202,6 +204,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
   // budget. See backend/docs/debug-api.md.
   app.route('/', publicDebugController())
+  // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
+  // install and no local process. Same key auth; the tools reach `/api/v1` back through this app's
+  // own loopback under the caller's key, so nothing here can drift from the surface above it.
+  app.route('/', publicMcpController(appLoopback(app)))
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())

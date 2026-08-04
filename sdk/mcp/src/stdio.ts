@@ -42,10 +42,7 @@ export interface StdioBootResult {
  * is the one ordering that produces a log claiming success next to a server that never served.
  */
 export async function bootStdioServer(deps: StdioBootDeps): Promise<StdioBootResult> {
-  const options = optionsFromEnv(
-    deps.env,
-    deps.readSecretFile ? { readSecretFile: deps.readSecretFile } : {},
-  )
+  const options = optionsFromEnv(deps.env, { readSecretFile: deps.readSecretFile })
   const { server, tools } = createCatFactoryMcpServer(options)
   const connect = deps.connect ?? ((built: Server) => built.connect(new StdioServerTransport()))
   await connect(server)

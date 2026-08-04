@@ -14,8 +14,15 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
   parked human decisions; the headless clarification loop), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
-  an LLM can walk them within a context budget; see `docs/debug-api.md`), `publicApiAuth.ts` (the
-  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
+  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
+  HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
+  Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
+  tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
+  caller's own key; deliberately NOT an OpenAPI operation, see `docs/public-api.md`),
+  `publicApiAuth.ts` (the
+  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
+  with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
+  `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
   the pre-token input gate, which parks on the shape of the TASK and so is invisible to the
   step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
