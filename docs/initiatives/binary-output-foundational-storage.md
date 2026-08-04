@@ -557,13 +557,17 @@ Four rules bind what is done with it:
   available at registration is to unregister something, which is precisely the wrong lesson.
 
 It lands on **both** surfaces, from that one function, because they inform different parties at
-different moments. The brief (`renderBinaryGeneratorSection`) states it to the AGENT, after the
+different moments. Each names the shared CONTENT TYPE and every ID that produces it: "some of these
+overlap" is a puzzle, and both values are already on the view, so the whole value is in being
+specific. The brief (`renderBinaryGeneratorSection`) states it to the AGENT, after the
 per-integration entries so that "read each one's notes above" is literally true, and silently when
 there is no overlap, because a paragraph riding every brief is one agents stop reading. The picker
-states it to the HUMAN, advisory-styled beside `media_type_unverifiable` rather than among the
-refusals, because that is the party who both knows why two were selected and has the step's prompt
-open to write it down. The brief catches the step whose author did not think to write it; the
-picker catches the author.
+conveyed it nowhere before this: each candidate is labelled with what it produces, but a human
+reading two identical labels is being shown the overlap rather than told about it, which is the
+same absence-reads-as-fine failure the rest of that surface exists to avoid. It now states it
+advisory-styled beside `media_type_unverifiable` rather than among the refusals, because that is
+the party who both knows why two were selected and has the step's prompt open to write it down. The
+brief catches the step whose author did not think to write it; the picker catches the author.
 
 **Two readers is what decides where the rule LIVES**, and it settles a question this feature had
 already answered the other way once. `binaryModalityOverlaps` sits in `@cat-factory/contracts`
