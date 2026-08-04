@@ -38,6 +38,6 @@ default to `[]`, so every registered endpoint keeps its current behaviour byte-f
 The `platform_health` notification payload gains an optional `platformAlertTransition`, which
 carries that ordinal and so also lets a caller reading `GET /api/v1/notifications` line a card up
 against the alert deliveries it received. That is an ADDITIVE public-API change: the OpenAPI
-`info.version` goes to 1.1.0 and the four SDK clients plus the MCP facade regenerate, with no
+`info.version` goes to 1.2.0 and the four SDK clients plus the MCP facade regenerate, with no
 existing field renamed, retyped or removed. A card written before this ships carries no ordinal and
 its next transition simply starts the count at 1.

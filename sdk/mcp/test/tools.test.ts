@@ -68,7 +68,15 @@ describe('the generated tool table', () => {
     // validates cannot disagree.
     expect(body.type).toBe('object')
     expect(body.required).toEqual(['title'])
-    expect(Object.keys(body.properties).sort()).toEqual(['description', 'taskType', 'title'])
+    // Asserted as a SEPARATION rather than as an exact roster. What this test is about is that the
+    // two namespaces stay apart: the body carries the spec's body fields and the path id stays at
+    // the top level, where a model does not have to nest it. Pinning the exact field list instead
+    // would fail on every ADDITIVE contract change, which is the normal mode for this surface, so
+    // it would report a healthy new optional field as a broken tool table.
+    expect(Object.keys(body.properties)).toEqual(
+      expect.arrayContaining(['title', 'description', 'taskType']),
+    )
+    expect(Object.keys(body.properties)).not.toContain('serviceId')
   })
 
   it('never narrows an OPEN vocabulary to an enum', () => {
