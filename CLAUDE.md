@@ -973,11 +973,11 @@ faked. Spec-writing mechanics and the Specs table:
   REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin
   it with a unit test. Never paper over it in the spec (no sleep, no bumped timeout, no reload), and the
   bar for "fixed" is a high-count `--repeat-each` pass plus the root-cause fix in the same change.
-- **Most of those flakes are one product bug: a stale full-snapshot refresh clobbering newer live
-  state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic refreshes, the
-  optimistic-echo trap and `execution.echoAfter`) live in
-  [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber);
-  pin regressions with the store-level unit tests named there.
+- **A flake is either a SPEC asserting state the product only passes THROUGH (the e2e README names
+  the untestable transients) or the recurring product bug: a stale full-snapshot refresh clobbering
+  newer live state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic
+  refreshes, the optimistic-echo trap and `execution.echoAfter`) plus the store-level unit tests that
+  pin them live in [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber).
 
 ## Basic vs advanced interface mode (frontend)
 
