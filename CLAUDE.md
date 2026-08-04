@@ -698,8 +698,11 @@ flows established are stated once above (concurrency/idempotency, untrusted text
 harness rules).
 
 **Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
-against the CATALOG, never the stored row. Trap: retiring a built-in is TWO edits (delete the definition
-AND name it in `buildRetiredPipelines()`); doing only the first is a silent no-op. Doc:
+against the CATALOG, never the stored row; a run ADOPTS an entry the board was never seeded with, so a
+PINNED pipeline is never stuck behind an advisory. Traps: retiring a built-in is TWO edits (delete the
+definition AND name it in `buildRetiredPipelines()`), doing only the first being a silent no-op; and a
+bare `pipelineRepository.get` on a run-adjacent path is the smell, since every gate in front of a start
+resolves the pipeline and then CONCLUDES from it. Doc:
 [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
@@ -970,11 +973,11 @@ faked. Spec-writing mechanics and the Specs table:
   REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin
   it with a unit test. Never paper over it in the spec (no sleep, no bumped timeout, no reload), and the
   bar for "fixed" is a high-count `--repeat-each` pass plus the root-cause fix in the same change.
-- **Most of those flakes are one product bug: a stale full-snapshot refresh clobbering newer live
-  state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic refreshes, the
-  optimistic-echo trap and `execution.echoAfter`) live in
-  [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber);
-  pin regressions with the store-level unit tests named there.
+- **A flake is either a SPEC asserting state the product only passes THROUGH (the e2e README names
+  the untestable transients) or the recurring product bug: a stale full-snapshot refresh clobbering
+  newer live state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic
+  refreshes, the optimistic-echo trap and `execution.echoAfter`) plus the store-level unit tests that
+  pin them live in [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber).
 
 ## Basic vs advanced interface mode (frontend)
 

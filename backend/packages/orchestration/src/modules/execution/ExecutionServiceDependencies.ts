@@ -28,6 +28,8 @@ import type {
   ModelPresetCacheValue,
   ModelPresetRepository,
   ModelRef,
+  OperationalMetrics,
+  PipelineRegistry,
   PipelineRepository,
   PrVerificationReportPublisher,
   ProviderCapabilities,
@@ -101,6 +103,23 @@ export interface ExecutionServiceDependencies {
   workspaceRepository: WorkspaceRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
+  /**
+   * The app-owned pipeline registry, so run resolution can ADOPT a catalog built-in the workspace
+   * was never seeded with (`pipelines/pipelineAdoption.ts`). Optional, because the BUILT-IN catalog
+   * lives in code and stays adoptable without it; a facade must still thread it, or a DEPLOYMENT's
+   * own registered pipeline (a reusable operation's canned pipeline) is unadoptable and a task
+   * pinning it 404s on any board older than the registration. Read the resolved
+   * `runtime.pipelineRegistry`, never a facade's own optional argument, so the engine and
+   * `PipelineService` share ONE instance.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
+   * The deployment's operational counters. Required, per the rule an un-wired counter breaks: a
+   * zero and an unreported signal are different facts and only one of them is honest. Today the
+   * engine's own increment is `pipeline.adopted` (see `pipelines/pipelineAdoption.ts`); it arrives
+   * through the `CoreDependencies` spread, where it is required too.
+   */
+  operationalMetrics: OperationalMetrics
   executionRepository: ExecutionRepository
   /**
    * Resolves the owning account of a workspace so a service that pins no cloud

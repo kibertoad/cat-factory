@@ -694,6 +694,17 @@ describe('the org:introduce-api reusable operation', () => {
     expect(registry.variant(ORG_CODER_API_VARIANT_ID)?.systemPrompt).toBeUndefined()
   })
 
+  it('registers its canned pipeline as a read-only, versioned catalog template', () => {
+    // Read off `registered()` rather than `seedPipelines()` on purpose: the seeding path DEFAULTS
+    // every built-in's version to 1, so asserting through it would pass for a registration that
+    // declared neither half. `builtin` is what keeps the pipeline read-only in a workspace (clone
+    // to deviate) and the explicit `version` is the rollout channel: without it the org could seed
+    // the operation's pipeline once and never update the boards holding it.
+    const registered = pipelineRegistry.registered().find((p) => p.id === INTRODUCE_API_PIPELINE_ID)
+    expect(registered?.builtin).toBe(true)
+    expect(registered?.version).toBe(1)
+  })
+
   it("renders a run's collected parameters under the descriptor's labels", () => {
     // The end of the chain this package exists to prove: the values a user typed on the create
     // form come back out as the labelled brief every agent in the pipeline reads.

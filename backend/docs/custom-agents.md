@@ -584,8 +584,11 @@ registers:
   whole bundle: the small create form whose values reach every agent's prompt, the standing
   context (`defaultFragmentIds`: the org's API guidelines, auth requirements and shared-services
   map), and `defaultPipelineId: pl_org_introduce_api`, whose design + build steps run under the
-  `org:architect-api` / `org:coder-api` variants. Design and the boundary against initiative
-  presets (which are the vehicle when the work must be PLANNED and decomposed):
+  `org:architect-api` / `org:coder-api` variants. That pipeline registers `builtin: true` with an
+  explicit `version`, the shape that makes it a read-only template the org can roll out and later
+  update ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). Design and the
+  boundary against initiative presets (which are the vehicle when the work must be PLANNED and
+  decomposed):
   [`../../docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
 - the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`**, **`pl_org_apply`** and
   **`pl_org_introduce_api`** pipelines chaining them, plus

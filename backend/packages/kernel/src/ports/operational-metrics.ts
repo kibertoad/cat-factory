@@ -75,6 +75,19 @@ export type OperationalCounter =
   | 'tutorial.tour_started'
   | 'tutorial.tour_completed'
   | 'tutorial.tour_abandoned'
+  /**
+   * A run MATERIALISED a catalog pipeline its workspace was never seeded with
+   * (`pipelineAdoption.adoptForRun`). Once per workspace+pipeline, so a standing rate is the
+   * operator's answer to a question the log line cannot reach: the line says WHICH board caught
+   * up, and only the rate says how many are still behind a catalog the deployment already
+   * shipped. A quiet counter after a release means the rollout landed; a long tail means boards
+   * are discovering it one first-run at a time.
+   *
+   * UNDIMENSIONED on purpose. The interesting split would be by pipeline id, and a registered
+   * pipeline's id is whatever a deployment named it, so it is exactly the unbounded dimension
+   * the rule above bans. The id rides the log line at the increment site.
+   */
+  | 'pipeline.adopted'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns

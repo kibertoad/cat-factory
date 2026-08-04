@@ -95,6 +95,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
     get: { scope: { kind: 'workspace', arg: 0 } },
     insert: { scope: { kind: 'workspace', arg: 0 } },
+    // The adoption write (`pipelineAdoption.adoptForRun`, and `reseed`'s absent branch): it sits on
+    // the run-START path, so it must be remote from this slice, or a mothership-mode node (which
+    // has no `db`) throws the moment a task pinning an un-adopted catalog pipeline is started.
+    // Same reasoning as `executionRepository.countActiveByWorkspace` below.
+    insertIfAbsent: { scope: { kind: 'workspace', arg: 0 } },
     update: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
