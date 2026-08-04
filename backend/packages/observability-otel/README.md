@@ -163,23 +163,31 @@ moving spec. `src/mapping.ts`'s `ATTR` object and this table are edited together
 **Extended beyond the convention**, because the convention has no equivalent and the fact is
 load-bearing here:
 
-| Attribute                                               | Why it exists                                                                       |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `gen_ai.usage.cache_read_input_tokens`                  | The convention lumps input into one count. These are priced ~0.1x and ~1.25–2x      |
-| `gen_ai.usage.cache_creation_input_tokens`              | base input, so summing them hides whether a loop rides a warm cache or rewrites it. |
-| `gen_ai.token.type` values `cache_read` / `cache_write` | The same split on the counter's dimension.                                          |
-| `cat_factory.workspace_id`                              | Tenant scope. Spans only — unbounded, so never a metric dimension.                  |
-| `cat_factory.execution_id`                              | The run. Searchable, since the trace id is a hash of it rather than the id itself.  |
-| `cat_factory.agent_kind`                                | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
-| `cat_factory.pipeline` / `cat_factory.step_count`       | The run span's pipeline, and the step span's fold size.                             |
-| `cat_factory.attempt_count`                             | Dispatches folded into a step span: the rounds of a loop, stated since not split.   |
-| `cat_factory.tool_call.seq`                             | The call's ordinal in its dispatch. Start time cannot order a tool loop: several    |
-|                                                         | calls routinely share one millisecond.                                              |
-| `cat_factory.tool_call.arguments_dropped_chars`         | What the harness's capture cap dropped, so a truncated body is legible AS           |
-| `cat_factory.tool_call.result_dropped_chars`            | truncated rather than read as the whole of a short one.                             |
+| Attribute                                                                 | Why it exists                                                                       |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `gen_ai.usage.cache_read_input_tokens`                                    | The convention lumps input into one count. These are priced ~0.1x and ~1.25–2x      |
+| `gen_ai.usage.cache_creation_input_tokens`                                | base input, so summing them hides whether a loop rides a warm cache or rewrites it. |
+| `gen_ai.token.type` values `cache_read` / `cache_write`                   | The same split on the counter's dimension.                                          |
+| `cat_factory.workspace_id`                                                | Tenant scope. Spans only — unbounded, so never a metric dimension.                  |
+| `cat_factory.execution_id`                                                | The run. Searchable, since the trace id is a hash of it rather than the id itself.  |
+| `cat_factory.agent_kind`                                                  | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
+| `cat_factory.pipeline` / `cat_factory.step_count`                         | The run span's pipeline, and the step span's fold size.                             |
+| `cat_factory.attempt_count`                                               | Dispatches folded into a step span: the rounds of a loop, stated since not split.   |
+| `cat_factory.tool_call.seq`                                               | The call's ordinal in its dispatch. Start time cannot order a tool loop: several    |
+|                                                                           | calls routinely share one millisecond.                                              |
+| `cat_factory.tool_call.arguments_dropped_chars`                           | What the harness's capture cap dropped, so a truncated body is legible AS           |
+| `cat_factory.tool_call.result_dropped_chars`                              | truncated rather than read as the whole of a short one.                             |
+| **Deliberately NOT emitted**, each for a reason rather than an oversight: |
 
-**Deliberately NOT emitted**, each for a reason rather than an oversight:
-
+- **COST, in any form.** A span or a counter carrying money would be DERIVED data (`tokens x
+rates`) in a store that cannot reprice it: a corrected rate table leaves the history
+  permanently wrong with nothing marking it, and the figure would sit beside the platform's own
+  spend ledger (`SpendService` / `priceRollupCells`) as a second, un-reconcilable answer — at a
+  grain that deliberately drops `workspace_id`, so it could never be checked against what anyone
+  is billed. What this exporter emits are the OBSERVED facts a downstream consumer prices FROM:
+  `gen_ai.request.model` plus the three input classes and the output count, kept apart rather
+  than lumped, which is exactly the input a rate table needs. Money belongs where it can be
+  recomputed.
 - **`gen_ai.request.*` sampling parameters** (`temperature`, `top_p`, `max_tokens`, …). The event
   that reaches this package carries none of them: the proxied path records what the upstream
   returned, and the subscription harnesses lift metrics off a CLI's event stream, which never
@@ -295,6 +303,27 @@ That sharing is a **call** to the same `deriveTraceId` the spans go through, nev
 of the derivation, and the test asserts a log record's trace id against a **span's**. Both matter:
 the two signals agreeing is the whole feature, nothing else enforces it, and a re-derivation plus
 a test comparing one log record to another would let the span side drift with every test green.
+
+**An INBOUND `traceparent` fills in the rest.** A caller already collecting a distributed trace
+(one of the four SDK clients, a gateway, a sibling service) sends W3C trace context on the
+request; `mountRequestLogging` parses it once through kernel's `parseTraceparent` and binds
+`traceId` + `spanId` onto the request-scoped child logger, so every line the request emits is
+exported into the caller's trace, pointing at the caller's own span. Malformed or absent means
+ignored — a bad correlation header is not a reason to refuse real work, and the request falls
+back to the correlation it always had.
+
+**The run wins when a line has both**, and that precedence is load-bearing. The derived trace id
+is the only thing joining a run's lines to the spans this package emits for it; re-pointing them
+at the caller's trace would leave the run's spans with no logs and its logs with no spans. The
+two are true statements at different scopes (the caller's trace covers the REQUEST, the derived
+one covers the RUN it touched) and the run is the narrower answer. Nothing is lost either way:
+the adopted ids stay queryable as attributes. Only an adopted context names a `spanId` — a
+run-derived trace has no single span a line belongs to, so it attaches to the trace and lets the
+backend place it.
+
+Deliberately not here: **emitting** a `traceparent` of our own, and carrying `tracestate`. Both
+are things a producer of spans owes its callees, and the request boundary produces no span — its
+evidence is the log line. Adding them is the slice that adds a request span.
 
 **Draining is the facade's job, and the two runtimes differ only there:**
 

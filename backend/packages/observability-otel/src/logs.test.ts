@@ -328,6 +328,34 @@ describe('mapLogRecord', () => {
     expect(String(mapped.attributes.cyclic)).toContain('unserializable')
   })
 
+  it('adopts an inbound trace context for a line with no run of its own', () => {
+    // The HTTP boundary bound these off a caller's `traceparent`. Most of what an API request
+    // emits has no run, and this is the case the header exists to serve: the caller sees our
+    // lines inside the trace they are already collecting.
+    const mapped = mapLogRecord(
+      line({ fields: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), requestId: 'r1' } }),
+    )
+    expect(mapped.traceId).toBe('a'.repeat(32))
+    // The caller's span is named exactly, so the line lands beside it rather than loose in the
+    // trace — an adopted context is the one case where there is an unambiguous span to point at.
+    expect(mapped.spanId).toBe('b'.repeat(16))
+    expect(mapped.traceFlags).toBe(1)
+  })
+
+  it('lets a RUN’s derived trace win over an adopted one, and names no span', () => {
+    // The precedence is load-bearing: the derived id is the only thing joining a run's lines to
+    // the spans this package emits for it, and nothing else asserts that join. Re-pointing them
+    // at the caller's trace would leave the run's spans with no logs and its logs with no spans.
+    const mapped = mapLogRecord(
+      line({ fields: { executionId: 'exec-42', traceId: 'a'.repeat(32), spanId: 'b'.repeat(16) } }),
+    )
+    expect(mapped.traceId).not.toBe('a'.repeat(32))
+    expect(mapped.traceId).toBe(mapLogRecord(line({ fields: { executionId: 'exec-42' } })).traceId)
+    expect(mapped.spanId).toBeUndefined()
+    // The other half is never lost: the request's context is still queryable as attributes.
+    expect(mapped.attributes.traceId).toBe('a'.repeat(32))
+  })
+
   it('caps an oversized value and says how much it cut', () => {
     const mapped = mapLogRecord(line({ fields: { stdout: 'x'.repeat(9_000) } }))
     const capped = String(mapped.attributes.stdout)

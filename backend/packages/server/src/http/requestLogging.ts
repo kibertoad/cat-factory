@@ -1,5 +1,11 @@
 import type { Context, Hono } from 'hono'
 import type { Logger } from '@cat-factory/kernel'
+import {
+  SPAN_ID_FIELD,
+  TRACEPARENT_HEADER,
+  TRACE_ID_FIELD,
+  parseTraceparent,
+} from '@cat-factory/kernel'
 import type { AppEnv } from './env.js'
 import { logger } from '../observability/logger.js'
 
@@ -91,7 +97,22 @@ export function mountRequestLogging<E extends AppEnv>(app: Hono<E>, base: Logger
     // `c.req.path` is Hono's own already-computed pathname (a string slice, no URL parse) —
     // identical value, and this runs on every request including the LLM proxy's hot path.
     const path = c.req.path
-    const log = base.child({ requestId, method, path })
+    // A caller that is already collecting a distributed trace (an SDK client, a gateway, a
+    // sibling service) tells us so with `traceparent`. Adopting it binds the correlation onto
+    // the request's child logger, so every line this request produces is exported INTO the
+    // caller's trace instead of alongside it — the join an operator otherwise has to make by
+    // hand, from a request id they had to think to copy.
+    //
+    // Bound HERE rather than resolved at the exporter because this is the only scope that can
+    // see the header, and it costs one bind for the whole request instead of a per-line read.
+    // Absent or malformed ⇒ nothing is bound and the line correlates exactly as it did before.
+    const trace = parseTraceparent(c.req.header(TRACEPARENT_HEADER))
+    const log = base.child({
+      requestId,
+      method,
+      path,
+      ...(trace ? { [TRACE_ID_FIELD]: trace.traceId, [SPAN_ID_FIELD]: trace.spanId } : {}),
+    })
     c.set('requestId', requestId)
     c.set('log', log)
 

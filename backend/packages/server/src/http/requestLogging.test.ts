@@ -65,6 +65,30 @@ describe('mountRequestLogging', () => {
     expect(logger.lines[0]?.fields?.requestId).toBe('upstream-42')
   })
 
+  it('adopts an inbound traceparent so the request’s lines join the caller’s trace', async () => {
+    const { app, logger } = buildApp()
+    await app.request('/workspaces/ws1/blocks', {
+      headers: { traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' },
+    })
+    // Bound once for the whole request, so anything logging inside it correlates for free.
+    expect(logger.lines[0]?.fields).toMatchObject({
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      spanId: '00f067aa0ba902b7',
+    })
+  })
+
+  it('ignores a malformed traceparent rather than refusing the request', async () => {
+    const { app, logger } = buildApp()
+    // A bad correlation header is not a reason to fail real work, and the value is echoed into
+    // every exported line — so it is dropped, not sanitised into something almost-valid.
+    const res = await app.request('/workspaces/ws1/blocks', {
+      headers: { traceparent: 'nonsense' },
+    })
+    expect(res.status).toBe(200)
+    expect(logger.lines[0]?.fields).not.toHaveProperty('traceId')
+    expect(logger.lines[0]?.fields).not.toHaveProperty('spanId')
+  })
+
   it('logs only the pathname, never the query string', async () => {
     const { app, logger } = buildApp()
     await app.request('/workspaces/ws1/blocks?ticket=super-secret')
