@@ -1,8 +1,9 @@
-import type { ExecutionInstance } from '@cat-factory/contracts'
+import type { ExecutionInstance, PipelineStep } from '@cat-factory/contracts'
 import type { LlmRunSpan, LlmStepSpan } from '@cat-factory/kernel'
 
-// The PARENTS of everything a run emitted to the external trace: its root span and one span
-// per agent kind that actually ran. Pure, so the fold is testable without an engine.
+// The PARENTS of everything a run emitted to the external trace: its root span, one span per
+// agent kind that ran, and one nested under those for each helper kind a step escalated to.
+// Pure, so the fold is testable without an engine.
 //
 // They are built at SETTLEMENT because that is the first moment a run's boundaries are known.
 // A generation exported hours earlier already named its parent by DERIVING the id from the run
@@ -19,7 +20,19 @@ import type { LlmRunSpan, LlmStepSpan } from '@cat-factory/kernel'
 // DIFFERENT duration each time, which a backend cannot collapse the way it collapses a
 // byte-identical duplicate. The extent therefore comes from stamps the run already recorded,
 // each of them set-once precisely so a replay cannot move it (`StepGraph.finishStep`,
-// `AgentFailure.occurredAt`).
+// `AgentFailure.occurredAt`, `PipelineStep.firstStartedAt`).
+//
+// Two facts the fold cannot get from `step.agentKind` alone, and both are about CYCLES, which
+// is what this platform's runs actually repeat (a duplicate kind within one pipeline is rare;
+// a review that spawns fixes four times is not):
+//
+//   - WHAT ran. A gate escalating to `ci-fixer`, a Tester handing off to the fixer and a
+//     two-phase coder's `fork-proposer` are all dispatched under a kind that is not the step's,
+//     and every telemetry row they produce is tagged with THAT kind. Without `step.dispatches`
+//     those spans name a parent nobody emits, and dangle inside their own run's trace.
+//   - HOW OFTEN. A span cannot separate the rounds of a loop, because its children carry no
+//     attempt ordinal to be separated BY. So the rounds are counted and stated rather than
+//     silently folded into one long span.
 
 /** A settled run's root span plus the per-agent-kind step spans that hang under it. */
 export interface RunTraceSpans {
@@ -27,12 +40,20 @@ export interface RunTraceSpans {
   steps: LlmStepSpan[]
 }
 
-/** One agent kind's slice, accumulated across every step of that kind. */
+/** One agent kind's slice, accumulated across every step that ran it. */
 interface StepFold {
   startedAt: number
   endedAt: number
   stepCount: number
+  attemptCount: number
   failed: boolean
+  parentAgentKind?: string
+}
+
+/** When a step actually began, across every attempt rather than only the one in flight. */
+function stepStartedAt(step: PipelineStep): number | null {
+  const at = step.firstStartedAt ?? step.startedAt
+  return typeof at === 'number' ? at : null
 }
 
 /** Every epoch-ms stamp the run itself recorded, in no particular order. */
@@ -41,7 +62,7 @@ function observedStamps(instance: ExecutionInstance): number[] {
   for (const step of instance.steps) {
     // A step in flight when the run settled carries no `finishedAt` (it is stamped only on the
     // transition to `done`), so its start and its last observed sign of life are what bound it.
-    for (const stamp of [step.startedAt, step.finishedAt, step.lastActivityAt]) {
+    for (const stamp of [stepStartedAt(step), step.finishedAt, step.lastActivityAt]) {
       if (typeof stamp === 'number') stamps.push(stamp)
     }
   }
@@ -50,6 +71,27 @@ function observedStamps(instance: ExecutionInstance): number[] {
   // run recorded rather than by how long the platform took to notice.
   if (typeof instance.failure?.occurredAt === 'number') stamps.push(instance.failure.occurredAt)
   return stamps
+}
+
+/**
+ * How many times a step dispatched a given kind. Falls back to the step's own start count for
+ * its OWN kind, because an inline step (a judge, a consensus panel, a reviewer served without a
+ * container) never reaches the dispatch funnel and would otherwise report zero rounds for work
+ * that plainly ran.
+ */
+function dispatchCount(step: PipelineStep, agentKind: string): number {
+  const recorded = step.dispatches?.find((d) => d.agentKind === agentKind)?.count
+  if (recorded) return recorded
+  return agentKind === step.agentKind ? (step.attempts ?? 1) : 1
+}
+
+/** The kinds one step contributed a span for: its own, then any helper it dispatched. */
+function kindsOf(step: PipelineStep): { agentKind: string; parentAgentKind?: string }[] {
+  const helpers = (step.dispatches ?? [])
+    .map((d) => d.agentKind)
+    .filter((kind) => kind !== step.agentKind)
+    .map((agentKind) => ({ agentKind, parentAgentKind: step.agentKind }))
+  return [{ agentKind: step.agentKind }, ...helpers]
 }
 
 /**
@@ -68,7 +110,7 @@ export function buildRunTraceSpans(
   instance: ExecutionInstance,
 ): RunTraceSpans | null {
   const started = instance.steps
-    .map((step) => step.startedAt)
+    .map(stepStartedAt)
     .filter((at): at is number => typeof at === 'number')
   const runStartedAt = instance.createdAt ?? (started.length > 0 ? Math.min(...started) : null)
   if (runStartedAt === null) return null
@@ -90,26 +132,39 @@ export function buildRunTraceSpans(
     // A step that never started contributed no telemetry, so it gets no span. A SKIPPED step is
     // the case that matters: an estimate-gated step is absent from the run's work, and giving
     // it a span would show an operator a step that was deliberately not run.
-    if (typeof step.startedAt !== 'number') continue
+    const startedAt = stepStartedAt(step)
+    if (startedAt === null) continue
+    // A helper shares its host step's window. That is not an approximation to apologise for: a
+    // parent span is REQUIRED to contain its children, and the helper ran inside the step, so
+    // the host's window is the tightest bound the run actually recorded.
     const endedAt = Math.min(runEndedAt, step.finishedAt ?? runEndedAt)
-    const existing = folds.get(step.agentKind)
-    folds.set(step.agentKind, {
-      startedAt: Math.min(existing?.startedAt ?? step.startedAt, step.startedAt),
-      endedAt: Math.max(existing?.endedAt ?? endedAt, endedAt),
-      stepCount: (existing?.stepCount ?? 0) + 1,
-      // Only the step the run actually failed ON is marked ERROR. Marking every step of a
-      // failed run would say the reviewer that passed had failed too.
-      failed: (existing?.failed ?? false) || failedStepIndex === index,
-    })
+    for (const { agentKind, parentAgentKind } of kindsOf(step)) {
+      const existing = folds.get(agentKind)
+      folds.set(agentKind, {
+        startedAt: Math.min(existing?.startedAt ?? startedAt, startedAt),
+        endedAt: Math.max(existing?.endedAt ?? endedAt, endedAt),
+        stepCount: (existing?.stepCount ?? 0) + 1,
+        attemptCount: (existing?.attemptCount ?? 0) + dispatchCount(step, agentKind),
+        // Only the step the run actually failed ON is marked ERROR. Marking every step of a
+        // failed run would say the reviewer that passed had failed too.
+        failed: (existing?.failed ?? false) || failedStepIndex === index,
+        // A kind that is some step's OWN kind keeps its run-level parent even if another step
+        // also dispatched it as a helper: one span cannot hang in two places, and the spans
+        // underneath it cannot be told apart to split it.
+        parentAgentKind: existing ? existing.parentAgentKind : parentAgentKind,
+      })
+    }
   }
 
   const steps: LlmStepSpan[] = [...folds].map(([agentKind, fold]) => ({
     workspaceId,
     executionId: instance.id,
     agentKind,
+    ...(fold.parentAgentKind ? { parentAgentKind: fold.parentAgentKind } : {}),
     startedAt: fold.startedAt,
     endedAt: Math.max(fold.startedAt, fold.endedAt),
     stepCount: fold.stepCount,
+    attemptCount: fold.attemptCount,
     ok: !fold.failed,
     errorMessage: fold.failed ? (failure?.message ?? null) : null,
   }))

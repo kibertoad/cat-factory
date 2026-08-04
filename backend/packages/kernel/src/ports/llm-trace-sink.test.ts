@@ -52,6 +52,7 @@ const STEPS: LlmStepSpan[] = [
     startedAt: 1,
     endedAt: 5,
     stepCount: 1,
+    attemptCount: 1,
     ok: true,
     errorMessage: null,
   },

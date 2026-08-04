@@ -274,6 +274,7 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
         startedAt: 900,
         endedAt: 4_000,
         stepCount: 2,
+        attemptCount: 3,
         ok: true,
         errorMessage: null,
       },
@@ -304,8 +305,10 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     const stepAttrs = attrMap(stepSpan.attributes as KeyValue[])
     expect(stepAttrs['gen_ai.operation.name']).toBe('invoke_agent')
     expect(stepAttrs['gen_ai.agent.name']).toBe('coder')
-    // The fold is STATED, so a two-step slice isn't read as one long step.
+    // Both folds are STATED, so a two-step slice isn't read as one long step and a three-round
+    // loop isn't read as one long round.
     expect(stepAttrs['cat_factory.step_count']).toBe(2)
+    expect(stepAttrs['cat_factory.attempt_count']).toBe(3)
 
     // The whole hierarchy is one trace, and the generation emitted earlier already pointed at
     // the step span this request finally supplies.

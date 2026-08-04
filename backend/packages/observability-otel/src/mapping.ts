@@ -52,6 +52,7 @@ export const ATTR = {
   executionId: 'cat_factory.execution_id',
   pipeline: 'cat_factory.pipeline',
   stepCount: 'cat_factory.step_count',
+  attemptCount: 'cat_factory.attempt_count',
   serviceName: 'service.name',
 } as const
 
@@ -552,22 +553,33 @@ export function mapRunSpan(run: LlmRunSpan): MappedSpan {
   }
 }
 
-/** Map one `(run, agent kind)` slice to the step span its generations and tool calls hang under. */
+/**
+ * Map one `(run, agent kind)` slice to the step span its generations and tool calls hang under.
+ *
+ * A HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a `fork-proposer`) names its hosting
+ * kind as parent instead of the run, so an escalation reads as what it is rather than as a
+ * pipeline step of its own.
+ */
 export function mapStepSpan(step: LlmStepSpan): MappedSpan {
   const attributes: AttributeMap = {
     [ATTR.operationName]: OPERATION.invokeAgent,
     [ATTR.agentName]: step.agentKind,
     [ATTR.agentKind]: step.agentKind,
     [ATTR.executionId]: step.executionId,
-    // Stated ALWAYS, not only when it exceeds one: a reader who has to infer the fold from its
-    // absence will read a two-step slice as a single step that took twice as long.
+    // Both counts are stated ALWAYS, not only when they exceed one: a reader who has to infer a
+    // fold from its absence reads a two-step slice as one step that took twice as long, and a
+    // six-round fixer loop as one long fix. `step_count` folds steps of a kind; `attempt_count`
+    // folds the DISPATCHES inside them, which is the cycle a run actually repeats.
     [ATTR.stepCount]: step.stepCount,
+    [ATTR.attemptCount]: step.attemptCount,
   }
   if (step.workspaceId) attributes[ATTR.workspaceId] = step.workspaceId
   return {
     traceId: deriveTraceId(step.executionId),
     spanId: deriveStepSpanId(step.executionId, step.agentKind),
-    parentSpanId: deriveRunSpanId(step.executionId),
+    parentSpanId: step.parentAgentKind
+      ? deriveStepSpanId(step.executionId, step.parentAgentKind)
+      : deriveRunSpanId(step.executionId),
     name: `${OPERATION.invokeAgent} ${step.agentKind}`,
     kind: 'internal',
     startTimeMs: step.startedAt,

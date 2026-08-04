@@ -91,7 +91,7 @@ export class GateHelperDispatcher {
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle)
+    recordDispatchAttribution(step, handle, context.agentKind)
     step.gate = {
       // Preserve the recorded verdict/failure detail (set in evaluateGate) so the UI
       // keeps showing what the helper is fixing while it works.

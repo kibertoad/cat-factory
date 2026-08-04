@@ -22,7 +22,16 @@ export class StepGraph {
   /** Transition a step into `working`, stamping its start time once, and resume its clock. */
   startStep(step: PipelineStep): void {
     step.state = 'working'
-    if (step.startedAt == null) step.startedAt = this.clock.now()
+    if (step.startedAt == null) {
+      step.startedAt = this.clock.now()
+      // A FRESH attempt, which is the one moment the two cross-attempt facts advance: this
+      // guard is false when the step merely re-enters `working` after a pause, so neither is
+      // inflated by a human approving. `firstStartedAt` is stamped once and outlives every
+      // reset (see its contract doc); `attempts` counts the starts a later reader would
+      // otherwise have to infer from a failure trail that a clean re-run leaves empty.
+      step.firstStartedAt ??= step.startedAt
+      step.attempts = (step.attempts ?? 0) + 1
+    }
     // (Re)entering `working` means the step is no longer parked on a human: resume
     // its duration clock (see {@link pauseStepForInput}).
     step.pausedAt = null
@@ -64,6 +73,10 @@ export class StepGraph {
     step.state = 'pending'
     step.startedAt = null
     step.finishedAt = null
+    // `firstStartedAt`, `attempts` and `dispatches` are deliberately NOT cleared: they
+    // are the record that this step ran BEFORE, which is exactly what a reset destroys
+    // everywhere else. The external trace needs them to give a re-run step a parent span that
+    // still contains the children of its earlier attempts.
     step.pausedAt = null
     step.jobId = undefined
     step.approval = null

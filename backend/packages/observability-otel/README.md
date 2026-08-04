@@ -20,11 +20,14 @@ Jaeger, an OpenTelemetry Collector, …) as:
 A run's spans form a tree, not a flat set of siblings sharing a trace id:
 
 ```
-run                               (root; the whole execution, INTERNAL)
-└── invoke_agent coder            (one per agent KIND that ran, INTERNAL)
-    ├── chat claude-sonnet-4-5    (one per LLM call, CLIENT)
-    ├── execute_tool edit_file    (one per container tool call, INTERNAL)
-    └── execute_tool run_command
+run                                 (root; the whole execution, INTERNAL)
+├── invoke_agent coder              (one per agent KIND that ran, INTERNAL)
+│   ├── chat claude-sonnet-4-5      (one per LLM call, CLIENT)
+│   ├── execute_tool edit_file      (one per container tool call, INTERNAL)
+│   └── execute_tool run_command
+└── invoke_agent ci                 (a gate step)
+    └── invoke_agent ci-fixer       (a HELPER the gate escalated to, nested under it)
+        └── chat claude-sonnet-4-5
 ```
 
 Nothing is buffered to build it. **Every parent id is a pure function of the run id**
@@ -48,6 +51,32 @@ Two consequences worth knowing:
 - **A standalone inline call stays a root.** Requirements review, the doc planner and the
   fragment selector run outside any execution, so they have no run to hang under and no parent
   is claimed — rather than pointing at one that will never be emitted.
+- **A HELPER kind gets its own span, nested under the step that dispatched it.** A step often
+  runs work under a kind that is not its own: a gate escalating to `ci-fixer` /
+  `conflict-resolver` / `on-call`, a Tester handing off to the fixer, a two-phase coder's
+  `fork-proposer`. Every telemetry row that work produces is tagged with the HELPER's kind, so
+  without a span of its own each of those would name a parent nobody emits and dangle inside its
+  own run's trace. The run records what it dispatched (`PipelineStep.dispatches`), and the helper
+  inherits its host step's window: a parent is required to contain its children, and the host's
+  window is the tightest bound the run actually recorded.
+
+### Cycles: counted, not separated
+
+The repetition these runs actually contain is cyclical rather than duplicated. A pipeline with
+two steps of one kind is rare (no built-in has one); a review that spawns fixes four times, a
+Ralph loop that iterates seven, a bounced step re-run on a judge's verdict are all ordinary.
+
+A span cannot separate those rounds, because the events hanging under it carry no attempt ordinal
+to be separated BY — threading one reaches the proxy URL contract and the harness, so it is a
+deliberate non-goal here. What is NOT acceptable is letting the fold pass silently, so each step
+span states both of its collapses: `cat_factory.step_count` (steps of this kind) and
+`cat_factory.attempt_count` (dispatches inside them). Converging in one round and thrashing
+through six are otherwise the same picture, and that picture is what an operator is looking for.
+
+The extent is stated honestly across rounds too: a re-run step's span starts at
+`PipelineStep.firstStartedAt`, which survives the reset that re-stamps `startedAt`. Without it a
+bounced step's parent would begin AFTER the generations of its own earlier attempts, which still
+name it.
 
 ## Two transports, one behaviour
 
@@ -136,6 +165,7 @@ load-bearing here:
 | `cat_factory.execution_id`                              | The run. Searchable, since the trace id is a hash of it rather than the id itself.  |
 | `cat_factory.agent_kind`                                | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
 | `cat_factory.pipeline` / `cat_factory.step_count`       | The run span's pipeline, and the step span's fold size.                             |
+| `cat_factory.attempt_count`                             | Dispatches folded into a step span: the rounds of a loop, stated since not split.   |
 
 **Deliberately NOT emitted**, each for a reason rather than an oversight:
 

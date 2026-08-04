@@ -127,12 +127,31 @@ export interface LlmStepSpan {
   workspaceId: string | null
   executionId: string
   agentKind: string
-  /** Epoch ms the earliest folded step started. */
+  /**
+   * The kind whose span this one hangs under, or undefined to hang directly off the run root.
+   *
+   * Set for a HELPER: a kind a step dispatched that is not the step's own (a gate escalating to
+   * `ci-fixer` / `conflict-resolver` / `on-call`, a Tester handing off to the fixer, a two-phase
+   * coder's `fork-proposer`). Those run inside a hosting step, and nesting them says so, where a
+   * flat sibling would present an escalation as if it were a pipeline step of its own.
+   */
+  parentAgentKind?: string
+  /** Epoch ms the earliest folded step started, across ALL of its attempts. */
   startedAt: number
   /** Epoch ms the latest folded step finished (the run's settle time for one still open). */
   endedAt: number
   /** How many pipeline steps of this kind folded into the span (≥ 1). */
   stepCount: number
+  /**
+   * How many times this kind was DISPATCHED inside the span (≥ 1): a re-run step, a gate's
+   * fixer rounds, a Ralph loop's iterations.
+   *
+   * The span cannot separate those dispatches, because the events that hang under it carry no
+   * attempt ordinal to name one by. So the count is stated instead: converging in one round and
+   * thrashing through six are the same picture otherwise, and they are the picture an operator
+   * is actually looking for.
+   */
+  attemptCount: number
   /** False when any folded step failed. */
   ok: boolean
   /** A short failure message when {@link ok} is false, else null. */

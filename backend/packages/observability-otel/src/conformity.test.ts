@@ -81,6 +81,33 @@ const STEP_SPANS: LlmStepSpan[] = [
     startedAt: 1_500,
     endedAt: 3_000,
     stepCount: 1,
+    attemptCount: 1,
+    ok: true,
+    errorMessage: null,
+  },
+  // A HELPER kind: dispatched by the `ci` gate, so it nests under that step rather than under
+  // the run. Included here because parentage assembled from a NON-root parent is the part the
+  // two transports build most differently (an explicit parent Context on the SDK side).
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec-42',
+    agentKind: 'ci-fixer',
+    parentAgentKind: 'ci',
+    startedAt: 3_000,
+    endedAt: 4_500,
+    stepCount: 1,
+    attemptCount: 4,
+    ok: true,
+    errorMessage: null,
+  },
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec-42',
+    agentKind: 'ci',
+    startedAt: 3_000,
+    endedAt: 5_000,
+    stepCount: 1,
+    attemptCount: 1,
     ok: true,
     errorMessage: null,
   },
@@ -306,6 +333,8 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
       'chat claude-x',
       'execute_tool edit_file',
       'execute_tool run_command',
+      'invoke_agent ci',
+      'invoke_agent ci-fixer',
       'invoke_agent coder',
       'run',
     ])
@@ -335,6 +364,13 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
       for (const leaf of ['chat claude-x', 'execute_tool edit_file', 'execute_tool run_command']) {
         expect(spans.get(leaf)!.parentSpanId, leaf).toBe(step.spanId)
       }
+      // A helper nests one level deeper: the `ci` gate escalated to a fixer, so the fixer hangs
+      // under the gate rather than beside it. Both transports have to agree about a parent that
+      // is itself a derived, not-yet-emitted span.
+      const gate = spans.get('invoke_agent ci')!
+      expect(gate.parentSpanId).toBe(root.spanId)
+      expect(spans.get('invoke_agent ci-fixer')!.parentSpanId).toBe(gate.spanId)
+      expect(spans.get('invoke_agent ci-fixer')!.attributes['cat_factory.attempt_count']).toBe(4)
     }
   })
 })

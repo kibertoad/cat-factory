@@ -1108,6 +1108,40 @@ export const pipelineStepSchema = v.object({
    */
   finishedAt: v.optional(v.nullable(v.number())),
   /**
+   * Epoch ms the step began its FIRST attempt. Where {@link startedAt} is cleared and
+   * re-stamped by `resetStepForRerun` (so it always names the attempt in flight), this one
+   * survives the reset and never moves. It is what gives a re-run step a span covering
+   * everything it did: external-trace children name their parent by the run + agent kind
+   * alone, so attempt 1's generations hang under the same parent as attempt 3's, and a parent
+   * starting at the LAST attempt would begin after its own earliest child. Absent until the
+   * step starts.
+   */
+  firstStartedAt: v.optional(v.nullable(v.number())),
+  /**
+   * How many times this step has been STARTED (1 on a step that ran once, N after N-1
+   * re-runs). Incremented on each fresh start, never cleared by `resetStepForRerun`, so a
+   * cycle it drove is still countable after the fact. Distinct from the per-loop counters
+   * (`gate.attempts`, `ralph.attempts`), which count dispatches WITHIN one start.
+   */
+  attempts: v.optional(v.number()),
+  /**
+   * Every agent kind DISPATCHED against this step, in first-dispatch order, with how many
+   * times each ran.
+   *
+   * Usually just {@link agentKind} once, but a step routinely runs work under another kind: a
+   * gate escalating to its helper (`ci-fixer` / `conflict-resolver` / `on-call`), a Tester
+   * handing off to the fixer, a two-phase coder's `fork-proposer`. Those dispatches are what
+   * every telemetry row is tagged with, so the run's own record of "what actually ran here"
+   * cannot be `agentKind` alone. The COUNT is the cycle: a gate that dispatched its fixer four
+   * times is the difference between a run that converged and one that thrashed, and it is
+   * otherwise recoverable only from per-loop state each loop shapes differently.
+   *
+   * Written by `recordDispatchAttribution`, the one funnel every dispatch site already calls,
+   * and never cleared by `resetStepForRerun`. Absent on a step that dispatched no container
+   * agent (a gate whose precheck always passed, an inline-only step, a skipped step).
+   */
+  dispatches: v.optional(v.array(v.object({ agentKind: v.string(), count: v.number() }))),
+  /**
    * Epoch ms of the container agent's last observed sign of life, forwarded from the harness
    * heartbeat (job start, then every stdout chunk / subagent transcript tail) and persisted here
    * THROTTLED — only re-stamped once the heartbeat has advanced by a bounded window, so a live

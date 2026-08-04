@@ -162,6 +162,80 @@ describe('buildRunTraceSpans', () => {
     expect(buildRunTraceSpans('ws_1', settled)).toEqual(buildRunTraceSpans('ws_1', settled))
   })
 
+  it('covers every attempt of a re-run step, not just the one in flight', () => {
+    // A judge bounce resets `startedAt`, so it names attempt 2. Attempt 1's generations were
+    // exported hours earlier naming this same derived parent (the id is the run + kind), so a
+    // span starting at attempt 2 would begin AFTER its own earliest child.
+    const spans = buildRunTraceSpans(
+      'ws_1',
+      instance({
+        steps: [
+          step({ agentKind: 'coder', firstStartedAt: 1_000, startedAt: 6_000, finishedAt: 9_000 }),
+        ],
+      }),
+    )!
+
+    expect(spans.steps[0]!.startedAt).toBe(1_000)
+    expect(spans.steps[0]!.attemptCount).toBe(1)
+  })
+
+  it('gives a dispatched HELPER kind its own span, nested under its host step', () => {
+    // A ci-fixer's generations are tagged `ci-fixer`, not `ci`. Without a span of its own, every
+    // one of them names a parent nobody emits and dangles inside the run's trace.
+    const spans = buildRunTraceSpans(
+      'ws_1',
+      instance({
+        steps: [
+          step({ agentKind: 'coder', startedAt: 1_000, finishedAt: 2_000 }),
+          step({
+            agentKind: 'ci',
+            startedAt: 3_000,
+            finishedAt: 8_000,
+            dispatches: [{ agentKind: 'ci-fixer', count: 4 }],
+          }),
+        ],
+      }),
+    )!
+
+    const fixer = spans.steps.find((s) => s.agentKind === 'ci-fixer')!
+    expect(fixer.parentAgentKind).toBe('ci')
+    // The helper ran inside the gate, so it inherits the gate's window: a parent is REQUIRED to
+    // contain its children, and that is the tightest bound the run recorded.
+    expect([fixer.startedAt, fixer.endedAt]).toEqual([3_000, 8_000])
+    // Four fixer rounds is the whole signal: converged vs thrashed.
+    expect(fixer.attemptCount).toBe(4)
+    // The hosting gate keeps its own run-level span.
+    expect(spans.steps.find((s) => s.agentKind === 'ci')!.parentAgentKind).toBeUndefined()
+  })
+
+  it('counts a loop that re-dispatched one kind inside a single step', () => {
+    // Ralph iterates within one step (no reset), so `attempts` stays 1 while the dispatch count
+    // climbs. Both numbers are real and they answer different questions.
+    const spans = buildRunTraceSpans(
+      'ws_1',
+      instance({
+        steps: [
+          step({
+            agentKind: 'ralph',
+            startedAt: 1_000,
+            finishedAt: 9_000,
+            dispatches: [{ agentKind: 'ralph', count: 7 }],
+          }),
+        ],
+      }),
+    )!
+
+    expect(spans.steps[0]!.stepCount).toBe(1)
+    expect(spans.steps[0]!.attemptCount).toBe(7)
+  })
+
+  it('reports one attempt for an inline step that never reached the dispatch funnel', () => {
+    // A judge/consensus step is served inline, so it records no dispatches. Reporting 0 rounds
+    // for work that plainly ran would be worse than the absence it comes from.
+    const spans = buildRunTraceSpans('ws_1', instance({ steps: [step({ agentKind: 'judge' })] }))!
+    expect(spans.steps[0]!.attemptCount).toBe(1)
+  })
+
   it('bounds a still-running step by its last observed sign of life', () => {
     // A container step in flight when the run settled has no `finishedAt`. Its heartbeat is the
     // latest thing the run actually observed, so the extent stops there rather than at the

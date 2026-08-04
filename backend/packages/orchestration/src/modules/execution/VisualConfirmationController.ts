@@ -292,7 +292,7 @@ export class VisualConfirmationController {
     }
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle)
+    recordDispatchAttribution(step, handle, context.agentKind)
     // The dispatch returned, so the helper's per-run container is up; surface it via the
     // same `container` projection the Coder/Tester use (the live phase + id/url arrive on
     // the first poll). A finished cold-boot must NOT linger as a stale "spinning up".

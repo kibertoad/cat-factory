@@ -167,6 +167,7 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
         startedAt: 900,
         endedAt: 4_000,
         stepCount: 1,
+        attemptCount: 1,
         ok: true,
         errorMessage: null,
       },

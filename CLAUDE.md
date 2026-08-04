@@ -1412,8 +1412,15 @@ run, so **the parents' EXTENT is folded from stamps the run recorded, never read
 time** (`buildRunTraceSpans`): derived ids alone make a replay re-export the same span ids, and pairing
 those with a duration that moved is a contradiction where a byte-identical duplicate is something a
 backend collapses. The step level's grain is the agent KIND because that is the finest thing a generation
-event can NAME; a folded slice states its `step_count` rather than passing two steps off as one. **A span
-NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
+event can NAME. **A step that dispatched a HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a
+`fork-proposer`) gets a span for that kind too, nested under it**: the helper's telemetry is tagged with
+the HELPER, so without one every row of it names a parent nobody emits. What ran is recorded at dispatch
+on `PipelineStep.dispatches` through the ONE funnel (`recordDispatchAttribution`), never re-derived from
+`agentKind`. **What a span cannot separate it STATES**: the runs here repeat as CYCLES (a fixer loop, a
+Ralph iteration, a bounced step), and the events under a span carry no attempt ordinal to split it by, so
+each step span reports `step_count` AND `attempt_count` rather than passing six rounds off as one. A
+re-run's extent comes from `firstStartedAt`, which survives the reset that re-stamps `startedAt`, or the
+parent would begin after its own earlier children. **A span NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
 counterpart of the bounded-dimension rule: free text like a pipeline name rides an attribute, or a tenant
 mints unbounded series on the operator's backend by renaming things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
 exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
