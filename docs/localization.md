@@ -15,13 +15,31 @@ is left**.
 ## TL;DR
 
 - The migration is **incremental and phased**. Each phase localizes one area of the
-  app, lands the new keys in **all five bundled locales**, and ships as its own PR.
-- **Bundled locales:** `en` (source) + `es`, `fr`, `pl`, `uk`. Every new key must
-  exist in **all five** or the `i18n:check` CI gate fails (it hard-fails on a key
-  used in code but missing from a catalog).
+  app, lands the new keys in **every bundled locale**, and ships as its own PR.
+- **Ten bundled locales**, declared in `frontend/app/nuxt.config.ts`: `en` (the source,
+  and the `fallbackLocale` for all the others) plus `es`, `fr`, `pl`, `uk`, `de`, `it`,
+  `he`, `ja`, `tr`. The catalog set started at five (`en`/`es`/`fr`/`pl`/`uk`) and grew
+  to ten after phase 9; the five later catalogs were seeded with full coverage of every
+  phase, so an entry below saying "all bundled locales" holds for all ten today even
+  where the phase itself shipped into five.
+- `he` is the only RTL locale. `app.vue` drives `<html lang dir>` off `useLocaleHead()`,
+  so the mirroring comes from the `dir: 'rtl'` flag on the locale definition plus the
+  `rtl:` Tailwind variants on directional icons, never from per-component branching.
 - Catalogs live in `frontend/app/i18n/locales/<locale>.json`; runtime vue-i18n
   behaviour (fallback, plural rules, number/date formats) is in
-  `frontend/app/i18n/i18n.config.ts`.
+  `frontend/app/i18n/i18n.config.ts`. The language picker is data-driven from
+  `useI18n().locales`, so a locale added to the config surfaces in the UI with no
+  component change, and a downstream deployment layer can add or override a catalog by
+  dropping its own `i18n/locales/*.json`.
+- **Two CI gates, and neither is a full key-parity check.** `i18n:check`
+  (vue-i18n-extract) hard-fails on a key used in code but absent from a catalog, and it
+  only sees keys written as static `t('literal')` calls. `i18n-locale-parity.mjs --since
+  origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
+  same change in the other nine catalogs. Pre-existing lag on keys a PR does not touch
+  passes both, deliberately: it keeps the gates from fighting the incremental policy.
+  Standing lag is therefore tracked by hand, under **Remaining** below.
+- **Plural selectors are overridden only for `pl` and `uk`** (the Slavic one/few/many
+  rule in `i18n.config.ts`). The other seven run on vue-i18n's default selector.
 
 ## Progress
 
@@ -67,7 +85,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   labels), the integration back-title, the notifications inbox (per-type actions),
   and the personal-setup modal. `SideBar.vue` is now fully migrated (switched off the
   global `$t` to the destructured `t`). New keys under `auth.*` and `layout.*`, in all
-  five bundled locales.
+  bundled locales.
 - **Phase 4 (settings, #401):** the model-configuration presets editor, account
   settings tabs, the provider-connection panel (environment + runner-pool, local
   delegation), service fragment defaults, the issue-tracker panel (filing / linking /
@@ -75,7 +93,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   incident enrichment, local-mode tuning (warm pool + checkout reuse), the OpenRouter
   catalog, the workspace settings (waiting / task-limit / observability / retention /
   Kaizen / budget), and the local model endpoints. 314 keys under `settings.*` in all
-  five locales (enum-keyed lookups via exhaustive `Record` maps; spend currency via the
+  bundled locales (enum-keyed lookups via exhaustive `Record` maps; spend currency via the
   number formatter).
 
 - **Phase 5 (providers, #403):** the default-preset mismatch dialog and the AI-provider
@@ -84,7 +102,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   direct/proxy provider API-keys section (per-vendor labels + guided steps, scope/provider
   pickers, the caching note, connected-key usage), and the pooled LLM-vendor credentials
   modal (tabs, pool intro, per-vendor guided steps, connected-token usage). New keys under
-  `providers.*` in all five bundled locales; connected-key/token usage uses plural forms
+  `providers.*` in all bundled locales; connected-key/token usage uses plural forms
   (3-form for pl/uk) with the number formatter, and per-vendor labels/steps resolve via
   literal `t(...)` keys to keep the typed-key drift guard live.
 
@@ -95,7 +113,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   picker, import modal, source-connect modal, spawn preview, task context-docs list), and
   the tasks/issue-tracker surfaces (context-issue picker, context-issues list, import
   modal, source-connect modal). New keys under `github.*`, `slack.*`, `documents.*` and
-  `tasks.*` in all five bundled locales (256 leaf keys total, full parity); count readouts
+  `tasks.*` in all bundled locales (256 leaf keys total, full parity); count readouts
   use plural forms (3-form for pl/uk), statically-known enum labels (PR/issue state, Slack
   notification types) resolve via literal `t(...)` keys to keep the typed-key drift guard
   live, and structural emphasis uses `<i18n-t>` slots instead of HTML in message bodies.
@@ -111,7 +129,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   (the three default choice labels), and the gate result window (CI / conflicts / human-review
   variants: subtitles, the rolled-up display status, failing-check list, approval progress,
   the request-a-fix box, attempt timeline, and the sidebar state/budget/footer). New keys
-  under `pipeline.*`, `palette.*` and `gates.*` in all five bundled locales (166 leaf keys,
+  under `pipeline.*`, `palette.*` and `gates.*` in all bundled locales (166 leaf keys,
   full parity); count readouts use plural forms (3-form for pl/uk) with the count selector,
   the local status/state/strategy/outcome enum lookups resolve via exhaustive `Record` maps
   of literal `t(...)` keys to keep the typed-key drift guard live, the "agents complete"
@@ -133,7 +151,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   expiry dates via `d(...)`), the test-report window (status/severity enums, screenshot /
   check / concern count plurals), and the block focus view. New keys under `requirements.*`,
   `clarity.*`, `consensus.*`, `brainstorm.*`, `spec.*`, `followUp.*`, `humanTest.*`,
-  `testing.*`, `visualConfirm.*` and `focus.*` in all five bundled locales (full parity);
+  `testing.*`, `visualConfirm.*` and `focus.*` in all bundled locales (full parity);
   plural readouts use 3 forms for pl/uk, enum lookups resolve via exhaustive `Record` maps
   of literal `t()` keys, percentages via `n(..., 'percent')`. `catalog.ts`-sourced
   status/type labels rendered in these windows stay deferred to phase X.
@@ -155,7 +173,7 @@ phases 0–9. The remaining work is phase X (cross-cutting) below.
   media surfaces: the actual-vs-reference comparator (mode labels, alt text, upload
   hints) and the screenshot lightbox (toolbar titles, counter, zoom percentage via
   `n(..., 'percent')`). New keys under `bootstrap.*`, `sandbox.*`, `fragments.*`,
-  `kaizen.*`, `recurring.*`, `environments.*`, `provisioning.*` and `media.*` in all five
+  `kaizen.*`, `recurring.*`, `environments.*`, `provisioning.*` and `media.*` in all
   bundled locales (full parity); plural readouts use 3 forms for pl/uk, enum lookups
   resolve via exhaustive `Record` maps of literal `t()` keys, and concrete example
   placeholders (`payments-service`, `acme`, the `e.g. …` hints) stay inline per the
@@ -177,6 +195,8 @@ migration and are intentionally skipped.
   guarded) removes the last raw strings from the board/inspector surfaces.
 - `app/pages/index.vue`, `app/pages/reset-password.vue`: page-level copy.
 
+All ten catalogs are otherwise at full key parity with `en`.
+
 ## Per-phase checklist
 
 For each phase (see `CLAUDE.md` → Internationalization for the full rules):
@@ -189,15 +209,35 @@ For each phase (see `CLAUDE.md` → Internationalization for the full rules):
    numbers/percent/currency via `n(value, { key, currency })`. Inline-styled values
    via `<i18n-t>` slots. Enum→key lookups via an **exhaustive `Record`** of literal
    key strings.
-3. Add the new keys to `en.json`, then **all four** of `es/fr/pl/uk.json` (real
-   translations, 3 plural forms for pl/uk). Keep keys in full parity across locales.
+3. Add the new keys to `en.json`, then **all nine** of
+   `es/fr/pl/uk/de/it/he/ja/tr.json` (real translations, never a verbatim English
+   copy; 3 plural forms for pl/uk). Keep keys in full parity across locales.
 4. Verify: `pnpm --filter @cat-factory/app run i18n:check` (no missing keys),
-   `pnpm exec turbo run typecheck --filter=@cat-factory/app` (typed message keys),
-   `pnpm exec turbo run test:run --filter=@cat-factory/app`, and `oxfmt --check`.
+   `node frontend/app/scripts/i18n-locale-parity.mjs --since origin/main` (the nine
+   catalogs moved with `en`), `pnpm exec turbo run typecheck --filter=@cat-factory/app`
+   (typed message keys), `pnpm exec turbo run test:run --filter=@cat-factory/app`, and
+   `oxfmt --check`.
 5. Add a changeset (`@cat-factory/app` patch) and open a PR off the latest `main`.
 
 ## Known issues
 
+- **A dynamically-resolved key can go missing in a locale without any gate noticing.**
+  `i18n:check` scans for static `t('literal')` calls, so a key held as a string in a
+  data table and resolved through `t(item.label)` is invisible to it, and the parity
+  guard only couples keys a PR actually touched. The `settings.infrastructure.*` picker
+  labels went missing from four catalogs exactly this way and were only found by a manual
+  sweep. When you add a key that is resolved indirectly, check the catalogs by hand: the
+  fallback to `en` makes the gap silent in the UI rather than leaking a raw key.
+- **`he` uses two different terms for the Tester** (`הבוחן` in
+  `settings.infrastructure.testEnvBackend.composeDesc`, `סוכן הבדיקה` in
+  `local-composeDesc`), and three of its `testEnvBackend` descriptions drop the
+  "Best for …" second sentence that `en` carries. Picking one term is a translation
+  decision, not a mechanical fix.
+- **Plural rules are only overridden for `pl` and `uk`.** `he` in particular has a
+  four-form CLDR rule (one/two/many/other) and is running on vue-i18n's default 2-form
+  selector, so a Hebrew count message reads as an approximation rather than a wrong
+  form. Adding a selector to `i18n.config.ts` means re-authoring the affected `he`
+  entries at the same time.
 - **Pre-existing typecheck breakage on `main` (now resolved):** PR #372 had left
   `nuxt typecheck` reporting ~150 errors in untouched `app/composables/api/*.ts`
   files (HTTP-client typings). As of phase 3, a clean `main` checkout typechecks

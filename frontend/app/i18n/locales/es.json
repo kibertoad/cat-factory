@@ -3226,13 +3226,25 @@
       "executionBackend": {
         "label": "Dónde se ejecutan los agentes",
         "local-docker": "Docker local (host)",
+        "local-dockerDesc": "Ejecuta cada agente en un contenedor sobre el daemon de Docker de esta máquina.",
         "cloudflare-containers": "Cloudflare Containers (integrado)",
-        "runner-pool": "Pool de ejecutores autoalojado"
+        "cloudflare-containersDesc": "Ejecuta los agentes en la plataforma de contenedores por ejecución integrada de Cloudflare.",
+        "kubernetes": "Clúster de Kubernetes",
+        "kubernetesDesc": "Ejecuta cada agente como un pod en un clúster de Kubernetes que tú gestionas.",
+        "runner-pool": "Pool de ejecutores personalizado (HTTP)",
+        "runner-poolDesc": "Envía los agentes a tu propio planificador detrás de una API de manifiestos HTTP.",
+        "k3s": "Kubernetes local (k3s)",
+        "k3sDesc": "Precargado para un clúster k3s/k3d local en esta máquina: solo tienes que pegar un token."
       },
       "testEnvBackend": {
         "label": "Dónde se ejecutan los entornos de prueba",
-        "local-compose": "docker-compose en contenedor",
-        "environment-provider": "Proveedor de entornos",
+        "local-compose": "docker-compose en contenedor (dependencias del Tester)",
+        "local-composeDesc": "Levanta las dependencias del Tester con docker-compose dentro del contenedor de la ejecución. Para un entorno de vista previa completo de la app, usa la opción de entorno de vista previa de Docker Compose de abajo.",
+        "kubernetes": "Clúster de Kubernetes",
+        "kubernetesDesc": "Aprovisiona un namespace por PR en un clúster de Kubernetes que tú gestionas. Ideal para apps nativas de Kubernetes o si ya tienes un clúster en marcha.",
+        "environment-provider": "Proveedor HTTP personalizado",
+        "environment-providerDesc": "Aprovisiona entornos efímeros a través de tu propia API de gestión HTTP. Ideal si ya cuentas con herramientas propias de entornos de vista previa.",
+        "compose": "Entorno de vista previa de Docker Compose",
         "composeDesc": "Levanta el docker-compose.yml del propio repositorio en un daemon de Docker local como URL del Tester. Ideal para apps locales basadas en Compose. Admite imágenes prediseñadas o compilación desde el código fuente; requiere un daemon de Docker, por lo que solo en despliegues locales."
       },
       "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no se necesita conexión (el contenedor de la ejecución debe admitir Docker-in-Docker). Configura el servicio, el puerto y el origen de la imagen (usar prediseñada o compilar desde el código fuente) en los ajustes de entorno del servicio.",
