@@ -2979,6 +2979,48 @@
         "removeFailed": "レジストリエントリを削除できませんでした"
       }
     },
+    "toolServers": {
+      "heading": "ツールサーバー (MCP)",
+      "intro": "このデプロイがエージェント向けに登録している MCP サーバーです。テストするとこのボードの認証情報を解決してサーバーとプロトコルで通信するため、結果は実行時に得られるものと同じです。",
+      "transport": {
+        "stdio": "コンテナ内",
+        "http": "リモート"
+      },
+      "declaredBy": "割り当て先: {kinds}",
+      "declaredByNone": "どのエージェントにも渡されていないため、どの実行でも起動されません。",
+      "servableHarnesses": "対応 CLI: {harnesses}",
+      "servableHarnessesNone": "このトランスポートを扱えるエージェント CLI がないため、このサーバーはどの実行にも適用されません。",
+      "allowedTools": "許可されたツール: {tools}",
+      "credentials": "認証情報: {keys}",
+      "test": "テスト",
+      "notProbeable": {
+        "stdio": "エージェントのコンテナ内で動作するため、ここからはテストできません。",
+        "containerLocal": "エージェントと同じコンテナ内で待ち受けているため、ここからは到達できません。",
+        "urlNotAllowed": "ツールサーバーの接続先として許可されていないアドレスです (https、または localhost の平文 http のみ)。"
+      },
+      "status": {
+        "ok": "応答あり",
+        "credentialsMissing": "認証情報なし",
+        "credentialRefused": "認証情報を拒否",
+        "unreachable": "応答なし",
+        "httpError": "リクエストを拒否",
+        "protocolError": "MCP サーバーではない",
+        "notProbeable": "ここからテストできない"
+      },
+      "okDetail": "{name} {version}、プロトコル {protocol}、ツール {count} 個。",
+      "toolsIncomplete": "サーバーは 1 回のテストで読み取れる数を超えるツールを持つため、この数は最小値です。",
+      "unmatchedTools": "このサーバーに {tools} というツールは存在しないため、エージェントは呼び出せないツールを知らされています。",
+      "allowedToolsUnchecked": "ツール一覧が長すぎて全部を読み取れなかったため、絞り込んだ名前は確認できませんでした。",
+      "unresolvedCredentials": "{keys} の値が解決できませんでした。下で入力するか、デプロイの環境変数に設定してください。",
+      "refusedCredentials": "{keys} はプラットフォーム自身の設定に属する変数名なので、決して解決されません。デプロイのコード側の宣言を変更してください。",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "詳細を表示",
+      "hideDetails": "詳細を隠す",
+      "toast": {
+        "loadFailed": "ツールサーバーを読み込めませんでした",
+        "probeFailed": "ツールサーバーをテストできませんでした"
+      }
+    },
     "capabilityCredentials": {
       "tab": "機能の認証情報",
       "intro": "このデプロイのツールサーバーと生成系インテグレーションが名前で要求するシークレットです。値はこのボードにのみ保存され、保管時は暗号化され、エージェントのプロセスへ直接渡されます。プロンプトにもログにも現れません。値は書き込み専用なので、保存済みの値は新しい値を入力して置き換えるだけで、読み出すことはできません。",

@@ -2979,6 +2979,48 @@
         "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
       }
     },
+    "toolServers": {
+      "heading": "Araç sunucuları (MCP)",
+      "intro": "Bu kurulumun ajanları için kaydettiği MCP sunucuları. Bir sunucuyu test etmek bu panonun kimlik bilgilerini çözer ve sunucuyla protokol konuşur; sonuç, bir çalıştırmanın alacağı sonuçtur.",
+      "transport": {
+        "stdio": "Konteyner içinde",
+        "http": "Uzak"
+      },
+      "declaredBy": "Şu ajanlara verili: {kinds}",
+      "declaredByNone": "Hiçbir ajan bu sunucuyu almıyor, dolayısıyla hiçbir çalıştırma onu başlatmaz.",
+      "servableHarnesses": "Şunlarla çalışır: {harnesses}",
+      "servableHarnessesNone": "Hiçbir ajan CLI’si bu taşımayı sunamaz, dolayısıyla bu sunucu hiçbir çalıştırmada geçerli olmaz.",
+      "allowedTools": "Şunlarla sınırlı: {tools}",
+      "credentials": "Kimlik bilgileri: {keys}",
+      "test": "Test et",
+      "notProbeable": {
+        "stdio": "Ajanın konteynerinin içinde çalışır, bu yüzden buradan test edilemez.",
+        "containerLocal": "Ajanın yanında, onun kendi konteynerinde dinliyor; buradan erişilemez.",
+        "urlNotAllowed": "Bu adres bir araç sunucusuna erişim için uygun değil (https ya da yalnızca localhost üzerinde düz http)."
+      },
+      "status": {
+        "ok": "Yanıt verdi",
+        "credentialsMissing": "Kimlik bilgisi yok",
+        "credentialRefused": "Kimlik bilgisi reddedildi",
+        "unreachable": "Yanıt yok",
+        "httpError": "İsteği reddetti",
+        "protocolError": "MCP sunucusu değil",
+        "notProbeable": "Buradan test edilemez"
+      },
+      "okDetail": "{name} {version}, protokol {protocol}, {count} araç.",
+      "toolsIncomplete": "Sunucunun araç sayısı tek bir testin okuduğundan fazla, bu yüzden bu sayı bir alt sınırdır.",
+      "unmatchedTools": "Bu sunucu {tools} adlı bir araç sunmuyor; dolayısıyla ajana çağıramayacağı bir araç bildiriliyor.",
+      "allowedToolsUnchecked": "Araç listesi tümüyle okunacak kadar kısa değildi, bu yüzden sınırlanan adlar denetlenemedi.",
+      "unresolvedCredentials": "{keys} için hiçbir değer çözülmedi. Aşağıda doldurun ya da kurulumun ortamında tanımlayın.",
+      "refusedCredentials": "{keys}, platformun kendi yapılandırmasına ait bir değişkeni adlandırıyor, bu yüzden asla çözülmez. Kurulumun kodundaki bildirimi değiştirin.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Ayrıntıları göster",
+      "hideDetails": "Ayrıntıları gizle",
+      "toast": {
+        "loadFailed": "Araç sunucuları yüklenemedi",
+        "probeFailed": "Araç sunucusu test edilemedi"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Yetenek kimlik bilgileri",
       "intro": "Bu kurulumdaki araç sunucularının ve üretken entegrasyonların adıyla istediği sırlar. Değerler yalnızca bu pano için saklanır, beklerken şifrelenir ve doğrudan ajanın sürecine verilir: ne bir isteme ne de bir günlüğe düşer. Değerler yalnızca yazılabilir, dolayısıyla saklanan bir değer yenisi yazılarak değiştirilir ve hiçbir zaman geri okunmaz.",

@@ -36,6 +36,7 @@ import {
   type PersistenceRegistry,
   type ServerContainer,
   type ToolSecretChain,
+  toolSecretContainerFields,
   type WebSearchUpstream,
 } from '@cat-factory/server'
 import {
@@ -829,13 +830,11 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
-    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
-    // describes the real chain instead of asserting the default beside it. Undefined when a
-    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
-    // what that consults.
-    ...(toolSecretChain.environmentFallback === undefined
-      ? {}
-      : { toolSecretEnvironmentFallback: toolSecretChain.environmentFallback }),
+    // The composed capability-credential chain: the resolver the tool-server probe resolves through
+    // (a probe must resolve exactly as a dispatch does, or it reports on the wrong tenant's value)
+    // and the description the credential checklist renders. Projected by ONE shared helper on both
+    // facades, since an absent description and a `false` one send an operator opposite ways.
+    ...toolSecretContainerFields(toolSecretChain),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,

@@ -33,6 +33,7 @@ import { modelsApi } from './api/models'
 import { notificationsApi } from './api/notifications'
 import { packageRegistriesApi } from './api/packageRegistries'
 import { capabilityCredentialsApi } from './api/capabilityCredentials'
+import { toolServersApi } from './api/toolServers'
 import { preflightsApi } from './api/preflights'
 import { presetsApi } from './api/presets'
 import { publicApiKeysApi } from './api/publicApiKeys'
@@ -156,6 +157,7 @@ export function useApi() {
     ...testSecretsApi(ctx),
     ...packageRegistriesApi(ctx),
     ...capabilityCredentialsApi(ctx),
+    ...toolServersApi(ctx),
     ...previewApi(ctx),
     ...environmentsApi(ctx),
     ...recurringApi(ctx),

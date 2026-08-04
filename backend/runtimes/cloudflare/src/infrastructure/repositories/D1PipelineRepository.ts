@@ -3,6 +3,39 @@ import type { Pipeline } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
 import { type PipelineRow, rowToPipeline } from './mappers'
 
+/**
+ * The insert statement and its bindings, shared by `insert` and `insertIfAbsent` so the
+ * twenty-column projection is written once: the two differ only in the conflict clause appended
+ * to this SQL.
+ */
+const INSERT_PIPELINE_SQL =
+  'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+
+function pipelineBindings(workspaceId: string, pipeline: Pipeline): unknown[] {
+  return [
+    workspaceId,
+    pipeline.id,
+    pipeline.name,
+    pipeline.description ?? null,
+    JSON.stringify(pipeline.agentKinds),
+    pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+    pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
+    pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+    pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+    pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+    pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+    pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
+    pipeline.stepOptions ? JSON.stringify(pipeline.stepOptions) : null,
+    pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+    pipeline.archived ? 1 : null,
+    pipeline.builtin ? 1 : null,
+    pipeline.version ?? null,
+    pipeline.public ? 1 : null,
+    pipeline.availability ?? null,
+    pipeline.purpose ?? null,
+  ]
+}
+
 export class D1PipelineRepository implements PipelineRepository {
   private readonly db: D1Database
 
@@ -32,31 +65,19 @@ export class D1PipelineRepository implements PipelineRepository {
 
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
     await this.db
-      .prepare(
-        'INSERT INTO pipelines (workspace_id, id, name, description, agent_kinds, gates, thresholds, enabled, consensus, gating, follow_ups, tester_quality, step_options, labels, archived, builtin, version, public, availability, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      )
-      .bind(
-        workspaceId,
-        pipeline.id,
-        pipeline.name,
-        pipeline.description ?? null,
-        JSON.stringify(pipeline.agentKinds),
-        pipeline.gates ? JSON.stringify(pipeline.gates) : null,
-        pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
-        pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
-        pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
-        pipeline.gating ? JSON.stringify(pipeline.gating) : null,
-        pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
-        pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
-        pipeline.stepOptions ? JSON.stringify(pipeline.stepOptions) : null,
-        pipeline.labels ? JSON.stringify(pipeline.labels) : null,
-        pipeline.archived ? 1 : null,
-        pipeline.builtin ? 1 : null,
-        pipeline.version ?? null,
-        pipeline.public ? 1 : null,
-        pipeline.availability ?? null,
-        pipeline.purpose ?? null,
-      )
+      .prepare(INSERT_PIPELINE_SQL)
+      .bind(...pipelineBindings(workspaceId, pipeline))
+      .run()
+  }
+
+  async insertIfAbsent(workspaceId: string, pipeline: Pipeline): Promise<void> {
+    // Conflict-TARGETED on the composite key, so losing the adoption race is a no-op while a
+    // genuine constraint violation still throws (see the port's contract). Deliberately NOT
+    // `INSERT OR IGNORE`, which would also swallow any other constraint failure on this runtime
+    // alone and so hide a real bug behind a passing Postgres suite.
+    await this.db
+      .prepare(`${INSERT_PIPELINE_SQL} ON CONFLICT(workspace_id, id) DO NOTHING`)
+      .bind(...pipelineBindings(workspaceId, pipeline))
       .run()
   }
 

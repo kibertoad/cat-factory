@@ -925,7 +925,7 @@ never remotely invocable (mothership-internal cron).
 | `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                         |
 | `blockRepository`                        | ◑ part  | board/run reads+writes + public-API `countActiveInternal`; unbatched `listByService` unused        |
 | `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                          |
-| `pipelineRepository`                     | ✅ done | full CRUD                                                                                          |
+| `pipelineRepository`                     | ✅ done | full CRUD + `insertIfAbsent` (run-path catalog adoption)                                           |
 | `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                  |
 | `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                |
 | `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                          |

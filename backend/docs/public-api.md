@@ -79,6 +79,14 @@ Two things to know before minting `decide` or `admin`:
 - Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
+- **A pipeline the board has not adopted yet is a real pipeline for both start paths, and is scoped
+  like any other.** Built-ins are copied into a workspace at creation, so a board older than a
+  catalog pipeline holds no row for it; a run MATERIALISES the row on first start
+  ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). Naming one now starts (or, if
+  it can park, is refused for a key below `decide`) instead of answering `404`/`pipeline_not_public`,
+  so an integration pinning a pipeline by id no longer has to wait for someone to reseed the board in
+  the SPA. `GET /api/v1/pipelines` still lists the board's own rows, so an un-adopted id will not
+  appear there until a run adopts it.
 
 ### 3. Authenticate
 

@@ -85,6 +85,12 @@ export async function collectDeclaredCapabilityCredentials(
           id: server.id,
           label: server.label ?? server.id,
           key: secret.key,
+          // The declaration's own note on what value belongs here. The view has carried the field
+          // since it landed and only the generator branch below filled it in, so a tool server's
+          // row said "SLACK_MCP_TOKEN, wanted by Slack" and nothing about which token type or
+          // scopes — sending the operator back to the deployment's source, the exact trip this
+          // checklist exists to remove.
+          ...(secret.usage ? { usage: secret.usage } : {}),
           // `required` defaults to TRUE at both declaration sites: a credential a capability
           // bothered to declare is one it needs.
           required: secret.required !== false,

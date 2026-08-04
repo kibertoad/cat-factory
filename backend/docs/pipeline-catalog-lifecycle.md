@@ -17,6 +17,67 @@ add a filter to `seedPipelines()`.
 A deployment retires its own via `PipelineRegistry.retire(id, { replacedBy })`, cannot retire a
 built-in, and `replacedBy` is an ID resolved against the stored row AND the catalog, never prose.
 
+### Adoption: a run materialises a catalog built-in the board was never seeded with
+
+A board seeded before a pipeline shipped holds no row for it, and the catalog's copy is invisible to
+every read (`PipelineService.list` is `listByWorkspace`, the builder edits rows, a run resolves by
+row). For a human browsing the library the advisory plus a reseed closes that. For anything that
+PINS a pipeline by id it does not: a reusable operation's task is creatable on an older board (the
+pin resolves off the task-type registry, which knows nothing about rows) and would then refuse to
+start. So `pipelineAdoption.adoptForRun` (`modules/pipelines/pipelineAdoption.ts`) resolves the run's
+pipeline and INSERTS the catalog row when the board lacks it.
+
+Three rules hold it together:
+
+- **It writes rather than running off the catalog copy.** Resolving from code without persisting
+  would leave a run using a pipeline the board's own library cannot show, open in the builder, or
+  attach a schedule to. Rows stay the single source every surface reads.
+- **Only `builtin` catalog entries are adoptable**, and that is the whole safety argument: a built-in
+  is read-only and becomes deletable only once RETIRED, and a retired id is absent from
+  `seedPipelines` by construction, so "no row plus a live built-in entry" can only mean never
+  adopted. A versionless registered pipeline IS deletable, so adopting one would resurrect a
+  deliberate deletion.
+- **The write is `insertIfAbsent`** (conflict-targeted `DO NOTHING` on `(workspace_id, id)`, not
+  `INSERT OR IGNORE`). Two tasks of one operation started at once both resolve "no row" and both
+  insert the same definition, so first write wins and the loser has nothing to report. `reseed`'s
+  absent branch goes through it too, since it races the same way.
+
+#### A read on the run path asks ADOPTION, never the bare row
+
+`resolveDefinition` is the read-only twin, for a question about a PROSPECTIVE run. It must agree with
+`adoptForRun` about what would run and differ only in writing, because every gate standing in front
+of a start resolves the pipeline first and then decides. Answer `null` there and the gate does not
+refuse, it CONCLUDES, off a pipeline that is about to run anyway:
+
+- the personal-credential gate read "no agent kinds", so a run needing an individual subscription
+  started ungated;
+- the public API's decide-scope check found nothing to inspect for parks, so a `write`-only key set
+  in motion exactly the park that scope withholds (`PipelineService.resolveForRun`, which replaced
+  the `get` that served the stored row, is the one read both public start paths take);
+- the post-merge auto-start dropped a dependent whose pin had no row, so a merge propagated into a
+  task that silently never began (that path holds the workspace's whole list already, so it resolves
+  misses through `adoptableCatalog()` rather than a point read per miss).
+
+So a bare `pipelineRepository.get` on a run-adjacent path is the smell. Adoption is also COUNTED,
+not only logged (`pipeline.adopted`): the log line says which board caught up, and only the rate says
+how many are still behind a catalog the deployment already shipped.
+
+Still refusing on purpose: an initiative policy edit and a recurring schedule naming an un-adopted
+pipeline. Both are AUTHORING paths where the SPA only offers stored pipelines, so adopting on them
+would materialise rows for pipelines nobody ran.
+
+### The registration SHAPE picks the lifecycle, and only one of the two can be updated
+
+`builtin: true` plus an explicit `version` makes a registered pipeline a read-only catalog template:
+seeded into new workspaces, offered to older boards by the new-pipeline advisory, materialised (and
+re-adopted after a version bump) by `reseed`, cloned to deviate. Registered VERSIONLESS it is instead
+an editable copy each workspace owns, and `reseed` then refuses the stored row ("Only built-in
+pipelines can be reseeded"), so a deployment can never roll a fix out to a board that already holds
+it. Anything that PINS a pipeline by id wants the first shape: a reusable operation's
+`defaultPipelineId` ([`reusable-operations.md`](../../docs/initiatives/reusable-operations.md) D10)
+or an initiative preset's `seedPlan` routing both break if a workspace edits or deletes the
+definition out from under them.
+
 ## Deletion guards
 
 Deleting a pipeline a recurring SCHEDULE points at is refused 409, paused included.

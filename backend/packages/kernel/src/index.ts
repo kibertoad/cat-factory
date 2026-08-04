@@ -570,6 +570,7 @@ export {
   MCP_TOOL_NAME_PATTERN,
   TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
+  isLoopbackMcpHttpUrl,
   isValidMcpServerId,
   isValidMcpToolName,
   mcpHarnessServesTransport,
