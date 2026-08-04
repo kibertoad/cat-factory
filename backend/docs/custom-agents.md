@@ -350,21 +350,29 @@ environment, per key, with the reserved-key floor applied before the resolver is
 `initialize` + `tools/list` to the server. So the verdict is about THIS board rather than about
 whoever set the deployment's variable.
 
-| Verdict               | What it means                                                                      | The fix                                                           |
-| --------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `ok`                  | The handshake completed and the tool list came back                                | Nothing; the row names the server, its version and its tool count |
-| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                       | Store the value for this board, or set the variable               |
-| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                  | The DECLARATION (setting the variable must not help)              |
-| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline                | The endpoint, or the network between here and it                  |
-| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)  | The credential's value, or the url's path                         |
-| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect) | The url almost certainly names something else                     |
-| `not_probeable`       | The backend has no vantage point (see below)                                       | Verify from a run, or change the transport                        |
+| Verdict               | What it means                                                                                                    | The fix                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ok`                  | The handshake completed and the tool list came back                                                              | Nothing; the row names the server, its version and its tool count |
+| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                                                     | Store the value for this board, or set the variable               |
+| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                                                | The DECLARATION (setting the variable must not help)              |
+| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline (including a body that stalls after its 200) | The endpoint, or the network between here and it                  |
+| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)                                | The credential's value, or the url's path                         |
+| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect)                               | The url almost certainly names something else                     |
+| `not_probeable`       | The backend has no vantage point (see below)                                                                     | Verify from a run, or change the transport                        |
 
 Three declarations are refused BY NAME instead of being probed, because a probe from the backend would
 answer about the wrong process: a `stdio` server is a child of the harness inside the run container; a
 loopback url means "beside the agent, in its own container", and the backend's `127.0.0.1` is a
 different machine (a SUCCESS there would be the more misleading of the two outcomes); and a url that
 fails the transport rule is held to the same floor the dispatch holds it to.
+
+**A REDIRECT is followed, but a credential stops at its own origin.** Each hop is re-checked against
+the transport rule, so an https endpoint cannot redirect a credential-bearing request onto cleartext.
+A hop that leaves the DECLARED ORIGIN is refused outright while a credential is riding, and that is
+what a run does too rather than extra caution: the Web platform removes `Authorization` when a
+redirect crosses origins, so an agent's own MCP client reaches such a hop unauthenticated and would
+report a 401. Naming the origin change instead points at the fix, which is the declaration naming the
+final url. A server that needs no credential is followed across origins as usual.
 
 **The probe is also the only thing that can check `allowedTools` against reality.** Every other layer
 holds an entry to a NAME pattern and none can tell a well-formed name from a real one. When the tool

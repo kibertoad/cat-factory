@@ -11,12 +11,21 @@ import { probeMcpHttpServer } from '../src/modules/toolServers/mcpProbe.js'
 
 interface Recorded {
   url: string
+  method: string
   headers: Record<string, string>
   body: unknown
 }
 
-/** A stub `fetch` that answers each POST in turn from `answers`, recording what it was sent. */
-function stubFetch(answers: Array<Response | (() => Response | Promise<Response>)>) {
+/**
+ * A stub `fetch` that answers each request in turn from `answers`, recording what it was sent.
+ *
+ * An answer may be a function, which is handed the `RequestInit` so a test can build a response that
+ * reacts to the request's SIGNAL. A real fetch errors the response body when the signal aborts, and
+ * nothing else in a stub is listening, so a body that models a stalling server has to do it itself.
+ */
+function stubFetch(
+  answers: Array<Response | ((init?: RequestInit) => Response | Promise<Response>)>,
+) {
   const sent: Recorded[] = []
   let index = 0
   const doFetch = (async (url: string | URL, init?: RequestInit) => {
@@ -26,12 +35,13 @@ function stubFetch(answers: Array<Response | (() => Response | Promise<Response>
     }
     sent.push({
       url: String(url),
+      method: init?.method ?? 'GET',
       headers,
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
     })
     const answer = answers[index++]
     if (!answer) throw new Error(`unexpected request ${index}: ${String(url)}`)
-    return typeof answer === 'function' ? await answer() : answer
+    return typeof answer === 'function' ? await answer(init) : answer
   }) as unknown as typeof fetch
   return { doFetch, sent }
 }
@@ -62,7 +72,11 @@ const HANDSHAKE = {
   },
 }
 
-const target = { url: 'https://mcp.example/rpc', headers: { authorization: 'Bearer tok' } }
+const target = {
+  url: 'https://mcp.example/rpc',
+  headers: {},
+  credentialHeaders: { authorization: 'Bearer tok' },
+}
 
 describe('probeMcpHttpServer', () => {
   it('completes the handshake, sends the initialized notification, and lists tools', async () => {
@@ -112,14 +126,15 @@ describe('probeMcpHttpServer', () => {
     expect(outcome).toMatchObject({ status: 'ok', tools: ['search'] })
   })
 
-  it('echoes a minted session id and the negotiated protocol version on later requests', async () => {
+  it('echoes a minted session id, then ENDS the session it opened', async () => {
     const { doFetch, sent } = stubFetch([
       json(HANDSHAKE, { headers: { 'content-type': 'application/json', 'mcp-session-id': 's-9' } }),
       new Response(null, { status: 202 }),
       json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+      new Response(null, { status: 204 }),
     ])
 
-    await probeMcpHttpServer(target, { fetch: doFetch })
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
 
     // Without these a session-keeping server answers the handshake and then 400s everything after
     // it, which reads as a broken server rather than a broken client.
@@ -127,6 +142,44 @@ describe('probeMcpHttpServer', () => {
     expect(sent[1]!.headers['mcp-session-id']).toBe('s-9')
     expect(sent[1]!.headers['mcp-protocol-version']).toBe('2025-06-18')
     expect(sent[2]!.headers['mcp-session-id']).toBe('s-9')
+    // The spec's termination path, so pressing Test repeatedly does not leave one session per press
+    // on the server to age out on its own clock.
+    expect(sent[3]).toMatchObject({ method: 'DELETE', headers: { 'mcp-session-id': 's-9' } })
+    expect(outcome).toMatchObject({ status: 'ok' })
+  })
+
+  it('does not send a termination for a server that minted no session', async () => {
+    const { doFetch, sent } = stubFetch([
+      json(HANDSHAKE),
+      new Response(null, { status: 202 }),
+      json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+    ])
+
+    await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // A stateless server has nothing to terminate, and a DELETE at its endpoint asks it to end a
+    // session it never had. Asserted because `stubFetch` would answer a fourth request by throwing,
+    // which the probe swallows — so only the count can say the request was never made.
+    expect(sent).toHaveLength(3)
+  })
+
+  it('keeps its own content negotiation when a declaration spells a header differently', async () => {
+    const { doFetch, sent } = stubFetch([
+      json(HANDSHAKE),
+      new Response(null, { status: 202 }),
+      json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+    ])
+
+    await probeMcpHttpServer(
+      { ...target, headers: { Accept: 'application/json', 'X-Tenant': 'acme' } },
+      { fetch: doFetch },
+    )
+
+    // `Headers` APPENDS as it fills from a record, so an un-normalised merge would send
+    // `accept: application/json, application/json, text/event-stream` and a stream-first server
+    // would negotiate against something neither side offered.
+    expect(sent[0]!.headers.accept).toBe('application/json, text/event-stream')
+    expect(sent[0]!.headers['x-tenant']).toBe('acme')
   })
 
   it('follows pagination and reports a list that ran past the page bound as incomplete', async () => {
@@ -197,7 +250,7 @@ describe('probeMcpHttpServer', () => {
     expect((outcome as { error: string }).error).toContain('serverInfo')
   })
 
-  it('follows a redirect within the transport rule, carrying the credential', async () => {
+  it('follows a SAME-ORIGIN redirect, carrying the credential', async () => {
     const { doFetch, sent } = stubFetch([
       new Response(null, { status: 307, headers: { location: 'https://mcp.example/v2/rpc' } }),
       json(HANDSHAKE),
@@ -209,8 +262,8 @@ describe('probeMcpHttpServer', () => {
 
     expect(outcome).toMatchObject({ status: 'ok' })
     expect(sent[1]!.url).toBe('https://mcp.example/v2/rpc')
-    // The agent's own MCP client would follow the hop with the credential too, so a probe that
-    // stripped it would report a 401 for a server that works on a run.
+    // A path move inside the declared origin is the ordinary case (a versioned endpoint), and the
+    // credential rides it exactly as the agent's own client would.
     expect(sent[1]!.headers.authorization).toBe('Bearer tok')
   })
 
@@ -225,7 +278,43 @@ describe('probeMcpHttpServer', () => {
     // header, and a redirect is how a declaration that passed boot validation still reaches
     // cleartext.
     expect(outcome).toMatchObject({ status: 'protocol_error' })
-    expect((outcome as { error: string }).error).toContain('carries a credential')
+    expect((outcome as { error: string }).error).toContain('may not be')
+  })
+
+  it('refuses to carry a credential ACROSS ORIGINS, https or not', async () => {
+    const { doFetch, sent } = stubFetch([
+      new Response(null, { status: 307, headers: { location: 'https://elsewhere.example/rpc' } }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    // The hop passes the transport rule (it is https), and forwarding the credential anyway would
+    // make the probe the one path that hands a workspace's token to whatever a hijacked or expired
+    // vendor host redirects to — while answering about a request no run makes, because the Web
+    // platform removes `Authorization` on a cross-origin hop. So: refused, with the fix named.
+    expect(outcome).toMatchObject({ status: 'protocol_error' })
+    expect((outcome as { error: string }).error).toContain('different origin')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('follows a cross-origin redirect when there is no credential to leak', async () => {
+    const { doFetch, sent } = stubFetch([
+      new Response(null, { status: 307, headers: { location: 'https://elsewhere.example/rpc' } }),
+      json(HANDSHAKE),
+      new Response(null, { status: 202 }),
+      json({ jsonrpc: '2.0', id: 2, result: { tools: [] } }),
+    ])
+
+    const outcome = await probeMcpHttpServer(
+      { url: 'https://mcp.example/rpc', headers: {}, credentialHeaders: {} },
+      { fetch: doFetch },
+    )
+
+    // The refusal above is about the CREDENTIAL, not about redirects: an unauthenticated server
+    // that moves origins is reachable on a run too, so reporting it as broken would be the probe
+    // inventing a fault.
+    expect(outcome).toMatchObject({ status: 'ok' })
+    expect(sent[1]!.url).toBe('https://elsewhere.example/rpc')
   })
 
   it('names the deadline rather than reporting a bare abort', async () => {
@@ -241,5 +330,58 @@ describe('probeMcpHttpServer', () => {
 
     expect(outcome).toMatchObject({ status: 'unreachable' })
     expect((outcome as { error: string }).error).toContain('did not answer within')
+  })
+
+  it('names the deadline for a stream that stalls AFTER answering 200', async () => {
+    // The shape a real slow endpoint has: headers arrive, the body does not. The probe's one signal
+    // aborts the response stream as well as the request, so this used to surface as a
+    // `protocol_error` — "the url names something else" for a server that is merely slow, and the
+    // one cause `unreachable` is documented to cover.
+    const { doFetch } = stubFetch([
+      (init) =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              // Never enqueues, never closes: the deadline is what ends it, exactly as a real fetch
+              // ends a body whose request was aborted.
+              init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')))
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        ),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch, timeoutMs: 60 })
+
+    expect(outcome).toMatchObject({ status: 'unreachable' })
+    expect((outcome as { error: string }).error).toContain('did not answer within')
+  })
+
+  it('bounds the body it quotes back from a non-2xx answer', async () => {
+    // An auth proxy or a load balancer answers a 4xx with an HTML page, and this string is both
+    // rendered in a browser and logged. The STATUS is the diagnosis; the body is a hint about who
+    // answered, so it is previewed like every other quoted body rather than echoed whole.
+    const { doFetch } = stubFetch([
+      new Response(`<html>${'x'.repeat(50_000)}</html>`, {
+        status: 502,
+        headers: { 'content-type': 'text/html' },
+      }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    expect(outcome).toMatchObject({ status: 'http_error', httpStatus: 502 })
+    expect((outcome as { error: string }).error.length).toBeLessThan(300)
+  })
+
+  it('reports an empty 200 as a missing body rather than as unparseable JSON', async () => {
+    const { doFetch } = stubFetch([
+      new Response('', { status: 200, headers: { 'content-type': 'application/json' } }),
+    ])
+
+    const outcome = await probeMcpHttpServer(target, { fetch: doFetch })
+
+    expect(outcome).toMatchObject({ status: 'protocol_error' })
+    expect((outcome as { error: string }).error).toContain('no readable body')
   })
 })

@@ -24,9 +24,17 @@ import { MCP_PROBE_MAX_PAGES, MCP_PROBE_TIMEOUT_MS } from '@cat-factory/contract
 //     the handshake and then 400s the `tools/list` that follows.
 //   - redirects, followed by hand up to {@link MAX_REDIRECTS} hops with every hop re-validated
 //     against `isAllowedMcpHttpUrl` (the same rule the declared url is held to, re-checked per hop
-//     exactly as the local-runner fetch does). The credential headers ride along, because the
-//     agent's own MCP client would follow the hop with them too: a probe that stripped them would
-//     report a 401 for a server that works on a run, which is a worse answer than the redirect.
+//     exactly as the local-runner fetch does) — and, when the request carries a credential, held to
+//     the SAME ORIGIN as well. That is not extra caution beyond what a real client does, it is what
+//     a real client does: the Web platform REMOVES `Authorization` when a redirect crosses origins
+//     (fetch's CORS non-wildcard request-header rule), so an agent's own MCP client reaches such a
+//     hop unauthenticated. Forwarding a resolved credential there would make the probe the one path
+//     that hands a workspace's token to whatever a hijacked or expired vendor host redirects to,
+//     and it would answer about a request no run will ever make. Refused BY NAME instead, because
+//     "your declared url redirects off its origin" is the fix, where a silently credential-less
+//     401 is a wrong cause.
+//   - a POST on every hop, deliberately NOT the spec's 301/302/303 method rewrite. A GET to an MCP
+//     endpoint means "open the SSE stream", so degrading to one asks a different question.
 //
 // It never throws. Every failure is a discriminated outcome, because the whole point is to hand the
 // operator a CAUSE, and "the probe blew up" is not one.
@@ -57,8 +65,16 @@ const MAX_RESPONSE_BYTES = 4_000_000
 
 export interface McpProbeTarget {
   url: string
-  /** Request headers, INCLUDING the resolved credential header. Never logged, never returned. */
+  /** The non-secret headers the DECLARATION itself carries (`transport.headers`). */
   headers: Record<string, string>
+  /**
+   * The resolved credential headers. Never logged, never returned.
+   *
+   * Kept APART from `headers` rather than merged by the caller, because the two are treated
+   * differently at a redirect: a hop that leaves the declared origin is refused while these are
+   * present, and a declaration's own `x-tenant` is not a reason to refuse anything.
+   */
+  credentialHeaders: Record<string, string>
 }
 
 export interface McpProbeDeps {
@@ -102,19 +118,34 @@ export async function probeMcpHttpServer(
   target: McpProbeTarget,
   deps: McpProbeDeps = {},
 ): Promise<McpProbeOutcome> {
-  const doFetch = deps.fetch ?? fetch
-  const maxPages = deps.maxPages ?? MCP_PROBE_MAX_PAGES
   // ONE deadline for the whole exchange rather than a timeout per request. Three round trips each
   // allowed the full budget is three times the wait an operator was told to expect, and the thing
   // being bounded is how long this endpoint holds a request open.
   const timeoutMs = deps.timeoutMs ?? MCP_PROBE_TIMEOUT_MS
-  const signal = AbortSignal.timeout(timeoutMs)
-  const session = new SessionHeaders()
+  const ctx: Exchange = {
+    doFetch: deps.fetch ?? fetch,
+    target,
+    session: new SessionHeaders(),
+    signal: AbortSignal.timeout(timeoutMs),
+    timeoutMs,
+  }
 
-  const handshake = await exchange(
-    { doFetch, target, session, signal, timeoutMs },
-    { id: 1, method: 'initialize', params: initializeParams() },
-  )
+  const outcome = await handshakeAndList(ctx, deps.maxPages ?? MCP_PROBE_MAX_PAGES)
+  // A session the server minted is ENDED before answering, whatever the outcome was. The spec's own
+  // termination path, and without it every press of the Test button leaves a session on the server
+  // to expire on its own clock. Best effort by construction: it cannot change the verdict, so a
+  // server that refuses or ignores the DELETE costs nothing.
+  await endSession(ctx)
+  return outcome
+}
+
+/** The exchange itself: handshake, the required notification, then every page of `tools/list`. */
+async function handshakeAndList(ctx: Exchange, maxPages: number): Promise<McpProbeOutcome> {
+  const handshake = await exchange(ctx, {
+    id: 1,
+    method: 'initialize',
+    params: initializeParams(),
+  })
   if (!handshake.ok) return handshake.failure
 
   const negotiated = readHandshake(handshake.result)
@@ -126,18 +157,15 @@ export async function probeMcpHttpServer(
         'answering JSON-RPC but is not an MCP server',
     }
   }
-  session.protocolVersion = negotiated.protocolVersion
+  ctx.session.protocolVersion = negotiated.protocolVersion
 
   // The spec REQUIRES this notification before any other request, and a strict server rejects
   // `tools/list` without it. It carries no id and expects no body (a `202` is the normal answer), so
   // its outcome is only interesting when the transport itself failed.
-  const notified = await notify(
-    { doFetch, target, session, signal, timeoutMs },
-    'notifications/initialized',
-  )
+  const notified = await notify(ctx, 'notifications/initialized')
   if (notified) return notified
 
-  const listed = await listTools({ doFetch, target, session, signal, timeoutMs }, maxPages)
+  const listed = await listTools(ctx, maxPages)
   if (!listed.ok) return listed.failure
   return { status: 'ok', ...negotiated, tools: listed.tools, toolsComplete: listed.complete }
 }
@@ -192,15 +220,22 @@ interface Exchange {
 class SessionHeaders {
   sessionId?: string
   protocolVersion?: string
+  /**
+   * The url the session was minted at, which a redirect may have moved off the declared one. The
+   * DELETE that ends the session has to reach the endpoint that owns it, not the url we asked for.
+   */
+  endpoint?: string
 
   apply(headers: Record<string, string>): void {
     if (this.sessionId) headers['mcp-session-id'] = this.sessionId
     if (this.protocolVersion) headers['mcp-protocol-version'] = this.protocolVersion
   }
 
-  adopt(response: Response): void {
+  adopt(response: Response, url: string): void {
     const minted = response.headers.get('mcp-session-id')
-    if (minted) this.sessionId = minted
+    if (!minted) return
+    this.sessionId = minted
+    this.endpoint = url
   }
 }
 
@@ -249,7 +284,7 @@ async function exchange(
 ): Promise<ExchangeOutcome> {
   const sent = await post(ctx, { jsonrpc: '2.0', ...message })
   if (!sent.ok) return { ok: false, failure: sent.failure }
-  const body = await readFrame(sent.response)
+  const body = await readFrame(ctx, sent.response)
   if (!body.ok) return { ok: false, failure: body.failure }
   const frame = body.frame
   if (isRecord(frame.error)) {
@@ -289,65 +324,49 @@ async function notify(ctx: Exchange, method: string): Promise<McpProbeFailure | 
   return undefined
 }
 
+/**
+ * End the session the server minted, if it minted one. The spec's own termination path.
+ *
+ * Best effort in the strict sense: it runs AFTER the verdict is decided and cannot change it, so
+ * every failure is dropped here rather than reported. A server may answer `405` (termination not
+ * allowed) and be entirely correct, the deadline may already have passed, and neither is news. What
+ * it buys is that pressing Test repeatedly does not leave a session per press on the server to age
+ * out on its own clock.
+ */
+async function endSession(ctx: Exchange): Promise<void> {
+  const { sessionId, endpoint } = ctx.session
+  if (!sessionId || !endpoint) return
+  try {
+    const response = await ctx.doFetch(endpoint, {
+      method: 'DELETE',
+      headers: requestHeaders(ctx),
+      redirect: 'manual',
+      signal: ctx.signal,
+    })
+    // silent-catch-ok: as above — a body we never read, on a request whose outcome is already
+    // irrelevant to the caller.
+    await response.body?.cancel().catch(() => {})
+  } catch {
+    // Nothing to report and nowhere to report it: the verdict is already computed, and a failed
+    // courtesy DELETE says nothing about the server an operator asked about.
+  }
+}
+
 /** POST one frame, following redirects by hand and turning transport faults into outcomes. */
 async function post(
   ctx: Exchange,
   frame: Record<string, unknown>,
 ): Promise<{ ok: true; response: Response } | { ok: false; failure: McpProbeFailure }> {
   let url = ctx.target.url
+  const carriesCredential = Object.keys(ctx.target.credentialHeaders).length > 0
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const headers: Record<string, string> = {
-      ...ctx.target.headers,
-      'content-type': 'application/json',
-      accept: 'application/json, text/event-stream',
-    }
-    ctx.session.apply(headers)
-    let response: Response
-    try {
-      response = await ctx.doFetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(frame),
-        redirect: 'manual',
-        signal: ctx.signal,
-      })
-    } catch (error) {
-      // Everything that never produced a status: DNS, TLS, connection refused, and the deadline.
-      // One outcome for all of them because they share a fix (the endpoint, or the network) and the
-      // prose carries which — while a 4xx/5xx below is a DIFFERENT fix and gets its own member.
-      return {
-        ok: false,
-        failure: { status: 'unreachable', error: redact(errorText(error, ctx.timeoutMs)) },
-      }
-    }
-    ctx.session.adopt(response)
-    if (!isRedirect(response)) return { ok: true, response }
-    const location = response.headers.get('location')
-    const next = location ? resolveHop(url, location) : undefined
-    if (!next) {
-      return {
-        ok: false,
-        failure: {
-          status: 'protocol_error',
-          error: `the endpoint answered ${response.status} with no usable Location header`,
-        },
-      }
-    }
-    // The hop is held to the SAME rule the declared url is: an https endpoint that redirects a
-    // credential-bearing request onto cleartext is the one thing that rule exists to stop, and a
-    // redirect is the way a declaration that passed boot validation still gets there.
-    if (!isAllowedMcpHttpUrl(next)) {
-      return {
-        ok: false,
-        failure: {
-          status: 'protocol_error',
-          error:
-            `the endpoint redirected to ${redact(next)}, which an MCP tool server may not be ` +
-            `reached at (https, or plain http on loopback) — the request carries a credential`,
-        },
-      }
-    }
-    url = next
+    const sent = await send(ctx, url, frame)
+    if (!sent.ok) return sent
+    ctx.session.adopt(sent.response, url)
+    if (!isRedirect(sent.response)) return sent
+    const hopTo = nextHop(ctx, url, sent.response, carriesCredential)
+    if (!hopTo.ok) return hopTo
+    url = hopTo.url
   }
   return {
     ok: false,
@@ -358,8 +377,129 @@ async function post(
   }
 }
 
+/** One request, with every transport fault turned into an outcome rather than a throw. */
+async function send(
+  ctx: Exchange,
+  url: string,
+  frame: Record<string, unknown>,
+): Promise<{ ok: true; response: Response } | { ok: false; failure: McpProbeFailure }> {
+  try {
+    return {
+      ok: true,
+      response: await ctx.doFetch(url, {
+        method: 'POST',
+        headers: requestHeaders(ctx),
+        body: JSON.stringify(frame),
+        redirect: 'manual',
+        signal: ctx.signal,
+      }),
+    }
+  } catch (error) {
+    // Everything that never produced a status: DNS, TLS, connection refused, and the deadline. One
+    // outcome for all of them because they share a fix (the endpoint, or the network) and the prose
+    // carries which — while a 4xx/5xx is a DIFFERENT fix and gets its own member.
+    return {
+      ok: false,
+      failure: { status: 'unreachable', error: redact(errorText(error, ctx.timeoutMs)) },
+    }
+  }
+}
+
+/**
+ * The headers one request carries: the declaration's own, the resolved credential, the session pair,
+ * and this client's content negotiation.
+ *
+ * Lower-cased before the probe's own values are written, which is load-bearing rather than tidy:
+ * `Headers` APPENDS as it fills from a record, so a declaration spelling `Accept` plus this
+ * function's `accept` arrives at the server as ONE combined value, and a stream-first server then
+ * negotiates against something neither side offered.
+ */
+function requestHeaders(ctx: Exchange): Record<string, string> {
+  const headers = lowerCasedKeys({ ...ctx.target.headers, ...ctx.target.credentialHeaders })
+  headers['content-type'] = 'application/json'
+  headers.accept = 'application/json, text/event-stream'
+  ctx.session.apply(headers)
+  return headers
+}
+
+function lowerCasedKeys(headers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) out[name.toLowerCase()] = value
+  return out
+}
+
+/** Where a redirect points, or the reason the probe will not follow it. */
+function nextHop(
+  ctx: Exchange,
+  from: string,
+  response: Response,
+  carriesCredential: boolean,
+): { ok: true; url: string } | { ok: false; failure: McpProbeFailure } {
+  const location = response.headers.get('location')
+  const next = location ? resolveHop(from, location) : undefined
+  if (!next) {
+    return {
+      ok: false,
+      failure: {
+        status: 'protocol_error',
+        error: `the endpoint answered ${response.status} with no usable Location header`,
+      },
+    }
+  }
+  // The hop is held to the SAME rule the declared url is: an https endpoint that redirects a
+  // credential-bearing request onto cleartext is the one thing that rule exists to stop, and a
+  // redirect is the way a declaration that passed boot validation still gets there.
+  if (!isAllowedMcpHttpUrl(next)) {
+    return {
+      ok: false,
+      failure: {
+        status: 'protocol_error',
+        error:
+          `the endpoint redirected to ${redact(next)}, which an MCP tool server may not be ` +
+          `reached at (https, or plain http on loopback)`,
+      },
+    }
+  }
+  // A credential-bearing request stops at its own ORIGIN, matching the Web platform rather than
+  // exceeding it: fetch removes `Authorization` when a redirect crosses origins, so the agent's own
+  // MCP client reaches this hop unauthenticated and a probe that forwarded the token would both
+  // answer about a request no run makes and hand a workspace's credential to whatever the redirect
+  // names. Refused rather than followed credential-less, because the FIX is the declaration naming
+  // the final url, and a 401 from a stripped hop would name the token instead.
+  if (carriesCredential && !sameOrigin(ctx.target.url, next)) {
+    return {
+      ok: false,
+      failure: {
+        status: 'protocol_error',
+        error:
+          `the endpoint redirected to ${redact(next)}, a different origin from the declared url, ` +
+          `and the request carries a credential — declare the final url, because an agent's own ` +
+          `MCP client reaches a cross-origin hop with the credential removed`,
+      },
+    }
+  }
+  return { ok: true, url: next }
+}
+
 function isRedirect(response: Response): boolean {
   return response.status >= 300 && response.status < 400
+}
+
+/**
+ * Whether two urls share an origin. An UNPARSEABLE url is never same-origin with anything, so the
+ * caller's refusal is what an unreadable hop reaches rather than a comparison of two undefineds.
+ */
+function sameOrigin(a: string, b: string): boolean {
+  const left = originOf(a)
+  return left !== undefined && left === originOf(b)
+}
+
+function originOf(raw: string): string | undefined {
+  try {
+    return new URL(raw).origin
+  } catch {
+    return undefined
+  }
 }
 
 /** Absolutise a `Location` against the url it came from, or undefined when it is unparseable. */
@@ -380,6 +520,7 @@ function resolveHop(from: string, location: string): string | undefined {
  * operator to look at the server's tool table instead of at the status.
  */
 async function readFrame(
+  ctx: Exchange,
   response: Response,
 ): Promise<{ ok: true; frame: Record<string, unknown> } | { ok: false; failure: McpProbeFailure }> {
   if (!response.ok) {
@@ -389,7 +530,12 @@ async function readFrame(
       failure: {
         status: 'http_error',
         httpStatus: response.status,
-        error: redact(body ? `HTTP ${response.status}: ${body}` : `HTTP ${response.status}`),
+        // PREVIEWED, like every other quoted body: an auth proxy or a load balancer answers a 4xx
+        // with an HTML page, and this string is both rendered in a browser and logged. The status is
+        // the diagnosis; the body is a hint about which proxy answered.
+        error: redact(
+          body ? `HTTP ${response.status}: ${preview(body)}` : `HTTP ${response.status}`,
+        ),
       },
     }
   }
@@ -397,13 +543,12 @@ async function readFrame(
   const raw = contentType.includes('text/event-stream')
     ? await firstSseData(response)
     : await bodyText(response)
-  if (raw === undefined) {
+  // An EMPTY body counts as unreadable rather than as JSON that fails to parse, so the prose names
+  // the missing body instead of quoting nothing.
+  if (raw === undefined || !raw.trim()) {
     return {
       ok: false,
-      failure: {
-        status: 'protocol_error',
-        error: 'the endpoint answered 200 with no readable body',
-      },
+      failure: bodyFailure(ctx, 'the endpoint answered 200 with no readable body'),
     }
   }
   let parsed: unknown
@@ -412,10 +557,10 @@ async function readFrame(
   } catch {
     return {
       ok: false,
-      failure: {
-        status: 'protocol_error',
-        error: `the endpoint answered 200 with a body that is not JSON: ${redact(preview(raw))}`,
-      },
+      failure: bodyFailure(
+        ctx,
+        `the endpoint answered 200 with a body that is not JSON: ${redact(preview(raw))}`,
+      ),
     }
   }
   // A BATCH response is a legal JSON-RPC shape and every request here is single, so a server that
@@ -433,16 +578,30 @@ async function readFrame(
   return { ok: true, frame }
 }
 
-/** A whole body as text, bounded, or undefined when it could not be read. */
+/**
+ * The failure to report for a body that yielded no frame.
+ *
+ * The DEADLINE is checked FIRST, because the one signal aborts the response stream as well as the
+ * request: a server that answers 200 and then stalls (an SSE stream that never completes an event, a
+ * body that stops mid-way) leaves a partial buffer behind, and calling that a `protocol_error` tells
+ * the operator "the url names something else" for what is a slow endpoint — the exact cause
+ * `unreachable` is documented to cover. A cause is the whole product here, so the two are kept
+ * apart even though the code reaches them through the same branch.
+ */
+function bodyFailure(ctx: Exchange, protocolError: string): McpProbeFailure {
+  if (ctx.signal.aborted) return { status: 'unreachable', error: timeoutText(ctx.timeoutMs) }
+  return { status: 'protocol_error', error: protocolError }
+}
+
+/** A whole body as text, bounded, or undefined when there was no body to read at all. */
 async function bodyText(response: Response): Promise<string | undefined> {
   const stream = response.body
   if (!stream) {
     // A bodyless response is legitimate for a notification and a protocol fault for a request; the
-    // caller distinguishes, so an empty string here is a body that parses to nothing.
+    // caller distinguishes, so this stays apart from an EMPTY body, which read fine and said nothing.
     return undefined
   }
-  const read = await readBounded(stream, () => false)
-  return read
+  return readBounded(stream, () => false)
 }
 
 /**
@@ -455,18 +614,23 @@ async function bodyText(response: Response): Promise<string | undefined> {
 async function firstSseData(response: Response): Promise<string | undefined> {
   const stream = response.body
   if (!stream) return undefined
-  const raw = await readBounded(stream, (buffered) => extractSseData(buffered) !== undefined)
-  return raw === undefined ? undefined : extractSseData(raw)
+  return extractSseData(
+    await readBounded(stream, (buffered) => extractSseData(buffered) !== undefined),
+  )
 }
 
 /**
- * Read `stream` until `done(buffered)` says enough arrived, the stream ends, or the byte ceiling is
- * hit. Cancels what it did not read, so a stream held open costs no connection past this point.
+ * Read `stream` until `done(buffered)` says enough arrived, the stream ends, or the character ceiling
+ * is hit. Cancels what it did not read, so a stream held open costs no connection past this point.
+ *
+ * Always a string, never undefined: a read that failed part-way still returns what arrived, and
+ * whether that is usable is the caller's question (`bodyFailure` turns an empty one into the right
+ * cause, deadline included).
  */
 async function readBounded(
   stream: ReadableStream<Uint8Array>,
   done: (buffered: string) => boolean,
-): Promise<string | undefined> {
+): Promise<string> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffered = ''
@@ -485,7 +649,10 @@ async function readBounded(
     // here, and a throw out of `finally` would replace the outcome the caller needs with noise.
     await reader.cancel().catch(() => {})
   }
-  return buffered
+  // Flush the decoder's pending bytes, so a multi-byte character split across the LAST chunk lands
+  // in the buffer (as itself, or as the replacement character a truncated sequence deserves) rather
+  // than being dropped silently.
+  return buffered + decoder.decode()
 }
 
 /**
@@ -514,10 +681,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function errorText(error: unknown, timeoutMs: number): string {
   if (error instanceof Error) {
     return error.name === 'TimeoutError'
-      ? `the endpoint did not answer within ${timeoutMs / 1000}s`
+      ? timeoutText(timeoutMs)
       : `${error.name}: ${error.message}`
   }
   return String(error)
+}
+
+/**
+ * The deadline in prose, authored ONCE: the same expiry is reachable as a rejected request and as an
+ * aborted body read, and two spellings of one cause read like two causes.
+ */
+function timeoutText(timeoutMs: number): string {
+  return `the endpoint did not answer within ${timeoutMs / 1000}s`
 }
 
 /** First line and a bounded prefix, for prose that quotes an unexpected body. */

@@ -43,6 +43,14 @@ to a NAME pattern, which a well-formed typo passes), and when the server's tool 
 paginated past the probe's page bound the check reports itself as unchecked rather than calling a
 working tool missing.
 
+A redirect is followed, and each hop is held to the transport rule and to the DECLARED ORIGIN while a
+credential is riding. That matches what a run does rather than exceeding it: the Web platform removes
+`Authorization` on a cross-origin redirect, so an agent's own MCP client reaches such a hop
+unauthenticated, and a probe that forwarded the token would report on a request no run makes while
+handing a workspace's credential to whatever the redirect names. The row names the origin change, so
+the fix reads as the declaration naming the final url. A server needing no credential is followed
+across origins as before.
+
 Two smaller fixes ride along. `McpSecretRef` gains `usage`, the operator-facing note the credential
 checklist has always had a field for and only the generative-integration half ever populated — so a
 tool server's row can finally say which token type and scopes a key wants. And the checklist's READ was

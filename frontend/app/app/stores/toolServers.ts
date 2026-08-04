@@ -43,8 +43,22 @@ export const useToolServersStore = defineStore('toolServers', () => {
    */
   const hasSurface = computed(() => (view.value?.servers.length ?? 0) > 0)
 
-  /** Force a refresh of the inventory. */
+  /**
+   * Refresh the inventory, sharing a read that is already in flight.
+   *
+   * Coalescing belongs on `load` and not only on `ensureLoaded` because both callers fire on the
+   * same interaction: the Infrastructure window calls `ensureLoaded` to decide whether the tab
+   * exists at all, and the panel refreshes on mount so a redeploy shows up without a reload. Two
+   * identical GETs per open is what a plain "force" would have cost, and a read that started
+   * microseconds ago IS the refresh.
+   */
   async function load() {
+    if (inFlight) return inFlight
+    inFlight = readInventory().finally(() => (inFlight = null))
+    return inFlight
+  }
+
+  async function readInventory() {
     const ws = useWorkspaceStore()
     loading.value = true
     try {
@@ -68,11 +82,10 @@ export const useToolServersStore = defineStore('toolServers', () => {
     }
   }
 
-  /** Load once and share the result (coalescing concurrent callers); `load()` refreshes. */
+  /** Load once and stay loaded; `load()` re-reads (both share whatever is in flight). */
   async function ensureLoaded() {
     if (available.value !== null) return
-    if (!inFlight) inFlight = load().finally(() => (inFlight = null))
-    return inFlight
+    return load()
   }
 
   /**

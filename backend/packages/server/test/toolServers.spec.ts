@@ -142,12 +142,28 @@ describe('collectDeclaredToolServers', () => {
     expect(view!.target).toBe('https://mcp.example/rpc')
   })
 
-  it('renders a stdio declaration as its command line', () => {
-    const registry = registryWith((r) => r.registerToolServer(STDIO_SERVER))
+  it('renders a stdio declaration as its command line, scrubbed', () => {
+    const registry = registryWith((r) =>
+      r.registerToolServers([
+        STDIO_SERVER,
+        {
+          id: 'inline-argv',
+          transport: {
+            kind: 'stdio',
+            command: 'npx',
+            args: ['-y', 'acme-mcp', '--api-key=sk-live-abcdef1234567890'],
+          },
+        },
+      ]),
+    )
 
-    expect(collectDeclaredToolServers({ agentKindRegistry: registry })[0]).toMatchObject({
-      target: 'npx -y acme-advisories-mcp',
-    })
+    const views = collectDeclaredToolServers({ agentKindRegistry: registry })
+
+    expect(views[0]).toMatchObject({ target: 'npx -y acme-advisories-mcp' })
+    // A command line is a place a credential legitimately sits, and the more tempting of the two for
+    // a deployment that has not found `secretKeys` yet. Stored values are write-only, so this row is
+    // the one place on the surface where a pasted secret could be READ back.
+    expect(views[1]!.target).not.toContain('sk-live-abcdef1234567890')
   })
 })
 
@@ -372,6 +388,47 @@ describe('probeToolServer', () => {
         probe: { fetch: okResponses(['search_issues', 'get_issue']) },
       }),
     ).toMatchObject({ status: 'ok' })
+  })
+
+  it('probes the SAME definition the inventory row describes when one id has two', async () => {
+    // A registration and a kind's INLINE declaration may carry one id. The row and the verdict then
+    // have to be about the same server, or the operator reads a url, a credential list and a tool
+    // narrowing from one definition and a verdict produced against another, both labelled `issues`.
+    // Pinned by driving both halves off one registry and comparing the url actually requested.
+    const registry = registryWith((r) => {
+      r.registerToolServer({
+        ...HTTP_SERVER,
+        transport: { kind: 'http', url: 'https://registered.example/rpc' },
+      })
+      r.register({
+        kind: 'auditor',
+        systemPrompt: 'p',
+        toolServers: [
+          {
+            ...HTTP_SERVER,
+            secretKeys: [],
+            transport: { kind: 'http', url: 'https://inline.example/rpc' },
+          },
+        ],
+      })
+    })
+    const requested: string[] = []
+    const inner = okResponses(['search_issues', 'get_issue'])
+    const doFetch = (async (url: string, init?: RequestInit) => {
+      requested.push(String(url))
+      return (inner as unknown as (u: string, i?: RequestInit) => Promise<Response>)(url, init)
+    }) as unknown as typeof fetch
+
+    const [view] = collectDeclaredToolServers({ agentKindRegistry: registry })
+    const result = await probeToolServer({
+      agentKindRegistry: registry,
+      workspaceId: 'ws_1',
+      serverId: 'issues',
+      probe: { fetch: doFetch },
+    })
+
+    expect(result).toMatchObject({ status: 'ok' })
+    expect(new URL(requested[0]!).origin).toBe(new URL(view!.target).origin)
   })
 
   it('404s an id this deployment declares nowhere', async () => {

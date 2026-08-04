@@ -3,6 +3,7 @@ import {
   isAllowedMcpHttpUrl,
   isLoopbackMcpHttpUrl,
   mcpServableHarnesses,
+  redactSecrets,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { ToolServerNotProbeableReason, ToolServerView } from '@cat-factory/contracts'
@@ -22,8 +23,18 @@ export interface CollectDeclaredToolServersInput {
   agentKindRegistry: AgentKindRegistry
 }
 
+/** One declared server: the definition this surface answers for, and the kinds that reach it. */
+export interface DeclaredToolServer {
+  definition: McpServerDefinition
+  declaredBy: AgentKind[]
+}
+
 /**
- * Every declared tool server, sorted by id.
+ * Every declared tool server by id — the ONE resolution both halves of this surface use.
+ *
+ * Shared rather than re-derived per caller, because the two halves disagreeing about which
+ * definition an id names is invisible and mean: the row would describe one endpoint while the Test
+ * button probed another, both labelled with the same id. So the LIST and the PROBE ask this.
  *
  * Two sources, unioned, because neither is complete on its own:
  *
@@ -33,34 +44,39 @@ export interface CollectDeclaredToolServersInput {
  *     `kindsWithCapabilities` exists to close);
  *   - `allToolServers()` finds registrations attached to NOTHING, which the walk structurally
  *     cannot see and which nothing else in the platform reports. Such a server never reaches a
- *     dispatch, so its credentials are keys an operator fills in for no run — reported here with an
+ *     dispatch, so its credentials are keys an operator fills in for no run — reported with an
  *     empty `declaredBy` rather than filtered out, because only the operator can tell a
  *     work-in-progress registration from a kind that lost its assignment in a refactor.
+ *
+ * First definition wins, matching `normalizeToolRefs`: a kind may declare an id inline while another
+ * references the registration, and the dispatch resolves per kind. What one surface can honestly
+ * show is one row per id, so it shows the first and names every kind.
  */
-export function collectDeclaredToolServers(
-  input: CollectDeclaredToolServersInput,
-): ToolServerView[] {
-  const registry = input.agentKindRegistry
-  const definitions = new Map<string, McpServerDefinition>()
-  const kindsById = new Map<string, AgentKind[]>()
+export function resolveDeclaredToolServers(
+  registry: AgentKindRegistry,
+): Map<string, DeclaredToolServer> {
+  const declared = new Map<string, DeclaredToolServer>()
 
   for (const kind of registry.kindsWithCapabilities()) {
     for (const server of registry.toolServersFor(kind).servers) {
-      // First definition wins, matching `normalizeToolRefs`: a kind may declare the same id inline
-      // while another references the registration, and the dispatch resolves per kind. What this
-      // surface can honestly show is one row per id, so it shows the first and names every kind.
-      if (!definitions.has(server.id)) definitions.set(server.id, server)
-      const kinds = kindsById.get(server.id)
-      if (kinds) kinds.push(kind)
-      else kindsById.set(server.id, [kind])
+      const existing = declared.get(server.id)
+      if (existing) existing.declaredBy.push(kind)
+      else declared.set(server.id, { definition: server, declaredBy: [kind] })
     }
   }
   for (const server of registry.allToolServers()) {
-    if (!definitions.has(server.id)) definitions.set(server.id, server)
+    if (!declared.has(server.id)) declared.set(server.id, { definition: server, declaredBy: [] })
   }
 
-  return [...definitions.values()]
-    .map((definition) => toView(definition, kindsById.get(definition.id) ?? []))
+  return declared
+}
+
+/** Every declared tool server, projected non-secretly and sorted by id. */
+export function collectDeclaredToolServers(
+  input: CollectDeclaredToolServersInput,
+): ToolServerView[] {
+  return [...resolveDeclaredToolServers(input.agentKindRegistry).values()]
+    .map((declared) => toView(declared.definition, declared.declaredBy))
     .sort((a, b) => a.id.localeCompare(b.id))
 }
 
@@ -91,15 +107,18 @@ function toView(definition: McpServerDefinition, declaredBy: AgentKind[]): ToolS
 /**
  * What the declaration points at, for recognition on the surface.
  *
- * A url is stripped of userinfo before it reaches a browser. That is not paranoia about a field an
- * operator authored: `https://user:token@mcp.example` is a legal declaration this platform accepts
- * (`isAllowedMcpHttpUrl` only rules on the scheme and host), so the url is a place a credential can
- * legitimately be, and rendering it verbatim would put that credential in a screenshot.
+ * BOTH shapes are scrubbed before they reach a browser, because both are places a credential can
+ * legitimately sit. A url carries userinfo: `https://user:token@mcp.example` is a declaration this
+ * platform accepts (`isAllowedMcpHttpUrl` only rules on the scheme and host), so it goes through
+ * `stripUrlCredentials`. A `stdio` command line carries `--token=…` just as easily, and it is the
+ * more tempting spot of the two for a deployment that has not found `secretKeys` yet — so the joined
+ * argv goes through `redactSecrets`. Values in the credential store are write-only, which makes this
+ * the one place on the surface where a pasted secret could otherwise be READ back.
  */
 function describeTarget(definition: McpServerDefinition): string {
   if (definition.transport.kind === 'http') return stripUrlCredentials(definition.transport.url)
   const args = definition.transport.args ?? []
-  return [definition.transport.command, ...args].join(' ')
+  return redactSecrets([definition.transport.command, ...args].join(' ')) ?? ''
 }
 
 /**

@@ -9,7 +9,7 @@ import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/co
 import type { ToolServerProbeResult } from '@cat-factory/contracts'
 import { MCP_PROBE_TOOL_NAME_CAP } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { notProbeableReason } from './declaredToolServers.js'
+import { notProbeableReason, resolveDeclaredToolServers } from './declaredToolServers.js'
 import { type McpProbeDeps, probeMcpHttpServer } from './mcpProbe.js'
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,11 @@ export async function probeToolServer(input: ProbeToolServerInput): Promise<Tool
   const outcome = await probeMcpHttpServer(
     {
       url: definition.transport.url,
-      headers: { ...definition.transport.headers, ...credentials.headers },
+      // The declaration's own headers and the RESOLVED CREDENTIAL stay apart, because the protocol
+      // client treats them differently at a redirect: a hop off the declared origin is refused while
+      // a credential is riding, and a non-secret `x-tenant` is no reason to refuse anything.
+      headers: { ...definition.transport.headers },
+      credentialHeaders: credentials.headers,
     },
     input.probe,
   )
@@ -103,19 +107,17 @@ export async function probeToolServer(input: ProbeToolServerInput): Promise<Tool
 }
 
 /**
- * The definition behind an id, from either source the list surface unions: a kind's declarations
- * (which covers inline ones) or the registry.
+ * The definition behind an id, through the SAME resolution the list surface projects.
+ *
+ * Shared rather than looked up here, and that is the point: a registry entry and a kind's INLINE
+ * declaration may carry one id, so a second lookup with its own precedence would probe an endpoint
+ * the row an operator clicked does not describe — a verdict about a different url, credential and
+ * tool list, labelled with the id they recognise. One resolution makes that unrepresentable.
  */
 function findDefinition(input: ProbeToolServerInput): McpServerDefinition {
-  const registry = input.agentKindRegistry
-  const registered = registry.toolServerDefinition(input.serverId)
-  if (registered) return registered
-  for (const kind of registry.kindsWithCapabilities()) {
-    for (const server of registry.toolServersFor(kind).servers) {
-      if (server.id === input.serverId) return server
-    }
-  }
-  throw new NotFoundError('Tool server', input.serverId)
+  const declared = resolveDeclaredToolServers(input.agentKindRegistry).get(input.serverId)
+  if (!declared) throw new NotFoundError('Tool server', input.serverId)
+  return declared.definition
 }
 
 /**

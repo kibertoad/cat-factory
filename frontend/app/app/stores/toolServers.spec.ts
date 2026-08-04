@@ -48,6 +48,25 @@ describe('toolServers store', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('shares one read between concurrent callers', async () => {
+    let reads = 0
+    vi.stubGlobal('useApi', () => ({
+      listToolServers: () => {
+        reads++
+        return Promise.resolve({ servers: [server()] })
+      },
+    }))
+
+    const store = useToolServersStore()
+    // Both callers fire on the same interaction: the Infrastructure window asks `ensureLoaded` whether
+    // the tab exists at all, and the panel refreshes on mount so a redeploy shows up without a reload.
+    // A read that started microseconds ago IS that refresh, so it is shared rather than duplicated.
+    await Promise.all([store.ensureLoaded(), store.load()])
+
+    expect(reads).toBe(1)
+    expect(store.hasSurface).toBe(true)
+  })
+
   it('a 403 latches the surface unavailable without throwing', async () => {
     vi.stubGlobal('useApi', () => ({
       listToolServers: () => Promise.reject({ statusCode: 403 }),

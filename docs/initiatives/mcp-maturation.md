@@ -256,7 +256,7 @@ Recorded so the next iteration does not re-propose them.
   obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
   decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
 
-## Slice 4's four decisions
+## Slice 4's five decisions
 
 - **The MCP client is hand-rolled, not `@modelcontextprotocol/sdk`'s.** The same argument slice 3
   recorded about the serving side, pointed the other way: the backend's HTTP layer is typed against
@@ -265,10 +265,24 @@ Recorded so the next iteration does not re-propose them.
   every one of which a probe needs to NOT do. Three POSTs plus a body reader is smaller than the
   adapter that would hold that machinery back, and it keeps the SDK out of a module every facade
   bundles. What it deliberately KEEPS is what makes the answer trustworthy: both body shapes a
-  compliant server may answer with (JSON, or one SSE event), the `mcp-session-id` a server may mint,
-  and redirects, each hop re-validated against `isAllowedMcpHttpUrl` with the credential headers
-  riding along, because the agent's own client would follow the hop with them and a probe that
-  stripped them would report a 401 for a server that works on a run.
+  compliant server may answer with (JSON, or one SSE event), the `mcp-session-id` a server may mint
+  (and the DELETE that ends it, so a press of Test leaves no session behind), and redirects, each hop
+  re-validated against `isAllowedMcpHttpUrl`.
+- **A credential stops at the DECLARED ORIGIN, redirect or not.** Hand-rolling the redirect loop means
+  hand-rolling what a real client does at a hop, and the first draft of this got it exactly backwards:
+  it forwarded the credential headers on the reasoning that the agent's own client would. It would
+  not. The Web platform REMOVES `Authorization` when a redirect crosses origins (fetch's CORS
+  non-wildcard request-header rule), so an SDK client reaches a cross-origin hop unauthenticated and
+  answers 401 — meaning a forwarding probe both reports on a request no run makes and becomes the one
+  path that hands a workspace's token to whatever a hijacked or lapsed vendor host redirects to. So a
+  cross-origin hop is REFUSED while a credential is riding, naming the origin change, because the fix
+  is the declaration naming the final url and a stripped-credential 401 would name the token instead.
+  A server with no credential is followed across origins as usual: the rule is about the secret, not
+  about redirects. Same-origin hops (a versioned path) are the ordinary case and carry it.
+  **When you hand-roll a transport, check each divergence from the platform's own fetch semantics in
+  the direction of the SECRET**: the method rewrite is the other one here, and re-POSTing is right
+  because a GET to an MCP endpoint means "open the stream", so it is documented at the site rather
+  than left to read as an oversight.
 - **A `stdio` server and a loopback url are REFUSED BY NAME, never approximated.** The backend is not
   the run container: a `stdio` server is a child of the harness inside it (and the Worker has no
   process model at all), and the backend's `127.0.0.1` is a different machine from the container's. A
@@ -307,12 +321,29 @@ Recorded so the next iteration does not re-propose them.
   checklist as keys no dispatch will ever ask for. `AgentKindRegistry.allToolServers()` is the
   complement of `kindsWithCapabilities()`, and the inventory unions the two so such a server is
   reported with an empty `declaredBy` rather than filtered out.
-- **A declared url is a place a credential can legitimately be.** `isAllowedMcpHttpUrl` rules on the
-  scheme and host only, so `https://user:token@mcp.example` is an accepted declaration, and the
-  inventory renders that url in a browser. It goes through `stripUrlCredentials` first. The same
-  reasoning covers the probe's own error prose, scrubbed through `redactSecrets` at the emit site
-  because a fetch failure routinely echoes the request url and a 4xx body from an auth proxy echoes
-  tokens as a matter of routine.
+- **A declared TARGET is a place a credential can legitimately be, in both transports.**
+  `isAllowedMcpHttpUrl` rules on the scheme and host only, so `https://user:token@mcp.example` is an
+  accepted declaration, and the inventory renders that url in a browser: it goes through
+  `stripUrlCredentials` first. A `stdio` command line carries `--api-key=…` just as easily and is the
+  likelier of the two for a deployment that has not found `secretKeys` yet, so the joined argv goes
+  through `redactSecrets`. Stored credential values are WRITE-ONLY, which is what makes this row the
+  one place on the surface where a pasted secret could be read back. The same reasoning covers the
+  probe's own error prose, scrubbed at the emit site because a fetch failure routinely echoes the
+  request url and a 4xx body from an auth proxy echoes tokens as a matter of routine — and PREVIEWED
+  there as well as scrubbed, because an auth proxy answers a 4xx with an HTML page and that string is
+  both rendered in a browser and logged.
+- **One deadline over three round trips also aborts the BODY, and that changes the cause.** The signal
+  handed to `fetch` errors the response stream too, so a server that answers 200 and then stalls
+  leaves a partial buffer behind — which read as `protocol_error` ("the url names something else") for
+  what is the plain slow endpoint `unreachable` is documented to cover. Every "the body yielded no
+  frame" path now checks `signal.aborted` FIRST (`bodyFailure`), and the deadline prose is authored
+  once so a rejected request and an aborted read cannot describe one expiry two ways. A hand-rolled
+  client that reports causes owes this check anywhere a partial read can be mistaken for a bad one.
+- **Two halves of one surface must resolve an id the SAME way.** An `McpServerDefinition` reaches the
+  surface from two places (a registry entry, a kind's inline declaration) and one id can name both, so
+  the list and the probe each having their own lookup meant the row could describe one endpoint while
+  the Test button probed another, both labelled with the id the operator recognises. There is now one
+  `resolveDeclaredToolServers` and both halves ask it.
 - **`isLoopbackMcpHttpUrl` is deliberately a SEPARATE predicate from `isAllowedMcpHttpUrl`.** They
   answer different questions and only the probe wants the second: "may this url be dispatched" is
   about the scheme, "does this server live beside the agent" is about the host, and an `https`

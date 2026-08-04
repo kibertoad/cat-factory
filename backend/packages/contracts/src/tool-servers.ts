@@ -243,9 +243,9 @@ export const MCP_PROBE_TOOL_NAME_CAP = 100
  *
  * A bound rather than a full drain, because a probe is an interactive request an operator waits on
  * and the page size is the SERVER's choice: an unbounded loop hands a remote server control of how
- * long this endpoint runs. Two pages is enough for every real server's tool table; a third page
- * means the answer is "it works, and it has more tools than this can enumerate", which is a true
- * and useful answer.
+ * long this endpoint runs. Three pages covers every real server's tool table; a cursor still
+ * outstanding after the third means the answer is "it works, and it has more tools than this can
+ * enumerate", which is a true and useful answer.
  */
 export const MCP_PROBE_MAX_PAGES = 3
 
