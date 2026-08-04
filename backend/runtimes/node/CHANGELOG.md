@@ -1,5 +1,53 @@
 # @cat-factory/node-server
 
+## 0.164.0
+
+### Minor Changes
+
+- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+  run before a run's first agent step is dispatched. A task that states nothing an agent could act
+  on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
+  review call to report an absence a string comparison already knew about.
+
+  Six V1 findings, three of them blocking: no description, a placeholder-only description
+  (`TBD`/`n/a`/`fix it`), a `bug` with no reproduction context, and a `review` task naming no pull
+  request; a very short description and a `spike` with no success criteria ride as advisories. The
+  check never judges quality or infers intent, which is the reviewer's job.
+
+  **Behaviour change on upgrade.** The gate ships ON (`inputGateMode: 'standard'`), so a run
+  started against a title-only task parks on a notice instead of dispatching. Every blocking
+  finding names an input a model could not have acted on either, so the gate only replaces a call
+  that would have reported the same gap. A workspace can turn it down to `advisory` (record the
+  findings, never park) or `off` in Workspace settings. Resolve a parked run by fixing the task and
+  re-checking (the fix is re-evaluated, not taken on trust) or by proceeding anyway, which records
+  an `overridden` verdict that keeps the waived findings on the run.
+
+  Persistence: a new `input_gate_mode` column on `workspace_settings` (D1 migration `0080` and the
+  matching Drizzle migration); the verdict itself rides the run's existing `detail` JSON.
+
+### Patch Changes
+
+- Updated dependencies [10e0341]
+- Updated dependencies [10e0341]
+  - @cat-factory/contracts@0.229.0
+  - @cat-factory/kernel@0.230.0
+  - @cat-factory/orchestration@0.197.0
+  - @cat-factory/server@0.209.0
+  - @cat-factory/agents@0.109.1
+  - @cat-factory/consensus@0.14.7
+  - @cat-factory/eks@0.1.217
+  - @cat-factory/gates@0.8.63
+  - @cat-factory/gitlab@0.15.22
+  - @cat-factory/integrations@0.123.3
+  - @cat-factory/observability-otel@0.8.5
+  - @cat-factory/prompt-fragments@0.15.54
+  - @cat-factory/spend@0.14.5
+  - @cat-factory/caching@0.14.7
+  - @cat-factory/observability-langfuse@0.9.60
+  - @cat-factory/provider-bedrock@0.7.368
+  - @cat-factory/provider-cloudflare@0.7.369
+  - @cat-factory/provider-s3@0.2.288
+
 ## 0.163.2
 
 ### Patch Changes
