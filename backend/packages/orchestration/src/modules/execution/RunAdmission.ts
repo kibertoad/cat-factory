@@ -92,6 +92,7 @@ export interface RunAdmissionDeps {
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   inlineHarnessRef?: (ref: ModelRef) => boolean
   resolveWorkspaceModelDefault?: (
@@ -126,6 +127,7 @@ export class RunAdmission {
   private readonly resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   private readonly inlineHarnessRef?: (ref: ModelRef) => boolean
   private readonly resolveWorkspaceModelDefault?: (
@@ -808,7 +810,14 @@ export class RunAdmission {
     initiatedBy: string | null | undefined,
   ): Promise<void> {
     if (!this.resolveProviderCapabilities) return
-    const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
+    // Resolved under the block's own preset, so the guard walks each model's routes in the order
+    // the dispatch will: a preset preferring Bedrock must be checked against the Bedrock route,
+    // not the default order's first usable one.
+    const caps = await this.resolveProviderCapabilities(
+      workspaceId,
+      initiatedBy,
+      block.modelPresetId,
+    )
     const runsInline = this.inlineHarnessRef
     // Two failure buckets, so the error can steer the fix precisely:
     //  - `unconfigured`: no usable provider AT ALL (container or inline) — add a key/sub/CF.
@@ -905,7 +914,11 @@ export class RunAdmission {
     const accountId = await this.workspaceRepository.accountOf(workspaceId)
     if (!(await this.spend.isOverBudget(workspaceId, { accountId, userId: initiatedBy }))) return
     if (!this.resolveProviderCapabilities) return
-    const caps = await this.resolveProviderCapabilities(workspaceId, initiatedBy)
+    const caps = await this.resolveProviderCapabilities(
+      workspaceId,
+      initiatedBy,
+      block.modelPresetId,
+    )
     const ids: (string | undefined)[] = []
     if (block.modelId) {
       ids.push(block.modelId)

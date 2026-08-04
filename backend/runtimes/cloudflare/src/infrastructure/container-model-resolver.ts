@@ -7,11 +7,19 @@
 // is *given*, not part of assembling it, and keeping it here is what lets the executor wiring
 // (`container-executor-deps.ts`) import it without either module reaching back into the root.
 
-import { type ModelProviderResolver, composeTraceSinks } from '@cat-factory/kernel'
+import {
+  type AppCaches,
+  type ModelFlavor,
+  type ModelProviderResolver,
+  composeTraceSinks,
+} from '@cat-factory/kernel'
 import { vendorConcurrencyLimiterFromEnv } from '@cat-factory/agents'
 import { cloudflareBindingRegistry } from '@cat-factory/provider-cloudflare'
 import { buildLangfuseSink, buildOtelSink } from './container-trace-sinks.js'
-import { resolvePresetModelForKind } from '@cat-factory/orchestration'
+import {
+  resolvePresetModelForKind,
+  resolvePresetProviderPreference,
+} from '@cat-factory/orchestration'
 import {
   logger,
   createInlineInstrumentation,
@@ -118,8 +126,23 @@ export function buildModelProviderResolver(env: Env, db: D1Database): ModelProvi
  */
 export function buildResolveWorkspaceModelDefault(
   db: D1Database,
+  caches?: AppCaches,
 ): (workspaceId: string, agentKind: string, modelPresetId?: string) => Promise<string | undefined> {
   const repo = new D1ModelPresetRepository({ db })
   return (workspaceId, agentKind, modelPresetId) =>
-    resolvePresetModelForKind(repo, workspaceId, agentKind, modelPresetId)
+    resolvePresetModelForKind(repo, workspaceId, agentKind, modelPresetId, caches?.modelPreset)
+}
+
+/**
+ * The route ORDER a preset states, read from the same D1 preset repo as the model id above. Its
+ * sibling: the model a step runs and the order that model's routes are tried in come from one row,
+ * so a preset cannot pick a model on one surface and an order on another.
+ */
+export function buildResolvePresetProviderPreference(
+  db: D1Database,
+  caches?: AppCaches,
+): (workspaceId: string, modelPresetId?: string) => Promise<readonly ModelFlavor[] | undefined> {
+  const repo = new D1ModelPresetRepository({ db })
+  return (workspaceId, modelPresetId) =>
+    resolvePresetProviderPreference(repo, workspaceId, modelPresetId, caches?.modelPreset)
 }

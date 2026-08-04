@@ -22,7 +22,8 @@
         "deleteTitle": "Preset löschen",
         "basePrefix": "Basis:",
         "overrideCount": "{count} Override | {count} Overrides",
-        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen."
+        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen.",
+        "customRouteOrder": "eigene Routen-Reihenfolge"
       },
       "editor": {
         "useBaseModel": "Basismodell verwenden",
@@ -43,6 +44,30 @@
         "nameRequiredTitle": "Name erforderlich",
         "nameRequiredBody": "Gib dem Preset einen Namen.",
         "saveFailed": "Preset konnte nicht gespeichert werden"
+      },
+      "routes": {
+        "direct": "Die eigene Provider-API des Modells",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter-Gateway",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abo (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Benötigt einen API-Schlüssel für diesen Provider.",
+        "bedrock": "Läuft in deiner AWS-Region, mit den für dein Konto freigegebenen Modellen.",
+        "openrouter": "Ein Schlüssel, viele Anbieter, mit Aufschlag weiterverkauft.",
+        "cloudflare": "Immer verfügbar, ohne Prompt-Caching.",
+        "subscription": "Pauschales Kontingent eines verbundenen Tarifs."
+      },
+      "routeOrder": {
+        "label": "Routen-Reihenfolge",
+        "defaultHint": "Dieses Preset folgt dem Standard des Deployments. Verschiebe eine Route nach oben, um sie zu bevorzugen.",
+        "customHint": "Dieses Preset bevorzugt Routen in dieser Reihenfolge. Ein Modell, das nur über eine niedrigere Route erreichbar ist, läuft weiterhin und wird nur später versucht.",
+        "reset": "Standardreihenfolge verwenden",
+        "moveUp": "Diese Route stärker bevorzugen",
+        "moveDown": "Diese Route weniger bevorzugen",
+        "subscriptionOverrideHint": "Ein verbundenes Abo gewinnt weiterhin bei Modellen, die eines anbieten: Die Engine leitet diese unabhängig von dieser Reihenfolge auf den Tarif. Routen unterhalb des Abo-Eintrags gelten für alle anderen Modelle.",
+        "badgesUseDefaultPresetHint": "Die Route neben jedem Modell oben ist die des Standard-Presets des Workspace, nicht die dieses Presets."
       }
     },
     "account": {
@@ -5950,7 +5975,7 @@
       "newDescription": "Neue integrierte Modell-Presets sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
       "add": "Hinzufügen",
       "updatesHeading": "Updates verfügbar",
-      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
+      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen: Standard und Reihenfolge bleiben erhalten, eine eigene Routen-Reihenfolge auf dem Preset wird jedoch zurückgesetzt.",
       "versionAvailable": "Version {from} → {to} verfügbar.",
       "reseed": "Erneut seeden",
       "reseedAll": "Alle aktualisieren ({count})",

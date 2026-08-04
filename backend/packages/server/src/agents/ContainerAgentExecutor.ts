@@ -9,6 +9,7 @@ import {
   type HarnessKind,
   type LlmTraceSink,
   type Logger,
+  type ModelFlavor,
   type ModelRef,
   type OperationalMetrics,
   type RunnerDispatchKind,
@@ -196,8 +197,11 @@ export interface ContainerAgentExecutorDependencies {
   resolveTransport: ResolveRunnerTransport
   /** Default model routing; used when the block pins no (usable) model. */
   agentRouting: AgentRouting
-  /** Resolve a block's selected model id to a concrete ref (direct flavour). */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a concrete ref, under a preset's route order. */
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve the workspace's per-agent-kind default model id, consulted when the
    * block pins no model. Optional: absent → the env routing for the kind is used.
