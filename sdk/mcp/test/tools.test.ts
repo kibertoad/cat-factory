@@ -68,7 +68,12 @@ describe('the generated tool table', () => {
     // validates cannot disagree.
     expect(body.type).toBe('object')
     expect(body.required).toEqual(['title'])
-    expect(Object.keys(body.properties).sort()).toEqual(['description', 'taskType', 'title'])
+    // A SUPERSET assertion, not an exact field list: `/api/v1` is additive forever, so pinning the
+    // set turns every new optional field into a red test in the facade rather than a reviewed
+    // change in the contracts, and the only possible fix is to retype the same list.
+    expect(Object.keys(body.properties)).toEqual(
+      expect.arrayContaining(['title', 'description', 'taskType']),
+    )
   })
 
   it('never narrows an OPEN vocabulary to an enum', () => {
