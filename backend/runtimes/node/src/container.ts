@@ -333,6 +333,11 @@ interface NodeServerContainerBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  /**
+   * Whether the composed capability-credential chain reads this node's environment behind the
+   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   */
+  toolSecretEnvironmentFallback: boolean | undefined
   validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
@@ -374,6 +379,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     subscriptions,
     personalSubscriptions,
@@ -518,6 +524,11 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
+    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
+    // describes the real chain instead of asserting the default beside it. Undefined when a
+    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
+    // what that consults.
+    ...(toolSecretEnvironmentFallback === undefined ? {} : { toolSecretEnvironmentFallback }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
@@ -628,6 +639,11 @@ interface NodeContainerFinalizeBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  /**
+   * Whether the composed capability-credential chain reads this node's environment behind the
+   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   */
+  toolSecretEnvironmentFallback: boolean | undefined
   validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
@@ -689,6 +705,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     publicApiKeys,
     userSecrets,
@@ -866,6 +883,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     subscriptions,
     personalSubscriptions,

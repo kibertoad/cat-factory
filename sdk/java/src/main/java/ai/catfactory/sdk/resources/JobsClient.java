@@ -13,21 +13,21 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Headless initiative-breakdown runs: start one against a brief, poll or stream it.
+ * Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
-public final class InitiativesClient {
+public final class JobsClient {
     private final Transport transport;
 
-    InitiativesClient(Transport transport) {
+    JobsClient(Transport transport) {
         this.transport = transport;
     }
 
     /**
-     * Cancel an initiative job
-     * Stop a headless initiative run, freeing its concurrency slot. Idempotent — an
-     * already-finished job is returned as-is. Use this to abandon a run parked on a decision you
-     * do not intend to answer.
+     * Cancel a job
+     * Stop a headless job run, freeing its concurrency slot. Idempotent — an already-finished job
+     * is returned as-is. Use this to abandon a run parked on a decision you do not intend to
+     * answer.
      * {@code POST /api/v1/jobs/{id}/cancel} (operation {@code cancelPublicJob}).
      */
     public PublicJob cancel(String id) {
@@ -35,19 +35,18 @@ public final class InitiativesClient {
     }
 
     /**
-     * Start an initiative-breakdown run
+     * Start a headless job
      * Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to
      * poll or stream. Nothing is pushed to GitHub.
-     * {@code POST /api/v1/initiatives} (operation {@code createInitiativeJob}).
+     * {@code POST /api/v1/jobs} (operation {@code createPublicJob}).
      */
-    public InitiativeAccepted create(CreateInitiativeJob body) {
-        return transport.request("POST", "/api/v1/initiatives", body, Map.of(), new TypeReference<InitiativeAccepted>() {});
+    public PublicJobAccepted create(CreatePublicJob body) {
+        return transport.request("POST", "/api/v1/jobs", body, Map.of(), new TypeReference<PublicJobAccepted>() {});
     }
 
     /**
-     * Get an initiative job
-     * Poll a headless initiative run started by this key: its status and, once finished, its
-     * result.
+     * Get a job
+     * Poll a headless job started through this surface: its status and, once finished, its result.
      * {@code GET /api/v1/jobs/{id}} (operation {@code getPublicJob}).
      */
     public PublicJob get(String id) {
@@ -55,20 +54,20 @@ public final class InitiativesClient {
     }
 
     /**
-     * List the workspace's initiative jobs (no query parameters).
+     * List the workspace's jobs (no query parameters).
      */
     public ListPublicJobsResponse list() {
-        return list(InitiativesListQuery.none());
+        return list(JobsListQuery.none());
     }
 
     /**
-     * List the workspace's initiative jobs
-     * List the headless initiative runs THIS surface created, newest first and keyset-paginated.
-     * Scoped to internal-anchored runs exactly like the single-job read, so an external key can
-     * never enumerate the workspace’s ordinary board runs.
+     * List the workspace's jobs
+     * List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to
+     * internal-anchored runs exactly like the single-job read, so an external key can never
+     * enumerate the workspace’s ordinary board runs.
      * {@code GET /api/v1/jobs} (operation {@code listPublicJobs}).
      */
-    public ListPublicJobsResponse list(InitiativesListQuery query) {
+    public ListPublicJobsResponse list(JobsListQuery query) {
         return transport.request("GET", "/api/v1/jobs", null, query.toQuery(), new TypeReference<ListPublicJobsResponse>() {});
     }
 
@@ -78,11 +77,11 @@ public final class InitiativesClient {
      * may legitimately arrive empty while a cursor is still set, so iteration ends on the cursor,
      * never on an empty page.
      */
-    public Iterator<PublicJob> listAll(InitiativesListQuery query) {
+    public Iterator<PublicJob> listAll(JobsListQuery query) {
         return new PageIterator<PublicJob>() {
             @Override
             protected Page<PublicJob> fetch(@Nullable String cursor) {
-                InitiativesListQuery nextQuery = InitiativesListQuery.builder()
+                JobsListQuery nextQuery = JobsListQuery.builder()
                         .limit(query.limit())
                         .status(query.status())
                         .since(query.since())
@@ -95,8 +94,8 @@ public final class InitiativesClient {
     }
 
     /**
-     * Stream an initiative job (SSE)
-     * Server-sent events for a headless initiative run: `progress` frames until a terminal
+     * Stream a job (SSE)
+     * Server-sent events for a headless job run: `progress` frames until a terminal
      * `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
      * {@code GET /api/v1/jobs/{id}/events} (operation {@code streamPublicJobEvents}).
      */

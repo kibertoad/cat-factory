@@ -30,6 +30,11 @@ describe('captureRunDeepLink', () => {
     })
   })
 
+  it('parses the captured-evidence link the lifecycle section emits', () => {
+    setUrl('?ws=ws_1&block=blk_1&run=exec_1&view=test-evidence')
+    expect(captureRunDeepLink()?.view).toBe('test-evidence')
+  })
+
   it('strips its own params so a reload does not re-open the panel', () => {
     setUrl('?ws=ws_1&run=exec_1&view=observability&keep=yes')
     captureRunDeepLink()

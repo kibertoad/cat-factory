@@ -54,7 +54,10 @@ import { selectTraceSink } from './container-trace-sinks.js'
 export { selectTraceSink }
 import { buildWorkerSharedServices } from './container-shared-services.js'
 import { assembleWorkerContainer } from './container-assembly.js'
-import { resolveRegisteredToolSecretResolver } from './toolSecretResolver.js'
+import {
+  registeredToolSecretEnvironmentFallback,
+  resolveRegisteredToolSecretResolver,
+} from './toolSecretResolver.js'
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
@@ -86,6 +89,7 @@ import {
   FanOutEventPublisher,
   InAppNotificationChannel,
   PatPreferringAppRegistry,
+  buildToolSecretChain,
   logger,
   buildInfrastructureCapabilities,
   GitHubIdentityResolver,
@@ -1410,6 +1414,27 @@ export function buildContainer(
     cloudflareModelsEnabledOverride: opts.cloudflareModelsEnabled,
   })
 
+  // How a registered capability's declared credentials are resolved at dispatch, composed ONCE
+  // here so the dispatch path and the credential CHECKLIST read one composition: whether an
+  // unstored key still resolves from the deployment's own vars is a property of what was composed,
+  // and the checklist has to describe it rather than assert a default beside it.
+  //
+  // The policy is read from the PROCESS-WIDE registration rather than from `opts`, because this
+  // function has many callers and only one of them is the request path: the durable driver
+  // (`ExecutionWorkflow`), the queue consumers and every cron sweeper each build their own
+  // container from a bare `buildContainer(env)`. Container agents are dispatched by the durable
+  // driver, so an option carried on `createApp` alone would be accepted and then never asked
+  // anything. A deployment's own resolver (built from THIS entry point's `env`: a Worker binding,
+  // D1 or a Secrets Store, is only reachable that way) REPLACES the chain; absent, the platform's
+  // per-workspace store answers first and the Worker's configured vars answer behind it.
+  const toolSecretChain = buildToolSecretChain({
+    custom: resolveRegisteredToolSecretResolver(env),
+    credentials: shared.capabilityCredentialsService,
+    env: env as unknown as Record<string, unknown>,
+    environmentFallback: registeredToolSecretEnvironmentFallback(),
+    logger,
+  })
+
   return assembleWorkerContainer({
     ...shared,
     env,
@@ -1421,18 +1446,9 @@ export function buildContainer(
     caches,
     overrides,
     gateProviders: opts.gateProviders,
-    // The deployment's own capability-credential resolver, built from THIS entry point's `env`
-    // (a Worker binding, D1 or a Secrets Store, is only reachable that way, which is why the
-    // registration holds a factory rather than an instance).
-    //
-    // Read from the PROCESS-WIDE registration rather than from `opts`, because this function has
-    // many callers and only one of them is the request path: the durable driver
-    // (`ExecutionWorkflow`), the queue consumers and every cron sweeper each build their own
-    // container from a bare `buildContainer(env)`. Container agents are dispatched by the durable
-    // driver, so an option carried on `createApp` alone would be accepted and then never asked
-    // anything. Absent ⇒ the executor composes the platform's own per-workspace store in front of
-    // the deployment environment.
-    executorToolSecrets: resolveRegisteredToolSecretResolver(env),
+    // The composed capability-credential chain (above): the resolver the container executor asks,
+    // and the description the credential checklist renders.
+    toolSecretChain,
     registries: {
       environmentBackendRegistry,
       runnerBackendRegistry,

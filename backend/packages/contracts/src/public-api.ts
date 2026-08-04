@@ -5,11 +5,12 @@ import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primiti
 // ---------------------------------------------------------------------------
 // Public-API wire contracts (the `/api/v1` surface for external systems).
 //
-// First use-case: "break down an initiative". An external caller picks a public,
-// inline (no-GitHub) pipeline and supplies an initial brief; the platform runs it
+// First use-case: "headless jobs". An external caller picks a public, inline
+// (no-GitHub) pipeline and supplies an initial brief; the platform runs it
 // headlessly and persists the result in the DB for asynchronous retrieval (poll
 // `GET /jobs/:id` or subscribe to `GET /jobs/:id/events` over SSE). Nothing is
-// committed to GitHub.
+// committed to GitHub. The first such pipeline breaks an initiative down, but
+// the job resource is generic over any public inline pipeline.
 //
 // Second use-case: "basic board workloads". A key holder lists the workspace's
 // services, creates a task under one, starts it, and follows its status — the
@@ -55,16 +56,16 @@ const epochMsQuerySchema = v.pipe(
   v.minValue(0),
 )
 
-/** Start an initiative run. */
-export const createInitiativeJobSchema = v.object({
+/** Start a headless job (run a public, inline pipeline against a brief). */
+export const createPublicJobSchema = v.object({
   /** Id of a PUBLIC, inline pipeline (e.g. `pl_initiative_breakdown`). */
   pipelineId: v.pipe(v.string(), v.trim(), v.minLength(1)),
-  /** The initiative brief — becomes the run's task description. */
+  /** The brief the pipeline runs against; becomes the run's task description. */
   input: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(50_000)),
   /** Optional human-readable title for the run; defaults to a truncated `input`. */
   title: v.optional(v.pipe(v.string(), v.trim(), v.maxLength(200))),
 })
-export type CreateInitiativeJobInput = v.InferOutput<typeof createInitiativeJobSchema>
+export type CreatePublicJobInput = v.InferOutput<typeof createPublicJobSchema>
 
 /**
  * The coarse public job status, mapped from the internal execution status:
@@ -83,7 +84,7 @@ export const publicJobResultSchema = v.object({
 })
 export type PublicJobResult = v.InferOutput<typeof publicJobResultSchema>
 
-/** A public job resource — the external view of a headless initiative run. */
+/** A public job resource — the external view of a headless pipeline run. */
 export const publicJobSchema = v.object({
   jobId: v.string(),
   status: publicJobStatusSchema,
@@ -97,7 +98,7 @@ export const publicJobSchema = v.object({
 export type PublicJob = v.InferOutput<typeof publicJobSchema>
 
 /**
- * The workspace's headless initiative jobs, newest first, bounded. Closes the gap where an
+ * The workspace's headless jobs, newest first, bounded. Closes the gap where an
  * integration that lost its stored job ids (a restart, a fresh deployment) could never
  * re-discover its own in-flight runs — `GET /jobs/:id` needs an id it no longer has.
  *
@@ -129,13 +130,13 @@ export const listPublicJobsQuerySchema = v.object({
 })
 export type ListPublicJobsQuery = v.InferOutput<typeof listPublicJobsQuerySchema>
 
-/** The `202` returned by `POST /initiatives`: the job id + where to follow it. */
-export const initiativeAcceptedSchema = v.object({
+/** The `202` returned by `POST /jobs`: the job id + where to follow it. */
+export const publicJobAcceptedSchema = v.object({
   jobId: v.string(),
   status: publicJobStatusSchema,
   links: v.object({ self: v.string(), events: v.string() }),
 })
-export type InitiativeAccepted = v.InferOutput<typeof initiativeAcceptedSchema>
+export type PublicJobAccepted = v.InferOutput<typeof publicJobAcceptedSchema>
 
 // ---------------------------------------------------------------------------
 // Basic board workloads: services + tasks.
@@ -182,8 +183,12 @@ export const publicTaskSchema = v.object({
   status: publicTaskStatusSchema,
   /** 0..1 progress of the task's current run; 0 when not started. */
   progress: v.number(),
-  /** The live run's id once the task has been started; null while `planned`. */
-  executionId: v.nullable(v.string()),
+  /**
+   * The live run's id once the task has been started; null while `planned`. Joins onto the
+   * rich run projection (`publicRun.runId`) and the decisions surface (`/runs/:runId/...`):
+   * one public name for one concept ("execution" is the internal engine vocabulary).
+   */
+  runId: v.nullable(v.string()),
   /** The web URL of the PR the run opened, once one exists; null otherwise. */
   pullRequestUrl: v.nullable(v.string()),
 })
@@ -323,7 +328,7 @@ export const publicPipelineSchema = v.object({
   /** The enabled step chain, in order (each an agent kind). */
   steps: v.array(v.string()),
   /**
-   * Whether this pipeline is exposed as a PUBLIC initiative pipeline (`POST /initiatives`).
+   * Whether this pipeline is exposed as a PUBLIC initiative pipeline (`POST /jobs`).
    * A non-public pipeline can still back a board task `start` when pinned or passed by id.
    */
   public: v.boolean(),

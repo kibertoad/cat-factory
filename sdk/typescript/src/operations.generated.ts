@@ -10,14 +10,12 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
-  CreateInitiativeJob,
+  CreatePublicJob,
   CreatePublicTask,
   DebugAgentContextSnapshot,
   DebugLlmCall,
   DebugRunOverview,
   GetDebugLlmCallView,
-  InitiativeAccepted,
-  InitiativeAcceptedStatus,
   ListDebugAgentContextResponse,
   ListDebugLlmCallsOrder,
   ListDebugLlmCallsResponse,
@@ -31,6 +29,8 @@ import type {
   PublicDecisionList,
   PublicIncorporate,
   PublicJob,
+  PublicJobAccepted,
+  PublicJobStatus,
   PublicNotificationList,
   PublicPipelineList,
   PublicReplyFinding,
@@ -100,11 +100,11 @@ export type DebugListSearchQueriesQuery = {
   cursor?: string
 }
 
-/** Query parameters for `client.initiatives.list()`. */
-export type InitiativesListQuery = {
+/** Query parameters for `client.jobs.list()`. */
+export type JobsListQuery = {
   limit?: number
   cursor?: string
-  status?: InitiativeAcceptedStatus
+  status?: PublicJobStatus
   since?: number
 }
 
@@ -115,8 +115,8 @@ export type TasksListByServiceQuery = {
   status?: TaskStatus
 }
 
-/** Headless initiative-breakdown runs: start one against a brief, poll or stream it. */
-export class InitiativesResource {
+/** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
+export class JobsResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
@@ -124,8 +124,8 @@ export class InitiativesResource {
   }
 
   /**
-   * Cancel an initiative job
-   * Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.
+   * Cancel a job
+   * Stop a headless job run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.
    * `POST /api/v1/jobs/{id}/cancel` — operation `cancelPublicJob`.
    */
   cancel(id: string, options: RequestOptions = {}): Promise<PublicJob> {
@@ -137,22 +137,22 @@ export class InitiativesResource {
   }
 
   /**
-   * Start an initiative-breakdown run
+   * Start a headless job
    * Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.
-   * `POST /api/v1/initiatives` — operation `createInitiativeJob`.
+   * `POST /api/v1/jobs` — operation `createPublicJob`.
    */
-  create(body: CreateInitiativeJob, options: RequestOptions = {}): Promise<InitiativeAccepted> {
-    return this.#transport.request<InitiativeAccepted>({
+  create(body: CreatePublicJob, options: RequestOptions = {}): Promise<PublicJobAccepted> {
+    return this.#transport.request<PublicJobAccepted>({
       method: 'POST',
-      path: `/api/v1/initiatives`,
+      path: `/api/v1/jobs`,
       body,
       options,
     })
   }
 
   /**
-   * Get an initiative job
-   * Poll a headless initiative run started by this key: its status and, once finished, its result.
+   * Get a job
+   * Poll a headless job started through this surface: its status and, once finished, its result.
    * `GET /api/v1/jobs/{id}` — operation `getPublicJob`.
    */
   get(id: string, options: RequestOptions = {}): Promise<PublicJob> {
@@ -164,11 +164,11 @@ export class InitiativesResource {
   }
 
   /**
-   * List the workspace's initiative jobs
-   * List the headless initiative runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.
+   * List the workspace's jobs
+   * List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.
    * `GET /api/v1/jobs` — operation `listPublicJobs`.
    */
-  list(query: InitiativesListQuery = {}, options: RequestOptions = {}): Promise<ListPublicJobsResponse> {
+  list(query: JobsListQuery = {}, options: RequestOptions = {}): Promise<ListPublicJobsResponse> {
     return this.#transport.request<ListPublicJobsResponse>({
       method: 'GET',
       path: `/api/v1/jobs`,
@@ -182,7 +182,7 @@ export class InitiativesResource {
    * Follows `nextCursor` until the server reports no further page. The cursor is opaque
    * and carries a position, never authority — each page re-applies the key's full scope.
    */
-  async *listAll(query: InitiativesListQuery = {}, options: RequestOptions = {}): AsyncGenerator<ListPublicJobsResponse['jobs'][number]> {
+  async *listAll(query: JobsListQuery = {}, options: RequestOptions = {}): AsyncGenerator<ListPublicJobsResponse['jobs'][number]> {
     let cursor: string | undefined = query.cursor
     for (;;) {
       const page = await this.list({ ...query, cursor }, options)
@@ -194,8 +194,8 @@ export class InitiativesResource {
   }
 
   /**
-   * Stream an initiative job (SSE)
-   * Server-sent events for a headless initiative run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
+   * Stream a job (SSE)
+   * Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
    * `GET /api/v1/jobs/{id}/events` — operation `streamPublicJobEvents`.
    */
   stream(id: string, options: RequestOptions = {}): Promise<EventStream> {
@@ -266,7 +266,7 @@ export class TasksResource {
 
   /**
    * Get a task's status
-   * Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one exists).
+   * Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).
    * `GET /api/v1/tasks/{taskId}` — operation `getPublicTask`.
    */
   get(taskId: string, options: RequestOptions = {}): Promise<PublicTask> {
@@ -335,7 +335,7 @@ export class TasksResource {
 
   /**
    * Start (run) a task
-   * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).
+   * Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).
    * `POST /api/v1/tasks/{taskId}/start` — operation `startPublicTask`.
    */
   start(taskId: string, body: StartPublicTask, options: RequestOptions = {}): Promise<PublicTask> {
@@ -821,8 +821,8 @@ export class DebugResource {
  * cannot see that such properties are initialised — so a real base class it is.)
  */
 export abstract class CatFactoryResources {
-  /** Headless initiative-breakdown runs: start one against a brief, poll or stream it. */
-  readonly initiatives: InitiativesResource
+  /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
+  readonly jobs: JobsResource
   /** The workspace's board services — the frames tasks are created under. */
   readonly services: ServicesResource
   /** A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete. */
@@ -839,7 +839,7 @@ export abstract class CatFactoryResources {
   readonly debug: DebugResource
 
   protected constructor(transport: Transport) {
-    this.initiatives = new InitiativesResource(transport)
+    this.jobs = new JobsResource(transport)
     this.services = new ServicesResource(transport)
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)

@@ -46,8 +46,8 @@ def _encode(value: Any) -> Any:
 
 
 @dataclass(frozen=True, slots=True)
-class CreateInitiativeJob:
-    """`CreateInitiativeJob`, as carried on the wire."""
+class CreatePublicJob:
+    """`CreatePublicJob`, as carried on the wire."""
 
     input: str
     pipeline_id: str
@@ -60,8 +60,8 @@ class CreateInitiativeJob:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "CreateInitiativeJob":
-        """Decode a `CreateInitiativeJob` from its JSON object."""
+    def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicJob":
+        """Decode a `CreatePublicJob` from its JSON object."""
         known = {"input", "pipelineId", "title"}
         return cls(
             input=data.get("input"),
@@ -1685,84 +1685,6 @@ class GetDebugLlmCallView(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class InitiativeAccepted:
-    """`InitiativeAccepted`, as carried on the wire."""
-
-    job_id: str
-    links: InitiativeAcceptedLinks
-    status: InitiativeAcceptedStatus
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "InitiativeAccepted":
-        """Decode a `InitiativeAccepted` from its JSON object."""
-        known = {"jobId", "links", "status"}
-        return cls(
-            job_id=data.get("jobId"),
-            links=InitiativeAcceptedLinks.from_dict(data.get("links")),
-            status=_enum(InitiativeAcceptedStatus, data.get("status")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["jobId"] = self.job_id
-        out["links"] = _encode(self.links)
-        out["status"] = _encode(self.status)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class InitiativeAcceptedLinks:
-    """`InitiativeAcceptedLinks`, as carried on the wire."""
-
-    events: str
-    self_: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "InitiativeAcceptedLinks":
-        """Decode a `InitiativeAcceptedLinks` from its JSON object."""
-        known = {"events", "self"}
-        return cls(
-            events=data.get("events"),
-            self_=data.get("self"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["events"] = self.events
-        out["self"] = self.self_
-        return out
-
-
-class InitiativeAcceptedStatus(StrEnum):
-    """The `InitiativeAcceptedStatus` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-
-
-@dataclass(frozen=True, slots=True)
 class ListDebugAgentContextResponse:
     """`ListDebugAgentContextResponse`, as carried on the wire."""
 
@@ -2734,7 +2656,7 @@ class PublicJob:
     created_at: float
     job_id: str
     pipeline_id: str
-    status: InitiativeAcceptedStatus
+    status: PublicJobStatus
     #: Always present; ``None`` when the server has no value for it.
     error: RunError | None = None
     #: Always present; ``None`` when the server has no value for it.
@@ -2753,7 +2675,7 @@ class PublicJob:
             created_at=data.get("createdAt"),
             job_id=data.get("jobId"),
             pipeline_id=data.get("pipelineId"),
-            status=_enum(InitiativeAcceptedStatus, data.get("status")),
+            status=_enum(PublicJobStatus, data.get("status")),
             error=None if data.get("error") is None else RunError.from_dict(data.get("error")),
             result=None if data.get("result") is None else PublicJobResult.from_dict(data.get("result")),
             extra={k: v for k, v in data.items() if k not in known},
@@ -2768,6 +2690,69 @@ class PublicJob:
         out["status"] = _encode(self.status)
         out["error"] = _encode(self.error)
         out["result"] = _encode(self.result)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicJobAccepted:
+    """`PublicJobAccepted`, as carried on the wire."""
+
+    job_id: str
+    links: PublicJobAcceptedLinks
+    status: PublicJobStatus
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicJobAccepted":
+        """Decode a `PublicJobAccepted` from its JSON object."""
+        known = {"jobId", "links", "status"}
+        return cls(
+            job_id=data.get("jobId"),
+            links=PublicJobAcceptedLinks.from_dict(data.get("links")),
+            status=_enum(PublicJobStatus, data.get("status")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["jobId"] = self.job_id
+        out["links"] = _encode(self.links)
+        out["status"] = _encode(self.status)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicJobAcceptedLinks:
+    """`PublicJobAcceptedLinks`, as carried on the wire."""
+
+    events: str
+    self_: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicJobAcceptedLinks":
+        """Decode a `PublicJobAcceptedLinks` from its JSON object."""
+        known = {"events", "self"}
+        return cls(
+            events=data.get("events"),
+            self_=data.get("self"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["events"] = self.events
+        out["self"] = self.self_
         return out
 
 
@@ -2800,6 +2785,21 @@ class PublicJobResult:
         out["output"] = self.output
         out["data"] = self.data
         return out
+
+
+class PublicJobStatus(StrEnum):
+    """The `PublicJobStatus` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -3547,9 +3547,9 @@ class PublicTask:
     task_type: str
     title: str
     #: Always present; ``None`` when the server has no value for it.
-    execution_id: str | None = None
-    #: Always present; ``None`` when the server has no value for it.
     pull_request_url: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    run_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
@@ -3559,7 +3559,7 @@ class PublicTask:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTask":
         """Decode a `PublicTask` from its JSON object."""
-        known = {"description", "progress", "serviceId", "status", "taskId", "taskType", "title", "executionId", "pullRequestUrl"}
+        known = {"description", "progress", "serviceId", "status", "taskId", "taskType", "title", "pullRequestUrl", "runId"}
         return cls(
             description=data.get("description"),
             progress=data.get("progress"),
@@ -3568,8 +3568,8 @@ class PublicTask:
             task_id=data.get("taskId"),
             task_type=data.get("taskType"),
             title=data.get("title"),
-            execution_id=data.get("executionId"),
             pull_request_url=data.get("pullRequestUrl"),
+            run_id=data.get("runId"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -3583,8 +3583,8 @@ class PublicTask:
         out["taskId"] = self.task_id
         out["taskType"] = self.task_type
         out["title"] = self.title
-        out["executionId"] = self.execution_id
         out["pullRequestUrl"] = self.pull_request_url
+        out["runId"] = self.run_id
         return out
 
 

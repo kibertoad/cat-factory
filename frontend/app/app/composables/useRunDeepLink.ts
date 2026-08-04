@@ -1,11 +1,12 @@
 /**
- * Boot-time replay of a RUN deep link — `?ws=<id>&block=<id>&run=<id>&view=observability`.
+ * Boot-time replay of a RUN deep link: `?ws=<id>&block=<id>&run=<id>&view=<panel>`.
  *
- * The engine's PR verification report links each PR back to the run's observability panel
- * (Model activity / Provided context), built from the deployment's public app URL. The SPA is a
- * single canvas with no URL identity for anything, so this is the narrow consumer that makes
- * that link resolve: pin the board before the snapshot loads, then — once the board is ready —
- * select the task and open the panel for the run.
+ * The engine's PR verification report links each PR back into the run: to the observability
+ * panel (Model activity / Provided context), and to the Tester's result window holding the
+ * evidence its environment-lifecycle section lists. Both are built from the deployment's public
+ * app URL. The SPA is a single canvas with no URL identity for anything, so this is the narrow
+ * consumer that makes those links resolve: pin the board before the snapshot loads, then, once
+ * the board is ready, select the task and open the panel for the run.
  *
  * Deliberately narrow. The GENERAL parser (every entity, every window, plus state→URL sync) is
  * slice 4 of `docs/initiatives/global-search-and-deep-links.md`; when it lands, this composable
@@ -81,9 +82,11 @@ export function useRunDeepLink(): void {
       if (!ready || applied) return
       applied = true
       if (link.blockId) ui.select(link.blockId)
-      // `observability` is the only view this narrow parser serves — an unknown view still
-      // lands the user on the right board and task rather than failing the navigation.
+      // Two views are served: the observability panel and the Tester's result window (where the
+      // screenshots the report's environment-lifecycle section lists are rendered). An unknown
+      // view still lands the user on the right board and task rather than failing the navigation.
       if (link.view === 'observability') ui.openObservability(link.runId)
+      else if (link.view === 'test-evidence') ui.openTestEvidence(link.runId)
       stop?.()
     },
     { immediate: true },

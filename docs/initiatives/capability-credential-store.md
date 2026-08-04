@@ -1,7 +1,7 @@
 # Per-workspace capability credentials
 
-Status: **slices 1 and 2 landed (backend end-to-end, plus the SPA surface); slice 3 (conformance)
-open.**
+Status: **slices 1, 2 and 4 landed (backend end to end, the SPA surface, and the store-only
+declaration); slice 3 (conformance) open.**
 
 ## Goal
 
@@ -112,10 +112,12 @@ which reconfigure the run instead of authenticating a call.
       tool servers are not asserted there today, so this slice is really "give the harness a seam
       that can observe the resolved job body", and it should be scoped as that rather than smuggled
       in as a test.
-- [ ] **4. Retire the environment default for a multi-tenant deployment.** Not by removing it: by
-      letting a deployment declare `createToolSecretResolver` as store-ONLY and having the view
-      report `environmentFallback: false`, which the SPA already reads. The open question is whether
-      a hosted deployment should default that way, which is a product call rather than a code one.
+- [x] **4. Retire the environment default for a multi-tenant deployment.** Not by removing it:
+      `capabilityCredentialEnvironmentFallback: false` on every facade composes the chain without
+      the environment resolver, and the view reports what was composed. The DEFAULT is untouched
+      (`true`), because whether a hosted deployment should ship store-only is a product call and
+      this slice deliberately does not make it.
+      ([PR #1631](https://github.com/kibertoad/cat-factory/pull/1631).)
 
 ### Three decisions the SPA slice forced
 
@@ -148,6 +150,42 @@ which reconfigure the run instead of authenticating a call.
    Each write also stamps `updatedAt` on the touched key only: "last set" is a per-key fact the
    checklist renders, so re-stamping the set would falsify every neighbour's date.
 
+### Three decisions slice 4 forced
+
+9. **The composition returns the DESCRIPTION with the resolver, so nothing can re-assert it.**
+   `buildToolSecretChain` (`@cat-factory/server`) is the single site all three facades compose
+   through, and it hands back `{ resolver, environmentFallback }`. Previously each facade's
+   executor builder assembled its own chain, which is the shape that lets two runtimes drift about
+   a precedence rule, and neither could be read by the surface that has to describe it: the
+   controller asserted `true` beside a chain it never saw. Consequence worth stating: the facades
+   now build the chain at the composition ROOT and pass it down, so the executor builders take a
+   resolver rather than the store, and the Worker stopped building a second
+   `CapabilityCredentialsService` for the executor alone. What that consequence then forced is
+   decision 11.
+10. **`environmentFallback` is a TRI-STATE, because a deployment's own resolver is undescribable.**
+    The seam's documented meaning is that `createToolSecretResolver` REPLACES the chain, so a
+    deployment may have wired Vault, or the environment, or both, and neither boolean is a claim
+    the platform can make. Absent is that answer, and the SPA renders it as a third line that
+    states only what is known. Both guesses fail in opposite directions and both fail silently:
+    `true` tells an operator a blank row may still be working when nothing will ever resolve it,
+    `false` sends them hunting for a value that already answers. Rejected alternative: reporting
+    the ordered SOURCE LIST (`['workspace-store', 'deployment-environment']`) instead of a flag,
+    which reads richer and is not: the only extra fact it carries, "the store is not consulted at
+    all", is unreachable, since the controller already 503s when the store is unwired, and for a
+    custom resolver the list would be the same guess in a longer shape.
+11. **The executor takes the chain as a REQUIRED dependency, because the only default it could
+    carry failed OPEN.** Moving composition to the root left both executor builders with a bare
+    deployment-environment default "for a caller assembling this executor without that root".
+    That default is the leak the store exists to prevent, reachable by dropping ONE optional field
+    in a facade whose every neighbouring link is optional: the per-workspace store stops being
+    consulted, every tenant resolves off the deployment's own vars, and nothing throws or logs
+    because env-only is a perfectly valid chain. It also contradicted the decision one paragraph
+    up, where store-only-with-no-store refuses LOUDLY rather than quietly re-adding the
+    environment. Making the field required moves that whole class of regression to a compile
+    error, and the standalone caller loses nothing: `buildToolSecretChain` is exported, and calling
+    it is what gets them the description the checklist renders as well as the resolver. General
+    form: **a default is only safe where the safe answer is the convenient one.**
+
 ## Gotchas the pilot surfaced
 
 - **`collectDeclaredCapabilityCredentials` enumerates through the KINDS**, not off the tool-server
@@ -160,10 +198,27 @@ which reconfigure the run instead of authenticating a call.
   and the generator half must go through `BinaryGeneratorSource`, which only the composition root
   can supply. Putting it in `@cat-factory/integrations` would have dragged that package into the
   agent-kind registry graph for a read that is presentational.
+- **Store-only with NO store is a refusal, not a quiet no-op.** `ENCRYPTION_KEY` is what wires the
+  store, so a deployment can declare the chain store-only and have nothing in it. The composition
+  logs an `error` naming the misconfiguration and returns a resolver that answers nothing, rather
+  than silently re-adding the environment (which would ignore the declaration) or throwing (the
+  Worker composes per entry point, so that would take out every request). The operator surface
+  already states the other half: the controller 503s naming `ENCRYPTION_KEY`.
+- **A composition-time report is said ONCE PER PROCESS, because this runs per container build.**
+  On the Worker that is per request, per cron tick and per queue message, so a line repeated per
+  invocation buries the one line that names the problem. The guard is a module-level set keyed by
+  problem (per isolate on the Worker), the cadence `validateRegistrationsOnce` already sets for the
+  sibling registration checks. Not a counter: a configuration mistake has no rate to watch. The
+  same guard covers the WARN for a deployment that set `capabilityCredentialEnvironmentFallback`
+  beside its own resolver, which is a declaration the composition cannot honour and so is stated
+  rather than dropped.
+- **The tri-state's ABSENT copy names no CAUSE, and that is not squeamishness.** Two things land
+  on absent: a deployment's own resolver (the deliberate one) and a facade that wired the store and
+  dropped the flag (a refactor hazard). Copy that blames the custom resolver makes the second read
+  as the first, sending an operator to inspect a resolver nobody wrote. So the line states that the
+  chain cannot be described HERE and stops, which is true of both.
 - **The declaration list is NOT filtered to the capabilities a workspace's pipelines use.** Which
   kinds a workspace runs changes with every pipeline edit, so filtering makes the checklist flicker
   and hides the key an operator needs to set BEFORE adding the step that wants it.
-- **`environmentFallback` is hard-coded `true` in the controller** because all three facades
-  currently compose the chain that way. When slice 4 makes it configurable, it must be read from
-  what the facade actually composed rather than re-asserted: the flag's whole job is to describe
-  the real chain.
+- **`environmentFallback` was hard-coded `true` in the controller** because all three facades
+  composed the chain that way. Slice 4 closed that, and the shape it forced is the entry below.

@@ -6,11 +6,11 @@ import {
 } from '../public-api-keys.js'
 import { notificationSchema } from '../notifications.js'
 import {
-  createInitiativeJobSchema,
+  createPublicJobSchema,
   createPublicTaskSchema,
-  initiativeAcceptedSchema,
   listPublicJobsQuerySchema,
   listPublicServiceTasksQuerySchema,
+  publicJobAcceptedSchema,
   publicJobListSchema,
   publicJobSchema,
   publicNotificationListSchema,
@@ -65,15 +65,21 @@ export const revokePublicApiKeyContract = defineApiContract({
 
 // ---- the external `/api/v1` surface (absolute paths, key-authenticated) ----
 
-export const createInitiativeJobContract = defineApiContract({
+/**
+ * Start a headless job: run a public, inline pipeline against a supplied brief. Lives at
+ * `POST /api/v1/jobs` so the whole job lifecycle (create, list, get, cancel, stream) shares one
+ * resource root; the create used to sit apart at `POST /api/v1/initiatives`, which split the
+ * resource across two path roots for no reason a caller could see.
+ */
+export const createPublicJobContract = defineApiContract({
   method: 'post',
-  pathResolver: () => '/api/v1/initiatives',
-  requestBodySchema: createInitiativeJobSchema,
-  responsesByStatusCode: { 202: initiativeAcceptedSchema, ...errorResponses },
+  pathResolver: () => '/api/v1/jobs',
+  requestBodySchema: createPublicJobSchema,
+  responsesByStatusCode: { 202: publicJobAcceptedSchema, ...errorResponses },
 })
 
 /**
- * List the workspace's headless initiative jobs (newest first, keyset-paginated). Scoped to the
+ * List the workspace's headless jobs (newest first, keyset-paginated). Scoped to the
  * runs THIS surface created — an internal-anchored run — exactly like the single-job read, so an
  * external key can never enumerate the workspace's ordinary board runs.
  */
@@ -92,12 +98,12 @@ export const getPublicJobContract = defineApiContract({
 })
 
 /**
- * Cancel a headless initiative run. The escape hatch that makes admitting a PARKING pipeline
+ * Cancel a headless job run. The escape hatch that makes admitting a PARKING pipeline
  * safe (see `docs/initiatives/headless-clarification-loop.md`, D1): a parked run waits for a
- * human indefinitely and holds one of the workspace's in-flight initiative slots, so a caller
+ * human indefinitely and holds one of the workspace's in-flight job slots, so a caller
  * that decides not to answer must be able to free it. Idempotent — a run already terminal comes
  * back as-is. Board tasks have had `POST /api/v1/tasks/:taskId/stop` all along; this is its
- * counterpart on the initiative surface.
+ * counterpart on the jobs surface.
  */
 export const cancelPublicJobContract = defineApiContract({
   method: 'post',

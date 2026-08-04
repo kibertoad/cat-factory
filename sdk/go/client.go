@@ -51,7 +51,7 @@ type Options struct {
 	// MaxRetries bounds retries of a RETRIABLE failure. Zero means 2.
 	//
 	// A non-idempotent request is never retried automatically, so raising this does not make
-	// Initiatives.Create replayable.
+	// Jobs.Create replayable.
 	MaxRetries int
 	// Header is sent on every request.
 	Header http.Header
@@ -74,8 +74,8 @@ type Client struct {
 	header     http.Header
 	httpClient *http.Client
 
-	// Headless initiative-breakdown runs.
-	Initiatives *InitiativesService
+	// Headless jobs: a public, inline pipeline run against a brief.
+	Jobs *JobsService
 	// The workspace's board services.
 	Services *ServicesService
 	// Board tasks: create, edit, start, stop, retry, watch, delete.
@@ -131,7 +131,7 @@ func New(options Options) (*Client, error) {
 		header:     header,
 		httpClient: httpClient,
 	}
-	client.Initiatives = &InitiativesService{client: client}
+	client.Jobs = &JobsService{client: client}
 	client.Services = &ServicesService{client: client}
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
@@ -161,7 +161,7 @@ func pathEscape(value string) string {
 // idempotent reports whether a method may be replayed after a failure.
 //
 // A transport failure with no response tells us nothing about whether the server acted, so only a
-// method that is idempotent BY DEFINITION is replayed. POST /initiatives and POST /tasks/:id/start
+// method that is idempotent BY DEFINITION is replayed. POST /jobs and POST /tasks/:id/start
 // both cost real LLM work, and a duplicate is not something the SDK may decide to risk on the
 // caller's behalf.
 func idempotent(method string) bool {

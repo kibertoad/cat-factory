@@ -15,12 +15,12 @@
 // the group already says what resource is being addressed.
 
 const SURFACE = {
-  // ---- Initiatives: headless runs against a supplied brief -------------------------------
-  createInitiativeJob: { group: 'initiatives', method: 'create' },
-  listPublicJobs: { group: 'initiatives', method: 'list', paginates: 'jobs' },
-  getPublicJob: { group: 'initiatives', method: 'get' },
-  cancelPublicJob: { group: 'initiatives', method: 'cancel' },
-  streamPublicJobEvents: { group: 'initiatives', method: 'stream' },
+  // ---- Jobs: headless runs of a public, inline pipeline against a supplied brief ---------
+  createPublicJob: { group: 'jobs', method: 'create' },
+  listPublicJobs: { group: 'jobs', method: 'list', paginates: 'jobs' },
+  getPublicJob: { group: 'jobs', method: 'get' },
+  cancelPublicJob: { group: 'jobs', method: 'cancel' },
+  streamPublicJobEvents: { group: 'jobs', method: 'stream' },
 
   // ---- Services -------------------------------------------------------------------------
   listPublicServices: { group: 'services', method: 'list' },
@@ -76,7 +76,7 @@ const SURFACE = {
 
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
 export const GROUP_DOCS = {
-  initiatives: 'Headless initiative-breakdown runs: start one against a brief, poll or stream it.',
+  jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
   services: "The workspace's board services — the frames tasks are created under.",
   tasks: "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',

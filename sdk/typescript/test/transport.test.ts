@@ -75,7 +75,7 @@ describe('Transport retry policy', () => {
   })
 
   it('never replays a non-idempotent request', async () => {
-    // `POST /initiatives` and `POST /tasks/:id/start` cost real LLM work, and a transport failure
+    // `POST /jobs` and `POST /tasks/:id/start` cost real LLM work, and a transport failure
     // with no response says nothing about whether the server acted — so a duplicate is not a risk
     // the SDK may take on the caller's behalf.
     let calls = 0

@@ -274,6 +274,13 @@ Everything the agent writes that reaches a parsed surface is treated as hostile:
 - Captured command output shown back to a model is fenced with a fence sized longer than any
   backtick run in the body (`fencedOutput`), so tool output cannot spill into what the model reads
   as instructions.
+- The report's **test environment lifecycle** section renders three families of hole a run does not
+  control: a service-frame id and a provider's verbatim stderr from the deployer's per-frame
+  outcomes, and the view name plus stored artifact id of every screenshot the tester captured.
+  Every one crosses `hostMarkdown.cell`, and the provider error is scrubbed with `redactSecrets`
+  first (a failing provisioner routinely echoes the request URL it was called with). The section's
+  own prose is platform-authored constants, so the note and gap lines are deliberately NOT escaped:
+  what a reader must be able to trust there is that no agent wrote them.
 - Published review findings (`createReview`, on both providers) are a rendered surface too, and one
   that is **not** yet scrubbed: a finding's body is posted to the host verbatim. The exposure is
   bounded relative to a PR body: a host auto-links `#123`/`@name` in a comment, but only a

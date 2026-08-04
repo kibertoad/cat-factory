@@ -116,9 +116,15 @@ export {
 // The per-workspace capability-credential resolver and the per-KEY composition that puts it in
 // front of the environment one. See `capabilityCredentialResolver.ts` for why an environment
 // variable is a single-tenant answer, and why the fallback is a real mechanism rather than a shim.
+// `buildToolSecretChain` is the ONE composition site: a facade calls it and gets both the resolver
+// its dispatch path asks and the description its credential checklist renders, so the two cannot
+// disagree about whether an unstored key still resolves.
 export {
+  buildToolSecretChain,
   createWorkspaceToolSecretResolver,
   composeToolSecretResolvers,
+  type ToolSecretChain,
+  type ToolSecretChainInput,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
 export {

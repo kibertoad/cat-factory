@@ -303,7 +303,7 @@ is the reference for the shared-ids pattern.
 
 - **Data-only / DB-authored presets** (UI-authored, no code hooks): the descriptor/hook split keeps
   the pure-JSON subset expressible, but there is no non-code registration path yet.
-- **Public API preset exposure** (`POST /api/v1/initiatives` accepting a `presetId`).
+- **Public API preset exposure** (`POST /api/v1/jobs` accepting a `presetId`).
 - **A first-class pipeline template with a swappable step**: the doc/audit spawn pipelines share only
   the universal `conflicts → ci → merger` tail; a templated pipeline is a separate initiative, not
   built here (each preset stamps a concrete `pipelineId` per item for now).

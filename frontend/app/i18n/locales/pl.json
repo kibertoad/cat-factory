@@ -2719,6 +2719,7 @@
       "storedAt": "Ostatnio ustawione {date}",
       "notStoredWithFallback": "Dla tej tablicy nic nie jest zapisane. To wdrożenie odczytuje klucz również z własnego środowiska, więc funkcja może nadal działać.",
       "notStored": "Dla tej tablicy nic nie jest zapisane, a to wdrożenie nie ma awaryjnego odczytu ze środowiska, więc funkcja nie może się uwierzytelnić.",
+      "notStoredUnknownFallback": "Dla tej tablicy nic nie jest zapisane. Łańcucha poświadczeń tego wdrożenia nie można tutaj opisać, więc nie wiadomo, czy klucz jest obsługiwany gdzie indziej.",
       "setValue": "Wartość",
       "replaceValue": "Zastąp zapisaną wartość",
       "save": "Zapisz",

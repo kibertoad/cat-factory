@@ -299,6 +299,13 @@ export async function start(
      */
     createToolSecretResolver?: NodeContainerOptions['createToolSecretResolver']
     /**
+     * Whether this node's environment answers a capability credential the workspace has not
+     * stored. Defaults to true; a multi-tenant deployment sets it false so a tenant that has
+     * typed nothing resolves nothing instead of silently running on the operator's own vendor
+     * account. See `NodeContainerOptions.capabilityCredentialEnvironmentFallback`.
+     */
+    capabilityCredentialEnvironmentFallback?: NodeContainerOptions['capabilityCredentialEnvironmentFallback']
+    /**
      * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
      * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
      * the LAN — but note repo-operating agent containers reach this service's LLM proxy
@@ -695,6 +702,7 @@ async function bootServer(
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     createToolSecretResolver: options.createToolSecretResolver,
+    capabilityCredentialEnvironmentFallback: options.capabilityCredentialEnvironmentFallback,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
     // default). The local facade rides on this same field via its `buildContainer` override.
     defaultModelPresetId: options.defaultModelPresetId,

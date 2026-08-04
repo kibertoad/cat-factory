@@ -8,35 +8,35 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code InitiativeAccepted} wire model.
+ * The {@code PublicJobAccepted} wire model.
  * @param jobId the {@code jobId} field.
  * @param links the {@code links} field.
  * @param status the {@code status} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record InitiativeAccepted(
+public record PublicJobAccepted(
     @JsonProperty("jobId") String jobId,
 
-    @JsonProperty("links") InitiativeAcceptedLinks links,
+    @JsonProperty("links") PublicJobAcceptedLinks links,
 
-    @JsonProperty("status") InitiativeAcceptedStatus status
+    @JsonProperty("status") PublicJobStatus status
 ) {
 
-    /** A new builder for {@link InitiativeAccepted}. */
+    /** A new builder for {@link PublicJobAccepted}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link InitiativeAccepted}.
+     * Fluent builder for {@link PublicJobAccepted}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
         private @Nullable String jobId;
-        private @Nullable InitiativeAcceptedLinks links;
-        private @Nullable InitiativeAcceptedStatus status;
+        private @Nullable PublicJobAcceptedLinks links;
+        private @Nullable PublicJobStatus status;
 
         /** Set {@code jobId}. */
         public Builder jobId(@Nullable String jobId) {
@@ -45,20 +45,20 @@ public record InitiativeAccepted(
         }
 
         /** Set {@code links}. */
-        public Builder links(@Nullable InitiativeAcceptedLinks links) {
+        public Builder links(@Nullable PublicJobAcceptedLinks links) {
             this.links = links;
             return this;
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable InitiativeAcceptedStatus status) {
+        public Builder status(@Nullable PublicJobStatus status) {
             this.status = status;
             return this;
         }
 
-        /** Build the {@link InitiativeAccepted}. */
-        public InitiativeAccepted build() {
-            return new InitiativeAccepted(jobId, links, status);
+        /** Build the {@link PublicJobAccepted}. */
+        public PublicJobAccepted build() {
+            return new PublicJobAccepted(jobId, links, status);
         }
     }
 }

@@ -182,14 +182,20 @@ export const capabilityCredentialsViewSchema = v.object({
   /** Stored keys no registered capability declares. */
   orphaned: v.array(capabilityCredentialRefSchema),
   /**
-   * Whether the deployment ALSO has an environment-variable fallback behind this store. False
-   * when a facade wired a store-only resolver.
+   * Whether the deployment ALSO has an environment-variable fallback behind this store, read off
+   * the chain the facade actually COMPOSED rather than asserted by the surface that renders it.
    *
    * Stated because it changes what an EMPTY row means: with the fallback, a key nothing is stored
    * for may still resolve from the deployment's environment, so the UI must not report it as
    * missing. "Absent" and "zero" again.
+   *
+   * Three states, not two, because a deployment that supplied its OWN `ToolSecretResolver`
+   * replaced the whole chain, and the platform cannot describe what it put there: that resolver
+   * may read Vault, or the environment, or both. Absent is that answer. Rendering a guess either
+   * way is the same mistake in opposite directions: `true` sends an operator away from a
+   * credential nothing will resolve, `false` sends them hunting for a value that already answers.
    */
-  environmentFallback: v.boolean(),
+  environmentFallback: v.optional(v.boolean()),
   /**
    * Whether the DECLARATION half of this view is known to be incomplete — the generative
    * integrations are read through `BinaryGeneratorSource`, which THROWS rather than answering an
