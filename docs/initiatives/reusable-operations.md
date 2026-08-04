@@ -1,6 +1,6 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** design settled, slices pending (slice 0 = this tracker) · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slice 1 landed (the fold + the bundle); slices 2-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -369,9 +369,10 @@ else could offer the way back). Mechanics:
 `org:introduce-api`, org-flavored, never shipped as product:
 
 - **Fragments** (registered via `registerPromptFragments` from
-  `registerExampleCustomAgents`): `org-api-guidelines`, `org-api-auth-requirements`,
-  `org-shared-services-map`, each with a `brief` so the two-tier standards fold is
-  exercised.
+  `registerExampleCustomAgents`): `org.api-guidelines`, `org.api-auth-requirements`,
+  `org.shared-services-map`, each with a `brief` so the two-tier standards fold is
+  exercised. Dotted, matching the catalog's own id convention (`node.best-practices`),
+  which is what `INTRODUCE_API_FRAGMENT_IDS` ships.
 - **Variants**: `org:architect-api` and `org:coder-api` (`promptAddition`s carrying the
   org's API design and implementation conventions; addition, not replacement, per the
   variant doctrine).
@@ -427,23 +428,71 @@ else could offer the way back). Mechanics:
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                   | Scope  | Depends on | Status  | PR  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
-| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ⬜ todo |     |
-| 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ⬜ todo |     |
-| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ⬜ todo |     |
-| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |     |
-| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |     |
-| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |     |
-| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |     |
-| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |     |
-| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |     |
-| 9   | (deferred) **Prefill probe (D6)**: the preset `detect` mirror                                                                                                                                                                                                                                                                                         | SYSTEM | warrant    | ⬜ todo |     |
+| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                   | Scope  | Depends on | Status  | PR                                                          |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ----------------------------------------------------------- |
+| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ✅ done | [#1650](https://github.com/kibertoad/cat-factory/pull/1650) |
+| 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
+| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ⬜ todo |                                                             |
+| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |                                                             |
+| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
+| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
+| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
+| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
+| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
+| 9   | (deferred) **Prefill probe (D6)**: the preset `detect` mirror                                                                                                                                                                                                                                                                                         | SYSTEM | warrant    | ⬜ todo |                                                             |
 
 Pilot ordering: slice 1 establishes the fold and the bundle with the smallest blast radius
 and proves the worked example end to end on the existing 4-type form vocabulary. Slices 3,
 4, 5, 6 parallelize after their stated dependency; 7 and 8 wait for the vocabulary to be
 final so neither ships a shape that changes a slice later.
+
+### What slice 1 surfaced (carry into the rest)
+
+- **The projection is a KERNEL domain helper, not builder code.**
+  `describeCustomTaskType` (`kernel/src/domain/task-type-context.ts`, the `describeOwnService`
+  sibling) does the descriptor join; `AgentContextBuilder` only calls it.
+- **`BoardService`'s creation-time task-type defaults are now a collaborator**, because this slice's
+  additions crossed the file's size budget: `board/taskTypeCreationDefaults.ts` owns the fragment
+  union (form picks or service standards ⊕ per-type defaults ⊕ a registered operation's standing
+  context) AND the default-pipeline pin, since both are one lookup against one registry read twice.
+  That bought `BoardService` ~70 lines of headroom, but `AgentContextBuilder` is still within ~55
+  lines of its own, so anything a later slice adds THERE belongs in a collaborator from the start.
+- **The registry reaches the builder through FOUR edits**, and missing any one compiles fine
+  while the fold silently never resolves: `ExecutionServiceDependencies.taskTypeRegistry`, the
+  `RunContextAdmissionDeps` `Pick`, the `AgentContextBuilder` deps literal in
+  `run-context-admission.ts`, and `container/execution-service.ts` reading
+  **`runtime.taskTypeRegistry`** rather than `injected` (a facade may pass none and
+  `resolveCoreRuntime` supplies the empty default, so the engine and `BoardService` must read the
+  same instance).
+- **Kernel now re-exports `CustomTaskType` + `TaskTypeFieldDescriptor`** (`domain/types.ts`), so
+  an org package registering an operation imports its whole vocabulary from kernel and needs no
+  contracts dependency.
+- **`registerExampleCustomAgents` now takes ONE deps object** (`ExampleRegistries`), converted in
+  this slice rather than growing to a seventh positional registry: `max-params` refuses the seventh,
+  and every entry is a registry, so transposing two in a positional list is a silent
+  misregistration that typechecks. A later slice needing an eighth seam ADDS A FIELD; do not
+  reintroduce positional arguments.
+- **The example's `operations` field ships as `text` in slice 1** and becomes a `checkbox-group`
+  in slice 2, changing its value type from `string` to `string[]`. Internals are pre-1.0 and this
+  is the worked example, so no migration; just do not treat the slice-1 shape as settled.
+- **Conformance asserts the CONTEXT, not the prompt**: `FakeAgentOptions.echoTaskParams` echoes
+  the resolved projection (`[params]label|key=value;…[/params]`) the way `echoPreset` does, since
+  what needs proving per runtime is that the sparse `custom` bag survives persistence and reaches
+  dispatch. The rendering itself is pure and unit-tested in `@cat-factory/agents`.
+- **The value-authoritative rule stops at a NAMESPACED type, and slice 8 must keep it there.**
+  `describeCustomTaskType` returns nothing for an un-namespaced id: a custom type is namespaced by
+  construction, so `feature` has no descriptor however current the build is, and the raw-id fallback
+  that honestly names a WITHDRAWN operation would instead head a section `## Task parameters
+(feature)` over keys nothing declared. That is not drift costing a label, it is a fabricated
+  operation identity the model reads as a specification. `createTaskSchema.taskTypeFields` accepts
+  the bag for any type today (slice 2 owns creation validation), and D9's
+  `createPublicTaskSchema.fields` covers "custom + built-in", so the type-side check belongs there
+  and the guard here stays either way.
+- **The standing-context seeding STATES an unregistered type** (`BoardService.standingContextForTaskType`),
+  where the fold degrades silently on purpose. The asymmetry is deliberate and worth keeping in mind
+  for D11/D12: only the id SET freezes at creation, so a task created on a process whose package
+  lacks the registration never gains the operation's fragments and a later build does not go back
+  for it, while the projection self-heals the moment the descriptor is there.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

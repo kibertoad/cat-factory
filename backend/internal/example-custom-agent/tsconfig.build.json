@@ -6,6 +6,7 @@
   "exclude": ["**/*.test.ts", "**/*.spec.ts"],
   "references": [
     { "path": "../../packages/kernel/tsconfig.build.json" },
-    { "path": "../../packages/agents/tsconfig.build.json" }
+    { "path": "../../packages/agents/tsconfig.build.json" },
+    { "path": "../../packages/prompt-fragments/tsconfig.build.json" }
   ]
 }

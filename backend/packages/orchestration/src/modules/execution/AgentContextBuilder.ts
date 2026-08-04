@@ -28,6 +28,7 @@ import type {
   ResolvedSkill,
   SkillVersionPin,
   TaskRepository,
+  TaskTypeRegistry,
   TestSecretRef,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
@@ -36,6 +37,7 @@ import {
   applyConsensusGroup,
   buildExcerpt,
   CONTEXT_BUDGET,
+  describeCustomTaskType,
   describeOwnService,
   resolveServiceFrameBlock,
   selectConsensusGroup,
@@ -216,6 +218,13 @@ export interface AgentContextBuilderDeps {
   agentKindRegistry: AgentKindRegistry
   /** App-owned initiative-preset registry: resolves a spawned/planning run's preset steering. */
   initiativePresetRegistry: InitiativePresetRegistry
+  /**
+   * Optional: the app-owned custom task-type registry, read to LABEL the per-case parameters a
+   * custom-typed task collected at creation (a reusable operation's brief). Absent, or missing
+   * the block's type (the normal state on a node whose build predates the registration), it
+   * degrades to the raw bag keys, never to a dropped value.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
   /**
    * Optional: the workspace's agent system-prompt override log. When wired, each dispatch
    * resolves the live revision for the kind being run and folds it onto the context, so the
@@ -466,6 +475,7 @@ export class AgentContextBuilder {
       this.catalogContext().sliceFor(workspaceId, agentKind, step, instance),
     ])
     const agentConfig = block.agentConfig
+    const customTaskType = this.customTaskTypeFor(block)
     const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
     const priorOutputs = [
       ...(architectureDirection
@@ -549,6 +559,8 @@ export class AgentContextBuilder {
       // the one the prompt has to STATE, so leaving it out would be the silent gap this exists to
       // close. Derived from the `serviceFrame` already resolved above, so it costs no extra read.
       ownService: describeOwnService(block, serviceFrame),
+      // The per-case parameters a custom-typed task was invoked with (see `customTaskTypeFor`).
+      ...customTaskType,
       ...(testSecrets.length ? { testSecrets } : {}),
       // Spreads BOTH the pre-PR checks and the dependency-prepopulation install — one frame-chain
       // read, two independently-gated context fields (see `validationChecksFor`).
@@ -593,6 +605,27 @@ export class AgentContextBuilder {
       // precedence when both are present.
       ...buildRevisionContext(step),
     }
+  }
+
+  /**
+   * The per-case PARAMETERS a custom-typed task was invoked with (a REUSABLE OPERATION's brief),
+   * labelled from the registered descriptor. Resolved here, once per dispatch, for the same reason
+   * the prompt override and the output budget are: the container, inline and consensus paths must
+   * not disagree about what the operation was asked for.
+   *
+   * Returns a SPREAD-READY partial (like `validationChecksFor`) rather than a nullable value, so
+   * the hot builder gains no branch. Costs no read: the registry is in-process, and an absent one
+   * degrades to the raw bag keys rather than dropping the values (see `describeCustomTaskType`).
+   * Empty for every run that collected nothing, which is every run of a built-in type.
+   */
+  private customTaskTypeFor(block: Block): Pick<AgentRunContext, 'customTaskType'> {
+    if (!block.taskType) return {}
+    const customTaskType = describeCustomTaskType(
+      block.taskType,
+      block.taskTypeFields?.custom,
+      this.deps.taskTypeRegistry?.get(block.taskType),
+    )
+    return customTaskType ? { customTaskType } : {}
   }
 
   /**

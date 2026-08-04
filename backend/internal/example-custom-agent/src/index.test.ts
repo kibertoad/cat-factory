@@ -9,15 +9,19 @@ import type {
   ProviderRegistry,
   RepoFiles,
   StepResolverRegistry,
+  TaskTypeRegistry,
 } from '@cat-factory/kernel'
+import { universalFragments } from '@cat-factory/prompt-fragments'
 import {
   InitiativePresetRegistry,
   defaultGateRegistry,
   defaultJudgeRegistry,
   defaultPipelineRegistry,
+  defaultTaskTypeRegistry,
   stubJudgeContext,
   defaultProviderRegistry,
   defaultStepResolverRegistry,
+  describeCustomTaskType,
   noopLogger,
   seedPipelines,
   stubGateContext,
@@ -44,6 +48,11 @@ import {
   ORG_SCOPE_PIPELINE_ID,
   SCOPE_JUDGE_KIND,
   SCOPE_RUBRIC_FRAGMENT_ID,
+  INTRODUCE_API_FRAGMENT_IDS,
+  INTRODUCE_API_PIPELINE_ID,
+  INTRODUCE_API_TASK_TYPE,
+  ORG_ARCHITECT_API_VARIANT_ID,
+  ORG_CODER_API_VARIANT_ID,
 } from './index.js'
 
 // Agent kinds + initiative presets + gates + step resolvers + pipelines live on app-owned
@@ -55,6 +64,7 @@ let stepResolverRegistry: StepResolverRegistry
 let providerRegistry: ProviderRegistry
 let pipelineRegistry: PipelineRegistry
 let judgeRegistry: JudgeRegistry
+let taskTypeRegistry: TaskTypeRegistry
 beforeEach(() => {
   registry = defaultAgentKindRegistry()
   initiativePresetRegistry = new InitiativePresetRegistry()
@@ -63,14 +73,16 @@ beforeEach(() => {
   providerRegistry = defaultProviderRegistry()
   pipelineRegistry = defaultPipelineRegistry()
   judgeRegistry = defaultJudgeRegistry()
-  registerExampleCustomAgents(
-    registry,
+  taskTypeRegistry = defaultTaskTypeRegistry()
+  registerExampleCustomAgents({
+    agentKindRegistry: registry,
     initiativePresetRegistry,
     gateRegistry,
     stepResolverRegistry,
     pipelineRegistry,
     judgeRegistry,
-  )
+    taskTypeRegistry,
+  })
 })
 
 describe('example custom agents', () => {
@@ -573,5 +585,82 @@ describe('example scope-adherence judge', () => {
     expect(pipeline.agentKinds.indexOf(SCOPE_JUDGE_KIND)).toBeGreaterThan(
       pipeline.agentKinds.indexOf('coder'),
     )
+  })
+})
+
+describe('the org:introduce-api reusable operation', () => {
+  it('registers the whole bundle on the task type: form, standing context, canned pipeline', () => {
+    const operation = taskTypeRegistry.get(INTRODUCE_API_TASK_TYPE)
+    expect(operation?.presentation.label).toBe('Introduce API')
+    // The picker grouping axis, so an org's twenty operations are captioned rather than flat.
+    expect(operation?.presentation.category).toBe('API delivery')
+    expect(operation?.defaultPipelineId).toBe(INTRODUCE_API_PIPELINE_ID)
+    expect(operation?.defaultFragmentIds).toEqual([...INTRODUCE_API_FRAGMENT_IDS])
+    // The per-case form: what a user fills, and what reaches every agent's prompt.
+    expect(operation?.fields?.map((f) => f.key)).toEqual([
+      'entity',
+      'operations',
+      'resourceStyle',
+      'authRequirement',
+      'notes',
+    ])
+    expect(operation?.fields?.filter((f) => f.required).map((f) => f.key)).toEqual([
+      'entity',
+      'operations',
+      'authRequirement',
+    ])
+  })
+
+  it('registers its standing-context fragments into the universal pool, each with a brief', () => {
+    // The brief is what an implementer kind folds on every turn of its loop; without one the
+    // full body is re-sent per turn, which is the cost the two-tier fold exists to avoid.
+    for (const id of INTRODUCE_API_FRAGMENT_IDS) {
+      const fragment = universalFragments().find((f) => f.id === id)
+      expect(fragment?.brief?.length).toBeGreaterThan(0)
+      expect(fragment?.brief?.length).toBeLessThan(fragment!.body.length)
+    }
+  })
+
+  it('steers its design + build steps through VARIANTS the pipeline selects', () => {
+    // Per-kind steering rides the pipeline's own stepOptions rather than a second text channel
+    // on the task type: the operation owns its pipeline, so the per-step seam already exists.
+    const pipeline = seedPipelines(pipelineRegistry).find((p) => p.id === INTRODUCE_API_PIPELINE_ID)
+    expect(pipeline?.agentKinds).toEqual([
+      'architect',
+      'coder',
+      'tester-api',
+      'conflicts',
+      'ci',
+      'merger',
+    ])
+    expect(pipeline?.stepOptions?.[0]?.agentVariantId).toBe(ORG_ARCHITECT_API_VARIANT_ID)
+    expect(pipeline?.stepOptions?.[1]?.agentVariantId).toBe(ORG_CODER_API_VARIANT_ID)
+    // Both variants VARY a built-in kind rather than introducing one, so every engine decision
+    // keyed on `architect`/`coder` (the merge tail, the fork phase) is unchanged.
+    expect(registry.variant(ORG_ARCHITECT_API_VARIANT_ID)?.baseKind).toBe('architect')
+    expect(registry.variant(ORG_CODER_API_VARIANT_ID)?.baseKind).toBe('coder')
+    // Additions, not replacements: they compose with the shipped prompt AND a workspace override.
+    expect(registry.variant(ORG_CODER_API_VARIANT_ID)?.promptAddition).toBeTruthy()
+    expect(registry.variant(ORG_CODER_API_VARIANT_ID)?.systemPrompt).toBeUndefined()
+  })
+
+  it("renders a run's collected parameters under the descriptor's labels", () => {
+    // The end of the chain this package exists to prove: the values a user typed on the create
+    // form come back out as the labelled brief every agent in the pipeline reads.
+    const context = describeCustomTaskType(
+      INTRODUCE_API_TASK_TYPE,
+      { entity: 'Order', authRequirement: 'service', operations: 'create, read, list' },
+      taskTypeRegistry.get(INTRODUCE_API_TASK_TYPE),
+    )
+    expect(context?.label).toBe('Introduce API')
+    expect(context?.fields).toEqual([
+      { key: 'entity', label: 'Entity or capability to expose', value: 'Order' },
+      { key: 'operations', label: 'Operations', value: 'create, read, list' },
+      {
+        key: 'authRequirement',
+        label: 'Auth requirement',
+        value: 'Service-to-service machine token',
+      },
+    ])
   })
 })

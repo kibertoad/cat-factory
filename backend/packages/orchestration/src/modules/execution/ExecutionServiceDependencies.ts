@@ -44,6 +44,7 @@ import type {
   StepResolverRegistry,
   SubscriptionActivationRepository,
   TaskRepository,
+  TaskTypeRegistry,
   TestSecretRef,
   TicketTrackerProvider,
   WorkRunner,
@@ -115,6 +116,13 @@ export interface ExecutionServiceDependencies {
    * `defaultAgentKindRegistry()` when a facade doesn't inject the shared instance.
    */
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned custom task-type registry, threaded to {@link AgentContextBuilder} so a
+   * custom-typed task's collected PARAMETERS reach the prompt under their descriptor's labels.
+   * Optional: a facade that registers no task types (the stock product) passes none and every
+   * run resolves exactly as before.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
   /**
    * The app-owned polling-gate registry (the built-in `@cat-factory/gates` suite installed by
    * the facade + any deployment-registered gates), threaded to the dispatcher's gate machine.

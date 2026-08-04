@@ -672,6 +672,84 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       expect(block?.taskType).toBe('conf:incident')
       expect(block?.taskTypeFields?.custom?.severity).toBe('sev1')
     })
+
+    // The REUSABLE OPERATION bundle (docs/initiatives/reusable-operations.md): a registered type
+    // carrying a per-case form AND its standing-context fragments. Both halves are engine-level,
+    // but both cross persistence (the seeded fragment ids onto the task row, the collected values
+    // through the sparse `custom` JSON column), so a mapper that dropped either would ship.
+    it('seeds an operation’s standing context and folds its parameters into the run', async () => {
+      const taskTypeRegistry = defaultTaskTypeRegistry()
+      taskTypeRegistry.register({
+        taskType: 'conf:introduce-api',
+        presentation: {
+          label: 'Introduce API',
+          icon: 'i-lucide-plug',
+          color: '#0ea5e9',
+          description: 'Expose functionality over HTTP.',
+          category: 'API delivery',
+        },
+        fields: [
+          { key: 'entity', label: 'Entity', type: 'text' },
+          {
+            key: 'authRequirement',
+            label: 'Auth requirement',
+            type: 'select',
+            options: [{ value: 'service', label: 'Service-to-service token' }],
+          },
+        ],
+        defaultFragmentIds: ['conf.api-guidelines'],
+      })
+      const app = harness.makeApp({ echoTaskParams: true }, { taskTypeRegistry })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+
+      // 1. Creating the task seeds the operation's standing context onto its own selection.
+      const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'Expose orders',
+        description: 'Expose the order entity.',
+        taskType: 'conf:introduce-api',
+        taskTypeFields: { custom: { entity: 'Order', authRequirement: 'service' } },
+      })
+      expect(created.status).toBe(201)
+      expect(created.body.fragmentIds).toEqual(['conf.api-guidelines'])
+
+      // 2. Dispatching resolves the collected values under the descriptor's labels, rendering the
+      //    select's CAPTION rather than its stored enum value.
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build',
+        agentKinds: ['coder'],
+      })
+      const start = await app.call(
+        'POST',
+        `/workspaces/${wsId}/blocks/${created.body.id}/executions`,
+        { pipelineId: pipeline.body.id },
+      )
+      expect(start.status).toBe(201)
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === created.body.id)!
+      expect(exec.steps[0]?.output).toContain(
+        '[params]Introduce API|Entity=Order;Auth requirement=Service-to-service token[/params]',
+      )
+    })
+
+    it('folds nothing for a built-in task type, so its prompt is unchanged', async () => {
+      // The regression bar for the fold: a run that collected no parameters must carry none.
+      const app = harness.makeApp({ echoTaskParams: true })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+        title: 'A plain feature',
+        taskType: 'feature',
+      })
+      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+        name: 'Build',
+        agentKinds: ['coder'],
+      })
+      await app.call('POST', `/workspaces/${wsId}/blocks/${created.body.id}/executions`, {
+        pipelineId: pipeline.body.id,
+      })
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === created.body.id)!
+      expect(exec.steps[0]?.output).toContain('[params][/params]')
+    })
   })
 }
 

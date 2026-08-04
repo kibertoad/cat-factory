@@ -196,8 +196,9 @@ unattended, and `humanReview` opts INTO gates on the spawned doc-task runs.
 
 `backend/internal/example-custom-agent`, the worked example of a company-authored package,
 registers a tiny preset alongside its custom agent kinds + gate, proving a **deployment** can add a
-first-class initiative shape through the public seam alone. Its `registerExampleCustomAgents(registry)`
-composition-root entry calls `registerOrgAuditPreset()`, which registers `preset_org_audit`:
+first-class initiative shape through the public seam alone. Its
+`registerExampleCustomAgents(registries)` composition-root entry calls `registerOrgAuditPreset()`,
+which registers `preset_org_audit`:
 
 - an `interview: 'full'` preset that reuses the built-in `pl_initiative` planning pipeline (so no new
   planning pipeline is registered),
@@ -278,8 +279,9 @@ the phase).
   cannot drift on it, with no per-facade wiring. (The built-in generic preset is baked into the
   `InitiativePresetRegistry` class itself, always resolvable.)
 - **A deployment preset**: register from the deployment's composition root on the app-owned registry
-  the facade injects (the `example-custom-agent` model: `registerExampleCustomAgents(agentKindRegistry,
-initiativePresetRegistry)`), then pass that registry into the facade build
+  the facade injects (the `example-custom-agent` model: `registerExampleCustomAgents({
+agentKindRegistry, initiativePresetRegistry, ... })`, one object because the set grows with every
+  seam the example demonstrates), then pass that registry into the facade build
   (`createApp({ overrides: { initiativePresetRegistry } })` / `start({ initiativePresetRegistry })`).
 
 If a preset uses a `phaseTemplate`, define the phase ids **once** as a shared constant and reference

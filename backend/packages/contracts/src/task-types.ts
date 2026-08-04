@@ -26,6 +26,13 @@ export const taskTypePresentationSchema = v.object({
   color: v.pipe(v.string(), v.minLength(1), v.maxLength(40)),
   /** One-line description shown in the create-task type picker. */
   description: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
+  /**
+   * Optional grouping caption for the create-task type picker (e.g. `API delivery`), mirroring
+   * `agentPresentationSchema.category`, which already drives the pipeline builder's palette. An
+   * org registering twenty reusable operations needs the picker to group them; types sharing a
+   * category render under one caption, and an uncategorized type renders flat after them.
+   */
+  category: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(60))),
 })
 export type TaskTypePresentation = v.InferOutput<typeof taskTypePresentationSchema>
 
@@ -80,6 +87,19 @@ export const customTaskTypeSchema = v.object({
    * positional default, exactly like an unmapped built-in type.
    */
   defaultPipelineId: v.optional(v.string()),
+  /**
+   * The STANDING CONTEXT a task of this type carries: best-practice fragment ids unioned onto
+   * every new task's own `fragmentIds` at creation, beside whatever it inherits from its service.
+   * This is what makes a reusable operation consistent: an org's API guidelines and auth
+   * requirements reach every "introduce an API" run without per-task picking.
+   *
+   * Only the id SET freezes at creation (matching `serviceFragmentIds` semantics); the BODIES
+   * live-resolve per run against the merged builtin ⊕ account ⊕ workspace catalog, so editing a
+   * guideline reaches every future run of an already-created task. Ids resolve against the
+   * universal code pool AND the tenant tiers, which is why boot validation WARNS rather than
+   * refuses on an id it cannot see (a workspace-tier id is structurally invisible at boot).
+   */
+  defaultFragmentIds: v.optional(v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(200)))),
   /**
    * Optional id of a bespoke create-form section component (`<ns>:<name>`) the deployment
    * contributes to the frontend `taskTypeFormPanels` slot, shown INSTEAD of the descriptor
