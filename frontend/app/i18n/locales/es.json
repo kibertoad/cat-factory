@@ -83,7 +83,8 @@
       "confirm": "Descartar",
       "keep": "Seguir editando"
     },
-    "edit": "Editar"
+    "edit": "Editar",
+    "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas)."
   },
   "access": {
     "noBoardWrite": "Acceso de solo lectura: puedes ver este tablero pero no editarlo.",
@@ -188,6 +189,7 @@
       "title": "Añadir una tarea",
       "newTaskIn": "Nueva tarea en {container}",
       "typeLabel": "Tipo",
+      "typeOther": "Otros",
       "types": {
         "feature": "Funcionalidad",
         "bug": "Error",
@@ -298,6 +300,7 @@
       "continue": "Continuar",
       "submit": "Añadir tarea",
       "addFailedTitle": "No se pudo añadir la tarea",
+      "customFieldsInvalid": "El formulario de este tipo de tarea ha cambiado desde que lo abriste, por lo que las respuestas ya no coinciden con lo que pide. Cierra y vuelve a abrir el diálogo para rellenar los campos actuales.",
       "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos",
       "review": {
         "prUrl": "Pull request",
@@ -445,6 +448,7 @@
       "start": "Iniciar",
       "blocked": "Bloqueada",
       "startPipeline": "Iniciar {name}",
+      "startPipelineDryRun": "Iniciar {name} como ejecución de prueba: abre una pull request y no fusiona nada",
       "pipelineFallback": "pipeline",
       "waitingOn": "Esperando a: {deps}",
       "blockedByDependenciesTitle": "Bloqueada por dependencias",
@@ -469,6 +473,10 @@
         "title": "Ejecución iniciada",
         "body": "Ejecutando \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Ejecución de prueba iniciada",
+      "body": "Ejecutando \"{name}\". Las ejecuciones de tu rol no fusionan nada en esta tarea."
     },
     "epic": {
       "label": "Épica",
@@ -569,6 +577,7 @@
         "input_gate_not_parked": "Nada que responder",
         "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
+        "document_already_linked": "El documento ya está adjunto",
         "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
       },
       "description": {
@@ -605,6 +614,7 @@
         "input_gate_not_parked": "Esta ejecución ya no espera su comprobación de entrada. Puede que alguien la haya respondido o que la ejecución haya avanzado.",
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
+        "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
         "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "action": {
@@ -1075,7 +1085,9 @@
       "chooseApproach": "Elegir enfoque",
       "triageFollowUps": "Decidir seguimientos",
       "elapsedTooltip": "Tiempo transcurrido en este paso",
-      "reviewFindings": "Revisar hallazgos"
+      "reviewFindings": "Revisar hallazgos",
+      "dryRun": "Ejecución de prueba",
+      "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
     },
     "structure": {
       "title": "Estructura",
@@ -1496,7 +1508,10 @@
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
       },
-      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}",
+      "dryRun": "Ejecución de prueba: no fusionar nada",
+      "dryRunForced": "Ejecución de prueba: las ejecuciones de tu rol nunca se fusionan aquí",
+      "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
     }
   },
   "observability": {
@@ -2623,7 +2638,7 @@
         },
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
-          "help": "Cuando una ejecución iniciada por la API se detiene para aclarar requisitos, publica sus preguntas abiertas — cada una con el id que debe nombrar la respuesta — en la incidencia vinculada. Las tareas iniciadas en la aplicación no se ven afectadas."
+          "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
         }
       },
       "probeFailure": {
@@ -2739,6 +2754,19 @@
           "always": "Fusionar siempre automáticamente",
           "never": "Exigir siempre revisión"
         }
+      },
+      "roleRules": {
+        "heading": "Límites según el rol que inicia",
+        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede quedar sujeto a reglas más estrictas que las de arriba, o solo a ejecuciones de prueba: la canalización trabaja y abre una pull request, pero no se fusiona nada. Un rol solo puede endurecer esta política, nunca relajarla.",
+        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request ya pasa por una persona y los límites de categoría de abajo no añaden nada. Las ejecuciones de prueba siguen aplicándose: también rechazan una fusión manual.",
+        "sandboxLabel": "Solo ejecuciones de prueba",
+        "sandboxNote": "Las ejecuciones iniciadas por este rol abren una pull request y no fusionan nada, así que las reglas por categoría de abajo no pueden restringirlas más.",
+        "noRules": "Sin límites por categoría",
+        "ruleCount": "{count} categoría limitada | {count} categorías limitadas",
+        "inherit": "Igual que esta política",
+        "redundant": "Sin efecto: esta política ya es igual de estricta o más.",
+        "alreadyStrictest": "Ya se revisa siempre",
+        "baseHint": "Esta política compara las puntuaciones en todas las categorías, así que un rol solo puede endurecer una categoría hasta exigir revisión."
       }
     },
     "observabilityConnection": {
@@ -3227,13 +3255,25 @@
       "executionBackend": {
         "label": "Dónde se ejecutan los agentes",
         "local-docker": "Docker local (host)",
+        "local-dockerDesc": "Ejecuta cada agente en un contenedor sobre el daemon de Docker de esta máquina.",
         "cloudflare-containers": "Cloudflare Containers (integrado)",
-        "runner-pool": "Pool de ejecutores autoalojado"
+        "cloudflare-containersDesc": "Ejecuta los agentes en la plataforma de contenedores por ejecución integrada de Cloudflare.",
+        "kubernetes": "Clúster de Kubernetes",
+        "kubernetesDesc": "Ejecuta cada agente como un pod en un clúster de Kubernetes que tú gestionas.",
+        "runner-pool": "Pool de ejecutores personalizado (HTTP)",
+        "runner-poolDesc": "Envía los agentes a tu propio planificador detrás de una API de manifiestos HTTP.",
+        "k3s": "Kubernetes local (k3s)",
+        "k3sDesc": "Precargado para un clúster k3s/k3d local en esta máquina: solo tienes que pegar un token."
       },
       "testEnvBackend": {
         "label": "Dónde se ejecutan los entornos de prueba",
-        "local-compose": "docker-compose en contenedor",
-        "environment-provider": "Proveedor de entornos",
+        "local-compose": "docker-compose en contenedor (dependencias del Tester)",
+        "local-composeDesc": "Levanta las dependencias del Tester con docker-compose dentro del contenedor de la ejecución. Para un entorno de vista previa completo de la app, usa la opción de entorno de vista previa de Docker Compose de abajo.",
+        "kubernetes": "Clúster de Kubernetes",
+        "kubernetesDesc": "Aprovisiona un namespace por PR en un clúster de Kubernetes que tú gestionas. Ideal para apps nativas de Kubernetes o si ya tienes un clúster en marcha.",
+        "environment-provider": "Proveedor HTTP personalizado",
+        "environment-providerDesc": "Aprovisiona entornos efímeros a través de tu propia API de gestión HTTP. Ideal si ya cuentas con herramientas propias de entornos de vista previa.",
+        "compose": "Entorno de vista previa de Docker Compose",
         "composeDesc": "Levanta el docker-compose.yml del propio repositorio en un daemon de Docker local como URL del Tester. Ideal para apps locales basadas en Compose. Admite imágenes prediseñadas o compilación desde el código fuente; requiere un daemon de Docker, por lo que solo en despliegues locales."
       },
       "dockerComposeInfo": "Los servicios de Docker Compose se levantan en el Docker local del runtime: no se necesita conexión (el contenedor de la ejecución debe admitir Docker-in-Docker). Configura el servicio, el puerto y el origen de la imagen (usar prediseñada o compilar desde el código fuente) en los ajustes de entorno del servicio.",
@@ -3507,7 +3547,28 @@
         "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
       },
       "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
-      "invalidNumbers": "Estos límites no son números"
+      "invalidNumbers": "Estos límites no son números",
+      "failureKinds": {
+        "label": "Reglas por tipo de fallo",
+        "description": "Avisa cuando un tipo de fallo alcanza la proporción de fallos que le permites. El límite de causa dominante de arriba pregunta si un tipo está desbordando al resto; estas reglas preguntan si un tipo concreto ha alcanzado lo que este despliegue tolera de él.",
+        "overrideLabel": "Definir reglas por tipo propias de esta cuenta",
+        "overrideHint": "Desactivado, la cuenta usa las reglas configuradas en el despliegue. Activado, la lista de abajo las sustituye por completo, y una lista vacía significa ninguna regla por tipo.",
+        "empty": "Sin reglas. Esta cuenta no generará la alerta por tipo de fallo.",
+        "kindLabel": "Tipo de fallo",
+        "shareLabel": "Proporción de fallos (%)",
+        "shareHint": "La regla se activa a partir de esta proporción.",
+        "minCountLabel": "Fallos mínimos",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Cuántos fallos de ese tipo necesita la ventana antes de que la regla pueda dispararse. Sin esto, una proporción baja salta a la mínima: cinco ejecuciones con un desalojo ya son el 20 %.",
+        "addRule": "Añadir regla",
+        "allKindsCovered": "Cada tipo de fallo ya tiene una regla.",
+        "removeRule": "Eliminar regla",
+        "duplicateKind": "Cada tipo de fallo admite como máximo una regla.",
+        "tooManyRules": "Como máximo {max} reglas por tipo. Elimina algunas antes de guardar.",
+        "unknownKind": "{kind} (no reconocido)",
+        "invalidTitle": "Estas reglas por tipo no se pueden guardar",
+        "invalidRows": "Revisa las reglas {rows}: la proporción debe ser mayor que 0 y como máximo 100, el mínimo debe ser un número entero de 1 o más, y cada tipo puede aparecer una sola vez."
+      }
     }
   },
   "providers": {
@@ -4004,7 +4065,8 @@
       "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
       "emptyInitiative": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al redactar esta iniciativa.",
-      "attached": "Documento adjuntado"
+      "attached": "Documento adjuntado",
+      "uploadedHint": "Subido a través de la API, por lo que no hay página de origen que abrir."
     },
     "templates": {
       "title": "Plantillas y ejemplos de documentos",
@@ -5213,7 +5275,10 @@
     "description": "Descripción",
     "overallProgress": "Progreso general",
     "dependencies": "Dependencias",
-    "noDependencies": "Ninguna"
+    "noDependencies": "Ninguna",
+    "dryRun": "Ejecución de prueba",
+    "dryRunHint": "Ejecutar la canalización y abrir una pull request, pero no fusionar nada.",
+    "dryRunForcedHint": "La política de riesgo de esta tarea limita tu rol a ejecuciones de prueba."
   },
   "environments": {
     "title": "Entorno efímero",
@@ -5902,7 +5967,10 @@
       "manualHeading": "Solo revisión manual",
       "manualExplainer": "Esta política nunca fusiona por su cuenta, así que cada pull request espera una revisión humana sea cual sea su puntuación.",
       "ciHeading": "Correcciones de CI",
-      "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse."
+      "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse.",
+      "roleHeading": "Quién inició la ejecución",
+      "roleSandboxed": "Las ejecuciones iniciadas por {roles} abren una pull request y nunca se fusionan.",
+      "roleNarrowed": "Las ejecuciones iniciadas por {roles} siguen reglas más estrictas en algunas categorías de cambio."
     }
   },
   "modelPreset": {
@@ -5933,7 +6001,6 @@
       "titlePlaceholder": "p. ej. Migrar la API al nuevo modelo de autenticacion",
       "goalField": "Objetivo",
       "goalPlaceholder": "Describe el objetivo, las restricciones y el alcance aproximado. El planificador lo refina en un plan multifase.",
-      "pathInvalid": "Introduce una ruta dentro del repositorio (sin \"..\", rutas absolutas ni barras invertidas).",
       "hint": "Todavia no se ejecuta nada: tras crearla, ejecuta el pipeline de planificacion de iniciativas sobre el bloque. Analiza el codigo y redacta el plan multifase para tu aprobacion.",
       "submit": "Crear iniciativa",
       "failedTitle": "No se pudo crear la iniciativa",

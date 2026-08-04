@@ -1,10 +1,424 @@
 # @cat-factory/worker
 
+## 0.152.0
+
+### Minor Changes
+
+- c9c1dd3: Persist an agent's tool calls as a first-class trajectory: one row per invocation, in the order it
+  made them, carrying the tool's arguments and result. The evidence standard for a merged PR is
+  "how, not just the diff", and until now the tool loop survived a run only as metadata spans a
+  trace sink had to be wired to see, so reconstructing what an agent actually did meant diffing
+  consecutive prompt bodies against each other.
+
+  The fourth telemetry sink (`agent_tool_calls`), beside the per-call cost rows and the dispatch
+  context snapshots, in the same store and on the same retention window: D1 on Cloudflare, the
+  `telemetry` Postgres schema on Node, `node:sqlite` on a mothership-mode node, with the same
+  cross-runtime conformance assertions and the same local-first routing as its siblings. Readable
+  through a new `GET /api/v1/debug/runs/:runId/tool-calls` (additive; the spec's `info.version`
+  takes a minor and the four SDK clients plus the MCP facade gain the operation), and exported on
+  the OTel and Langfuse tool spans alongside the dispatch and ordinal a trajectory orders by.
+
+  The endpoint serves two orders, because the order is the product and a client cannot derive it
+  from the rows: `recent` is the newest-first keyset every sibling debug list shares, and
+  `order=trajectory` is the run's calls oldest-first as the agents made them, a bounded prefix that
+  issues no cursor (pairing one with it is refused rather than quietly served in the other order).
+  Both narrow to a single dispatch with `jobId`. The server orders by when each call STARTED, with
+  `seq` separating the calls that share a millisecond: sorting by the job id instead would order a
+  run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+
+  Both harnesses produce it: the Pi runner pairs each `tool_execution_start` with its end, and the
+  claude-code runner pairs each `tool_use` block with the `tool_result` that answers it — the CLI's
+  own stream being the only place a subscription run's tool loop is visible at all. Bodies are
+  capped and secret-scrubbed at capture, and ride the same `LLM_RECORD_PROMPTS` +
+  `storeAgentContext` double gate as every other captured body; a withheld body is recorded AS
+  withheld, so an opted-out workspace's trajectory never reads as a run whose every tool took no
+  arguments.
+
+  Breaks nothing, retains nothing new by default beyond a run's tool metadata, and requires the
+  `1.91.0` runner image (an older image's calls still reach the trace sinks; their trajectory is
+  skipped rather than persisted under colliding ids, and the skip is logged).
+
+### Patch Changes
+
+- Updated dependencies [8511a90]
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/server@0.215.0
+  - @cat-factory/contracts@0.236.0
+  - @cat-factory/kernel@0.236.0
+  - @cat-factory/orchestration@0.203.0
+  - @cat-factory/observability-otel@0.10.0
+  - @cat-factory/observability-langfuse@0.10.0
+  - @cat-factory/agents@0.110.7
+  - @cat-factory/consensus@0.14.16
+  - @cat-factory/eks@0.1.226
+  - @cat-factory/gates@0.8.72
+  - @cat-factory/gitlab@0.15.31
+  - @cat-factory/integrations@0.126.2
+  - @cat-factory/prompt-fragments@0.15.62
+  - @cat-factory/spend@0.14.14
+  - @cat-factory/caching@0.14.16
+  - @cat-factory/provider-cloudflare@0.7.378
+
+## 0.151.1
+
+### Patch Changes
+
+- Updated dependencies [6b9f696]
+  - @cat-factory/kernel@0.235.1
+  - @cat-factory/agents@0.110.6
+  - @cat-factory/caching@0.14.15
+  - @cat-factory/consensus@0.14.15
+  - @cat-factory/eks@0.1.225
+  - @cat-factory/gates@0.8.71
+  - @cat-factory/gitlab@0.15.30
+  - @cat-factory/integrations@0.126.1
+  - @cat-factory/observability-langfuse@0.9.68
+  - @cat-factory/observability-otel@0.9.5
+  - @cat-factory/orchestration@0.202.1
+  - @cat-factory/provider-cloudflare@0.7.377
+  - @cat-factory/server@0.214.1
+  - @cat-factory/spend@0.14.13
+
+## 0.151.0
+
+### Minor Changes
+
+- cec0c3e: Attach spec-sized requirements documents when creating a task over the public API.
+
+  `/api/v1` had no way to give a run a specification. `description` caps at 2,000 characters because
+  it is a task's own framing, echoed into every prompt; the 50,000-character `POST /jobs` brief drives
+  inline pipelines that never touch a repository; and the app's own attach-a-document flow is
+  session-authed. A headless caller holding a PRD could only paste a truncated version of it into a
+  field and hope. `POST /api/v1/services/:serviceId/tasks` now takes an ordered `documents` list, each
+  entry either NAMING a page in a connected document source (imported and attached, as `ticket`
+  already does for a tracker issue) or CARRYING the text itself. The full body reaches agents exactly
+  as a document a human attached does: materialised under `.cat-context/` for a container agent,
+  folded into the prompt for an inline one.
+
+  Carrying the text needed a document with no source behind it, so `DocumentOrigin` (`DocumentSourceKind`
+  plus `upload`) is now what a stored row and its block/role links are keyed by, while everything a
+  provider does stays typed against the narrow union. That keeps the missing `upload` provider a
+  compile error rather than an `undefined` at whichever call site reaches for it first. An uploaded
+  document has no origin URL, and every reader now renders that absence as nothing rather than as
+  `Title ()` or a bare `Source:` line.
+
+  One fix rode along, found by the cross-runtime assertion for the new origin rather than by
+  reasoning: `urlMatchCandidates` used to hand back `['', '/']` for an empty needle, so `getByUrl`
+  would match every row whose stored `url` is empty. Nothing produced such a row before uploads, and
+  no caller passes an empty URL today, but "a lookup for nothing resolves to an arbitrary uploaded
+  document, which the caller then hands an agent as the page a description pointed at" is not a trap
+  to leave armed. It now returns null, and the four repositories that call it answer "no match".
+
+  A document is now attached to at most ONE block, enforced where the link is written rather than at
+  the new endpoint. `linkedBlockId` is a single column, so attaching a document another task already
+  holds MOVED the link instead of copying it: the earlier task silently lost a document it was created
+  with, and nothing in its next run reported the absence. That was reachable from the app's own
+  picker too, which offers already-attached documents for re-use. `linkToBlock` now refuses with
+  `document_already_linked` and the holder's id, the same rule and shape as one-task-per-ticket, with
+  translated SPA copy. Two things keep it from wedging anything: a link naming a DELETED block is not
+  a holder (so the guard heals rows left by past deletes), and `removeBlock` now detaches a doomed
+  block's documents through the removal cascade, so new ones are not made. Only the link goes; the
+  document survives its task.
+
+  Attaching a list is one unit of work rather than a loop: `linkManyToBlock` asserts the block once,
+  resolves the whole list through a new batched `DocumentRepository.listByRefs` and writes the links
+  through a new `linkBlockMany` (both mirrored D1 ⇄ Drizzle, with cross-runtime assertions, plus
+  `detachBlocks` for the cascade). The point method in a loop was three round-trips per document, ten
+  of which re-read the same block.
+
+  Worth watching in review: the creation is all-or-nothing. Everything refusable (an unconfigured
+  source, an unparseable ref, a page the provider will not serve, an upload that renders to no
+  readable text, a document another task holds) is refused before the board changes, and an
+  attachment that fails after the task exists takes the task back off the board, because a task
+  silently missing part of its spec is the failure this whole surface exists to prevent. Two ordering
+  details carry that: uploads are written only after the whole list resolves (an import is idempotent
+  on its ref, but every upload mints an id, so an eager write would leave one orphan per retry), and
+  the rollback detaches by BLOCK rather than by the refs it resolved (a rollback can be running
+  because one of those refs belongs to another task, and clearing it by ref would commit the very
+  loss the guard just refused). The attach runs before the ticket claim so that rollback can never
+  orphan a claimed ticket. Naming `documents` does not work in mothership mode yet, for the same
+  reason `ticket` does not: the document write surface is still `pending` on the persistence
+  allow-list, which the new `linkBlockMany`/`detachBlocks` join rather than widen.
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+  - @cat-factory/kernel@0.235.0
+  - @cat-factory/integrations@0.126.0
+  - @cat-factory/orchestration@0.202.0
+  - @cat-factory/server@0.214.0
+  - @cat-factory/agents@0.110.5
+  - @cat-factory/consensus@0.14.14
+  - @cat-factory/eks@0.1.224
+  - @cat-factory/gates@0.8.70
+  - @cat-factory/gitlab@0.15.29
+  - @cat-factory/observability-otel@0.9.4
+  - @cat-factory/prompt-fragments@0.15.61
+  - @cat-factory/spend@0.14.12
+  - @cat-factory/caching@0.14.14
+  - @cat-factory/observability-langfuse@0.9.67
+  - @cat-factory/provider-cloudflare@0.7.376
+
+## 0.150.2
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/integrations@0.125.0
+  - @cat-factory/server@0.213.0
+  - @cat-factory/agents@0.110.4
+  - @cat-factory/consensus@0.14.13
+  - @cat-factory/eks@0.1.223
+  - @cat-factory/gates@0.8.69
+  - @cat-factory/gitlab@0.15.28
+  - @cat-factory/kernel@0.234.2
+  - @cat-factory/observability-otel@0.9.3
+  - @cat-factory/orchestration@0.201.2
+  - @cat-factory/prompt-fragments@0.15.60
+  - @cat-factory/spend@0.14.11
+  - @cat-factory/provider-cloudflare@0.7.375
+  - @cat-factory/caching@0.14.13
+  - @cat-factory/observability-langfuse@0.9.66
+
+## 0.150.1
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/orchestration@0.201.1
+  - @cat-factory/server@0.212.1
+  - @cat-factory/agents@0.110.3
+  - @cat-factory/consensus@0.14.12
+  - @cat-factory/eks@0.1.222
+  - @cat-factory/gates@0.8.68
+  - @cat-factory/gitlab@0.15.27
+  - @cat-factory/integrations@0.124.1
+  - @cat-factory/kernel@0.234.1
+  - @cat-factory/observability-otel@0.9.2
+  - @cat-factory/prompt-fragments@0.15.59
+  - @cat-factory/spend@0.14.10
+  - @cat-factory/provider-cloudflare@0.7.374
+  - @cat-factory/caching@0.14.12
+  - @cat-factory/observability-langfuse@0.9.65
+
+## 0.150.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/orchestration@0.201.0
+  - @cat-factory/server@0.212.0
+  - @cat-factory/integrations@0.124.0
+  - @cat-factory/agents@0.110.2
+  - @cat-factory/consensus@0.14.11
+  - @cat-factory/eks@0.1.221
+  - @cat-factory/gates@0.8.67
+  - @cat-factory/gitlab@0.15.26
+  - @cat-factory/observability-otel@0.9.1
+  - @cat-factory/prompt-fragments@0.15.58
+  - @cat-factory/spend@0.14.9
+  - @cat-factory/caching@0.14.11
+  - @cat-factory/observability-langfuse@0.9.64
+  - @cat-factory/provider-cloudflare@0.7.373
+
+## 0.149.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/observability-otel@0.9.0
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/server@0.211.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/caching@0.14.10
+  - @cat-factory/consensus@0.14.10
+  - @cat-factory/eks@0.1.220
+  - @cat-factory/gates@0.8.66
+  - @cat-factory/gitlab@0.15.25
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/observability-langfuse@0.9.63
+  - @cat-factory/provider-cloudflare@0.7.372
+  - @cat-factory/spend@0.14.8
+  - @cat-factory/prompt-fragments@0.15.57
+
+## 0.148.1
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/agents@0.110.0
+  - @cat-factory/server@0.210.0
+  - @cat-factory/orchestration@0.199.0
+  - @cat-factory/integrations@0.123.5
+  - @cat-factory/caching@0.14.9
+  - @cat-factory/consensus@0.14.9
+  - @cat-factory/eks@0.1.219
+  - @cat-factory/gates@0.8.65
+  - @cat-factory/gitlab@0.15.24
+  - @cat-factory/observability-otel@0.8.7
+  - @cat-factory/prompt-fragments@0.15.56
+  - @cat-factory/spend@0.14.7
+  - @cat-factory/observability-langfuse@0.9.62
+  - @cat-factory/provider-cloudflare@0.7.371
+
+## 0.148.0
+
+### Minor Changes
+
+- e7e4404: Reusable operations, slice 2: one descriptor-driven form vocabulary behind both surfaces that have
+  one, and a custom task type's collected values are now checked against what it declares.
+
+  An initiative preset and a custom task type had grown the same feature twice, and the task type was
+  the poorer copy: four input types against eight, no defaults, no conditional visibility, no shared
+  validation, and two near-identical Vue renderers. So a form an org could express as a preset was
+  unexpressible as an operation, and nothing but the create form enforced a `required` marker or an
+  option list. `contracts/src/form-fields.ts` is now the union both draw on (the field shape, the
+  filled-value bag, and the pure visibility / validation / sanitization / prose-rendering rules), with
+  each surface declaring only which input types it admits. `password` is excluded for a task type by
+  construction rather than by convention: a collected value is folded into prompts, projected onto the
+  board snapshot and captured in telemetry, so a secret belongs in the capability-credential store.
+
+  `taskTypeFields.custom` widens from `string | number` to the shared bag (adding booleans and
+  multi-select `string[]`), and the prompt fold renders the new shapes through the same renderer the
+  form review uses, so a multi-select reads as its option captions rather than its stored enum values.
+  Rows are read back through an unvalidated JSON parse, so nothing existing breaks and there is nothing
+  to migrate. Two INTERNAL breaks ride along, in the bounds the shared bag carries that the old
+  untyped record did not: a bag KEY is now capped at 80 characters and a string VALUE at 2000, so a
+  value longer than that (only reachable through a bespoke `formPanel`, since a declared `maxLength`
+  cannot exceed the same bound) is refused on the way in.
+
+  `BoardService.addTask` now validates a registered type's bag against its descriptor and freezes only
+  the declared, currently-visible answers, so one rule covers the SPA, the internal API and (from the
+  public-API slice) a headless caller. An ABSENT bag is checked against an empty one, because a
+  required field is unanswered whether the caller sent `custom: {}` or no `custom` key at all: a check
+  the caller can opt out of by sending nothing is not a check. **Behaviour change for a deployment
+  that registers an operation with required fields**: any path creating such a task without its
+  parameters (an initiative item's `spawn`, a script) now gets a 422 where it previously created a
+  task whose operation brief was empty. Three cases still deliberately pass through unchecked: a
+  built-in type (schema-typed fields, already validated), a type this process does not register (a
+  supported row, since task types are node-local by design and degrading data must not brick
+  creation), and a descriptor declaring a bespoke `formPanel`, which owns its own bag.
+
+  The richer vocabulary brings new ways for a descriptor to break itself, so boot validation now
+  refuses a create form that structurally cannot be filled: a duplicate field key, an optionless
+  `select`/`checkbox-group`, or a `showWhen` gating a field on a key the type does not declare (which
+  would hide that field forever). Each is fully known from the registration and silent at run time,
+  unlike a `defaultFragmentIds` id, which stays a warning because a tenant-tier fragment is invisible
+  at boot. Both surfaces are held to that bar by one checker, so an initiative preset's create form is
+  validated at boot for the first time (all three facades pass the registry).
+
+  Behaviour change worth reviewing: a custom task type's `select` field renders as a dropdown rather
+  than a button row, since it is now the shared renderer, and a form with many options needed that
+  anyway. The path-invalid message moved from `initiative.create.pathInvalid` to `common.pathInvalid`,
+  carrying each locale's existing translation.
+
+  One unfilled value is now dropped rather than frozen, on both surfaces. Validation short-circuits on
+  a value that says nothing, so a `false` on a text field, a blank string or an empty multi-select
+  reached the freeze having passed no type check; sanitization now drops them, which stops a
+  wrong-typed answer reaching agents as the operation's own brief (`notes: false` rendered as
+  `Notes: No`). The one exception is an explicit `false` on a `checkbox`, which is the opt-OUT of a
+  default-ON toggle and the one unfilled value that is an answer.
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+  - @cat-factory/orchestration@0.198.0
+  - @cat-factory/agents@0.109.2
+  - @cat-factory/consensus@0.14.8
+  - @cat-factory/eks@0.1.218
+  - @cat-factory/gates@0.8.64
+  - @cat-factory/gitlab@0.15.23
+  - @cat-factory/integrations@0.123.4
+  - @cat-factory/observability-otel@0.8.6
+  - @cat-factory/prompt-fragments@0.15.55
+  - @cat-factory/server@0.209.1
+  - @cat-factory/spend@0.14.6
+  - @cat-factory/caching@0.14.8
+  - @cat-factory/observability-langfuse@0.9.61
+  - @cat-factory/provider-cloudflare@0.7.370
+
 ## 0.147.0
 
 ### Minor Changes
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -12340,8 +12754,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that
@@ -13297,7 +13711,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the

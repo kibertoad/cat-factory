@@ -4,6 +4,8 @@ import type {
   LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
+  LogLevel,
+  LogRecord,
   OperationalCounter,
   OperationalCounterSample,
   OperationalGauge,
@@ -47,6 +49,10 @@ export const ATTR = {
   tokenType: 'gen_ai.token.type',
   agentName: 'gen_ai.agent.name',
   toolName: 'gen_ai.tool.name',
+  toolCallJobId: 'cat_factory.tool_call.job_id',
+  toolCallSeq: 'cat_factory.tool_call.seq',
+  toolArgsDropped: 'cat_factory.tool_call.arguments_dropped_chars',
+  toolResultDropped: 'cat_factory.tool_call.result_dropped_chars',
   workspaceId: 'cat_factory.workspace_id',
   agentKind: 'cat_factory.agent_kind',
   executionId: 'cat_factory.execution_id',
@@ -87,14 +93,23 @@ export const DURATION_UNIT = 's'
 const EVENT = {
   prompt: 'gen_ai.content.prompt',
   completion: 'gen_ai.content.completion',
+  toolArguments: 'gen_ai.tool.arguments',
+  toolResult: 'gen_ai.tool.result',
 } as const
 const EVENT_ATTR = {
   prompt: 'gen_ai.prompt',
   completion: 'gen_ai.completion',
+  toolArguments: 'gen_ai.tool.arguments',
+  toolResult: 'gen_ai.tool.result',
 } as const
 
-/** A neutral attribute value both transports understand (string / number / string list). */
-export type AttributeValue = string | number | string[]
+/**
+ * A neutral attribute value both transports understand (string / number / boolean / string
+ * list). Booleans arrive only from LOG fields, which are free-form where a span's attributes
+ * are ours to choose; they are carried as a native OTLP `boolValue` rather than stringified,
+ * because a backend filters `ok = false` and `ok = "false"` differently.
+ */
+export type AttributeValue = string | number | boolean | string[]
 export type AttributeMap = Record<string, AttributeValue>
 
 interface MappedEvent {
@@ -566,6 +581,39 @@ export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): Map
   }
   if (context.workspaceId) attributes[ATTR.workspaceId] = context.workspaceId
   if (context.executionId) attributes[ATTR.executionId] = context.executionId
+  // The call's ordinal within its dispatch. Carried because a backend that renders spans by
+  // start time cannot order a tool loop: several calls routinely share one millisecond, and a
+  // trajectory read in the wrong order is worse than one read as an unordered set.
+  //
+  // The DISPATCH rides with it, and has to: `seq` restarts at zero on every dispatch, so a run
+  // whose step ran twice (a re-run, a gate's fixer rounds) otherwise exports two `seq: 0` spans
+  // that no query can tell apart. With the job id present, ordering within a dispatch is exact
+  // and grouping across them is possible.
+  if (context.jobId) attributes[ATTR.toolCallJobId] = context.jobId
+  if (span.seq !== undefined) attributes[ATTR.toolCallSeq] = span.seq
+  // What the harness's capture cap dropped, so a truncated argument is legible AS truncated.
+  if (span.argsDropped) attributes[ATTR.toolArgsDropped] = span.argsDropped
+  if (span.resultDropped) attributes[ATTR.toolResultDropped] = span.resultDropped
+  // The bodies ride span EVENTS, like a generation's prompt and completion, and for the same
+  // reason: they are payloads rather than dimensions, and an attribute carrying kilobytes of a
+  // command's output would land in every backend's indexed attribute space. Present only when
+  // the double gate allowed capture (upstream blanks them otherwise), so an empty one is
+  // omitted rather than exported as a call that carried nothing.
+  const events: MappedEvent[] = []
+  if (span.args) {
+    events.push({
+      name: EVENT.toolArguments,
+      timeMs: span.startedAt,
+      attributes: { [EVENT_ATTR.toolArguments]: span.args },
+    })
+  }
+  if (span.result) {
+    events.push({
+      name: EVENT.toolResult,
+      timeMs: span.endedAt,
+      attributes: { [EVENT_ATTR.toolResult]: span.result },
+    })
+  }
   return {
     // Tool spans only reach here with a non-null executionId (the sinks guard on it).
     traceId: deriveTraceId(context.executionId),
@@ -579,7 +627,7 @@ export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): Map
     endTimeMs: span.endedAt,
     ok: span.ok,
     attributes,
-    events: [],
+    events,
   }
 }
 
@@ -784,4 +832,188 @@ export function mapOperationalGauges(samples: OperationalGaugeSample[]): MappedG
     unit: JOB_UNIT,
     points,
   }))
+}
+
+// ---- LOG RECORDS ----------------------------------------------------------
+//
+// The third OTLP signal this package publishes (`/v1/logs`), beside the per-call traces and
+// the metrics above. Its input is the kernel `LogRecord`, one emitted `Logger` line with its
+// `child`-bound correlation fields already folded in, so this mapping is the one place that
+// decides how a platform log line becomes an OTLP log record: severity, body, attributes, and
+// the trace it belongs to.
+
+/**
+ * OTLP `SeverityNumber` per level. The platform's vocabulary is four levels (kernel's
+ * `LogLevel`), each landing on the BASE number of its OTLP range (DEBUG=5, INFO=9, WARN=13,
+ * ERROR=17) rather than a mid-range value, so a backend's `severity >= WARN` filter means
+ * exactly what an operator reading `LOG_LEVEL` expects. Exhaustive over the union, so adding
+ * a level fails the build here rather than exporting an unmapped line as severity 0.
+ */
+export const LOG_SEVERITY_NUMBER: Record<LogLevel, number> = {
+  debug: 5,
+  info: 9,
+  warn: 13,
+  error: 17,
+}
+
+/** The matching `SeverityText`, upper-cased per the OTLP convention. */
+export const LOG_SEVERITY_TEXT: Record<LogLevel, string> = {
+  debug: 'DEBUG',
+  info: 'INFO',
+  warn: 'WARN',
+  error: 'ERROR',
+}
+
+/**
+ * Ceiling on one stringified attribute value. A log field can carry captured command output
+ * or model text, and a collector rejects an oversized batch WHOLE, so one 2 MB field would drop
+ * every line beside it. Truncation states what it cut (see the "every cap records what it
+ * dropped" rule) rather than silently shortening.
+ */
+const MAX_ATTRIBUTE_CHARS = 8192
+
+/** The field name a log record's own truncation note lands under. */
+const TRUNCATION_SUFFIX = (dropped: number) => `…[truncated ${dropped} chars]`
+
+function cap(value: string): string {
+  return value.length <= MAX_ATTRIBUTE_CHARS
+    ? value
+    : value.slice(0, MAX_ATTRIBUTE_CHARS) + TRUNCATION_SUFFIX(value.length - MAX_ATTRIBUTE_CHARS)
+}
+
+/**
+ * Coerce one arbitrary log-field value into a neutral attribute value, or `undefined` to omit
+ * the attribute entirely.
+ *
+ * `LogFields` is `Record<string, unknown>`: a call site may pass anything, including a value
+ * that cannot be serialised. Nothing here may throw (this runs on the emit path of a line that
+ * is often already reporting a failure), so an unserialisable value degrades to a note
+ * naming the problem rather than taking the line down with it.
+ *
+ * `null`/`undefined` are OMITTED rather than sent as an empty string: an absent attribute and
+ * one holding `""` are different facts, and only the absence states "the emitter had nothing".
+ */
+export function logAttributeValue(value: unknown): AttributeValue | undefined {
+  if (value === null || value === undefined) return undefined
+  if (typeof value === 'string') return cap(value)
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : cap(String(value))
+  if (typeof value === 'bigint') return cap(value.toString())
+  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+    return value.map((v) => cap(v))
+  }
+  try {
+    const json = JSON.stringify(value)
+    return json === undefined ? cap(String(value)) : cap(json)
+  } catch (error) {
+    // A cycle, a BigInt inside an object, a throwing `toJSON`: the same class the pino
+    // browser writer guards against, for the same reason: a field bag we cannot render must
+    // not remove the line, which is the only evidence that the code path ran at all.
+    return `[unserializable: ${error instanceof Error ? error.message : String(error)}]`
+  }
+}
+
+/** Render a value this mapping could not read at all, in the `logAttributeValue` vocabulary. */
+function unreadable(error: unknown): string {
+  return `[unreadable: ${error instanceof Error ? error.message : String(error)}]`
+}
+
+/**
+ * Map a whole field bag, dropping the keys whose value carries nothing.
+ *
+ * TOTAL by construction, which is the same promise {@link logAttributeValue} makes and for a
+ * stronger reason: this runs on the exporter's DRAIN path, downstream of the try/catch the
+ * logging adapter wraps `record` in, so a throw here escapes into the send chain rather than
+ * costing one line. `LogFields` is `Record<string, unknown>`, so both halves of the read can
+ * throw on a value a call site is free to pass: enumerating the keys (a Proxy trap) and
+ * reading one (an accessor property). Each is guarded separately so a single unreadable field
+ * costs THAT field and nothing else.
+ *
+ * A field that cannot be read is REPORTED under its own key rather than omitted: the key's
+ * presence is what tells a reader the emitter had something to say there, which an absent
+ * attribute would not.
+ */
+export function logAttributes(fields: Record<string, unknown>): AttributeMap {
+  const attributes: AttributeMap = {}
+  let keys: string[]
+  try {
+    keys = Object.keys(fields)
+  } catch (error) {
+    // The whole bag is unreadable. One sentinel attribute, because a line exported with no
+    // attributes at all reads as a line that carried none.
+    return { fields: unreadable(error) }
+  }
+  for (const key of keys) {
+    let value: AttributeValue | undefined
+    try {
+      value = logAttributeValue(fields[key])
+    } catch (error) {
+      value = unreadable(error)
+    }
+    if (value !== undefined) attributes[key] = value
+  }
+  return attributes
+}
+
+/** A transport-neutral OTLP log record. */
+export interface MappedLogRecord {
+  /** Epoch ms the line was emitted at. */
+  timeMs: number
+  severityNumber: number
+  severityText: string
+  /** The line's fixed message; everything variable is an attribute. */
+  body: string
+  attributes: AttributeMap
+  /**
+   * The trace this line belongs to, when it named a run. Set through the SAME `deriveTraceId`
+   * the run's spans go through (never a second copy of the derivation), so a backend joins
+   * logs to the trace structurally rather than by matching an attribute; absent for a line
+   * with no run (most boot, sweep and request lines).
+   */
+  traceId?: string
+  /**
+   * W3C trace flags for {@link traceId}, present only alongside it. Always SAMPLED, because
+   * this pipeline has no sampler: a line that reached the exporter is a line the deployment
+   * chose to export. Spans carry no `flags` and need none (a span's presence in the batch
+   * states its own sampling); a log record is the side that has to state it, since a backend
+   * decides from these flags whether the trace it points at is one it should have.
+   */
+  traceFlags?: number
+}
+
+/** W3C `sampled` trace flag, the only one this exporter ever sets. */
+const TRACE_FLAG_SAMPLED = 0x01
+
+/**
+ * Map one emitted line to a neutral OTLP log record.
+ *
+ * Fields are exported under the names they already carry on the local writer (`workspaceId`,
+ * `executionId`, `jobId`, `scope`, …) rather than being renamed into the `cat_factory.*`
+ * namespace the spans use. An operator greps stdout and queries the collector with the same
+ * key, which is worth more than symmetry with a signal whose attribute names this package
+ * chose in the first place. The one thing the two signals DO share is the trace id, and it is
+ * shared structurally: a line carrying an `executionId` is stamped with the run's derived
+ * trace id, so a run's logs and its spans meet in the backend without either naming the other.
+ *
+ * That sharing is a CALL to `deriveTraceId`, not a second copy of what it does. The two signals
+ * agreeing is the whole feature and nothing else enforces it: a re-derivation here would let a
+ * change to the span side pass every test in this package while silently unjoining every log
+ * line from the run it belongs to.
+ */
+export function mapLogRecord(record: LogRecord): MappedLogRecord {
+  const executionId = record.fields.executionId
+  // `deriveTraceId(null)` mints a RANDOM id, which is right for a span (it still needs a trace
+  // of its own) and wrong for a line: a run-less line belongs to no trace, and inventing one
+  // per line would fill the backend with single-entry traces. So the run-less case is the
+  // absent field, and only the derivation itself is shared.
+  const runTraceId =
+    typeof executionId === 'string' && executionId ? deriveTraceId(executionId) : null
+  return {
+    timeMs: record.timeMs,
+    severityNumber: LOG_SEVERITY_NUMBER[record.level],
+    severityText: LOG_SEVERITY_TEXT[record.level],
+    body: cap(record.msg),
+    attributes: logAttributes(record.fields),
+    ...(runTraceId ? { traceId: runTraceId, traceFlags: TRACE_FLAG_SAMPLED } : {}),
+  }
 }

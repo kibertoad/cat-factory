@@ -8,14 +8,7 @@ import type {
   ResizeBlockInput,
   UpdateBlockInput,
 } from '@cat-factory/contracts'
-import type {
-  Block,
-  BlockStatus,
-  BlockType,
-  Position,
-  PreloadedBlocks,
-  ServiceConnection,
-} from '@cat-factory/kernel'
+import type { Block, BlockStatus, BlockType, Position, PreloadedBlocks } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
 import { BLOCK_TYPE_LABEL } from '@cat-factory/kernel'
 import type {
@@ -26,6 +19,7 @@ import type {
   GitHubRepo,
   GroupCacheHandle,
   InitiativeRepository,
+  DocumentRepository,
   Logger,
   RepoProjectionRepository,
   ResolveRunRepoContext,
@@ -46,7 +40,7 @@ import {
 } from '@cat-factory/kernel'
 import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createMountProjection } from './mountProjection.js'
-import { reclaimDoomedEntities } from './removal-cascade.js'
+import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
 import {
   aprioriBranchesError,
   canReparent,
@@ -117,6 +111,14 @@ export interface BoardServiceDependencies {
    */
   initiativeRepository?: InitiativeRepository
   /**
+   * Document projections, present only when the document-source integration is wired. Backs the
+   * same cascade: a document attached to a doomed block keeps a `linked_block_id` naming it
+   * unless the delete clears it, and a document row holds exactly ONE such link, so the stale
+   * value makes the document look permanently spoken for by a task nobody can open. Absent → the
+   * integration is unwired, so no document can be attached to anything.
+   */
+  documentRepository?: DocumentRepository
+  /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
    * (and every board mounting a shared service) see the create/rename/move/reparent/delete
@@ -186,6 +188,7 @@ export class BoardService {
   private readonly workspaceMountRepository?: WorkspaceMountRepository
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   private readonly initiativeRepository?: InitiativeRepository
+  private readonly documentRepository?: DocumentRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
   private readonly workspaceSettings?: WorkspaceSettingsReader
@@ -223,6 +226,7 @@ export class BoardService {
     workspaceMountRepository,
     serviceFragmentDefaultsRepository,
     initiativeRepository,
+    documentRepository,
     executionEventPublisher,
     taskTypeRegistry,
     workspaceSettings,
@@ -241,6 +245,7 @@ export class BoardService {
     this.workspaceMountRepository = workspaceMountRepository
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
     this.initiativeRepository = initiativeRepository
+    this.documentRepository = documentRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
     this.workspaceSettings = workspaceSettings
@@ -682,9 +687,13 @@ export class BoardService {
       // The kind of work, chosen on the create form; defaults to a feature task.
       taskType,
     }
-    // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
-    if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
-      block.taskTypeFields = input.taskTypeFields
+    // Small per-type form fields (bug severity / repro, spike timebox, …), when given. A registered
+    // custom type's `custom` bag is CHECKED against its descriptor here rather than trusted from the
+    // form, so every door (SPA, internal API, public API) enforces one rule; see
+    // `taskTypeCreationDefaults.ts` for what passes through unchecked and why.
+    const submittedFields = this.taskTypeDefaults.validatedFields(taskType, input.taskTypeFields)
+    if (submittedFields && Object.keys(submittedFields).length) {
+      block.taskTypeFields = submittedFields
     }
     // A REVIEW task targets an EXISTING pull request, so its reference is checked against the
     // provider BEFORE the block is written: a PR the provider positively reports as absent fails
@@ -1243,7 +1252,7 @@ export class BoardService {
     }
     await this.blockRepository.deleteMany(blockHome, ids)
     // Drop dependency + epic edges in the source workspace that now dangle to the moved subtree.
-    await this.pruneDanglingEdges(blockHome, srcBlocks, new Set(ids))
+    await pruneDanglingEdges(this.blockRepository, blockHome, srcBlocks, new Set(ids))
     // Destination side: origin = the new HOME so the moved subtree fans out to the destination
     // service's mounts (and that board). Source side: the block is gone from its old service, so
     // the block→service join can't resolve it anymore — notify the captured source boards
@@ -1255,50 +1264,6 @@ export class BoardService {
       }
     }
     return assertFound(await this.blockRepository.get(parentHome, id), 'Block', id)
-  }
-
-  /**
-   * After a set of blocks leaves `homeWorkspaceId` (deleted, or moved to another workspace),
-   * drop the now-dangling references on the surviving blocks in one pass: dependency edges
-   * pointing into `removed`, and epic membership whose epic was removed (the member task itself
-   * survives — epic grouping is non-structural, never cascaded). Shared by the delete and the
-   * reparent/detach paths so they can't drift.
-   */
-  private async pruneDanglingEdges(
-    homeWorkspaceId: string,
-    survivors: Block[],
-    removed: Set<string>,
-  ): Promise<void> {
-    for (const b of survivors) {
-      if (removed.has(b.id)) continue
-      const patch: {
-        dependsOn?: string[]
-        epicId?: string | null
-        initiativeId?: string | null
-        serviceConnections?: ServiceConnection[]
-        involvedServiceIds?: string[]
-      } = {}
-      const next = b.dependsOn.filter((d) => !removed.has(d))
-      if (next.length !== b.dependsOn.length) patch.dependsOn = next
-      if (b.epicId && removed.has(b.epicId)) patch.epicId = null
-      // Initiative membership is non-structural (epic-style): a task the loop spawned
-      // isn't a descendant of the deleted initiative block, so detach the dangling link
-      // here the same way epic membership is pruned above.
-      if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
-      // Service-connection edges into the removed set, and task selections of a removed
-      // involved service, dangle the same way dependency edges do — drop them here too.
-      const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
-      if (connections.length !== (b.serviceConnections ?? []).length) {
-        patch.serviceConnections = connections
-      }
-      const involved = (b.involvedServiceIds ?? []).filter((sid) => !removed.has(sid))
-      if (involved.length !== (b.involvedServiceIds ?? []).length) {
-        patch.involvedServiceIds = involved
-      }
-      if (Object.keys(patch).length) {
-        await this.blockRepository.update(homeWorkspaceId, b.id, patch)
-      }
-    }
   }
 
   /**
@@ -1370,12 +1335,13 @@ export class BoardService {
           ? { workspaceMountRepository: this.workspaceMountRepository }
           : {}),
         ...(this.initiativeRepository ? { initiativeRepository: this.initiativeRepository } : {}),
+        ...(this.documentRepository ? { documentRepository: this.documentRepository } : {}),
       },
       { homeWorkspaceId, deletedId: id, blocks, doomed },
     )
     await this.blockRepository.deleteMany(homeWorkspaceId, [...doomed])
 
-    await this.pruneDanglingEdges(homeWorkspaceId, blocks, doomed)
+    await pruneDanglingEdges(this.blockRepository, homeWorkspaceId, blocks, doomed)
 
     // The block + any shared service are now gone, so fan out per captured target (blockId is
     // unresolvable post-delete) — every board that showed the block refreshes it away.

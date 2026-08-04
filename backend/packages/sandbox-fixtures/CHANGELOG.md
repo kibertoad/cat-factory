@@ -1,5 +1,61 @@
 # @cat-factory/sandbox-fixtures
 
+## 0.7.270
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+
+## 0.7.269
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+
+## 0.7.268
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+
+## 0.7.267
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+
+## 0.7.266
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+
+## 0.7.265
+
+### Patch Changes
+
+- Updated dependencies [eb4ca17]
+  - @cat-factory/contracts@0.231.0
+
+## 0.7.264
+
+### Patch Changes
+
+- Updated dependencies [1f14793]
+  - @cat-factory/contracts@0.230.1
+
+## 0.7.263
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+
 ## 0.7.262
 
 ### Patch Changes

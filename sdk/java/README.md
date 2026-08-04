@@ -92,8 +92,8 @@ back to platform types.
 
 ## Resource clients
 
-`jobs()`, `services()`, `tasks()`, `pipelines()`, `notifications()`, `usage()`,
-`decisions()`, `debug()`: one per tag of the published OpenAPI surface. Every call is scoped to
+`jobs()`, `services()`, `tasks()`, `pipelines()`, `notifications()`, `webhook()`,
+`usage()`, `decisions()`, `debug()`: one per tag of the published OpenAPI surface. Every call is scoped to
 the key's workspace.
 
 ## Watching a run

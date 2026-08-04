@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createCatFactoryMcpServer } from '../src/server.ts'
+import { CAT_FACTORY_TOOLS } from '../src/tools.generated.ts'
 import type { CatFactoryMcpOptions } from '../src/config.ts'
 
 // Drives the facade the way a host does: a REAL MCP client over an in-memory transport, against a
@@ -72,12 +73,75 @@ describe('the MCP facade end to end', () => {
   it('lists tools with their schemas and the read-only annotation', async () => {
     ;({ client } = await connect(OPTIONS, () => json({})))
     const { tools } = await client.listTools()
-    expect(tools).toHaveLength(37)
+    // The facade lists the generated table, whole: nothing added by the server layer, nothing
+    // dropped by it. Asserted against the table rather than a pinned count, so an added endpoint
+    // costs no edit here and a tool the server silently withholds still fails.
+    expect(tools.map((tool) => tool.name).sort()).toEqual(
+      CAT_FACTORY_TOOLS.map((tool) => tool.name).sort(),
+    )
     const start = tools.find((tool) => tool.name === 'tasks_start')!
     expect(start.annotations?.readOnlyHint).toBe(false)
     expect(tools.find((tool) => tool.name === 'tasks_get')!.annotations?.readOnlyHint).toBe(true)
     // The streaming endpoints are absent BY NAME, which is what the omission list documents.
     expect(tools.map((tool) => tool.name)).not.toContain('tasks_stream')
+  })
+
+  it('states the two hints the HTTP method cannot, on the tools that spend', async () => {
+    ;({ client } = await connect(OPTIONS, () => json({})))
+    const { tools } = await client.listTools()
+    const start = tools.find((tool) => tool.name === 'tasks_start')!
+    expect(start.annotations?.destructiveHint).toBe(true)
+    // Not idempotent: a second call starts a second real agent run against a real repository.
+    expect(start.annotations?.idempotentHint).toBe(false)
+    const remove = tools.find((tool) => tool.name === 'tasks_delete')!
+    // The pair `readOnlyHint` alone cannot express, and the reason both hints exist: deleting twice
+    // leaves the board in the same state, and the first call is still irreversible.
+    expect(remove.annotations?.destructiveHint).toBe(true)
+    expect(remove.annotations?.idempotentHint).toBe(true)
+    // A cheap write says NOTHING rather than claiming to be safe: the protocol's default for an
+    // unset hint is the cautious one, and lowering a host's caution on a guess is worse than silence.
+    const update = tools.find((tool) => tool.name === 'tasks_update')!
+    expect(update.annotations?.destructiveHint).toBeUndefined()
+    expect(update.annotations?.idempotentHint).toBeUndefined()
+  })
+
+  it('declares the shape of a result and returns it as structured content', async () => {
+    ;({ client } = await connect(OPTIONS, () =>
+      json({ taskId: 'blk_1', title: 'Add a health check', status: 'planned' }),
+    ))
+    const { tools } = await client.listTools()
+    const get = tools.find((tool) => tool.name === 'tasks_get')!
+    expect(get.outputSchema?.type).toBe('object')
+    // Rendered permissively on purpose: `/api/v1` is additive forever, and a caller's own MCP client
+    // VALIDATES against this schema, so a `required` list or an `enum` would be a way for an older
+    // copy of this package to reject a newer deployment's honest answer.
+    const schema = get.outputSchema as { required?: unknown; properties: Record<string, unknown> }
+    expect(schema.required).toBeUndefined()
+    expect((schema.properties.status as { enum?: unknown }).enum).toBeUndefined()
+
+    // The client below validates the structured content against that schema and throws if it is
+    // absent, so this call passing at all is the assertion that the two agree.
+    const result = (await client.callTool({
+      name: 'tasks_get',
+      arguments: { taskId: 'blk_1' },
+    })) as {
+      structuredContent?: Record<string, unknown>
+    }
+    expect(result.structuredContent).toEqual({
+      taskId: 'blk_1',
+      title: 'Add a health check',
+      status: 'planned',
+    })
+    // Both halves: the text block is what a host with no structured-content support shows a model.
+    expect(JSON.parse(textOf(result)).taskId).toBe('blk_1')
+  })
+
+  it('spends no context on indentation', async () => {
+    ;({ client } = await connect(OPTIONS, () => json({ taskId: 'blk_1', status: 'planned' })))
+    const result = await client.callTool({ name: 'tasks_get', arguments: { taskId: 'blk_1' } })
+    // Two-space indentation reads better to a human than to a model and costs roughly a third of
+    // every result in whitespace, which on this surface is a third of an agent-context snapshot.
+    expect(textOf(result)).toBe('{"taskId":"blk_1","status":"planned"}')
   })
 
   it('calls the deployment through the SDK and returns the response as JSON text', async () => {
@@ -152,7 +216,7 @@ describe('the MCP facade end to end', () => {
     expect(textOf(result)).toContain('returns no content')
   })
 
-  it('states a truncation rather than silently shortening a large response', async () => {
+  it('refuses an over-cap response instead of rendering half of it', async () => {
     const big = {
       calls: Array.from({ length: 500 }, (_, i) => ({ id: `call_${i}`, prompt: 'x'.repeat(200) })),
     }
@@ -161,12 +225,35 @@ describe('the MCP facade end to end', () => {
       name: 'debug_list_llm_calls',
       arguments: { runId: 'exec_1' },
     })
+    // A refusal, not a prefix. Half an object cannot satisfy the output schema it was cut out of,
+    // and the old truncation note itself told the model that what followed was not valid JSON and to
+    // narrow instead of reading on, which is the whole cap spent to deliver that instruction.
+    expect((result as { isError?: boolean }).isError).toBe(true)
     const text = textOf(result)
-    expect(text.startsWith('[TRUNCATED]')).toBe(true)
-    // What was dropped, and what to do instead — a cap that does not say so is one a model
-    // summarises around as though it had the whole document.
-    expect(text).toMatch(/dropped/)
+    expect(text).toContain('2000-character limit')
+    // How much there was, and what to do about it, from either side of the connection.
+    expect(text).toMatch(/returned \d{5,} characters/)
     expect(text).toContain('`limit`')
+    expect(text).toContain('CAT_FACTORY_MCP_MAX_RESULT_CHARS')
+  })
+
+  it('withholds one tool without losing its group, and says so to the model', async () => {
+    ;({ client } = await connect({ ...OPTIONS, excludeTools: ['notifications_act'] }, () =>
+      json({}),
+    ))
+    const names = (await client.listTools()).tools.map((tool) => tool.name)
+    expect(names).not.toContain('notifications_act')
+    expect(names).toContain('notifications_list')
+    const instructions = client.getInstructions() ?? ''
+    expect(instructions).toContain('withheld these individual tools')
+    expect(instructions).toContain('notifications_act')
+    // ...and the confirm-first section no longer names a tool this server does not serve, because it
+    // is DERIVED from what was exposed rather than restated in prose beside it.
+    const confirm = instructions
+      .split('\n\n')
+      .find((section) => section.startsWith('Confirm with the user'))!
+    expect(confirm).toContain('tasks_start')
+    expect(confirm).not.toContain('notifications_act')
   })
 
   it('refuses a tool it does not serve without breaking the protocol', async () => {
@@ -196,5 +283,33 @@ describe('the MCP facade end to end', () => {
     expect(instructions).toContain('debug')
     // ...and the two streaming endpoints are named as omissions with their alternative.
     expect(instructions).toContain('/events')
+  })
+
+  it('tells the model how to watch a run, since it cannot stream one', async () => {
+    ;({ client } = await connect(OPTIONS, () => json({})))
+    const instructions = client.getInstructions() ?? ''
+    // The absent operations are the platform's live channels, so "how do I watch this" is the
+    // question this surface most needs answered in prose. Without it a model either invents a
+    // streaming tool, polls in a tight loop, or reports one non-terminal reading as the outcome.
+    expect(instructions).toContain('`tasks_get_run`')
+    expect(instructions).toContain('15-30 seconds')
+    expect(instructions).toContain('terminal')
+  })
+
+  it('does not promise cheap tools on a server that serves only spending ones', async () => {
+    // Prose assembled from data has to read as English for every filter combination, and an
+    // allow-list naming just the spending tools is the one that breaks the closing sentence: there
+    // is no "everything else" on this server, and a model told there is learns that the instructions
+    // are not about the server in front of it.
+    const spendingOnly = await connect({ ...OPTIONS, tools: ['tasks_start'] }, () => json({}))
+    const confirm = (spendingOnly.client.getInstructions() ?? '')
+      .split('\n\n')
+      .find((section) => section.startsWith('Confirm with the user'))!
+    expect(confirm).toContain('`tasks_start`')
+    expect(confirm).not.toContain('Everything else')
+
+    // ...and it is still there when there IS something else.
+    const mixed = await connect({ ...OPTIONS, tools: ['tasks_start', 'tasks_get'] }, () => json({}))
+    expect(mixed.client.getInstructions() ?? '').toContain('Everything else here is cheap.')
   })
 })

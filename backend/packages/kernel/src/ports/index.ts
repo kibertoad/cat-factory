@@ -56,6 +56,8 @@ export type { Clock, IdGenerator } from './runtime.js'
 export {
   type LogFields,
   type LogLevel,
+  type LogRecord,
+  type LogSink,
   type Logger,
   type RecordedLogLine,
   createRecordingLogger,
@@ -164,6 +166,15 @@ export type {
   AgentSearchQueryRepository,
   RecordAgentSearchQueryInput,
 } from './agent-search-queries.js'
+export type {
+  AgentToolCall,
+  AgentToolCallPageQuery,
+  AgentToolCallRecorder,
+  AgentToolCallRepository,
+  AgentToolCallTrajectoryQuery,
+  RecordAgentToolCallInput,
+  ToolCallBodiesState,
+} from './agent-tool-calls.js'
 export type {
   LlmGenerationEvent,
   LlmRunSpan,
@@ -303,6 +314,7 @@ export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
   DocumentRecord,
+  DocumentRef,
   DocumentRepository,
 } from './document-repositories.js'
 export type {

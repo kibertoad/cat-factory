@@ -3,9 +3,15 @@ import * as v from 'valibot'
 import {
   agentContextSnapshotSchema,
   agentSearchQuerySchema,
+  agentToolCallSchema,
   llmCallMetricSchema,
 } from '@cat-factory/contracts'
-import type { AgentContextSnapshot, AgentSearchQuery, LlmCallMetric } from '@cat-factory/kernel'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  AgentToolCall,
+  LlmCallMetric,
+} from '@cat-factory/kernel'
 import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
@@ -70,11 +76,13 @@ export function telemetryIngestController(): Hono<AppEnv> {
     const metricRepository = repos?.llmCallMetricRepository
     const snapshotRepository = repos?.agentContextSnapshotRepository
     const searchRepository = repos?.agentSearchQueryRepository
+    const toolCallRepository = repos?.agentToolCallRepository
     if (
       typeof workspaceRepository?.accountOf !== 'function' ||
       typeof metricRepository?.recordMany !== 'function' ||
       typeof snapshotRepository?.recordMany !== 'function' ||
-      typeof searchRepository?.recordMany !== 'function'
+      typeof searchRepository?.recordMany !== 'function' ||
+      typeof toolCallRepository?.recordMany !== 'function'
     ) {
       return c.json(
         { ok: false, error: { code: 'internal', message: 'telemetry ingest not enabled' } },
@@ -168,6 +176,9 @@ export function telemetryIngestController(): Hono<AppEnv> {
       await (searchRepository.recordMany(
         rows.searchQueries.map((q) => ({ ...q, ...scope })),
       ) as Promise<void>)
+      await (toolCallRepository.recordMany(
+        rows.toolCalls.map((t) => ({ ...t, ...scope })),
+      ) as Promise<void>)
     } catch (error) {
       // A failed append must be visible to the node: it leaves the run's high-water mark alone
       // and retries next sweep, which is exactly right because the append is idempotent.
@@ -185,6 +196,7 @@ export function telemetryIngestController(): Hono<AppEnv> {
         metrics: rows.metrics.length,
         snapshots: rows.snapshots.length,
         searchQueries: rows.searchQueries.length,
+        toolCalls: rows.toolCalls.length,
       },
     })
   })
@@ -199,17 +211,20 @@ function overCap(body: TelemetryIngestRequest): keyof typeof TELEMETRY_INGEST_LI
   if ((body.searchQueries?.length ?? 0) > TELEMETRY_INGEST_LIMITS.searchQueries) {
     return 'searchQueries'
   }
+  if ((body.toolCalls?.length ?? 0) > TELEMETRY_INGEST_LIMITS.toolCalls) return 'toolCalls'
   return null
 }
 
 const metricsSchema = v.optional(v.array(llmCallMetricSchema), [])
 const snapshotsSchema = v.optional(v.array(agentContextSnapshotSchema), [])
 const searchQueriesSchema = v.optional(v.array(agentSearchQuerySchema), [])
+const toolCallsSchema = v.optional(v.array(agentToolCallSchema), [])
 
 interface DecodedRows {
   metrics: LlmCallMetric[]
   snapshots: AgentContextSnapshot[]
   searchQueries: AgentSearchQuery[]
+  toolCalls: AgentToolCall[]
 }
 
 /**
@@ -222,10 +237,14 @@ function decodeRows(body: TelemetryIngestRequest): DecodedRows | null {
   const metrics = v.safeParse(metricsSchema, body.metrics)
   const snapshots = v.safeParse(snapshotsSchema, body.snapshots)
   const searchQueries = v.safeParse(searchQueriesSchema, body.searchQueries)
-  if (!metrics.success || !snapshots.success || !searchQueries.success) return null
+  const toolCalls = v.safeParse(toolCallsSchema, body.toolCalls)
+  if (!metrics.success || !snapshots.success || !searchQueries.success || !toolCalls.success) {
+    return null
+  }
   return {
     metrics: metrics.output,
     snapshots: snapshots.output,
     searchQueries: searchQueries.output,
+    toolCalls: toolCalls.output,
   }
 }

@@ -1,4 +1,4 @@
-// The SDK's PUBLIC shape: how the 38 `/api/v1` operations are grouped into resource clients
+// The SDK's PUBLIC shape: how the `/api/v1` operations are grouped into resource clients
 // and what each method is called.
 //
 // This is a chosen table, not a derivation, for the same reason `OPERATION_DOCS` in
@@ -45,6 +45,11 @@ const SURFACE = {
   actPublicNotification: { group: 'notifications', method: 'act' },
   dismissPublicNotification: { group: 'notifications', method: 'dismiss' },
 
+  // ---- The outbound webhook (push enrolment) ---------------------------------------------
+  getPublicNotificationWebhook: { group: 'webhook', method: 'get' },
+  putPublicNotificationWebhook: { group: 'webhook', method: 'set' },
+  deletePublicNotificationWebhook: { group: 'webhook', method: 'delete' },
+
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
 
@@ -59,6 +64,30 @@ const SURFACE = {
   proceedPublicRunRequirements: { group: 'decisions', method: 'proceed' },
   reReviewPublicRunRequirements: { group: 'decisions', method: 'reReview' },
   resolvePublicRunRequirementsExceeded: { group: 'decisions', method: 'resolveExceeded' },
+  approvePublicRunStep: { group: 'decisions', method: 'approveStep' },
+  requestPublicRunStepChanges: { group: 'decisions', method: 'requestStepChanges' },
+  rejectPublicRunStep: { group: 'decisions', method: 'rejectStep' },
+  resolvePublicRunStepExceeded: { group: 'decisions', method: 'resolveStepExceeded' },
+  resolvePublicRunAgentDecision: { group: 'decisions', method: 'answerAgentDecision' },
+  replyPublicRunClarityFinding: { group: 'decisions', method: 'replyToClarityFinding' },
+  setPublicRunClarityFindingStatus: { group: 'decisions', method: 'setClarityFindingStatus' },
+  incorporatePublicRunClarity: { group: 'decisions', method: 'incorporateClarity' },
+  reReviewPublicRunClarity: { group: 'decisions', method: 'reReviewClarity' },
+  proceedPublicRunClarity: { group: 'decisions', method: 'proceedClarity' },
+  resolvePublicRunClarityExceeded: { group: 'decisions', method: 'resolveClarityExceeded' },
+  replyPublicRunBrainstormOption: { group: 'decisions', method: 'replyToBrainstormOption' },
+  setPublicRunBrainstormOptionStatus: { group: 'decisions', method: 'setBrainstormOptionStatus' },
+  incorporatePublicRunBrainstorm: { group: 'decisions', method: 'incorporateBrainstorm' },
+  reReviewPublicRunBrainstorm: { group: 'decisions', method: 'reReviewBrainstorm' },
+  proceedPublicRunBrainstorm: { group: 'decisions', method: 'proceedBrainstorm' },
+  resolvePublicRunBrainstormExceeded: { group: 'decisions', method: 'resolveBrainstormExceeded' },
+  resolvePublicRunPrReview: { group: 'decisions', method: 'resolvePrReview' },
+  dismissPublicRunPrReviewFinding: { group: 'decisions', method: 'dismissPrReviewFinding' },
+  challengePublicRunPrReviewFinding: { group: 'decisions', method: 'challengePrReviewFinding' },
+  confirmPublicRunHumanTest: { group: 'decisions', method: 'confirmHumanTest' },
+  requestPublicRunHumanTestFix: { group: 'decisions', method: 'requestHumanTestFix' },
+  approvePublicRunVisualConfirm: { group: 'decisions', method: 'approveVisualConfirmation' },
+  requestPublicRunVisualConfirmFix: { group: 'decisions', method: 'requestVisualConfirmationFix' },
 
   // ---- Run diagnostics (`read` scope; the surface an operator or an LLM debugs a run with) -
   listDebugRuns: { group: 'debug', method: 'listRuns', paginates: 'runs' },
@@ -67,6 +96,7 @@ const SURFACE = {
   getDebugLlmCall: { group: 'debug', method: 'getLlmCall' },
   listDebugAgentContext: { group: 'debug', method: 'listAgentContext', paginates: 'snapshots' },
   getDebugAgentContext: { group: 'debug', method: 'getAgentContext' },
+  listDebugToolCalls: { group: 'debug', method: 'listToolCalls', paginates: 'toolCalls' },
   listDebugLogs: { group: 'debug', method: 'listLogs', paginates: 'entries' },
   listDebugSearchQueries: {
     group: 'debug',
@@ -96,6 +126,42 @@ export const MCP_OMITTED_OPERATIONS = {
     'SSE endpoint through an SDK.',
 }
 
+/**
+ * The MCP tool annotations that cannot be derived from the HTTP method, per operation.
+ *
+ * `readOnlyHint` follows from the method and is emitted for every tool. These two do not: the
+ * protocol's defaults for an UNSET hint are already the cautious ones (`destructiveHint` defaults
+ * to true, `idempotentHint` to false), so a mutating tool that says nothing is treated as the
+ * worst case and needs no entry. What an entry buys is the hint being STATED, which is what a host
+ * showing a confirmation dialog reads, and it is worth stating exactly where the consequence is
+ * real money or a merged pull request.
+ *
+ * Deliberately NOT a blanket pass over the mutating operations: setting `destructive: false` on a
+ * cheap write would LOWER a host's caution below its own default, which is a guess dressed as
+ * information. An operation absent from this table keeps the protocol's cautious default.
+ *
+ * Generation fails on an entry naming an operation the spec no longer has, and on one naming a GET
+ * (a read changes nothing, so neither hint means anything about it).
+ */
+export const MCP_TOOL_HINTS = {
+  // The four that spend: each begins a real agent run against a real repository, or merges a real
+  // pull request. Not idempotent: a second call starts a second run.
+  startPublicTask: { destructive: true, idempotent: false },
+  retryPublicTask: { destructive: true, idempotent: false },
+  createPublicJob: { destructive: true, idempotent: false },
+  actPublicNotification: { destructive: true, idempotent: false },
+  // Destructive AND idempotent, which is the pair `readOnlyHint` alone cannot express: deleting a
+  // task twice leaves the board in the same state, and the first call is still irreversible.
+  deletePublicTask: { destructive: true, idempotent: true },
+  // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
+  // both overwrite state whose previous value cannot be recovered through this API: the endpoint
+  // someone else's integration is registered at, and a signing secret that is never readable back.
+  // What is lost is invisible from here, since the receiver that stops hearing from this workspace
+  // is somewhere else entirely.
+  putPublicNotificationWebhook: { destructive: true, idempotent: true },
+  deletePublicNotificationWebhook: { destructive: true, idempotent: true },
+}
+
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */
 export const GROUP_DOCS = {
   jobs: 'Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.',
@@ -103,10 +169,13 @@ export const GROUP_DOCS = {
   tasks: "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
+  webhook:
+    "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
-  debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
+    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
+  debug:
+    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
 }
 
 /** The resource groups in emission order. */

@@ -124,6 +124,7 @@ export function loadConfig(env: Env): AppConfig {
       minStalledPriorRuns: env.PLATFORM_ALERTS_MIN_STALLED_PRIOR_RUNS,
       maxFailureKindShare: env.PLATFORM_ALERTS_MAX_FAILURE_KIND_SHARE,
       maxSweepFailures: env.PLATFORM_ALERTS_MAX_SWEEP_FAILURES,
+      failureKindRates: env.PLATFORM_ALERTS_FAILURE_KIND_RATES,
     }),
     // Infrastructure-reachability watcher: opt-in (`INFRA_REACHABILITY_WATCH=true`). The
     // `scheduled` cron drives the sweep; the interval knob is Node-only.

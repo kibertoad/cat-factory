@@ -66,6 +66,11 @@ export const CONFLICT_REASONS = [
   'github_not_connected',
   'bootstrap_not_retryable',
   'bootstrap_reference_missing',
+  // A document is already attached to a DIFFERENT live task. A document row carries a single
+  // `linkedBlockId`, so attaching it again would MOVE the link rather than copy it, silently
+  // stripping the earlier task of a document it was created with. Same rule and same shape as
+  // `ticket_already_linked`: `details.taskId` names the holder so the caller can follow it.
+  'document_already_linked',
   // No workspace handler is configured for a service's declared provision type (the
   // per-service provision-type model — the deployer/tester can't stand the env up).
   'provision_type_unhandled',
@@ -178,7 +183,7 @@ export const CONFLICT_REASONS = [
   // useful to a headless integration: a redelivered webhook reads it as "already filed" and
   // follows the existing task instead of filing a duplicate.
   'ticket_already_linked',
-  // A caller tried to resolve a run's PRE-TOKEN INPUT GATE that is not (or is no longer) parked
+  // A caller tried to resolve a run's PRE-DISPATCH INPUT GATE that is not (or is no longer) parked
   // on it: the gate passed, the workspace has it off, or another surface already answered it.
   // The remedy is "nothing to do here": the SPA refreshes the run rather than re-offering a
   // decision that has already been taken.

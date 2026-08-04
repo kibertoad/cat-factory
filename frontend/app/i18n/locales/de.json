@@ -406,7 +406,7 @@
         },
         "questionsOnPark": {
           "label": "Offene Fragen bei einem pausierten Headless-Lauf posten",
-          "help": "Wenn ein über die API gestarteter Lauf zur Klärung der Anforderungen pausiert, poste seine offenen Fragen — jeweils mit der ID, die eine Antwort nennt — am verknüpften Issue. In der App gestartete Aufgaben sind nicht betroffen."
+          "help": "Wenn ein außerhalb der App gestarteter Lauf zur Klärung der Anforderungen pausiert (über die API oder aus einem Tracker-Ticket gestartet), poste seine offenen Fragen am verknüpften Issue, jeweils mit der ID, die eine Antwort nennt. In der App gestartete Aufgaben sind nicht betroffen."
         }
       },
       "probeFailure": {
@@ -522,6 +522,19 @@
           "always": "Immer automatisch zusammenführen",
           "never": "Immer Review verlangen"
         }
+      },
+      "roleRules": {
+        "heading": "Grenzen je startender Rolle",
+        "help": "Was ein Lauf darf, hängt auch davon ab, wer ihn gestartet hat. Eine Rolle kann strengeren Regeln als den obigen unterliegen oder nur Probeläufe machen: Die Pipeline arbeitet und öffnet einen Pull Request, zusammengeführt wird nichts. Eine Rolle kann diese Richtlinie nur verschärfen, nie lockern.",
+        "autoMergeOffWarning": "Für diese Vorlage ist das automatische Zusammenführen aus, jeder Pull Request geht also ohnehin an einen Menschen und die Kategoriegrenzen unten ändern nichts mehr. Probeläufe gelten weiterhin: Sie verweigern auch das manuelle Zusammenführen.",
+        "sandboxLabel": "Nur Probeläufe",
+        "sandboxNote": "Läufe dieser Rolle öffnen einen Pull Request und führen nichts zusammen, die Kategorieregeln unten können sie also nicht weiter einschränken.",
+        "noRules": "Keine Kategoriegrenzen",
+        "ruleCount": "{count} Kategorie eingeschränkt | {count} Kategorien eingeschränkt",
+        "inherit": "Wie in dieser Richtlinie",
+        "redundant": "Ohne Wirkung: Diese Richtlinie ist bereits mindestens so streng.",
+        "alreadyStrictest": "Wird ohnehin immer geprüft",
+        "baseHint": "Diese Richtlinie vergleicht in jeder Kategorie die Bewertungen, eine Rolle kann eine Kategorie daher nur auf \"immer Review\" verschärfen."
       }
     },
     "observabilityConnection": {
@@ -1161,7 +1174,28 @@
         "maxSweepFailures": "Aufeinanderfolgende fehlgeschlagene Durchläufe einer Hintergrundprüfung."
       },
       "notLoaded": "Die aktuellen Einstellungen dieses Kontos konnten nicht geladen werden; ein Speichern würde die übrigen überschreiben. Bitte vor dem Bearbeiten neu laden.",
-      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen"
+      "invalidNumbers": "Diese Obergrenzen sind keine Zahlen",
+      "failureKinds": {
+        "label": "Regeln pro Fehlerart",
+        "description": "Alarm auslösen, wenn eine Fehlerart den Anteil an Fehlschlägen erreicht, den Sie ihr zugestehen. Die Obergrenze für die dominante Ursache oben fragt, ob eine Art alle anderen überlagert; diese Regeln fragen, ob eine benannte Art das erreicht, was diese Installation von ihr toleriert.",
+        "overrideLabel": "Eigene Regeln pro Fehlerart für dieses Konto festlegen",
+        "overrideHint": "Aus: Das Konto verwendet die Regeln der Installation. Ein: Die Liste unten ersetzt sie vollständig, und eine leere Liste bedeutet gar keine Regeln pro Fehlerart.",
+        "empty": "Keine Regeln. Dieses Konto löst den Alarm pro Fehlerart nicht aus.",
+        "kindLabel": "Fehlerart",
+        "shareLabel": "Anteil an Fehlschlägen (%)",
+        "shareHint": "Die Regel löst ab diesem Anteil aus.",
+        "minCountLabel": "Mindestanzahl Fehlschläge",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Wie viele Fehlschläge dieser Art im Zeitfenster nötig sind, bevor die Regel auslösen kann. Ohne diesen Wert ist ein niedriger Anteil überempfindlich: Fünf Läufe mit einer Verdrängung sind bereits 20 %.",
+        "addRule": "Regel hinzufügen",
+        "allKindsCovered": "Jede Fehlerart hat bereits eine Regel.",
+        "removeRule": "Regel entfernen",
+        "duplicateKind": "Jede Fehlerart darf höchstens eine Regel haben.",
+        "tooManyRules": "Höchstens {max} Regeln pro Fehlerart. Entfernen Sie einige vor dem Speichern.",
+        "unknownKind": "{kind} (unbekannt)",
+        "invalidTitle": "Diese Regeln pro Fehlerart können nicht gespeichert werden",
+        "invalidRows": "Prüfen Sie die Regeln {rows}: Der Anteil muss über 0 und höchstens 100 liegen, eine Mindestanzahl muss eine ganze Zahl ab 1 sein, und jede Art darf nur einmal vorkommen."
+      }
     }
   },
   "inspector": {
@@ -1539,7 +1573,9 @@
       "chooseApproach": "Ansatz wählen",
       "triageFollowUps": "Folgeaufgaben entscheiden",
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
-      "reviewFindings": "Befunde prüfen"
+      "reviewFindings": "Befunde prüfen",
+      "dryRun": "Probelauf",
+      "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
     },
     "structure": {
       "title": "Struktur",
@@ -1960,7 +1996,10 @@
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
       },
-      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}",
+      "dryRun": "Probelauf: nichts zusammenführen",
+      "dryRunForced": "Probelauf: Läufe deiner Rolle werden hier nie zusammengeführt",
+      "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
     }
   },
   "layout": {
@@ -2562,6 +2601,7 @@
       "title": "Eine Aufgabe hinzufügen",
       "newTaskIn": "Neue Aufgabe in {container}",
       "typeLabel": "Typ",
+      "typeOther": "Sonstige",
       "types": {
         "feature": "Feature",
         "bug": "Bug",
@@ -2672,6 +2712,7 @@
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
+      "customFieldsInvalid": "Das Formular dieses Aufgabentyps hat sich seit dem Öffnen geändert, daher passen die Antworten nicht mehr zu den Angaben, die es verlangt. Schließen Sie den Dialog und öffnen Sie ihn erneut, um die aktuellen Felder auszufüllen.",
       "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden",
       "review": {
         "prUrl": "Pull Request",
@@ -2819,6 +2860,7 @@
       "start": "Starten",
       "blocked": "Blockiert",
       "startPipeline": "{name} starten",
+      "startPipelineDryRun": "{name} als Probelauf starten: öffnet einen Pull Request, führt nichts zusammen",
       "pipelineFallback": "Pipeline",
       "waitingOn": "Wartet auf: {deps}",
       "blockedByDependenciesTitle": "Durch Abhängigkeiten blockiert",
@@ -2843,6 +2885,10 @@
       "buildSteps": "Build-Schritte",
       "reviewAndApprove": "Überprüfen & freigeben",
       "clickToViewStep": "Klicken, um Schrittdetails & Ausgabe anzuzeigen"
+    },
+    "dryRunToast": {
+      "title": "Probelauf gestartet",
+      "body": "\"{name}\" läuft. Läufe deiner Rolle führen bei dieser Aufgabe nichts zusammen."
     },
     "epic": {
       "label": "Epic",
@@ -3638,7 +3684,8 @@
       "connectSourceNamed": "{source} verbinden",
       "empty": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agents es beim Umsetzen dieser Aufgabe sehen.",
       "emptyInitiative": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Entwerfen dieser Initiative lesen.",
-      "attached": "Dokument angehängt"
+      "attached": "Dokument angehängt",
+      "uploadedHint": "Über die API hochgeladen, daher gibt es keine Quellseite zum Öffnen."
     },
     "templates": {
       "title": "Dokumentvorlagen & Beispiele",
@@ -4817,7 +4864,6 @@
       "titlePlaceholder": "z. B. Die API auf das neue Auth-Modell migrieren",
       "goalField": "Ziel",
       "goalPlaceholder": "Beschreiben Sie das Ziel, die Einschränkungen und den groben Umfang. Der Planer verfeinert dies zu einem mehrphasigen Plan.",
-      "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes).",
       "hint": "Es läuft noch nichts: Führen Sie nach dem Erstellen die Initiative-Planning-Pipeline auf dem Block aus. Sie analysiert die Codebasis und entwirft den mehrphasigen Plan zu Ihrer Freigabe.",
       "submit": "Initiative erstellen",
       "failedTitle": "Die Initiative konnte nicht erstellt werden",
@@ -5030,7 +5076,8 @@
       "confirm": "Verwerfen",
       "keep": "Weiter bearbeiten"
     },
-    "edit": "Bearbeiten"
+    "edit": "Bearbeiten",
+    "pathInvalid": "Geben Sie einen Pfad innerhalb des Repositorys an (kein \"..\", keine absoluten Pfade und keine Backslashes)."
   },
   "access": {
     "noBoardWrite": "Nur-Lese-Zugriff: Sie können dieses Board ansehen, aber nicht bearbeiten.",
@@ -5158,6 +5205,7 @@
         "input_gate_not_parked": "Nichts zu beantworten",
         "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
+        "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
       },
       "description": {
@@ -5194,6 +5242,7 @@
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
+        "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "action": {
@@ -5781,7 +5830,10 @@
     "description": "Beschreibung",
     "overallProgress": "Gesamtfortschritt",
     "dependencies": "Abhängigkeiten",
-    "noDependencies": "Keine"
+    "noDependencies": "Keine",
+    "dryRun": "Probelauf",
+    "dryRunHint": "Die Pipeline ausführen und einen Pull Request öffnen, aber nichts zusammenführen.",
+    "dryRunForcedHint": "Die Risikorichtlinie dieser Aufgabe lässt deine Rolle nur Probeläufe machen."
   },
   "environments": {
     "title": "Ephemere Umgebung",
@@ -6048,7 +6100,10 @@
       "manualHeading": "Nur manuelle Prüfung",
       "manualExplainer": "Diese Richtlinie mergt nie von selbst, jeder Pull Request wartet also unabhängig von den Bewertungen auf eine menschliche Prüfung.",
       "ciHeading": "CI-Fixes",
-      "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt."
+      "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt.",
+      "roleHeading": "Wer den Lauf gestartet hat",
+      "roleSandboxed": "Läufe von {roles} öffnen einen Pull Request und werden nie zusammengeführt.",
+      "roleNarrowed": "Für Läufe von {roles} gelten in einigen Änderungskategorien strengere Regeln."
     }
   },
   "modelPreset": {

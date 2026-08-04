@@ -7,13 +7,14 @@ import {
   listDebugLogsContract,
   listDebugRunsContract,
   listDebugSearchQueriesContract,
+  listDebugToolCallsContract,
 } from '@cat-factory/contracts'
 import type { DebugCursor, DebugPage, RunDebugService } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { authorize } from './publicApiAuth.js'
+import { authorize, refuse } from './publicApiAuth.js'
 import { decodeTimeCursor, encodeCursor } from './publicApiPaging.js'
 
 // The REMOTE DEBUGGING surface (`/api/v1/debug/*`) — the telemetry + provisioning-log reads an
@@ -82,6 +83,23 @@ function readCursor(raw: string | undefined): { cursor?: DebugCursor } | { inval
 const invalidCursor = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
 
+/**
+ * A cursor paired with `order=trajectory`: the ordered read is a bounded prefix and issues no
+ * cursor, so there is nothing the position could have come from. REFUSED rather than ignored,
+ * for the same reason a malformed cursor is: a caller that thinks it is paging and is silently
+ * being re-served the same prefix has an infinite loop with no error to act on.
+ */
+const cursorNotPageable = <E extends AppEnv>(c: Context<E>) =>
+  c.json(
+    {
+      error: {
+        code: 'invalid_cursor',
+        message: 'Trajectory order returns a bounded prefix and cannot be resumed with a cursor',
+      },
+    },
+    400,
+  )
+
 /** Encode a service page's next position back onto the wire (null ⇒ that was the last page). */
 function nextCursorOf<T>(page: DebugPage<T>): string | null {
   return page.nextCursor ? encodeCursor(page.nextCursor.createdAt, page.nextCursor.id) : null
@@ -93,12 +111,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The entry point for a caller that holds no run id: "which of my runs failed recently".
   buildHonoRoute(app, listDebugRunsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -116,12 +129,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's diagnostic map — aggregates only, so this is the call a client always makes first.
   buildHonoRoute(app, getDebugRunContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -133,12 +141,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's model calls. Bodies only when `bodyChars` asks for them, sliced in SQL.
   buildHonoRoute(app, listDebugLlmCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -167,12 +170,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // per-message rows via `?view=messages`.
   buildHonoRoute(app, getDebugLlmCallContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -187,12 +185,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The run's captured dispatches — identity and sizes, never bodies.
   buildHonoRoute(app, listDebugAgentContextContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -212,12 +205,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // One dispatch's prompts, folded fragments and injected files, each budgeted independently.
   buildHonoRoute(app, getDebugAgentContextContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const query = c.req.valid('query')
@@ -233,12 +221,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // The web searches the run's agents performed (small rows, returned whole).
   buildHonoRoute(app, listDebugSearchQueriesContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
@@ -254,17 +237,38 @@ export function publicDebugController(): Hono<AppEnv> {
     return c.json({ queries: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
 
+  // The tool calls the run's agents made. Rows come back whole (both bodies are capped at
+  // capture, so the page size is computable before the request) with `bodies` saying whether
+  // they were retained at all. Two orders: the keyset page every sibling list serves, and the
+  // TRAJECTORY — what the agent did, in the order it did it, which is the read this sink
+  // exists for and the one a client cannot correctly derive from the rows itself.
+  buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const debug = requireDebug(c)
+    if (!debug) return unavailable(c)
+    const workspaceId = gate.auth.workspaceId
+    const runId = c.req.valid('param').runId
+    const query = c.req.valid('query')
+    const cursor = readCursor(query.cursor)
+    if ('invalid' in cursor) return invalidCursor(c)
+    if (query.order === 'trajectory' && cursor.cursor) return cursorNotPageable(c)
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
+    const page = await debug.listToolCalls(workspaceId, runId, {
+      limit: query.limit ?? DEFAULT_SMALL_ROW_PAGE,
+      ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
+      ...(query.jobId ? { jobId: query.jobId } : {}),
+      ...(query.order ? { order: query.order } : {}),
+    })
+    return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
+  })
+
   // The run's provisioning event log: how its infrastructure came up, or why it didn't. For a
   // run whose container never started this is the ONLY record of the cause — it has no model
   // telemetry at all.
   buildHonoRoute(app, listDebugLogsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId

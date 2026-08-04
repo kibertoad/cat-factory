@@ -30,9 +30,14 @@ from .models import (
     ListDebugLogsResponse,
     ListDebugRunsResponse,
     ListDebugSearchQueriesResponse,
+    ListDebugToolCallsOrder,
+    ListDebugToolCallsResponse,
     ListPublicJobsResponse,
     LlmCallOutcome,
     Notification,
+    NotificationWebhook,
+    PublicApproveStep,
+    PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
     PublicIncorporate,
@@ -40,17 +45,24 @@ from .models import (
     PublicJobAccepted,
     PublicJobStatus,
     PublicNotificationList,
+    PublicNotificationWebhook,
     PublicPipelineList,
+    PublicRejectStep,
     PublicReplyFinding,
+    PublicRequestGateFix,
+    PublicRequestStepChanges,
+    PublicResolveAgentDecision,
     PublicResolveExceeded,
     PublicResolveInputGate,
     PublicResolveJudge,
+    PublicResolvePrReview,
     PublicRun,
     PublicServiceList,
     PublicSetFindingStatus,
     PublicTask,
     PublicTaskList,
     PublicUsage,
+    PutNotificationWebhook,
     RunStatus,
     StartPublicTask,
     TaskStatus,
@@ -196,7 +208,10 @@ class TasksResource:
     def create(self, service_id: str, body: CreatePublicTask, timeout: float | None = None) -> PublicTask:
         """Create a task under a service
         Create a task inside a service frame the key’s workspace owns. The task starts in
-        the `planned` state; start it with the start endpoint.
+        the `planned` state; start it with the start endpoint. Optionally file it FROM a
+        tracker ticket, and/or attach the requirements documents it is to be built against
+        (named in a connected document source, or uploaded inline): the only way to get
+        spec-sized input onto a repository-touching run.
         `POST /api/v1/services/{serviceId}/tasks` (operation `createPublicTask`).
         """
         raw = self._transport.request(
@@ -430,6 +445,62 @@ class NotificationsResource:
         return PublicNotificationList.from_dict(raw)
 
 
+class WebhookResource:
+    """The workspace's one outbound endpoint: register, inspect or remove the receiver that
+    notifications, run-lifecycle events and health alerts are pushed to.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def delete(self, timeout: float | None = None) -> None:
+        """Remove the outbound webhook
+        Deregister the endpoint; deliveries stop. Idempotent.
+        `DELETE /api/v1/notification-webhook` (operation `deletePublicNotificationWebhook`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/notification-webhook",
+            query=None,
+            timeout=timeout,
+        )
+
+    def get(self, timeout: float | None = None) -> PublicNotificationWebhook:
+        """Read the workspace's outbound webhook
+        The endpoint this workspace delivers notifications, run-lifecycle events and
+        platform-health alerts to, or `{ "webhook": null }` when none is registered. The
+        signing secret is never returned; `hasSecret` reports only whether one is set.
+        `GET /api/v1/notification-webhook` (operation `getPublicNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/notification-webhook",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicNotificationWebhook.from_dict(raw)
+
+    def set(self, body: PutNotificationWebhook, timeout: float | None = None) -> NotificationWebhook:
+        """Register or update the outbound webhook
+        Register the HTTPS endpoint deliveries are POSTed to, or update the one already
+        registered. Every omitted field keeps its stored value, so subscribing to run events
+        is a one-field call that re-sends neither the URL nor the secret. `url` is required
+        only on the first call, when there is nothing registered to keep; omitting it
+        otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret;
+        omitting it keeps the current one. The endpoint must be `https:` and publicly
+        routable unless the deployment widened its allow-list.
+        `PUT /api/v1/notification-webhook` (operation `putPublicNotificationWebhook`).
+        """
+        raw = self._transport.request(
+            "PUT",
+            f"/api/v1/notification-webhook",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return NotificationWebhook.from_dict(raw)
+
+
 class UsageResource:
     """The billing period's metered budget position and the per-model breakdown behind it."""
 
@@ -456,12 +527,83 @@ class UsageResource:
 
 
 class DecisionsResource:
-    """A parked run's human decisions — requirement findings, forks, judge verdicts and the
-    pre-token input gate.
+    """Every way a run stops for a person: approval gates, review and brainstorm loops, forks,
+    judge verdicts, PR review findings and the human-verdict gates.
     """
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
+
+    def answer_agent_decision(self, run_id: str, decision_id: str, body: PublicResolveAgentDecision, timeout: float | None = None) -> PublicDecisionList:
+        """Answer an agent-raised decision
+        Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with
+        the choice folded in, rather than advancing past it. The choice is taken verbatim,
+        so it may be one of the offered options or a steer of your own. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/questions/{decisionId}/answer` (operation
+        `resolvePublicRunAgentDecision`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/questions/{_quote(decision_id)}/answer",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def approve_step(self, run_id: str, approval_id: str, body: PublicApproveStep, timeout: float | None = None) -> PublicDecisionList:
+        """Approve a parked step
+        Approve the proposal a gated step is holding up, optionally replacing it with an
+        edited one (the edit is what flows to every downstream step), and advance the run.
+        The `approvalId` comes from the run's decision list; passing it back is what makes a
+        racing app user and a racing integration resolve the same gate. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve` (operation
+        `approvePublicRunStep`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/approve",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def approve_visual_confirmation(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Approve a visual-confirmation gate
+        Approve the captured screenshots against the reference designs and advance the run.
+        The images themselves are not readable over this API — the decision carries only
+        artifact ids — so approving on the projection alone approves screenshots you have
+        not seen. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/visual-confirmation/approve` (operation
+        `approvePublicRunVisualConfirm`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/visual-confirmation/approve",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def challenge_pr_review_finding(self, run_id: str, finding_id: str, body: PublicChallengePrReviewFinding, timeout: float | None = None) -> PublicDecisionList:
+        """Challenge a PR review finding
+        Dispatch a read-only investigator to re-examine one finding against the full source,
+        optionally with a specific concern. It upholds, strengthens or retracts the finding,
+        and the review re-parks carrying the verdict. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge`
+        (operation `challengePublicRunPrReviewFinding`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/findings/{_quote(finding_id)}/challenge",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
 
     def choose_fork(self, run_id: str, body: PublicChooseFork, timeout: float | None = None) -> PublicDecisionList:
         """Choose an implementation approach
@@ -479,6 +621,37 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def confirm_human_test(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Confirm a human-test gate
+        Confirm the change works in the ephemeral environment: it is torn down and the run
+        advances. The decision carries the environment URL to exercise; confirming without
+        exercising it approves untested work. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/human-test/confirm` (operation
+        `confirmPublicRunHumanTest`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/human-test/confirm",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def dismiss_pr_review_finding(self, run_id: str, finding_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss a PR review finding
+        Drop one finding from the parked review entirely. Curation rather than a resolution:
+        the run stays parked. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss`
+        (operation `dismissPublicRunPrReviewFinding`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/findings/{_quote(finding_id)}/dismiss",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def incorporate(self, run_id: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
         """Incorporate the answers
         Fold the recorded answers into one standardized requirements document. Asynchronous
@@ -490,6 +663,40 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/requirements/incorporate",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def incorporate_brainstorm(self, run_id: str, stage: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
+        """Incorporate brainstorm picks
+        Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the
+        session `incorporating` while the durable driver folds and re-runs in the
+        background. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate` (operation
+        `incorporatePublicRunBrainstorm`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/incorporate",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def incorporate_clarity(self, run_id: str, body: PublicIncorporate, timeout: float | None = None) -> PublicDecisionList:
+        """Incorporate clarity answers
+        Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the
+        response shows the review `incorporating` while the durable driver folds and
+        re-reviews in the background. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/clarity/incorporate` (operation
+        `incorporatePublicRunClarity`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/incorporate",
             body=_encode(body),
             query=None,
             timeout=timeout,
@@ -526,6 +733,86 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def proceed_brainstorm(self, run_id: str, stage: str, timeout: float | None = None) -> PublicDecisionList:
+        """Proceed past a brainstorm
+        Settle the brainstorm with the last converged direction and advance the parked run.
+        Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed` (operation
+        `proceedPublicRunBrainstorm`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/proceed",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def proceed_clarity(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Proceed past the clarity review
+        Settle the clarity phase with the last clarified report and advance the parked run.
+        Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/clarity/proceed` (operation
+        `proceedPublicRunClarity`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/proceed",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def reject_step(self, run_id: str, approval_id: str, body: PublicRejectStep, timeout: float | None = None) -> PublicDecisionList:
+        """Reject a parked step
+        Reject the gated proposal: the run stops entirely, recording a terminal `rejected`
+        failure the board can retry. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject` (operation
+        `rejectPublicRunStep`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/reject",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def reply_to_brainstorm_option(self, run_id: str, stage: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
+        """Respond to a brainstorm option
+        Pick or steer one of the options the brainstorm agent proposed, for the named stage
+        (`requirements` or `architecture`). A task may hold one live session per stage at
+        once. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply`
+        (operation `replyPublicRunBrainstormOption`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/options/{_quote(item_id)}/reply",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def reply_to_clarity_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
+        """Answer a clarity (bug-triage) finding
+        Record an answer to one clarity-review finding — the bug-report twin of the
+        requirements loop. Returns the run's updated decision list. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply` (operation
+        `replyPublicRunClarityFinding`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/findings/{_quote(item_id)}/reply",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def reply_to_finding(self, run_id: str, item_id: str, body: PublicReplyFinding, timeout: float | None = None) -> PublicDecisionList:
         """Answer a review finding
         Record an answer to one reviewer finding. Returns the run's updated decision list.
@@ -542,6 +829,57 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def request_human_test_fix(self, run_id: str, body: PublicRequestGateFix, timeout: float | None = None) -> PublicDecisionList:
+        """Request a fix from a human-test gate
+        Submit findings against the tested environment and dispatch a fixer, which commits
+        onto the PR branch before the environment is rebuilt. The findings ARE the fixer
+        prompt, so they cannot be blank. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/human-test/request-fix` (operation
+        `requestPublicRunHumanTestFix`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/human-test/request-fix",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def request_step_changes(self, run_id: str, approval_id: str, body: PublicRequestStepChanges, timeout: float | None = None) -> PublicDecisionList:
+        """Request changes on a parked step
+        Send the gated step back to re-run with your guidance folded in. Unlike the in-app
+        twin this takes freeform feedback only: anchored per-block comments address source
+        line ranges of a rendered proposal, which a headless caller never rendered. Requires
+        a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes`
+        (operation `requestPublicRunStepChanges`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/request-changes",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def request_visual_confirmation_fix(self, run_id: str, body: PublicRequestGateFix, timeout: float | None = None) -> PublicDecisionList:
+        """Request a fix from a visual-confirmation gate
+        Submit findings against the captured screenshots and dispatch a fixer. The findings
+        ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/visual-confirmation/request-fix` (operation
+        `requestPublicRunVisualConfirmFix`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/visual-confirmation/request-fix",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def re_review(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
         """Re-review the incorporated document
         Run one more reviewer pass over the incorporated document. On convergence the parked
@@ -552,6 +890,70 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/requirements/re-review",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def re_review_brainstorm(self, run_id: str, stage: str, timeout: float | None = None) -> PublicDecisionList:
+        """Re-run a brainstorm pass
+        Run one more brainstorm pass against the converged direction. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review` (operation
+        `reReviewPublicRunBrainstorm`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/re-review",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def re_review_clarity(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Re-triage the clarified report
+        Run one more triage pass over the incorporated bug report. On convergence the parked
+        run advances. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/clarity/re-review` (operation
+        `reReviewPublicRunClarity`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/re-review",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def resolve_brainstorm_exceeded(self, run_id: str, stage: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+        """Resolve a brainstorm at its iteration cap
+        Pick how a brainstorm that exhausted its pass budget proceeds: one more round,
+        proceed with the last converged direction, or stop and reset the task. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded` (operation
+        `resolvePublicRunBrainstormExceeded`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/resolve-exceeded",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def resolve_clarity_exceeded(self, run_id: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+        """Resolve a clarity review at its iteration cap
+        Pick how a clarity review that exhausted its pass budget proceeds: one more round,
+        proceed with the last clarified report, or stop and reset the task. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/clarity/resolve-exceeded` (operation
+        `resolvePublicRunClarityExceeded`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/resolve-exceeded",
+            body=_encode(body),
             query=None,
             timeout=timeout,
         )
@@ -576,10 +978,10 @@ class DecisionsResource:
 
     def resolve_input_gate(self, run_id: str, body: PublicResolveInputGate, timeout: float | None = None) -> PublicDecisionList:
         """Resolve a run parked on the task's input check
-        Settle a run the pre-token input gate parked before its first agent step because the
-        task states nothing an agent could act on. `recheck` re-evaluates the task as it now
-        stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not
-        taken on trust) and releases the run only if the blocking findings are gone; a
+        Settle a run the pre-dispatch input gate parked before its first agent step because
+        the task states nothing an agent could act on. `recheck` re-evaluates the task as it
+        now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified,
+        not taken on trust) and releases the run only if the blocking findings are gone; a
         still-blocked verdict comes back as an ordinary 200 with refreshed findings.
         `proceed` waives the findings, which stay on the run as an `overridden` record.
         Requires a `decide`-scope key.
@@ -611,6 +1013,75 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def resolve_pr_review(self, run_id: str, body: PublicResolvePrReview, timeout: float | None = None) -> PublicDecisionList:
+        """Resolve a parked PR deep review
+        Record the curated finding selection and say what to do with it: `finish` completes
+        the read-only review, `fix` hands the selected findings to a fixer that commits onto
+        the reviewed PR branch, `post` publishes them as inline PR review comments. `fix`
+        and `post` need at least one selected finding and act on the real pull request.
+        Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/pr-review/resolve` (operation
+        `resolvePublicRunPrReview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/resolve",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def resolve_step_exceeded(self, run_id: str, approval_id: str, body: PublicResolveExceeded, timeout: float | None = None) -> PublicDecisionList:
+        """Resolve a companion gate at its rework cap
+        Pick how a quality companion that spent its automatic rework budget proceeds: one
+        more round, proceed with the output as it stands, or stop and reset the task. A gate
+        in this state reports `exceeded: true` and refuses the plain approve. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded`
+        (operation `resolvePublicRunStepExceeded`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/resolve-exceeded",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def set_brainstorm_option_status(self, run_id: str, stage: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss or reopen a brainstorm option
+        Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options
+        block incorporation. Requires a `decide`-scope key.
+        `PATCH /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}`
+        (operation `setPublicRunBrainstormOptionStatus`).
+        """
+        raw = self._transport.request(
+            "PATCH",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/brainstorm/{_quote(stage)}/options/{_quote(item_id)}",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def set_clarity_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss or reopen a clarity finding
+        Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake.
+        Only `open` findings block incorporation. Requires a `decide`-scope key.
+        `PATCH /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}` (operation
+        `setPublicRunClarityFindingStatus`).
+        """
+        raw = self._transport.request(
+            "PATCH",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/findings/{_quote(item_id)}",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def set_finding_status(self, run_id: str, item_id: str, body: PublicSetFindingStatus, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss or reopen a finding
         Dismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a
@@ -629,8 +1100,8 @@ class DecisionsResource:
 
 
 class DebugResource:
-    """A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.
-
+    """A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls
+    it made, infra logs.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -839,6 +1310,40 @@ class DebugResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
+    def list_tool_calls(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> ListDebugToolCallsResponse:
+        """List a run's tool calls
+        The tool calls the run’s agents made, in the order they made them — which command,
+        against what, and what came back. The half of “how did this diff come about” that
+        neither the diff nor a prompt body answers. Arguments and results are retained only
+        when the deployment records agent context AND the workspace has not opted out;
+        `bodies` says which, so an empty `args` is never mistaken for a call that took none.
+        `GET /api/v1/debug/runs/{runId}/tool-calls` (operation `listDebugToolCalls`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/debug/runs/{_quote(run_id)}/tool-calls",
+            query={"limit": limit, "cursor": cursor, "jobId": job_id, "order": order},
+            timeout=timeout,
+        )
+        return ListDebugToolCallsResponse.from_dict(raw)
+
+    def list_tool_calls_all(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> Iterator[Any]:
+        """Every `toolCalls` across every page of `list_tool_calls()`, as they arrive.
+        Follows `next_cursor` until the server reports no further page. A page may
+        legitimately come back empty while `next_cursor` is still set, so this pages until
+        the cursor is None rather than stopping at the first empty page.
+        Yields items of `ListDebugToolCallsResponse.tool_calls`.
+        """
+        page_cursor = cursor
+        while True:
+            page = self.list_tool_calls(run_id, limit=limit, job_id=job_id, order=order, cursor=page_cursor, timeout=timeout)
+            yield from page.tool_calls
+            if not page.next_cursor:
+                return
+            if page.next_cursor == page_cursor:
+                raise _repeated_cursor()
+            page_cursor = page.next_cursor
+
 
 def build_resources(transport: Transport) -> dict[str, Any]:
     """Every resource client, keyed by the attribute it is mounted at on the client."""
@@ -848,6 +1353,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),
         "notifications": NotificationsResource(transport),
+        "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),

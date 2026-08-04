@@ -204,18 +204,26 @@ routes on and an empty title is honest about what could be read.
   is a headless integration whose operator is already using the API; a settings panel is worth
   adding when a human-facing deployment wants one, and it would now carry the `runEvents` selector
   too.
-- **Tier 4 stays deferred, on demand only**: `POST /bootstrap` (container-backed and force-pushes to
-  GitHub, breaking the "public runs never touch GitHub" invariant), document/requirements ingestion
-  at task creation (wants the documents model exposed externally), and serving
-  `GET /api/v1/openapi.json` (trivial once wanted; the spec already ships as a repo file, so an
-  endpoint is only packaging).
+- **Tier 4 is now one item, not three**: `POST /bootstrap` stays deferred (container-backed and
+  force-pushes to GitHub, breaking the "public runs never touch GitHub" invariant), and serving
+  `GET /api/v1/openapi.json` stays unbuilt but trivial (the spec already ships as a repo file, so an
+  endpoint is only packaging). Document/requirements ingestion at task creation SHIPPED, as slice D2
+  of [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md): the create
+  takes an ordered `documents` list, each entry naming a page in a connected source or carrying the
+  text itself. It landed because the gap it names was never really about the documents model: it was
+  that this surface had no spec-sized input at all for a run that touches a repository, `description`
+  being a task's own framing at 2,000 characters and the 50,000-character `POST /jobs` brief being
+  inline-only.
 - **The parked-decision surface is INCOMPLETE, and what is missing is tracked in
   [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md)**: the public
   decision surface answers three park types (requirements review, fork, judge) while the engine has
   more, and both start paths admit (for a `decide`-scope key; since
   [ADR 0034](./0034-public-api-stability.md) the board start applies the same parking rule as
   `POST /jobs`) a run that can park on one of the others. That tracker ranks the additions, and
-  records what was considered and rejected.
+  records what was considered and rejected. **Since largely closed**: the tracker's A1–A6 landed,
+  so every park a pipeline can carry is answerable except `human-review`, whose answer is a person
+  approving the pull request on the VCS host rather than an API call. The tracker stays the place
+  to look: it records the two park surfaces that enumeration missed.
 - **An incomplete surface must not ADVERTISE what it cannot do.** The `pipeline_requires_decide_scope`
   refusal originally told the operator a `decide` key answers the park through
   `/api/v1/runs/:runId/decisions`, which held for one of the five parks it named: selling a scope

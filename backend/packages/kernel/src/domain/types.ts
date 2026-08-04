@@ -21,9 +21,13 @@ export type {
   CreateTaskType,
   TaskTypeFields,
   // The wire shape of a deployment-registered task type (the `TaskTypeRegistry`'s currency),
-  // re-exported here so an org package registering one imports its whole vocabulary from kernel.
+  // re-exported here so an org package registering one imports its whole vocabulary from kernel:
+  // the descriptor, its field shape, and the shared form-value bag its answers land in.
   CustomTaskType,
   TaskTypeFieldDescriptor,
+  TaskTypeFieldType,
+  DescriptorFieldValue,
+  DescriptorFieldValues,
   DocKind,
   Decision,
   EnvConfigRepairJob,
@@ -34,7 +38,7 @@ export type {
   ExecutionInstance,
   ExecutionStatus,
   IntakeOrigin,
-  // The pre-token input gate's wire vocabulary (see `domain/input-gate.ts` for its check).
+  // The pre-dispatch input gate's wire vocabulary (see `domain/input-gate.ts` for its check).
   InputGateIssue,
   InputGateIssueCode,
   InputGateMode,
@@ -124,6 +128,7 @@ export type {
   UserSecretDescriptor,
   // Document-source integration projections + planning shapes.
   DocumentSourceKind,
+  DocumentOrigin,
   DocumentLinkRole,
   DocumentSourceDescriptor,
   CredentialField,

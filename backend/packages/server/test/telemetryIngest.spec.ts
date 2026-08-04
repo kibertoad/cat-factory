@@ -1,6 +1,11 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import type { AgentContextSnapshot, AgentSearchQuery, LlmCallMetric } from '@cat-factory/kernel'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  AgentToolCall,
+  LlmCallMetric,
+} from '@cat-factory/kernel'
 import { HmacSigner, TOKEN_AUDIENCE } from '../src/auth/signing.js'
 import { mintMachineToken } from '../src/auth/machineToken.js'
 import type { AppEnv, ServerContainer } from '../src/http/env.js'
@@ -99,14 +104,41 @@ function search(
   }
 }
 
+function toolCall(overrides: Partial<AgentToolCall> & Pick<AgentToolCall, 'id'>): AgentToolCall {
+  return {
+    workspaceId: 'ws_1',
+    executionId: 'exe_1',
+    agentKind: 'coder',
+    jobId: 'job_1',
+    seq: 0,
+    tool: 'bash',
+    startedAt: 1,
+    endedAt: 2,
+    ok: true,
+    bodies: 'stored',
+    args: '{"command":"ls"}',
+    result: 'a.ts',
+    argsDropped: 0,
+    resultDropped: 0,
+    createdAt: 1,
+    ...overrides,
+  }
+}
+
 interface Stored {
   metrics: LlmCallMetric[]
   snapshots: AgentContextSnapshot[]
   searchQueries: AgentSearchQuery[]
+  toolCalls: AgentToolCall[]
 }
 
 function makeApp(opts: { repositories?: boolean; throws?: boolean; stored?: Stored } = {}) {
-  const stored: Stored = opts.stored ?? { metrics: [], snapshots: [], searchQueries: [] }
+  const stored: Stored = opts.stored ?? {
+    metrics: [],
+    snapshots: [],
+    searchQueries: [],
+    toolCalls: [],
+  }
   const container = {
     repositories:
       opts.repositories === false
@@ -126,6 +158,9 @@ function makeApp(opts: { repositories?: boolean; throws?: boolean; stored?: Stor
             },
             agentSearchQueryRepository: {
               recordMany: async (rows: AgentSearchQuery[]) => stored.searchQueries.push(...rows),
+            },
+            agentToolCallRepository: {
+              recordMany: async (rows: AgentToolCall[]) => stored.toolCalls.push(...rows),
             },
           },
     config: { auth: { sessionSecret: SECRET } },
@@ -158,7 +193,7 @@ function ingest(app: Hono<AppEnv>, token: string | undefined, body: unknown) {
 }
 
 describe('POST /internal/telemetry/ingest', () => {
-  it('appends an in-scope run’s batch across the three sinks', async () => {
+  it('appends an in-scope run’s batch across every sink', async () => {
     const { app, stored } = makeApp()
     const res = await ingest(app, await machineToken(), {
       workspaceId: 'ws_1',
@@ -166,15 +201,17 @@ describe('POST /internal/telemetry/ingest', () => {
       metrics: [metric({ id: 'm1' }), metric({ id: 'm2' })],
       snapshots: [snapshot({ id: 's1' })],
       searchQueries: [search({ id: 'q1' })],
+      toolCalls: [toolCall({ id: 't1' })],
     })
     expect(res.status).toBe(200)
     expect((await res.json()) as unknown).toEqual({
       ok: true,
-      stored: { metrics: 2, snapshots: 1, searchQueries: 1 },
+      stored: { metrics: 2, snapshots: 1, searchQueries: 1, toolCalls: 1 },
     })
     expect(stored.metrics.map((m) => m.id)).toEqual(['m1', 'm2'])
     expect(stored.snapshots.map((s) => s.id)).toEqual(['s1'])
     expect(stored.searchQueries.map((q) => q.id)).toEqual(['q1'])
+    expect(stored.toolCalls.map((t) => t.id)).toEqual(['t1'])
   })
 
   it('stamps the batch’s scope onto every row, discarding what the rows claim', async () => {
@@ -321,7 +358,7 @@ describe('POST /internal/telemetry/ingest', () => {
       executionId: 'exe_1',
       metrics: [metric({ id: 'm1' })],
     })
-    expect(result).toEqual({ metrics: 1, snapshots: 0, searchQueries: 0 })
+    expect(result).toEqual({ metrics: 1, snapshots: 0, searchQueries: 0, toolCalls: 0 })
     expect(stored.metrics.map((m) => m.id)).toEqual(['m1'])
   })
 

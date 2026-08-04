@@ -5,15 +5,17 @@ import { defineEnvironmentsConformance } from './integration-environments.js'
 import { defineProvisioningConformance } from './integration-provisioning.js'
 import { definePublicDebugConformance } from './integration-public-debug.js'
 import { definePublicDecisionsConformance } from './integration-public-decisions.js'
+import { definePublicMcpConformance } from './integration-public-mcp.js'
+import { definePublicWebhookConformance } from './integration-public-webhooks.js'
 import { defineSecretsConformance } from './integration-secrets.js'
 import { defineSourcesConformance } from './integration-sources.js'
 import { defineTrackerWebhookConformance } from './integration-tracker-webhooks.js'
 
 // The shared integration-slice conformance (credentials / provisioning / secrets / source
-// integrations / inbound tracker webhooks / environments / the public-API decision + remote
-// debugging surfaces), split into cohesive sibling files so no single suite file
-// grows unbounded. Each `defineX` emits its nested `describe` blocks inside the one
-// per-facade `[name] conformance` group, so the reported test tree is unchanged.
+// integrations / inbound tracker webhooks / environments / the public-API decision, remote
+// debugging, outbound-webhook management and hosted MCP surfaces), split into cohesive sibling
+// files so no single suite file grows unbounded. Each `defineX` emits its nested `describe` blocks
+// inside the one per-facade `[name] conformance` group, so the reported test tree is unchanged.
 export function defineIntegrationConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
     defineCredentialsConformance(harness)
@@ -24,5 +26,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     defineEnvironmentsConformance(harness)
     definePublicDecisionsConformance(harness)
     definePublicDebugConformance(harness)
+    definePublicWebhookConformance(harness)
+    definePublicMcpConformance(harness)
   })
 }

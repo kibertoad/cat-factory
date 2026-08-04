@@ -195,14 +195,18 @@ describe('public-API admission', () => {
   describe('parkingRefusalMessage', () => {
     it('promises an answer path ONLY for surfaces the decision surface really serves', () => {
       // The defect this replaced: the old fixed sentence named all four park types and told the
-      // operator a `decide` key answers them through /api/v1/runs/:runId/decisions. Three of them
-      // are answerable only in the app, so the advice bought a wider-scoped key and a run whose
-      // only exit is cancel.
+      // operator a `decide` key answers them through /api/v1/runs/:runId/decisions. Most were
+      // answerable only in the app, so the advice bought a wider-scoped key and a run whose only
+      // exit is cancel.
+      //
+      // `human-review` is the last surface in that position, and unlike the others it is not a
+      // slice waiting to be built: its answer is a person approving the PR on the VCS host, so
+      // there is nothing for this surface to offer and the refusal must not pretend otherwise.
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['clarity-review'] }, { inputGateBlocks: false }),
+        publicRunParkSurfaces({ agentKinds: ['human-review'] }, { inputGateBlocks: false }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
-      expect(message).toContain('clarity-review')
+      expect(message).toContain('human-review')
       expect(message).not.toContain('/api/v1/runs/:runId/decisions')
       expect(message).toContain('POST /api/v1/jobs/:id/cancel')
     })
@@ -213,7 +217,7 @@ describe('public-API admission', () => {
       // name a route that 404s for the run it is about. `cancelPath` is required rather than
       // defaulted precisely so a third start surface cannot inherit either of these by accident.
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['clarity-review'] }, { inputGateBlocks: false }),
+        publicRunParkSurfaces({ agentKinds: ['human-review'] }, { inputGateBlocks: false }),
         { cancelPath: PUBLIC_TASK_STOP_PATH },
       )
       expect(message).toContain('POST /api/v1/tasks/:taskId/stop')
@@ -223,7 +227,7 @@ describe('public-API admission', () => {
     it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {
       const message = parkingRefusalMessage(
         publicRunParkSurfaces(
-          { agentKinds: ['requirements-review', 'initiative-breakdown'], gates: [false, true] },
+          { agentKinds: ['requirements-review', 'human-review'] },
           { inputGateBlocks: false },
         ),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
@@ -231,7 +235,24 @@ describe('public-API admission', () => {
       expect(message).toContain(
         "Start it with a 'decide'-scope key, which can answer requirements-review through /api/v1/runs/:runId/decisions.",
       )
-      expect(message).toContain('cannot answer approval-gate yet')
+      expect(message).toContain('cannot answer human-review yet')
+    })
+
+    it('promises the answer path for an approval gate, the commonest park of all', () => {
+      // The pilot slice of docs/initiatives/public-api-additions.md, and the one an operator meets
+      // first: any pipeline can carry a gated step. While it was unanswerable this refusal told
+      // them a `decide` key bought nothing but a cancel.
+      const message = parkingRefusalMessage(
+        publicRunParkSurfaces(
+          { agentKinds: ['initiative-breakdown'], gates: [true] },
+          { inputGateBlocks: false },
+        ),
+        { cancelPath: PUBLIC_JOB_CANCEL_PATH },
+      )
+      expect(message).toContain(
+        "Start it with a 'decide'-scope key, which can answer approval-gate through /api/v1/runs/:runId/decisions.",
+      )
+      expect(message).not.toContain('cancel')
     })
 
     it('mentions no cancel-only caveat when every park is answerable', () => {
@@ -279,7 +300,7 @@ describe('public-API admission', () => {
 })
 
 describe('publicRunParkSurfaces', () => {
-  // The regression this pins: the PRE-TOKEN INPUT GATE parks on the shape of the TASK, so
+  // The regression this pins: the PRE-DISPATCH INPUT GATE parks on the shape of the TASK, so
   // `parkSurfacesOf` (which reads the step chain) cannot see it. A `write` key could start a
   // title-only task under a pipeline that parks nowhere and get a run that stopped before its
   // first dispatch with nothing able to answer it and only cancel as a way out.

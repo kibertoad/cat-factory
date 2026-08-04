@@ -1,6 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { loadCode } from './coverageScan.js'
 
 // ---------------------------------------------------------------------------
 // Every HTTP route that STARTS a run has to decide whether the run is attributed to a workspace
@@ -19,9 +19,13 @@ import { describe, expect, it } from 'vitest'
 // It cannot anchor on the engine (`ExecutionService.start` is reached by schedules and loops that
 // legitimately pin nothing) and it cannot be a typecheck (`initiatedByRole` is optional, and must
 // stay optional for exactly those callers).
+//
+// Reads go through `coverageScan`, so every assertion below sees CODE and not prose. A guard that
+// matches raw text is satisfied by a file that merely NAMES the literal it is supposed to pass,
+// which is how the sibling `intakeOrigin` spec stayed green over a call site missing its value.
 // ---------------------------------------------------------------------------
 
-const SRC = join(import.meta.dirname, '..', 'src')
+const ROOTS: Record<string, string> = { server: join(import.meta.dirname, '..', 'src') }
 
 /**
  * Routes that start a run ON BEHALF OF A SIGNED-IN PERSON acting on their own board. Each must
@@ -29,8 +33,8 @@ const SRC = join(import.meta.dirname, '..', 'src')
  * read of the gate's context — one authority for membership (ADR 0025), one shape to audit.
  */
 const ATTRIBUTED = [
-  'modules/execution/ExecutionController.ts',
-  'modules/bugHunt/BugHuntController.ts',
+  'server:modules/execution/ExecutionController.ts',
+  'server:modules/bugHunt/BugHuntController.ts',
 ]
 
 /**
@@ -40,25 +44,17 @@ const ATTRIBUTED = [
  * the policy that governed every run before role scoping existed.
  */
 const UNATTRIBUTED: Record<string, string> = {
-  'modules/publicApi/PublicApiController.ts':
+  'server:modules/publicApi/PublicApiController.ts':
     'a headless `/api/v1` start authenticates as an API KEY, not as a workspace member: it holds ' +
     'scopes rather than a tier, so there is no role to pin and guessing one would either hand it ' +
     'the widest rules in the preset or sandbox every integration in the deployment.',
 }
 
-/** Every `.ts` under `src/`, recursively. */
-function sourceFiles(dir: string, prefix = ''): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-    if (entry.isDirectory()) return sourceFiles(join(dir, entry.name), rel)
-    return entry.name.endsWith('.ts') ? [rel] : []
-  })
-}
-
 describe('run-start routes classify their initiator role', () => {
-  const starters = sourceFiles(SRC).filter((rel) =>
-    readFileSync(join(SRC, rel), 'utf8').includes('executionService.start('),
-  )
+  const code = loadCode(ROOTS)
+  const starters = [...code.entries()]
+    .filter(([, source]) => source.includes('executionService.start('))
+    .map(([key]) => key)
 
   it('finds the start routes at all (the scan itself must not silently match nothing)', () => {
     // A rename of `executionService.start` would otherwise turn every assertion below vacuous.
@@ -67,29 +63,29 @@ describe('run-start routes classify their initiator role', () => {
 
   it('classifies every start route as attributed or deliberately unattributed', () => {
     const unclassified = starters.filter(
-      (rel) => !ATTRIBUTED.includes(rel) && !(rel in UNATTRIBUTED),
+      (key) => !ATTRIBUTED.includes(key) && !(key in UNATTRIBUTED),
     )
     expect(unclassified).toEqual([])
   })
 
   it('makes every attributed route pin the role through the one accessor', () => {
-    for (const rel of ATTRIBUTED) {
-      const source = readFileSync(join(SRC, rel), 'utf8')
-      expect(starters, `${rel} no longer starts a run`).toContain(rel)
-      expect(source, `${rel} must pass initiatedByRole`).toContain('initiatedByRole:')
-      expect(source, `${rel} must read the role via runInitiatorRole`).toContain(
+    for (const key of ATTRIBUTED) {
+      const source = code.get(key)!
+      expect(starters, `${key} no longer starts a run`).toContain(key)
+      expect(source, `${key} must pass initiatedByRole`).toContain('initiatedByRole:')
+      expect(source, `${key} must read the role via runInitiatorRole`).toContain(
         'runInitiatorRole(c)',
       )
       // A hand-rolled read is the drift this guards: it compiles, it works, and it is a second
       // place to get the dev-open `null` fallback wrong.
-      expect(source, `${rel} must not re-derive the role`).not.toContain("c.get('workspaceAccess')")
+      expect(source, `${key} must not re-derive the role`).not.toContain("c.get('workspaceAccess')")
     }
   })
 
   it('keeps a stated reason beside every unattributed route', () => {
-    for (const [rel, reason] of Object.entries(UNATTRIBUTED)) {
-      expect(starters, `${rel} no longer starts a run`).toContain(rel)
-      expect(reason.length, `${rel} needs a real reason, not a placeholder`).toBeGreaterThan(40)
+    for (const [key, reason] of Object.entries(UNATTRIBUTED)) {
+      expect(starters, `${key} no longer starts a run`).toContain(key)
+      expect(reason.length, `${key} needs a real reason, not a placeholder`).toBeGreaterThan(40)
     }
   })
 })

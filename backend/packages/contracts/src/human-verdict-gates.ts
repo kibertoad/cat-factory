@@ -59,8 +59,17 @@ export type HumanTestRound = v.InferOutput<typeof humanTestRoundSchema>
  *   - `resolving_conflicts` — a `conflict-resolver` job (from a conflicting pull-main) is in flight.
  *   - `passed`             — the human confirmed; the env is torn down and the run advances.
  */
+export const humanTestPhaseSchema = v.picklist([
+  'provisioning',
+  'awaiting_human',
+  'fixing',
+  'resolving_conflicts',
+  'passed',
+])
+export type HumanTestPhase = v.InferOutput<typeof humanTestPhaseSchema>
+
 export const humanTestStepStateSchema = v.object({
-  phase: v.picklist(['provisioning', 'awaiting_human', 'fixing', 'resolving_conflicts', 'passed']),
+  phase: humanTestPhaseSchema,
   /** The live ephemeral environment (null in degraded manual mode / after destroy). */
   environment: v.optional(v.nullable(humanTestEnvironmentSchema)),
   /**
@@ -130,8 +139,11 @@ export type VisualConfirmRound = v.InferOutput<typeof visualConfirmRoundSchema>
  * until that loop is wired — see the visual-confirmation handover doc — so it is intentionally
  * absent from the picklist rather than carried as dead state.)
  */
+export const visualConfirmPhaseSchema = v.picklist(['awaiting_human', 'fixing', 'approved'])
+export type VisualConfirmPhase = v.InferOutput<typeof visualConfirmPhaseSchema>
+
 export const visualConfirmStepStateSchema = v.object({
-  phase: v.picklist(['awaiting_human', 'fixing', 'approved']),
+  phase: visualConfirmPhaseSchema,
   /** The actual-vs-reference pairs the human reviews, refreshed on each (re)capture. */
   pairs: v.optional(v.array(visualConfirmPairSchema)),
   /** Set when no screenshots could be gathered (no UI tester ran / no storage) — manual mode. */

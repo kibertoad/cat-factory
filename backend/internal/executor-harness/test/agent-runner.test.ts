@@ -35,6 +35,29 @@ function failingCli(name: string, lines: string[], code: number, stderr = ''): v
 }
 
 /**
+ * A fake `codex` that copies its `CODEX_HOME/config.toml` into its cwd before exiting, then emits
+ * one usable event. That copy is the only way to see the file the harness wrote: the per-run
+ * `CODEX_HOME` is a temp dir removed in `finally`, deliberately, so the leased credential does not
+ * outlive the run — which means the assertion has to be taken from INSIDE the run.
+ */
+function codexHomeRecordingCli(): void {
+  const script = `#!/usr/bin/env node
+const fs = require('node:fs')
+const path = require('node:path')
+process.stdin.resume()
+process.stdin.on('data', () => {})
+process.stdin.on('end', () => {
+  const home = process.env.CODEX_HOME
+  const config = home ? fs.readFileSync(path.join(home, 'config.toml'), 'utf8') : ''
+  fs.writeFileSync(path.join(process.cwd(), 'config.toml.copy'), config)
+  const line = JSON.stringify({ type: 'agent_message', message: 'done' })
+  process.stdout.write(line + '\\n', () => process.exit(0))
+})
+`
+  writeFileSync(join(binDir, 'codex'), script, { mode: 0o755 })
+}
+
+/**
  * A fake CLI that records its argv + the stdin it received into `argv.json` / `stdin.txt`
  * under its cwd, then emits one `result` line. Lets a test assert HOW the harness passed the
  * system prompt (argv vs folded into stdin) without depending on the real `claude` binary.
@@ -729,6 +752,71 @@ describe.skipIf(!unix)('runCodex telemetry', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0]!.responseText).toBe('The real answer')
     expect(outcome.summary).toBe('The real answer')
+  })
+
+  it('writes the run’s tool servers into the per-run CODEX_HOME config.toml, beside the auth store', async () => {
+    // End to end for the whole Codex MCP path: the job-body specs, the TOML writer, and the file
+    // the CLI actually reads. Asserted from inside the run because the per-run home is wiped in
+    // `finally` — the credential must not outlive the job.
+    codexHomeRecordingCli()
+    await runCodex({
+      cwd,
+      model: 'gpt-5.5-codex',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      subscriptionToken: JSON.stringify({ tokens: { access_token: 'tok-secret' } }),
+      mcpServers: [
+        {
+          id: 'issues',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', 'issue-mcp'],
+          env: { ISSUE_TOKEN: 'tok-abcdef' },
+          secretKeys: ['ISSUE_TOKEN'],
+        },
+      ],
+    })
+    const config = readFileSync(join(cwd, 'config.toml.copy'), 'utf8')
+    // The auth-store setting must survive the MCP addition: it is what makes the injected
+    // auth.json usable at all, so a writer that replaced the file rather than appending to it
+    // would fail the run for a reason no MCP test would notice.
+    expect(config).toContain('cli_auth_credentials_store = "file"')
+    expect(config).toContain('[mcp_servers.issues]')
+    expect(config).toContain('command = "npx"')
+    expect(config).toContain('args = ["-y", "issue-mcp"]')
+    expect(config).toContain('env = { "ISSUE_TOKEN" = "tok-abcdef" }')
+  })
+
+  it('writes a config with no MCP tables when the job carries no tool servers', async () => {
+    // Every built-in run: the file must be byte-for-byte what it was before tool servers existed.
+    codexHomeRecordingCli()
+    await runCodex({
+      cwd,
+      model: 'gpt-5.5-codex',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      subscriptionToken: JSON.stringify({ tokens: { access_token: 'tok-secret' } }),
+    })
+    expect(readFileSync(join(cwd, 'config.toml.copy'), 'utf8')).toBe(
+      'cli_auth_credentials_store = "file"\n',
+    )
+  })
+
+  it('writes NO tool servers under ambient auth, which has no per-run config home', async () => {
+    // The harness will not write servers into the developer's own ~/.codex: they would outlive the
+    // run and race a concurrent job. The backend drops them for this case at dispatch (so the
+    // prompt states the gap); this asserts the harness never writes them even if a body carries some.
+    codexHomeRecordingCli()
+    await runCodex({
+      cwd,
+      model: 'gpt-5.5-codex',
+      systemPrompt: 'SYS',
+      userPrompt: 'USER',
+      ambientAuth: true,
+      mcpServers: [{ id: 'issues', transport: 'stdio', command: 'npx' }],
+    })
+    // No CODEX_HOME ⇒ the fake had nothing to copy, and nothing was written anywhere.
+    expect(readFileSync(join(cwd, 'config.toml.copy'), 'utf8')).toBe('')
   })
 
   it('falls back to a single call from the cumulative total when no per-turn usage is emitted', async () => {

@@ -256,6 +256,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.ticket_already_linked',
     descriptionKey: 'errors.conflict.description.ticket_already_linked',
   },
+  document_already_linked: {
+    titleKey: 'errors.conflict.title.document_already_linked',
+    descriptionKey: 'errors.conflict.description.document_already_linked',
+  },
 }
 
 /**

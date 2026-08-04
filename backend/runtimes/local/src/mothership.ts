@@ -239,6 +239,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     llmCallMetricRepository: readThrough.llmCallMetricRepository,
     agentContextSnapshotRepository: readThrough.agentContextSnapshotRepository,
     agentSearchQueryRepository: readThrough.agentSearchQueryRepository,
+    agentToolCallRepository: readThrough.agentToolCallRepository,
     provisioningLogRepository: telemetryStore.provisioningLogRepository,
     subscriptionQuotaCycleRepository: telemetryStore.subscriptionQuotaCycleRepository,
   }

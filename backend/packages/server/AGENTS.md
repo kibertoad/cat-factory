@@ -12,18 +12,33 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `modules/*/…Controller.ts`: the ~50 Hono controllers, one dir per module.
 - `modules/publicApi/`: the key-authenticated `/api/v1` surface (NOT behind the session gate):
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
-  parked human decisions; the headless clarification loop), `PublicDebugController` (the
+  parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run
+  for the key, `projection.ts` turns a run into the decision list, and one `*Routes.ts` per park
+  family answers it — approval gates and agent questions, the three iterative-review loops, the
+  container-backed PR review and human-verdict gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
-  an LLM can walk them within a context budget; see `docs/debug-api.md`), `publicApiAuth.ts` (the
-  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
+  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
+  HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
+  Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
+  tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
+  caller's own key; deliberately NOT an OpenAPI operation, see `docs/public-api.md`),
+  `publicApiAuth.ts` (the
+  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
+  with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
+  `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
-  the pre-token input gate, which parks on the shape of the TASK and so is invisible to the
+  the pre-dispatch input gate, which parks on the shape of the TASK and so is invisible to the
   step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
   on the surface shares (`GET /jobs`, `GET /services/:id/tasks`, every `/api/v1/debug/*` list) plus the coarse-status
   projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
   definition of a run's sort key so a cursor can never name a different value than the query
-  orders by). See
-  `docs/initiatives/headless-clarification-loop.md` and
+  orders by). Two collaborators own the create's ORDERING, which is the whole design and does not
+  read as such inlined between route registrations: `ticketLinkage.ts` (file a task FROM a tracker
+  ticket: resolve and refuse before the block exists, claim after) and `documentAttachment.ts`
+  (attach the requirements documents a task is built against, imported from a connected source or
+  uploaded whole, with the task rolled back if an attachment does not land). See
+  `docs/initiatives/headless-clarification-loop.md`,
+  `docs/initiatives/public-api-additions.md` and
   `backend/docs/adr/0030-public-api-surface.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
@@ -38,7 +53,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
   `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection; the one place
   that decides what of a dispatch may be persisted, so a new body field is opt-in, never
-  inherited). Every dispatcher of the `agent` kind (the executor, the bootstrapper and
+  inherited). A third, `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
+  gate ONCE and hands the same gated batch to the trajectory store and to any wired trace sink,
+  so the two can never end up with different answers about what a workspace permitted. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has
@@ -85,7 +102,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `requireWorkspacePermission`; the admin-tier controller middleware) and `optionalJsonBody`
   (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
   otherwise makes the transport require a body, which breaks body-less callers of a route that
-  merely gained an optional field); `config/`; the `AppConfig`
+  merely gained an optional field); `config/` (the runtime-neutral env parsers both facades
+  share; a rejected value is REPORTED through `config/warnOnce.ts`, once per process rather
+  than once per read, because the Worker re-derives its whole config on every invocation);
+  the `AppConfig`
   contract; `runtime/gateways.ts`; the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `runtime/` also holds the **runtime-neutral periodic sweeps** each facade drives from its own
@@ -96,8 +116,17 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `observability/logger.ts`: the **only place a logging library is named**: pino adapted onto the
   kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
   destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the
-  top of its boot path). Patterns and rules: [`backend/docs/logging.md`](../../docs/logging.md).
+  top of its boot path). It also owns the SECOND-destination seam: `setLogSink` installs a kernel
+  `LogSink` (the opt-in OTLP log exporter) that every emitted line is copied to, with the
+  `child`-bound fields folded in and behind the same level gate. Patterns and rules:
+  [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
+  typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
+  default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new
+  one until someone writes down which bucket it is in. They read through `loadCode`, which strips
+  comments first: a guard matching raw text is satisfied by a file that merely NAMES the literal
+  it should pass, which is exactly how one stayed green over a call site missing its value.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),

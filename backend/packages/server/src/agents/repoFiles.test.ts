@@ -6,7 +6,7 @@ import { makeResolveRunRepoContext } from './repoFiles.js'
 const TARGET: RepoTarget = {
   installationId: 42,
   repoId: 'repo-123',
-  owner: 'lokalise',
+  owner: 'acme',
   name: 'maestro',
   baseBranch: 'main',
 }
@@ -19,7 +19,7 @@ describe('makeResolveRunRepoContext', () => {
     )
     const ctx = await resolve('ws', 'blk')
     expect(ctx).not.toBeNull()
-    expect(ctx?.owner).toBe('lokalise')
+    expect(ctx?.owner).toBe('acme')
     expect(ctx?.name).toBe('maestro')
     // The pre-existing fields are unchanged.
     expect(ctx?.baseBranch).toBe('main')

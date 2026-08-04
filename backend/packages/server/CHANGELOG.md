@@ -1,10 +1,416 @@
 # @cat-factory/server
 
+## 0.215.0
+
+### Minor Changes
+
+- 8511a90: MCP maturation slice 3: the public API is now served over MCP from the deployment itself.
+
+  `POST /api/v1/mcp` speaks Model Context Protocol behind the same public-API key auth as every other
+  `/api/v1` route, so an MCP host reaches a deployment with a URL and a key and nothing installed. That
+  is the point of the slice: until now "drive cat-factory from a model" meant an npm dependency, a local
+  process per host and a long-lived key in the host's plaintext config, which rules out claude.ai, hosted
+  agents and anything that cannot spawn a subprocess. The stdio binary stays, for hosts with no HTTP MCP
+  support and for use against a deployment you do not run.
+
+  It is the SAME server behind both paths: the endpoint mounts `@cat-factory/mcp-server`'s
+  `handleMcpHttpRequest`, so the generated tool table, the instructions and the result rendering are the
+  same bytes, and every tool call is one `/api/v1` request under the CALLER's own forwarded key. Nothing
+  is reachable over MCP that the same key could not reach with `curl`. Behaviour worth knowing about:
+  the key's SCOPE decides the tool list (a `read`-scoped key is served only the tools that change
+  nothing, and the instructions say a wider key would expose the rest, so a model asks for one instead of
+  reporting the platform as unable to write); above `read` the whole table is listed and each tool's own
+  rung is enforced by the endpoint it calls, arriving as tool content the model can act on; and the
+  endpoint is stateless with JSON responses, so `GET` and `DELETE` are answered `405`.
+
+  Two things a caller and an operator each notice. A tool's `/api/v1` call INHERITS the MCP request's
+  `X-Request-Id`, so the tool call and the API call it caused share one correlation id and a log holding
+  both lines can be joined on it (supply your own on the MCP request and both halves land under it).
+  And `Mcp-Protocol-Version` joins the shared CORS allow-list both facades serve, without which a
+  cross-origin BROWSER host would negotiate successfully and then have every later call dropped by the
+  browser, since a Streamable HTTP client sends that header on every request after `initialize` and on
+  none before it.
+
+  The endpoint joins the PUBLIC surface under the stability contract from this release. It is
+  deliberately absent from `docs/openapi.json`: a JSON-RPC endpoint has no operation shape to describe,
+  and describing it would mint an SDK method in four languages for a protocol none of those clients
+  speaks. `backend/docs/public-api.md` carries the obligation instead, which also means the endpoint's
+  arrival does not move the spec's `info.version`: that version tracks the described surface.
+
+  `@cat-factory/mcp-server` gains `handleMcpHttpRequest` / `refuseMcpMethod`, so any deployment of this
+  API can mount the endpoint, plus a `readOnlyReason` option that lets the instructions name the right
+  fix for a narrowed tool list.
+
+  INTERNAL BREAK in `@cat-factory/mcp-server`: `optionsFromEnv(env, deps)` now REQUIRES
+  `deps.readSecretFile` rather than defaulting to `readFileSync`, and `ToolSelection.writeToolsHidden` is
+  a `ReadOnlyReason | null` rather than a boolean. The first is what keeps every module the hosted
+  endpoint reaches free of Node built-ins: those modules are bundled into deployments' Workers, where
+  `node:fs` does not resolve at build time, so the default was a Worker that fails to BUILD for the sake
+  of a code path it can never take. `bin.ts` supplies the reader.
+
+- c9c1dd3: Persist an agent's tool calls as a first-class trajectory: one row per invocation, in the order it
+  made them, carrying the tool's arguments and result. The evidence standard for a merged PR is
+  "how, not just the diff", and until now the tool loop survived a run only as metadata spans a
+  trace sink had to be wired to see, so reconstructing what an agent actually did meant diffing
+  consecutive prompt bodies against each other.
+
+  The fourth telemetry sink (`agent_tool_calls`), beside the per-call cost rows and the dispatch
+  context snapshots, in the same store and on the same retention window: D1 on Cloudflare, the
+  `telemetry` Postgres schema on Node, `node:sqlite` on a mothership-mode node, with the same
+  cross-runtime conformance assertions and the same local-first routing as its siblings. Readable
+  through a new `GET /api/v1/debug/runs/:runId/tool-calls` (additive; the spec's `info.version`
+  takes a minor and the four SDK clients plus the MCP facade gain the operation), and exported on
+  the OTel and Langfuse tool spans alongside the dispatch and ordinal a trajectory orders by.
+
+  The endpoint serves two orders, because the order is the product and a client cannot derive it
+  from the rows: `recent` is the newest-first keyset every sibling debug list shares, and
+  `order=trajectory` is the run's calls oldest-first as the agents made them, a bounded prefix that
+  issues no cursor (pairing one with it is refused rather than quietly served in the other order).
+  Both narrow to a single dispatch with `jobId`. The server orders by when each call STARTED, with
+  `seq` separating the calls that share a millisecond: sorting by the job id instead would order a
+  run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+
+  Both harnesses produce it: the Pi runner pairs each `tool_execution_start` with its end, and the
+  claude-code runner pairs each `tool_use` block with the `tool_result` that answers it — the CLI's
+  own stream being the only place a subscription run's tool loop is visible at all. Bodies are
+  capped and secret-scrubbed at capture, and ride the same `LLM_RECORD_PROMPTS` +
+  `storeAgentContext` double gate as every other captured body; a withheld body is recorded AS
+  withheld, so an opted-out workspace's trajectory never reads as a run whose every tool took no
+  arguments.
+
+  Breaks nothing, retains nothing new by default beyond a run's tool metadata, and requires the
+  `1.91.0` runner image (an older image's calls still reach the trace sinks; their trajectory is
+  skipped rather than persisted under colliding ids, and the skip is logged).
+
+### Patch Changes
+
+- Updated dependencies [8511a90]
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/mcp-server@0.6.0
+  - @cat-factory/contracts@0.236.0
+  - @cat-factory/kernel@0.236.0
+  - @cat-factory/orchestration@0.203.0
+  - @cat-factory/agents@0.110.7
+  - @cat-factory/integrations@0.126.2
+  - @cat-factory/prompt-fragments@0.15.62
+  - @cat-factory/spend@0.14.14
+
+## 0.214.1
+
+### Patch Changes
+
+- Updated dependencies [6b9f696]
+  - @cat-factory/kernel@0.235.1
+  - @cat-factory/agents@0.110.6
+  - @cat-factory/integrations@0.126.1
+  - @cat-factory/orchestration@0.202.1
+  - @cat-factory/spend@0.14.13
+
+## 0.214.0
+
+### Minor Changes
+
+- cec0c3e: Attach spec-sized requirements documents when creating a task over the public API.
+
+  `/api/v1` had no way to give a run a specification. `description` caps at 2,000 characters because
+  it is a task's own framing, echoed into every prompt; the 50,000-character `POST /jobs` brief drives
+  inline pipelines that never touch a repository; and the app's own attach-a-document flow is
+  session-authed. A headless caller holding a PRD could only paste a truncated version of it into a
+  field and hope. `POST /api/v1/services/:serviceId/tasks` now takes an ordered `documents` list, each
+  entry either NAMING a page in a connected document source (imported and attached, as `ticket`
+  already does for a tracker issue) or CARRYING the text itself. The full body reaches agents exactly
+  as a document a human attached does: materialised under `.cat-context/` for a container agent,
+  folded into the prompt for an inline one.
+
+  Carrying the text needed a document with no source behind it, so `DocumentOrigin` (`DocumentSourceKind`
+  plus `upload`) is now what a stored row and its block/role links are keyed by, while everything a
+  provider does stays typed against the narrow union. That keeps the missing `upload` provider a
+  compile error rather than an `undefined` at whichever call site reaches for it first. An uploaded
+  document has no origin URL, and every reader now renders that absence as nothing rather than as
+  `Title ()` or a bare `Source:` line.
+
+  One fix rode along, found by the cross-runtime assertion for the new origin rather than by
+  reasoning: `urlMatchCandidates` used to hand back `['', '/']` for an empty needle, so `getByUrl`
+  would match every row whose stored `url` is empty. Nothing produced such a row before uploads, and
+  no caller passes an empty URL today, but "a lookup for nothing resolves to an arbitrary uploaded
+  document, which the caller then hands an agent as the page a description pointed at" is not a trap
+  to leave armed. It now returns null, and the four repositories that call it answer "no match".
+
+  A document is now attached to at most ONE block, enforced where the link is written rather than at
+  the new endpoint. `linkedBlockId` is a single column, so attaching a document another task already
+  holds MOVED the link instead of copying it: the earlier task silently lost a document it was created
+  with, and nothing in its next run reported the absence. That was reachable from the app's own
+  picker too, which offers already-attached documents for re-use. `linkToBlock` now refuses with
+  `document_already_linked` and the holder's id, the same rule and shape as one-task-per-ticket, with
+  translated SPA copy. Two things keep it from wedging anything: a link naming a DELETED block is not
+  a holder (so the guard heals rows left by past deletes), and `removeBlock` now detaches a doomed
+  block's documents through the removal cascade, so new ones are not made. Only the link goes; the
+  document survives its task.
+
+  Attaching a list is one unit of work rather than a loop: `linkManyToBlock` asserts the block once,
+  resolves the whole list through a new batched `DocumentRepository.listByRefs` and writes the links
+  through a new `linkBlockMany` (both mirrored D1 ⇄ Drizzle, with cross-runtime assertions, plus
+  `detachBlocks` for the cascade). The point method in a loop was three round-trips per document, ten
+  of which re-read the same block.
+
+  Worth watching in review: the creation is all-or-nothing. Everything refusable (an unconfigured
+  source, an unparseable ref, a page the provider will not serve, an upload that renders to no
+  readable text, a document another task holds) is refused before the board changes, and an
+  attachment that fails after the task exists takes the task back off the board, because a task
+  silently missing part of its spec is the failure this whole surface exists to prevent. Two ordering
+  details carry that: uploads are written only after the whole list resolves (an import is idempotent
+  on its ref, but every upload mints an id, so an eager write would leave one orphan per retry), and
+  the rollback detaches by BLOCK rather than by the refs it resolved (a rollback can be running
+  because one of those refs belongs to another task, and clearing it by ref would commit the very
+  loss the guard just refused). The attach runs before the ticket claim so that rollback can never
+  orphan a claimed ticket. Naming `documents` does not work in mothership mode yet, for the same
+  reason `ticket` does not: the document write surface is still `pending` on the persistence
+  allow-list, which the new `linkBlockMany`/`detachBlocks` join rather than widen.
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+  - @cat-factory/kernel@0.235.0
+  - @cat-factory/integrations@0.126.0
+  - @cat-factory/orchestration@0.202.0
+  - @cat-factory/agents@0.110.5
+  - @cat-factory/prompt-fragments@0.15.61
+  - @cat-factory/spend@0.14.12
+
+## 0.213.0
+
+### Minor Changes
+
+- 8cbf1a7: Manage the outbound notification webhook over `/api/v1`, so the whole integration surface is
+  headless.
+
+  `GET|PUT|DELETE /api/v1/notification-webhook` (`admin` scope) register, read and remove the one
+  HTTPS endpoint a workspace pushes its notifications, run-lifecycle events and platform-health
+  alerts to. Until now that endpoint could only be registered over the session-authed
+  `/workspaces/:ws/notification-webhook`, so a deployment driven entirely by API keys had to put a
+  human in a browser to switch on the very channel that exists because there is no browser: the
+  delivery contract was headless and its enrolment was not.
+
+  The routes delegate to the same `NotificationWebhookService` the session controller calls, so the
+  SSRF guard on the endpoint, the keep-on-omit rule for every field and the one-row-per-workspace
+  invariant are identical whichever surface writes. The signing secret stays write-only: `PUT`
+  accepts one and the read reports only `hasSecret`, so an `admin` key can rotate it and can never
+  learn the stored one.
+
+  `PUT`'s `url` becomes optional, on both surfaces, so keep-on-omit is uniform across every field
+  rather than every field but one. A mandatory re-send made the routine edit (subscribe to a family)
+  carry a value the caller never meant to change, and a client re-sending a URL it cached before
+  someone else rotated the receiver would silently redirect the workspace's deliveries back to the
+  old endpoint while appearing to add a subscription. `url` is still required on the first `PUT`
+  against a workspace with nothing registered, refused with `details.reason: "webhook_url_required"`.
+  Relaxing a required field is additive, so no live caller changes.
+
+  Additive on `/api/v1` (OpenAPI `info.version` 1.5.0; main took 1.4.0 for its own additive change
+  while this branch was open). The four SDK clients gain a `webhook` resource
+  (`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/integrations@0.125.0
+  - @cat-factory/agents@0.110.4
+  - @cat-factory/kernel@0.234.2
+  - @cat-factory/orchestration@0.201.2
+  - @cat-factory/prompt-fragments@0.15.60
+  - @cat-factory/spend@0.14.11
+
+## 0.212.1
+
+### Patch Changes
+
+- ee6601e: Post a parked requirements review's questions to the ticket for webhook-dispatched runs too.
+
+  A run started by a per-ticket issue-intake schedule recorded no intake origin, so it read back as
+  UI-started and the clarification writeback refused it: the review parked, and the person who filed
+  the ticket was never told. The answer channel was already open (ticket-comment replies are ungated
+  by intake), but the finding ids an answer has to name are only ever rendered by the question
+  comment, so a ticket-driven run could park and stay parked with nothing pointing at the cause.
+
+  Such a run now carries `intakeOrigin: 'tracker'`, and the writeback gate asks the classification
+  (`isHeadlessIntake`) rather than comparing against the one origin that shipped first.
+
+  The vocabulary also gains `schedule` for cadence fires and the queue-drain push, so `ui` stops
+  being a catch-all for "nothing said" and becomes a positive claim that a human is watching in the
+  app. Every unattended start path now names itself; only the in-app start takes the default. The
+  field must stay optional for that one caller, so the rule is held by a coverage spec that
+  classifies each start path rather than by a typecheck.
+
+  `schedule` is classified NOT headless even though it is unattended. A fire works the schedule's
+  reused block, and queue-mode intake replace-links each pick onto it, so a question posted there
+  loses its reply channel on the next fire. The classification asks whether the run has a stable
+  place to hold a conversation, not whether a human was present.
+
+  No change to runs started in the app or through `/api/v1`. The workspace opt-in
+  (`writebackQuestionsOnPark`, off by default) and its per-task override still gate every post; their
+  copy now says "outside the app" rather than "through the API".
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/orchestration@0.201.1
+  - @cat-factory/agents@0.110.3
+  - @cat-factory/integrations@0.124.1
+  - @cat-factory/kernel@0.234.1
+  - @cat-factory/prompt-fragments@0.15.59
+  - @cat-factory/spend@0.14.10
+
+## 0.212.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/orchestration@0.201.0
+  - @cat-factory/integrations@0.124.0
+  - @cat-factory/agents@0.110.2
+  - @cat-factory/prompt-fragments@0.15.58
+  - @cat-factory/spend@0.14.9
+
+## 0.211.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/spend@0.14.8
+  - @cat-factory/prompt-fragments@0.15.57
+
+## 0.210.0
+
+### Minor Changes
+
+- 2619d79: MCP maturation slice 1: every declared tool server is either served or STATED.
+
+  A dispatch now checks the running harness's MCP TRANSPORTS, not just whether it speaks MCP, so an
+  `http` server on a Codex run (whose client is stdio-only) is dropped under a new
+  `transport_unsupported` reason instead of being advertised in the prompt and then silently skipped by
+  the harness's TOML writer. Boot validation and the capability-credential checklist now enumerate
+  `AgentKindRegistry.kindsWithCapabilities()` (every kind declaring a capability on its own
+  registration, plus every kind named by `assignSkills` / `assignToolServers`), so a server attached to
+  a built-in such as `coder` reaches the same refusals and the same operator checklist as a registered
+  kind's own. New checks: a transport/harness combination no run could serve, an `allowedTools` entry
+  that is not a single tool name (the harness joins the list with commas), and a per-dispatch server
+  budget, both dimensions of which warn at boot and drop the excess under `over_budget` at dispatch.
+  The harness exempts `mcp__*` calls from the no-edit progress bound and bounds them with their own
+  `JOB_MAX_CONSECUTIVE_MCP_CALLS` streak, plus a `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` backstop shared
+  by every no-edit-exempt family (each per-family streak resets on a call outside its family, so
+  interleaving two of them was bounded only by the job's wall-clock ceiling).
+
+  OPERATORS UPGRADING: capabilities attached by `assignSkills` / `assignToolServers` were previously
+  not boot-validated at all, so a declaration that is now an ERROR (a cleartext off-loopback endpoint,
+  a reserved credential key, an unregistered id, a malformed server id or tool name) turns a
+  deployment that used to start into one that refuses to. That is the intent of the change, and each
+  message names the kind and the declaration to fix.
+
+  INTERNAL BREAK: `UnavailableToolServer['reason']` gains `transport_unsupported` and `over_budget`, so
+  a deployment rendering that union exhaustively must map them. Runner image bumped to 1.89.0.
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/agents@0.110.0
+  - @cat-factory/orchestration@0.199.0
+  - @cat-factory/integrations@0.123.5
+  - @cat-factory/prompt-fragments@0.15.56
+  - @cat-factory/spend@0.14.7
+
+## 0.209.1
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+  - @cat-factory/orchestration@0.198.0
+  - @cat-factory/agents@0.109.2
+  - @cat-factory/integrations@0.123.4
+  - @cat-factory/prompt-fragments@0.15.55
+  - @cat-factory/spend@0.14.6
+
 ## 0.209.0
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -27,7 +433,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -3299,7 +3705,7 @@
 
 ### Patch Changes
 
-- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a Kargo project, whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
+- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a provider-side project whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
 - Updated dependencies [200fb4d]
   - @cat-factory/kernel@0.165.1
   - @cat-factory/agents@0.72.2
@@ -12175,8 +12581,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that

@@ -4,7 +4,7 @@ import type { InputGateIssue, InputGateIssueCode, RunInputGate } from '@cat-fact
 import type { InputGateTone } from '~/utils/inputGate'
 import { useInputGateStore } from '~/stores/inputGate'
 
-// The PRE-TOKEN INPUT GATE's notice: what the structural check found in the task's authored
+// The PRE-DISPATCH INPUT GATE's notice: what the structural check found in the task's authored
 // input, and the two ways out. Shown wherever a run parked on the gate is surfaced (the
 // inspector's execution panel, the step-detail overlay), so it is a plain component over a
 // verdict rather than an overlay of its own, its remedy is to go and edit the task, which is a

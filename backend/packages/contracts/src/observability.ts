@@ -400,6 +400,80 @@ export const agentSearchQuerySchema = v.object({
 export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
 
 // ---------------------------------------------------------------------------
+// Tool-call trajectory: one row per tool invocation inside an agent's loop, in the
+// order the agent made them. Where `agent_context_snapshots` keeps what an agent was
+// GIVEN and `llm_call_metrics` what each model call cost, this keeps what the agent
+// DID with it — the "how" behind a diff, which was previously reconstructible only by
+// diffing consecutive prompts against each other.
+//
+// Bodies (`args`/`result`) ride the same double gate as the other two body-bearing
+// sinks (deployment `LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`),
+// which is why {@link agentToolCallSchema.bodies} exists: a withheld body and a tool
+// that genuinely took no arguments are different facts and must not render alike.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a tool call's `args`/`result` are empty.
+ *
+ * `stored` ⇒ the bodies were captured, so an empty one means the call really carried
+ * nothing. `withheld` ⇒ recording was off (deployment switch or workspace opt-out) or
+ * the producing harness image predates body capture, so nothing can be concluded from
+ * the empty strings. The distinction is the whole point of the field: without it an
+ * opted-out workspace's trajectory reads as a run whose every tool took no arguments.
+ */
+export const toolCallBodiesStateSchema = v.picklist(['stored', 'withheld'])
+export type ToolCallBodiesState = v.InferOutput<typeof toolCallBodiesStateSchema>
+
+/** One tool invocation an agent made during a run, in trajectory order. */
+export const agentToolCallSchema = v.object({
+  id: v.string(),
+  workspaceId: v.string(),
+  /** The run this call belongs to. */
+  executionId: v.string(),
+  /** The agent kind whose loop made the call (`coder`, `ci-fixer`, …). */
+  agentKind: v.string(),
+  /**
+   * The dispatch (container job) the call was made in. One run's step can dispatch more
+   * than once (a re-run, a gate's fixer rounds, a Ralph iteration), and {@link seq} is
+   * only monotonic WITHIN a dispatch, so the trajectory orders by `(jobId, seq)` — never
+   * by `seq` alone, which would interleave two dispatches into one nonsensical sequence.
+   */
+  jobId: v.string(),
+  /** The call's 0-based ordinal within its dispatch: the trajectory order itself. */
+  seq: v.number(),
+  /** The tool the agent invoked (`edit_file`, `bash`, `todo`, …). */
+  tool: v.string(),
+  /** Epoch ms the tool call started. */
+  startedAt: v.number(),
+  /** Epoch ms the tool call ended. */
+  endedAt: v.number(),
+  /** Whether the tool reported success (a failing call is kept: a stall is a trajectory). */
+  ok: v.boolean(),
+  /** Whether {@link args}/{@link result} were captured at all. */
+  bodies: toolCallBodiesStateSchema,
+  /**
+   * The tool's arguments as the agent supplied them, secret-scrubbed and capped at
+   * capture time. Serialised JSON for a structured tool call; `''` when `bodies` is
+   * `withheld`, or when the call genuinely took none.
+   */
+  args: v.string(),
+  /**
+   * What the tool returned, secret-scrubbed and capped at capture time. `''` when
+   * `bodies` is `withheld`, or when the tool returned nothing.
+   */
+  result: v.string(),
+  /**
+   * Characters dropped from {@link args} and {@link result} by the capture cap, so a
+   * reader can tell a short command from the head of a long one. 0 when nothing was cut.
+   */
+  argsDropped: v.number(),
+  resultDropped: v.number(),
+  /** When the call was recorded (epoch ms) — the keyset the pages order by. */
+  createdAt: v.number(),
+})
+export type AgentToolCall = v.InferOutput<typeof agentToolCallSchema>
+
+// ---------------------------------------------------------------------------
 // Platform-operator observability: deployment-level aggregate health, the dual of
 // the per-run detail above. Where the schemas above describe ONE run, these describe
 // the WHOLE deployment (scoped to an account) over a time window — run outcomes,
@@ -612,6 +686,16 @@ export type PlatformObservability = v.InferOutput<typeof platformObservabilitySc
  *                           completely different incidents — infrastructure versus the model
  *                           — so the dominant kind is its own signal rather than a detail
  *                           buried in the dashboard.
+ *   - `failure_kind_rate_high` — a NAMED failure kind crossed the ceiling an operator set for
+ *                           that kind specifically (see {@link platformFailureKindRuleSchema}).
+ *                           The dominant condition answers "is one cause swamping everything",
+ *                           which no single ceiling can express for a kind that matters at 5%
+ *                           and one that is routine at 40%: an eviction rate that never
+ *                           approaches dominance is still the substrate failing, while a
+ *                           `rejected` share of the same size is the product working as
+ *                           designed. Which kinds carry a rule, and where each sits, is the
+ *                           operator's judgement, so it is configuration rather than a
+ *                           threshold the platform picks.
  *   - `sweep_degraded`    — a background sweeper has been failing repeatedly. Alerting on the
  *                           WATCHER, because a sweep that stopped running makes every signal
  *                           above stale without making any of them fire.
@@ -622,6 +706,7 @@ export const platformAlertReasonSchema = v.picklist([
   'backlog_high',
   'throughput_stalled',
   'failure_kind_dominant',
+  'failure_kind_rate_high',
   'sweep_degraded',
 ])
 export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema>
@@ -635,6 +720,60 @@ export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema
  */
 export const platformAlertWindowSchema = v.picklist(['1h', '24h', '7d'])
 export type PlatformAlertWindow = v.InferOutput<typeof platformAlertWindowSchema>
+
+/**
+ * One PER-KIND alert rule: "page when `evicted` accounts for more than X% of the window's
+ * failures". The generalisation of `failure_kind_dominant`, which is one ceiling applied to
+ * whichever kind happens to be largest, into a ceiling an operator sets per kind.
+ *
+ * The share is measured against the window's FAILURES, the same denominator the dominant
+ * condition and the dashboard's taxonomy use, so a rule reads off the taxonomy an operator is
+ * already looking at rather than a second, differently-normalised number.
+ *
+ * {@link kind} is a plain string rather than the closed `agentFailureKindSchema` picklist, and
+ * that is deliberate in both directions. Reading: a rule naming a kind that a later release
+ * RETIRES must still parse, because this schema also decodes the stored blob, and a rule
+ * rejected there would take the account's whole settings row down with it (the fallback is the
+ * built-in defaults, so one stale rule would silently discard the model policy beside it).
+ * Matching: the projection's own `kind` is a string for the same reason, so comparing strings is
+ * comparing like with like. What a human is offered when AUTHORING one is the closed vocabulary,
+ * in the settings panel, which is where a typo can still be caught before it is stored.
+ */
+/**
+ * The most per-kind rules one config may carry, shared by every layer that bounds the list: the
+ * schema below, the env parser that builds the deployment's, and the settings editor that warns
+ * before a save the schema would refuse. A number restated per layer is a number that drifts,
+ * and the layer that drifts low silently discards a rule an operator is counting on.
+ */
+export const MAX_FAILURE_KIND_RULES = 32
+
+/**
+ * The longest a rule's `kind` may be. Generous against the current vocabulary on purpose: it is
+ * a bound on a string an operator types, not a statement about which kinds exist (which is
+ * {@link isAgentFailureKind}, and is deliberately not enforced here — see below).
+ */
+export const MAX_FAILURE_KIND_LENGTH = 64
+
+export const platformFailureKindRuleSchema = v.object({
+  /** The `agentFailureKind` this rule watches, e.g. `evicted` (matched against the taxonomy). */
+  kind: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(MAX_FAILURE_KIND_LENGTH)),
+  /**
+   * Share (0..1] of the window's failures this kind must reach before the rule fires. Excludes
+   * 0 for the same reason {@link platformAlertThresholdOverridesSchema}'s dominant share does: a
+   * ceiling of 0 is satisfied by any distribution, including one where the kind never occurred.
+   */
+  maxShare: v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1)),
+  /**
+   * Failures OF THIS KIND the window must carry before the rule can fire. Absent ⇒ 1.
+   *
+   * The per-rule analogue of `minRuns`, and the reason a low ceiling is usable at all: the point
+   * of a per-kind rule is to sit far below dominance (5% evictions is an incident), and at 5%
+   * the shared minimum-run gate stops protecting anything — a window with the default 5 terminal
+   * runs and a single eviction is already at 20%. This is what says "one is a blip".
+   */
+  minCount: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1_000_000))),
+})
+export type PlatformFailureKindRule = v.InferOutput<typeof platformFailureKindRuleSchema>
 
 /**
  * Operator-tunable ceilings for the platform-health alert sweep. EVERY field is optional and
@@ -676,6 +815,31 @@ export const platformAlertThresholdOverridesSchema = v.object({
   maxFailureKindShare: v.optional(v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1))),
   /** Consecutive failed passes of one sweeper before `sweep_degraded` fires. */
   maxSweepFailures: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000))),
+  /**
+   * Per-kind ceilings driving `failure_kind_rate_high` (see
+   * {@link platformFailureKindRuleSchema}).
+   *
+   * The one field here that is a LIST rather than a scalar, which changes what overriding it
+   * means: a stored list REPLACES the deployment's rules wholesale rather than merging into
+   * them, so an account that wants the deployment's rules plus one of its own restates all of
+   * them. Merging per kind would leave an account unable to DROP a rule it disagrees with, and
+   * silently reinstating a deployment rule an account had removed is the worse of the two
+   * failure modes for a pager. An EMPTY list is therefore a real setting ("no per-kind rules
+   * for this account"), distinct from absent, exactly like the zeros elsewhere in this object.
+   *
+   * Bounded, and unique by kind: two rules on one kind would fire twice for one condition, and
+   * the second is invariably an edit somebody meant to replace the first.
+   */
+  failureKindRules: v.optional(
+    v.pipe(
+      v.array(platformFailureKindRuleSchema),
+      v.maxLength(MAX_FAILURE_KIND_RULES),
+      v.check(
+        (rules) => new Set(rules.map((rule) => rule.kind)).size === rules.length,
+        'Each failure kind may carry at most one alert rule.',
+      ),
+    ),
+  ),
 })
 export type PlatformAlertThresholdOverrides = v.InferOutput<
   typeof platformAlertThresholdOverridesSchema
@@ -709,6 +873,15 @@ export const platformAlertSchema = v.object({
   value: v.number(),
   /** The configured threshold it crossed (same unit as {@link value}). */
   threshold: v.number(),
+  /**
+   * The failure kind this alert is about, on a KIND-SCOPED condition (`failure_kind_rate_high`);
+   * absent on every other reason, which are about the deployment as a whole.
+   *
+   * It is part of what the condition SAYS, not a decoration: several rules can fire at once and
+   * they share a reason code, so an alert without it names a rule the reader cannot identify, and
+   * a firing set that swapped `evicted` for `timeout` would look unchanged.
+   */
+  kind: v.optional(v.string()),
 })
 export type PlatformAlert = v.InferOutput<typeof platformAlertSchema>
 

@@ -1,8 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** investigation complete; A0 landed, the start-path scope question settled by
-[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–C2 not started · **Owner:**
-core · **Started:** 2026-08-02
+**Status:** A0, C1, D1 and D2 landed; **A1–A6 landed together**; the start-path scope question settled
+by [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2 and C2 not started ·
+**Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -20,23 +20,40 @@ not. Enumerated rather than counted, because "the engine has N parks" is the kin
 quietly goes stale: this is what the investigation found, not a proof of exhaustiveness, and a
 surface discovered later belongs in this table rather than in a revised number:
 
-| Park surface              | Lives on             | Public answer path                         |
-| ------------------------- | -------------------- | ------------------------------------------ |
-| `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*` |
-| implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`    |
-| judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`  |
-| pre-token input gate      | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`   |
-| approval gate             | `step.approval`      | ❌ none (slice **A1**                      |
-| agent-raised decision     | `step.decision`      | ❌ none) slice **A2**                      |
-| `clarity-review`          | clarity module       | ❌ none (slice **A3**                      |
-| `requirements-brainstorm` | brainstorm module    | ❌ none) slice **A4**                      |
-| `architecture-brainstorm` | brainstorm module    | ❌ none (slice **A4**                      |
-| PR deep-review selection  | `step.prReview`      | ❌ none) slice **A5**                      |
-| human-test window         | `step.humanTest`     | ❌ none (slice **A6**                      |
-| visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
-| `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)              |
+| Park surface              | Lives on             | Public answer path                               |
+| ------------------------- | -------------------- | ------------------------------------------------ |
+| `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*`       |
+| implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`          |
+| judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`        |
+| pre-dispatch input gate   | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`         |
+| approval gate             | `step.approval`      | ✅ `/runs/:runId/decisions/approvals/:id/*`      |
+| companion iteration cap   | `step.companion`     | ✅ `…/approvals/:id/resolve-exceeded`            |
+| agent-raised decision     | `step.decision`      | ✅ `/runs/:runId/decisions/questions/:id/answer` |
+| `clarity-review`          | clarity module       | ✅ `/runs/:runId/decisions/clarity/*`            |
+| `requirements-brainstorm` | brainstorm module    | ✅ `…/brainstorm/requirements/*`                 |
+| `architecture-brainstorm` | brainstorm module    | ✅ `…/brainstorm/architecture/*`                 |
+| PR deep-review selection  | `step.prReview`      | ✅ `/runs/:runId/decisions/pr-review/*`          |
+| human-test window         | `step.humanTest`     | ✅ `/runs/:runId/decisions/human-test/*`         |
+| visual-confirmation gate  | `step.visualConfirm` | ✅ `…/visual-confirmation/*`                     |
+| `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)                    |
+| follow-up triage          | `step.followUps`     | ❌ none, **found during A1–A6** (see below)      |
+| interview gate            | interview modules    | ❌ none, **found during A1–A6** (see below)      |
 
-**The pre-token input gate is the odd row**, and worth reading before adding another: every other
+**The last two rows were not in the original investigation**, and the table's own warning is why
+they are here rather than in a revised count: this enumeration is what was found, not a proof of
+exhaustiveness. Both surfaced from the same place, `assertNotIterativeGate` — the engine's list of
+parks that ride `step.approval` but refuse the generic approve. Neither has a public answer path
+and neither is projected as a decision, so a run parked on one reports `parked: true` with nothing
+to answer, exactly as `human-review` does. They are NOT in
+`PUBLICLY_ANSWERABLE_PARK_SURFACES`, so no refusal advertises them.
+
+Ranking them is deliberately left open. Follow-up triage is a per-item verb set (file / send back /
+answer / dismiss) over items an agent streams mid-run, and an interview gate is a conversational
+loop (answer / continue / proceed) whose value to a headless caller is the same open question A6
+raises. Neither is reachable from `POST /jobs` (both ride container-agent steps), so both are
+board-start-only, which is where A5/A6 already rank.
+
+**The pre-dispatch input gate is the odd row**, and worth reading before adding another: every other
 entry is a park a PIPELINE can carry, so `parkSurfacesOf` sees it in the step chain and admission
 can refuse a `write` key up front. The gate parks on the shape of the TASK, so it holds runs under
 pipelines that park nowhere and was invisible to that enumeration entirely. It is composed in at
@@ -66,31 +83,36 @@ The headline finding is not "an endpoint is missing" but an **asymmetry between 
 key start and what the decision surface lets it answer**. A caller can put a run into a state only
 the SPA can get it out of.
 
-**What gates the first slice:** nothing technical: A1 is ready to pick up. The former [open
-question](#open-question-for-the-maintainer-settled) about the `POST /tasks/:taskId/start` scope
-rule is settled (tightened, with [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)).
-When the committed scope completes, this tracker converts to a numbered ADR under
-`backend/docs/adr/` (per CLAUDE.md); if it is instead abandoned, say so here rather than deleting
-it, so the investigation is not redone.
+**Where this stands:** A1–A6 landed as one change, so the asymmetry the tracker was opened for is
+closed: of the surfaces a pipeline can park on, `human-review` is the only one a `decide` key can
+start and not answer, and it is unanswerable by construction rather than unbuilt. What remains is
+B1/B2 (key introspection, spec endpoint), C1 (webhook management) and C2 (step output), none of
+which is a park. The former [open question](#open-question-for-the-maintainer-settled) about the
+`POST /tasks/:taskId/start` scope rule is settled (tightened, with
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)). When the committed scope
+completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md); if it
+is instead abandoned, say so here rather than deleting it, so the investigation is not redone.
 
-## The gap, precisely
+## The gap, precisely (as it stood before A1–A6; kept for the reasoning)
 
-`buildDecisionList` (`PublicDecisionController.ts`) enumerates exactly three decisions:
-`requirements-review`, `fork`, `judge`. Its own closing comment names the hole:
+`buildDecisionList` (then in `PublicDecisionController.ts`, now `decisions/projection.ts`)
+enumerated exactly three decisions: `requirements-review`, `fork`, `judge`. Its own closing comment
+named the hole:
 
 > a run parked on a surface this projection doesn't model yet (a plain approval gate, a human-test
 > window) still reports `parked: true` with an empty list rather than silently claiming all is well.
 
 That is honest reporting of an incomplete surface, not a bug, but the reporting is all a caller
-gets. Two independent paths lead into it:
+got. Two independent paths led into it:
 
 **1. The initiative surface admits parks it cannot answer.** `PARKING_INLINE_KINDS`
 (`publicApiAdmission.ts`) lists four kinds (`requirements-review`, `clarity-review` and the two
 brainstorms) and admitting any of them is what the `decide` scope buys. Only `requirements-review`
-is answerable (see the table above). Clarity and brainstorm are separate orchestration modules with
-their own repositories, deliberately mirroring requirements, so `buildDecisionList`'s single
-`container.requirements` read cannot see them, and a `decide` key that starts such a pipeline gets a
-run it can only cancel.
+was answerable. Clarity and brainstorm are separate orchestration modules with their own
+repositories, deliberately mirroring requirements, so `buildDecisionList`'s single
+`container.requirements` read could not see them, and a `decide` key that started such a pipeline
+got a run it could only cancel. **A3/A4 closed this**: the projection now reads each module too,
+gated on the run's own step chain so a run that cannot park there pays for no round-trip.
 
 **…and the refusal used to ADVERTISE the parks it cannot answer**: fixed as A0 below. The
 `pipeline_requires_decide_scope` body a `write` key got named all four kinds plus the approval gate
@@ -144,60 +166,54 @@ drift-guard test then update themselves, where a hand-written sentence would go 
 answer path nobody built. (What is admitted was unchanged by A0; the board-start scope rule was
 later tightened by ADR 0032, see the settled question below.)
 
-### A1: Approval gates (highest value, lowest cost) ⬜
+### A1–A6: every remaining park type ✅ (landed together)
 
-The internal pair already exists: `POST /executions/:executionId/steps/:approvalId/approve` and
-`…/request-changes` (plus reject, a terminal `rejected` failure the board can retry).
+The six were sliced separately because they were expected to be six PRs' worth of engine work. They
+were not: past the first one they are the SAME shape (gate the run, delegate to the service method
+the SPA calls, return the re-read decision list), so splitting them would have meant six rounds of
+the shared plumbing rather than six independent risks. Landed as one change, with the surface split
+into `publicApi/decisions/` (scope / projection / one route module per park family) since the single
+controller would otherwise have tripled.
 
-The state rides `step.approval` (`stepApprovalSchema`: `id`, `status`, `proposal`, `feedback`,
-`comments`), so the decision projection is a **pure read off the run `buildDecisionList` already
-holds**, no extra repository round-trip, exactly like the `judge` decision it sits beside. That is
-what makes this the cheapest slice and the one to pilot on.
+What each turned into:
 
-Model it on `toJudgeDecision`. The `proposal` is agent-authored text crossing a rendered surface;
-project it as data, and keep the "possibly edited proposal" affordance OUT of v1 unless a consumer
-asks: approve/request-changes/reject is the whole lifecycle.
+- **A1 approval gates** — `…/approvals/:approvalId/{approve,request-changes,reject,resolve-exceeded}`,
+  projected as `approval-gate`. Two departures from the plan. The **edited proposal IS exposed**
+  (`approve` takes an optional `proposal`): it was going to be held back as an in-app affordance,
+  but without it the only way to correct an output is to bounce the whole step, and the field is one
+  optional string. And `resolve-exceeded` is a FOURTH verb, not three: a companion at its rework cap
+  parks on the same approval and refuses the generic approve, so the projection reports `exceeded`
+  and the caller reaches for its own route.
+- **A2 agent-raised decisions** — `…/questions/:decisionId/answer`, projected as `agent-decision`.
+- **A3 clarity / A4 brainstorm** — the requirements verb set twice more, addressed by ITEM id with
+  the entity resolved from the run's block (and, for a brainstorm, its stage), as planned.
+- **A5 PR deep review** — `…/pr-review/resolve` plus per-finding `dismiss` / `challenge`. `resume`
+  is deliberately absent: it nudges a review still IN FLIGHT rather than answering a park.
+- **A6 human-verdict gates** — only the two VERDICT verbs per gate (`confirm`/`request-fix`,
+  `approve`/`request-fix`). The app's environment-management affordances (recreate / destroy /
+  pull-main / recapture) are out: they are things a person does while looking at the environment,
+  not answers to the park, and each is an unbounded lever on infrastructure. The A6 caveat stands and
+  is now stated in the API docs rather than only here — a caller approving a visual-confirmation gate
+  off this projection is approving screenshots it has not seen, because artifact bytes are not
+  readable over `/api/v1`.
 
-### A2: Agent-raised decisions ⬜
+**The trap this slice actually hit, and the one a future park must not re-hit:** `step.approval` is
+the engine's GENERIC parking mechanism. A requirements gate, a brainstorm, a fork choice, a
+human-verdict gate, a follow-up triage and an interview all leave a PENDING approval on the step, and
+the engine refuses the generic verbs on every one of them (`assertNotIterativeGate`). A projection
+that read "pending approval ⇒ approval-gate" would therefore have offered a well-behaved integration
+a route the engine answers with a 409, forever — the A0 defect wearing different clothes. The fix was
+to extract the engine's own list as `dedicatedParkSurface` (`orchestration/.../step-park.logic.ts`)
+and have BOTH the refusal and the projection read it, so what the API offers and what the engine
+accepts cannot drift. A conformance test pins it. **A new park that rides `step.approval` adds itself
+there**, and the `WRONG_SURFACE_MESSAGES` record fails to compile until it does.
 
-`POST /executions/:executionId/decisions/:decisionId` (`resolveDecisionContract`). Distinct from an
-approval gate: an agent raises it and resolving RE-RUNS the same step. Same projection shape.
-
-### A3: Clarity review (bug-report triage) ⬜
-
-Mirrors requirements exactly: same `IterativeReviewService` shape, same reply / set-status /
-incorporate / re-review / proceed / resolve-exceeded verb set. The public routes should mirror
-`/decisions/requirements/*` verb for verb.
-
-Three pieces of work, not two: a second module read in `buildDecisionList`, a `clarity-review`
-decision kind, and the same **item-id re-keying** the requirements twin does. The internal clarity
-item routes are review-keyed (`/clarity-reviews/:reviewId/items/:itemId/reply`) while the public
-requirements routes deliberately address by ITEM id and resolve the live review from the run's block
-(`PublicDecisionController`, `registerRequirementsDecisionRoutes`): a headless caller reads findings
-from `GET .../decisions` and never chose a review id. Copy the public shape, not the internal one.
-
-### A4: Brainstorm dialogues ⬜
-
-Both stages (`requirements`, `architecture`). Same verb set again, but keyed by `(block, stage)`
-rather than block alone, so the decision projection carries the stage and the routes take it. A block
-may hold a live session per stage: the list must be able to carry two brainstorm decisions at once.
-
-### A5: PR deep-review finding selection ⬜
-
-`step.prReview` parks at `awaiting_selection` for a human to curate the reviewer's findings and
-resolve (post / dismiss / challenge). Reachable only through `POST /tasks/:taskId/start`, since a
-`pr-reviewer` step is container-backed and the initiative surface is inline-only, which is why it
-ranks below A1–A4 despite being a genuine dead end. Projection is a pure read off the run, as A1;
-the findings are model-authored text crossing a rendered surface, so project them as data.
-
-### A6: Human-verdict gates (human-test, visual confirmation) ⬜
-
-`step.humanTest` and `step.visualConfirm` both park for a person to look at something: a live
-environment, a screenshot pair. Lowest priority of the A group and the only slice where "a headless
-caller cannot really do this" is a fair objection: the confirm/request-fix verbs are mechanical, but
-the judgement they record is the one thing an API consumer is least able to supply. Worth exposing
-for the integration that drives its OWN human through a different UI; not worth it otherwise. Listed
-so the omission is a decision on the record rather than a surface nobody noticed.
+**Left behind, deliberately:** the SPA's `dedicatedParkView` (`utils/pipelineRender.ts`) still
+carries its own copy of the shared cases, because it answers the adjacent question of which OVERLAY a
+step click opens and it cannot import the classifier — the built-in gate kinds live in
+`orchestration` (`HUMAN_TEST_AGENT_KIND`) where the frontend cannot see them. Converging the two
+means moving those constants into `@cat-factory/contracts` first, which is a change worth making on
+its own rather than smuggled in behind this one.
 
 ### B1: `GET /api/v1/me` (key introspection) ⬜
 
@@ -211,13 +227,40 @@ scope work above, since A1–A4 make scope more load-bearing.
 ADR 0030 already calls this "trivial once wanted: the spec already ships as a repo file, so an
 endpoint is only packaging". It becomes materially more useful once A1–A4 widen the surface.
 
-### C1: Notification-webhook management under `/api/v1` ⬜
+### C1: Notification-webhook management under `/api/v1` ✅
 
-Managed today only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
-behind `integrations.manage`, and there is deliberately no SPA panel. A deployment whose operator is
-headless therefore has NO route to register the receiver that the run-lifecycle push exists to feed.
-`admin` scope; the sealed signing secret must stay write-only (never readable back), and the
-`runEvents` selector rides it.
+Was managed only over the session-authed `GET|PUT|DELETE /workspaces/:ws/notification-webhook`
+behind `integrations.manage`, with deliberately no SPA panel, so a deployment whose operator is
+headless had NO route to register the receiver that the run-lifecycle push exists to feed: the
+delivery contract was headless and its enrolment was not.
+
+`GET|PUT|DELETE /api/v1/notification-webhook` now serve the same three verbs at `admin` scope,
+delegating to the same `NotificationWebhookService` the session controller calls (so the SSRF guard,
+the keep-on-omit rule per field and the one-row-per-workspace invariant cannot differ by surface).
+The session routes stay: an operator with a browser keeps the surface they had.
+
+Three decisions worth keeping:
+
+- **`admin` on the READ too**, where `read` was arguable (the projection carries no secret). ADR 0034
+  decides it: a scope can be relaxed later without breaking a live key, never tightened, so between
+  two close readings the strict one is the reversible one.
+- **The read is WRAPPED (`{ webhook: … | null }`), the write is not.** A bare nullable body is an
+  honest wire shape and a poor generated one: Go decodes a `null` body into a zero-valued struct, so
+  "nothing registered" would reach a caller as an endpoint whose URL is the empty string. The write
+  always has an endpoint to describe, so wrapping its response would hand every client a null to
+  check that cannot occur.
+- **The secret stays write-only on this surface too.** An `admin` key can ROTATE the signing secret
+  and can never read the stored one, which is what stops a leaked key from becoming the ability to
+  forge deliveries a receiver would verify.
+- **`PUT`'s `url` became optional so keep-on-omit is uniform.** Publishing the endpoint is what
+  forced the question: three separate places in the first draft described the rule as covering every
+  field, because that is the mental model a partial `PUT` creates, while the schema required `url`.
+  Rather than trim the docs to the accident, the schema moved. A mandatory re-send made the routine
+  edit carry a value the caller never meant to change, and a client re-sending a URL cached before
+  someone else rotated the receiver would redirect every future delivery while looking like it only
+  added a subscription. The first `PUT` on an empty workspace still needs one
+  (`reason: 'webhook_url_required'`). Worth doing BEFORE the version shipped: relaxing a required
+  field stays legal afterwards, but the false doc would have been baked into four published SDKs.
 
 ### D1: Ticket context on task creation ✅
 
@@ -258,6 +301,68 @@ writes as one slice is what turns this on, and it belongs to the mothership trac
   endpoint too, and a per-task issue lookup there is a banned N+1: it needs a batched
   `TaskRepository` block→issue method mirrored D1 ⇄ Drizzle with a conformance assertion. Worth
   doing as its own slice if a consumer asks; not worth smuggling in behind a create.
+
+### D2: Requirements documents on task creation ✅
+
+The other half of D1, and the same class of gap: an input the app has and the API did not.
+`POST /api/v1/services/:serviceId/tasks` now takes an optional ordered `documents` list, each entry
+either a page NAMED in a connected document source (imported and attached, as D1 does for a ticket)
+or an `upload` CARRYING the text.
+
+Worth reading before extending it, because the shape was not obvious:
+
+- **The gap was never "documents are missing", it was SIZE.** `description` caps at 2,000
+  characters because it is a task's own framing, echoed into every prompt; the `POST /jobs` brief
+  takes 50,000 but drives inline pipelines that never touch a repository. So a headless caller
+  holding a PRD had no way to get it in front of a run that opens a pull request. That is why the
+  `upload` variant is the load-bearing half rather than a convenience: naming a Confluence page
+  only helps a caller whose spec is already on a wiki.
+- **`upload` is a `DocumentOrigin`, NOT a `DocumentSourceKind`, and the split is the design.**
+  Everything a provider does (connect, search, import a ref, `probeVersion` a stored copy against
+  the live page) is defined only for a connectable source, and there is no `upload` provider to
+  ask. Keeping the narrow union on those surfaces is what makes the absence a compile error rather
+  than an `undefined` at whichever call site reaches for the missing provider first; the wide union
+  covers only the stored row and its block/role links, where the origin is a label. A future
+  origin with no provider (a pasted-in artifact, a generated brief) copies this rather than
+  widening `DocumentSourceKind`.
+- **The readability refusal at the boundary is STRICTER than the run-time one, on purpose.**
+  `hasReadableContent` passes anything with a non-empty raw body, because a container agent opens
+  the materialised markdown and can at least see what is in it; only the excerpt-only inline
+  readers refuse a body that renders to nothing. `assertUploadReadable` refuses it for everyone,
+  because here the bytes are in hand and the caller can fix them, where the run-time refusal costs
+  a step already paid for. The run-time refusal stays: it is the one that covers a page whose
+  SOURCE went empty after import.
+- **An uploaded document has no URL, and every reader had to be taught the difference between
+  "no origin" and "a broken one".** `originSuffix` / `originHeaderLine` (kernel) are what the
+  prompt index, the inline injection and the `.cat-context/` file header all render through, so
+  none of them can emit `Title ()` or a bare `Source:` line. The SPA does the same by rendering a
+  non-anchor row.
+- **A `201` means the task carries every document named**, so an attachment that fails after the
+  block exists takes the task back off the board, exactly as a lost ticket claim does. The
+  documents themselves stay (a projected document is what a plain import produces anyway), so a
+  retry re-imports rather than accumulating half-written state. The attach runs BEFORE the ticket
+  claim on purpose: a block removed after a successful claim would leave the ticket pointing at a
+  task nobody can open, which then refuses every future filing of it.
+- **The rollback detaches by BLOCK, never by the refs it resolved.** A rollback can be running
+  BECAUSE the attach was refused (a named document belongs to another task), and clearing that
+  document by ref would strip the task that legitimately holds it — the same silent loss the guard
+  just refused, committed by the cleanup path. Asking "what is attached to the block being removed"
+  can only ever clear links this creation made.
+- **The uploads are WRITTEN LAST, after the whole list resolves.** An import is idempotent on its
+  `(source, externalId)` key, so a retry lands on the same row; every upload mints a fresh id, so
+  an eagerly-written one leaves an unreachable copy behind on each attempt. Writing them after the
+  refusable half means an integration retrying in a loop cannot fill a workspace with orphans.
+  Anything added here that MINTS rather than keys must go in the same pass.
+- **The corpus bound was deliberately NOT duplicated.** The contract caps one document
+  (100,000 characters) and the list (10 entries); the ~256 KB materialised-context budget is
+  enforced where it always was, at the first dispatch, because it also sizes in linked tracker
+  issues this endpoint cannot see. A second, partial "too much context" rule here would disagree
+  with it and read as an all-clear.
+
+Same mothership caveat as D1, and for the same reason: `documentRepository.upsert` / `linkBlock`
+are `pending` on the persistence allow-list, so naming `documents` on a node with no main database
+answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
+is one slice of the mothership tracker, not this one.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 
@@ -303,6 +408,17 @@ Recorded so these are not re-proposed:
 - **Add the surface to `PUBLICLY_ANSWERABLE_PARK_SURFACES`** (`publicApiAdmission.ts`) as part of the
   slice. That set is what the A0 refusal message and its drift-guard test read, so a slice that ships
   an answer path without updating it leaves the API still telling operators the park is unanswerable.
+- **A park that rides `step.approval` is classified through `dedicatedParkSurface`, never re-listed.**
+  Offering a caller the generic approve verbs on a park the engine refuses them for is a 409 loop, and
+  a second copy of the list is how that arrives (see A1–A6 above).
+- **Two SDK-generation rules bite the CONTRACT, not the emitter.** A REQUEST body field may not carry
+  a valibot `default` (`v.optional(x, y)`): a default means "always present" outbound and "may be
+  omitted" inbound, and the emitters read the former, so four published clients would insist on a
+  value the API does not need. Apply the fallback at the call site instead and document it on the
+  field. And an enum reused by more than one DTO is DEDUPED by value-set into a single named type,
+  whose name is taken from whichever DTO the walk reaches first — so reusing a picklist an existing
+  DTO already published silently RENAMES a released type. Pin it in `INLINE_ENUM_NAMES`
+  (`scripts/sdk/ir.mjs`) to the name that shipped.
 - **Regenerate `docs/openapi.json`** (`pnpm gen:openapi`) in the same PR, with the
   `COMPONENT_SCHEMAS` + `OPERATION_DOCS` entries each new named DTO needs; CI fails on drift.
 - **Update the usage guide** ([`backend/docs/public-api.md`](../../backend/docs/public-api.md)) in

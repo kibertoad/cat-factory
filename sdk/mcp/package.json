@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/mcp-server",
-  "version": "0.2.1",
+  "version": "0.6.0",
   "description": "Model Context Protocol server for the cat-factory public API (/api/v1): a thin facade that exposes the published operations as MCP tools, generated from the same OpenAPI spec the SDKs are, over the hand-written @cat-factory/sdk transport.",
   "keywords": [
     "cat-factory",
@@ -21,12 +21,19 @@
     "dist"
   ],
   "type": "module",
+  "sideEffects": [
+    "./dist/bin.js"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
     },
     "./package.json": "./package.json"
   },

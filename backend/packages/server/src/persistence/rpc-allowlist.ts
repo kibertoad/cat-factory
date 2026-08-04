@@ -404,6 +404,10 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // per-dispatch run path as `get`/`listByBlock` above — so it must be allow-listed too
     // (else a task whose description contains any link fails the run with `unknown_method`).
     getByUrl: { scope: { kind: 'workspace', arg: 0 } },
+    // The batched counterpart to `get`, mirroring `taskRepository.listByRefs` below: attaching a
+    // LIST of documents resolves them in one read rather than a point-read per document. arg0 is
+    // the workspaceId → the `workspace` rule.
+    listByRefs: { scope: { kind: 'workspace', arg: 0 } },
     // Document-authoring run path (WS1): for a doc-aware kind, `AgentContextBuilder` resolves the
     // workspace's linked TEMPLATE (singular) + EXEMPLAR (list) for the block's `docKind` on each
     // dispatch, so both reads are on the run path exactly like `listByBlock`/`getByUrl`. arg0 is
@@ -1221,6 +1225,7 @@ export const LOCAL_FIRST_PERSISTENCE_REPOSITORIES = [
   'llmCallMetricRepository',
   'agentContextSnapshotRepository',
   'agentSearchQueryRepository',
+  'agentToolCallRepository',
   'provisioningLogRepository',
   'subscriptionQuotaCycleRepository',
 ] as const

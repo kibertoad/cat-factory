@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
 import { pathExists } from './fs-utils.js'
-import { redactSecrets } from './redact.js'
+import { redactSecrets, secretsToRedact } from './redact.js'
 import { HarnessFailure } from './failure.js'
 import { log } from './logger.js'
 import type { EffortReport } from './effort.js'
@@ -14,6 +14,12 @@ import {
   toolCallSignal,
   type ProgressGuardLimits,
 } from './progress-guard.js'
+import {
+  ToolCallTracker,
+  readToolCallId,
+  toolCallResult,
+  toolCallStart,
+} from './tool-trajectory.js'
 
 // Drives the Pi coding-agent CLI. Pi is pointed at the Worker's OpenAI-compatible
 // proxy via a custom provider in ~/.pi/agent/models.json, authenticated with the
@@ -501,18 +507,39 @@ export interface TodoProgress {
 }
 
 /**
- * One tool invocation in Pi's loop, captured for the run's observability trace.
- * Metadata only (name + timing + ok) — never the tool's args or result — so the
- * harness buffer stays tiny. The backend drains these on its existing job poll and
- * emits them as child spans under the run trace.
+ * One tool invocation in an agent's loop, captured for the run's TRAJECTORY: the ordered
+ * account of what the agent did, drained by the backend on its existing job poll and
+ * both persisted and emitted as a child span under the run trace.
+ *
+ * It carries the call's arguments and result (scrubbed and capped at capture — see
+ * `tool-trajectory.ts`), because the question asked of a finished run is which command
+ * ran against what, not how long a tool named `bash` took. Whether those bodies are
+ * RETAINED is the backend's decision, taken against the deployment switch and the
+ * workspace's opt-out; the harness's job is to capture them bounded and scrubbed.
  */
 export interface ToolSpan {
   tool: string
-  /** Epoch ms the tool call started (approximated as the previous tool's end). */
+  /**
+   * The call's 0-based ordinal within this job. Two calls routinely land in the same
+   * millisecond, so this is the only thing that orders the trajectory — and it is what
+   * makes the backend's stored row id deterministic, so a replayed poll re-records
+   * instead of duplicating.
+   */
+  seq: number
+  /** Epoch ms the tool call started (the previous call's end when no start was seen). */
   startedAt: number
   /** Epoch ms the tool call ended (when its `tool_execution_end` event arrived). */
   endedAt: number
   ok: boolean
+  /** Whether the bodies below were captured at all — always `'stored'` from this harness. */
+  bodies: 'stored' | 'withheld'
+  /** The call's arguments, serialised, scrubbed and capped. `''` when it took none. */
+  args: string
+  /** What the tool returned, scrubbed and capped. `''` when it returned nothing. */
+  result: string
+  /** Characters the cap dropped from {@link args} / {@link result}; 0 when nothing was cut. */
+  argsDropped: number
+  resultDropped: number
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -918,10 +945,17 @@ export function runPi(opts: {
       opts.guardLimits ?? progressGuardLimitsFromEnv(),
       opts.expectsEdits ?? true,
     )
-    // Start boundary for the next tool span: each tool's slice runs from the previous
-    // tool's end (or the run start) to its own `tool_execution_end`. Approximate but
-    // contiguous — enough for the trace tree, and metadata-only.
-    let toolBoundary = Date.now()
+    // Pairs each tool call's start with its result, numbers the pairs and captures the two
+    // bodies (scrubbed + capped). A call whose start Pi never emitted still gets an entry,
+    // timed from the previous call's end — see `ToolCallTracker`.
+    //
+    // The known-secret list is DERIVED from the token this function itself hands the child
+    // (`PI_PROXY_TOKEN` / `SEARXNG_API_KEY`) rather than taken as a parameter: the bodies
+    // travel to a store and to external trace sinks, and a caller that forgets to pass the
+    // list produces bodies scrubbed of credential SHAPES only, with no signal that the
+    // narrower rule ever ran. Deriving it here means the one place that knows the child's
+    // credentials is the place that scrubs them.
+    const tools = new ToolCallTracker(secretsToRedact(opts.sessionToken))
 
     // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
     // and the no-progress guard; the `close` handler turns it into a rejection.
@@ -958,21 +992,22 @@ export function runPi(opts: {
         if (progress) opts.onProgress(progress)
       }
       if (opts.onSpan) {
+        const start = toolCallStart(event)
+        if (start) tools.started(start.id, start.name, start.args)
         const signal = toolCallSignal(event)
         if (signal && signal.name) {
-          const endedAt = Date.now()
+          const call = tools.finished(
+            readToolCallId(event),
+            signal.name,
+            toolCallResult(event),
+            signal.isError,
+          )
           try {
-            opts.onSpan({
-              tool: signal.name,
-              startedAt: toolBoundary,
-              endedAt,
-              ok: !signal.isError,
-            })
+            opts.onSpan({ ...call, bodies: 'stored' })
           } catch {
             // A faulty observer must never break the run.
             observerErrors++
           }
-          toolBoundary = endedAt
         }
       }
       if (runGuard && !guardReason && !aborted) {

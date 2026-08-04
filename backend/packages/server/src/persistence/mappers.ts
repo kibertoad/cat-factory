@@ -903,7 +903,7 @@ interface ExecutionDetail {
   frontendBindings?: ResolvedFrontendBinding[]
   /** After-the-fact investigation context (see {@link ExecutionInstance.diagnostics}). */
   diagnostics?: RunDiagnostics
-  /** The pre-token input gate's verdict (see {@link ExecutionInstance.inputGate}). */
+  /** The pre-dispatch input gate's verdict (see {@link ExecutionInstance.inputGate}). */
   inputGate?: RunInputGate
 }
 
@@ -945,7 +945,7 @@ function parseRunDiagnostics(value: unknown): RunDiagnostics | undefined {
 }
 
 /**
- * The pre-token input gate's stored verdict. Dropped when malformed, exactly like the
+ * The pre-dispatch input gate's stored verdict. Dropped when malformed, exactly like the
  * diagnostics above: an unreadable record must not brick the whole snapshot decode, and an
  * ABSENT verdict already has a defined meaning (the gate has not evaluated this run yet), so
  * dropping one is at worst a re-evaluation rather than a false clean bill of health.
@@ -1045,7 +1045,7 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       const diagnostics = parseRunDiagnostics(detail.diagnostics)
       return diagnostics ? { diagnostics } : {}
     })(),
-    // The pre-token input gate's verdict rides in `detail` too (absent until the run reaches
+    // The pre-dispatch input gate's verdict rides in `detail` too (absent until the run reaches
     // its first dispatch); dropped if malformed, like the diagnostics above.
     ...(() => {
       const inputGate = parseRunInputGate(detail.inputGate)
@@ -1083,9 +1083,12 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
-    // Only persisted for a headless (`public-api`) run — `ui` is the read-time default, so
-    // storing it would put a redundant key on every ordinary run's detail JSON.
-    intakeOrigin: instance.intakeOrigin === 'public-api' ? 'public-api' : undefined,
+    // Only persisted for a NON-`ui` run, since `ui` is the read-time default and storing it would put
+    // a redundant key on every ordinary run's detail JSON. Written as "anything but the default"
+    // rather than as an allow-list of the origins that existed when this was authored: an
+    // allow-list here drops a newly added origin on the floor at write time, and the run then
+    // reads back as UI-started with nothing to grep for.
+    intakeOrigin: instance.intakeOrigin === 'ui' ? undefined : instance.intakeOrigin,
     // The tier the run was ADMITTED under, and whether it may land its work. Both are settled
     // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
     // nothing else — so a field missing here is a merge policy that silently never applies.
@@ -1105,7 +1108,7 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Diagnostics are stamped once a container step dispatches; a pure inline/gate run has none
     // (JSON.stringify omits the undefined key so those runs carry nothing extra).
     diagnostics: instance.diagnostics,
-    // The pre-token input gate's verdict, once it has one. Absent until the run reaches its
+    // The pre-dispatch input gate's verdict, once it has one. Absent until the run reaches its
     // first dispatch, which is a real state (see `ExecutionInstance.inputGate`), so an
     // un-evaluated run carries nothing extra.
     inputGate: instance.inputGate,

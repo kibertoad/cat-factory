@@ -1,4 +1,9 @@
-import type { AgentContextSnapshot, AgentSearchQuery, LlmCallMetric } from '@cat-factory/kernel'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  AgentToolCall,
+  LlmCallMetric,
+} from '@cat-factory/kernel'
 
 // Mothership-mode telemetry INGEST (docs/initiatives/mothership-mode.md, PR 5 — the UPSTREAM half).
 //
@@ -26,6 +31,11 @@ export const TELEMETRY_INGEST_LIMITS = {
   snapshots: 20,
   /** Performed searches: no unbounded body, so the cap is purely on row count. */
   searchQueries: 500,
+  /**
+   * Tool calls: each carries two bodies, but both are capped at CAPTURE time, so the cap here is
+   * a byte budget divided by that ceiling rather than a guess about row shape.
+   */
+  toolCalls: 500,
 } as const
 
 /**
@@ -52,6 +62,7 @@ export interface TelemetryIngestRequest {
   metrics?: LlmCallMetric[]
   snapshots?: AgentContextSnapshot[]
   searchQueries?: AgentSearchQuery[]
+  toolCalls?: AgentToolCall[]
 }
 
 /** How many rows of each sink the mothership actually appended (duplicates included). */
@@ -59,6 +70,7 @@ export interface TelemetryIngestResult {
   metrics: number
   snapshots: number
   searchQueries: number
+  toolCalls: number
 }
 
 /**
@@ -141,6 +153,7 @@ export class HttpMachineTelemetryClient implements MachineTelemetryClient {
       metrics: body.stored?.metrics ?? 0,
       snapshots: body.stored?.snapshots ?? 0,
       searchQueries: body.stored?.searchQueries ?? 0,
+      toolCalls: body.stored?.toolCalls ?? 0,
     }
   }
 }

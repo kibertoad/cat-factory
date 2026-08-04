@@ -1,6 +1,7 @@
 # MCP support maturation
 
-Status: **proposed; no slices landed.** Source: the 2026-08-04 review of both MCP surfaces.
+Status: **in progress; slices 1, 2 and 3 landed.** Source: the 2026-08-04 review of both MCP
+surfaces.
 
 ## Goal
 
@@ -57,56 +58,48 @@ dump and never uses the word MCP).
   (environments, runners, local models, user secrets).
 - **The hosted endpoint mounts what already exists**: `createCatFactoryMcpServer` returns a bare
   `Server` decoupled from transport, and the pinned `@modelcontextprotocol/sdk` 1.30 ships
-  `StreamableHTTPServerTransport`.
+  `WebStandardStreamableHTTPServerTransport` (the `Request → Response` sibling of the Node-only
+  `StreamableHTTPServerTransport`, which is what let slice 3 land in the shared controller layer).
 - **OAuth tokens live in the capability-credential store**
   ([capability-credential-store.md](./capability-credential-store.md)): sealed, per-workspace,
   already composed in front of the environment resolver per key.
 
 ## Slices
 
-- [ ] **1. Honest wiring: every declared server is either served or stated.** The consuming-side
-      defects, together because they are one property enforced at three layers.
-      `servableOnThisRun` becomes transport-aware, so an `http` server on a Codex run is dropped
-      WITH a stated reason (a new member of the existing unavailability vocabulary in
-      `prompts/capabilities.ts`) instead of advertised and then skipped by `codexMcpConfigToml`.
-      Boot validation gains a transport-by-harness rule (a definition whose `harnesses` and
-      `transport` can never be served anywhere is a boot warning, `harnesses: ['pi']` included)
-      and starts validating ASSIGNED capabilities: iterate the union of `registry.all()` and the
-      kinds named by `assignSkills`/`assignToolServers`, minding that `requiresContainer` answers
-      false for unregistered kinds, so the container warning must consult the built-in container
-      set rather than the registry. `collectDeclaredCapabilityCredentials` enumerates the same
-      union, so a credential declared only via assignment to a built-in reaches the operator
-      checklist. Field validation closes the unvalidated inputs: `allowedTools` entries refuse
-      commas (the harness joins them with `','` into one `--allowedTools` argument), and the
-      server list gets the same size cap discipline as the context-file corpus. The progress
-      guard learns `mcp__*` (disposition to decide in the slice: exempt like exploration tools,
-      or a separate budget); this is the phase's one image bump, so the harness-side test backfill
-      rides it: the `toolServersSection` prompt contract, `harnesses` narrowing, Codex
-      `config.toml` end to end, and the Codex+http case above.
-- [ ] **2. The published server: guarded, filterable, structured.** Extend
-      `check-publish-integrity.mjs` and `check-package-catalog.mjs` to `sdk/*`, add an MCP runner
-      to `backend/internal/sdk-smoketest` so CI drives the real binary against a real backend,
-      and cover `bin.ts` (stderr-only rule, exit codes, `CAT_FACTORY_API_KEY_FILE` as the
-      plaintext-config mitigation until slice 6). Then the protocol depth the generator already
-      has the data for: per-tool allow/deny beside the group filter (today excluding the
-      PR-merging `notifications_act` costs the whole `notifications` group), `outputSchema` +
-      `structuredContent` from the response schemas already in the IR, compact JSON instead of
-      `JSON.stringify(value, null, 2)` (the indentation inflates every read for free), and
-      `destructiveHint`/`idempotentHint` on the four real-money tools (`tasks_start`,
-      `tasks_retry`, `jobs_create`, `notifications_act`). Docs ride along: `sdk/AGENTS.md` learns
-      the MCP package exists (the generated table, the `MCP_OMITTED_OPERATIONS` rule), the README
-      gains a `claude mcp add` snippet and one worked flow (create, start, poll, decide), and the
-      server instructions gain polling guidance for the SSE-shaped gaps.
-- [ ] **3. Hosted MCP endpoint.** Mount the existing server behind
-      `StreamableHTTPServerTransport` on BOTH facades, behind the public-API key auth and scope
-      ladder, with a conformance assertion so the facades cannot drift. This is the adoption
-      lever: today "drive cat-factory from Claude" requires npm, a local process and a key pasted
-      into host config; a hosted endpoint makes the platform reachable from claude.ai, Claude
-      Desktop and hosted agents with zero install. The slice decides statefulness (per-request
-      server instance vs a session manager) and how the read-only/group filtering maps onto key
-      scopes. The endpoint joins the public surface, so it ships under the stability contract
-      from its first release. The stdio binary stays: it is the path that needs no backend
-      deployment and the only one for hosts without HTTP MCP support.
+- [x] **1. Honest wiring: every declared server is either served or stated.** ([#1664](https://github.com/kibertoad/cat-factory/pull/1664))
+      The consuming-side defects, together because they are one property enforced at three layers.
+      `servableOnThisRun` became transport-aware, so an `http` server on a Codex run is dropped
+      WITH a stated reason (`transport_unsupported`, a new member of the unavailability vocabulary)
+      instead of advertised and then skipped by `codexMcpConfigToml`. Boot validation gained a
+      transport-by-harness rule (`tool_server_unservable`, a warning, `harnesses: ['pi']` included)
+      and now validates ASSIGNED capabilities through the new
+      `AgentKindRegistry.kindsWithCapabilities()` union helper, with the container warning going
+      through `runsInContainer` rather than `registry.requiresContainer` (which answers false for
+      every built-in). `collectDeclaredCapabilityCredentials` enumerates the same union.
+      `allowedTools` entries are held to `isValidMcpToolName` at all three layers (registration, the
+      dispatch that builds the prompt projection, the job boundary), and the server list to
+      `TOOL_SERVER_BUDGET`, dropping the excess under `over_budget` rather than refusing the dispatch
+      as the context-file corpus does: tool servers are deployment CODE, so boot is where the fault
+      is named. BOTH budget dimensions warn at boot, the byte one measured on the declaration
+      (`toolServerDeclaredBytes`, a floor on the resolved spec the dispatch measures), and the
+      unbounded DROP list is folded into a count past `maxStatedUnavailable` so the runaway
+      declaration the cap exists for cannot reach the prompt one line at a time. The progress guard
+      exempts `mcp__*` from the no-edit bound and bounds it with its own `maxConsecutiveMcpCalls`
+      streak, plus `maxConsecutiveNonActionCalls` across every exempt family, since each per-family
+      cap resets on a call outside its family and interleaving two of them tripped nothing.
+      Image bumped to 1.89.0, carrying the harness-side test backfill: the `toolServersSection`
+      prompt contract, the transport matrix, Codex `config.toml` end to end (asserted from INSIDE
+      the run, since the per-run home is wiped in `finally`), and the `allowedTools` boundary.
+- [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped. Two
+      decisions it had to make on the way, and the cost it leaves behind, are below.
+- [x] **3. Hosted MCP endpoint.** `POST /api/v1/mcp`, mounted by `PublicMcpController` in the
+      SHARED controller layer, so both facades serve it from one implementation rather than two that
+      could drift. `handleMcpHttpRequest` lives in `sdk/mcp` beside the server it wraps, which is
+      what keeps the MCP SDK (and its Node-reaching types) out of the backend's Web-standard HTTP
+      layer and makes the endpoint something any deployment of this API can stand up. Tool calls
+      reach `/api/v1` through `http/loopback.ts` under the CALLER's forwarded key, so nothing is
+      reachable there that the same key could not reach with `curl`. The three decisions the slice
+      owed, and the two things it turned out not to need, are below.
 - [ ] **4. Tool-server operability.** A probe seam that speaks `initialize` + `tools/list` to a
       declared server, surfaced as the same `/test` shape every neighbouring connection type has,
       plus a Test button beside the capability-credential checklist. The probe is also the first
@@ -146,23 +139,23 @@ dump and never uses the word MCP).
 ## Findings inventory
 
 Every finding from the review, with its disposition. "Slice N" means the slice's checklist above
-carries it.
+carries it; "done" means that slice has landed.
 
 | Finding                                                                           | Disposition                   |
 | --------------------------------------------------------------------------------- | ----------------------------- |
-| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1                       |
-| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1                       |
-| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1                       |
-| No cap on server count/size, unlike the context-file corpus                       | Slice 1                       |
-| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1                       |
-| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1                       |
-| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2                       |
-| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2                       |
+| Codex+http server advertised in the prompt, dropped by the TOML writer            | Slice 1 (done)                |
+| Assigned-to-built-in capabilities skip boot validation and the credential UI      | Slice 1 (done)                |
+| `allowedTools`/`harnesses` unvalidated (comma join, impossible harness lists)     | Slice 1 (done)                |
+| No cap on server count/size, unlike the context-file corpus                       | Slice 1 (done)                |
+| Progress guard counts `mcp__*` calls toward the no-edits abort                    | Slice 1 (done)                |
+| Named test gaps (prompt section, harness narrowing, Codex TOML, argv positive)    | Slice 1 (done)                |
+| `sdk/mcp` outside publish-integrity and package-catalog guards                    | Slice 2 (done)                |
+| No CI run of the real binary; `bin.ts` untested; no smoketest runner              | Slice 2 (done)                |
 | API key only via env, plaintext in host config                                    | Slice 2 (key file), slice 6   |
-| Tool filtering is group-coarse, startup-only                                      | Slice 2                       |
-| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2                       |
-| `destructiveHint` unset on the four spending tools                                | Slice 2                       |
-| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2                       |
+| Tool filtering is group-coarse, startup-only                                      | Slice 2 (done)                |
+| Text-only pretty-printed results; no `outputSchema`/`structuredContent`           | Slice 2 (done)                |
+| `destructiveHint` unset on the four spending tools                                | Slice 2 (done)                |
+| `sdk/AGENTS.md` silent on MCP; no `claude mcp add`; no worked flow; no poll guide | Slice 2 (done)                |
 | stdio-only; no hosted endpoint; no backend MCP route                              | Slice 3                       |
 | No probe/health check; `allowedTools` never checked against reality               | Slice 4                       |
 | Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 4                       |
@@ -218,13 +211,177 @@ Recorded so the next iteration does not re-propose them.
 
 - **Any harness-side change is an image bump** (`@cat-factory/executor-harness` version + the
   three pinned tags + `RECOMMENDED_HARNESS_IMAGE`), and a reused tag does not deploy. Slice 1
-  bundles its harness edits into one bump; slice 4's handshake is a second.
-- **The kernel/harness copies are pinned by conformity tests.** The id pattern and the URL rule
-  exist twice on purpose; slice 1's validation additions must extend both sides and the pinning
-  test, not just kernel.
-- **`registry.all()` walks are in more places than validation.** Slice 1 fixes the two found
-  (boot validation, the credential checklist); anything new that enumerates "kinds with
-  capabilities" must use the union helper it introduces, or the same hole reopens.
+  bundled its harness edits into one bump (1.89.0); slice 4's handshake is a second.
+- **The kernel/harness copies are pinned by conformity tests.** The id pattern, the tool-name
+  pattern and the URL rule exist twice on purpose; a validation addition must extend both sides and
+  the pinning test, not just kernel.
+- **`registry.all()` walks are in more places than validation.** Slice 1 fixed the two found (boot
+  validation, the credential checklist) and introduced
+  `AgentKindRegistry.kindsWithCapabilities()`; anything new that enumerates "kinds with
+  capabilities" must use it, or the same hole reopens.
+- **A new unavailability reason owes prose in `UNAVAILABLE_REASONS`** (the exhaustive `Record` in
+  `prompts/capabilities.ts`), phrased for the AGENT rather than an operator: it needs to know the
+  tool is absent and that trying harder will not produce it. Two reasons deliberately render the
+  SAME sentence (`harness_unsupported` / `transport_unsupported`) because the distinction is the
+  operator's, carried by the log line and the boot warning.
+- **The harness-side stdio-only skips are backstops now, not decisions.** `codexMcpConfigToml` still
+  drops an `http` server, but the backend has already dropped it with a reason, so a change that
+  makes the harness silently skip something is again the defect slice 1 closed.
+- **A new progress-guard EXEMPTION owes two caps, not one.** Its own consecutive-call streak, and a
+  place in the shared `maxConsecutiveNonActionCalls` backstop (`isNonActionToolCall`), because every
+  per-family streak resets on a call outside its family: two exempt families interleaved trip
+  neither, and a run that makes no action call never reaches the no-edit bound either. The
+  exemption set and the backstop set must be the SAME predicate, or the guard either misses a loop
+  or kills a run for a call the bound says it may make.
+- **A cap on one side of a pair needs the other side asking whether it is now unbounded.** The
+  dispatch caps the servers it WIRES; the drop list it produces instead had no cap and lands in the
+  same prompt, which is why `maxStatedUnavailable` folds it. Same shape as the boot warnings: the
+  count dimension had one and the byte dimension did not, so a fat declaration was refused at
+  dispatch by a rule boot never mentioned.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
-  the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
-  internal-first soft launch for an endpoint whose whole point is external callers.
+  the hosted endpoint fall under the ADR 0034 stability contract immediately; there is no
+  internal-first soft launch for an endpoint whose whole point is external callers. It carries that
+  obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
+  decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 3's three decisions, and the two it did not need
+
+- **The transport is `WebStandardStreamableHTTPServerTransport`, not the `StreamableHTTPServerTransport`
+  this tracker originally named.** That one wraps Node's `IncomingMessage`/`ServerResponse`, so a
+  Worker facade could not mount it, and "the hosted endpoint exists on one runtime" is the facade
+  asymmetry this repo treats as a showstopper. The web-standard sibling is `Request → Response`, which
+  is what let the endpoint land in the SHARED controller layer rather than once per facade.
+- **Stateless, one server per request, JSON responses.** A session-keyed server holds its state in the
+  memory of the process that minted the session id, and neither runtime can promise the next request
+  lands there: a Worker request gets whichever isolate the edge picks, and a Node deployment scaled
+  past one instance has the same problem without sticky routing. So a stateful endpoint works on a
+  developer's single process and fails intermittently in production. Nothing needs the state anyway.
+  `GET`/`DELETE` are therefore `405` with `Allow: POST`, in the transport's OWN JSON-RPC error frame
+  rather than the deployment's error envelope, because the reader is a protocol client that wants the
+  header and the frame. Auth failures go the other way (thrown `DomainError` → the envelope), since
+  the MCP spec puts those at the HTTP layer and an operator needs `details.reason`.
+- **Scope decides the tool list; the per-host filters do not apply.** A `read` key gets exactly the
+  `readOnly` tools, which is EXACT rather than approximate (every `/api/v1` GET requires `read` and
+  every write requires more), and the new `readOnlyReason: 'key-scope'` makes the instructions name a
+  wider key as the fix rather than a host-config edit. Above `read` the whole table is listed and the
+  refusal comes from the ONE authority on the question, the endpoint itself: the tool table carries no
+  per-operation scope, so filtering further would mean guessing, and a wrong guess WITHHOLDS a
+  capability the key genuinely has. Making it exact would mean emitting the required scope into the
+  spec (structured `security` per operation, additive, `info.version` minor) and threading it through
+  `emit-mcp.mjs`; deliberately not done here, since it is an `/api/v1` spec change with its own
+  regeneration of four clients.
+- **It did not need a deployment-wide filter.** The stdio filters exist because a stdio server is
+  per-host; a hosted one is per-DEPLOYMENT, so the same knob would narrow what an already-scoped key
+  may do for every caller at once, which is a break rather than a convenience. Per-workspace selection
+  is slice 5's job and has a tenant to attribute the decision to.
+- **It did not need an OpenAPI entry, and must not have one.** A JSON-RPC endpoint has no operation
+  shape to describe, and the generator's own rule (an `/api/v1` operation MUST have a
+  `scripts/sdk/surface.mjs` entry) would mint an SDK method in four languages plus an MCP tool for the
+  protocol none of them speaks. The two hand-documented SSE routes are not a precedent: those ARE
+  operations, which is why they need `MCP_OMITTED_OPERATIONS` entries.
+
+## Gotchas slice 3 surfaced
+
+- **`sdk/mcp` is now bundled into a Worker, so its runtime-neutral half may import NO Node built-in.**
+  This is invisible to every typecheck: the package opts into `@types/node` (its `bin` genuinely is a
+  process), so `import { readFileSync } from 'node:fs'` in `config.ts` compiled perfectly and would
+  break a deployment's Worker BUILD, since `node:fs` does not resolve there. `optionsFromEnv` therefore
+  takes its file reader as a required dependency, `bin.ts` supplies `readFileSync`, and
+  `test/runtime-neutral.test.ts` pins the closed neutral module list AGAINST the import graph, so a new
+  module reached from `http.ts` cannot join it unguarded.
+- **The loopback is a dispatch through `app.fetch`, not a `fetch` to the deployment's own origin.** A
+  network loopback needs an origin to aim at, which a facade behind a proxy, a preview URL or a private
+  hostname cannot reliably derive, and spends a connection to reach code already in memory. Forward
+  BOTH runtime handles: `env` (without it a Worker's inner request cannot build a container at all) and
+  `executionCtx` (without it an inner handler's post-response telemetry write is silently dropped, the
+  exact failure `makeWaitUntil` exists to prevent). Hono's `c.executionCtx` THROWS when absent, so
+  reading it is a try/catch.
+- **And forward the CORRELATION ID, which is the third handle and the easiest to forget.**
+  `mountRequestLogging` ADOPTS an inbound `X-Request-Id` rather than always minting one, so a
+  loopback that omits it leaves the inner `/api/v1` request logging under an id of its own: both
+  lines are present and nothing joins them, which is the one question a log of this endpoint exists
+  to answer. An id the inner request already carries wins, so a future loopback caller can still set
+  its own.
+- **A cross-origin BROWSER host needs `Mcp-Protocol-Version` in `CORS_ALLOWED_HEADERS`.** A
+  Streamable HTTP client sends it on every request AFTER `initialize` and on none before, so leaving
+  it out fails in the shape that reads as success: the handshake preflight asks only for headers
+  already listed and passes, then every real call is dropped by the browser with a CORS message that
+  names no route. The session header stays out on purpose — this endpoint is stateless and mints no
+  session id, so listing it would advertise a mode that does not exist. Server-side hosts send no
+  preflight at all, which is why the whole class was invisible until someone asked about a browser.
+- **A JSON-RPC BATCH is the endpoint's one unbounded dimension.** The transport accepts an array of
+  calls in one `POST` and each becomes its own loopback `/api/v1` request, so one authenticated
+  request fans out in proportion to its length, inside a single Worker invocation. Not a bypass (each
+  inner call re-runs the key gate and its own scope rung, and an in-process dispatch is not a
+  subrequest), but it is the shape to look at first if this endpoint ever needs a limit.
+- **Recursion is prevented by construction rather than by a guard.** The tool table is generated from
+  the OpenAPI spec, and the endpoint is deliberately not in it, so no tool can name a path that
+  re-enters the endpoint. That argument is what a future composed or hand-authored tool would break.
+- **Three test layers, and each sees something the others cannot.** `sdk/mcp`'s `http.test.ts` drives a
+  real MCP client whose `fetch` is the handler (protocol negotiation, statelessness, the 405 shape);
+  `publicMcp.spec.ts` drives the controller over a real `appLoopback` with a stub `/api/v1` route (the
+  refusal shapes, the scope mapping, that the CALLER's key is what reaches the API);
+  `integration-public-mcp.ts` drives each facade to a real row. The gap only the last one closes: a
+  facade that mounted the endpoint but wired the loopback wrongly answers `initialize` and `tools/list`
+  perfectly and returns nothing from every tool, which reads as an empty workspace.
+- **The `sdk-smoketest` MCP phases are now two, against ONE backend.** `--only=mcp` spawns the binary,
+  `--only=mcp-hosted` connects a real Streamable HTTP client to the running deployment. Running both
+  against one seeded board is the only thing in the repo that can see the two access paths answer
+  differently.
+- **Import `@cat-factory/mcp-server/http`, never the package root, from anything that bundles.** The
+  root re-exports the stdio boot, which drags `@modelcontextprotocol/sdk/server/stdio.js` and its
+  `node:process` import along: esbuild cannot shake it out, because dropping it would drop an import
+  of a package that does not declare itself side-effect-free. The `./http` subpath exists for exactly
+  this, and it is the only entry with the runtime-neutrality guarantee.
+- **What the Worker bundle pays for it, measured:** about **1.1 MiB unminified** (zod 640 KiB via the
+  SDK's `types.js`, ajv + ajv-formats 226 KiB via the eager validator in `server/index.js`, the SDK
+  itself 142 KiB, this package 94 KiB, `@cat-factory/sdk` 37 KiB), taking the Worker from 6.8 to
+  7.9 MiB raw and **0.96 MiB minified+gzipped**, so comfortably inside the 3 MiB limit. None of it is
+  avoidable while using the SDK's `Server`: both heavy imports are static and unconditional. ajv is
+  never asked to COMPILE anything on this path (the low-level server uses it only for elicitation,
+  which this facade never performs), which matters because `new Function` is unavailable on workerd;
+  constructing an `Ajv` does not compile.
+
+## Slice 2's two decisions, and what they cost
+
+- **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a successful
+  result with no `structuredContent` for a tool that declares a schema, and VALIDATES the content it
+  gets. `/api/v1` is additive forever, so every assertion that validation could turn against a newer
+  deployment is dropped on the way out: no `required`, no `enum`, no closed `anyOf`, no bounds, and
+  for a union not even `type` (every union on the surface has object variants today, so
+  `type: 'object'` would be accurate about the spec as it stands and would still be the assertion a
+  future string-or-array variant is rejected by). The known members of a vocabulary go in the field's
+  description, where a new member cannot invalidate them. `emit-mcp.mjs` carries this as an
+  `INPUT`/`OUTPUT` mode rather than a second renderer.
+- **The result cap became a REFUSAL rather than a truncation**, forced by the same obligation: half an
+  object cannot satisfy the schema it was cut out of. It is also the better trade on its own terms,
+  since the old `[TRUNCATED]` note spent the whole cap delivering "this is not valid JSON, narrow
+  instead of reading on".
+- **What it costs, for whoever revisits it:** the declared output schemas are about 41 KB of JSON
+  across the table, taking `tools/list` from roughly 20 KB to roughly 31 KB on the wire, and the text
+  block still accompanies `structuredContent` as the protocol recommends. The compact-JSON change
+  offsets part of it on the result side. Two levers if real transcripts show the tool-list read
+  dominating, cheapest first: the notification `payload` object is inlined by three tools at ~3.9 KB
+  each (29% of the total) and a model cannot act on thirty mutually exclusive payload shapes anyway,
+  so rendering it as `{}` reclaims ~12 KB on its own; `debug_get_run` is the single largest entry at
+  ~5.9 KB. Dropping the declarations entirely (keeping `structuredContent`) is the full reversal.
+
+## Gotchas slice 2 surfaced
+
+- **A declared `outputSchema` is a CONTRACT the caller enforces, not a hint.** The MCP client throws
+  when a schema-carrying tool answers successfully without `structuredContent`, and ajv-validates the
+  content against the schema. Anything that shortens, samples or partially renders a result is
+  therefore incompatible with declaring one, which is what turned the cap into a refusal. Slice 3's
+  hosted endpoint inherits this: the same tool table, the same obligation.
+- **`sdk/*` was outside two guards, and the fix is the GLOB, not another entry.** Both
+  `check-publish-integrity.mjs` and `check-package-catalog.mjs` named `sdk/typescript` or nothing;
+  they now expand `sdk/*`, so the next SDK-family member is covered without anyone remembering. The
+  Python/Go/Java clients have no `package.json` and drop out at read time.
+- **The MCP phase of `sdk-smoketest` is graded, not compared.** There is one implementation, so it
+  does not join `compareReports`; it reuses that module's problem vocabulary only so both phases
+  report the same way. It is also the only check that can see a generated output schema disagree with
+  what the deployment really answers, which makes it the natural home for slice 3's hosted-endpoint
+  assertions too.
+- **`pnpm build` on Windows executes zero tasks** (the root script's quoted `--filter` globs survive
+  into turbo verbatim), so a local `pnpm check:publish` reports every package as an empty shell. Run
+  `pnpm exec turbo run build --filter=./backend/** --filter=./sdk/**` instead.

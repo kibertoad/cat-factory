@@ -1,5 +1,6 @@
 import type { Hono } from 'hono'
 import type { AppEnv } from './http/env.js'
+import { appLoopback } from './http/loopback.js'
 import { accountController } from './modules/accounts/AccountController.js'
 import { platformObservabilityController } from './modules/observability/PlatformObservabilityController.js'
 import { reportsController } from './modules/reports/ReportsController.js'
@@ -101,6 +102,8 @@ import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
+import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
+import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
 
 /**
@@ -202,6 +205,16 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
   // budget. See backend/docs/debug-api.md.
   app.route('/', publicDebugController())
+  // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
+  // half of the push channel, so a deployment with no browser session can register the receiver
+  // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
+  // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
+  app.route('/', publicNotificationWebhookController())
+  // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
+  // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
+  // and the tools reach those routes back through this app's own loopback under the caller's key, so
+  // nothing here can drift from the surface above it.
+  app.route('/', publicMcpController(appLoopback(app)))
   // Read-only catalogs + account/workspace roots (gated by the facade's auth middleware).
   app.route('/', promptFragmentController())
   app.route('/', modelController())

@@ -7,10 +7,13 @@ export {
   logger,
   noopLogger,
   getLogLevel,
+  getLogSink,
   parseLogLevel,
   setLogLevel,
+  setLogSink,
   type LogFields,
   type LogLevel,
+  type LogSink,
   type Logger,
 } from './observability/logger.js'
 export { operationalMetrics } from './observability/operationalMetrics.js'
@@ -423,6 +426,7 @@ export type {
   ObservabilityConfig,
   NotificationWebhookConfig,
   OtelConfig,
+  OtelLogsConfig,
   InfraReachabilityConfig,
   PlatformAlertConfig,
   PrivilegedAppConfig,

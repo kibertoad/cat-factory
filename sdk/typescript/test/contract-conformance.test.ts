@@ -74,6 +74,18 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicTaskTicketSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicTaskSourceDocument,
+  v.InferOutput<typeof contracts.publicTaskSourceDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskUploadedDocument,
+  v.InferOutput<typeof contracts.publicTaskUploadedDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskDocument,
+  v.InferOutput<typeof contracts.publicTaskDocumentSchema>
+>()
+expectMutuallyAssignable<
   sdk.StartPublicTask,
   v.InferOutput<typeof contracts.startPublicTaskSchema>
 >()
@@ -91,6 +103,18 @@ expectMutuallyAssignable<sdk.Notification, v.InferOutput<typeof contracts.notifi
 expectMutuallyAssignable<
   sdk.PublicNotificationList,
   v.InferOutput<typeof contracts.publicNotificationListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.NotificationWebhook,
+  v.InferOutput<typeof contracts.notificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicNotificationWebhook,
+  v.InferOutput<typeof contracts.publicNotificationWebhookSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PutNotificationWebhook,
+  v.InferOutput<typeof contracts.putNotificationWebhookSchema>
 >()
 expectMutuallyAssignable<sdk.PublicUsageRow, v.InferOutput<typeof contracts.publicUsageRowSchema>>()
 expectMutuallyAssignable<
@@ -143,6 +167,87 @@ expectMutuallyAssignable<
   sdk.PublicResolveInputGate,
   v.InferOutput<typeof contracts.publicResolveInputGateSchema>
 >()
+expectMutuallyAssignable<
+  sdk.PublicApprovalGateDecision,
+  v.InferOutput<typeof contracts.publicApprovalGateDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicApproveStep,
+  v.InferOutput<typeof contracts.publicApproveStepSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRequestStepChanges,
+  v.InferOutput<typeof contracts.publicRequestStepChangesSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRejectStep,
+  v.InferOutput<typeof contracts.publicRejectStepSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAgentDecision,
+  v.InferOutput<typeof contracts.publicAgentDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolveAgentDecision,
+  v.InferOutput<typeof contracts.publicResolveAgentDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicClarityDecision,
+  v.InferOutput<typeof contracts.publicClarityDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicBrainstormDecision,
+  v.InferOutput<typeof contracts.publicBrainstormDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecision,
+  v.InferOutput<typeof contracts.publicPrReviewDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolvePrReview,
+  v.InferOutput<typeof contracts.publicResolvePrReviewSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicChallengePrReviewFinding,
+  v.InferOutput<typeof contracts.publicChallengePrReviewFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicHumanTestEnvironment,
+  v.InferOutput<typeof contracts.publicHumanTestEnvironmentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicHumanTestDecision,
+  v.InferOutput<typeof contracts.publicHumanTestDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicVisualConfirmDecision,
+  v.InferOutput<typeof contracts.publicVisualConfirmDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRequestGateFix,
+  v.InferOutput<typeof contracts.publicRequestGateFixSchema>
+>()
+
+// The nested projections a `pr-review` / `visual-confirmation` decision carries. The emitter
+// inlines them rather than hoisting them into `components.schemas`, so the coverage guard below
+// cannot see them, and inlined is exactly where a mapping bug hides, since nothing else names
+// the type. Asserted explicitly against the contract they come from.
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionSlice,
+  v.InferOutput<typeof contracts.publicPrReviewSliceSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionFinding,
+  v.InferOutput<typeof contracts.publicPrReviewFindingSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicPrReviewDecisionFindingChallenge,
+  v.InferOutput<typeof contracts.publicPrReviewFindingChallengeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicVisualConfirmDecisionPair,
+  v.InferOutput<typeof contracts.publicVisualConfirmPairSchema>
+>()
 
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
@@ -155,6 +260,9 @@ const ASSERTED_COMPONENTS = [
   'PublicTask',
   'PublicTaskList',
   'PublicTaskTicket',
+  'PublicTaskSourceDocument',
+  'PublicTaskUploadedDocument',
+  'PublicTaskDocument',
   'CreatePublicTask',
   'StartPublicTask',
   'UpdatePublicTask',
@@ -163,6 +271,9 @@ const ASSERTED_COMPONENTS = [
   'PublicPipelineList',
   'Notification',
   'PublicNotificationList',
+  'NotificationWebhook',
+  'PublicNotificationWebhook',
+  'PutNotificationWebhook',
   'PublicUsageRow',
   'PublicUsageBudget',
   'PublicUsage',
@@ -178,6 +289,21 @@ const ASSERTED_COMPONENTS = [
   'PublicChooseFork',
   'PublicInputGateDecision',
   'PublicResolveInputGate',
+  'PublicApprovalGateDecision',
+  'PublicApproveStep',
+  'PublicRequestStepChanges',
+  'PublicRejectStep',
+  'PublicAgentDecision',
+  'PublicResolveAgentDecision',
+  'PublicClarityDecision',
+  'PublicBrainstormDecision',
+  'PublicPrReviewDecision',
+  'PublicResolvePrReview',
+  'PublicChallengePrReviewFinding',
+  'PublicHumanTestEnvironment',
+  'PublicHumanTestDecision',
+  'PublicVisualConfirmDecision',
+  'PublicRequestGateFix',
 ] as const
 
 describe('generated models conform to the Valibot contracts', () => {

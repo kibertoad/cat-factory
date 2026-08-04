@@ -101,7 +101,7 @@ Verified against the code (files cited are the authorities):
    `InitiativeInterviewService`, `WorkspaceController` (snapshot descriptors),
    `InitiativeController` (probe).
 7. **Existing coverage that needs no work** (validated): create-form generically rendered
-   (`initiativePresetFieldSchema` + `InitiativePresetFields.vue`); interview steering for
+   (`initiativePresetFieldSchema` + the shared `DescriptorFields.vue` renderer); interview steering for
    full-interview presets; skip-interview qa seeding; phase-template prompt fold + ingest
    normalizer; spawn decoration incl. per-run `gates` override threaded by the loop; the
    preset-satisfiability start guard (`inline-harness-and-preset-satisfiability.md`)

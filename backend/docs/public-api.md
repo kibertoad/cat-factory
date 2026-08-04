@@ -58,12 +58,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                  |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md). |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                           |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park. |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**).                                 |
+| Scope    | Adds                                                                                                                                                                             |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).                            |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                      |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                            |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), and manage the [outbound webhook](#outbound-webhook-push). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -108,20 +108,20 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   validation failure carries `issues: [{ path, message }]`.
 - **Surface-specific codes**, unique to `/api/v1` (branch on these, not on the message):
 
-  | Code                             | Status  | Where                                                                                                        |
-  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                         |
-  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                  |
-  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                 |
-  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                            |
-  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                |
-  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                            |
-  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                       |
-  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                   |
-  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
-  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                  |
-  | `no_review`                      | 404     | requirements decision routes: the run has no live requirements review                                        |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
+  | Code                             | Status  | Where                                                                                                         |
+  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                          |
+  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                   |
+  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                  |
+  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                             |
+  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                 |
+  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                             |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                        |
+  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                    |
+  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
+  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
+  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                     |
 
 ### Pagination
 
@@ -225,10 +225,71 @@ Details, the design rules the four share, and the Java/Kotlin story:
 
 ### From an MCP host
 
-`@cat-factory/mcp-server` exposes this surface as **Model Context Protocol tools**, so a model in an
-MCP host can plan work on the board, start and watch runs, answer parked decisions and read a run's
-telemetry. It is a thin facade over the TypeScript client with its tool table generated from the
-same spec, so it inherits every convention on this page rather than re-stating them.
+This surface is also served as **Model Context Protocol tools**, so a model in an MCP host can plan
+work on the board, start and watch runs, answer parked decisions and read a run's telemetry. The tool
+table is generated from the same spec, over the same TypeScript client, so it inherits every
+convention on this page rather than re-stating them.
+
+Two ways in, same server behind both:
+
+| Path                                | Reach it with             | Use it when                                                          |
+| ----------------------------------- | ------------------------- | -------------------------------------------------------------------- |
+| **Hosted** `POST /api/v1/mcp`       | a URL and a key           | the host speaks HTTP MCP (claude.ai, Claude Desktop, a hosted agent) |
+| **stdio** `@cat-factory/mcp-server` | `npx`, a per-host process | the host spawns servers, or you want per-host tool filters           |
+
+#### Hosted (`POST /api/v1/mcp`)
+
+Nothing to install: point the host at the endpoint and authenticate exactly as every other call on
+this page does.
+
+```sh
+# Claude Code, for example:
+claude mcp add --transport http cat-factory $BASE/api/v1/mcp \
+  --header "Authorization: Bearer cf_live_…"
+```
+
+What to know about it:
+
+- **The key's SCOPE decides the tool list.** A `read`-scoped key is served only the tools that change
+  nothing, and the server's instructions say that a wider key would expose the rest, so a model asks
+  for one instead of reporting the platform as unable to write. Above `read` the whole table is
+  listed and each tool's own rung is enforced by the endpoint it calls: a `write` key calling
+  `tasks_delete` gets the same `insufficient_scope` refusal `DELETE /api/v1/tasks/{id}` would give
+  it, as tool content the model can read and act on.
+- **Every tool call is one `/api/v1` request under YOUR key.** Nothing is reachable here that the
+  same key could not reach with `curl`. Each one carries a `cat-factory-mcp/<version>` `User-Agent`,
+  so an audit trail shows that a model made the call, and it INHERITS the MCP request's
+  `X-Request-Id`: the tool call and the API call it caused share one correlation id, which is what
+  makes "which tool call produced this refusal" answerable. Supply your own `X-Request-Id` on the
+  MCP request and both halves are logged under it.
+- **Stateless, and it answers JSON.** No session to establish or tear down, so `GET` (the
+  server-to-client event stream) and `DELETE` (end a session) are answered `405`. Watching a run
+  means polling `tasks_get_run` / `jobs_get`, the same as on the stdio path.
+- **A JSON-RPC batch is one request that fans out.** The protocol permits an array of calls in one
+  `POST`, and each becomes its own `/api/v1` request, so a batch costs the deployment in proportion
+  to its length rather than to the one HTTP call it arrived as. Sized like any other public-API
+  usage: the per-tool result ceiling still applies to each entry, and the key's scope still gates
+  each one.
+- **The endpoint is public surface** under the stability contract above, from its first release. It
+  is deliberately NOT in [`docs/openapi.json`](../../docs/openapi.json): a JSON-RPC endpoint has no
+  operation shape to describe, and describing it would mint an SDK method in four languages for a
+  protocol none of those clients speaks. This section is what carries the obligation instead, which
+  has one consequence worth stating: because the endpoint is absent from the spec, its arrival did
+  not move `info.version`, and a change to it will not either. The spec's version tracks the
+  described surface; THIS section is the changelog for the part it cannot describe.
+- **From a browser origin it needs `Mcp-Protocol-Version` allow-listed**, which the shipped CORS
+  configuration does. Worth knowing because a Streamable HTTP client sends that header on every
+  request after `initialize` and on none before it, so a deployment that narrows
+  `CORS_ALLOWED_ORIGINS` and strips the header sees the handshake succeed and every later call fail
+  in the browser only. Server-side hosts (a hosted connector, a CLI) never send a preflight.
+- **The per-host tool filters below are stdio-only.** A deployment-wide filter here would narrow what
+  an already-scoped key may do, which is a break rather than a convenience; per-workspace selection
+  is [tracked separately](../../docs/initiatives/mcp-maturation.md).
+
+#### stdio (`@cat-factory/mcp-server`)
+
+Needs no backend deployment of your own, and it is the only path for a host with no HTTP MCP
+support.
 
 ```jsonc
 {
@@ -242,9 +303,16 @@ same spec, so it inherits every convention on this page rather than re-stating t
 }
 ```
 
-The key's SCOPE is what decides what the model may do — mint the narrowest one that does the job.
-The two SSE endpoints are deliberately not tools (a tool call has no streaming channel; see
-[`sdk/mcp/README.md`](../../sdk/mcp/README.md)).
+Here too the key's SCOPE decides what the model may do: mint the narrowest one that does the job. This
+path adds per-host filters on top (`CAT_FACTORY_MCP_GROUPS`, `CAT_FACTORY_MCP_TOOLS`,
+`CAT_FACTORY_MCP_EXCLUDE_TOOLS`, `CAT_FACTORY_MCP_READ_ONLY`) that narrow what ONE host can see; they
+are a convenience rather than a boundary, since the key still carries whatever scope it was minted
+with.
+
+The two SSE endpoints are deliberately not tools on either path (a tool call has no streaming
+channel), so watching a run from a host means polling `tasks_get_run` / `jobs_get`, which the server's
+instructions say in so many words. The env-var table and a worked flow (create, start, poll, decide):
+[`sdk/mcp/README.md`](../../sdk/mcp/README.md).
 
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
 error codes, scopes and paging rules are the same whichever you use.
@@ -277,17 +345,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                 |
-| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                            |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                         |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                 |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                  |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                          |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                             |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                          |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                              |
+| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                  |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                               |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                       |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                        |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                    |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -355,6 +423,75 @@ ticket taken (the write had landed) or files cleanly (it had not).
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
 
+#### Attaching requirements documents
+
+A task's `description` is capped at 2,000 characters because it is the task's own framing, echoed
+into every prompt. A specification is not that, and there was previously nowhere on this surface to
+put one: the 50,000-character `POST /jobs` brief drives inline pipelines that never touch a
+repository, and the app's own "attach a document" flow is session-authed. `documents` closes that
+gap. Each entry is attached to the new task as context, and the full text is what agents receive:
+materialised into the run's checkout under `.cat-context/` for a container agent to open, folded
+into the prompt for an inline one.
+
+Two forms, differing only in where the text comes from:
+
+```http
+POST /api/v1/services/svc_api/tasks
+{ "title": "Split payments at checkout",
+  "description": "From the payments squad.",
+  "documents": [
+    { "kind": "source", "source": "confluence", "ref": "https://acme.atlassian.net/wiki/spaces/ENG/pages/4242" },
+    { "kind": "upload", "title": "Checkout PRD", "content": "# Checkout PRD\n\n## Goal\n…" }
+  ] }
+```
+
+- **`kind: "source"`** NAMES a page in a document source this workspace has connected
+  (`confluence`, `notion`, `github`, `figma`, `zeplin`, `linear`). `ref` is the page's id or its
+  full URL, the same grammar the app's own import takes. The platform fetches and projects it, so
+  the page stays the source of truth and a later re-import picks up edits. The GitHub docs source
+  needs no separate connect step: it rides the workspace's installed App, so
+  `{ "source": "github", "ref": "acme/api:docs/checkout-prd.md" }` works wherever the App does.
+  A page the source serves but which turns out to be BLANK (a permission-limited Confluence page,
+  an empty Notion page) is not caught here: the create succeeds and the run's first step refuses
+  with `details.reason: "context_document_unreadable"`, naming the page.
+- **`kind: "upload"`** CARRIES the text (Markdown, up to 100,000 characters). For a caller that
+  generated the spec, holds it in a file, or whose deployment has connected no document source at
+  all. There is no page behind it, so nothing re-fetches it and it shows in the app with no source
+  link: the bytes you send are what every agent on the run reads.
+
+At most 10 documents per create, in the order agents should read them.
+
+Four refusals matter:
+
+- **Everything is resolved before the task is created.** An unconfigured source, a ref the provider
+  cannot parse, a page it will not serve, or an upload with no readable text refuses the whole
+  request and leaves the board untouched. The other order hands you a `201` for a task you believe
+  carries its spec, running on its title alone.
+- **An upload with no readable text is refused** (`422`) rather than stored. A body that renders to
+  nothing would reach the agent as an empty attachment, so it is caught while you still hold the
+  bytes and can fix them, rather than costing you the first step of a run.
+- **One task per document.** A document already attached to another live task comes back `409` with
+  `details.reason: "document_already_linked"` and `details.taskId` naming the task that holds it.
+  A document carries a single attachment, so a second attach would MOVE it: the earlier task would
+  lose a document it was created with, and nothing in its next run would say so. Attach a separate
+  copy (upload the text again), or detach it from the other task first. A link naming a task that
+  has since been deleted is not a holder, so a deleted task never strands its documents.
+- **A `201` means the task carries every document you named.** If an attachment fails to land after
+  the task is created, the task is taken back off the board and you get the error, so your retry
+  files it once and whole.
+
+A refused request leaves nothing behind to clean up: pages resolve onto the same row every time
+(they are keyed by their ref), and uploads are stored only once the whole list has resolved, so
+retrying in a loop cannot fill the workspace with copies of a spec that was never attached.
+
+The per-document cap bounds one attachment; the whole attached corpus (documents plus any linked
+tracker issues) is bounded by the run's materialised-context budget of ~256 KB. Overflowing it
+refuses the run's first dispatch with `details.reason: "context_documents_over_budget"`, naming
+what did not fit.
+
+Documents attached this way are ordinary workspace documents: they appear in the app alongside
+imported pages, and a human can detach or re-attach them there.
+
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically
 knowable, so they do not gate the start; see the
@@ -402,29 +539,55 @@ interactive user. A pipeline can be startable on a board task without being eith
 
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
 
-The external counterpart of the SPA's requirements-review, fork and judge windows, plus the
-pre-token input gate's notice. Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
+The external counterpart of every window the SPA offers a human when a run stops and waits for one.
+Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
 possibly started by a human in the SPA). Reading needs `read`; **answering needs `decide`**.
 
 Every action returns the run's **whole decision list**, re-read after the action:
 `{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
-run is waiting on a park type this surface cannot answer yet
-([tracker](../../docs/initiatives/public-api-additions.md)); your options are the SPA or cancel.
+run is waiting on a park this surface does not model
+([tracker](../../docs/initiatives/public-api-additions.md)); the one you should expect is
+`human-review`, whose answer is a person approving the pull request on the VCS host.
 
-| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                    |
-| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                         |
-| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                      |
-| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                |
-| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round. |
-| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                       |
-| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                           |
-| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                  |
-| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                 |
-| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                 |
-| `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                   |
+| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
+| ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                                    |
+| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. Body `{ proposal? (≤50000) }` — an edit replaces the agent's text and is what flows downstream.                                            |
+| `POST …/approvals/:approvalId/request-changes`        | `decide` | Body `{ feedback (1–10000) }`; the gated step re-runs with the guidance folded in.                                                                                                      |
+| `POST …/approvals/:approvalId/reject`                 | `decide` | Body `{ reason? (≤2000) }`; the run stops entirely (a terminal `rejected` failure the board can retry).                                                                                 |
+| `POST …/approvals/:approvalId/resolve-exceeded`       | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a companion gate at its automatic-rework cap (`exceeded: true`), which refuses the plain approve.                |
+| `POST …/questions/:decisionId/answer`                 | `decide` | Body `{ choice (1–4000) }`; answer a decision an agent raised. The asking step **re-runs** with it.                                                                                     |
+| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                                 |
+| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                           |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.            |
+| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                                  |
+| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                                      |
+| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                             |
+| `POST\|PATCH …/clarity/…`                             | `decide` | The **same six verbs** as `…/requirements/…`, over the bug-report triage loop: `findings/:itemId/reply`, `findings/:itemId`, `incorporate`, `re-review`, `proceed`, `resolve-exceeded`. |
+| `POST\|PATCH …/brainstorm/:stage/…`                   | `decide` | The same six verbs again, over a dialogue stage (`requirements` \| `architecture`), with the items called `options/:itemId` rather than `findings/:itemId`.                             |
+| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                            |
+| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                            |
+| `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                              |
+| `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                |
+| `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                     |
+| `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Body `{ question? (≤4000) }`; dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                           |
+| `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                    |
+| `POST …/human-test/request-fix`                       | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the tested environment, then rebuild it.                                                                                        |
+| `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                             |
+| `POST …/visual-confirmation/request-fix`              | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the captured screenshots.                                                                                                       |
 
-Four decision kinds appear in `decisions[]`, discriminated by `kind`:
+Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
+
+- **`approval-gate`**: a step marked `requiresApproval` finished and the run is holding its output
+  up for a person — the simplest park, and the one any pipeline can carry. Carries the
+  `approvalId` every action addresses, the `stepKind` and `stepIndex` whose output is being judged,
+  the `proposal` itself, and the last `feedback`. **`exceeded: true` changes the verb**: the gate is
+  a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
+  `resolve-exceeded` is what settles it.
+- **`agent-decision`**: an agent hit a fork mid-work and asked. Carries the `decisionId`, the
+  `question` and the `options` it offered. Resolving **re-runs** the asking step with the choice
+  folded in rather than advancing past it — the difference from an approval gate. Your `choice` is
+  taken verbatim, so it may be one of the options or a steer of your own.
 
 - **`requirements-review`**: the clarification loop. Findings carry a stable `itemId`, category,
   severity, status and any recorded `reply`; the decision carries `iteration` / `maxIterations` and
@@ -446,10 +609,38 @@ Four decision kinds appear in `decisions[]`, discriminated by `kind`:
   This is the one park that depends on the **task** rather than the pipeline, which is why a
   `write`-scope key is refused at start (`pipeline_requires_decide_scope`) for a task it would
   hold, rather than being handed a run it cannot answer.
+- **`clarity-review`**: the bug-report triage loop — the requirements review's twin over a
+  different document, settling `clarifiedReport` instead of `incorporatedRequirements`. It is its
+  own kind rather than a variant of `requirements-review` because a run can carry **both**: a
+  bugfix pipeline clarifies the report and then reviews the requirements derived from it.
+- **`brainstorm`**: a structured dialogue that proposes concrete `options` with their trade-offs
+  and converges on one direction. Keyed by `(task, stage)`, so a decision list can carry **two**
+  brainstorm entries at once (`requirements` and `architecture`) — key your own state by
+  `kind` + `stage`, not `kind` alone.
+- **`pr-review`**: the read-only reviewer sliced an open pull request and the run is waiting for
+  someone to curate which findings matter. Carries the `slices`, the severity-ordered `findings`
+  (each with its path/line anchor, `suggestedFix` and any `challenge` verdict) and the current
+  `selectedFindingIds`. Reachable only through `POST /tasks/:taskId/start`, since a `pr-reviewer`
+  step is container-backed.
+- **`human-test`**: a live ephemeral `environment` is up and the run is waiting for someone to
+  exercise it. `degradedReason` non-null means no environment was provisioned and the change has
+  to be tested against the PR branch by hand.
+- **`visual-confirmation`**: the UI tester's screenshots are waiting to be compared against the
+  reference designs. `pairs` carries the artifact ids per view, but **the images are not readable
+  over this API** — resolving an id to an image needs the app, so approving on this projection
+  alone approves screenshots you have not seen.
+
+The last two are exposed with their limits stated rather than sold as equivalent to the rest: the
+verbs are mechanical, but the judgement they record is the one an API consumer is least able to
+supply. They earn their place for an integration that drives its own human through a different UI,
+or that has a real automated check to point at `environment.url`.
 
 Answers ride the **same service methods** the SPA calls, so racing surfaces (a human in the app and
 your integration) are already arbitrated: whoever answers first wins, no locking needed on your
-side.
+side. That sharing is also why the list only ever offers you verbs the engine will accept: several
+specialised parks ride the same internal approval flag as a plain gate, and each is reported as
+**its own** kind rather than as `approval-gate`, because the engine refuses the generic
+approve/request-changes/reject on them.
 
 ### Notification inbox
 
@@ -478,10 +669,16 @@ a sibling workspace's spend.
 
 ### Run debugging (`/api/v1/debug/*`)
 
-Eight read-only endpoints for diagnosing a run from outside the browser: run index, per-run
+Nine read-only endpoints for diagnosing a run from outside the browser: run index, per-run
 overview with precomputed signals, and budgeted drill-downs into model calls, agent context,
-searches and provisioning logs. Same keys, `read` scope. Fully documented in
-[`debug-api.md`](./debug-api.md).
+searches, the agents' TOOL CALLS (what they actually did, in order) and provisioning logs. Same
+keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
+
+### Outbound webhook management
+
+`GET|PUT|DELETE /api/v1/notification-webhook`, `admin` scope: register the endpoint this workspace
+pushes to, read what is registered, or unregister. Documented with the delivery contract it
+configures, in [Outbound webhook](#outbound-webhook-push) below.
 
 ## Outbound webhook (push)
 
@@ -498,12 +695,13 @@ endpoint and subscribe it to any of three delivery families:
 
 ### Register the endpoint
 
-Session-authed, `integrations.manage` (workspace admin); there is deliberately no SPA panel and no
-`/api/v1` management route yet (tracked as slice C1 in the
-[additions tracker](../../docs/initiatives/public-api-additions.md)):
+`admin` scope. Enrolment is part of the API, so an integration installs its own receiver rather than
+asking someone to open a browser (there is deliberately no SPA panel; the session-authed
+`GET|PUT|DELETE $BASE/workspaces/$WS/notification-webhook`, behind `integrations.manage`, remains and
+drives the same service):
 
 ```sh
-curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: application/json' \
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
   -d '{
     "url": "https://hooks.example.com/cat-factory",
     "secret": "<16-200 chars, used to sign deliveries>",
@@ -512,12 +710,34 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
     "alertEvents": ["platform_health.firing", "platform_health.resolved"],
     "enabled": true
   }' \
-  "$BASE/workspaces/$WS/notification-webhook"
+  "$BASE/api/v1/notification-webhook"
 ```
 
+| Route                                 | Scope   | Notes                                                          |
+| ------------------------------------- | ------- | -------------------------------------------------------------- |
+| `GET /api/v1/notification-webhook`    | `admin` | `{ "webhook": … }`, or `{ "webhook": null }` when none is set. |
+| `PUT /api/v1/notification-webhook`    | `admin` | Register, edit or rotate. Returns the stored config.           |
+| `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
+
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
-at rest, never readable back. Omitting `secret` on a later `PUT` keeps the stored one, supplying it
-rotates. `DELETE` unregisters (idempotent, `204`).
+at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
+stored one, so a leaked key cannot be used to forge deliveries your receiver would verify. `DELETE`
+unregisters (idempotent, `204`).
+
+**`PUT` is keep-on-omit in every field**, `url` included: a body states what changes and leaves the
+rest alone, so subscribing an existing endpoint to a new family is a one-field call.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{"alertEvents": ["platform_health.firing"]}' "$BASE/api/v1/notification-webhook"
+```
+
+`url` is required only on the **first** `PUT`, when there is nothing registered to keep; a body that
+names none against an empty workspace is refused with `details.reason: "webhook_url_required"`. The
+uniformity is a safety property, not a convenience: a mandatory re-send would make every routine
+edit carry an endpoint the caller did not mean to change, and a client re-sending a `url` it cached
+before someone else rotated the receiver would quietly redirect every future delivery back to the
+old one while appearing to add a subscription.
 
 Three filters, and the first has the **opposite** empty semantics to the other two. All three are
 deliberate:

@@ -140,17 +140,17 @@ a literal in the paths; the git ref + repo come from the
   // (or id) we capture and reuse on status/teardown.
   "provision": {
     "method": "POST",
-    "pathTemplate": "/projects/my-project/prenvs",
+    "pathTemplate": "/projects/my-project/environments",
     "bodyTemplate": "{\"git_ref\":{\"pr_number\":{{input.pullNumber}}},\"github\":{\"owner\":\"{{input.repoOwner}}\",\"repo\":\"{{input.repoName}}\"}}",
   },
   // Status/teardown address the env by the ref captured from the provision response.
   "status": {
     "method": "GET",
-    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}",
+    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
   },
   "teardown": {
     "method": "DELETE",
-    "pathTemplate": "/projects/my-project/prenvs/{{provision.externalId}}",
+    "pathTemplate": "/projects/my-project/environments/{{provision.externalId}}",
   },
 
   "response": {

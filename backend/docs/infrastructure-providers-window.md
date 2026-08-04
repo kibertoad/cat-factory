@@ -13,9 +13,9 @@
 >
 > Companion docs: [`runner-pool-integration.md`](./runner-pool-integration.md) and
 > [`environments-integration.md`](./environments-integration.md) (the two backend
-> integrations this UI configures). The Kargo-side capability that makes "one pool serves
-> both" possible upstream is tracked separately (the kargo repo's
-> `docs/managed-container-runner.md`); **this doc is UI-only and backend-change-free.**
+> integrations this UI configures). The provider-side capability that makes "one pool serves
+> both" possible upstream is tracked separately, in the provider's own repo; **this doc is
+> UI-only and backend-change-free.**
 
 ## Why
 
@@ -174,9 +174,9 @@ secrets }`. (Types may gain a small `starterManifest` helper; see O1.)
 
 ## Non-goals / out of scope
 
-- **No Kargo-specific code.** The `KargoRunnerPoolProvider` (warm long-lived runner +
+- **No provider-specific code.** A native runner-pool provider (warm long-lived runner +
   sticky router) is a separate wrapper-repo deliverable; this window just registers
-  _whatever_ manifest the operator authors (including one fronting Kargo).
+  _whatever_ manifest the operator authors (including one fronting such a provider).
 - **No backend changes.** If a future provider wants to ship a starter manifest from the
   server, that's an additive `describeProvider` field (O1), not part of this redesign.
 - **No new editor dependency** in v1 (textarea + validation); a rich JSON editor is a

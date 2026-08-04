@@ -221,6 +221,7 @@ function selectNodeObservabilityDeps(args: {
     // debugging reader: a pure reader that wants neither sink's capture gate.
     agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
     agentSearchQueryRepository: repos.agentSearchQueryRepository,
+    agentToolCallRepository: repos.agentToolCallRepository,
   }
 }
 

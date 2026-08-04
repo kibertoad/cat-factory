@@ -56,7 +56,7 @@ export const PARKING_INLINE_KINDS = new Set<string>([
 export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
 
 /**
- * The park surface the PRE-TOKEN INPUT GATE presents. A THIRD kind of thing again, and the
+ * The park surface the PRE-DISPATCH INPUT GATE presents. A THIRD kind of thing again, and the
  * distinction matters more here than the others: the two above are properties of the PIPELINE, so
  * {@link parkSurfacesOf} can read them off the step chain, while this one is a property of the
  * TASK. A run whose pipeline parks nowhere at all still stops here if its task states nothing an
@@ -94,20 +94,28 @@ export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
 /**
  * The park surfaces `/api/v1/runs/:runId/decisions` can actually ANSWER today.
  *
- * Deliberately a SEPARATE set from {@link PARKING_INLINE_KINDS}, because the asymmetry between them
- * IS the current state: admission lets a `decide` key start more parks than the decision surface
- * can answer (clarity review and both brainstorms are separate orchestration modules
- * `buildDecisionList` does not read; an approval gate is not projected at all). Closing that gap is
- * tracked in `docs/initiatives/public-api-additions.md`.
+ * Deliberately a SEPARATE set from {@link PARKING_INLINE_KINDS}, because the asymmetry between the
+ * two is the thing worth stating: admission decides what a `decide` key may set in motion, and
+ * this decides what the refusal is allowed to PROMISE it can then answer.
  *
  * Keeping the answerable set EXPLICIT rather than implied is what stops the refusal below drifting
  * from what the surface really serves: landing a slice moves a member here and the message it
  * builds updates itself, where a hand-written sentence would keep promising an answer path that
  * does not exist — which is exactly the defect this replaced.
+ *
+ * The gap is now down to ONE member of {@link parkSurfacesOf}: `human-review`, and it is not a
+ * slice waiting to be built. Its answer is a person approving the pull request on the VCS host,
+ * not an API call this surface could offer, so a run parked there is honestly reported as
+ * `parked: true` with nothing to answer and the refusal says as much. See
+ * `docs/initiatives/public-api-additions.md`.
  */
 export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
   REQUIREMENTS_REVIEW_AGENT_KIND,
+  CLARITY_REVIEW_AGENT_KIND,
+  REQUIREMENTS_BRAINSTORM_AGENT_KIND,
+  ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   INPUT_GATE_PARK_SURFACE,
+  APPROVAL_GATE_PARK_SURFACE,
 ])
 
 /** The pipeline shape admission reasons about — the step chain plus its parallel flag arrays. */

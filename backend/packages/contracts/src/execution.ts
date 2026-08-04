@@ -1,9 +1,11 @@
 import * as v from 'valibot'
+import { intakeOriginSchema, runDiagnosticsSchema, runModeSchema } from './run-provenance.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { judgeStepStateSchema } from './judge.js'
+import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
@@ -26,29 +28,28 @@ import {
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
 import { stepOptionsSchema } from './entities.js'
+import {
+  companionVerdictSchema,
+  decisionSchema,
+  stepApprovalSchema,
+  stepReviewCommentSchema,
+} from './step-decisions.js'
 import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Run / execution runtime state: the shapes that describe an in-flight run and
-// its steps' live state — human decisions, subtasks, review comments, companion
-// verdicts, approvals, agent-run failures, the tester step-state machine,
-// per-step metrics, the pipeline STEP (the runtime instance of a pipeline's
-// step), and the execution instance itself. The gate (`gate.ts`) and
-// human-verdict-gate (`human-verdict-gates.ts`) step-state clusters live in
-// their own modules and are composed back into `PipelineStep` here.
+// its steps' live state — subtasks, agent-run failures, the tester step-state
+// machine, per-step metrics, the pipeline STEP (the runtime instance of a
+// pipeline's step), and the execution instance itself. The gate (`gate.ts`),
+// human-verdict-gate (`human-verdict-gates.ts`) and human-decision
+// (`step-decisions.ts`: an agent's question, review comments, a companion
+// verdict, the approval gate) clusters live in their own modules and are
+// composed back into `PipelineStep` here.
 // Split out of entities.ts (which keeps the board / pipeline-definition / model
 // / workspace shapes); re-exported from the package barrel, so consumers are
 // unaffected. Depends on entities.ts (for stepOptionsSchema); entities.ts does
 // NOT depend back on this file.
 // ---------------------------------------------------------------------------
-
-export const decisionSchema = v.object({
-  id: v.string(),
-  question: v.string(),
-  options: v.array(v.string()),
-  chosen: v.nullable(v.string()),
-})
-export type Decision = v.InferOutput<typeof decisionSchema>
 
 /** One entry of a running step's todo list — its label and current status. */
 export const stepSubtaskItemSchema = v.object({
@@ -78,87 +79,6 @@ export const stepSubtasksSchema = v.object({
 export type StepSubtasks = v.InferOutput<typeof stepSubtasksSchema>
 
 /**
- * One GitHub-review-style comment left on a specific block or item of an agent's
- * proposal — either by a human reviewing an approval gate, or by a quality
- * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
- * is the verbatim raw markdown of the block the comment targets (sliced from the
- * proposal by its source line range), so a "request changes" re-run can quote the
- * agent's own text back to it rather than a re-rendered approximation. It is
- * OPTIONAL because a comment may instead anchor to a structured item via
- * {@link anchorId} (e.g. a spec requirement / acceptance-criterion id), where the
- * reviewed output is rendered as discrete items rather than free prose and there is
- * no quoted source range — the shape a companion returns.
- */
-export const stepReviewCommentSchema = v.object({
-  /**
-   * Verbatim raw-markdown source of the commented prose block. Optional: a comment
-   * may instead anchor to a structured item via {@link anchorId}, where there is no
-   * prose source to quote.
-   */
-  quotedSource: v.optional(v.string()),
-  /**
-   * 0-based source line range [start, end) of the commented prose block, for
-   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
-   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
-   * there is no prose line range.
-   */
-  srcStart: v.optional(v.number()),
-  srcEnd: v.optional(v.number()),
-  /**
-   * Stable id of the structured item the comment targets (e.g. a spec
-   * requirement/criterion id), when the reviewed output is rendered as structured
-   * items rather than free prose. Absent for prose-range comments.
-   */
-  anchorId: v.optional(v.string()),
-  /** The reviewer's note on this block / item. */
-  body: v.string(),
-})
-export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
-
-/**
- * The standardized, stored verdict a quality companion produced for an output it
- * graded — shared by every companion site (the pipeline companion step and the
- * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
- * (rating + summary + comments); this is the persisted, self-describing record of how
- * that assessment was applied: the `rating`, the `threshold` it was judged against,
- * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
- */
-export const companionVerdictSchema = v.object({
-  /** Overall quality of the graded output (0..1, higher = better). */
-  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** The quality bar the rating had to reach to pass. */
-  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
-  /** Whether the rating met the threshold. */
-  passed: v.boolean(),
-  /** The companion's challenge / justification (its assessment summary). */
-  feedback: v.string(),
-})
-export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
-
-/**
- * A human approval gate raised after a step whose pipeline marked it
- * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
- * re-runs the same step on resolution), an approval gate fires once the step has
- * already produced its `proposal`; approving advances the run (carrying the —
- * possibly edited — proposal forward as context), requesting changes re-runs the
- * same step with the human's `feedback` (+ per-block `comments`), and rejecting
- * stops the run entirely (a terminal `rejected` failure the board can retry).
- */
-export const stepApprovalSchema = v.object({
-  /** Unique id of this gate; the durable run parks on it like a decision. */
-  id: v.string(),
-  /** `pending` while awaiting the human; terminal `approved`/`rejected`; `changes_requested` re-runs the step. */
-  status: v.picklist(['pending', 'approved', 'changes_requested', 'rejected']),
-  /** The agent's output the human is reviewing (editable before approval). */
-  proposal: v.string(),
-  /** When changes were requested, the human's freeform guidance fed into the re-run. */
-  feedback: v.optional(v.string()),
-  /** When changes were requested, per-block review comments fed into the re-run. */
-  comments: v.optional(v.array(stepReviewCommentSchema)),
-})
-export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
-
-/**
  * The agent flows that produce an "agent run" (a container-backed job whose
  * lifecycle, progress and failure the board surfaces uniformly):
  *   - `bootstrap`  — a "bootstrap repo" run that scaffolds/adapts a new repo.
@@ -168,47 +88,6 @@ export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
  */
 export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
 export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
-
-/**
- * How an agent run faulted, so the board can classify the failure (and hint
- * whether a retry is likely to help). The union spans both flows; a given flow
- * only ever produces a subset:
- *   - `preflight`        — rejected before dispatch (repo missing/not empty, not connected). [bootstrap]
- *   - `dispatch`         — the container accept-request itself failed (HTTP / network). [bootstrap]
- *   - `evicted`          — the container vanished mid-run (eviction/crash). Retrying spins a fresh one.
- *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
- *   - `agent`            — the agent / git push reported a failure.
- *   - `job_failed`       — an async container job came back failed. [execution]
- *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
- *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
- *   - `unknown`          — anything not otherwise classified.
- */
-export const agentFailureKindSchema = v.picklist([
-  'preflight',
-  'dispatch',
-  // A `deployer` step's ephemeral-environment provisioning failed (the EnvironmentProvider
-  // threw or returned `status:'failed'`) — distinct from `dispatch` (a container/runner
-  // never accepting the job). The provider's verbatim error rides the failure `detail`.
-  'environment',
-  'evicted',
-  'timeout',
-  'agent',
-  'job_failed',
-  'rejected',
-  // A companion agent could not return a parseable quality assessment (truncated /
-  // malformed) even after a repair retry, so the run was failed for human attention.
-  // (Exhausting the automatic rework budget no longer fails the run — it parks on the
-  // companion iteration-cap gate for a human; see `companion.exceeded`.)
-  'companion_rejected',
-  // The run was still `running` in storage but its durable driver was gone (a crashed /
-  // restarted orchestrator left the advance job orphaned), and the stale-run sweeper could
-  // not recover it within the hard-stall deadline — so it is failed for human attention
-  // instead of spinning `running` forever with no progress. Retry spins a fresh run.
-  'stalled',
-  'cancelled',
-  'unknown',
-])
-export type AgentFailureKind = v.InferOutput<typeof agentFailureKindSchema>
 
 /**
  * Structured diagnostics captured when an agent run fails, stored on the run and
@@ -1260,89 +1139,6 @@ export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused', 'failed'])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
-/**
- * Per-run diagnostic context captured for AFTER-THE-FACT investigation of a run (esp. a
- * failure) — the "where/what did this run actually execute on" facts that were previously
- * spread across the DB (repo↔service↔installation joins), the harness transcript (model), or
- * lost entirely (which backend a step ran on). Stamped by the engine at dispatch and refined
- * on the first poll; it reflects the MOST RECENT container-step dispatch (the step most likely
- * relevant to a failure), not a per-step history. Rides in the run's `detail` JSON (no dedicated
- * column), like {@link ExecutionInstance.notes}/`frontendBindings`. Absent on legacy runs and on
- * runs with no container step (pure inline/gate pipelines). NEVER carries a token or secret.
- */
-/**
- * How a run entered the system. `ui` is every in-app surface (the SPA board, an initiative
- * spawn, a recurring schedule fire) and is the DEFAULT for anything that doesn't say
- * otherwise; `public-api` is a run started headlessly through the `/api/v1` surface, where
- * there is no human in the app to answer a park. See {@link ExecutionInstance.intakeOrigin}.
- */
-export const intakeOriginSchema = v.picklist(['ui', 'public-api'])
-export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
-
-/**
- * Whether a run may LAND its work. `live` (the default, and every run before this existed) is the
- * historical behaviour. `dry_run` is the sandboxed mode: the pipeline runs in full and opens its
- * pull request, so the human sees a real diff on a real branch, but nothing merges — neither the
- * `merger` step's auto-merge nor the manual merge endpoint.
- *
- * The PR is deliberately still opened. The deliverable a non-engineer needs to SEE is the diff,
- * and withholding the push would leave them reading prose about work they cannot inspect; what
- * makes the mode a sandbox is that the change cannot reach the default branch, not that it stays
- * invisible.
- *
- * Requested per run at start, and FORCED for the roles a task's merge preset lists in
- * `dryRunRoles`. The two compose one way only: a live request from a sandboxed role is a dry run,
- * and there is no way to ask out of it, or the setting would be advisory.
- */
-export const runModeSchema = v.picklist(['live', 'dry_run'])
-export type RunMode = v.InferOutput<typeof runModeSchema>
-
-export const runDiagnosticsSchema = v.object({
-  /** Context of the most recent container-step dispatch. */
-  lastDispatch: v.optional(
-    v.object({
-      /** Index of the dispatched step within the pipeline. */
-      stepIndex: v.number(),
-      /** The step's agent kind (`coder`, `merger`, a custom kind, …). */
-      agentKind: v.string(),
-      /** Resolved model ref `provider:model` (e.g. `anthropic:claude-opus-4-8`); null if unresolved. */
-      model: v.optional(v.nullable(v.string())),
-      /**
-       * Which runner backend the step actually ran on — the datum that distinguishes a native
-       * host-process run from a sandboxed container: `local-native` | `local-container` |
-       * `runner-pool` | `cloudflare-container`. Filled on the first poll (the transport reports
-       * it); absent until then or on an older runtime.
-       */
-      executionBackend: v.optional(v.string()),
-      /** The repo the step operated on. */
-      repo: v.optional(
-        v.object({
-          owner: v.string(),
-          name: v.string(),
-          /** The base branch the work branched from. */
-          baseBranch: v.optional(v.string()),
-          /** VCS provider (`github` | `gitlab`), resolved from the run's repo origin. */
-          provider: v.optional(v.string()),
-        }),
-      ),
-      /** Epoch ms the dispatch was recorded. */
-      at: v.number(),
-    }),
-  ),
-  /**
-   * The control-plane (orchestrator) host running the engine — NOT necessarily where the agent
-   * ran (a container step runs elsewhere; see `lastDispatch.executionBackend`). `platform` is the
-   * orchestrator's `process.platform` (e.g. `win32` pins a Windows local deployment — the class
-   * of host that surfaced the native-Windows git-auth break). Best-effort.
-   */
-  host: v.optional(
-    v.object({
-      platform: v.optional(v.string()),
-    }),
-  ),
-})
-export type RunDiagnostics = v.InferOutput<typeof runDiagnosticsSchema>
-
 export const executionInstanceSchema = v.object({
   id: v.string(),
   blockId: v.string(),
@@ -1429,15 +1225,15 @@ export const executionInstanceSchema = v.object({
    */
   mode: v.optional(runModeSchema),
   /**
-   * HOW this run entered the system — `ui` (the SPA / any in-app surface, the default) or
-   * `public-api` (started headlessly through `/api/v1`). Distinct from `initiatedBy`, which is
-   * `null` for a public-API run, a recurring-schedule fire AND auth-disabled dev alike, and
-   * from the launch-time `RunOrigin` (`manual`/`recurring`), which gates pipeline availability
-   * and is not persisted. Recorded because clarification behaviour diverges by intake: a
-   * headless run may push its parked questions out to the task's linked tracker issue, whereas
-   * a UI-started task's overseer is in the SPA and must keep behaving exactly as before.
-   * Carried forward across retry/restart. Absent on legacy runs ⇒ treated as `ui` (the safe
-   * reading: no outbound question writeback for a run whose intake we can't prove was headless).
+   * HOW this run entered the system (`intakeOriginSchema`, which documents each member).
+   * Distinct from `initiatedBy`, which is `null` for a public-API run, a recurring-schedule fire
+   * AND auth-disabled dev alike, and from the launch-time `RunOrigin` (`manual`/`recurring`),
+   * which gates pipeline availability and is not persisted. Recorded because clarification
+   * behaviour diverges by intake: a headless run ({@link isHeadlessIntake}) pushes its parked
+   * questions out to the task's linked tracker issue, whereas a UI-started task's overseer is in
+   * the SPA and must keep behaving exactly as before. Carried forward across retry/restart.
+   * Absent on legacy runs ⇒ treated as `ui` (the safe reading: no outbound question writeback
+   * for a run whose intake we can't prove was headless).
    */
   intakeOrigin: v.optional(intakeOriginSchema),
   /**
@@ -1470,7 +1266,7 @@ export const executionInstanceSchema = v.object({
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**
-   * The PRE-TOKEN INPUT GATE's verdict on the task this run implements (see
+   * The PRE-DISPATCH INPUT GATE's verdict on the task this run implements (see
    * {@link runInputGateSchema}): the structural check of the authored input that runs before
    * the first agent step is dispatched, so a task nobody could act on parks having spent no
    * tokens at all.

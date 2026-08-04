@@ -258,6 +258,10 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
   parent's level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
+  OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
+  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
 
 ## Operational EVENTS are counted, not just logged
 
@@ -714,14 +718,14 @@ it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`
 promote by assertion. Doc:
 [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
-**Pre-token input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
+**Pre-dispatch input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
 before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
 Traps: it is not a cheap reviewer (it never scores prose or infers intent, and every BLOCKING finding
 names an input no model could have acted on either); the park rides `step.approval`, so a generic
 approve would mark the run's first working step done (refused in `assertNotIterativeGate`, checked off
 the INSTANCE); `off` records NO findings where `passed` records an empty list, so an unwired or
 unreadable settings seam records `off` rather than the default mode. Doc:
-[`pre-token-input-gate.md`](./docs/initiatives/pre-token-input-gate.md).
+[`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
 **Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
 (review → answer → incorporate → re-review) that settles the PRODUCT layer only. Traps: a parked run
@@ -807,7 +811,7 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
   starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
   `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
-  [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
+  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
   the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
   a VCS outage can't change policy. Doc:
@@ -884,8 +888,8 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Three sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`) live in a dedicated
-telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
+live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
 Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
 The full model, and the authority for anything recording an LLM call:
 [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
@@ -901,6 +905,11 @@ The full model, and the authority for anything recording an LLM call:
   spent it by whoever OWNS the boundary.
 - **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
   add a query.
+- **The tool-call TRAJECTORY is one sink per invocation, ordered SERVER-SIDE by `(startedAt, seq)`**
+  and never by the drain stamp several calls share nor by the job id, a string that sorts dispatches
+  by agent-kind spelling; a harness image that numbers nothing has its trajectory skipped rather
+  than collapsed onto colliding ids, and `bodies` marks a withheld arg list so it never reads as a
+  tool that took none.
 - **Bodies are double-gated** (`LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, via
   kernel's `createStoreAgentContextGate`), on every path that captures a model body, external trace
   fan-out included; a read that throws fails closed.
@@ -1061,6 +1070,15 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
+- **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
+  the test made that population, so the count is a local fact. A total over a population it does NOT
+  control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
+  every ordinary addition, names nothing about what broke, and trains the next person to re-pin it
+  unread. Derive that expectation from the same source the code reads and assert the structural
+  property (every operation accounted for EXACTLY ONCE across exposed and omitted; a facade listing
+  EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
+  existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
+  bug is consistent in both halves.
 - **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw
   script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces
   as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`:

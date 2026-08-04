@@ -13,8 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token
- * input gate.
+ * Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
+ * verdicts, PR review findings and the human-verdict gates.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class DecisionsClient {
@@ -22,6 +22,56 @@ public final class DecisionsClient {
 
     DecisionsClient(Transport transport) {
         this.transport = transport;
+    }
+
+    /**
+     * Answer an agent-raised decision
+     * Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the
+     * choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be
+     * one of the offered options or a steer of your own. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/questions/{decisionId}/answer} (operation {@code
+     * resolvePublicRunAgentDecision}).
+     */
+    public PublicDecisionList answerAgentDecision(String runId, String decisionId, PublicResolveAgentDecision body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/questions/" + Transport.pathSegment(decisionId) + "/answer", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Approve a parked step
+     * Approve the proposal a gated step is holding up, optionally replacing it with an edited one
+     * (the edit is what flows to every downstream step), and advance the run. The `approvalId`
+     * comes from the run's decision list; passing it back is what makes a racing app user and a
+     * racing integration resolve the same gate. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve} (operation {@code
+     * approvePublicRunStep}).
+     */
+    public PublicDecisionList approveStep(String runId, String approvalId, PublicApproveStep body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/approvals/" + Transport.pathSegment(approvalId) + "/approve", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Approve a visual-confirmation gate
+     * Approve the captured screenshots against the reference designs and advance the run. The
+     * images themselves are not readable over this API — the decision carries only artifact ids —
+     * so approving on the projection alone approves screenshots you have not seen. Requires a
+     * `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/visual-confirmation/approve} (operation {@code
+     * approvePublicRunVisualConfirm}).
+     */
+    public PublicDecisionList approveVisualConfirmation(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/visual-confirmation/approve", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Challenge a PR review finding
+     * Dispatch a read-only investigator to re-examine one finding against the full source,
+     * optionally with a specific concern. It upholds, strengthens or retracts the finding, and the
+     * review re-parks carrying the verdict. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge}
+     * (operation {@code challengePublicRunPrReviewFinding}).
+     */
+    public PublicDecisionList challengePrReviewFinding(String runId, String findingId, PublicChallengePrReviewFinding body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/findings/" + Transport.pathSegment(findingId) + "/challenge", body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -36,6 +86,29 @@ public final class DecisionsClient {
     }
 
     /**
+     * Confirm a human-test gate
+     * Confirm the change works in the ephemeral environment: it is torn down and the run advances.
+     * The decision carries the environment URL to exercise; confirming without exercising it
+     * approves untested work. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/human-test/confirm} (operation {@code
+     * confirmPublicRunHumanTest}).
+     */
+    public PublicDecisionList confirmHumanTest(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/human-test/confirm", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Dismiss a PR review finding
+     * Drop one finding from the parked review entirely. Curation rather than a resolution: the run
+     * stays parked. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss}
+     * (operation {@code dismissPublicRunPrReviewFinding}).
+     */
+    public PublicDecisionList dismissPrReviewFinding(String runId, String findingId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/findings/" + Transport.pathSegment(findingId) + "/dismiss", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Incorporate the answers
      * Fold the recorded answers into one standardized requirements document. Asynchronous — the
      * run re-reviews in the background, so the response shows the review `incorporating`. Requires
@@ -45,6 +118,30 @@ public final class DecisionsClient {
      */
     public PublicDecisionList incorporate(String runId, PublicIncorporate body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/requirements/incorporate", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Incorporate brainstorm picks
+     * Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session
+     * `incorporating` while the durable driver folds and re-runs in the background. Requires a
+     * `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate} (operation {@code
+     * incorporatePublicRunBrainstorm}).
+     */
+    public PublicDecisionList incorporateBrainstorm(String runId, String stage, PublicIncorporate body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/incorporate", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Incorporate clarity answers
+     * Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows
+     * the review `incorporating` while the durable driver folds and re-reviews in the background.
+     * Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/clarity/incorporate} (operation {@code
+     * incorporatePublicRunClarity}).
+     */
+    public PublicDecisionList incorporateClarity(String runId, PublicIncorporate body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/incorporate", body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -70,6 +167,62 @@ public final class DecisionsClient {
     }
 
     /**
+     * Proceed past a brainstorm
+     * Settle the brainstorm with the last converged direction and advance the parked run. Requires
+     * a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed} (operation {@code
+     * proceedPublicRunBrainstorm}).
+     */
+    public PublicDecisionList proceedBrainstorm(String runId, String stage) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/proceed", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Proceed past the clarity review
+     * Settle the clarity phase with the last clarified report and advance the parked run. Requires
+     * a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/clarity/proceed} (operation {@code
+     * proceedPublicRunClarity}).
+     */
+    public PublicDecisionList proceedClarity(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/proceed", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Reject a parked step
+     * Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure
+     * the board can retry. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject} (operation {@code
+     * rejectPublicRunStep}).
+     */
+    public PublicDecisionList rejectStep(String runId, String approvalId, PublicRejectStep body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/approvals/" + Transport.pathSegment(approvalId) + "/reject", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Respond to a brainstorm option
+     * Pick or steer one of the options the brainstorm agent proposed, for the named stage
+     * (`requirements` or `architecture`). A task may hold one live session per stage at once.
+     * Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply}
+     * (operation {@code replyPublicRunBrainstormOption}).
+     */
+    public PublicDecisionList replyToBrainstormOption(String runId, String stage, String itemId, PublicReplyFinding body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/options/" + Transport.pathSegment(itemId) + "/reply", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Answer a clarity (bug-triage) finding
+     * Record an answer to one clarity-review finding — the bug-report twin of the requirements
+     * loop. Returns the run's updated decision list. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply} (operation
+     * {@code replyPublicRunClarityFinding}).
+     */
+    public PublicDecisionList replyToClarityFinding(String runId, String itemId, PublicReplyFinding body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/findings/" + Transport.pathSegment(itemId) + "/reply", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Answer a review finding
      * Record an answer to one reviewer finding. Returns the run's updated decision list. Requires
      * a `decide`-scope key.
@@ -81,6 +234,41 @@ public final class DecisionsClient {
     }
 
     /**
+     * Request a fix from a human-test gate
+     * Submit findings against the tested environment and dispatch a fixer, which commits onto the
+     * PR branch before the environment is rebuilt. The findings ARE the fixer prompt, so they
+     * cannot be blank. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/human-test/request-fix} (operation {@code
+     * requestPublicRunHumanTestFix}).
+     */
+    public PublicDecisionList requestHumanTestFix(String runId, PublicRequestGateFix body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/human-test/request-fix", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Request changes on a parked step
+     * Send the gated step back to re-run with your guidance folded in. Unlike the in-app twin this
+     * takes freeform feedback only: anchored per-block comments address source line ranges of a
+     * rendered proposal, which a headless caller never rendered. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes}
+     * (operation {@code requestPublicRunStepChanges}).
+     */
+    public PublicDecisionList requestStepChanges(String runId, String approvalId, PublicRequestStepChanges body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/approvals/" + Transport.pathSegment(approvalId) + "/request-changes", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Request a fix from a visual-confirmation gate
+     * Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the
+     * fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/visual-confirmation/request-fix} (operation
+     * {@code requestPublicRunVisualConfirmFix}).
+     */
+    public PublicDecisionList requestVisualConfirmationFix(String runId, PublicRequestGateFix body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/visual-confirmation/request-fix", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Re-review the incorporated document
      * Run one more reviewer pass over the incorporated document. On convergence the parked run
      * advances. Requires a `decide`-scope key.
@@ -89,6 +277,49 @@ public final class DecisionsClient {
      */
     public PublicDecisionList reReview(String runId) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/requirements/re-review", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Re-run a brainstorm pass
+     * Run one more brainstorm pass against the converged direction. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review} (operation {@code
+     * reReviewPublicRunBrainstorm}).
+     */
+    public PublicDecisionList reReviewBrainstorm(String runId, String stage) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/re-review", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Re-triage the clarified report
+     * Run one more triage pass over the incorporated bug report. On convergence the parked run
+     * advances. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/clarity/re-review} (operation {@code
+     * reReviewPublicRunClarity}).
+     */
+    public PublicDecisionList reReviewClarity(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/re-review", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a brainstorm at its iteration cap
+     * Pick how a brainstorm that exhausted its pass budget proceeds: one more round, proceed with
+     * the last converged direction, or stop and reset the task. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded} (operation
+     * {@code resolvePublicRunBrainstormExceeded}).
+     */
+    public PublicDecisionList resolveBrainstormExceeded(String runId, String stage, PublicResolveExceeded body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a clarity review at its iteration cap
+     * Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed
+     * with the last clarified report, or stop and reset the task. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/clarity/resolve-exceeded} (operation {@code
+     * resolvePublicRunClarityExceeded}).
+     */
+    public PublicDecisionList resolveClarityExceeded(String runId, PublicResolveExceeded body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -105,7 +336,7 @@ public final class DecisionsClient {
 
     /**
      * Resolve a run parked on the task's input check
-     * Settle a run the pre-token input gate parked before its first agent step because the task
+     * Settle a run the pre-dispatch input gate parked before its first agent step because the task
      * states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit
      * it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and
      * releases the run only if the blocking findings are gone; a still-blocked verdict comes back
@@ -127,6 +358,54 @@ public final class DecisionsClient {
      */
     public PublicDecisionList resolveJudge(String runId, PublicResolveJudge body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/judge/resolve", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a parked PR deep review
+     * Record the curated finding selection and say what to do with it: `finish` completes the
+     * read-only review, `fix` hands the selected findings to a fixer that commits onto the
+     * reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post`
+     * need at least one selected finding and act on the real pull request. Requires a
+     * `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/pr-review/resolve} (operation {@code
+     * resolvePublicRunPrReview}).
+     */
+    public PublicDecisionList resolvePrReview(String runId, PublicResolvePrReview body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/resolve", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a companion gate at its rework cap
+     * Pick how a quality companion that spent its automatic rework budget proceeds: one more
+     * round, proceed with the output as it stands, or stop and reset the task. A gate in this
+     * state reports `exceeded: true` and refuses the plain approve. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded}
+     * (operation {@code resolvePublicRunStepExceeded}).
+     */
+    public PublicDecisionList resolveStepExceeded(String runId, String approvalId, PublicResolveExceeded body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/approvals/" + Transport.pathSegment(approvalId) + "/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Dismiss or reopen a brainstorm option
+     * Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options block
+     * incorporation. Requires a `decide`-scope key.
+     * {@code PATCH /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}} (operation
+     * {@code setPublicRunBrainstormOptionStatus}).
+     */
+    public PublicDecisionList setBrainstormOptionStatus(String runId, String stage, String itemId, PublicSetFindingStatus body) {
+        return transport.request("PATCH", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/brainstorm/" + Transport.pathSegment(stage) + "/options/" + Transport.pathSegment(itemId), body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Dismiss or reopen a clarity finding
+     * Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. Only `open`
+     * findings block incorporation. Requires a `decide`-scope key.
+     * {@code PATCH /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}} (operation {@code
+     * setPublicRunClarityFindingStatus}).
+     */
+    public PublicDecisionList setClarityFindingStatus(String runId, String itemId, PublicSetFindingStatus body) {
+        return transport.request("PATCH", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/findings/" + Transport.pathSegment(itemId), body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**

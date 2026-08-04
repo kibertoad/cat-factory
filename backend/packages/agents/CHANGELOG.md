@@ -1,5 +1,118 @@
 # @cat-factory/agents
 
+## 0.110.7
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+  - @cat-factory/kernel@0.236.0
+  - @cat-factory/prompt-fragments@0.15.62
+
+## 0.110.6
+
+### Patch Changes
+
+- Updated dependencies [6b9f696]
+  - @cat-factory/kernel@0.235.1
+
+## 0.110.5
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+  - @cat-factory/kernel@0.235.0
+  - @cat-factory/prompt-fragments@0.15.61
+
+## 0.110.4
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/kernel@0.234.2
+  - @cat-factory/prompt-fragments@0.15.60
+
+## 0.110.3
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/kernel@0.234.1
+  - @cat-factory/prompt-fragments@0.15.59
+
+## 0.110.2
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/prompt-fragments@0.15.58
+
+## 0.110.1
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/prompt-fragments@0.15.57
+
+## 0.110.0
+
+### Minor Changes
+
+- 2619d79: MCP maturation slice 1: every declared tool server is either served or STATED.
+
+  A dispatch now checks the running harness's MCP TRANSPORTS, not just whether it speaks MCP, so an
+  `http` server on a Codex run (whose client is stdio-only) is dropped under a new
+  `transport_unsupported` reason instead of being advertised in the prompt and then silently skipped by
+  the harness's TOML writer. Boot validation and the capability-credential checklist now enumerate
+  `AgentKindRegistry.kindsWithCapabilities()` (every kind declaring a capability on its own
+  registration, plus every kind named by `assignSkills` / `assignToolServers`), so a server attached to
+  a built-in such as `coder` reaches the same refusals and the same operator checklist as a registered
+  kind's own. New checks: a transport/harness combination no run could serve, an `allowedTools` entry
+  that is not a single tool name (the harness joins the list with commas), and a per-dispatch server
+  budget, both dimensions of which warn at boot and drop the excess under `over_budget` at dispatch.
+  The harness exempts `mcp__*` calls from the no-edit progress bound and bounds them with their own
+  `JOB_MAX_CONSECUTIVE_MCP_CALLS` streak, plus a `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` backstop shared
+  by every no-edit-exempt family (each per-family streak resets on a call outside its family, so
+  interleaving two of them was bounded only by the job's wall-clock ceiling).
+
+  OPERATORS UPGRADING: capabilities attached by `assignSkills` / `assignToolServers` were previously
+  not boot-validated at all, so a declaration that is now an ERROR (a cleartext off-loopback endpoint,
+  a reserved credential key, an unregistered id, a malformed server id or tool name) turns a
+  deployment that used to start into one that refuses to. That is the intent of the change, and each
+  message names the kind and the declaration to fix.
+
+  INTERNAL BREAK: `UnavailableToolServer['reason']` gains `transport_unsupported` and `over_budget`, so
+  a deployment rendering that union exhaustively must map them. Runner image bumped to 1.89.0.
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/prompt-fragments@0.15.56
+
+## 0.109.2
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+  - @cat-factory/prompt-fragments@0.15.55
+
 ## 0.109.1
 
 ### Patch Changes

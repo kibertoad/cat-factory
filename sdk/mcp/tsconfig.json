@@ -8,10 +8,15 @@
     "rewriteRelativeImportExtensions": true,
     "erasableSyntaxOnly": true,
     "lib": ["ES2022"],
-    // Unlike the SDK next door, this one is a Node PROCESS: it reads the environment, writes to
-    // stderr and speaks a stdio transport, so `@types/node` belongs in the shipped config rather
-    // than only in the dev one. The SDK's `types: []` assertion is about code that must also run
-    // in a browser and a worker isolate; an MCP stdio server never does.
+    // Unlike the SDK next door, this package ships a Node PROCESS: `bin.ts` reads the environment
+    // and the filesystem, writes to stderr and speaks a stdio transport, so `@types/node` belongs
+    // in the shipped config rather than only in the dev one. It is also what types the Web globals
+    // (`Request`, `Response`, `fetch`) the hosted endpoint is written against, since `lib` here
+    // deliberately excludes `DOM`.
+    //
+    // So this does NOT mean every module may reach for a Node built-in: `http.ts` and everything it
+    // pulls in is bundled into deployments' Workers, where `node:fs` does not resolve at build time.
+    // `test/runtime-neutral.test.ts` is what enforces that, since the typecheck cannot.
     "types": ["node"]
   },
   "include": ["src/**/*.ts"]

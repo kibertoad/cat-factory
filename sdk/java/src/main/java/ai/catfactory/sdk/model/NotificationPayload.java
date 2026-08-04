@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
  * @param mergedRepos May be absent entirely.
  * @param onCallAssessment May be absent entirely.
  * @param pipelineName May be absent entirely.
+ * @param platformAlertFailureKinds May be absent entirely.
  * @param platformAlertTransition May be absent entirely.
  * @param platformAlerts May be absent entirely.
  * @param platformFailedTotal May be absent entirely.
@@ -73,6 +74,9 @@ public record NotificationPayload(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("pipelineName") @Nullable String pipelineName,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformAlertFailureKinds") @Nullable List<String> platformAlertFailureKinds,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformAlertTransition") @Nullable Double platformAlertTransition,
@@ -135,6 +139,7 @@ public record NotificationPayload(
         private @Nullable List<String> mergedRepos;
         private @Nullable NotificationPayloadOnCallAssessment onCallAssessment;
         private @Nullable String pipelineName;
+        private @Nullable List<String> platformAlertFailureKinds;
         private @Nullable Double platformAlertTransition;
         private @Nullable List<NotificationPayloadPlatformAlert> platformAlerts;
         private @Nullable Double platformFailedTotal;
@@ -220,6 +225,12 @@ public record NotificationPayload(
             return this;
         }
 
+        /** Set {@code platformAlertFailureKinds}. */
+        public Builder platformAlertFailureKinds(@Nullable List<String> platformAlertFailureKinds) {
+            this.platformAlertFailureKinds = platformAlertFailureKinds;
+            return this;
+        }
+
         /** Set {@code platformAlertTransition}. */
         public Builder platformAlertTransition(@Nullable Double platformAlertTransition) {
             this.platformAlertTransition = platformAlertTransition;
@@ -294,7 +305,7 @@ public record NotificationPayload(
 
         /** Build the {@link NotificationPayload}. */
         public NotificationPayload build() {
-            return new NotificationPayload(assessment, budgetAlerts, budgetPeriodStart, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
+            return new NotificationPayload(assessment, budgetAlerts, budgetPeriodStart, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlertFailureKinds, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
         }
     }
 }

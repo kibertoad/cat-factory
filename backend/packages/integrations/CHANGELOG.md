@@ -1,5 +1,209 @@
 # @cat-factory/integrations
 
+## 0.126.2
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+  - @cat-factory/kernel@0.236.0
+
+## 0.126.1
+
+### Patch Changes
+
+- Updated dependencies [6b9f696]
+  - @cat-factory/kernel@0.235.1
+
+## 0.126.0
+
+### Minor Changes
+
+- cec0c3e: Attach spec-sized requirements documents when creating a task over the public API.
+
+  `/api/v1` had no way to give a run a specification. `description` caps at 2,000 characters because
+  it is a task's own framing, echoed into every prompt; the 50,000-character `POST /jobs` brief drives
+  inline pipelines that never touch a repository; and the app's own attach-a-document flow is
+  session-authed. A headless caller holding a PRD could only paste a truncated version of it into a
+  field and hope. `POST /api/v1/services/:serviceId/tasks` now takes an ordered `documents` list, each
+  entry either NAMING a page in a connected document source (imported and attached, as `ticket`
+  already does for a tracker issue) or CARRYING the text itself. The full body reaches agents exactly
+  as a document a human attached does: materialised under `.cat-context/` for a container agent,
+  folded into the prompt for an inline one.
+
+  Carrying the text needed a document with no source behind it, so `DocumentOrigin` (`DocumentSourceKind`
+  plus `upload`) is now what a stored row and its block/role links are keyed by, while everything a
+  provider does stays typed against the narrow union. That keeps the missing `upload` provider a
+  compile error rather than an `undefined` at whichever call site reaches for it first. An uploaded
+  document has no origin URL, and every reader now renders that absence as nothing rather than as
+  `Title ()` or a bare `Source:` line.
+
+  One fix rode along, found by the cross-runtime assertion for the new origin rather than by
+  reasoning: `urlMatchCandidates` used to hand back `['', '/']` for an empty needle, so `getByUrl`
+  would match every row whose stored `url` is empty. Nothing produced such a row before uploads, and
+  no caller passes an empty URL today, but "a lookup for nothing resolves to an arbitrary uploaded
+  document, which the caller then hands an agent as the page a description pointed at" is not a trap
+  to leave armed. It now returns null, and the four repositories that call it answer "no match".
+
+  A document is now attached to at most ONE block, enforced where the link is written rather than at
+  the new endpoint. `linkedBlockId` is a single column, so attaching a document another task already
+  holds MOVED the link instead of copying it: the earlier task silently lost a document it was created
+  with, and nothing in its next run reported the absence. That was reachable from the app's own
+  picker too, which offers already-attached documents for re-use. `linkToBlock` now refuses with
+  `document_already_linked` and the holder's id, the same rule and shape as one-task-per-ticket, with
+  translated SPA copy. Two things keep it from wedging anything: a link naming a DELETED block is not
+  a holder (so the guard heals rows left by past deletes), and `removeBlock` now detaches a doomed
+  block's documents through the removal cascade, so new ones are not made. Only the link goes; the
+  document survives its task.
+
+  Attaching a list is one unit of work rather than a loop: `linkManyToBlock` asserts the block once,
+  resolves the whole list through a new batched `DocumentRepository.listByRefs` and writes the links
+  through a new `linkBlockMany` (both mirrored D1 ⇄ Drizzle, with cross-runtime assertions, plus
+  `detachBlocks` for the cascade). The point method in a loop was three round-trips per document, ten
+  of which re-read the same block.
+
+  Worth watching in review: the creation is all-or-nothing. Everything refusable (an unconfigured
+  source, an unparseable ref, a page the provider will not serve, an upload that renders to no
+  readable text, a document another task holds) is refused before the board changes, and an
+  attachment that fails after the task exists takes the task back off the board, because a task
+  silently missing part of its spec is the failure this whole surface exists to prevent. Two ordering
+  details carry that: uploads are written only after the whole list resolves (an import is idempotent
+  on its ref, but every upload mints an id, so an eager write would leave one orphan per retry), and
+  the rollback detaches by BLOCK rather than by the refs it resolved (a rollback can be running
+  because one of those refs belongs to another task, and clearing it by ref would commit the very
+  loss the guard just refused). The attach runs before the ticket claim so that rollback can never
+  orphan a claimed ticket. Naming `documents` does not work in mothership mode yet, for the same
+  reason `ticket` does not: the document write surface is still `pending` on the persistence
+  allow-list, which the new `linkBlockMany`/`detachBlocks` join rather than widen.
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+  - @cat-factory/kernel@0.235.0
+
+## 0.125.0
+
+### Minor Changes
+
+- 8cbf1a7: Manage the outbound notification webhook over `/api/v1`, so the whole integration surface is
+  headless.
+
+  `GET|PUT|DELETE /api/v1/notification-webhook` (`admin` scope) register, read and remove the one
+  HTTPS endpoint a workspace pushes its notifications, run-lifecycle events and platform-health
+  alerts to. Until now that endpoint could only be registered over the session-authed
+  `/workspaces/:ws/notification-webhook`, so a deployment driven entirely by API keys had to put a
+  human in a browser to switch on the very channel that exists because there is no browser: the
+  delivery contract was headless and its enrolment was not.
+
+  The routes delegate to the same `NotificationWebhookService` the session controller calls, so the
+  SSRF guard on the endpoint, the keep-on-omit rule for every field and the one-row-per-workspace
+  invariant are identical whichever surface writes. The signing secret stays write-only: `PUT`
+  accepts one and the read reports only `hasSecret`, so an `admin` key can rotate it and can never
+  learn the stored one.
+
+  `PUT`'s `url` becomes optional, on both surfaces, so keep-on-omit is uniform across every field
+  rather than every field but one. A mandatory re-send made the routine edit (subscribe to a family)
+  carry a value the caller never meant to change, and a client re-sending a URL it cached before
+  someone else rotated the receiver would silently redirect the workspace's deliveries back to the
+  old endpoint while appearing to add a subscription. `url` is still required on the first `PUT`
+  against a workspace with nothing registered, refused with `details.reason: "webhook_url_required"`.
+  Relaxing a required field is additive, so no live caller changes.
+
+  Additive on `/api/v1` (OpenAPI `info.version` 1.5.0; main took 1.4.0 for its own additive change
+  while this branch was open). The four SDK clients gain a `webhook` resource
+  (`get` / `set` / `delete`) and the MCP facade the matching `webhook_*` tools.
+
+### Patch Changes
+
+- Updated dependencies [8cbf1a7]
+  - @cat-factory/contracts@0.234.0
+  - @cat-factory/kernel@0.234.2
+
+## 0.124.1
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/kernel@0.234.1
+
+## 0.124.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+
+## 0.123.6
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+
+## 0.123.5
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+
+## 0.123.4
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+
 ## 0.123.3
 
 ### Patch Changes
@@ -1671,7 +1875,7 @@
 
 ### Patch Changes
 
-- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. a Kargo PREnv that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
+- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. an ephemeral environment that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
 
 ## 0.101.2
 
@@ -3140,11 +3344,10 @@
 
 ### Patch Changes
 
-- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+- 6c4bcef: chore(environments): use neutral illustrative naming in shared custom-deployment-provider code and UI
 
-  "Kargo" is one specific proprietary deployment provider and should not appear as the
-  canonical example in the framework's shared code or UI. Replaced every illustrative
-  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  Shared framework code and UI should carry neutral, self-contained examples. Replaced
+  every illustrative reference (comments, the `manifestId` placeholder/help text, config-file examples) with
   neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
   Behaviour is unchanged.
 
@@ -6394,8 +6597,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that

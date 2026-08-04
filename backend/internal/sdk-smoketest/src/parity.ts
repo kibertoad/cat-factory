@@ -85,6 +85,22 @@ const EXPECTED: Record<string, unknown> = {
   // The surface-specific code the SDKs deliberately do NOT narrow to an enum. All four must
   // surface it verbatim rather than flattening it to the status class.
   forbiddenCode: 'insufficient_scope',
+  // The outbound webhook round-trip. `webhookInitiallyNull` and `webhookNullAfterDelete` are the
+  // ones that earn their place: an unregistered endpoint is a `webhook: null` FIELD, and a client
+  // that decoded it as an absence, an empty object or a zero-valued struct would report an
+  // endpoint registered at the empty string rather than none at all.
+  webhookInitiallyNull: true,
+  webhookSavedUrl: 'https://hooks.example.com/cat-factory-smoketest',
+  // Write-only: the projection says a secret is SET and never says what it is.
+  webhookSavedHasSecret: true,
+  webhookSavedRunEvents: 'run.completed',
+  // Keep-on-omit is where an OPTIONAL field is most exposed to a client that serializes "absent"
+  // as a zero value: a `url` sent as `""` instead of left out would blank the workspace's endpoint
+  // on a call that meant to add a subscription, and the 200 would look identical. Each client
+  // sends a body naming only `alertEvents` and must get the registered url back unchanged.
+  webhookUrlSurvivesOmittedUpdate: true,
+  webhookReadMatchesSaved: true,
+  webhookNullAfterDelete: true,
   startedHasExecutionId: true,
   sseFramesAreKnown: true,
   runStatusIsKnown: true,
@@ -162,12 +178,16 @@ export function compareReports(reports: SdkReport[]): ParityProblem[] {
  * Go writes an integer count as `3` while a JS `JSON.stringify` of the same value is also `3`, yet
  * Python's float-typed model fields can surface `3.0`. Comparing numbers numerically (rather than
  * by their JSON text) is what keeps that from reading as a behavioural divergence.
+ *
+ * Exported for the MCP phase (`mcp.ts`), which grades one implementation against absolute claims
+ * rather than four against each other, but must call an observation equal on the same terms.
  */
-function sameValue(a: unknown, b: unknown): boolean {
+export function sameValue(a: unknown, b: unknown): boolean {
   if (typeof a === 'number' && typeof b === 'number') return a === b
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
-function render(value: unknown): string {
+/** How a value appears in a problem line; an ABSENT observation is not the same as a false one. */
+export function render(value: unknown): string {
   return value === undefined ? '(absent)' : JSON.stringify(value)
 }

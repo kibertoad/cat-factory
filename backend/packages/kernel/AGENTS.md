@@ -87,7 +87,7 @@ else imports its **ports** and domain types from here.
   because the reference can vanish in two different layers (the engine's `resolveLinkedContext`
   and the container's `buildContextFiles`) and both must refuse in the same words. See
   `backend/docs/document-sources.md`.
-- `domain/input-gate.ts`: the **pre-token input gate**'s pure check (`evaluateInputGate` plus the
+- `domain/input-gate.ts`: the **pre-dispatch input gate**'s pure check (`evaluateInputGate` plus the
   one `inputGateInputOf` block mapping the three evaluation sites share). Fields in, findings out,
   no I/O. `describesAuthoredTaskInput` is the `not_applicable` rule: only a `level: 'task'` block
   that is not a platform-authored TYPE carries a description the gate may judge, so a run against a
@@ -149,6 +149,8 @@ else imports its **ports** and domain types from here.
   `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
   the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
   because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
+  A third consumer is the tool-call drain (`@cat-factory/server`'s `toolTrajectory.ts`), which
+  gates a captured call's `args`/`result` the same way.
 - `ports/platform-metrics.ts` + `ports/gate-outcomes.ts`: the deployment-level (operator)
   reads, and the ONE place in the observability family that deliberately lives in the MAIN store
   rather than the telemetry one. Both are account-scoped through the same `workspaces`

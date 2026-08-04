@@ -168,13 +168,30 @@ export function useContextLinking() {
    * would make it a variable, which defeats both the typed-message-key check and the extractor's
    * static scan — and the plural choice has to be made against the same count.
    */
+  /**
+   * A failure's line in the toast: TRANSLATED copy where the backend named a reason we have a
+   * key for, else the server's own prose.
+   *
+   * The backend does not localize (it emits `details.reason`), so a refusal a user routinely
+   * hits — attaching a document another task already holds — would otherwise reach them as
+   * English prose in every locale. The full diagnostic dump keeps the raw message regardless,
+   * so nothing is lost for support.
+   */
+  function describeFailure(failure: LinkFailure): string {
+    const reason = failure.details?.reason
+    if (reason === 'document_already_linked') {
+      return t('errors.conflict.description.document_already_linked')
+    }
+    return failure.message
+  }
+
   function presentLinkFailures(
     failures: LinkFailure[],
     blockId?: string,
     opts: { title?: (count: number) => string } = {},
   ): void {
     if (failures.length === 0) return
-    const description = failures.map((f) => `${f.item.title}: ${f.message}`).join('\n')
+    const description = failures.map((f) => `${f.item.title}: ${describeFailure(f)}`).join('\n')
     const report = buildLinkFailureReport(failures, {
       workspaceId: workspace.workspaceId,
       blockId,

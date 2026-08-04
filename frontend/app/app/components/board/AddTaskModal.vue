@@ -15,6 +15,7 @@
 // (see useContextLinking) — the same context the agents see for every step of the run.
 import type {
   CreateTaskType,
+  DescriptorFieldValues,
   DocKind,
   DocKindFieldKey,
   TaskSourceKind,
@@ -25,12 +26,16 @@ import { resolveComponentRegistry } from '@modular-vue/core'
 import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
+import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
 import RiskPolicyPicker from '~/components/riskPolicy/RiskPolicyPicker.vue'
 import { parseConflict } from '~/composables/usePipelineErrorToast'
 import { apiErrorEnvelope } from '~/composables/api/errors'
 import type { ReviewTargetReason } from '@cat-factory/contracts'
+import { sanitizeDescriptorFields, validateDescriptorFields } from '@cat-factory/contracts'
+import { defaultDescriptorValues } from '~/utils/descriptorFields'
 import { pipelineAllowedForManualStart } from '~/utils/pipeline'
+import { buildTaskTypePickerRows } from '~/utils/taskTypePicker'
 
 const ui = useUiStore()
 // Interface tier. In BASIC mode this form asks for the task itself (type, title,
@@ -155,8 +160,9 @@ const selectedCustomType = computed(() =>
   customTaskTypes.value.find((tt) => tt.taskType === taskType.value),
 )
 // Descriptor-field values for a selected custom type (or a bespoke form panel's own bag), folded
-// into `taskTypeFields.custom` on submit. Cleared when the type changes / the modal reopens.
-const customFieldValues = ref<Record<string, string | number>>({})
+// into `taskTypeFields.custom` on submit. Re-seeded to the descriptor's own defaults when the type
+// changes / the modal reopens (its fields differ per type, so a carried-over bag would be foreign).
+const customFieldValues = ref<DescriptorFieldValues>({})
 // A bespoke create-form section paired to the custom type's `formPanel` id via the
 // `taskTypeFormPanels` slot; shown INSTEAD of the descriptor fields. Unpaired ⇒ descriptor fields
 // (degrade, never crash) — the same pairing shape as the result-view windows.
@@ -168,29 +174,25 @@ const customFormPanel = computed(() => {
   const id = selectedCustomType.value?.formPanel
   return id ? (formPanelRegistry.value.get(id) ?? null) : null
 })
-// Whether every REQUIRED descriptor field of the selected custom type has a value. Only the
-// descriptor path is enforced up front — a bespoke `formPanel` owns its own validation, so we
-// don't block on it (nor can we read its required semantics). No custom type selected (or none
-// of its fields are required) ⇒ trivially satisfied. Folded into `canAdd` so the required marker
-// the form renders is actually honoured before submit.
-const customRequiredFieldsFilled = computed(() => {
+// Client-side mirror of the server's creation check (the SAME shared function `BoardService` runs),
+// so the submit button reflects an invalid form: a missing required answer, a value outside its
+// declared options, an over-long string. Only the descriptor path is checked up front, since a
+// bespoke `formPanel` owns its own validation and the platform cannot read its required semantics.
+// The per-field path error is rendered inline by `DescriptorFields`.
+const customFieldProblems = computed(() => {
   const custom = selectedCustomType.value
-  if (!custom || customFormPanel.value) return true
-  return (custom.fields ?? []).every((field) => {
-    if (!field.required) return true
-    const raw = customFieldValues.value[field.key]
-    return raw !== undefined && String(raw).trim() !== ''
-  })
+  if (!custom || customFormPanel.value) return []
+  return validateDescriptorFields(custom.fields ?? [], customFieldValues.value)
 })
-// The type picker: the built-in choices (i18n labels) + the custom types (their wire presentation).
-const typeChoices = computed<{ value: TaskTypeChoice; label: string; icon: string }[]>(() => [
-  ...TASK_TYPES.value,
-  ...customTaskTypes.value.map((tt) => ({
-    value: tt.taskType as TaskTypeChoice,
-    label: tt.presentation.label,
-    icon: tt.presentation.icon,
-  })),
-])
+// The type picker, laid out as rows (see `buildTaskTypePickerRows`): the built-in choices (i18n
+// labels) first, then the deployment's registered types under their declared `presentation.category`
+// captions, so a catalog of reusable operations reads as sections instead of one wall of buttons.
+// Only the leftovers row's heading is CHROME, so it is the one caption the layer supplies.
+const typeRows = computed(() =>
+  buildTaskTypePickerRows(TASK_TYPES.value, customTaskTypes.value, {
+    other: t('board.addTask.typeOther'),
+  }),
+)
 
 // Parse the PR-reference input into the contract fields: a bare positive integer (optionally
 // `#`-prefixed) becomes `prNumber` (a PR on the service's linked repo); anything else is taken
@@ -258,28 +260,21 @@ const DOC_FIELD_PLACEHOLDER_KEYS: Record<DocKindFieldKey, string> = {
 const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const
 
 // A CUSTOM (deployment-registered) task type: fold the collected values into the sparse
-// `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim); the
-// descriptor path reads only the declared fields, coercing a `number` descriptor's string input.
+// `taskTypeFields.custom` bag. A bespoke form panel owns the whole bag (taken verbatim, minus blank
+// entries); the descriptor path sends the SANITIZED subset (declared, currently-visible fields), so
+// a stale answer on a since-hidden `showWhen` field never reaches the wire. The renderer already
+// keeps each value in its contract shape, so nothing needs coercing here.
 function buildCustomTypeFields(): TaskTypeFields | undefined {
   const custom = selectedCustomType.value
   if (!custom) return undefined
-  const bag: Record<string, string | number> = {}
+  let bag: DescriptorFieldValues
   if (customFormPanel.value) {
+    bag = {}
     for (const [key, value] of Object.entries(customFieldValues.value)) {
       if (value !== undefined && value !== '') bag[key] = value
     }
   } else {
-    for (const field of custom.fields ?? []) {
-      const raw = customFieldValues.value[field.key]
-      if (raw === undefined || raw === '') continue
-      if (field.type === 'number') {
-        // Skip a non-numeric value rather than sending NaN (which serialises to null on the wire).
-        const n = Number(raw)
-        if (Number.isFinite(n)) bag[field.key] = n
-      } else {
-        bag[field.key] = raw
-      }
-    }
+    bag = sanitizeDescriptorFields(custom.fields ?? [], customFieldValues.value)
   }
   return Object.keys(bag).length ? { custom: bag } : undefined
 }
@@ -416,12 +411,13 @@ const DEFAULT_PIPELINE_FOR_TYPE: Partial<Record<TaskTypeChoice, string>> = {
   review: 'pl_review',
 }
 watch(taskType, (next) => {
-  // A custom type owns a fresh field bag on every switch (its descriptors differ per type).
-  customFieldValues.value = {}
+  const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
+  // A custom type owns a fresh field bag on every switch (its descriptors differ per type), seeded
+  // to whatever defaults the new type declares.
+  customFieldValues.value = defaultDescriptorValues(custom?.fields ?? [])
   // Pre-select the type's default pipeline: a custom type's registered `defaultPipelineId`, else
   // the built-in map. (For a custom type with no default, `BoardService` applies the registry
   // default at creation, so leaving the picker unset is fine.)
-  const custom = customTaskTypes.value.find((tt) => tt.taskType === next)
   const preset = custom?.defaultPipelineId ?? DEFAULT_PIPELINE_FOR_TYPE[next]
   if (!preset) return
   const match = pipelines.pipelines.find((p) => p.id === preset)
@@ -526,6 +522,9 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
+  // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
+  // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
+  // and that is the one place the new type's declared defaults are seeded.
   customFieldValues.value = {}
   // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
   // ships with its service's fragments already selected (and freely add/removable here). The task
@@ -610,8 +609,8 @@ const canAdd = computed(() => {
     configValue(RALPH_VALIDATION_COMMAND_ID, '').trim().length === 0
   )
     return false
-  // A custom type's required descriptor fields must be filled (its form renders them as required).
-  if (!customRequiredFieldsFilled.value) return false
+  // A custom type's collected form must satisfy its descriptor (the same rule the server enforces).
+  if (customFieldProblems.value.length > 0) return false
   return true
 })
 
@@ -684,7 +683,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     }
     toast.add({
       title: t('board.addTask.addFailedTitle'),
-      description: reviewTargetMessage(e) ?? (e instanceof Error ? e.message : String(e)),
+      description: createRefusalMessage(e) ?? (e instanceof Error ? e.message : String(e)),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -714,10 +713,22 @@ const REVIEW_TARGET_MESSAGES: Record<
       : null,
 }
 
-function reviewTargetMessage(error: unknown): string | null {
+/**
+ * Translated copy for a machine-readable creation refusal, or null to fall back to the server's
+ * own English prose. Two reasons are recognised: a review task's unresolvable target PR, and a
+ * custom type's collected values contradicting its descriptor.
+ *
+ * The second one is reachable here even though `canAdd` mirrors the same check client-side, and
+ * that is the whole point of the server-side check: the descriptor can be re-registered while this
+ * dialog sits open, so the form the user filled is not the form the server now validates against.
+ * The individual problems stay out of the copy: they are backend English naming field keys, so
+ * what the user is told is the ONE thing they can act on (reopen the dialog).
+ */
+function createRefusalMessage(error: unknown): string | null {
   const details = (apiErrorEnvelope(error)?.details ?? {}) as Record<string, unknown>
   const reason = details.reason
   if (typeof reason !== 'string') return null
+  if (reason === 'task_type_fields_invalid') return t('board.addTask.customFieldsInvalid')
   return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
 }
 
@@ -758,24 +769,59 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
         </p>
 
         <UFormField :label="t('board.addTask.typeLabel')">
-          <div class="flex flex-wrap gap-1">
-            <UButton
-              v-for="ty in typeChoices"
-              :key="ty.value"
-              :color="taskType === ty.value ? 'primary' : 'neutral'"
-              :variant="taskType === ty.value ? 'soft' : 'ghost'"
-              :icon="ty.icon"
-              size="xs"
-              :data-testid="`task-type-${ty.value}`"
-              @click="
-                () => {
-                  taskType = ty.value
-                }
-              "
+          <!-- One row per picker group: the built-ins uncaptioned, then a caption per registered
+               category, then the leftovers. Category captions are deployment-authored English
+               rendered verbatim (as are the custom labels and their hover descriptions); only the
+               leftovers heading is chrome, so only it is i18n. The row gap must stay WIDER than a
+               caption's `mb-1`, or a heading sits equidistant between the group above it and its
+               own buttons and the grouping stops reading. -->
+          <div class="space-y-3">
+            <div
+              v-for="row in typeRows"
+              :key="row.id"
+              data-testid="task-type-row"
+              :data-task-type-row="row.id"
             >
-              {{ ty.label }}
-            </UButton>
+              <p
+                v-if="row.caption"
+                class="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+                data-testid="task-type-category"
+              >
+                {{ row.caption }}
+              </p>
+              <div class="flex flex-wrap gap-1">
+                <UButton
+                  v-for="ty in row.choices"
+                  :key="ty.value"
+                  :color="taskType === ty.value ? 'primary' : 'neutral'"
+                  :variant="taskType === ty.value ? 'soft' : 'ghost'"
+                  :icon="ty.icon"
+                  size="xs"
+                  :title="ty.description"
+                  :data-testid="`task-type-${ty.value}`"
+                  @click="
+                    () => {
+                      taskType = ty.value
+                    }
+                  "
+                >
+                  {{ ty.label }}
+                </UButton>
+              </div>
+            </div>
           </div>
+
+          <!-- What the selected operation is for, in the deployment's own words, in the field's OWN
+               help slot (the `:help` seam every other field here uses) rather than a paragraph
+               beside it fighting the modal's spacing. The hover title above helps you choose; this
+               states the choice you made, which is the half a touch device can reach. Built-in
+               types carry no description (their labels are localized and their meaning is fixed),
+               so only a custom type is described here. -->
+          <template v-if="selectedCustomType?.presentation.description" #help>
+            <span data-testid="task-type-description">
+              {{ selectedCustomType.presentation.description }}
+            </span>
+          </template>
         </UFormField>
 
         <!-- Recurring tasks are configured as a schedule on the service frame. -->
@@ -1045,8 +1091,9 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
 
           <!-- A CUSTOM (deployment-registered) task type: a bespoke create-form section when its
                `formPanel` is paired to the `taskTypeFormPanels` slot, else the descriptor-driven
-               `fields` the type declares. None of the built-in `v-if` branches above match a
-               namespaced custom type, so this renders on its own. -->
+               `fields` the type declares, rendered by the SHARED renderer the initiative-preset form
+               uses. None of the built-in `v-if` branches above match a namespaced custom type, so
+               this renders on its own. -->
           <div v-if="selectedCustomType" class="space-y-3" data-testid="custom-task-fields">
             <component
               :is="customFormPanel"
@@ -1055,47 +1102,12 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
               :model-value="customFieldValues"
               @update:model-value="customFieldValues = $event"
             />
-            <template v-else>
-              <UFormField
-                v-for="field in selectedCustomType.fields ?? []"
-                :key="field.key"
-                :label="field.label"
-                :help="field.help"
-                :required="field.required"
-              >
-                <div v-if="field.type === 'select'" class="flex flex-wrap gap-1">
-                  <UButton
-                    v-for="opt in field.options ?? []"
-                    :key="opt.value"
-                    :color="customFieldValues[field.key] === opt.value ? 'primary' : 'neutral'"
-                    :variant="customFieldValues[field.key] === opt.value ? 'soft' : 'ghost'"
-                    size="xs"
-                    :data-testid="`custom-field-${field.key}-${opt.value}`"
-                    @click="() => (customFieldValues[field.key] = opt.value)"
-                  >
-                    {{ opt.label }}
-                  </UButton>
-                </div>
-                <UTextarea
-                  v-else-if="field.type === 'textarea'"
-                  v-model="customFieldValues[field.key]"
-                  :rows="2"
-                  :maxlength="field.maxLength"
-                  :placeholder="field.placeholder"
-                  :data-testid="`custom-field-${field.key}`"
-                  class="w-full"
-                />
-                <UInput
-                  v-else
-                  v-model="customFieldValues[field.key]"
-                  :type="field.type === 'number' ? 'number' : 'text'"
-                  :maxlength="field.maxLength"
-                  :placeholder="field.placeholder"
-                  :data-testid="`custom-field-${field.key}`"
-                  class="w-full"
-                />
-              </UFormField>
-            </template>
+            <DescriptorFields
+              v-else
+              v-model="customFieldValues"
+              :fields="selectedCustomType.fields ?? []"
+              testid-prefix="custom-field"
+            />
           </div>
 
           <!-- One column in basic mode, where the pipeline picker is the only survivor and a

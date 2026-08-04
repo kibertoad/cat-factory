@@ -29,6 +29,13 @@
             "maxLength": 2000,
             "type": "string"
           },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/PublicTaskDocument"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
           "taskType": {
             "anyOf": [
               {
@@ -315,6 +322,12 @@
                   "pipelineName": {
                     "type": "string"
                   },
+                  "platformAlertFailureKinds": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
                   "platformAlertTransition": {
                     "type": "number"
                   },
@@ -326,6 +339,7 @@
                         "backlog_high",
                         "throughput_stalled",
                         "failure_kind_dominant",
+                        "failure_kind_rate_high",
                         "sweep_degraded"
                       ],
                       "type": "string"
@@ -529,6 +543,250 @@
         ],
         "type": "object"
       },
+      "NotificationWebhook": {
+        "properties": {
+          "alertEvents": {
+            "items": {
+              "enum": [
+                "platform_health.firing",
+                "platform_health.resolved"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "runEvents": {
+            "items": {
+              "enum": [
+                "run.started",
+                "run.completed",
+                "run.failed"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "types": {
+            "items": {
+              "enum": [
+                "merge_review",
+                "pipeline_complete",
+                "ci_failed",
+                "test_failed",
+                "requirement_review",
+                "clarity_review",
+                "release_regression",
+                "decision_required",
+                "human_test_ready",
+                "visual_confirmation_ready",
+                "human_review",
+                "followup_pending",
+                "fork_decision_pending",
+                "judge_review",
+                "pr_review_ready",
+                "initiative",
+                "platform_health",
+                "infra_unreachable",
+                "budget_paused",
+                "budget_threshold",
+                "key_drift",
+                "merge_tag_request"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "types",
+          "runEvents",
+          "alertEvents",
+          "enabled",
+          "hasSecret",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "PublicAgentDecision": {
+        "properties": {
+          "decisionId": {
+            "type": "string"
+          },
+          "kind": {
+            "const": "agent-decision"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          },
+          "stepKind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "decisionId",
+          "stepKind",
+          "question",
+          "options"
+        ],
+        "type": "object"
+      },
+      "PublicApprovalGateDecision": {
+        "properties": {
+          "approvalId": {
+            "type": "string"
+          },
+          "exceeded": {
+            "type": "boolean"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "approval-gate"
+          },
+          "proposal": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "changes_requested",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "stepIndex": {
+            "type": "number"
+          },
+          "stepKind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "approvalId",
+          "stepKind",
+          "stepIndex",
+          "status",
+          "proposal",
+          "feedback",
+          "exceeded"
+        ],
+        "type": "object"
+      },
+      "PublicApproveStep": {
+        "properties": {
+          "proposal": {
+            "maxLength": 50000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "PublicBrainstormDecision": {
+        "properties": {
+          "convergedDirection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "iteration": {
+            "type": "number"
+          },
+          "kind": {
+            "const": "brainstorm"
+          },
+          "maxIterations": {
+            "type": "number"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PublicReviewFinding"
+            },
+            "type": "array"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "requirements",
+              "architecture"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "incorporating",
+              "reviewing",
+              "merged",
+              "exceeded",
+              "incorporated"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "sessionId",
+          "stage",
+          "taskId",
+          "status",
+          "iteration",
+          "maxIterations",
+          "options",
+          "convergedDirection"
+        ],
+        "type": "object"
+      },
+      "PublicChallengePrReviewFinding": {
+        "properties": {
+          "question": {
+            "maxLength": 4000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PublicChooseFork": {
         "properties": {
           "custom": {
@@ -566,6 +824,63 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "PublicClarityDecision": {
+        "properties": {
+          "clarifiedReport": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/PublicReviewFinding"
+            },
+            "type": "array"
+          },
+          "iteration": {
+            "type": "number"
+          },
+          "kind": {
+            "const": "clarity-review"
+          },
+          "maxIterations": {
+            "type": "number"
+          },
+          "reviewId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "incorporating",
+              "reviewing",
+              "merged",
+              "exceeded",
+              "incorporated"
+            ],
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reviewId",
+          "taskId",
+          "status",
+          "iteration",
+          "maxIterations",
+          "findings",
+          "clarifiedReport"
+        ],
         "type": "object"
       },
       "PublicDecision": {
@@ -702,6 +1017,27 @@
           },
           {
             "$ref": "#/components/schemas/PublicInputGateDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicApprovalGateDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicAgentDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicClarityDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicBrainstormDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicPrReviewDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicHumanTestDecision"
+          },
+          {
+            "$ref": "#/components/schemas/PublicVisualConfirmDecision"
           }
         ]
       },
@@ -820,6 +1156,99 @@
           "status",
           "seamSummary",
           "forks"
+        ],
+        "type": "object"
+      },
+      "PublicHumanTestDecision": {
+        "properties": {
+          "attempts": {
+            "type": "number"
+          },
+          "degradedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublicHumanTestEnvironment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "human-test"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "phase": {
+            "enum": [
+              "provisioning",
+              "awaiting_human",
+              "fixing",
+              "resolving_conflicts",
+              "passed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "phase",
+          "environment",
+          "degradedReason",
+          "attempts",
+          "maxAttempts"
+        ],
+        "type": "object"
+      },
+      "PublicHumanTestEnvironment": {
+        "properties": {
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "provisioning",
+              "ready",
+              "failed",
+              "expired",
+              "tearing_down",
+              "torn_down"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "status",
+          "expiresAt"
         ],
         "type": "object"
       },
@@ -1028,6 +1457,24 @@
         ],
         "type": "object"
       },
+      "PublicNotificationWebhook": {
+        "properties": {
+          "webhook": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotificationWebhook"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "webhook"
+        ],
+        "type": "object"
+      },
       "PublicPipeline": {
         "properties": {
           "headlessStartable": {
@@ -1072,6 +1519,246 @@
         ],
         "type": "object"
       },
+      "PublicPrReviewDecision": {
+        "properties": {
+          "findings": {
+            "items": {
+              "properties": {
+                "category": {
+                  "enum": [
+                    "correctness",
+                    "security",
+                    "performance",
+                    "maintainability",
+                    "style",
+                    "test",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "challenge": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "justification": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "question": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "investigating",
+                            "upheld",
+                            "amended",
+                            "retracted",
+                            "failed"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "question",
+                        "justification"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "detail": {
+                  "type": "string"
+                },
+                "findingId": {
+                  "type": "string"
+                },
+                "line": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "blocker",
+                    "high",
+                    "medium",
+                    "low",
+                    "nit"
+                  ],
+                  "type": "string"
+                },
+                "side": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "LEFT",
+                        "RIGHT"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "sliceId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "suggestedFix": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "findingId",
+                "sliceId",
+                "path",
+                "line",
+                "side",
+                "severity",
+                "category",
+                "title",
+                "detail",
+                "suggestedFix",
+                "challenge"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "pr-review"
+          },
+          "prUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selectedFindingIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "slices": {
+            "items": {
+              "properties": {
+                "paths": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "rationale": {
+                  "type": "string"
+                },
+                "sliceId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sliceId",
+                "title",
+                "rationale",
+                "paths"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "reviewing",
+              "awaiting_selection",
+              "challenging",
+              "fixing",
+              "posting",
+              "done",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "summary",
+          "prUrl",
+          "slices",
+          "findings",
+          "selectedFindingIds"
+        ],
+        "type": "object"
+      },
+      "PublicRejectStep": {
+        "properties": {
+          "reason": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "PublicReplyFinding": {
         "properties": {
           "reply": {
@@ -1082,6 +1769,32 @@
         },
         "required": [
           "reply"
+        ],
+        "type": "object"
+      },
+      "PublicRequestGateFix": {
+        "properties": {
+          "findings": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "findings"
+        ],
+        "type": "object"
+      },
+      "PublicRequestStepChanges": {
+        "properties": {
+          "feedback": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback"
         ],
         "type": "object"
       },
@@ -1142,6 +1855,19 @@
         ],
         "type": "object"
       },
+      "PublicResolveAgentDecision": {
+        "properties": {
+          "choice": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice"
+        ],
+        "type": "object"
+      },
       "PublicResolveExceeded": {
         "properties": {
           "choice": {
@@ -1171,6 +1897,26 @@
         "required": [
           "choice"
         ],
+        "type": "object"
+      },
+      "PublicResolvePrReview": {
+        "properties": {
+          "action": {
+            "enum": [
+              "finish",
+              "fix",
+              "post"
+            ],
+            "type": "string"
+          },
+          "findingIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [],
         "type": "object"
       },
       "PublicReviewFinding": {
@@ -1535,6 +2281,16 @@
         ],
         "type": "object"
       },
+      "PublicTaskDocument": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PublicTaskSourceDocument"
+          },
+          {
+            "$ref": "#/components/schemas/PublicTaskUploadedDocument"
+          }
+        ]
+      },
       "PublicTaskList": {
         "properties": {
           "nextCursor": {
@@ -1557,6 +2313,35 @@
         "required": [
           "tasks",
           "nextCursor"
+        ],
+        "type": "object"
+      },
+      "PublicTaskSourceDocument": {
+        "properties": {
+          "kind": {
+            "const": "source"
+          },
+          "ref": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "confluence",
+              "notion",
+              "github",
+              "figma",
+              "zeplin",
+              "linear"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "source",
+          "ref"
         ],
         "type": "object"
       },
@@ -1587,6 +2372,29 @@
         "required": [
           "source",
           "ref"
+        ],
+        "type": "object"
+      },
+      "PublicTaskUploadedDocument": {
+        "properties": {
+          "content": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "const": "upload"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "content"
         ],
         "type": "object"
       },
@@ -1693,6 +2501,153 @@
         ],
         "type": "object"
       },
+      "PublicVisualConfirmDecision": {
+        "properties": {
+          "attempts": {
+            "type": "number"
+          },
+          "degradedReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "visual-confirmation"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "pairs": {
+            "items": {
+              "properties": {
+                "actualArtifactId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "referenceArtifactId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "view": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "view",
+                "actualArtifactId",
+                "referenceArtifactId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "awaiting_human",
+              "fixing",
+              "approved"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "phase",
+          "pairs",
+          "degradedReason",
+          "attempts",
+          "maxAttempts"
+        ],
+        "type": "object"
+      },
+      "PutNotificationWebhook": {
+        "properties": {
+          "alertEvents": {
+            "items": {
+              "enum": [
+                "platform_health.firing",
+                "platform_health.resolved"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "runEvents": {
+            "items": {
+              "enum": [
+                "run.started",
+                "run.completed",
+                "run.failed"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secret": {
+            "maxLength": 200,
+            "minLength": 16,
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "enum": [
+                "merge_review",
+                "pipeline_complete",
+                "ci_failed",
+                "test_failed",
+                "requirement_review",
+                "clarity_review",
+                "release_regression",
+                "decision_required",
+                "human_test_ready",
+                "visual_confirmation_ready",
+                "human_review",
+                "followup_pending",
+                "fork_decision_pending",
+                "judge_review",
+                "pr_review_ready",
+                "initiative",
+                "platform_health",
+                "infra_unreachable",
+                "budget_paused",
+                "budget_threshold",
+                "key_drift",
+                "merge_tag_request"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2000,
+            "pattern": "^https://",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "StartPublicTask": {
         "properties": {
           "pipelineId": {
@@ -1735,7 +2690,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.4.0"
+    "version": "1.8.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3530,12 +4485,28 @@
                             "count"
                           ],
                           "type": "object"
+                        },
+                        "toolCalls": {
+                          "properties": {
+                            "available": {
+                              "type": "boolean"
+                            },
+                            "count": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "available",
+                            "count"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
                         "llmCalls",
                         "agentContext",
                         "searchQueries",
+                        "toolCalls",
                         "provisioningLog"
                       ],
                       "type": "object"
@@ -4824,6 +5795,193 @@
         ]
       }
     },
+    "/api/v1/debug/runs/{runId}/tool-calls": {
+      "get": {
+        "description": "The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.",
+        "operationId": "listDebugToolCalls",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^\\d+$",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "jobId",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "recent",
+                "trajectory"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "nextCursor": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "toolCalls": {
+                      "items": {
+                        "properties": {
+                          "agentKind": {
+                            "type": "string"
+                          },
+                          "args": {
+                            "type": "string"
+                          },
+                          "argsDropped": {
+                            "type": "number"
+                          },
+                          "bodies": {
+                            "enum": [
+                              "stored",
+                              "withheld"
+                            ],
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          },
+                          "endedAt": {
+                            "type": "number"
+                          },
+                          "executionId": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "jobId": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "result": {
+                            "type": "string"
+                          },
+                          "resultDropped": {
+                            "type": "number"
+                          },
+                          "seq": {
+                            "type": "number"
+                          },
+                          "startedAt": {
+                            "type": "number"
+                          },
+                          "tool": {
+                            "type": "string"
+                          },
+                          "workspaceId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "workspaceId",
+                          "executionId",
+                          "agentKind",
+                          "jobId",
+                          "seq",
+                          "tool",
+                          "startedAt",
+                          "endedAt",
+                          "ok",
+                          "bodies",
+                          "args",
+                          "result",
+                          "argsDropped",
+                          "resultDropped",
+                          "createdAt"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "toolCalls",
+                    "nextCursor"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List a run's tool calls",
+        "tags": [
+          "Debug"
+        ]
+      }
+    },
     "/api/v1/jobs": {
       "get": {
         "description": "List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
@@ -5130,6 +6288,131 @@
         ]
       }
     },
+    "/api/v1/notification-webhook": {
+      "delete": {
+        "description": "Deregister the endpoint; deliveries stop. Idempotent.",
+        "operationId": "deletePublicNotificationWebhook",
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove the outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      },
+      "get": {
+        "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.",
+        "operationId": "getPublicNotificationWebhook",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNotificationWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the workspace's outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      },
+      "put": {
+        "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
+        "operationId": "putPublicNotificationWebhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutNotificationWebhook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Register or update the outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "description": "List the open, human-actionable notifications in the key’s workspace (merge reviews, pipeline-complete confirmations, CI/test failures, and informational cards).",
@@ -5370,6 +6653,1070 @@
         ]
       }
     },
+    "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve": {
+      "post": {
+        "description": "Approve the proposal a gated step is holding up, optionally replacing it with an edited one (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes from the run's decision list; passing it back is what makes a racing app user and a racing integration resolve the same gate. Requires a `decide`-scope key.",
+        "operationId": "approvePublicRunStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approvalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicApproveStep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Approve a parked step",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject": {
+      "post": {
+        "description": "Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the board can retry. Requires a `decide`-scope key.",
+        "operationId": "rejectPublicRunStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approvalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicRejectStep"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Reject a parked step",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes": {
+      "post": {
+        "description": "Send the gated step back to re-run with your guidance folded in. Unlike the in-app twin this takes freeform feedback only: anchored per-block comments address source line ranges of a rendered proposal, which a headless caller never rendered. Requires a `decide`-scope key.",
+        "operationId": "requestPublicRunStepChanges",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approvalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicRequestStepChanges"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Request changes on a parked step",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded": {
+      "post": {
+        "description": "Pick how a quality companion that spent its automatic rework budget proceeds: one more round, proceed with the output as it stands, or stop and reset the task. A gate in this state reports `exceeded: true` and refuses the plain approve. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunStepExceeded",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "approvalId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveExceeded"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a companion gate at its rework cap",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate": {
+      "post": {
+        "description": "Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session `incorporating` while the durable driver folds and re-runs in the background. Requires a `decide`-scope key.",
+        "operationId": "incorporatePublicRunBrainstorm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicIncorporate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Incorporate brainstorm picks",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}": {
+      "patch": {
+        "description": "Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options block incorporation. Requires a `decide`-scope key.",
+        "operationId": "setPublicRunBrainstormOptionStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicSetFindingStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss or reopen a brainstorm option",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply": {
+      "post": {
+        "description": "Pick or steer one of the options the brainstorm agent proposed, for the named stage (`requirements` or `architecture`). A task may hold one live session per stage at once. Requires a `decide`-scope key.",
+        "operationId": "replyPublicRunBrainstormOption",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicReplyFinding"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Respond to a brainstorm option",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed": {
+      "post": {
+        "description": "Settle the brainstorm with the last converged direction and advance the parked run. Requires a `decide`-scope key.",
+        "operationId": "proceedPublicRunBrainstorm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Proceed past a brainstorm",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review": {
+      "post": {
+        "description": "Run one more brainstorm pass against the converged direction. Requires a `decide`-scope key.",
+        "operationId": "reReviewPublicRunBrainstorm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Re-run a brainstorm pass",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded": {
+      "post": {
+        "description": "Pick how a brainstorm that exhausted its pass budget proceeds: one more round, proceed with the last converged direction, or stop and reset the task. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunBrainstormExceeded",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveExceeded"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a brainstorm at its iteration cap",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/findings/{itemId}": {
+      "patch": {
+        "description": "Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. Only `open` findings block incorporation. Requires a `decide`-scope key.",
+        "operationId": "setPublicRunClarityFindingStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicSetFindingStatus"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss or reopen a clarity finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply": {
+      "post": {
+        "description": "Record an answer to one clarity-review finding — the bug-report twin of the requirements loop. Returns the run's updated decision list. Requires a `decide`-scope key.",
+        "operationId": "replyPublicRunClarityFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "itemId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicReplyFinding"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Answer a clarity (bug-triage) finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/incorporate": {
+      "post": {
+        "description": "Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows the review `incorporating` while the durable driver folds and re-reviews in the background. Requires a `decide`-scope key.",
+        "operationId": "incorporatePublicRunClarity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicIncorporate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Incorporate clarity answers",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/proceed": {
+      "post": {
+        "description": "Settle the clarity phase with the last clarified report and advance the parked run. Requires a `decide`-scope key.",
+        "operationId": "proceedPublicRunClarity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Proceed past the clarity review",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/re-review": {
+      "post": {
+        "description": "Run one more triage pass over the incorporated bug report. On convergence the parked run advances. Requires a `decide`-scope key.",
+        "operationId": "reReviewPublicRunClarity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Re-triage the clarified report",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/clarity/resolve-exceeded": {
+      "post": {
+        "description": "Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with the last clarified report, or stop and reset the task. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunClarityExceeded",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveExceeded"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a clarity review at its iteration cap",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
     "/api/v1/runs/{runId}/decisions/fork/choose": {
       "post": {
         "description": "Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.",
@@ -5432,9 +7779,123 @@
         ]
       }
     },
+    "/api/v1/runs/{runId}/decisions/human-test/confirm": {
+      "post": {
+        "description": "Confirm the change works in the ephemeral environment: it is torn down and the run advances. The decision carries the environment URL to exercise; confirming without exercising it approves untested work. Requires a `decide`-scope key.",
+        "operationId": "confirmPublicRunHumanTest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Confirm a human-test gate",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/human-test/request-fix": {
+      "post": {
+        "description": "Submit findings against the tested environment and dispatch a fixer, which commits onto the PR branch before the environment is rebuilt. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.",
+        "operationId": "requestPublicRunHumanTestFix",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicRequestGateFix"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Request a fix from a human-test gate",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
     "/api/v1/runs/{runId}/decisions/input-gate/resolve": {
       "post": {
-        "description": "Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.",
+        "description": "Settle a run the pre-dispatch input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.",
         "operationId": "resolvePublicRunInputGate",
         "parameters": [
           {
@@ -5575,6 +8036,268 @@
           }
         },
         "summary": "Resolve a parked judge verdict",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge": {
+      "post": {
+        "description": "Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.",
+        "operationId": "challengePublicRunPrReviewFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "findingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicChallengePrReviewFinding"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Challenge a PR review finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss": {
+      "post": {
+        "description": "Drop one finding from the parked review entirely. Curation rather than a resolution: the run stays parked. Requires a `decide`-scope key.",
+        "operationId": "dismissPublicRunPrReviewFinding",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "findingId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Dismiss a PR review finding",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/pr-review/resolve": {
+      "post": {
+        "description": "Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunPrReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolvePrReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a parked PR deep review",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/questions/{decisionId}/answer": {
+      "post": {
+        "description": "Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the offered options or a steer of your own. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunAgentDecision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "decisionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveAgentDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Answer an agent-raised decision",
         "tags": [
           "Decisions"
         ]
@@ -5948,6 +8671,120 @@
         ]
       }
     },
+    "/api/v1/runs/{runId}/decisions/visual-confirmation/approve": {
+      "post": {
+        "description": "Approve the captured screenshots against the reference designs and advance the run. The images themselves are not readable over this API — the decision carries only artifact ids — so approving on the projection alone approves screenshots you have not seen. Requires a `decide`-scope key.",
+        "operationId": "approvePublicRunVisualConfirm",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Approve a visual-confirmation gate",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/visual-confirmation/request-fix": {
+      "post": {
+        "description": "Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.",
+        "operationId": "requestPublicRunVisualConfirmFix",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicRequestGateFix"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Request a fix from a visual-confirmation gate",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
     "/api/v1/services": {
       "get": {
         "description": "List the board service frames in the key’s workspace, so a caller can discover the serviceId to create/list tasks under.",
@@ -6079,7 +8916,7 @@
         ]
       },
       "post": {
-        "description": "Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.",
+        "description": "Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.",
         "operationId": "createPublicTask",
         "parameters": [
           {
@@ -6610,7 +9447,7 @@
   ],
   "tags": [
     {
-      "description": "A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.",
+      "description": "A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.",
       "name": "Debug"
     },
     {
@@ -6639,6 +9476,10 @@
     },
     {
       "name": "Usage"
+    },
+    {
+      "description": "The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.",
+      "name": "Webhook"
     }
   ]
 }

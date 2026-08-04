@@ -98,6 +98,10 @@ export {
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
 export {
+  dedicatedParkSurface,
+  type DedicatedParkSurface,
+} from './modules/execution/step-park.logic.js'
+export {
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   classifyReleaseHealth,
@@ -241,6 +245,13 @@ export {
   MAX_SEARCH_QUERY_CHARS,
 } from './modules/observability/SearchQueryObservabilityService.js'
 export {
+  ToolCallObservabilityService,
+  type ToolCallObservabilityServiceDependencies,
+  type ToolCallsRecordInput,
+  makeToolCallRecorder,
+  MAX_TOOL_BODY_CHARS,
+} from './modules/observability/ToolCallObservabilityService.js'
+export {
   PlatformObservabilityService,
   type PlatformObservabilityServiceDependencies,
 } from './modules/observability/PlatformObservabilityService.js'
@@ -289,6 +300,7 @@ export {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
   alertsHaveRunEvidence,
   evaluatePlatformHealth,
+  platformAlertFailureKinds,
   platformAlertReasons,
   platformHealthCardContent,
   resolveAccountAlertConfig,
