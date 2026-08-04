@@ -286,6 +286,104 @@ export function isLaunchOffer(tour: TutorialTour): boolean {
   return tour.offeredAtLaunch !== false
 }
 
+/** The ids a catalogue resolution says can be started right now. */
+export function readyTourIds(catalogue: readonly TutorialCatalogueEntry[]): Set<string> {
+  return new Set(
+    catalogue.filter((entry) => entry.availability === 'ready').map((entry) => entry.tour.id),
+  )
+}
+
+/**
+ * The tour that just became takeable, for the contextual offer, or null when nothing did.
+ *
+ * The catalogue made every walkthrough reachable; this is what reaches the user who needs one
+ * WITHOUT going looking. The trigger is deliberately not a per-surface hook ("when a run parks,
+ * mention `answer-park`"): every tour already declares, as its `requires`, the exact predicate
+ * that means "you can take this now". So one rule over the resolved catalogue covers the whole
+ * catalog and inherits `navRequirementDrift` unchanged, where a hand-wired trigger per surface
+ * would be a second copy of each requirement to keep in step.
+ *
+ * Three rules, and the first is the one that is easy to get wrong:
+ *
+ *  - It fires on a TRANSITION into `ready`, never on the standing state, which is why the caller
+ *    must SEED `previouslyReady` from the first resolution without offering anything. Fired on
+ *    the standing state it would nudge about everything already available on every board load,
+ *    which is the launch prompt with none of its manners. The transition rule also means the
+ *    permission-gated platform tours (ready from the first render on any board) naturally never
+ *    reach it, and only the board-state tours — a run parked, a run failed, a PR ready to
+ *    merge — can.
+ *  - Only the launch-offer arc, for the reason `offeredAtLaunch` exists: a tour declared as
+ *    reference material someone comes and gets is not one to interrupt them with. Reusing that
+ *    declaration rather than inventing a second opt-out keeps a consumer deployment's tour
+ *    behaving here exactly as it does in the prompt.
+ *  - Never twice for the same tour (`wasNudged`) and never one already completed. A contextual
+ *    offer that returns is a nag, and this one is unusually well placed to become one: the gates
+ *    it reads flip several times per run.
+ *
+ * And nothing at all for a user who DECLINED. "No thanks" was an answer about guided tours, not
+ * about the startup timing of the question, so a mechanism that goes on offering them anyway is
+ * overriding the one explicit preference this feature collects. They keep the catalogue, which is
+ * where someone who changed their mind goes; `resetProgress` is the way back to being asked.
+ */
+export function newlyAvailableTour(input: {
+  catalogue: readonly TutorialCatalogueEntry[]
+  previouslyReady: ReadonlySet<string>
+  declined: boolean
+  isCompleted: (tourId: string) => boolean
+  wasNudged: (tourId: string) => boolean
+}): TutorialTour | null {
+  if (input.declined) return null
+  const candidate = input.catalogue.find(
+    (entry) =>
+      entry.availability === 'ready' &&
+      isLaunchOffer(entry.tour) &&
+      !input.previouslyReady.has(entry.tour.id) &&
+      !input.isCompleted(entry.tour.id) &&
+      !input.wasNudged(entry.tour.id),
+  )
+  return candidate?.tour ?? null
+}
+
+/**
+ * The tour to hand the user off to when they finish `justFinishedId`, or null when there is
+ * nothing left to offer.
+ *
+ * The catalog is a COURSE, not a list: each delivery-loop tour produces the state the next
+ * one requires, so finishing one is the single most reliable moment at which another became
+ * takeable. Without a handoff the walkthrough that the user's own last action unlocked is
+ * reachable only from the catalogue, and the launch prompt cannot bring it up either: starting
+ * any tour writes `decision: 'accepted'`, which is what stops the prompt auto-opening for good.
+ * So the finish card is the ONLY place the product can still say "and now this one".
+ *
+ * Two rules make it an offer rather than a list:
+ *
+ *  - Launch-offer tours come FIRST, whatever their `order` (see {@link TutorialTour.offeredAtLaunch}).
+ *    The delivery loop is the arc someone taking a tour is on; a deployment's catalogue-only
+ *    tour with a low `order` must not jump in front of it. Ordering alone is not that
+ *    guarantee — it only happens to be true of the built-ins' numbering.
+ *  - It offers exactly one, and only a READY one. A list is what the catalogue is for, and a
+ *    blocked tour named here would ask the user to go and do something at the moment they
+ *    finished doing something.
+ *
+ * Absence is a legitimate answer, unlike in the catalogue: this is an offer, so having nothing
+ * to suggest means the card keeps its plain Done. The caller still shows the way to the
+ * catalogue, so the card never dead-ends.
+ *
+ * `ready` is deliberately read LIVE by the caller rather than from the tour's held script,
+ * which is the one place the "resolve once and HOLD" rule must not apply: completing
+ * `first-task` is exactly what makes `run-task` ready, so a candidate list frozen at tour
+ * start would be empty precisely when this exists to be useful.
+ */
+export function nextTourAfter(
+  ready: readonly TutorialTour[],
+  input: { justFinishedId: string; isCompleted: (tourId: string) => boolean },
+): TutorialTour | null {
+  const fresh = sortTours(ready).filter(
+    (tour) => tour.id !== input.justFinishedId && !input.isCompleted(tour.id),
+  )
+  return fresh.find(isLaunchOffer) ?? fresh[0] ?? null
+}
+
 /**
  * Where a tour stands for this user: the state the catalogue badges and the action label
  * derive from. Camel-cased because the values ARE the i18n leaf keys

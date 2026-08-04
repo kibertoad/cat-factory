@@ -1,41 +1,43 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { createTutorialPrompt } from '~/stores/tutorial.prompt'
+import { createTutorialRecord } from '~/stores/tutorial.record'
 
-/** The launch-prompt answer. `null` = never answered, so the app asks again next launch. */
-export type TutorialDecision = 'accepted' | 'declined'
+export type { TutorialDecision } from '~/stores/tutorial.record'
 
 /**
  * The in-app tutorial state: the launch-prompt decision, per-tour completion, and the
  * live progress of whichever tour is running.
  *
- * Two tiers of state, split on purpose:
+ * Two tiers of state, split on purpose — and the split is now a real seam rather than a comment:
  *
- *  - PERSISTED (`decision`, `completedTourIds`) — the user's explicit answer to "would you
- *    like a tour?" and which tours they have finished. Browser-persisted like the interface
- *    tier (`uiMode`): it is a per-person, per-browser preference, and `null` (never asked)
- *    is a real state distinct from `declined` — only an explicit answer stops the launch
- *    prompt from returning, while closing it without answering merely defers it to the
- *    next launch.
- *  - SESSION-ONLY (`promptOpen`, `catalogueOpen`, `activeTourId`, `stepIndex`) — a tour is anchored to live
- *    DOM, so replaying progress across a reload would point step N at a board that hasn't
- *    reached that state; a reloaded tour restarts from its beginning instead.
+ *  - PERSISTED (`decision`, `completedTourIds`, `nudgedTourIds`) — the standing record of what this
+ *    PERSON has done, owned by `createTutorialRecord` (`stores/tutorial.record.ts`) along with the
+ *    server-reconciliation rules that go with it. `null` (never asked) is a real state distinct from
+ *    `declined`: only an explicit answer stops the launch prompt returning, while closing it without
+ *    answering merely defers it to the next launch.
+ *  - SESSION-ONLY (`promptOpen`, `catalogueOpen`, `activeTourId`, `stepIndex`, `pendingNudgeId`) —
+ *    owned here. A tour is anchored to live DOM, so replaying progress across a reload would point
+ *    step N at a board that hasn't reached that state; a reloaded tour restarts from its beginning.
+ *
+ * The persisted half is a per-person fact rather than a per-browser one, so it is MIRRORED to the
+ * signed-in user's server row when the deployment has accounts (`useTutorialSync`), with this store
+ * staying the local cache the SPA reads. Persisting it here as well is not redundancy: it is what a
+ * deployment with auth disabled, and every load before the snapshot lands, runs on.
  *
  * The store deliberately knows nothing about WHICH tours exist: the catalog lives in the
- * `tutorialTours` slot (see `modular/tutorial-tours.ts`), so tours ship and evolve — first-
- * party and consumer-contributed alike — without this store changing. It tracks ids and a
- * step cursor; the overlay resolves definitions and drives the cursor.
+ * `tutorialTours` slot (see `modular/tutorial-tours.ts`), so tours ship and evolve — first-party and
+ * consumer-contributed alike — without this store changing. It tracks ids and a step cursor; the
+ * overlay resolves definitions and drives the cursor.
  */
 export const useTutorialStore = defineStore(
   'tutorial',
   () => {
-    /** The saved launch-prompt answer. Written only by an explicit accept/decline/start. */
-    const decision = ref<TutorialDecision | null>(null)
-    /** Ids of tours the user finished (reached the last step's Done), persisted. */
-    const completedTourIds = ref<string[]>([])
-
-    const promptOpen = ref(false)
-    /** Once-per-session guard for the launch auto-open; later opens are user-driven. */
-    const promptAutoOpened = ref(false)
+    const record = createTutorialRecord()
+    // The launch offer's own four-exit state machine (`stores/tutorial.prompt.ts`), which needs to
+    // know only WHETHER an answer exists.
+    const prompt = createTutorialPrompt({ hasDecision: () => record.decision.value !== null })
+    const { promptOpen } = prompt
     /**
      * The tutorial catalogue (every tour this deployment ships, startable at any time) is
      * open. Always user-driven — nothing auto-opens it — which is why it carries none of the
@@ -58,6 +60,21 @@ export const useTutorialStore = defineStore(
      */
     const interrupted = ref<{ tourId: string; stepIndex: number } | null>(null)
 
+    /**
+     * The tour the contextual offer is currently holding out, or null.
+     *
+     * Session state, and separate from `nudgedTourIds` on purpose: the id is marked as SPENT the
+     * moment the offer is made, while what is on SCREEN survives being suppressed. The two most
+     * valuable moments to offer a tour (a run parked, a run failed) routinely arrive while a
+     * tutorial window or another tour is up, and dropping the offer there would lose the one chance
+     * this mechanism gets. Holding it means it appears as soon as the way is clear.
+     *
+     * The trade is deliberate: a reload before it is ever shown burns the offer. That beats the
+     * alternative of re-arming it, which turns one missed moment into a prompt that keeps coming
+     * back on a board whose gates flip constantly.
+     */
+    const pendingNudgeId = ref<string | null>(null)
+
     /** A tour is currently running (the overlay mounts off this). */
     const touring = computed(() => activeTourId.value !== null)
 
@@ -78,43 +95,6 @@ export const useTutorialStore = defineStore(
     const ownWindowOpen = computed(() => promptOpen.value || catalogueOpen.value)
 
     /**
-     * Auto-open the launch prompt, at most once per session and only while the user has
-     * never answered it. Callers gate on the rest of the launch context (board ready, no
-     * other startup advisory open) — see `pages/index.vue`.
-     */
-    function maybeOfferOnLaunch() {
-      if (decision.value !== null || promptAutoOpened.value) return
-      promptAutoOpened.value = true
-      promptOpen.value = true
-    }
-
-    /** User-driven open (command palette), regardless of any saved decision. */
-    function openPrompt() {
-      promptOpen.value = true
-    }
-
-    /**
-     * Withdraw an offer this store made, because something the user actually has to answer
-     * (a startup advisory, the GitHub onboarding gate) opened on top of it — and re-arm, so
-     * the offer returns once that surface is gone. Distinct from {@link closePrompt}: no
-     * decision is written EITHER way, but a deferral was not the user's doing, so it must
-     * not consume this session's one offer.
-     *
-     * Only ever withdraws the auto-opened prompt; a prompt the user opened themselves from
-     * the palette is theirs to close.
-     */
-    function deferPrompt() {
-      if (!promptAutoOpened.value) return
-      promptOpen.value = false
-      promptAutoOpened.value = false
-    }
-
-    /** Close without answering: no decision is written, so the next launch asks again. */
-    function closePrompt() {
-      promptOpen.value = false
-    }
-
-    /**
      * Open the catalogue. Closes the launch prompt WITHOUT answering it: browsing the full
      * list is not "no thanks" (it is the opposite), and the two are modals that would
      * otherwise stack — so the offer returns next launch if the user browses and starts
@@ -131,7 +111,7 @@ export const useTutorialStore = defineStore(
 
     /** The explicit "no thanks": saved, so the launch prompt never auto-opens again. */
     function decline() {
-      decision.value = 'declined'
+      record.declineOffer()
       promptOpen.value = false
     }
 
@@ -141,7 +121,7 @@ export const useTutorialStore = defineStore(
      * leaving `declined` in place would misdescribe what happened).
      */
     function startTour(tourId: string) {
-      decision.value = 'accepted'
+      record.acceptOffer()
       promptOpen.value = false
       catalogueOpen.value = false
       activeTourId.value = tourId
@@ -171,7 +151,7 @@ export const useTutorialStore = defineStore(
         startTour(tourId)
         return
       }
-      decision.value = 'accepted'
+      record.acceptOffer()
       promptOpen.value = false
       catalogueOpen.value = false
       activeTourId.value = tourId
@@ -211,9 +191,7 @@ export const useTutorialStore = defineStore(
     /** Finish the running tour: record completion (idempotent) and clear the cursor. */
     function completeTour() {
       const id = activeTourId.value
-      if (id && !completedTourIds.value.includes(id)) {
-        completedTourIds.value = [...completedTourIds.value, id]
-      }
+      if (id) record.markCompleted(id)
       // A finished tour has no position left to resume, and an offer to resume the walkthrough
       // the user just completed would sit beside its own Completed badge.
       if (id !== null && interrupted.value?.tourId === id) interrupted.value = null
@@ -225,45 +203,50 @@ export const useTutorialStore = defineStore(
       return interrupted.value?.tourId === tourId ? interrupted.value.stepIndex : null
     }
 
-    function isCompleted(tourId: string): boolean {
-      return completedTourIds.value.includes(tourId)
+    /**
+     * Hold out the contextual offer for a tour that just became takeable.
+     *
+     * Spending the id and raising the offer are ONE action, so an offer can never be made twice
+     * however many times the gates flip: the guard is the persisted list, not the visible state.
+     * Idempotent, so a caller re-evaluating the catalogue needs no check of its own.
+     */
+    function offerNudge(tourId: string) {
+      if (record.wasNudged(tourId)) return
+      record.markNudged(tourId)
+      pendingNudgeId.value = tourId
+    }
+
+    /** Take the offer off screen. It is already spent, so it does not come back. */
+    function dismissNudge() {
+      pendingNudgeId.value = null
     }
 
     /**
-     * Forget everything this browser remembers about the tutorial: which tours were finished,
-     * where one was broken off, and the answer to the launch offer.
+     * Forget everything this browser remembers about the tutorial (see `record.reset`), plus the
+     * offer currently on screen.
      *
-     * The decision goes with it deliberately. "Reset" is asked for by someone handing the app
-     * to a colleague, demoing it, or re-walking the product after it changed — and every one
-     * of those wants the first-launch experience back, which a cleared completion list alone
-     * does not restore. It does NOT re-open the prompt in this session: `promptAutoOpened` is
-     * session state and stays spent, so the offer returns at the next launch rather than
-     * appearing on top of the catalogue the user is still reading.
-     *
-     * A running tour is left alone: this clears a record, it does not interrupt a walkthrough
-     * the user is in the middle of (which would end it, unrecorded, on a click about history).
+     * It does NOT re-open the prompt in this session: `promptAutoOpened` is session state and stays
+     * spent, so the offer returns at the next launch rather than appearing on top of the catalogue
+     * the user is still reading. A running tour is left alone: this clears a record, it does not
+     * interrupt a walkthrough the user is in the middle of (which would end it, unrecorded, on a
+     * click about history).
      */
     function resetProgress() {
-      completedTourIds.value = []
+      record.reset()
       interrupted.value = null
-      decision.value = null
+      pendingNudgeId.value = null
     }
 
     return {
-      decision,
-      completedTourIds,
-      promptOpen,
-      promptAutoOpened,
+      ...record,
+      ...prompt,
       catalogueOpen,
       activeTourId,
       stepIndex,
       interrupted,
+      pendingNudgeId,
       touring,
       ownWindowOpen,
-      maybeOfferOnLaunch,
-      openPrompt,
-      closePrompt,
-      deferPrompt,
       openCatalogue,
       closeCatalogue,
       resetProgress,
@@ -273,9 +256,10 @@ export const useTutorialStore = defineStore(
       setStepIndex,
       stopTour,
       completeTour,
-      isCompleted,
       interruptedAt,
+      offerNudge,
+      dismissNudge,
     }
   },
-  { persist: { pick: ['decision', 'completedTourIds'] } },
+  { persist: { pick: ['decision', 'completedTourIds', 'nudgedTourIds'] } },
 )

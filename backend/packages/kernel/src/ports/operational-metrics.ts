@@ -55,6 +55,26 @@ export type OperationalCounter =
    * window. Silent otherwise, and it degrades every replica's view of an attack at once.
    */
   | 'auth.throttle.store_unavailable'
+  /**
+   * An in-app tutorial walkthrough was started / finished / broken off. Dimensioned by `tour`.
+   *
+   * The one PRODUCT signal on an otherwise operational surface, and it is here rather than on a
+   * second seam because there is no second seam: the rule is one counter port, and adding a
+   * parallel one to keep this tidy would be two places to get delta temporality wrong. What it
+   * buys is the question the in-app-tutorial initiative could not answer about itself — the
+   * catalogue made every walkthrough reachable, but whether any is REACHED was unmeasured, so
+   * each further slice was chosen on a guess. Started-vs-completed separates "nobody opens it"
+   * from "everybody drops it halfway", which need opposite fixes.
+   *
+   * The `tour` dimension is bounded in TWO places, because neither alone is enough: the wire
+   * schema constrains the SHAPE of an id, and `TutorialTelemetryService` caps how many DISTINCT
+   * ids one process will ever report, folding the rest onto `other` and logging that it did.
+   * A dimension whose values come from a browser is otherwise an unbounded-cardinality hole in
+   * the operator's own backend.
+   */
+  | 'tutorial.tour_started'
+  | 'tutorial.tour_completed'
+  | 'tutorial.tour_abandoned'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns

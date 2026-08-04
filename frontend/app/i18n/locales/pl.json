@@ -6353,7 +6353,10 @@
       "finishedRun": "Uruchomienie zakończone powodzeniem",
       "integrationsManage": "Uprawnienie do zarządzania integracjami",
       "settingsManage": "Uprawnienie do zarządzania ustawieniami obszaru roboczego",
-      "library": "Włączona w tym wdrożeniu biblioteka fragmentów kontekstu"
+      "library": "Włączona w tym wdrożeniu biblioteka fragmentów kontekstu",
+      "failedRun": "Nieudane uruchomienie",
+      "infrastructure": "Backend wykonawczy podłączony do tego workspace’u",
+      "advancedTier": "Zaawansowany tryb interfejsu"
     },
     "overlay": {
       "next": "Dalej",
@@ -6365,7 +6368,9 @@
       "announcement": "Krok {current} z {total}. {title}. {body}",
       "abridged": "Pominięto 1 krok: tego elementu nie ma na tej tablicy. | Pominięto {count} kroki: tych elementów nie ma na tej tablicy. | Pominięto {count} kroków: tych elementów nie ma na tej tablicy.",
       "searching": "Szukanie podświetlonego elementu...",
-      "clickHint": "Kliknij podświetlony element, aby kontynuować"
+      "clickHint": "Kliknij podświetlony element, aby kontynuować",
+      "nextUp": "Następnie",
+      "takeNext": "Przejdź tę"
     },
     "tours": {
       "boardBasics": {
@@ -6488,7 +6493,7 @@
           },
           "finish": {
             "title": "To jest cała pętla",
-            "body": "Zaplanuj zadanie, wybierz potok, uruchom je, obserwuj. Kiedy uruchomienie czegoś od ciebie potrzebuje, zatrzymuje się i mówi o tym, czym zajmuje się następna wycieczka."
+            "body": "Zaplanuj zadanie, wybierz potok, uruchom je, obserwuj. Kolejne wycieczki czytają prawdziwe uruchomienie, więc odblokują się, gdy naprawdę jakieś uruchomisz."
           }
         }
       },
@@ -6643,7 +6648,100 @@
             "body": "Część wpisów należy do ciebie, a nie do tablicy, na przykład osobisty token dostępu albo plan, i służy tylko uruchomieniom, które sam zaczynasz. Centrum zaznacza, co jest czym, a Moja konfiguracja zbiera to, co twoje."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Odczytać błąd",
+        "description": "Uruchomienie zatrzymało się na błędzie. Sprawdź, co się zepsuło i co z tym zrobić.",
+        "steps": {
+          "intro": {
+            "title": "Uruchomienia się nie udają, i to normalne",
+            "body": "Nieudane uruchomienie to nie ślepy zaułek. Tablica zachowuje błąd, przyczyna to zwykle jedna linia, a większość przyczyn naprawia ustawienie, nie przepisywanie zadania."
+          },
+          "banner": {
+            "title": "Co poszło nie tak",
+            "body": "Karta zamienia pasek postępu na ten komunikat. Nazywa przyczynę, szczegóły zawierają surowe wyjście, a niektóre przyczyny oferują przycisk prosto do ustawienia, które je naprawia."
+          },
+          "retry": {
+            "title": "Uruchomić ponownie",
+            "body": "Ponów uruchamia pracę od nowa. Wcześniejsze błędy zostają na zadaniu, w sekcji „Poprzednie błędy”, więc możesz porównywać próby, zamiast tracić ślad."
+          },
+          "finish": {
+            "title": "Błąd to informacja",
+            "body": "Napraw przyczynę, ponów, porównaj. Jeśli ten sam błąd wraca, to właśnie szczegóły należy zanieść osobie, która może rozszerzyć uprawnienie albo podłączyć to, czego brakuje."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Gdzie dzieją się uruchomienia",
+        "description": "Maszyny, na których działają agenci, środowiska, w których testują, i poświadczenia, których mogą użyć.",
+        "steps": {
+          "intro": {
+            "title": "Agenci potrzebują miejsca do działania",
+            "body": "Każdy krok kontenerowy działa na backendzie wykonawczym, testy wstają w środowisku, a niektóre możliwości potrzebują poświadczenia. Wszystkie trzy konfiguruje się w jednym oknie."
+          },
+          "open": {
+            "title": "Otwórz Infrastrukturę",
+            "body": "Wszystko o tym, gdzie i jak wykonują się uruchomienia, jest tutaj."
+          },
+          "tabs": {
+            "title": "Jedna karta na jedno zagadnienie",
+            "body": "Kontenery agentów to miejsce, w którym wykonuje się praca. Środowiska testowe to to, z czego wstaje serwis. Lista poświadczeń pokazuje, które klucze możliwości używane przez twoich agentów potrafią naprawdę rozwiązać, a których wciąż brakuje."
+          },
+          "finish": {
+            "title": "Błędy odsyłają tutaj",
+            "body": "Kiedy uruchomienie zawodzi na etapie przygotowania zasobów, to właśnie to okno prosi otworzyć jego komunikat. Lepiej wiedzieć o tym wcześniej niż później."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Przegląd panelem",
+        "description": "Niech tę samą pracę przejrzy kilka modeli, a nie jeden, w zadaniach, które na to zasługują.",
+        "steps": {
+          "intro": {
+            "title": "Jeden recenzent albo kilku",
+            "body": "Krok przeglądu zwykle uruchamia jednego agenta. Może zamiast tego uruchomić panel kilku modeli i porównać to, co mówią, co przy cięższej pracy wyłapuje to, co pojedynczy recenzent przepuszcza."
+          },
+          "open": {
+            "title": "Otwórz Konfigurację modeli",
+            "body": "Panele składa się z modeli, więc ustawia się je obok nich."
+          },
+          "groups": {
+            "title": "Zdefiniuj panel",
+            "body": "Grupa wskazuje modele w panelu i to, jak wymagające musi być zadanie, żeby go użyć. Krok wybiera potem grupę, zamiast wymieniać modele po kolei."
+          },
+          "finish": {
+            "title": "Koszt idzie za wysiłkiem",
+            "body": "Panel kosztuje tyle wywołań modelu, ilu ma członków, i dlatego grupę można ograniczyć do zadań, których oszacowanie przekracza jej próg. Mała praca zostaje przy jednym recenzencie."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Serwisy, które już masz",
+        "description": "Powiedz agentom, jakie wspólne systemy istnieją i jak wyglądają ich API.",
+        "steps": {
+          "intro": {
+            "title": "Nie buduj od nowa tego, co masz",
+            "body": "Agenci projektują po ciemku, dopóki nie wiedzą, co twoja organizacja już utrzymuje. Ten katalog nazywa te systemy i przechowuje ich kontrakty API."
+          },
+          "open": {
+            "title": "Otwórz Serwisy podstawowe",
+            "body": "Katalog wspólnych możliwości dostępny dla każdej tablicy w tym workspace’ie."
+          },
+          "catalog": {
+            "title": "Zarejestruj, wgraj albo zsynchronizuj",
+            "body": "Dodaj serwis ręcznie, wgraj jego dokumenty API albo podłącz repozytorium i pozwól im się synchronizować. Projekty odwołują się potem do tego, co jest tu zarejestrowane, zamiast wymyślać interfejs."
+          },
+          "finish": {
+            "title": "Kroki projektowe to czytają",
+            "body": "Projekt, który zadeklaruje, które z nich używa, dostaje w następnym kroku ich pełne kontrakty. Taki, który nie deklaruje nic, nie dostaje nic: utrzymywanie tego na bieżąco jest warunkiem, żeby to działało."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Nowy przewodnik dostępny",
+      "start": "Pokaż mi",
+      "dismiss": "Zamknij"
     }
   },
   "externalTools": {

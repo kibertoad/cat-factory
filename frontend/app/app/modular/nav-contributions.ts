@@ -144,6 +144,17 @@ export interface NavGates {
    * failed run never renders.
    */
   boardHasFinishedRun: boolean
+  /**
+   * Some run on a task block has FAILED, so the card is rendering the failure banner.
+   *
+   * The other half of {@link boardHasFinishedRun}, and the reason it is a separate gate rather
+   * than a looser "a run settled": the two states render disjoint surfaces (a result view and
+   * a merge control; a failure banner and a retry), so one tour cannot cover both. It is also
+   * the state a new user is MOST likely to be in and the one the catalog had nothing for: with
+   * only the success gate, a board where every run failed reports the delivery loop as
+   * permanently half-finished and explains none of it.
+   */
+  boardHasFailedRun: boolean
 }
 
 /** Command-palette placement + copy for a contribution that appears in the palette. */

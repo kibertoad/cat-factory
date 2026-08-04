@@ -121,10 +121,16 @@ describe('useTutorialStore catalogue', () => {
     tutorial.setStepIndex(2)
     tutorial.stopTour()
 
+    tutorial.offerNudge('answer-park')
     tutorial.resetProgress()
     expect(tutorial.completedTourIds).toEqual([])
     expect(tutorial.interruptedAt('run-task')).toBeNull()
     expect(tutorial.decision).toBeNull()
+    // The spent contextual offers go too, or a board that has already run something would
+    // never make them again to the colleague the app was just handed to.
+    expect(tutorial.nudgedTourIds).toEqual([])
+    expect(tutorial.pendingNudgeId).toBeNull()
+    expect(tutorial.wasNudged('answer-park')).toBe(false)
   })
 
   it('leaves a running tour alone when progress is reset', () => {
@@ -298,5 +304,121 @@ describe('useTutorialStore resuming a broken-off tour', () => {
     tutorial.setStepIndex(2)
     tutorial.stopTour({ resumable: false })
     expect(tutorial.interruptedAt('gone-away')).toBeNull()
+  })
+})
+
+describe('useTutorialStore contextual offer', () => {
+  it('raises the offer and spends the id in one act', () => {
+    // The guard against re-offering is the PERSISTED list, not the visible state, so an offer
+    // cannot be made twice however many times the live gates flip.
+    const tutorial = useTutorialStore()
+    tutorial.offerNudge('answer-park')
+    expect(tutorial.pendingNudgeId).toBe('answer-park')
+    expect(tutorial.wasNudged('answer-park')).toBe(true)
+  })
+
+  it('never re-raises an offer already spent, even once dismissed', () => {
+    const tutorial = useTutorialStore()
+    tutorial.offerNudge('answer-park')
+    tutorial.dismissNudge()
+    expect(tutorial.pendingNudgeId).toBeNull()
+    tutorial.offerNudge('answer-park')
+    expect(tutorial.pendingNudgeId).toBeNull()
+    expect(tutorial.nudgedTourIds).toEqual(['answer-park'])
+  })
+
+  it('holds one offer at a time, keeping the newer arrival', () => {
+    const tutorial = useTutorialStore()
+    tutorial.offerNudge('answer-park')
+    tutorial.offerNudge('diagnose-failure')
+    expect(tutorial.pendingNudgeId).toBe('diagnose-failure')
+    expect(tutorial.nudgedTourIds).toEqual(['answer-park', 'diagnose-failure'])
+  })
+})
+
+describe('useTutorialStore server reconciliation', () => {
+  it('unions the server copy into the local one, keeping what only this browser knew', () => {
+    // Both lists are grow-only sets of things that HAPPENED, so neither side may un-say one. A
+    // replace here loses a tour finished while the mirror write was failing.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    const pushNeeded = tutorial.mergeServerProgress({
+      decision: 'accepted',
+      completedTourIds: ['first-task'],
+      nudgedTourIds: [],
+    })
+    expect(tutorial.completedTourIds).toEqual(['first-task', 'board-basics'])
+    // This browser held something the server did not, so the mirror owes it a write.
+    expect(pushNeeded).toBe(true)
+    expect(tutorial.serverPushNeeded).toBe(true)
+  })
+
+  it('asks for no push when the server copy is already a superset', () => {
+    // The ordinary reload. Writing anyway would mean every board load posted a mirror nobody reads.
+    const tutorial = useTutorialStore()
+    expect(
+      tutorial.mergeServerProgress({
+        decision: 'accepted',
+        completedTourIds: ['board-basics'],
+        nudgedTourIds: ['answer-park'],
+      }),
+    ).toBe(false)
+    expect(tutorial.completedTourIds).toEqual(['board-basics'])
+    expect(tutorial.serverPushNeeded).toBe(false)
+  })
+
+  it('never duplicates an id both sides already hold', () => {
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    tutorial.mergeServerProgress({
+      decision: null,
+      completedTourIds: ['board-basics'],
+      nudgedTourIds: [],
+    })
+    expect(tutorial.completedTourIds).toEqual(['board-basics'])
+  })
+
+  it('takes the server decision, but never clears a local one with an absent row', () => {
+    // The decision is a preference someone re-answers, so the shared record wins when it has an
+    // answer. A server row with no answer is not evidence that the local answer never happened.
+    const tutorial = useTutorialStore()
+    tutorial.decline()
+    tutorial.mergeServerProgress({
+      decision: null,
+      completedTourIds: [],
+      nudgedTourIds: [],
+    })
+    expect(tutorial.decision).toBe('declined')
+    expect(tutorial.serverPushNeeded).toBe(true)
+
+    tutorial.mergeServerProgress({
+      decision: 'accepted',
+      completedTourIds: [],
+      nudgedTourIds: [],
+    })
+    expect(tutorial.decision).toBe('accepted')
+  })
+
+  it('treats an absent server copy as nothing to reconcile, not as an empty one', () => {
+    // No accounts, no store wired, or a degraded read. Pushing here would write a mirror on a
+    // deployment that has nowhere to put it; clearing would be worse.
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    expect(tutorial.mergeServerProgress(null)).toBe(false)
+    expect(tutorial.completedTourIds).toEqual(['board-basics'])
+    expect(tutorial.serverPushNeeded).toBe(false)
+  })
+
+  it('clears the push request once the mirror has caught up', () => {
+    const tutorial = useTutorialStore()
+    tutorial.startTour('board-basics')
+    tutorial.completeTour()
+    tutorial.mergeServerProgress({ decision: null, completedTourIds: [], nudgedTourIds: [] })
+    expect(tutorial.serverPushNeeded).toBe(true)
+    tutorial.markServerPushed()
+    expect(tutorial.serverPushNeeded).toBe(false)
   })
 })

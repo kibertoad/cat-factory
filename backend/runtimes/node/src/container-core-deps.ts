@@ -413,6 +413,7 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // escalation sweep work identically to the Worker.
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
     userSettingsRepository: repos.userSettingsRepository,
+    tutorialProgressRepository: repos.tutorialProgressRepository,
     modelProviderResolver,
     requirementReviewModel: config.agents.routing.default.ref,
     requirementReviewResolveModel: config.agents.resolveBlockModel,

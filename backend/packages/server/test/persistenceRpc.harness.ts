@@ -204,6 +204,21 @@ function buildScopeAnchorRepos(fx: RegistryFixtures) {
   }
 }
 
+/**
+ * The PER-USER surface, whose rule is `selfUser` rather than a workspace or account: every method
+ * takes the subject's userId as arg0 and the dispatcher requires it to equal the token's own. Each
+ * stub echoes the id it was asked for, so a forwarded call can be told from a refused one.
+ */
+function buildPerUserRepos() {
+  return {
+    tutorialProgressRepository: {
+      get: async (userId: string) => ({ userId }),
+      upsert: async (userId: string) => ({ userId }),
+      remove: async (userId: string) => ({ userId }),
+    },
+  }
+}
+
 /** The workspace-scoped board-load surface: settings, presets, schedules, notifications, envs. */
 function buildBoardConfigRepos() {
   return {
@@ -677,6 +692,7 @@ export function makeRegistry(): {
     ...buildBoardConfigRepos(),
     ...buildReviewAndIntegrationRepos(),
     ...buildLibraryAndCommsRepos(),
+    ...buildPerUserRepos(),
   } as unknown as PersistenceRegistry
 
   const resolveAccountId = (id: string) =>

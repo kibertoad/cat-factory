@@ -5,6 +5,9 @@ import {
   isLaunchOffer,
   launchActionFor,
   needsReveal,
+  newlyAvailableTour,
+  nextTourAfter,
+  readyTourIds,
   resolveTourCatalogue,
   resolveTours,
   sortTours,
@@ -159,6 +162,149 @@ describe('resolveTourCatalogue', () => {
     expect(resolveTours(tours, gates(false)).map((t) => t.id)).toEqual(
       catalogue.filter((e) => e.availability === 'ready').map((e) => e.tour.id),
     )
+  })
+})
+
+describe('nextTourAfter', () => {
+  const ready = (...ids: string[]) => ids.map((id, index) => tour(id, (index + 1) * 10))
+  const none = () => false
+
+  it('offers the next unfinished tour after the one just completed', () => {
+    const next = nextTourAfter(ready('a', 'b', 'c'), { justFinishedId: 'a', isCompleted: none })
+    expect(next?.id).toBe('b')
+  })
+
+  it('never offers the tour just finished, even before it is recorded as complete', () => {
+    // The handoff renders on the finish card, BEFORE Done writes the completion, so
+    // `isCompleted` still says no about the tour the user is looking at.
+    const next = nextTourAfter(ready('a', 'b'), { justFinishedId: 'b', isCompleted: none })
+    expect(next?.id).toBe('a')
+  })
+
+  it('skips tours already completed', () => {
+    const next = nextTourAfter(ready('a', 'b', 'c'), {
+      justFinishedId: 'a',
+      isCompleted: (id) => id === 'b',
+    })
+    expect(next?.id).toBe('c')
+  })
+
+  it('prefers the launch-offer arc over a lower-ordered catalogue-only tour', () => {
+    // The rule ordering alone would get wrong. A deployment's reference tour at order 1 must
+    // not cut into the delivery loop, which is the chain the handoff exists to keep moving.
+    const shelf = { ...tour('shelf', 1), offeredAtLaunch: false as const }
+    const next = nextTourAfter([shelf, tour('loop', 50)], {
+      justFinishedId: 'x',
+      isCompleted: none,
+    })
+    expect(next?.id).toBe('loop')
+  })
+
+  it('falls back to a catalogue-only tour once the arc is exhausted', () => {
+    // Finishing the delivery loop is exactly when the platform half becomes the right thing
+    // to point at, so the preference is an ordering, not a filter.
+    const shelf = { ...tour('shelf', 60), offeredAtLaunch: false as const }
+    const next = nextTourAfter([shelf, tour('loop', 10)], {
+      justFinishedId: 'loop',
+      isCompleted: none,
+    })
+    expect(next?.id).toBe('shelf')
+  })
+
+  it('offers nothing when every other tour is done', () => {
+    // Absence is a legitimate answer here, unlike in the catalogue: this is an offer, and the
+    // finish card keeps its plain Done.
+    expect(nextTourAfter(ready('a', 'b'), { justFinishedId: 'a', isCompleted: () => true })).toBe(
+      null,
+    )
+    expect(nextTourAfter([], { justFinishedId: 'a', isCompleted: none })).toBe(null)
+  })
+})
+
+describe('newlyAvailableTour', () => {
+  const entries = (...tours: TutorialTour[]) => resolveTourCatalogue(tours, gates(true))
+  const open = { declined: false, isCompleted: () => false, wasNudged: () => false }
+
+  it('offers a tour that has just become ready', () => {
+    const catalogue = entries(withSteps('a', [step('one')]), withSteps('b', [step('one')]))
+    const offer = newlyAvailableTour({
+      catalogue,
+      previouslyReady: new Set(['a']),
+      ...open,
+    })
+    expect(offer?.id).toBe('b')
+  })
+
+  it('says nothing about a tour that was already ready', () => {
+    // The transition rule. Fired on the standing state this would greet every board load with
+    // an offer about a walkthrough that has been available for weeks.
+    const catalogue = entries(withSteps('a', [step('one')]))
+    expect(newlyAvailableTour({ catalogue, previouslyReady: new Set(['a']), ...open })).toBe(null)
+  })
+
+  it('ignores a tour that is still blocked', () => {
+    const catalogue = resolveTourCatalogue(
+      [withSteps('a', [step('one')], [needsAdvanced])],
+      gates(false),
+    )
+    expect(newlyAvailableTour({ catalogue, previouslyReady: new Set(), ...open })).toBe(null)
+  })
+
+  it('leaves the catalogue-only half alone', () => {
+    // `offeredAtLaunch: false` declares a tour as reference material someone comes and gets;
+    // interrupting them with it is the thing that declaration rules out.
+    const shelf = { ...withSteps('shelf', [step('one')]), offeredAtLaunch: false as const }
+    expect(
+      newlyAvailableTour({ catalogue: entries(shelf), previouslyReady: new Set(), ...open }),
+    ).toBe(null)
+  })
+
+  it('never re-offers a tour already offered or already completed', () => {
+    const catalogue = entries(withSteps('a', [step('one')]))
+    expect(
+      newlyAvailableTour({
+        catalogue,
+        previouslyReady: new Set(),
+        ...open,
+        wasNudged: (id) => id === 'a',
+      }),
+    ).toBe(null)
+    expect(
+      newlyAvailableTour({
+        catalogue,
+        previouslyReady: new Set(),
+        ...open,
+        isCompleted: (id) => id === 'a',
+      }),
+    ).toBe(null)
+  })
+
+  it('says nothing at all to a user who declined', () => {
+    // "No thanks" answered the question about guided tours, not about when it was asked.
+    const catalogue = entries(withSteps('a', [step('one')]))
+    expect(
+      newlyAvailableTour({ catalogue, previouslyReady: new Set(), ...open, declined: true }),
+    ).toBe(null)
+  })
+
+  it('offers the lowest-ordered tour when several become ready at once', () => {
+    const catalogue = entries(
+      { ...withSteps('later', [step('one')]), order: 50 },
+      { ...withSteps('earlier', [step('one')]), order: 20 },
+    )
+    const offer = newlyAvailableTour({ catalogue, previouslyReady: new Set(), ...open })
+    expect(offer?.id).toBe('earlier')
+  })
+})
+
+describe('readyTourIds', () => {
+  it('is exactly the ids resolveTours would return', () => {
+    const tours = [
+      withSteps('ready', [step('one')]),
+      withSteps('blocked', [step('one')], [needsAdvanced]),
+    ]
+    const catalogue = resolveTourCatalogue(tours, gates(false))
+    expect([...readyTourIds(catalogue)]).toEqual(resolveTours(tours, gates(false)).map((t) => t.id))
   })
 })
 

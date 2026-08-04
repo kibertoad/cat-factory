@@ -6365,7 +6365,10 @@
       "finishedRun": "Başarıyla tamamlanmış bir çalıştırma",
       "integrationsManage": "Entegrasyonları yönetme izni",
       "settingsManage": "Çalışma alanı ayarlarını yönetme izni",
-      "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi"
+      "library": "Bu kurulumda etkinleştirilmiş bağlam parçaları kütüphanesi",
+      "failedRun": "Başarısız olmuş bir çalıştırma",
+      "infrastructure": "Bu çalışma alanına bağlı bir yürütme arka ucu",
+      "advancedTier": "Gelişmiş arayüz modu"
     },
     "overlay": {
       "next": "İleri",
@@ -6377,7 +6380,9 @@
       "announcement": "Adım {current} / {total}. {title}. {body}",
       "abridged": "1 adım atlandı: bu denetim bu panonun parçası değil. | {count} adım atlandı: bu denetimler bu panonun parçası değil.",
       "searching": "Vurgulanan denetim aranıyor...",
-      "clickHint": "Devam etmek için vurgulanan denetime tıklayın"
+      "clickHint": "Devam etmek için vurgulanan denetime tıklayın",
+      "nextUp": "Sırada",
+      "takeNext": "Bunu yap"
     },
     "tours": {
       "boardBasics": {
@@ -6500,7 +6505,7 @@
           },
           "finish": {
             "title": "Döngü bu",
-            "body": "Görevi planlayın, hattı seçin, başlatın, izleyin. Bir çalışma sizden bir şey istediğinde durur ve söyler; bir sonraki tur bunu anlatıyor."
+            "body": "Görevi planlayın, hattı seçin, başlatın, izleyin. Bundan sonraki turlar gerçek bir çalışmayı okur; dolayısıyla gerçekten bir çalışma başlattığınızda açılırlar."
           }
         }
       },
@@ -6655,7 +6660,100 @@
             "body": "Bazı girdiler panoya değil size aittir; kişisel bir erişim jetonu ya da abonelik gibi, yalnızca sizin başlattığınız çalıştırmalarda kullanılır. Merkez hangisinin hangisi olduğunu işaretler, Kurulumum ise sizin olanları bir arada tutar."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Bir hatayı okumak",
+        "description": "Bir çalışma hatayla durdu. Neyin bozulduğunu ve ne yapılacağını öğrenin.",
+        "steps": {
+          "intro": {
+            "title": "Çalışmalar başarısız olur, bu normaldir",
+            "body": "Başarısız bir çalışma çıkmaz sokak değildir. Pano hatayı saklar, neden genellikle tek satırdır ve nedenlerin çoğu görevi yeniden yazmakla değil bir ayarla düzelir."
+          },
+          "banner": {
+            "title": "Ne ters gitti",
+            "body": "Kart, ilerleme çubuğunu bu uyarıyla değiştirir. Nedeni adlandırır, ayrıntılar ham çıktıyı tutar ve bazı nedenler onu düzelten ayara giden bir düğme sunar."
+          },
+          "retry": {
+            "title": "Yeniden çalıştırmak",
+            "body": "Yeniden dene işi baştan çalıştırır. Önceki hatalar „Önceki hatalar” altında görevde kalır; böylece izi kaybetmek yerine denemeleri karşılaştırabilirsiniz."
+          },
+          "finish": {
+            "title": "Hata bir bilgidir",
+            "body": "Nedeni düzeltin, yeniden deneyin, karşılaştırın. Aynı hata dönüp duruyorsa, bir izni genişletebilecek ya da eksik bağlantıyı kurabilecek kişiye götürülecek şey bu ayrıntılardır."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Çalışmalar nerede gerçekleşir",
+        "description": "Ajanların üzerinde koştuğu makineler, test ettikleri ortamlar ve kullanabilecekleri kimlik bilgileri.",
+        "steps": {
+          "intro": {
+            "title": "Ajanların koşacak bir yere ihtiyacı var",
+            "body": "Her konteyner adımı bir yürütme arka ucunda koşar, testler bir ortamda ayağa kalkar ve bazı yetenekler kimlik bilgisi ister. Üçü de tek pencerede yapılandırılır."
+          },
+          "open": {
+            "title": "Altyapıyı açın",
+            "body": "Çalışmaların nerede ve nasıl yürütüldüğüne dair her şey burada."
+          },
+          "tabs": {
+            "title": "Her konu için bir sekme",
+            "body": "Ajan konteynerleri, işin yürütüldüğü yerdir. Test ortamları, bir servisin neyden ayağa kaldırıldığıdır. Kimlik bilgisi listesi, ajanlarınızın kullandığı yeteneklerin gerçekten hangi anahtarları çözebildiğini ve hangilerinin hâlâ eksik olduğunu gösterir."
+          },
+          "finish": {
+            "title": "Hatalar buraya işaret eder",
+            "body": "Bir çalışma kaynak hazırlarken başarısız olduğunda, uyarısının açmanızı istediği pencere budur. Olduktan sonra değil, olmadan önce bilmeye değer."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Kurul incelemesi",
+        "description": "Hak eden görevlerde aynı işi tek model yerine birkaç model incelesin.",
+        "steps": {
+          "intro": {
+            "title": "Bir inceleyici ya da birkaçı",
+            "body": "Bir inceleme adımı normalde tek ajan koşar. Bunun yerine birkaç modelden oluşan bir kurul koşup söylediklerini karşılaştırabilir; bu, ağır işlerde tek bir inceleyicinin kaçırdığını yakalar."
+          },
+          "open": {
+            "title": "Model yapılandırmasını açın",
+            "body": "Kurullar modellerden oluşur, bu yüzden onların yanında kurulur."
+          },
+          "groups": {
+            "title": "Bir kurul tanımlayın",
+            "body": "Bir grup, kuruldaki modelleri ve kullanılması için görevin ne kadar zorlu olması gerektiğini belirtir. Adım sonra modelleri tek tek saymak yerine bir grup seçer."
+          },
+          "finish": {
+            "title": "Maliyet çabayı izler",
+            "body": "Bir kurul, üye sayısı kadar model çağrısına mal olur; bu yüzden bir grup, tahmini eşiğini geçen görevlerle sınırlanabilir. Küçük iş tek inceleyiciyle kalır."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Zaten çalıştırdığınız servisler",
+        "description": "Ajanlara hangi paylaşılan sistemlerin var olduğunu ve API’lerinin nasıl göründüğünü söyleyin.",
+        "steps": {
+          "intro": {
+            "title": "Elinizde olanı yeniden kurmayın",
+            "body": "Kurumunuzun neyi zaten çalıştırdığını bilmedikçe ajanlar karanlıkta tasarlar. Bu katalog o sistemleri adlandırır ve API sözleşmelerini taşır."
+          },
+          "open": {
+            "title": "Temel servisleri açın",
+            "body": "Bu çalışma alanındaki her panonun kullanabileceği paylaşılan yetenekler kataloğu."
+          },
+          "catalog": {
+            "title": "Kaydedin, yükleyin ya da senkronize edin",
+            "body": "Bir servisi elle ekleyin, API belgelerini yükleyin ya da bir depo bağlayıp senkronize olmalarını sağlayın. Tasarımlar sonra bir arayüz uydurmak yerine burada kayıtlı olana atıf yapar."
+          },
+          "finish": {
+            "title": "Tasarım adımları bunu okur",
+            "body": "Bunlardan hangilerini kullandığını bildiren bir tasarım, sonraki adımda onların tam sözleşmelerini alır. Hiçbir şey bildirmeyen hiçbir şey almaz: bunu güncel tutmak, işin işlemesinin koşuludur."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Yeni tur mevcut",
+      "start": "Göster",
+      "dismiss": "Kapat"
     }
   },
   "externalTools": {

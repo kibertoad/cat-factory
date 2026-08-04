@@ -150,7 +150,7 @@ import {
   D1SandboxGradeRepository,
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
-import { D1UserSettingsRepository } from './repositories/D1UserSettingsRepository'
+import { selectPerUserDeps } from './container-per-user-deps'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 
@@ -301,7 +301,7 @@ export function selectMergeLifecycleDeps(
     // so no `composeRuntime` is wired here — the lifecycle endpoints report "not supported".
     sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
-    userSettingsRepository: new D1UserSettingsRepository({ db }),
+    ...selectPerUserDeps(db),
     modelPresetRepository: new D1ModelPresetRepository({ db }),
     // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to.
     // Always wired (no secret material) — the panels only run when the optional consensus

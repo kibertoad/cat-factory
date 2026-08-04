@@ -30,6 +30,7 @@ import type { WorkspaceAgentSettingsService } from '../modules/agentSettings/Wor
 import type { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import type { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import type { TrackerSettingsService } from '../modules/recurring/TrackerSettingsService.js'
+import type { TutorialProgressService } from '../modules/tutorial/TutorialProgressService.js'
 import type { UserSettingsService } from '../modules/settings/UserSettingsService.js'
 import type { WorkspaceSettingsService } from '../modules/settings/WorkspaceSettingsService.js'
 
@@ -145,6 +146,11 @@ export interface WorkspaceSettingsModule {
 /** The per-user-settings feature's service, present only when its repository is wired. */
 export interface UserSettingsModule {
   service: UserSettingsService
+}
+
+/** Per-user in-app tutorial progress, present only when its repository is wired. */
+export interface TutorialProgressModule {
+  service: TutorialProgressService
 }
 
 /** The model-preset feature's service, present only when its repository is wired. */

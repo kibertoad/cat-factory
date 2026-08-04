@@ -512,6 +512,12 @@ export type {
   // Per-user settings (the user-tier spend budget).
   UserSettings,
   UpdateUserSettingsInput,
+  // Per-user in-app tutorial progress + the funnel event vocabulary.
+  TutorialProgress,
+  TutorialDecision,
+  UpdateTutorialProgressInput,
+  TutorialEvent,
+  RecordTutorialEventInput,
   // Slack integration shapes (Slack as an extra notification transport).
   SlackConnection,
   SlackRoute,

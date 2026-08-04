@@ -6579,7 +6579,10 @@
       "finishedRun": "A run that finished successfully",
       "integrationsManage": "Permission to manage integrations",
       "settingsManage": "Permission to manage workspace settings",
-      "library": "The context fragment library enabled on this deployment"
+      "library": "The context fragment library enabled on this deployment",
+      "failedRun": "A run that failed",
+      "infrastructure": "An execution backend connected to this workspace",
+      "advancedTier": "The advanced interface mode"
     },
     "overlay": {
       "next": "Next",
@@ -6597,7 +6600,9 @@
         "description": "Shown on a tour's final card when steps were skipped. Needs the plural forms of the target language (pl/uk take three: one | few | many); {count} is the number of skipped steps."
       },
       "searching": "Looking for the highlighted control...",
-      "clickHint": "Click the highlighted control to continue"
+      "clickHint": "Click the highlighted control to continue",
+      "nextUp": "Next up",
+      "takeNext": "Take this one"
     },
     "tours": {
       "boardBasics": {
@@ -6723,7 +6728,7 @@
           },
           "finish": {
             "title": "That is the loop",
-            "body": "Plan a task, pick a pipeline, start it, watch it. When a run needs something from you it pauses and says so, which the next tour covers."
+            "body": "Plan a task, pick a pipeline, start it, watch it. The walkthroughs after this one read a real run, so they unlock once you have actually started one."
           }
         }
       },
@@ -6878,7 +6883,100 @@
             "body": "Some entries belong to you rather than to the board, such as a personal access token or plan, and are used only for runs you start. The hub marks which is which, and My setup collects the ones that are yours."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Read a failure",
+        "description": "A run stopped with an error. Find out what broke, and what to do about it.",
+        "steps": {
+          "intro": {
+            "title": "Runs fail, and that is normal",
+            "body": "A failed run is not a dead end. The board keeps the error, the cause is usually one line, and most causes are fixed by a setting rather than by rewriting the task."
+          },
+          "banner": {
+            "title": "What went wrong",
+            "body": "The card swaps its progress bar for this banner. It names the cause, the details hold the raw output, and some causes offer a button straight to the setting that fixes them."
+          },
+          "retry": {
+            "title": "Run it again",
+            "body": "Retry re-runs the work. Earlier errors stay on the task under Previous errors, so you can compare attempts instead of losing the trail."
+          },
+          "finish": {
+            "title": "A failure is information",
+            "body": "Fix the cause, retry, compare. If the same error keeps coming back, the details are what to bring to whoever can widen a permission or connect what is missing."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Where runs happen",
+        "description": "The machines agents run on, the environments they test in, and the credentials they may use.",
+        "steps": {
+          "intro": {
+            "title": "Agents need somewhere to run",
+            "body": "Every container step runs on an execution backend, tests come up in an environment, and some capabilities need a credential. All three are configured in one window."
+          },
+          "open": {
+            "title": "Open Infrastructure",
+            "body": "Everything about where and how runs execute lives here."
+          },
+          "tabs": {
+            "title": "One tab per concern",
+            "body": "Agent containers is where runs execute. Test environments is what a service is brought up from. The credential list shows which keys the capabilities your agents use can actually resolve, and which are still missing."
+          },
+          "finish": {
+            "title": "Failures point back here",
+            "body": "When a run fails while provisioning, this is the window its banner is asking you to open. Worth knowing before that happens rather than after."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Review by panel",
+        "description": "Have several models review the same work instead of one, on the tasks that warrant it.",
+        "steps": {
+          "intro": {
+            "title": "One reviewer, or several",
+            "body": "A review step normally runs one agent. It can instead run a panel of several models and compare what they say, which catches what a single reviewer misses on heavier work."
+          },
+          "open": {
+            "title": "Open Model configuration",
+            "body": "Panels are made of models, so they are set up beside them."
+          },
+          "groups": {
+            "title": "Define a panel",
+            "body": "A group names the models on the panel and how demanding a task has to be before it is used. A step then selects a group instead of naming models one by one."
+          },
+          "finish": {
+            "title": "Cost follows effort",
+            "body": "A panel costs as many model calls as it has members, which is why a group can be limited to the tasks whose estimate clears its bar. Small work keeps a single reviewer."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "The services you already run",
+        "description": "Tell the agents which shared systems exist, and what their APIs look like.",
+        "steps": {
+          "intro": {
+            "title": "Do not rebuild what you have",
+            "body": "Agents design in the dark unless they know what your organisation already runs. This catalog names those systems and carries their API contracts."
+          },
+          "open": {
+            "title": "Open Foundational services",
+            "body": "The catalog of shared capabilities available to every board in this workspace."
+          },
+          "catalog": {
+            "title": "Register, upload, or sync",
+            "body": "Add a service by hand, upload its API documents, or link a repository and let them sync. Designs then reference what is registered here instead of inventing an interface."
+          },
+          "finish": {
+            "title": "Design steps read this",
+            "body": "A design that declares which of these it uses gets their full contracts in the next step. One that declares nothing gets nothing, so keeping this current is what makes it work."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "New walkthrough available",
+      "start": "Show me",
+      "dismiss": "Dismiss"
     }
   },
   "externalTools": {

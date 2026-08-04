@@ -167,6 +167,7 @@ import type {
   UrlSafetyPolicy,
   UserRepoAccessRepository,
   UserRepository,
+  TutorialProgressRepository,
   UserSettingsRepository,
   VcsProviderRegistry,
   WebhookVerifier,
@@ -1146,6 +1147,12 @@ export interface CoreDependencies {
    * Stores per-user settings (today: the user-tier spend budget). Wired by every
    * persistence-backed facade; absent → the user budget tier is inert (tests/conformance).
    */
+  /**
+   * Per-user in-app tutorial progress. Optional: a facade that wires none leaves the SPA on its
+   * browser-persisted copy, which is exactly the behaviour before this store existed rather than
+   * a half-wired feature.
+   */
+  tutorialProgressRepository?: TutorialProgressRepository
   userSettingsRepository?: UserSettingsRepository
   /**
    * Stores a workspace's model presets (the named model→agent mappings a task picks

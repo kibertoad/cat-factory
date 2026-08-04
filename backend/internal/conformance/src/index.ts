@@ -103,6 +103,7 @@ export { defineSubscriptionActivationSuite } from './subscription-activation-sui
 export { defineReviewFrictionSuite } from './review-friction-suite.js'
 export { defineMergeTrackRecordSuite } from './merge-track-record-suite.js'
 export { defineCredentialPoolSuite, type CredentialPoolRepos } from './credential-pool-suite.js'
+export { defineTutorialProgressSuite } from './tutorial-progress-suite.js'
 export { defineWorkspaceSettingsSuite } from './workspace-settings-suite.js'
 export { defineWorkspaceAccessSuite } from './workspace-access-suite.js'
 export { defineWorkspaceRbacSuite } from './workspace-rbac-suite.js'

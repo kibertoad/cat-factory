@@ -208,6 +208,37 @@ omission. It thins an offer, never the library: an un-offered tour is listed, st
 in the progress line and one footer button away, and `requires` remains the only thing that can
 hold a tour back, which is always reported.
 
+**The finish card HANDS OFF to the next walkthrough** (`nextTourAfter`, offered beside Done). The
+delivery loop is a chain — each tour produces the state the next one requires — and finishing one is
+the last moment the product can bring the tutorial up at all: `startTour` writes
+`decision: 'accepted'`, which is exactly what stops the launch prompt auto-opening, so without this
+the walkthrough a user's own action just unlocked is reachable only by going and finding the
+catalogue. It offers ONE tour, launch-offer tours first whatever their `order` (a deployment's
+reference tour must not cut into the arc), never one already completed or the one just finished, and
+nothing at all when nothing is ready — where the plain Done is the honest ending. It reads the gates
+LIVE, which is the one deliberate exception to the held-script rule below: completing `first-task` is
+precisely what makes `run-task` ready, so a candidate resolved at tour start would be empty exactly
+when it matters. Taking the offer completes this tour first (or its badge stays "not started") and
+goes through the same `useTutorialLaunch().launch`, so a suggested tour the user had broken off
+earlier RESUMES. **Per-run overlay state resets with the script**, not by the component unmounting:
+the handoff completes one tour and starts the next in ONE tick, so `touring` never goes false for a
+render and the finished tour's skips would otherwise be counted against the new one.
+
+**A CONTEXTUAL offer catches a tour becoming takeable** (`newlyAvailableTour` +
+`useTutorialNudge` + `TutorialNudge.vue`): a corner card, not a modal, since the whole point is the
+moment. The trigger is deliberately not a per-surface hook — every tour already declares, as its
+`requires`, the predicate that means "you can take this now", so ONE rule over the resolved
+catalogue covers the catalog and inherits `navRequirementDrift` unchanged. Four rules bind it. It
+fires on a TRANSITION into `ready`, with the first resolution SEEDING the baseline and offering
+nothing (on the standing state it would greet every board load with an offer about a walkthrough
+available for weeks; the transition rule is also why the permission-gated platform tours, ready from
+the first render, never reach it). Only the launch-offer arc, for the same reason `offeredAtLaunch`
+exists. Never twice per tour (`nudgedTourIds`, persisted) and never after an explicit decline —
+"no thanks" answered the question about guided tours, not about when it was asked. And the offer is
+HELD rather than dropped while a tour or a tutorial window is up, because the two most valuable
+moments (a run parked, a run failed) routinely arrive then; it is marked spent when RAISED, so
+holding it cannot become nagging.
+
 **The catalogue lists the tours it CANNOT start, and says what would unlock each.** That is the
 reason a tour's preconditions are declared (`TutorialRequirement`: an id, a copy key, and the
 gate predicate) rather than being an anonymous `when(gates)`. A predicate can only answer "no",
@@ -226,7 +257,31 @@ is what the prompt and the overlay have always seen) and `catalogue` (everything
 reads the SAME registered `gates` service the nav filter does, through the shared-dependency
 `useOptional('gates')`, so the two can never disagree about what this board offers.
 
-Progress is per tour id and per browser. The catalogue's counter is over the WHOLE catalog, not
+**Progress follows the USER, not the browser** (`useTutorialSync` / `useTutorialServer` over
+`GET|PUT|DELETE /tutorial/progress`). The browser-persisted store stays what the SPA reads and stays
+fully functional with no accounts, no store wired on the facade, or offline; the server row is a
+MIRROR, adopted in the snapshot fan-out (`stores/workspace/hydrate.ts`) so the launch prompt decides
+whether to appear against the merged state rather than this browser's copy alone. Both id lists are
+grow-only sets and are UNIONED on BOTH sides, because two browsers signed in as one person each hold
+a full copy and each write it back: a last-writer-wins replace on either side silently drops what the
+other learned, and the symptom is a finished walkthrough going back to "not started" days later.
+Only `decision` is replaced (a preference, not an accumulating fact). "Reset progress" is therefore a
+DELETE, which is also why the catalogue calls `useTutorialServer` and not just the store — a local
+clear alone would be undone by the next snapshot re-merging the row. Every write is fire-and-forget:
+the endpoint merges, so a retry or a racing tab is harmless, and a failed mirror must cost a re-offer
+on another machine rather than the walkthrough someone is taking.
+
+**The funnel is counted** (`POST /tutorial/events` → the kernel `OperationalMetrics` counters
+`tutorial.tour_started` / `_completed` / `_abandoned`, dimensioned by tour). The events are DERIVED
+from the cursor in one watcher rather than emitted from each store action, because those are five
+sites and a missing `started` fails nothing — it just biases the number the next decision is made
+against. Vue's batching is what makes that work across the handoff: it completes one tour and starts
+the next in a single tick, so the cursor goes `A → null → B` and the watcher sees `A → B` with the
+completion list one longer, reporting "A completed, B started". A resume counts as a start, which is
+deliberate: an attempt is an attempt, and not counting re-entries would make completions exceed
+starts. Nothing per-user or per-workspace is recorded, and nothing is stored.
+
+Progress is per tour id. The catalogue's counter is over the WHOLE catalog, not
 the runnable part: counting only today's runnable tours would move the denominator every time a
 repo was linked, and "2 of 2 completed" on a board with four walkthroughs still waiting reads as
 a finished tutorial. `Reset progress` clears the completions, the resume point AND the saved
@@ -245,10 +300,9 @@ state by design: it is openable mid-tour, which is what the `continue` action is
 is SUPPRESSED rather than unmounted, because it holds the running tour's resolved script and a
 remount would re-resolve it against gates that may have flipped since the tour started.
 
-The arc this surface is being built along (what has landed, what each slice learned, and what
-is still open) is tracked in
-[`docs/initiatives/in-app-tutorials.md`](../../docs/initiatives/in-app-tutorials.md). This
-section is the authority on how the thing WORKS.
+The decisions behind this surface, and why each alternative was rejected, are recorded in
+[ADR 0033](../../backend/docs/adr/0033-in-app-tutorials.md). This section is the authority on how
+the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
 control by its `data-testid` (the e2e anchor vocabulary; cover a control that has none by
@@ -302,14 +356,18 @@ each drift on their own: the same split components make for inline placeholders.
 The built-ins come in two halves. The DELIVERY LOOP, end to end, each tour gated on the state the
 previous one leaves behind, so the launch prompt only ever offers what this board can demonstrate:
 board basics, add a repository (`add-service`), create a task (`first-task`), run it (`run-task`),
-answer it when it parks (`answer-park`), review and merge the result (`review-merge`). Then the
-PLATFORM behind it, catalogue-only: connect an engine (`wire-models`), assemble a flow
-(`design-pipeline`), curate the standards agents read (`agent-standards`), link the systems a run
-talks to (`connect-systems`). Each of those covers ONE surface and ends there, because the surface
-opens as a modal over the sidebar it was reached from, so a later step could not click another
-sidebar entry anyway, and each declares exactly the permission that renders the entry it clicks,
-since a weaker requirement offers a tour to someone with no such control and it then reports itself
-abridged.
+answer it when it parks (`answer-park`), read a failure when one comes (`diagnose-failure`), review
+and merge the result (`review-merge`). The loop covers work going WRONG on purpose: a first run fails
+often, `boardHasFinishedRun` deliberately excludes failures (a result view and a merge control are
+not what a failed run renders), and that left the state a new user is most likely to be in as the
+only one on the arc with no walkthrough. Then the PLATFORM behind it, catalogue-only: connect an
+engine (`wire-models`), assemble a flow (`design-pipeline`), curate the standards agents read
+(`agent-standards`), link the systems a run talks to (`connect-systems`), where runs execute
+(`prepare-infrastructure`), review by panel (`panel-reviews`), the shared services designs build on
+(`share-services`). Each of those covers ONE surface and ends there, because the surface opens as a
+modal over the sidebar it was reached from, so a later step could not click another sidebar entry
+anyway, and each declares exactly the permission that renders the entry it clicks, since a weaker
+requirement offers a tour to someone with no such control and it then reports itself abridged.
 
 **That pairing is DERIVED from the nav catalog, not restated.** A step whose anchor IS a nav
 entry's `testId` is checked by `navRequirementDrift` (`tutorial-tours.spec.ts`, beside the anchor
@@ -321,6 +379,14 @@ entry's `gate` is the obvious one. The subtler one is marking it `advanced: true
 from BASIC mode; basic is the shipped default, so that tour would be offered to nearly everyone
 and find nothing. "Renders" therefore means the gate AND the tier, and a tour that wants an
 advanced entry has to declare the tier as a requirement of its own.
+
+**A SECTION can hide itself the same way, one level below anything that guard can see.**
+`panel-reviews` clicks `nav-model-config`, a BASIC-mode entry, but the consensus section inside that
+panel renders on `uiMode.isAdvanced || groups.hasGroups` — so on the shipped default tier a workspace
+that has never made a group renders nothing for the anchored step to find. `navRequirementDrift` pairs
+a tour only against a NAV entry's visibility, so this one is declared by hand (`advancedTier`) and
+pinned by its own named case in `tutorial-tours.spec.ts`. Any tour anchoring INSIDE a surface owes the
+same check of what that surface's own `v-if`s read.
 
 Two deliberate asymmetries about click-to-advance: `run-task` points at Start without it,
 because starting a run spends real model budget and nobody should discover they agreed to that by

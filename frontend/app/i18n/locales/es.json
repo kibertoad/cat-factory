@@ -6353,7 +6353,10 @@
       "finishedRun": "Una ejecución terminada correctamente",
       "integrationsManage": "Permiso para gestionar integraciones",
       "settingsManage": "Permiso para gestionar los ajustes del espacio de trabajo",
-      "library": "La biblioteca de fragmentos de contexto habilitada en este despliegue"
+      "library": "La biblioteca de fragmentos de contexto habilitada en este despliegue",
+      "failedRun": "Una ejecución que ha fallado",
+      "infrastructure": "Un backend de ejecución conectado a este espacio de trabajo",
+      "advancedTier": "El modo de interfaz avanzado"
     },
     "overlay": {
       "next": "Siguiente",
@@ -6365,7 +6368,9 @@
       "announcement": "Paso {current} de {total}. {title}. {body}",
       "abridged": "Se omitió 1 paso: ese control no forma parte de este tablero. | Se omitieron {count} pasos: esos controles no forman parte de este tablero.",
       "searching": "Buscando el control resaltado...",
-      "clickHint": "Haz clic en el control resaltado para continuar"
+      "clickHint": "Haz clic en el control resaltado para continuar",
+      "nextUp": "A continuación",
+      "takeNext": "Hacer este"
     },
     "tours": {
       "boardBasics": {
@@ -6488,7 +6493,7 @@
           },
           "finish": {
             "title": "Ese es el ciclo",
-            "body": "Planificar una tarea, elegir un pipeline, arrancarla y seguirla. Cuando una ejecución necesita algo de ti se detiene y lo dice, que es lo que cubre el siguiente recorrido."
+            "body": "Planificar una tarea, elegir un pipeline, arrancarla y seguirla. Los recorridos posteriores a este leen una ejecución real, así que se desbloquean en cuanto arranques una de verdad."
           }
         }
       },
@@ -6643,7 +6648,100 @@
             "body": "Algunas entradas son tuyas y no del tablero, como un token de acceso personal o un plan, y solo se usan en las ejecuciones que arrancas tú. El hub marca cuál es cuál, y Mi configuración reúne las que son tuyas."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Leer un fallo",
+        "description": "Una ejecución se ha detenido con un error. Averigua qué se ha roto y qué hacer al respecto.",
+        "steps": {
+          "intro": {
+            "title": "Las ejecuciones fallan, y es normal",
+            "body": "Una ejecución fallida no es un callejón sin salida. El tablero conserva el error, la causa suele ser una línea y la mayoría se arregla con un ajuste, no reescribiendo la tarea."
+          },
+          "banner": {
+            "title": "Qué ha ido mal",
+            "body": "La tarjeta cambia su barra de progreso por este aviso. Nombra la causa, los detalles guardan la salida en bruto y algunas causas ofrecen un botón directo al ajuste que las corrige."
+          },
+          "retry": {
+            "title": "Volver a ejecutarla",
+            "body": "Reintentar vuelve a ejecutar el trabajo. Los errores anteriores se quedan en la tarea, bajo «Errores anteriores», para que puedas comparar intentos en vez de perder el rastro."
+          },
+          "finish": {
+            "title": "Un fallo es información",
+            "body": "Corrige la causa, reintenta, compara. Si el mismo error vuelve una y otra vez, los detalles son lo que hay que llevarle a quien pueda ampliar un permiso o conectar lo que falta."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Dónde se ejecuta todo",
+        "description": "Las máquinas donde corren los agentes, los entornos donde prueban y las credenciales que pueden usar.",
+        "steps": {
+          "intro": {
+            "title": "Los agentes necesitan dónde ejecutarse",
+            "body": "Cada paso en contenedor corre sobre un backend de ejecución, las pruebas se levantan en un entorno y algunas capacidades necesitan una credencial. Las tres cosas se configuran en una sola ventana."
+          },
+          "open": {
+            "title": "Abrir Infraestructura",
+            "body": "Todo lo relativo a dónde y cómo se ejecutan las ejecuciones está aquí."
+          },
+          "tabs": {
+            "title": "Una pestaña por asunto",
+            "body": "Contenedores de agentes es donde se ejecuta el trabajo. Entornos de prueba es a partir de qué se levanta un servicio. La lista de credenciales muestra qué claves pueden resolver realmente las capacidades que usan tus agentes, y cuáles siguen faltando."
+          },
+          "finish": {
+            "title": "Los fallos apuntan aquí",
+            "body": "Cuando una ejecución falla al aprovisionar, esta es la ventana que su aviso te pide abrir. Mejor saberlo antes de que pase que después."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Revisión por panel",
+        "description": "Que varios modelos revisen el mismo trabajo en lugar de uno, en las tareas que lo merecen.",
+        "steps": {
+          "intro": {
+            "title": "Un revisor, o varios",
+            "body": "Un paso de revisión ejecuta normalmente un agente. En su lugar puede ejecutar un panel de varios modelos y comparar lo que dicen, lo que detecta lo que a un solo revisor se le escapa en trabajos más pesados."
+          },
+          "open": {
+            "title": "Abrir Configuración de modelos",
+            "body": "Los paneles están hechos de modelos, así que se configuran junto a ellos."
+          },
+          "groups": {
+            "title": "Definir un panel",
+            "body": "Un grupo nombra los modelos del panel y lo exigente que debe ser una tarea para usarlo. Un paso selecciona entonces un grupo en vez de nombrar modelos uno a uno."
+          },
+          "finish": {
+            "title": "El coste sigue al esfuerzo",
+            "body": "Un panel cuesta tantas llamadas a modelo como miembros tiene, y por eso un grupo puede limitarse a las tareas cuya estimación supere su umbral. El trabajo pequeño se queda con un único revisor."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Los servicios que ya tienes",
+        "description": "Dile a los agentes qué sistemas compartidos existen y cómo son sus API.",
+        "steps": {
+          "intro": {
+            "title": "No reconstruyas lo que ya tienes",
+            "body": "Los agentes diseñan a ciegas si no saben qué tiene ya tu organización en marcha. Este catálogo nombra esos sistemas y guarda sus contratos de API."
+          },
+          "open": {
+            "title": "Abrir Servicios fundamentales",
+            "body": "El catálogo de capacidades compartidas disponible para todos los tableros de este espacio de trabajo."
+          },
+          "catalog": {
+            "title": "Registrar, subir o sincronizar",
+            "body": "Añade un servicio a mano, sube sus documentos de API, o enlaza un repositorio y deja que se sincronicen. Los diseños referencian entonces lo registrado aquí en vez de inventarse una interfaz."
+          },
+          "finish": {
+            "title": "Los pasos de diseño leen esto",
+            "body": "Un diseño que declara cuáles de estos usa recibe sus contratos completos en el paso siguiente. Uno que no declara nada no recibe nada: mantener esto al día es lo que lo hace funcionar."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Nuevo recorrido disponible",
+      "start": "Enséñame",
+      "dismiss": "Descartar"
     }
   },
   "externalTools": {

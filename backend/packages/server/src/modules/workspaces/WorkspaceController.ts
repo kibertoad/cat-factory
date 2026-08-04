@@ -23,6 +23,7 @@ import type {
   RegisteredBinaryGenerator,
   SkillSummary,
   SpendStatus,
+  TutorialProgress,
   UserSettings,
   WorkspaceSnapshot,
 } from '@cat-factory/contracts'
@@ -36,6 +37,48 @@ import {
 import type { AccountRole, ModelRef, TaskTypeRegistry, WorkspaceRole } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/contracts'
 import type { ServerContainer } from '../../http/env.js'
+
+/**
+ * The signed-in caller's in-app tutorial progress for a snapshot, or undefined.
+ *
+ * Best-effort, exactly like the budget tiers beside it and for the same reason: on a
+ * mothership-mode node this read crosses the machine API, and a walkthrough-history list must
+ * never be able to 500 a board load. A failure degrades to absent, which the SPA reads as "no
+ * server copy" and answers from its own browser-persisted store — the behaviour before this
+ * existed. Unlike the budget reads it routes through `runBestEffort`, so the swallow is reported
+ * rather than silent.
+ */
+async function snapshotTutorialProgress(
+  container: ServerContainer,
+  viewerUserId: string | undefined,
+): Promise<TutorialProgress | undefined> {
+  const progress = container.tutorialProgress
+  if (!viewerUserId || !progress) return undefined
+  return await runBestEffort(container.logger, 'snapshot tutorial progress', () =>
+    progress.service.get(viewerUserId),
+  )
+}
+
+/**
+ * Every snapshot slice resolved for the SIGNED-IN VIEWER rather than for the board: the tiered
+ * budget widgets and their editable settings, plus the viewer's tutorial progress.
+ *
+ * One collaborator so the two response paths (the GET snapshot and the POST-create response, which
+ * the SPA hydrates from directly) cannot drift on which viewer-scoped fields they carry — the same
+ * reason `assembleBudgetTiers` exists one level down. Resolved in ONE wave: on a mothership-mode
+ * node each of these crosses the machine API, so awaiting them in sequence would add a round trip
+ * to every board load for nothing.
+ */
+async function assembleViewerSlices(
+  container: ServerContainer,
+  opts: { accountId: string | null | undefined; viewerUserId: string | undefined },
+) {
+  const [budgetTiers, tutorialProgress] = await Promise.all([
+    assembleBudgetTiers(container, opts),
+    snapshotTutorialProgress(container, opts.viewerUserId),
+  ])
+  return { ...budgetTiers, ...(tutorialProgress ? { tutorialProgress } : {}) }
+}
 
 /**
  * Assemble the account- and user-tier spend widgets for a snapshot: the account-tier
@@ -595,10 +638,10 @@ export function workspaceController(): Hono<AppEnv> {
     // In the SAME wave as the rest, not awaited after it: on a mothership-mode node one of these
     // projections crosses the machine API, and serialising that round trip behind the batch adds
     // its latency to every workspace create for nothing.
-    const [spend, infraSetup, budgetTiers, skills, registryProjections] = await Promise.all([
+    const [spend, infraSetup, viewerSlices, skills, registryProjections] = await Promise.all([
       container.spendService.status(snapshot.workspace.id),
       snapshotInfraSetup(container, snapshot.workspace.id),
-      assembleBudgetTiers(container, { accountId, viewerUserId: user?.id }),
+      assembleViewerSlices(container, { accountId, viewerUserId: user?.id }),
       snapshotSkills(container, accountId),
       snapshotRegistryProjections(container),
     ])
@@ -615,7 +658,7 @@ export function workspaceController(): Hono<AppEnv> {
       {
         ...snapshot,
         spend,
-        ...budgetTiers,
+        ...viewerSlices,
         ...(access ? { access } : {}),
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
@@ -696,7 +739,7 @@ export function workspaceController(): Hono<AppEnv> {
     // Tiered budgets: the account-tier status (this workspace's owning account) and the
     // signed-in caller's user-tier status + editable settings, plus the operator hard caps.
     // Each tier's status is absent when that tier is inactive (no configured limit + no cap).
-    const budgetTiers = await assembleBudgetTiers(container, {
+    const viewerSlices = await assembleViewerSlices(container, {
       accountId: budgetAccountId,
       viewerUserId: c.get('user')?.id,
     })
@@ -715,7 +758,7 @@ export function workspaceController(): Hono<AppEnv> {
         blocks: redacted.blocks,
         executions: redacted.executions,
         spend,
-        ...budgetTiers,
+        ...viewerSlices,
         agentConfigCatalog: snapshotAgentConfigCatalog(snapshot, container.agentKindRegistry),
         deploymentModelDefaults: deploymentModelDefaults(container.config.agents.routing),
         ...snapshotBackendKinds(container),
