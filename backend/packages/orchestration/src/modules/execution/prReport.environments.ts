@@ -143,8 +143,11 @@ interface LoggedEnvironments {
    * standing, could not run, or could not settle the question. `reason` is the probe's verbatim
    * explanation, so the report can say which without a reader going to the logs.
    *
-   * Kept apart from {@link stuck} because the platform's part succeeded here and failed there,
-   * and apart from {@link reclaimed} because neither may be reported as a reclaim.
+   * Scoped to {@link provisioned} for the same reason {@link stuck} is, and it has to be scoped
+   * HERE rather than at each read: the count and the rendered reasons come from this one map, and
+   * a filter applied to only one of them prints a neighbouring run's cause beside this run's
+   * count. Kept apart from {@link stuck} because the platform's part succeeded here and failed
+   * there, and apart from {@link reclaimed} because neither may be reported as a reclaim.
    */
   unconfirmed: Map<string, string | null>
   /**
@@ -193,7 +196,7 @@ function indexEnvironments(events: readonly ProvisioningLifecycleEvent[]): Logge
     // silence as a confirmation is precisely the false tick this whole leg exists to stop.
     const verified = latestVerify.get(id)
     if (verified?.outcome === 'success') reclaimed.add(id)
-    else {
+    else if (provisioned.has(id)) {
       unconfirmed.set(
         id,
         verified?.error ??
@@ -261,11 +264,10 @@ function foldLifecycle(read: ProvisioningLifecycleRead): LoggedLifecycle {
       tornDownAt,
       provisionFailures,
       teardownFailures: logged.stuck.size,
-      // Only the run's OWN environments, matching `teardownFailures`: a neighbouring run's
-      // unverified teardown is not something this PR asks anyone to act on.
-      teardownsUnconfirmed: [...logged.unconfirmed.keys()].filter((id) =>
-        logged.provisioned.has(id),
-      ).length,
+      // Already scoped to the run's OWN environments by `indexEnvironments`, matching
+      // `teardownFailures`: a neighbouring run's unverified teardown is not something this PR
+      // asks anyone to act on, and the reasons rendered below come from the same scoped map.
+      teardownsUnconfirmed: logged.unconfirmed.size,
     },
   }
 }

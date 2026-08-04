@@ -6,6 +6,7 @@ import type {
   EnvironmentProvider,
   EnvironmentTeardownRequest,
   TeardownConfirmation,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import { assertFound, getErrorMessage, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
@@ -26,6 +27,13 @@ export interface TeardownConfirmationResult {
 export interface TeardownResult extends TeardownConfirmationResult {
   handle: EnvironmentHandle
 }
+
+/**
+ * How long a provider's teardown probe may take before the platform stops waiting on it. Sized
+ * against the slowest built-in read (the Kubernetes namespace GET's own 30s ceiling) plus room
+ * for one retry inside a provider's transport, because exceeding it costs only the confirmation.
+ */
+const CONFIRM_TEARDOWN_TIMEOUT_MS = 45_000
 
 // EnvironmentTeardownService: destroys provisioned environments — on demand and,
 // via `sweepExpired`, when their TTL elapses (driven by the cron). Best-effort:
@@ -139,15 +147,16 @@ export class EnvironmentTeardownService {
     // If the provider was unregistered we can't call its API; just tombstone.
     if (!resolved) {
       await this.tombstone(record)
-      await this.recordTeardownAttempt(record, 'success', null)
       // Nothing was asked to destroy anything, so nothing can be claimed about the result. An
       // unregistered provider is a deployment-configuration fact, not a blip, so no later sweep
       // will answer differently: whatever it stood up has to be reclaimed by hand.
-      return await this.recordConfirmation(record, {
+      const confirmation: TeardownConfirmationResult = {
         confirmation: 'unverifiable',
         reason:
           'The provider that stood this environment up is no longer registered, so its teardown could not be performed or checked.',
-      })
+      }
+      await this.recordTeardownOutcome(record, 'success', null, confirmation)
+      return confirmation
     }
     const provisionFields = await this.decryptFields(record.provisionFieldsCipher)
     const request = {
@@ -162,25 +171,25 @@ export class EnvironmentTeardownService {
       // Log the verbatim provider error before it propagates (the sweep swallows
       // it; an on-demand teardown surfaces it). The local record is NOT tombstoned
       // on a provider failure, matching the existing retry-next-pass behaviour.
-      await this.recordTeardownAttempt(
-        record,
-        'failure',
-        error instanceof Error ? error.message : String(error),
-      )
+      // No confirmation: there is nothing to verify about a destroy the provider refused, and a
+      // verify row here would invite a reader to weigh a probe against an environment nobody
+      // touched.
+      await this.recordTeardownOutcome(record, 'failure', getErrorMessage(error), null)
       throw error
     }
     await this.tombstone(record)
-    await this.recordTeardownAttempt(record, 'success', null)
-    return await this.recordConfirmation(record, await this.confirm(resolved.provider, request))
+    const confirmation = await this.confirm(resolved.provider, request)
+    await this.recordTeardownOutcome(record, 'success', null, confirmation)
+    return confirmation
   }
 
   /**
    * Ask the provider whether the environment is actually gone, and classify the answer.
    *
-   * Runs AFTER the record is tombstoned and the teardown attempt logged, deliberately: the
-   * teardown itself succeeded, and a probe that hangs or throws must not undo that or propagate
-   * into a caller. Its whole job is to add knowledge, so its worst case is the absence of
-   * knowledge, which is exactly what `unconfirmed` states.
+   * Runs AFTER the record is tombstoned, deliberately: the teardown itself succeeded, and a probe
+   * that hangs or throws must not undo that or propagate into a caller. Its whole job is to add
+   * knowledge, so its worst case is the absence of knowledge, which is exactly what `unconfirmed`
+   * states.
    *
    * A provider with no {@link ConfirmTeardown} is `unverifiable` rather than confirmed, which is
    * the entire inversion this change makes: silence about an environment is no longer read as
@@ -198,7 +207,7 @@ export class EnvironmentTeardownService {
       }
     }
     try {
-      return classifyTeardownProbe(await probe.call(provider, request))
+      return classifyTeardownProbe(await this.withProbeDeadline(probe.call(provider, request)))
     } catch (error) {
       return {
         confirmation: 'unconfirmed',
@@ -207,6 +216,42 @@ export class EnvironmentTeardownService {
         // by the same `redactSecrets` pass either way.
         reason: `The teardown could not be verified: ${getErrorMessage(error)}`,
       }
+    }
+  }
+
+  /**
+   * Bound the probe in wall-clock time, so an unresponsive provider costs the CONFIRMATION and
+   * never the teardown.
+   *
+   * {@link ConfirmTeardown} is a public port: the built-ins all pass a timeout to their own
+   * transport, but a deployment's own provider need not, and this seam is awaited inline on two
+   * paths that must not stall — the on-demand teardown, which is holding an HTTP request open,
+   * and the TTL sweep, which runs every couple of minutes and would otherwise let one wedged
+   * environment block every later one in the same pass. A timeout is reported as `unconfirmed`
+   * (via the caller's catch) rather than `unverifiable`, because a provider that did not answer
+   * in time may well answer on the next sweep, where one with no probe at all never will.
+   */
+  private async withProbeDeadline(probe: Promise<TeardownProbe>): Promise<TeardownProbe> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        probe,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `the provider did not answer within ${CONFIRM_TEARDOWN_TIMEOUT_MS}ms of being asked`,
+                ),
+              ),
+            CONFIRM_TEARDOWN_TIMEOUT_MS,
+          )
+        }),
+      ])
+    } finally {
+      // The loser of the race keeps the timer alive otherwise, which on Node holds the process
+      // open past the work it was doing.
+      if (timer) clearTimeout(timer)
     }
   }
 
@@ -219,59 +264,60 @@ export class EnvironmentTeardownService {
   }
 
   /**
-   * Append the confirmation as its OWN `teardown-verify` row and hand it back to the caller.
+   * Append this teardown's COMPLETE record — the attempt, then the confirmation when there is one
+   * to make — and only then notify.
    *
-   * A second row rather than a field on the teardown one, because the two record different
-   * observers and the reader has to be able to tell them apart: `teardown` says the provider
-   * accepted the call, this says what was found afterwards. Only `confirmed` is written as a
-   * success, so a consumer that reads nothing but the outcome column still cannot mistake an
-   * unverified teardown for a reclaimed environment.
+   * That ordering is the whole contract, and it is ONE method taking the confirmation rather than
+   * two a caller sequences, because the hook's consumer READS THE LOG BACK. The PR verification
+   * report recomposes its environment section from the recorded rows, and a hook fired between
+   * the two writes sees a teardown nothing has verified — indistinguishable, to the reader, from
+   * one that was probed and came back unproven. It would therefore publish `unconfirmed` about an
+   * environment the very next write proves gone, and because this hook is the LAST edge on an
+   * already-settled run, nothing would ever correct it. Splitting the writes across two calls is
+   * exactly the bug this shape forecloses.
+   *
+   * The confirmation is a SECOND row rather than a field on the teardown one, because the two
+   * record different observers and a reader has to tell them apart: `teardown` says the provider
+   * accepted the call, `teardown-verify` says what an independent probe found afterwards. Only
+   * `confirmed` is written as a success, so a consumer reading nothing but the outcome column
+   * still cannot mistake an unverified teardown for a reclaimed environment.
+   *
+   * `confirmation: null` means there was nothing to verify (the provider refused the destroy), as
+   * opposed to a verification that could not be made — which is a `TeardownConfirmationResult`
+   * carrying its own reason.
    */
-  private async recordConfirmation(
-    record: EnvironmentRecord,
-    result: TeardownConfirmationResult,
-  ): Promise<TeardownConfirmationResult> {
-    await this.deps.provisioningLog?.record({
-      workspaceId: record.workspaceId,
-      subsystem: 'environment',
-      operation: 'teardown-verify',
-      targetId: record.id,
-      providerId: record.providerId,
-      blockId: record.blockId,
-      executionId: record.executionId,
-      outcome: result.confirmation === 'confirmed' ? 'success' : 'failure',
-      error: result.reason,
-      // The machine-readable verdict, so a reader distinguishes "still standing" from "could not
-      // check" without parsing the prose above it.
-      detail: JSON.stringify({ confirmation: result.confirmation }),
-    })
-    return result
-  }
-
-  /**
-   * Append the attempt to the provisioning log and then notify, in that order and in ONE place.
-   * The ordering is what makes the notification usable: its consumer reads the log back, so a
-   * hook fired before the row landed would report the state the edge exists to correct. Keeping
-   * both here is what makes the FAILURE edge structural rather than a line someone remembered to
-   * add beside the success one.
-   */
-  private async recordTeardownAttempt(
+  private async recordTeardownOutcome(
     record: EnvironmentRecord,
     outcome: ProvisioningOutcome,
     error: string | null,
+    confirmation: TeardownConfirmationResult | null,
   ): Promise<void> {
-    await this.deps.provisioningLog?.record({
+    const target = {
       workspaceId: record.workspaceId,
       subsystem: 'environment',
-      operation: 'teardown',
       targetId: record.id,
       providerId: record.providerId,
       blockId: record.blockId,
       executionId: record.executionId,
+    } as const
+    await this.deps.provisioningLog?.record({
+      ...target,
+      operation: 'teardown',
       outcome,
       error,
       detail: null,
     })
+    if (confirmation) {
+      await this.deps.provisioningLog?.record({
+        ...target,
+        operation: 'teardown-verify',
+        outcome: confirmation.confirmation === 'confirmed' ? 'success' : 'failure',
+        error: confirmation.reason,
+        // The machine-readable verdict, so a reader distinguishes "still standing" from "could
+        // not check" without parsing the prose above it.
+        detail: JSON.stringify({ confirmation: confirmation.confirmation }),
+      })
+    }
     const hook = this.teardownRecordedHook
     if (!hook) return
     await runBestEffort(this.log, 'environment.teardownRecordedHook', () => hook(record, outcome), {

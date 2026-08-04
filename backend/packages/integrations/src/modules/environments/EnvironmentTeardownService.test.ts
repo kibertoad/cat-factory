@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type {
   EnvironmentProvider,
   EnvironmentRecord,
@@ -109,7 +109,14 @@ const refusingProvider = {
 } as unknown as EnvironmentProvider
 
 describe('EnvironmentTeardownService teardown-recorded hook', () => {
-  it('notifies AFTER the success row lands, so a consumer re-reading the log sees it', async () => {
+  it('notifies only after EVERY row for the teardown has landed, confirmation included', async () => {
+    // The hook's one consumer is the PR verification report, which RE-READS the log to recompose
+    // its environment section. Fired between the two rows it would see a teardown nothing had
+    // verified — indistinguishable from one probed and found unproven — and publish `unconfirmed`
+    // about an environment the very next write proves gone. Because this hook is the last edge on
+    // an already-settled run, nothing would ever correct it, so the whole `confirmed` verdict
+    // would be unreachable in production. `rowsAtCall` is the assertion that matters: it pins the
+    // ORDER, which no assertion on the final rows can see.
     const { rows, log } = fakeLog()
     const service = makeService(workingProvider, log)
     const seen: { outcome: ProvisioningOutcome; rowsAtCall: number }[] = []
@@ -120,9 +127,7 @@ describe('EnvironmentTeardownService teardown-recorded hook', () => {
 
     await service.teardown('ws_1', 'env_1')
 
-    expect(seen).toEqual([{ outcome: 'success', rowsAtCall: 1 }])
-    // The confirmation row lands AFTER the hook, which is deliberate: the hook reports the
-    // teardown ATTEMPT, and its consumer re-reads the whole log anyway.
+    expect(seen).toEqual([{ outcome: 'success', rowsAtCall: 2 }])
     expect(rows).toEqual([
       { operation: 'teardown', outcome: 'success' },
       { operation: 'teardown-verify', outcome: 'failure' },
@@ -268,5 +273,51 @@ describe('EnvironmentTeardownService teardown confirmation', () => {
     await expect(service.teardown('ws_1', 'env_1')).rejects.toThrow('provider refused')
 
     expect(rows).toEqual([{ operation: 'teardown', outcome: 'failure' }])
+  })
+
+  it('stops waiting on a probe that never answers, without losing the teardown', async () => {
+    // `confirmTeardown` is a PUBLIC port: the built-ins bound their own transports, a
+    // deployment's own provider need not. The teardown already succeeded and is on record, so an
+    // unresponsive provider must cost only the confirmation — never the HTTP request an
+    // on-demand teardown is holding open, nor the rest of a TTL sweep pass behind it.
+    vi.useFakeTimers()
+    try {
+      const { rows, log } = fakeLog()
+      const provider = {
+        async teardown() {
+          return { status: 'torn_down' }
+        },
+        confirmTeardown: () => new Promise<never>(() => {}),
+      } as unknown as EnvironmentProvider
+      const settled = makeService(provider, log).teardown('ws_1', 'env_1')
+      await vi.advanceTimersByTimeAsync(60_000)
+      const result = await settled
+
+      // `unconfirmed`, not `unverifiable`: a provider that timed out may answer next sweep, where
+      // one with no probe at all never will.
+      expect(result.confirmation).toBe('unconfirmed')
+      expect(result.reason).toContain('did not answer')
+      expect(rows).toEqual([
+        { operation: 'teardown', outcome: 'success' },
+        { operation: 'teardown-verify', outcome: 'failure' },
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refuses to interpret a probe state this build does not define', async () => {
+    // Same public-port reasoning: the union is not the platform's to trust. Falling off the
+    // switch would return `undefined` as the verdict, which reads as neither a reclaim nor a
+    // refusal to say — the one outcome worse than an honest "could not verify".
+    const service = makeService(
+      probing({ state: 'evaporated' } as unknown as TeardownProbe),
+      fakeLog().log,
+    )
+
+    const result = await service.teardown('ws_1', 'env_1')
+
+    expect(result.confirmation).toBe('unconfirmed')
+    expect(result.reason).toContain('does not recognise')
   })
 })

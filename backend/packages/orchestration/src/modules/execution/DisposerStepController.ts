@@ -5,12 +5,9 @@ import type {
   Logger,
   PipelineStep,
 } from '@cat-factory/kernel'
-import { getErrorMessage, noopLogger } from '@cat-factory/kernel'
+import { getErrorMessage, noopLogger, NotFoundError } from '@cat-factory/kernel'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
-import type {
-  EnvironmentProvisioningService,
-  EnvironmentTeardownService,
-} from '@cat-factory/integrations'
+import type { EnvironmentTeardownService } from '@cat-factory/integrations'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { AdvanceResult } from './advance.js'
 
@@ -29,11 +26,15 @@ import type { AdvanceResult } from './advance.js'
 //
 // Two rules shape it:
 //
-//  - **It reclaims what the RUN provisioned, by identity.** The frames come from the deployer
-//    step's own recorded `deployEnvs`, never from a fresh frame-set resolution. That set is the
-//    exact list of environments this run stood up, so a mid-run connection edit cannot widen the
-//    disposer onto a peer it never deployed, nor narrow it off one it did — and re-deriving the
-//    frames would be a second answer to a question the deployer already answered and persisted.
+//  - **It reclaims what the RUN provisioned, by identity.** Both the frames AND the environment
+//    ids come from the deployer step's own recorded `deployEnvs`, never from a fresh resolution.
+//    That set is the exact list of environments this run stood up, so a mid-run connection edit
+//    cannot widen the disposer onto a peer it never deployed, nor narrow it off one it did.
+//    Re-resolving the environment from its frame is not merely redundant, it is WRONG: the
+//    block-and-frame registry read falls back to the block's FRAME-LESS row — a manual or
+//    `human-test` environment — when the frame's own row is gone, so a disposer running after a
+//    supersede, an operator's Destroy or a TTL sweep on a long run would resolve and then destroy
+//    an environment this run never provisioned, and record it as a clean reclaim of the frame.
 //
 //  - **It is BEST-EFFORT and never fails the run.** A disposer usually runs after `merger`, so
 //    a teardown hiccup must not flip a shipped, merged pipeline to failed: the work is done and
@@ -47,8 +48,6 @@ type DisposeEnvState = NonNullable<PipelineStep['disposeEnvs']>[string]
 
 export interface DisposerStepControllerDeps {
   runStateMachine: RunStateMachine
-  /** Resolves each frame's live environment handle. Absent ⇒ the step is a pass-through. */
-  environmentProvisioning?: EnvironmentProvisioningService
   /** Performs (and confirms) the teardown. Absent ⇒ the step is a pass-through. */
   environmentTeardown?: EnvironmentTeardownService
   recordStepResult: (
@@ -66,26 +65,35 @@ export interface DisposerStepControllerDeps {
   logger?: Logger
 }
 
+/** One environment this run stood up: the frame it belongs to, and which environment it was. */
+interface ProvisionedFrame {
+  frameId: string
+  /** Null when the deploy predates `deployEnvs.environmentId`; never a re-resolved substitute. */
+  environmentId: string | null
+}
+
 /**
- * The service frames this run stood environments up for, read off the deployer step's recorded
- * per-frame outcomes. Only `ready` frames are candidates: a `failed` frame never got an
- * environment and a `skipped` one was never meant to have one, so neither is something to
- * reclaim — and reporting either as "nothing to tear down" would pad the disposer's summary with
- * frames it did no work for.
+ * The environments this run stood up, read off the deployer step's recorded per-frame outcomes.
+ * Only `ready` frames are candidates: a `failed` frame never got an environment and a `skipped`
+ * one was never meant to have one, so neither is something to reclaim — and reporting either as
+ * "nothing to tear down" would pad the disposer's summary with frames it did no work for.
  *
  * Reads EVERY deployer step rather than the first, because a pipeline may deploy more than once
  * (a re-deploy after a fix), and a disposer that reclaimed only the first one's frames would
- * leave the rest standing while reporting a clean sweep.
+ * leave the rest standing while reporting a clean sweep. A later deploy of the same frame WINS:
+ * it superseded the earlier environment, so its id is the live one, and reclaiming the earlier id
+ * would tear down a row that is already a tombstone while leaving the real environment running.
  */
-function provisionedFrameIds(instance: ExecutionInstance): string[] {
-  const frameIds = new Set<string>()
+function provisionedFrames(instance: ExecutionInstance): ProvisionedFrame[] {
+  const byFrame = new Map<string, ProvisionedFrame>()
   for (const step of instance.steps) {
     if (step.agentKind !== DEPLOYER_AGENT_KIND) continue
     for (const [frameId, env] of Object.entries(step.deployEnvs ?? {})) {
-      if (env.status === 'ready') frameIds.add(frameId)
+      if (env.status !== 'ready') continue
+      byFrame.set(frameId, { frameId, environmentId: env.environmentId ?? null })
     }
   }
-  return [...frameIds]
+  return [...byFrame.values()]
 }
 
 /** The one-line summary of a frame's reclaim, for the step's output. */
@@ -98,7 +106,10 @@ function describeOutcome(frameId: string, state: DisposeEnvState): string {
           // teardown call returning is not the environment being gone.
           `Tore down the environment for frame '${frameId}', but could not confirm it is gone (${state.confirmation}): ${state.error ?? 'no reason given'}`
     case 'failed':
-      return `Could not tear down the environment for frame '${frameId}': ${state.error ?? 'unknown error'}. It is still standing; the TTL sweep will retry.`
+      // Not "it is still standing": this step could not establish that either, and the section's
+      // whole discipline is to state what was observed. What IS certain is that this step did not
+      // reclaim it and something else now has to.
+      return `Could not tear down the environment for frame '${frameId}': ${state.error ?? 'unknown error'}. It was not reclaimed here; the TTL sweep remains the backstop.`
     case 'none':
       return `No live environment was found for frame '${frameId}'; nothing to reclaim.`
   }
@@ -126,17 +137,17 @@ export class DisposerStepController {
     _block: Block,
     isFinalStep: boolean,
   ): Promise<AdvanceResult> {
-    const frameIds = provisionedFrameIds(instance)
-    if (frameIds.length === 0) {
+    const frames = provisionedFrames(instance)
+    if (frames.length === 0) {
       return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
         output: 'No environment was provisioned by this run, so there was nothing to reclaim.',
         model: 'environment:none',
       })
     }
-    for (const frameId of frameIds) {
-      if (step.disposeEnvs?.[frameId]) continue
-      const state = await this.reclaimFrame(workspaceId, instance, frameId)
-      step.disposeEnvs = { ...step.disposeEnvs, [frameId]: state }
+    for (const frame of frames) {
+      if (step.disposeEnvs?.[frame.frameId]) continue
+      const state = await this.reclaimFrame(workspaceId, instance, frame)
+      step.disposeEnvs = { ...step.disposeEnvs, [frame.frameId]: state }
       await this.deps.runStateMachine.casPersist(workspaceId, instance)
     }
     return this.completeDisposerStep(workspaceId, instance, step, isFinalStep)
@@ -152,32 +163,44 @@ export class DisposerStepController {
   private async reclaimFrame(
     workspaceId: string,
     instance: ExecutionInstance,
-    frameId: string,
+    frame: ProvisionedFrame,
   ): Promise<DisposeEnvState> {
-    const provisioning = this.deps.environmentProvisioning
     const teardown = this.deps.environmentTeardown
     // Unwired is a pass-through, byte-for-byte the prior behaviour: a deployment with no
     // environment integration never provisioned anything to reclaim either.
-    if (!provisioning || !teardown) {
-      return { status: 'none' }
+    if (!teardown) return { status: 'none' }
+    const environmentId = frame.environmentId
+    if (!environmentId) {
+      // The deploy predates `deployEnvs.environmentId`. Reported as a failure to reclaim rather
+      // than re-resolved from the frame: that read falls back to the block's frame-less row, so
+      // guessing here is how a `human-test` environment gets destroyed and booked as this
+      // frame's clean reclaim. `none` would be worse still — it reads as "there was nothing to
+      // do" about an environment that is probably still running.
+      const error =
+        'This run recorded no environment id for the frame (it was deployed before ids were recorded), so the environment could not be identified.'
+      this.log.warn('Disposer could not identify the environment to reclaim', {
+        workspaceId,
+        executionId: instance.id,
+        frameId: frame.frameId,
+      })
+      return { status: 'failed', error }
     }
-    const handle = await provisioning
-      .getHandleForBlock(workspaceId, instance.blockId, frameId)
-      .catch(() => null)
-    // The registry has no live row for this frame. Something already reclaimed it (a supersede,
-    // an operator's Destroy, the TTL sweep on a long run), which is a legitimate outcome and not
-    // a failure — but it is recorded as `none` rather than as a reclaim, because this step did
-    // not observe the environment going away and must not claim credit for it.
-    if (!handle) return { status: 'none' }
     try {
-      const result = await teardown.teardown(workspaceId, handle.id)
+      const result = await teardown.teardown(workspaceId, environmentId)
       return {
         status: 'reclaimed',
-        environmentId: handle.id,
+        environmentId,
         confirmation: result.confirmation,
         error: result.reason,
       }
     } catch (error) {
+      // The registry has no live row for it. Something already reclaimed it (a supersede, an
+      // operator's Destroy, the TTL sweep on a long run), which is a legitimate outcome and not a
+      // failure — but it is recorded as `none` rather than as a reclaim, because this step did
+      // not observe the environment going away and must not claim credit for it. Distinguished by
+      // the error TYPE, never by a swallowed lookup: a registry that is merely unreachable must
+      // not read as an environment that is already gone.
+      if (error instanceof NotFoundError) return { status: 'none', environmentId }
       const message = getErrorMessage(error)
       // Logged as well as recorded: an environment the provider refused to reclaim is billed
       // infrastructure nobody is watching, and the run's own step state is only seen by whoever
@@ -185,11 +208,11 @@ export class DisposerStepController {
       this.log.warn('Environment teardown failed during a disposer step', {
         workspaceId,
         executionId: instance.id,
-        frameId,
-        environmentId: handle.id,
+        frameId: frame.frameId,
+        environmentId,
         error: message,
       })
-      return { status: 'failed', environmentId: handle.id, error: message }
+      return { status: 'failed', environmentId, error: message }
     }
   }
 

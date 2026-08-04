@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentRunResult, Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
-import type {
-  EnvironmentProvisioningService,
-  EnvironmentTeardownService,
-} from '@cat-factory/integrations'
+import { NotFoundError } from '@cat-factory/kernel'
+import type { EnvironmentTeardownService } from '@cat-factory/integrations'
 import { DisposerStepController } from './DisposerStepController.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { AdvanceResult } from './advance.js'
@@ -27,7 +25,7 @@ function instanceWith(steps: PipelineStep[]): ExecutionInstance {
 const deployed = step({
   agentKind: 'deployer',
   deployEnvs: {
-    frm_api: { status: 'ready', url: 'https://api.test' },
+    frm_api: { status: 'ready', url: 'https://api.test', environmentId: 'env_api' },
     frm_web: { status: 'skipped' },
     frm_old: { status: 'failed', error: 'quota exceeded' },
   },
@@ -43,17 +41,13 @@ interface Harness {
  * `teardown` is loosely typed on purpose: these tests only care about the confirmation the
  * controller reads off the result, and spelling out a whole `EnvironmentHandle` per case would
  * bury that behind fixture noise. Null ⇒ the environment integration is unwired.
+ *
+ * There is deliberately no provisioning-service fake to configure: the controller resolves
+ * nothing, because the environment id it tears down by is the one the DEPLOYER recorded.
  */
-function harness(
-  teardown: { teardown: (...args: never[]) => Promise<unknown> } | null,
-  handles: Record<string, { id: string } | null> = { frm_api: { id: 'env_api' } },
-): Harness {
+function harness(teardown: { teardown: (...args: never[]) => Promise<unknown> } | null): Harness {
   const results: AgentRunResult[] = []
   const teardowns: string[] = []
-  const provisioning = {
-    getHandleForBlock: async (_ws: string, _blockId: string, frameId?: string) =>
-      (frameId ? handles[frameId] : null) ?? null,
-  } as unknown as EnvironmentProvisioningService
   const wrapped = teardown
     ? ({
         teardown: async (ws: string, id: string) => {
@@ -67,7 +61,6 @@ function harness(
     : undefined
   const controller = new DisposerStepController({
     runStateMachine: { casPersist: async () => {} } as unknown as RunStateMachine,
-    environmentProvisioning: provisioning,
     environmentTeardown: wrapped,
     recordStepResult: async (_ws, _i, _s, _f, result): Promise<AdvanceResult> => {
       results.push(result)
@@ -169,7 +162,7 @@ describe('DisposerStepController', () => {
       status: 'failed',
       error: expect.stringContaining('provider refused'),
     })
-    expect(results[0]?.output).toContain('TTL sweep will retry')
+    expect(results[0]?.output).toContain('TTL sweep remains the backstop')
   })
 
   it('says there was nothing to reclaim when the run provisioned nothing', async () => {
@@ -189,10 +182,15 @@ describe('DisposerStepController', () => {
   })
 
   it('claims no credit for an environment something else already took', async () => {
-    // A supersede, an operator's Destroy or the TTL sweep on a long run can get there first. That
+    // A supersede, an operator's Destroy or the TTL sweep on a long run can get there first. The
+    // registry read behind `teardown` skips tombstones, so it answers with a NotFoundError. That
     // is a legitimate outcome, but this step did not observe the environment going away, so it
     // records `none` rather than a reclaim it cannot vouch for.
-    const { controller, teardowns } = harness({ teardown: async () => ({}) }, { frm_api: null })
+    const { controller } = harness({
+      teardown: async () => {
+        throw new NotFoundError('Environment', 'env_api')
+      },
+    })
     const disposer = step({ agentKind: 'disposer' })
 
     await controller.runDisposerStep(
@@ -203,8 +201,104 @@ describe('DisposerStepController', () => {
       true,
     )
 
+    expect(disposer.disposeEnvs?.frm_api).toEqual({ status: 'none', environmentId: 'env_api' })
+  })
+
+  it('does not read a registry OUTAGE as an environment that is already gone', async () => {
+    // The failure directly above and this one arrive at the same call site, and only the error
+    // TYPE tells them apart. Swallowing both would report "nothing to reclaim" about a live
+    // environment whenever the store hiccups — the same false-clean reading the confirmation
+    // probe exists to stop, one layer up.
+    const { controller } = harness({
+      teardown: async () => {
+        throw new Error('connection terminated unexpectedly')
+      },
+    })
+    const disposer = step({ agentKind: 'disposer' })
+
+    await controller.runDisposerStep(
+      'ws_1',
+      instanceWith([deployed, disposer]),
+      disposer,
+      BLOCK,
+      true,
+    )
+
+    expect(disposer.disposeEnvs?.frm_api).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('connection terminated'),
+    })
+  })
+
+  it('tears down the environment the DEPLOYER recorded, never one re-resolved from the frame', async () => {
+    // The invariant the whole design rests on. Re-resolving by (block, frame) falls back to the
+    // block's frame-less row — a manual or `human-test` environment — once the frame's own row is
+    // gone, so a disposer that re-resolved would destroy an environment this run never stood up
+    // and book it as this frame's clean reclaim.
+    const { controller, teardowns } = harness({
+      teardown: async () => ({ confirmation: 'confirmed', reason: null, handle: {} }),
+    })
+    const disposer = step({ agentKind: 'disposer' })
+
+    await controller.runDisposerStep(
+      'ws_1',
+      instanceWith([deployed, disposer]),
+      disposer,
+      BLOCK,
+      true,
+    )
+
+    expect(teardowns).toEqual(['env_api'])
+  })
+
+  it('reclaims the LATEST environment when a frame was deployed more than once', async () => {
+    // A re-deploy after a fix supersedes the first environment, so the second id is the live one.
+    // Tearing down the superseded id would hit a tombstone and leave the real environment running
+    // while the summary reported a clean sweep.
+    const { controller, teardowns } = harness({
+      teardown: async () => ({ confirmation: 'confirmed', reason: null, handle: {} }),
+    })
+    const redeployed = step({
+      agentKind: 'deployer',
+      deployEnvs: { frm_api: { status: 'ready', environmentId: 'env_api_v2' } },
+    })
+    const disposer = step({ agentKind: 'disposer' })
+
+    await controller.runDisposerStep(
+      'ws_1',
+      instanceWith([deployed, redeployed, disposer]),
+      disposer,
+      BLOCK,
+      true,
+    )
+
+    expect(teardowns).toEqual(['env_api_v2'])
+  })
+
+  it('refuses to guess when the deploy recorded no environment id', async () => {
+    // A run that was already in flight when ids started being recorded. `none` would read as
+    // "there was nothing to do" about an environment that is probably still running and billing,
+    // so it is reported as an un-reclaimed frame with the reason named.
+    const { controller, teardowns } = harness({ teardown: async () => ({}) })
+    const legacy = step({
+      agentKind: 'deployer',
+      deployEnvs: { frm_api: { status: 'ready', url: 'https://api.test' } },
+    })
+    const disposer = step({ agentKind: 'disposer' })
+
+    await controller.runDisposerStep(
+      'ws_1',
+      instanceWith([legacy, disposer]),
+      disposer,
+      BLOCK,
+      true,
+    )
+
     expect(teardowns).toEqual([])
-    expect(disposer.disposeEnvs?.frm_api).toEqual({ status: 'none' })
+    expect(disposer.disposeEnvs?.frm_api).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('no environment id'),
+    })
   })
 
   it('resumes at the first un-settled frame on a replay', async () => {

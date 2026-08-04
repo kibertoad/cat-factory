@@ -291,7 +291,6 @@ export class RunDispatcher {
     })
     this.disposer = new DisposerStepController({
       runStateMachine: deps.runStateMachine,
-      environmentProvisioning: deps.environmentProvisioning,
       environmentTeardown: deps.environmentTeardown,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),

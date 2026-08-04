@@ -85,6 +85,30 @@ export function classifyTeardownProbe(probe: TeardownProbe): {
         confirmation: probe.retryable ? 'unconfirmed' : 'unverifiable',
         reason: probe.reason,
       }
+    default:
+      return describeUnrecognisedProbe(probe)
+  }
+}
+
+/**
+ * A probe state this build does not define, reported as the unusable answer it is.
+ *
+ * {@link TeardownProbe} crosses a PUBLIC port, so the value is not the platform's to trust: a
+ * deployment's own provider can return anything, and adding a state to the union without a case
+ * here must fail the build (the argument stops being `never`). What it must NOT do is fall off
+ * the end of the switch — that returns `undefined`, which then rides into the confirmation row as
+ * a missing verdict and, being neither `confirmed` nor anything else a reader recognises, is the
+ * one outcome worse than an honest refusal to say.
+ *
+ * Never guessed onto `gone`: an answer nobody can interpret is the opposite of proof.
+ */
+function describeUnrecognisedProbe(probe: never): {
+  confirmation: TeardownConfirmation
+  reason: string
+} {
+  return {
+    confirmation: 'unconfirmed',
+    reason: `The provider reported a teardown probe state this deployment does not recognise (${JSON.stringify(probe)}), so the teardown could not be verified.`,
   }
 }
 

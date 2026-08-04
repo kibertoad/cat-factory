@@ -403,6 +403,21 @@ export const deployEnvStateSchema = v.object({
   status: v.picklist(['ready', 'failed', 'skipped']),
   /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
   url: v.optional(v.nullable(v.string())),
+  /**
+   * The registry id of the environment this frame got, recorded for a `ready` env at the moment
+   * the deployer resolved its handle.
+   *
+   * This is the RUN's own record of WHICH environment it stood up, and it exists so that the
+   * `disposer` at the other end of the lifecycle can reclaim exactly that one. Re-resolving the
+   * environment from the frame later is not equivalent and is not safe: the block-and-frame read
+   * falls back to the block's FRAME-LESS row (a manual or `human-test` environment) when the
+   * frame's own row is gone, so a disposer running after a supersede, an operator's Destroy or a
+   * TTL sweep would resolve — and destroy — an environment this run never provisioned.
+   *
+   * Absent on a `ready` frame means the deploy predates this field, and the disposer reports that
+   * it could not identify the environment rather than guessing at one.
+   */
+  environmentId: v.optional(v.nullable(v.string())),
   /** The verbatim provider error for a `failed` env. */
   error: v.optional(v.nullable(v.string())),
 })

@@ -39,15 +39,30 @@ to tell you, and no retry will change that), and unconfirmed (transient; the nex
 
 And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
 its author places it — after the automated tester, or after a human has finished with the live
-URL. It reads the frames off the deployer's own recorded outcomes rather than re-deriving them, and
-it never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
 recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
 seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+environment the run never provisioned and recorded it as the frame's clean reclaim.
 
 The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
 ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
 MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
 client decodes the new row as a plain string rather than failing.
+
+One ordering detail is worth understanding, because getting it wrong made the whole feature
+unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+Both writes and the notification therefore happen in one method that takes the confirmation, and
+the regression test asserts the row count at hook time rather than the final rows, since only that
+can see the order.
 
 Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
 because a missing verify row is treated as "not proved" rather than as a pass, runs whose

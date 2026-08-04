@@ -61,10 +61,22 @@ INDEPENDENT probe found afterwards, so only a positively confirmed reclaim reads
 
 ## Conventions & gotchas carried between iterations
 
-- **The disposer reads the deployer's recorded `deployEnvs`; it does NOT re-resolve the frame
-  set.** That set is the exact list of environments this run stood up, so a mid-run connection
-  edit cannot widen the disposer onto a peer it never deployed nor narrow it off one it did. It
-  also avoids a second answer to a question the deployer already answered and persisted.
+- **The disposer reads the deployer's recorded `deployEnvs`; it does NOT re-resolve anything.**
+  That set is the exact list of environments this run stood up, so a mid-run connection edit
+  cannot widen the disposer onto a peer it never deployed nor narrow it off one it did.
+- **The ENVIRONMENT ID is recorded too, and re-resolving it is a bug, not just redundancy.**
+  `deployEnvs[frame].environmentId` is written at the moment the deployer resolves the handle,
+  and the disposer tears down by it. Resolving the environment from `(block, frame)` instead
+  looks correct and is not: `readRegistryRecord` falls back to the block's FRAME-LESS row when the
+  frame's own row is gone, and frame-less rows are the manual / `human-test` environments. A
+  disposer running after a supersede, an operator's Destroy, or a TTL sweep on a long run would
+  therefore resolve and destroy an environment this run never provisioned, and book it as this
+  frame's clean reclaim. A `ready` frame with no recorded id (a run in flight when the field
+  landed) is reported as un-reclaimed with the reason named, never guessed at and never `none`.
+- **A registry outage must not read as an environment that is already gone.** Both arrive at the
+  same call site and only the error TYPE separates them: a `NotFoundError` is "something else
+  already reclaimed it" (`none`), anything else is a failure to reclaim (`failed`). The earlier
+  `.catch(() => null)` collapsed them and reported "nothing to reclaim" about a live environment.
 - **The disposer NEVER fails the run.** It commonly sits after `merger`: the work shipped and the
   PR is in, so an un-reclaimed environment is a recorded warning and an operator's job. This is
   the opposite disposition from the deployer, whose primary-frame failure IS terminal —
@@ -80,6 +92,23 @@ INDEPENDENT probe found afterwards, so only a positively confirmed reclaim reads
   verify write was lost, has a teardown row and no verify row; the report reads that as
   `unconfirmed`. Deliberate — silence about an environment is exactly what stopped being read as
   its death.
+- **The teardown-recorded hook must fire after EVERY row for that teardown, confirmation
+  included.** Its one consumer re-reads the log to recompose the report, so a hook fired between
+  the two writes sees a teardown nothing has verified and publishes `unconfirmed` about an
+  environment the very next write proves gone. It is the last edge on an already-settled run, so
+  nothing corrects it: firing early made `confirmed` unreachable in production while every unit
+  test still passed. Both writes and the notification therefore live in ONE method that takes the
+  confirmation, rather than in a sequence a caller can get wrong. The regression test asserts the
+  ROW COUNT AT CALL TIME, because no assertion on the final rows can see the order.
+- **`confirmTeardown` is bounded in wall-clock time by the service, not by trust in the
+  provider.** It is a public port awaited inline on the on-demand teardown (holding an HTTP
+  request open) and on the TTL sweep (where one wedged environment would block the rest of the
+  pass). A timeout is `unconfirmed`, not `unverifiable`: it may answer next sweep.
+- **`TeardownProbe` crosses a public port, so its `switch` needs a `never` default.** A provider
+  returning an unrecognised `state` would otherwise fall off the end and make the verdict
+  `undefined` — neither a reclaim nor an honest refusal to say, and written straight into the log
+  row. The `describeUnrecognisedProbe(never)` helper keeps the compile-time guard while making the
+  runtime answer honest, the same shape as kernel's `describeModality`.
 - **`describeError` returns `LogFields`, not a string.** It is for log fields; a confirmation
   reason is rendered to a human on a PR, so it uses `getErrorMessage` (a `describeError` there
   lands as `[object Object]` — caught by a test, not the typechecker).
@@ -104,15 +133,18 @@ INDEPENDENT probe found afterwards, so only a positively confirmed reclaim reads
 
 ### Slice B: the `disposer` step
 
-| Unit                                                                                        | Status | PR   |
-| ------------------------------------------------------------------------------------------- | ------ | ---- |
-| `DISPOSER_AGENT_KIND` + `isDisposeStep` (`environments.logic.ts`), exported from the index  | done   | this |
-| Contracts: `disposeEnvStateSchema` / `disposeEnvsSchema` + `PipelineStep.disposeEnvs`       | done   | this |
-| `DisposerStepController` (frame fan-out, per-frame persist, best-effort)                    | done   | this |
-| StepHandler registered at `order: 105`; `environmentTeardown` threaded into `RunDispatcher` | done   | this |
-| `step-surface.test.ts`: `disposer` is not an inline model step                              | done   | this |
-| Frontend: palette archetype (`category: 'test'`) so it is user-placeable                    | done   | this |
-| Unit tests: run-scoped frames, confirmed/unconfirmed/failed, replay resume, unwired         | done   | this |
+| Unit                                                                                                                   | Status | PR   |
+| ---------------------------------------------------------------------------------------------------------------------- | ------ | ---- |
+| `DISPOSER_AGENT_KIND` + `isDisposeStep` (`environments.logic.ts`), exported from the index                             | done   | this |
+| Contracts: `disposeEnvStateSchema` / `disposeEnvsSchema` + `PipelineStep.disposeEnvs`                                  | done   | this |
+| `DisposerStepController` (frame fan-out, per-frame persist, best-effort)                                               | done   | this |
+| `deployEnvs[frame].environmentId` recorded at deploy; disposer reclaims BY ID, never re-resolves                       | done   | this |
+| StepHandler registered at `order: 105`; `environmentTeardown` threaded into `RunDispatcher`                            | done   | this |
+| `step-surface.test.ts`: `disposer` is not an inline model step                                                         | done   | this |
+| Frontend: palette archetype (`category: 'test'`) so it is user-placeable                                               | done   | this |
+| Unit tests: run-scoped frames, confirmed/unconfirmed/failed, replay resume, unwired                                    | done   | this |
+| Unit tests: reclaim by recorded id, latest id wins on re-deploy, missing id refuses to guess, `NotFoundError` ≠ outage | done   | this |
+| Conformance: deploy→dispose reclaims the run's own env and confirms it; unverifiable never fails the run               | done   | this |
 
 ### Slice C: the report's third leg
 
