@@ -182,9 +182,14 @@ test.describe('consumer extension (dogfood)', () => {
     // declared. Asserting through the row (rather than on the caption testid, which repeats per
     // row) is what proves the nesting: a flattened picker puts this button in the built-in row,
     // which has no caption at all.
+    //
+    // The `has:` locator is built off `page`, never off `modal`: Playwright queries an inner
+    // locator's WHOLE selector chain starting at each outer candidate, so a modal-rooted one
+    // looks for an `add-task-modal` INSIDE each row, matches nothing, and the filter silently
+    // empties (the same rule the `inspector-section` filter above already follows).
     const incidentRow = modal
       .getByTestId('task-type-row')
-      .filter({ has: modal.getByTestId('task-type-acme:incident') })
+      .filter({ has: page.getByTestId('task-type-acme:incident') })
     await expect(incidentRow).toHaveAttribute('data-task-type-row', 'category:incident response')
     await expect(incidentRow.getByTestId('task-type-category')).toHaveText('Incident response')
 
