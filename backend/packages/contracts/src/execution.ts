@@ -4,6 +4,7 @@ import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { judgeStepStateSchema } from './judge.js'
+import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
@@ -168,47 +169,6 @@ export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
  */
 export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
 export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
-
-/**
- * How an agent run faulted, so the board can classify the failure (and hint
- * whether a retry is likely to help). The union spans both flows; a given flow
- * only ever produces a subset:
- *   - `preflight`        — rejected before dispatch (repo missing/not empty, not connected). [bootstrap]
- *   - `dispatch`         — the container accept-request itself failed (HTTP / network). [bootstrap]
- *   - `evicted`          — the container vanished mid-run (eviction/crash). Retrying spins a fresh one.
- *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
- *   - `agent`            — the agent / git push reported a failure.
- *   - `job_failed`       — an async container job came back failed. [execution]
- *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
- *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
- *   - `unknown`          — anything not otherwise classified.
- */
-export const agentFailureKindSchema = v.picklist([
-  'preflight',
-  'dispatch',
-  // A `deployer` step's ephemeral-environment provisioning failed (the EnvironmentProvider
-  // threw or returned `status:'failed'`) — distinct from `dispatch` (a container/runner
-  // never accepting the job). The provider's verbatim error rides the failure `detail`.
-  'environment',
-  'evicted',
-  'timeout',
-  'agent',
-  'job_failed',
-  'rejected',
-  // A companion agent could not return a parseable quality assessment (truncated /
-  // malformed) even after a repair retry, so the run was failed for human attention.
-  // (Exhausting the automatic rework budget no longer fails the run — it parks on the
-  // companion iteration-cap gate for a human; see `companion.exceeded`.)
-  'companion_rejected',
-  // The run was still `running` in storage but its durable driver was gone (a crashed /
-  // restarted orchestrator left the advance job orphaned), and the stale-run sweeper could
-  // not recover it within the hard-stall deadline — so it is failed for human attention
-  // instead of spinning `running` forever with no progress. Retry spins a fresh run.
-  'stalled',
-  'cancelled',
-  'unknown',
-])
-export type AgentFailureKind = v.InferOutput<typeof agentFailureKindSchema>
 
 /**
  * Structured diagnostics captured when an agent run fails, stored on the run and

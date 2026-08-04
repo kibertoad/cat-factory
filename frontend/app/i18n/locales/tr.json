@@ -3541,7 +3541,28 @@
         "maxSweepFailures": "Bir arka plan taramasının üst üste başarısız geçişi."
       },
       "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin.",
-      "invalidNumbers": "Bu üst sınırlar sayı değil"
+      "invalidNumbers": "Bu üst sınırlar sayı değil",
+      "failureKinds": {
+        "label": "Hata türü başına kurallar",
+        "description": "Bir hata türü, ona tanıdığınız hata payına ulaştığında uyarır. Yukarıdaki baskın neden tavanı bir türün diğerlerini bastırıp bastırmadığını sorar; buradaki kurallar ise adı geçen bir türün bu kurulumun ondan kabul ettiği sınıra ulaşıp ulaşmadığını sorar.",
+        "overrideLabel": "Bu hesaba özel tür kuralları tanımla",
+        "overrideHint": "Kapalıyken hesap, kurulumda yapılandırılan kuralları kullanır. Açıkken aşağıdaki liste onların yerini tamamen alır ve boş liste hiç tür kuralı olmaması demektir.",
+        "empty": "Kural yok. Bu hesap tür bazlı uyarı üretmeyecek.",
+        "kindLabel": "Hata türü",
+        "shareLabel": "Hatalar içindeki pay (%)",
+        "shareHint": "Kural bu paydan itibaren tetiklenir.",
+        "minCountLabel": "En az hata sayısı",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Kuralın tetiklenebilmesi için pencerede o türden kaç hata gerektiğini belirler. Bu olmadan düşük bir pay çok hassas kalır: beş çalıştırmada bir tahliye zaten %20 eder.",
+        "addRule": "Kural ekle",
+        "allKindsCovered": "Her hata türünün zaten bir kuralı var.",
+        "removeRule": "Kuralı kaldır",
+        "duplicateKind": "Her hata türü en fazla bir kural taşıyabilir.",
+        "tooManyRules": "En fazla {max} tür kuralı. Kaydetmeden önce bir kısmını kaldırın.",
+        "unknownKind": "{kind} (tanınmıyor)",
+        "invalidTitle": "Bu tür kuralları kaydedilemiyor",
+        "invalidRows": "{rows} numaralı kuralları gözden geçirin: pay 0'dan büyük ve en fazla 100 olmalı, en az sayı 1 veya üzeri bir tam sayı olmalı ve her tür yalnızca bir kez yer alabilir."
+      }
     }
   },
   "providers": {

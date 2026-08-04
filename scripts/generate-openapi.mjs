@@ -35,7 +35,7 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.3.0'
+const API_VERSION = '1.4.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
