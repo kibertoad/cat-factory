@@ -244,12 +244,7 @@ export function publicDebugController(): Hono<AppEnv> {
   // exists for and the one a client cannot correctly derive from the rows itself.
   buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
-    if ('fail' in gate) {
-      return c.json(
-        { error: { code: gate.fail.code, message: gate.fail.message } },
-        gate.fail.status,
-      )
-    }
+    if ('fail' in gate) return refuse(c, gate.fail)
     const debug = requireDebug(c)
     if (!debug) return unavailable(c)
     const workspaceId = gate.auth.workspaceId
