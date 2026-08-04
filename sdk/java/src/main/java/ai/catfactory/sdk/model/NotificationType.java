@@ -33,6 +33,7 @@ public enum NotificationType {
     PLATFORM_HEALTH("platform_health"),
     INFRA_UNREACHABLE("infra_unreachable"),
     BUDGET_PAUSED("budget_paused"),
+    BUDGET_THRESHOLD("budget_threshold"),
     KEY_DRIFT("key_drift"),
     MERGE_TAG_REQUEST("merge_tag_request"),
 

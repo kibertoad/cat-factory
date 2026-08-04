@@ -1742,6 +1742,8 @@
     "spend": {
       "byModel": "Dépense par modèle",
       "byAgentKind": "Dépense par type d’agent",
+      "byRepo": "Dépense par dépôt",
+      "byTicket": "Dépense par ticket",
       "heading": "Dépense",
       "empty": "Aucune utilisation enregistrée sur cette période.",
       "calls": "{count} appel | {count} appels",
@@ -2036,6 +2038,7 @@
         "judge_review": "Marquer comme lu",
         "pr_review_ready": "Marquer comme lu",
         "budget_paused": "Marquer comme lu",
+        "budget_threshold": "Marquer comme lu",
         "key_drift": "Supprimer les identifiants obsolètes",
         "merge_tag_request": "Enregistrer l’effort"
       },

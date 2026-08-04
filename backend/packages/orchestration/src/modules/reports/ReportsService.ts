@@ -23,8 +23,10 @@ export interface ReportsServiceDependencies {
 
 /**
  * Cross-cutting usage analytics: composes the rollups behind {@link ReportsRepository}
- * into the Reports view — spend sliced by model and agent kind, spend and run activity
- * sliced by workspace / service / task type, and a spend trend, over a time window.
+ * into the Reports view: spend sliced by model, agent kind, repository and tracker ticket,
+ * spend and run activity sliced by workspace / service / task type, and a spend trend, over a
+ * time window. The repository and ticket slices are the TCO axes: what an organisation budgets
+ * against, answered by a grouped query rather than a hand-written join against the database.
  *
  * The dual of {@link PlatformObservabilityService}: that answers "is the deployment
  * healthy", this answers "where are the money and the work going". Every breakdown is one
@@ -53,7 +55,9 @@ export class ReportsService {
       byAgentKind,
       spendByWorkspace,
       spendByService,
+      spendByRepo,
       spendByTaskType,
+      spendByTicket,
       activityByWorkspace,
       activityByService,
       activityByTaskType,
@@ -63,7 +67,9 @@ export class ReportsService {
       repo.spendByDimension(scope, 'agentKind', range),
       repo.spendByDimension(scope, 'workspace', range),
       repo.spendByDimension(scope, 'service', range),
+      repo.spendByDimension(scope, 'repo', range),
       repo.spendByDimension(scope, 'taskType', range),
+      repo.spendByDimension(scope, 'ticket', range),
       repo.activityByDimension(scope, 'workspace', range),
       repo.activityByDimension(scope, 'service', range),
       repo.activityByDimension(scope, 'taskType', range),
@@ -84,7 +90,9 @@ export class ReportsService {
         byAgentKind: byAgentKind.map(toSpendRow),
         byWorkspace: spendByWorkspace.map(toSpendRow),
         byService: spendByService.map(toSpendRow),
+        byRepo: spendByRepo.map(toSpendRow),
         byTaskType: spendByTaskType.map(toSpendRow),
+        byTicket: spendByTicket.map(toSpendRow),
       },
       activity: {
         byWorkspace: activityByWorkspace.map(toActivityRow),

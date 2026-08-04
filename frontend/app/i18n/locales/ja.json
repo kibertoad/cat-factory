@@ -1742,6 +1742,8 @@
     "spend": {
       "byModel": "モデル別の費用",
       "byAgentKind": "エージェント種別の費用",
+      "byRepo": "リポジトリ別の費用",
+      "byTicket": "チケット別の費用",
       "heading": "費用",
       "empty": "この期間に記録された利用はありません。",
       "calls": "{count} 件の呼び出し | {count} 件の呼び出し",
@@ -2036,6 +2038,7 @@
         "judge_review": "既読にする",
         "pr_review_ready": "既読にする",
         "budget_paused": "既読にする",
+        "budget_threshold": "既読にする",
         "key_drift": "古い認証情報を削除",
         "merge_tag_request": "工数を記録"
       },

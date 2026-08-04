@@ -308,6 +308,10 @@ export {
   type ResolvedAccountAlertConfig,
 } from './modules/observability/platform-health.logic.js'
 export {
+  spendThresholdCardContent,
+  type SpendAlertSubject,
+} from './modules/spend/spend-alert.logic.js'
+export {
   cacheHitRate,
   classifyCall,
   isWarningFinishReason,

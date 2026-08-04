@@ -257,3 +257,97 @@ describe('SpendService.record — per-class pricing', () => {
     expect(rows[0]?.costEstimate).toBeCloseTo(4.6, 6)
   })
 })
+
+describe('SpendService forecast batching', () => {
+  const PERIOD_START = Date.UTC(2026, 6, 1)
+  const NOW = PERIOD_START + 10 * 24 * 60 * 60 * 1000
+
+  /** A ledger whose two grouped reads report the same spend for every requested scope. */
+  function ledger(scopes: string[], costEstimate: number): TokenUsageRepository {
+    const window = new Map(
+      scopes.map((id) => [id, { costEstimate, firstSeenAt: PERIOD_START }] as const),
+    )
+    return {
+      ...fakeTokenUsage(),
+      meteredSpendByWorkspaceSince: async () => new Map(window),
+      meteredSpendByAccountSince: async () => new Map(window),
+    } as unknown as TokenUsageRepository
+  }
+
+  it('resolves every workspace pricing in ONE batched settings read', async () => {
+    // The sweep asks about every workspace in the deployment on every pass, so a point read per
+    // workspace here is the banned N+1 (and on the Worker the settings cache is pass-through, so
+    // it would be N real round trips). One `listByWorkspaceIds` serves the whole set.
+    const workspaceIds = ['ws_1', 'ws_2', 'ws_3']
+    const workspaceSettingsRepository = {
+      get: vi.fn(async () => null),
+      listByWorkspaceIds: vi.fn(
+        async (ids: string[]) =>
+          new Map(ids.map((id) => [id, workspaceSettings({ spendMonthlyLimit: 200 })])),
+      ),
+    } as unknown as WorkspaceSettingsRepository
+
+    const svc = new SpendService({
+      tokenUsageRepository: ledger(workspaceIds, 180),
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+      workspaceSettingsRepository,
+    })
+
+    const out = await svc.forecastWorkspaces(workspaceIds, NOW)
+    expect(out.size).toBe(3)
+    // Each workspace's OWN override, not the base table's default limit.
+    expect(out.get('ws_1')?.costLimit).toBe(200)
+    expect(workspaceSettingsRepository.listByWorkspaceIds).toHaveBeenCalledTimes(1)
+    expect(workspaceSettingsRepository.get).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the base table for a workspace with no persisted overrides', async () => {
+    const workspaceSettingsRepository = {
+      get: vi.fn(async () => null),
+      // `ws_2` has never been written: absent from the map, not a null entry.
+      listByWorkspaceIds: vi.fn(
+        async () => new Map([['ws_1', workspaceSettings({ spendMonthlyLimit: 200 })]]),
+      ),
+    } as unknown as WorkspaceSettingsRepository
+
+    const svc = new SpendService({
+      tokenUsageRepository: ledger(['ws_1', 'ws_2'], 180),
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+      workspaceSettingsRepository,
+    })
+
+    const out = await svc.forecastWorkspaces(['ws_1', 'ws_2'], NOW)
+    expect(out.get('ws_1')?.costLimit).toBe(200)
+    expect(out.get('ws_2')?.costLimit).toBe(DEFAULT_SPEND_PRICING.monthlyLimit)
+  })
+
+  it('resolves every account limit in ONE batched account read, skipping inactive tiers', async () => {
+    const accountRepository = {
+      get: vi.fn(async () => null),
+      listByIds: vi.fn(async () => [
+        { id: 'acc_1', spendMonthlyLimit: 500 },
+        // No configured limit and no operator cap: an inactive tier has no ceiling to warn
+        // about approaching, so it must not appear in the result at all.
+        { id: 'acc_2', spendMonthlyLimit: null },
+      ]),
+    } as unknown as AccountRepository
+
+    const svc = new SpendService({
+      tokenUsageRepository: ledger(['acc_1', 'acc_2'], 450),
+      idGenerator,
+      clock,
+      pricing: DEFAULT_SPEND_PRICING,
+      accountRepository,
+    })
+
+    const out = await svc.forecastAccounts(['acc_1', 'acc_2'], NOW)
+    expect([...out.keys()]).toEqual(['acc_1'])
+    expect(out.get('acc_1')?.costLimit).toBe(500)
+    expect(accountRepository.listByIds).toHaveBeenCalledTimes(1)
+    expect(accountRepository.get).not.toHaveBeenCalled()
+  })
+})

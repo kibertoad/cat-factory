@@ -1742,6 +1742,8 @@
     "spend": {
       "byModel": "Modele göre harcama",
       "byAgentKind": "Ajan türüne göre harcama",
+      "byRepo": "Depoya göre harcama",
+      "byTicket": "Bilete göre harcama",
       "heading": "Harcama",
       "empty": "Bu dönemde kayıtlı kullanım yok.",
       "calls": "{count} çağrı | {count} çağrı",
@@ -2036,6 +2038,7 @@
         "judge_review": "Okundu olarak işaretle",
         "pr_review_ready": "Okundu işaretle",
         "budget_paused": "Okundu işaretle",
+        "budget_threshold": "Okundu işaretle",
         "key_drift": "Eski kimlik bilgilerini kaldır",
         "merge_tag_request": "Eforu kaydet"
       },

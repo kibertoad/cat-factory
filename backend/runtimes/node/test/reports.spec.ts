@@ -1,6 +1,14 @@
 import { type ReportsSeed, defineReportsSuite } from '@cat-factory/conformance'
 import { describe, it } from 'vitest'
-import { agentRuns, blocks, services, tokenUsage, workspaces } from '../src/db/schema.js'
+import {
+  agentRuns,
+  blocks,
+  githubRepos,
+  services,
+  tasks,
+  tokenUsage,
+  workspaces,
+} from '../src/db/schema.js'
 import { createDrizzleRepositories } from '../src/repositories/drizzle.js'
 import { setupTestDb } from './harness.js'
 
@@ -31,10 +39,35 @@ if (databaseUrl) {
         task_type: taskType,
       })
     },
-    async service(id, accountId, frameBlockId) {
-      await db
-        .insert(services)
-        .values({ id, account_id: accountId, frame_block_id: frameBlockId, created_at: 0 })
+    async service(id, accountId, frameBlockId, repoGithubId) {
+      await db.insert(services).values({
+        id,
+        account_id: accountId,
+        frame_block_id: frameBlockId,
+        repo_github_id: repoGithubId ?? null,
+        created_at: 0,
+      })
+    },
+    async repo(workspaceId, githubId, owner, name) {
+      await db.insert(githubRepos).values({
+        workspace_id: workspaceId,
+        github_id: githubId,
+        installation_id: 1,
+        owner,
+        name,
+        synced_at: 0,
+      })
+    },
+    async ticket(row) {
+      await db.insert(tasks).values({
+        workspace_id: row.workspaceId,
+        source: row.source,
+        external_id: row.externalId,
+        title: row.title,
+        url: '',
+        linked_block_id: row.linkedBlockId,
+        synced_at: 0,
+      })
     },
     async run(row) {
       await db.insert(agentRuns).values({

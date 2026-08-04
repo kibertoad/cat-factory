@@ -136,6 +136,38 @@ export class DrizzleNotificationRepository implements NotificationRepository {
     return out
   }
 
+  async listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    for (let i = 0; i < workspaceIds.length; i += 500) {
+      // `DISTINCT ON` keeps the reduction in SQL: one row per workspace comes back, where
+      // selecting every card and dropping all but the first in JS would read the workspace's
+      // whole `budget_threshold` history on every sweep (a dismissed card is never re-used by
+      // `raise`, so the rows accumulate) to use one of them.
+      const rows = await this.db
+        .selectDistinctOn([notifications.workspace_id])
+        .from(notifications)
+        .where(
+          and(
+            inArray(notifications.workspace_id, workspaceIds.slice(i, i + 500)),
+            isNull(notifications.block_id),
+            eq(notifications.type, type),
+          ),
+        )
+        // Newest-first, with NO status predicate: a dismissed card is still the last thing the
+        // sweep told this workspace, which is exactly what the caller is asking about. `id`
+        // breaks a tie on `created_at`, so two cards minted in the same millisecond resolve to
+        // the same one on every pass and on every replica (an arbitrary winner would make the
+        // caller's "has this already been notified?" answer flap).
+        .orderBy(notifications.workspace_id, desc(notifications.created_at), desc(notifications.id))
+      for (const row of rows) out.set(row.workspace_id, rowToNotification(row))
+    }
+    return out
+  }
+
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
     const values = {
       workspace_id: workspaceId,

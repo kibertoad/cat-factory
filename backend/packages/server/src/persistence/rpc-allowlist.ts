@@ -633,6 +633,11 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // exhaust that account's budget (pausing its runs) without ever touching its workspaces. The
     // rule pins both to what the caller already is.
     record: { scope: { kind: 'usageRecord', arg: 0 } },
+    // The two batched forecast reads (`meteredSpendByWorkspaceSince` /
+    // `meteredSpendByAccountSince`) stay OFF, like the sweeper-only reads above. They take a SET
+    // of scope ids spanning the whole deployment and exist for the spend-alert sweep, which runs
+    // on the mothership beside the ledger it reads; there is no per-workspace caller to scope
+    // them to, and a node has no business asking about tenants it does not own.
   },
   // The rest of the telemetry bucket is LOCAL-FIRST (docs/initiatives/mothership-mode.md, PR 5):
   // a mothership-mode node writes and reads its per-call LLM metrics, agent-context snapshots,

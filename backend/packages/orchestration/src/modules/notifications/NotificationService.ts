@@ -202,6 +202,18 @@ export class NotificationService {
   }
 
   /**
+   * Batched: the NEWEST block-less card of `type` per workspace regardless of status. The
+   * spend-alert sweep's notified-state read. See {@link NotificationRepository.listLatestByType}
+   * for why a dismissed card still counts.
+   */
+  async listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    return this.notifications.listLatestByType(workspaceIds, type)
+  }
+
+  /**
    * Auto-resolve the open, block-less card of `type` for a workspace (dismiss it), if one is
    * open. The self-clearing counterpart to a periodic sweep that raises a block-less card while
    * a condition holds (today `platform_health`): when the condition clears the sweep calls this

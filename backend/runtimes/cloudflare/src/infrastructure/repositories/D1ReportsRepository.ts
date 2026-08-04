@@ -41,6 +41,34 @@ const SERVICE_LABELS = `SELECT s.id AS service_id, MIN(b.title) AS title
                         GROUP BY s.id`
 
 /**
+ * The tracker ticket a block is linked to, PRE-AGGREGATED to exactly one row per
+ * `(workspace_id, linked_block_id)`.
+ *
+ * `idx_tasks_block` is a plain index, not a unique one: a block can legitimately be linked from
+ * more than one imported issue (two sources, or a re-imported duplicate). Joining `tasks`
+ * straight into an aggregate would then FAN OUT, multiplying that block's calls, tokens and cost
+ * by the number of tickets pointing at it and leaving the ticket breakdown disagreeing with the
+ * window totals. The same trap `SERVICE_LABELS` exists for.
+ *
+ * `MIN(source || ':' || external_id)` makes the attribution DETERMINISTIC (the lowest ref wins)
+ * rather than arbitrary. Splitting a block's cost across its tickets would be worse: the halves
+ * would answer no question anyone asked, and summing the breakdown would still be right only by
+ * accident. A multi-linked block therefore reports under one of its tickets, and the totals stay
+ * exact.
+ *
+ * The ticket's TITLE is deliberately not carried out of here. A second `MIN` over a different
+ * column is not guaranteed to come from the same row as the first, so a multi-linked block could
+ * render one ticket's title beside another's ref: a label that is not merely arbitrary but
+ * WRONG. The `source:externalId` ref is self-describing (`jira:PROJ-412`), so the dimension does
+ * what `model` and `taskType` do and reports no label at all.
+ */
+const TICKET_BY_BLOCK = `SELECT workspace_id, linked_block_id,
+                                MIN(source || ':' || external_id) AS ticket_key
+                         FROM tasks
+                         WHERE linked_block_id IS NOT NULL AND deleted_at IS NULL
+                         GROUP BY workspace_id, linked_block_id`
+
+/**
  * The joins and grouped key/label a spend dimension needs. `service` and `taskType` reach
  * the call's run through `execution_id` (a metered call records the run, not the board
  * shape), so a call with no resolvable run falls into the `''` (unattributed) bucket
@@ -67,6 +95,26 @@ const SPEND_DIMENSIONS: Record<
     joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
             LEFT JOIN blocks b ON b.workspace_id = ar.workspace_id AND b.id = ar.block_id`,
     key: "COALESCE(b.task_type, '')",
+    label: 'NULL',
+  },
+  repo: {
+    // `services.id` is a primary key and `(workspace_id, github_id)` is `github_repos`'
+    // primary key, so both joins are provably 1:1 and cannot fan the aggregate out. The KEY
+    // comes off the service (which always knows its repo id) and the LABEL off the projection
+    // (which the run's workspace may not hold a row in), so an unsynced repo loses its name
+    // and keeps its money.
+    joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
+            LEFT JOIN services s ON s.id = ar.service_id
+            LEFT JOIN github_repos gr ON gr.workspace_id = tu.workspace_id
+                                     AND gr.github_id = s.repo_github_id`,
+    key: "COALESCE(CAST(s.repo_github_id AS TEXT), '')",
+    label: "MAX(gr.owner || '/' || gr.name)",
+  },
+  ticket: {
+    joins: `LEFT JOIN agent_runs ar ON ar.workspace_id = tu.workspace_id AND ar.id = tu.execution_id
+            LEFT JOIN (${TICKET_BY_BLOCK}) tk ON tk.workspace_id = ar.workspace_id
+                                             AND tk.linked_block_id = ar.block_id`,
+    key: "COALESCE(tk.ticket_key, '')",
     label: 'NULL',
   },
 }

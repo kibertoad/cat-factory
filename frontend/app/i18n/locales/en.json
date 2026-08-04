@@ -1834,6 +1834,8 @@
     "spend": {
       "byModel": "Spend by model",
       "byAgentKind": "Spend by agent kind",
+      "byRepo": "Spend by repository",
+      "byTicket": "Spend by ticket",
       "heading": "Spend",
       "empty": "No recorded usage in this window.",
       "calls": "{count} call | {count} calls",
@@ -2137,6 +2139,7 @@
         "judge_review": "Mark read",
         "pr_review_ready": "Mark read",
         "budget_paused": "Mark read",
+        "budget_threshold": "Mark read",
         "key_drift": "Drop stale credentials",
         "merge_tag_request": "Record effort"
       },

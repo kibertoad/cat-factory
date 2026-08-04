@@ -352,6 +352,34 @@ watch(
               </section>
             </div>
 
+            <!-- The TCO axes: what a repository and a ticket actually cost. Spend-only, like the
+                 pair above, because a run's activity is already sliced by the service that owns
+                 the repo and there is no second population to pair a ticket with. -->
+            <div class="grid gap-6 md:grid-cols-2">
+              <section>
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('reports.spend.byRepo') }}
+                </h2>
+                <ReportsSpendBreakdown
+                  :rows="view.spend.byRepo"
+                  :currency="currency"
+                  test-id="reports-spend-repo"
+                  :label-of="sliceLabel"
+                />
+              </section>
+              <section>
+                <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {{ t('reports.spend.byTicket') }}
+                </h2>
+                <ReportsSpendBreakdown
+                  :rows="view.spend.byTicket"
+                  :currency="currency"
+                  test-id="reports-spend-ticket"
+                  :label-of="sliceLabel"
+                />
+              </section>
+            </div>
+
             <!-- The shared axis: spend AND activity for the same grouping, side by side. -->
             <section class="flex flex-col gap-3">
               <div class="flex flex-wrap items-center gap-2">

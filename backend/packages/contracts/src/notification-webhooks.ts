@@ -325,7 +325,8 @@ export type PlatformAlertWebhookDelivery = v.InferOutput<typeof platformAlertWeb
  * The notification types delivered when a webhook declares no explicit `types` filter: the
  * human-parking cards a headless overseer must react to, plus the failure tails it can act on
  * through the public notification surface. Deliberately NOT every type — the block-less/system
- * cards (`platform_health`, `infra_unreachable`, `budget_paused`, `key_drift`, `initiative`) are
+ * cards (`platform_health`, `infra_unreachable`, `budget_paused`, `budget_threshold`, `key_drift`,
+ * `initiative`) are
  * operator concerns with no external action, and shipping them by default turns the endpoint into a
  * firehose. A deployment that DOES want an infrastructure outage on its webhook can name it in the
  * per-webhook `types` filter, which is exactly what that filter is for.

@@ -1742,6 +1742,8 @@
     "spend": {
       "byModel": "Koszty według modelu",
       "byAgentKind": "Koszty według typu agenta",
+      "byRepo": "Koszty według repozytorium",
+      "byTicket": "Koszty według zgłoszenia",
       "heading": "Koszty",
       "empty": "W tym okresie nie zarejestrowano użycia.",
       "calls": "{count} wywołanie | {count} wywołania | {count} wywołań",
@@ -2036,6 +2038,7 @@
         "judge_review": "Oznacz jako przeczytane",
         "pr_review_ready": "Oznacz jako przeczytane",
         "budget_paused": "Oznacz jako przeczytane",
+        "budget_threshold": "Oznacz jako przeczytane",
         "key_drift": "Usuń nieaktualne poświadczenia",
         "merge_tag_request": "Zapisz nakład"
       },
