@@ -738,6 +738,7 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
         title: 'A plain feature',
+        description: 'Add a remember-me checkbox to the sign-in form.',
         taskType: 'feature',
       })
       const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
