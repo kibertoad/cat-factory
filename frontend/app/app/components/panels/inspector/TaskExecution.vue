@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isDryRun } from '@cat-factory/contracts'
 import type { Block } from '~/types/domain'
 import { agentKindMeta } from '~/utils/catalog'
 import {
@@ -47,6 +48,12 @@ const reviewStageLabel = computed(() =>
 )
 
 const instance = computed(() => execution.getInstance(props.block.executionId))
+
+// Whether this run may land its work at all. Read through the contracts helper rather than an
+// equality here, so a run persisted before the mode existed (absent ⇒ live) is never badged as a
+// sandbox. Both routes into the mode look identical from here on purpose: what the reader needs
+// is that nothing will merge, and WHY is answered by the run's own notes and the merge decision.
+const sandboxed = computed(() => isDryRun(instance.value?.mode))
 
 // Nothing to show yet: no run, no failed run, no PR, and not awaiting a merge — render an
 // empty state instead of a blank gap so the section reads as "no runs yet" rather than broken.
@@ -266,8 +273,23 @@ async function mergePr() {
     <!-- running pipeline -->
     <div v-if="instance">
       <div class="mb-1 flex items-center justify-between">
-        <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-          {{ instance.pipelineName }}
+        <span class="flex min-w-0 items-center gap-1.5">
+          <span class="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+            {{ instance.pipelineName }}
+          </span>
+          <!-- A sandboxed run looks exactly like one that simply has not reached the merge yet,
+               right up until it stops there, so it says what it is from the start. -->
+          <UBadge
+            v-if="sandboxed"
+            color="warning"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-shield"
+            :title="t('inspector.execution.dryRunHint')"
+            data-testid="run-dry-run"
+          >
+            {{ t('inspector.execution.dryRun') }}
+          </UBadge>
         </span>
         <div class="flex items-center gap-1">
           <!-- Stop without deleting: halts the run but keeps it readable + retryable. -->

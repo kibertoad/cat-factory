@@ -38,6 +38,42 @@ export interface Logger {
 }
 
 /**
+ * One emitted line, as a SECOND destination sees it: the same message and level the local
+ * writer got, with the `child`-bound correlation fields already folded into `fields` (a sink
+ * cannot reconstruct them, and they are the half that makes a line joinable to a run).
+ */
+export interface LogRecord {
+  level: LogLevel
+  /** The fixed message string. Everything variable lives in {@link fields}. */
+  msg: string
+  /** Bound fields merged with the call-site ones, bound first so a call site can override. */
+  fields: LogFields
+  /** Epoch ms the line was emitted at. */
+  timeMs: number
+}
+
+/**
+ * A SECOND destination for emitted lines, beside the local writer: an OTLP collector, a
+ * hosted log backend. Registered on the logging adapter by a facade, so the domain keeps
+ * logging through the one `Logger` port and knows nothing about where lines go.
+ *
+ * Two obligations, both inherited from the port itself (`Logger` may not throw, and
+ * observability may not break the product):
+ *
+ * - **`record` must not throw and must not block.** It is called on the emit path of every
+ *   line, including the ones reporting a failure the caller is already handling. Buffer and
+ *   return; do the I/O in {@link flush}.
+ * - **`flush` must never reject.** A sink that cannot deliver drops its batch and says so
+ *   through its own logger, exactly like every other best-effort path.
+ */
+export interface LogSink {
+  /** Accept one line. Non-blocking, never throws (see the interface docs). */
+  record(record: LogRecord): void
+  /** Deliver whatever is buffered. Best-effort: resolves even when the delivery failed. */
+  flush(): Promise<void>
+}
+
+/**
  * The default wherever a facade wired no logger. Construction stays cheap and a service
  * never has to null-check its logger dep, which is what keeps `logger` non-optional on the
  * services that take one.

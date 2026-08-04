@@ -522,6 +522,19 @@
           "always": "Unisci sempre automaticamente",
           "never": "Richiedi sempre una revisione"
         }
+      },
+      "roleRules": {
+        "heading": "Limiti per ruolo di chi avvia",
+        "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere soggetto a regole più severe di quelle sopra, oppure alle sole prove: la pipeline lavora e apre una pull request, ma non viene unito nulla. Un ruolo può solo restringere questo criterio, mai allargarlo.",
+        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per categoria qui sotto non aggiungono nulla. Le prove restano valide: rifiutano anche un'unione manuale.",
+        "sandboxLabel": "Solo prove",
+        "sandboxNote": "Le esecuzioni avviate da questo ruolo aprono una pull request e non uniscono nulla, quindi le regole per categoria qui sotto non possono restringerle ulteriormente.",
+        "noRules": "Nessun limite per categoria",
+        "ruleCount": "{count} categoria limitata | {count} categorie limitate",
+        "inherit": "Come questo criterio",
+        "redundant": "Nessun effetto: questo criterio è già almeno altrettanto severo.",
+        "alreadyStrictest": "Già sempre in revisione",
+        "baseHint": "Questo criterio confronta i punteggi per ogni categoria, quindi un ruolo può restringere una categoria solo fino alla revisione obbligatoria."
       }
     },
     "observabilityConnection": {
@@ -1560,7 +1573,9 @@
       "chooseApproach": "Scegli approccio",
       "triageFollowUps": "Decidi i follow-up",
       "elapsedTooltip": "Tempo trascorso su questo passaggio",
-      "reviewFindings": "Esamina i rilievi"
+      "reviewFindings": "Esamina i rilievi",
+      "dryRun": "Prova",
+      "dryRunHint": "Questa esecuzione apre una pull request e non unisce nulla."
     },
     "structure": {
       "title": "Struttura",
@@ -1981,7 +1996,10 @@
         "title": "Archiviare questo servizio?",
         "body": "\"{name}\" e le sue attività verranno nascosti dalla board. Puoi ripristinarlo in qualsiasi momento."
       },
-      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}"
+      "runBlocked": "Bloccato da una dipendenza non completata: {names} | Bloccato da {count} dipendenze non completate: {names}",
+      "dryRun": "Prova: non unire nulla",
+      "dryRunForced": "Prova: le esecuzioni del tuo ruolo qui non vengono mai unite",
+      "dryRunHint": "Questa esecuzione apre una pull request e non unisce nulla."
     }
   },
   "layout": {
@@ -2840,6 +2858,7 @@
       "start": "Avvia",
       "blocked": "Bloccato",
       "startPipeline": "Avvia {name}",
+      "startPipelineDryRun": "Avvia {name} come prova: apre una pull request e non unisce nulla",
       "pipelineFallback": "pipeline",
       "waitingOn": "In attesa di: {deps}",
       "blockedByDependenciesTitle": "Bloccato dalle dipendenze",
@@ -2864,6 +2883,10 @@
       "buildSteps": "Fasi di build",
       "reviewAndApprove": "Rivedi e approva",
       "clickToViewStep": "Clicca per vedere i dettagli e l'output della fase"
+    },
+    "dryRunToast": {
+      "title": "Prova avviata",
+      "body": "Esecuzione di \"{name}\". Le esecuzioni del tuo ruolo non uniscono nulla su questa attività."
     },
     "epic": {
       "label": "Epic",
@@ -5800,7 +5823,10 @@
     "description": "Descrizione",
     "overallProgress": "Avanzamento complessivo",
     "dependencies": "Dipendenze",
-    "noDependencies": "Nessuna"
+    "noDependencies": "Nessuna",
+    "dryRun": "Prova",
+    "dryRunHint": "Esegui la pipeline e apri una pull request, senza unire nulla.",
+    "dryRunForcedHint": "Il criterio di rischio di questa attività limita il tuo ruolo alle sole prove."
   },
   "environments": {
     "title": "Ambiente effimero",
@@ -6067,7 +6093,10 @@
       "manualHeading": "Solo revisione manuale",
       "manualExplainer": "Questo criterio non unisce mai da solo, quindi ogni pull request attende una revisione umana qualunque sia il punteggio.",
       "ciHeading": "Correzioni CI",
-      "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi."
+      "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi.",
+      "roleHeading": "Chi ha avviato l'esecuzione",
+      "roleSandboxed": "Le esecuzioni avviate da {roles} aprono una pull request e non vengono mai unite.",
+      "roleNarrowed": "Le esecuzioni avviate da {roles} seguono regole più severe per alcune categorie di modifica."
     }
   },
   "modelPreset": {

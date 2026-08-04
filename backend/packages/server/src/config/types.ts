@@ -403,6 +403,30 @@ export interface OtelConfig {
    * off unless {@link enabled} AND `OTEL_PLATFORM_METRICS=true`.
    */
   platformMetrics: OtelPlatformMetricsConfig
+  /**
+   * Structured LOG export: every line the platform emits (at the configured `LOG_LEVEL`) is
+   * copied to the same OTLP endpoint as OTLP log records, so an operator reads logs, traces
+   * and metrics in one backend. A further opt-in ON TOP of the base OTel exporter, since it
+   * adds an egress POST per batch of lines; off unless {@link enabled} AND `OTEL_LOGS=true`.
+   */
+  logs: OtelLogsConfig
+}
+
+export interface OtelLogsConfig {
+  /** Opt-in flag (`OTEL_LOGS=true`); only effective when the base OTel exporter is on. */
+  enabled: boolean
+  /**
+   * How often the buffered lines are flushed (ms). Node reads `OTEL_LOGS_FLUSH_INTERVAL_MS`
+   * (default 5s); the Worker flushes at the END OF EVERY INVOCATION instead (its module state
+   * is per isolate and an isolate is discarded without notice) and ignores this.
+   */
+  flushIntervalMs: number
+  /**
+   * Lines per OTLP POST (`OTEL_LOGS_MAX_BATCH_SIZE`, default 128). Also bounds what a
+   * collector outage may hold in memory: the exporter buffers a small multiple of it and
+   * drops the oldest beyond that, reporting the drop count on the next batch.
+   */
+  maxBatchSize: number
 }
 
 export interface OtelPlatformMetricsConfig {

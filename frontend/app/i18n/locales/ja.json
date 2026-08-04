@@ -447,6 +447,7 @@
       "start": "開始",
       "blocked": "ブロック中",
       "startPipeline": "{name} を開始",
+      "startPipelineDryRun": "{name} をドライランで開始: プルリクエストを開き、マージはしません",
       "pipelineFallback": "パイプライン",
       "waitingOn": "待機中: {deps}",
       "blockedByDependenciesTitle": "依存関係によりブロック中",
@@ -471,6 +472,10 @@
         "title": "実行を開始しました",
         "body": "「{name}」を実行中です。"
       }
+    },
+    "dryRunToast": {
+      "title": "ドライランを開始しました",
+      "body": "「{name}」を実行中です。あなたのロールの実行は、このタスクでは何もマージしません。"
     },
     "epic": {
       "label": "エピック",
@@ -1077,7 +1082,9 @@
       "chooseApproach": "アプローチを選択",
       "triageFollowUps": "フォローアップを決定",
       "elapsedTooltip": "このステップの経過時間",
-      "reviewFindings": "指摘を確認"
+      "reviewFindings": "指摘を確認",
+      "dryRun": "ドライラン",
+      "dryRunHint": "この実行はプルリクエストを開きますが、マージは行いません。"
     },
     "structure": {
       "title": "構造",
@@ -1498,7 +1505,10 @@
         "title": "このサービスをアーカイブしますか？",
         "body": "「{name}」とそのタスクはボードから非表示になります。いつでも復元できます。"
       },
-      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}"
+      "runBlocked": "未完了の依存関係によってブロックされています: {names} | {count} 件の未完了の依存関係によってブロックされています: {names}",
+      "dryRun": "ドライラン: マージしない",
+      "dryRunForced": "ドライラン: あなたのロールの実行はここではマージされません",
+      "dryRunHint": "この実行はプルリクエストを開きますが、マージは行いません。"
     }
   },
   "observability": {
@@ -2879,6 +2889,19 @@
           "always": "常に自動マージ",
           "never": "常にレビューを必須にする"
         }
+      },
+      "roleRules": {
+        "heading": "開始したロールごとの制限",
+        "help": "実行が何をできるかは、誰が開始したかにも左右されます。ロールごとに上のルールより厳しくしたり、ドライランだけに限定したりできます。ドライランではパイプラインは動作してプルリクエストを開きますが、マージは行われません。ロールはこのポリシーを厳しくすることしかできず、緩めることはできません。",
+        "autoMergeOffWarning": "このプリセットでは自動マージが無効なので、すべてのプルリクエストはすでに人の確認に回り、下のカテゴリの制限は何も加えません。ドライランは引き続き有効で、手動のマージも拒否します。",
+        "sandboxLabel": "ドライランのみ",
+        "sandboxNote": "このロールが開始した実行はプルリクエストを開くだけでマージしないため、下の変更カテゴリのルールでこれ以上厳しくすることはできません。",
+        "noRules": "カテゴリの制限なし",
+        "ruleCount": "{count} 件のカテゴリを制限 | {count} 件のカテゴリを制限",
+        "inherit": "このポリシーと同じ",
+        "redundant": "効果はありません。このポリシーはすでに同等以上に厳しい設定です。",
+        "alreadyStrictest": "すでに常にレビュー必須",
+        "baseHint": "このポリシーはすべてのカテゴリでスコアを比較するため、ロールはカテゴリを「常にレビュー必須」にすることしかできません。"
       }
     },
     "observabilityConnection": {
@@ -5245,7 +5268,10 @@
     "description": "説明",
     "overallProgress": "全体の進捗",
     "dependencies": "依存関係",
-    "noDependencies": "なし"
+    "noDependencies": "なし",
+    "dryRun": "ドライラン",
+    "dryRunHint": "パイプラインを実行してプルリクエストを開き、マージはしません。",
+    "dryRunForcedHint": "このタスクのリスクポリシーにより、あなたのロールはドライランのみに制限されています。"
   },
   "environments": {
     "title": "一時環境",
@@ -5934,7 +5960,10 @@
       "manualHeading": "手動レビューのみ",
       "manualExplainer": "このポリシーは自動でマージしないため、点数にかかわらずすべてのプルリクエストが人のレビューを待ちます。",
       "ciHeading": "CI 修正",
-      "ciAttempts": "実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。 | 実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。"
+      "ciAttempts": "実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。 | 実行は CI を green に戻す試行を最大 {count} 回行ってから諦めます。",
+      "roleHeading": "実行を開始した人",
+      "roleSandboxed": "{roles} が開始した実行はプルリクエストを開くだけで、マージされることはありません。",
+      "roleNarrowed": "{roles} が開始した実行には、一部の変更カテゴリでより厳しいルールが適用されます。"
     }
   },
   "modelPreset": {

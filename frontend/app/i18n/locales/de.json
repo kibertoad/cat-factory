@@ -522,6 +522,19 @@
           "always": "Immer automatisch zusammenführen",
           "never": "Immer Review verlangen"
         }
+      },
+      "roleRules": {
+        "heading": "Grenzen je startender Rolle",
+        "help": "Was ein Lauf darf, hängt auch davon ab, wer ihn gestartet hat. Eine Rolle kann strengeren Regeln als den obigen unterliegen oder nur Probeläufe machen: Die Pipeline arbeitet und öffnet einen Pull Request, zusammengeführt wird nichts. Eine Rolle kann diese Richtlinie nur verschärfen, nie lockern.",
+        "autoMergeOffWarning": "Für diese Vorlage ist das automatische Zusammenführen aus, jeder Pull Request geht also ohnehin an einen Menschen und die Kategoriegrenzen unten ändern nichts mehr. Probeläufe gelten weiterhin: Sie verweigern auch das manuelle Zusammenführen.",
+        "sandboxLabel": "Nur Probeläufe",
+        "sandboxNote": "Läufe dieser Rolle öffnen einen Pull Request und führen nichts zusammen, die Kategorieregeln unten können sie also nicht weiter einschränken.",
+        "noRules": "Keine Kategoriegrenzen",
+        "ruleCount": "{count} Kategorie eingeschränkt | {count} Kategorien eingeschränkt",
+        "inherit": "Wie in dieser Richtlinie",
+        "redundant": "Ohne Wirkung: Diese Richtlinie ist bereits mindestens so streng.",
+        "alreadyStrictest": "Wird ohnehin immer geprüft",
+        "baseHint": "Diese Richtlinie vergleicht in jeder Kategorie die Bewertungen, eine Rolle kann eine Kategorie daher nur auf \"immer Review\" verschärfen."
       }
     },
     "observabilityConnection": {
@@ -1560,7 +1573,9 @@
       "chooseApproach": "Ansatz wählen",
       "triageFollowUps": "Folgeaufgaben entscheiden",
       "elapsedTooltip": "Verstrichene Zeit für diesen Schritt",
-      "reviewFindings": "Befunde prüfen"
+      "reviewFindings": "Befunde prüfen",
+      "dryRun": "Probelauf",
+      "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
     },
     "structure": {
       "title": "Struktur",
@@ -1981,7 +1996,10 @@
         "title": "Diesen Dienst archivieren?",
         "body": "„{name}“ und seine Aufgaben werden vom Board ausgeblendet. Du kannst den Dienst jederzeit wiederherstellen."
       },
-      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}"
+      "runBlocked": "Blockiert durch eine unerledigte Abhängigkeit: {names} | Blockiert durch {count} unerledigte Abhängigkeiten: {names}",
+      "dryRun": "Probelauf: nichts zusammenführen",
+      "dryRunForced": "Probelauf: Läufe deiner Rolle werden hier nie zusammengeführt",
+      "dryRunHint": "Dieser Lauf öffnet einen Pull Request und führt nichts zusammen."
     }
   },
   "layout": {
@@ -2840,6 +2858,7 @@
       "start": "Starten",
       "blocked": "Blockiert",
       "startPipeline": "{name} starten",
+      "startPipelineDryRun": "{name} als Probelauf starten: öffnet einen Pull Request, führt nichts zusammen",
       "pipelineFallback": "Pipeline",
       "waitingOn": "Wartet auf: {deps}",
       "blockedByDependenciesTitle": "Durch Abhängigkeiten blockiert",
@@ -2864,6 +2883,10 @@
       "buildSteps": "Build-Schritte",
       "reviewAndApprove": "Überprüfen & freigeben",
       "clickToViewStep": "Klicken, um Schrittdetails & Ausgabe anzuzeigen"
+    },
+    "dryRunToast": {
+      "title": "Probelauf gestartet",
+      "body": "\"{name}\" läuft. Läufe deiner Rolle führen bei dieser Aufgabe nichts zusammen."
     },
     "epic": {
       "label": "Epic",
@@ -5800,7 +5823,10 @@
     "description": "Beschreibung",
     "overallProgress": "Gesamtfortschritt",
     "dependencies": "Abhängigkeiten",
-    "noDependencies": "Keine"
+    "noDependencies": "Keine",
+    "dryRun": "Probelauf",
+    "dryRunHint": "Die Pipeline ausführen und einen Pull Request öffnen, aber nichts zusammenführen.",
+    "dryRunForcedHint": "Die Risikorichtlinie dieser Aufgabe lässt deine Rolle nur Probeläufe machen."
   },
   "environments": {
     "title": "Ephemere Umgebung",
@@ -6067,7 +6093,10 @@
       "manualHeading": "Nur manuelle Prüfung",
       "manualExplainer": "Diese Richtlinie mergt nie von selbst, jeder Pull Request wartet also unabhängig von den Bewertungen auf eine menschliche Prüfung.",
       "ciHeading": "CI-Fixes",
-      "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt."
+      "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt.",
+      "roleHeading": "Wer den Lauf gestartet hat",
+      "roleSandboxed": "Läufe von {roles} öffnen einen Pull Request und werden nie zusammengeführt.",
+      "roleNarrowed": "Für Läufe von {roles} gelten in einigen Änderungskategorien strengere Regeln."
     }
   },
   "modelPreset": {

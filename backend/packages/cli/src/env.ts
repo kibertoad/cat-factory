@@ -323,6 +323,15 @@ function commonOptionalEntries(provider: VcsProvider): EnvEntry[] {
     { key: '# OTEL_SERVICE_NAME', value: 'cat-factory' },
     {
       comment: [
+        "Also export the platform's own structured LOG lines to the same OTLP endpoint, so",
+        'logs sit beside the traces they correlate with. A further opt-in on top of',
+        'OTEL_ENABLED; LOG_LEVEL governs what is exported.',
+      ],
+      key: '# OTEL_LOGS',
+      value: 'true',
+    },
+    {
+      comment: [
         'Post board notifications to Slack (connect the workspace in the UI). OFF by default;',
         'the value shown ENABLES it.',
       ],

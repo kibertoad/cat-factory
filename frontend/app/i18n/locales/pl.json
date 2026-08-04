@@ -447,6 +447,7 @@
       "start": "Uruchom",
       "blocked": "Zablokowane",
       "startPipeline": "Uruchom {name}",
+      "startPipelineDryRun": "Uruchom {name} jako uruchomienie próbne: otwiera pull request, niczego nie scala",
       "pipelineFallback": "pipeline",
       "waitingOn": "Oczekiwanie na: {deps}",
       "blockedByDependenciesTitle": "Zablokowane przez zależności",
@@ -471,6 +472,10 @@
         "title": "Uruchomiono",
         "body": "Trwa wykonywanie \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Uruchomiono próbnie",
+      "body": "Trwa wykonywanie \"{name}\". Uruchomienia twojej roli niczego nie scalają w tym zadaniu."
     },
     "epic": {
       "label": "Epik",
@@ -1077,7 +1082,9 @@
       "chooseApproach": "Wybierz podejście",
       "triageFollowUps": "Rozstrzygnij działania następcze",
       "elapsedTooltip": "Czas, który upłynął na tym kroku",
-      "reviewFindings": "Przejrzyj ustalenia"
+      "reviewFindings": "Przejrzyj ustalenia",
+      "dryRun": "Uruchomienie próbne",
+      "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
     },
     "structure": {
       "title": "Struktura",
@@ -1498,7 +1505,10 @@
         "title": "Zarchiwizować tę usługę?",
         "body": "„{name}” i jej zadania zostaną ukryte z tablicy. Możesz przywrócić usługę w dowolnej chwili."
       },
-      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}"
+      "runBlocked": "Zablokowane przez niedokończoną zależność: {names} | Zablokowane przez {count} niedokończone zależności: {names} | Zablokowane przez {count} niedokończonych zależności: {names}",
+      "dryRun": "Uruchomienie próbne: nic nie scalaj",
+      "dryRunForced": "Uruchomienie próbne: uruchomienia twojej roli nigdy nie są tu scalane",
+      "dryRunHint": "To uruchomienie otwiera pull request i niczego nie scala."
     }
   },
   "observability": {
@@ -2738,6 +2748,19 @@
           "always": "Zawsze scalaj automatycznie",
           "never": "Zawsze wymagaj przeglądu"
         }
+      },
+      "roleRules": {
+        "heading": "Ograniczenia według roli uruchamiającego",
+        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można objąć surowszymi regułami niż powyższe albo wyłącznie uruchomieniami próbnymi: potok pracuje i otwiera pull request, ale nic nie jest scalane. Rola może tę zasadę tylko zaostrzyć, nigdy poluzować.",
+        "autoMergeOffWarning": "W tym zestawie automatyczne scalanie jest wyłączone, więc każdy pull request i tak trafia do człowieka, a ograniczenia kategorii poniżej niczego nie dodają. Uruchomienia próbne nadal obowiązują: odmawiają też scalenia ręcznego.",
+        "sandboxLabel": "Tylko uruchomienia próbne",
+        "sandboxNote": "Uruchomienia rozpoczęte przez tę rolę otwierają pull request i niczego nie scalają, więc reguły kategorii poniżej nie mogą ich już bardziej ograniczyć.",
+        "noRules": "Brak ograniczeń kategorii",
+        "ruleCount": "{count} kategoria ograniczona | {count} kategorie ograniczone | {count} kategorii ograniczonych",
+        "inherit": "Tak jak w tej zasadzie",
+        "redundant": "Bez efektu: ta zasada jest już co najmniej tak samo surowa.",
+        "alreadyStrictest": "Już zawsze przeglądane",
+        "baseHint": "Ta zasada porównuje oceny w każdej kategorii, więc rola może zaostrzyć kategorię jedynie do wymogu przeglądu."
       }
     },
     "observabilityConnection": {
@@ -5245,7 +5268,10 @@
     "description": "Opis",
     "overallProgress": "Ogólny postęp",
     "dependencies": "Zależności",
-    "noDependencies": "Brak"
+    "noDependencies": "Brak",
+    "dryRun": "Uruchomienie próbne",
+    "dryRunHint": "Uruchom potok i otwórz pull request, ale niczego nie scalaj.",
+    "dryRunForcedHint": "Zasada ryzyka tego zadania ogranicza twoją rolę do uruchomień próbnych."
   },
   "environments": {
     "title": "Środowisko efemeryczne",
@@ -5934,7 +5960,10 @@
       "manualHeading": "Tylko recenzja ręczna",
       "manualExplainer": "Ta zasada nigdy nie scala samodzielnie, więc każdy pull request czeka na ludzką recenzję niezależnie od ocen.",
       "ciHeading": "Naprawy CI",
-      "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda."
+      "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda.",
+      "roleHeading": "Kto rozpoczął uruchomienie",
+      "roleSandboxed": "Uruchomienia rozpoczęte przez role {roles} otwierają pull request i nigdy nie są scalane.",
+      "roleNarrowed": "Uruchomienia rozpoczęte przez role {roles} podlegają surowszym regułom w części kategorii zmian."
     }
   },
   "modelPreset": {
@@ -6320,7 +6349,7 @@
     "viewPr": "Zobacz pull request",
     "stalledNote": "Pętla zatrzymała się przedwcześnie: kolejne iteracje nie zmieniły gałęzi, a polecenie walidacji nadal kończy się niepowodzeniem, więc nie zużyła reszty budżetu. Zanim ponowna próba cokolwiek da, prawdopodobnie trzeba zmienić zadanie lub polecenie walidacji.",
     "iterationsHeading": "Iteracje",
-    "iterationsTruncated": "Nie pokazano {count} wcześniejszej iteracji (historia jest ograniczona). | Nie pokazano {count} wcześniejszych iteracji (historia jest ograniczona).",
+    "iterationsTruncated": "Nie pokazano {count} wcześniejszej iteracji (historia jest ograniczona). | Nie pokazano {count} wcześniejszych iteracji (historia jest ograniczona). | Nie pokazano {count} wcześniejszych iteracji (historia jest ograniczona).",
     "iteration": "Iteracja {number}",
     "iterationPassed": "walidacja zaliczona",
     "iterationFailed": "kod {exit}",
@@ -6457,9 +6486,9 @@
       "body": "Uruchomienia agentów wypychają zmiany poświadczeniem, które może zapisywać w każdym objętym repozytorium. Nic tutaj nie powstrzyma skompromitowanego uruchomienia przed wypchnięciem zmian wprost na gałąź domyślną ani przed scaleniem własnego pull requesta przez API hosta — oba przypadki pokrywa wyłącznie ochrona gałęzi po stronie hosta, którą konfigurujesz sam. To sprawdzenie pokazuje, czy jest włączona.",
       "check": "Sprawdź ochronę",
       "allProtected": "Gałąź domyślna każdego powiązanego repozytorium jest chroniona.",
-      "exposed": "{count} repozytorium ma niechronioną gałąź domyślną. | {count} repozytoria mają niechronioną gałąź domyślną.",
+      "exposed": "{count} repozytorium ma niechronioną gałąź domyślną. | {count} repozytoria mają niechronioną gałąź domyślną. | {count} repozytoriów ma niechronioną gałąź domyślną.",
       "unavailable": "Podłączony dostawca nie potrafi zgłosić ochrony gałęzi, więc to sprawdzenie nic nie mówi — to nie jest wynik pozytywny.",
-      "omitted": "Nie sprawdzono jeszcze {count} powiązanego repozytorium. | Nie sprawdzono jeszcze {count} powiązanych repozytoriów.",
+      "omitted": "Nie sprawdzono jeszcze {count} powiązanego repozytorium. | Nie sprawdzono jeszcze {count} powiązanych repozytoriów. | Nie sprawdzono jeszcze {count} powiązanych repozytoriów.",
       "state": {
         "protected": "Chroniona",
         "unprotected": "Niechroniona",

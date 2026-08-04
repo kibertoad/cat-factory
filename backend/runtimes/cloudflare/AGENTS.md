@@ -51,6 +51,10 @@ it only reaches the logger the Worker writes through while both imports resolve 
   those are the shared abstraction, these are the runtime wiring; see `docs/glossary.md`).
 - `durable-objects/`, `workflows/`, `containers/`, `runners/`: durable execution + real-time
   - per-run-container machinery.
+- `observability/`: the per-ISOLATE telemetry buffers and their flushes (`operationalFlush.ts`,
+  `logExport.ts`, `platformMetrics.ts`, `cronSweep.ts`). Every entry point installs what its
+  isolate needs and flushes it as a post-response `waitUntil`, because an isolate is discarded
+  without notice and no later tick is guaranteed to reach what it held. Node's twins use timers.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
 `sandbox-migrations/` + `migrations-provisioning/` hold the D1 schema, the twin of the Node

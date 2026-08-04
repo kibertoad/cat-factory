@@ -591,6 +591,20 @@ export interface Env {
   OTEL_PLATFORM_METRICS_WINDOW?: string
   /** Node-only sweep interval (ms); the Worker is cron-driven and ignores it. */
   OTEL_PLATFORM_METRICS_INTERVAL_MS?: string
+  /**
+   * Opt-in flag ('true') for exporting the platform's own structured LOG lines to the same
+   * OTLP endpoint as OTLP log records. A further opt-in on top of OTEL_ENABLED (it adds an
+   * egress POST per batch of lines). `LOG_LEVEL` governs what is exported, exactly as it
+   * governs what is written locally.
+   */
+  OTEL_LOGS?: string
+  /** Lines per OTLP log POST (default 128); also bounds the exporter's in-memory buffer. */
+  OTEL_LOGS_MAX_BATCH_SIZE?: string
+  /**
+   * Node-only flush cadence (ms). The Worker flushes at the end of every invocation, since a
+   * per-isolate buffer has no later tick guaranteed to reach it, so it ignores this.
+   */
+  OTEL_LOGS_FLUSH_INTERVAL_MS?: string
 
   // ---- Platform-health alerting (see docs/environment-variables.md) --------
   /**

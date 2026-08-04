@@ -1,5 +1,11 @@
 import pino from 'pino'
-import { type LogFields, type LogLevel, type Logger, noopLogger } from '@cat-factory/kernel'
+import {
+  type LogFields,
+  type LogLevel,
+  type LogSink,
+  type Logger,
+  noopLogger,
+} from '@cat-factory/kernel'
 
 // The one place a logging library is named. Everything else in the backend — controllers,
 // facades, and the whole domain engine — talks to the kernel `Logger` port, so swapping
@@ -56,6 +62,51 @@ export function getLogLevel(): LogLevel {
 }
 
 /**
+ * The optional SECOND destination every emitted line is copied to (today: the opt-in OTLP log
+ * exporter). Module state for the same reason `activeLevel` is: a facade wires it from its
+ * resolved config after this module has already handed loggers out, and pino children snapshot
+ * their parent, so the fan-out has to be looked up per line rather than baked into an instance.
+ *
+ * Held here because this file is the one place a destination is named at all: the rule that
+ * makes "add a second destination" a change in this module and nowhere else.
+ */
+let activeSink: LogSink | null = null
+
+/**
+ * Install (or with `null`, remove) the second destination. Takes effect immediately for every
+ * logger already handed out, including children. A facade that installs one owns flushing and
+ * removing it: the sink only buffers, so the last lines before shutdown are delivered by the
+ * facade's final `flush()`, not by this module.
+ */
+export function setLogSink(sink: LogSink | null): void {
+  activeSink = sink
+}
+
+/** The installed second destination, if any. For a facade flushing what it wired. */
+export function getLogSink(): LogSink | null {
+  return activeSink
+}
+
+/**
+ * Copy one line to the installed sink, with the `child`-bound fields already folded in.
+ *
+ * Wrapped, because the port promises a logger cannot fail and a sink is third-party-shaped
+ * code on the emit path of every line: a throwing `record` would turn `logger.warn(…)` into a
+ * new failure class exactly where a caller is already handling one. The swallow is silent by
+ * necessity, because reporting it would emit a line, which would call the sink that just threw.
+ */
+function fanOut(level: LogLevel, msg: string, fields: LogFields): void {
+  const sink = activeSink
+  if (!sink) return
+  try {
+    sink.record({ level, msg, fields, timeMs: Date.now() })
+  } catch {
+    // silent-catch-ok: see above. The only channel available to report a broken log sink is
+    // the log sink. The local writer has the line either way, which is what an operator reads.
+  }
+}
+
+/**
  * Serialise one log object, never throwing. The port promises a logger cannot fail
  * (`kernel/ports/logging.ts`), and a plain `JSON.stringify` breaks that promise on the Worker:
  * a circular field bag or a `BigInt` raises a `TypeError` straight out of the `logger.warn(…)`
@@ -108,19 +159,32 @@ const PINO_OPTIONS = {
 
 type PinoLogger = ReturnType<typeof pino>
 
-function adapt(instance: PinoLogger): Logger {
+/**
+ * `bound` mirrors what pino already holds for this instance. Duplicated rather than read back
+ * off the instance because the fan-out needs the MERGED bag and pino exposes no accessor for
+ * it: a sink that only saw the call-site fields would drop every correlation id bound with
+ * `child`, which is the half a line is joined to a run by (`createRecordingLogger` folds them
+ * for the same reason).
+ */
+function adapt(instance: PinoLogger, bound: LogFields = {}): Logger {
   const emit =
     (level: LogLevel) =>
     (msg: string, fields?: LogFields): void => {
       if (LEVEL_RANK[level] < LEVEL_RANK[activeLevel]) return
       instance[level](fields ?? {}, msg)
+      // The threshold is applied ABOVE this: an exporter ships what the deployment chose to
+      // log, so `LOG_LEVEL` governs both destinations and an operator has one dial, not two.
+      // A fresh bag per line, never `bound` itself: a sink holds what it is handed (this one
+      // buffers it until a flush), and handing over the logger's own object would let it be
+      // mutated under every future line of the scope.
+      if (activeSink) fanOut(level, msg, { ...bound, ...fields })
     }
   return {
     debug: emit('debug'),
     info: emit('info'),
     warn: emit('warn'),
     error: emit('error'),
-    child: (bound) => adapt(instance.child(bound)),
+    child: (extra) => adapt(instance.child(extra), { ...bound, ...extra }),
   }
 }
 
@@ -142,4 +206,4 @@ export function createPinoLogger(destination?: pino.DestinationStream): Logger {
 export const logger: Logger = createPinoLogger()
 
 export { noopLogger }
-export type { LogFields, LogLevel, Logger }
+export type { LogFields, LogLevel, LogSink, Logger }
