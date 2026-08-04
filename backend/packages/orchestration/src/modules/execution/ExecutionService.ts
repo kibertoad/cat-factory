@@ -15,20 +15,12 @@ import type {
   PipelineStep,
   PullRequestMerger,
   StepReviewComment,
-  SubscriptionActivationRepository,
   IssueWritebackProvider,
   Logger,
 } from '@cat-factory/kernel'
-import {
-  allPullRequests,
-  DEFAULT_COMPANION_MAX_ATTEMPTS,
-  pipelineHasVisualStep,
-} from '@cat-factory/contracts'
-import { companionFor } from '@cat-factory/agents'
+import { allPullRequests } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
-import { settleRunModeForStart } from './runMode.logic.js'
 import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -36,25 +28,19 @@ import {
 } from './individualVendors.logic.js'
 import {
   assertFound,
-  ConflictError,
-  NotFoundError,
   RunContendedError,
   ReviewContendedError,
-  ValidationError,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY, noopLogger, runBestEffort } from '@cat-factory/kernel'
-import { isTesterKind } from './ci.logic.js'
-import { DEFAULT_FOLLOW_UP_MAX_LOOPS, FOLLOW_UP_PRODUCER_KIND } from './followUp.logic.js'
+import { noopLogger, runBestEffort } from '@cat-factory/kernel'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { CompanionController } from './CompanionController.js'
 import { StepGraph } from './StepGraph.js'
-import type { RunStartDeps } from './runStart.js'
-import { claimLiveRunOrConflict, handOffLiveRun } from './runStart.js'
 import { RunStateMachine } from './RunStateMachine.js'
 import { RunDispatcher } from './RunDispatcher.js'
 import { RunAdmission } from './RunAdmission.js'
 import { StepDecisionController } from './StepDecisionController.js'
+import { buildRunActionControllers, type RunActionControllers } from './run-action-controllers.js'
 import { inferTechnicalLabel } from './technical.logic.js'
 import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
@@ -73,7 +59,6 @@ import {
 } from './gate-window-facades.js'
 import { TesterController } from './TesterController.js'
 import { RalphController } from './RalphController.js'
-import { isRalphKind, resolveRalphConfig, seedRalphState } from './ralph.logic.js'
 import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
@@ -98,14 +83,13 @@ import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
 import { RunMergePolicy } from './RunMergePolicy.js'
+import type { ResolvedRunRiskPolicy } from './policy-types.js'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
-import { descendantIds } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
 import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
-import { buildResumedInstance, planResumedSteps, planRestartFromStep } from './retry.logic.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
@@ -237,7 +221,8 @@ export class ExecutionService {
    * their drops without a null-check. `noopLogger` when a facade wired none.
    */
   private readonly log: Logger
-  private readonly subscriptionActivations?: SubscriptionActivationRepository
+  // No `subscriptionActivations` field: its only reader is the run-lifecycle surface, which now
+  // takes the repository straight off the deps object (see {@link RunLifecycleController}).
   private readonly pokeInitiativeLoop?: (
     workspaceId: string,
     initiativeBlockId: string,
@@ -258,6 +243,13 @@ export class ExecutionService {
   private readonly runDispatcher: RunDispatcher
   /** The human decision surface on a parked run (approve / reject / merge / …). */
   private readonly stepDecisions: StepDecisionController
+  /**
+   * The surfaces a HUMAN drives on a whole run: its lifecycle (launch / re-launch / resume / end,
+   * which share the claim-then-hand-off order) and the three-way iteration-cap resolution both
+   * automatic-rework gates park for. Extracted so this service keeps the per-step machine; the
+   * public methods that reach them are thin pass-throughs.
+   */
+  private readonly runActions: RunActionControllers
   /** Maintains the run's verification report on its PR (a hook on step settlement). */
   private readonly prVerificationReport: PrVerificationReportController
 
@@ -365,7 +357,7 @@ export class ExecutionService {
       blockRepository,
       notificationService,
       mergeTrackRecord,
-      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
     this.companionController = new CompanionController({
@@ -395,9 +387,9 @@ export class ExecutionService {
       idGenerator,
       clock,
       clockNow: () => this.clock.now(),
-      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
-        this.dispatchIterationCap(ws, blockId, choice, handlers),
+        this.runActions.iterationCap.dispatchIterationCap(ws, blockId, choice, handlers),
       testerQualityReviewer,
       environmentProvisioning,
       environmentTeardown,
@@ -454,7 +446,6 @@ export class ExecutionService {
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
     this.log = logger ?? noopLogger
-    this.subscriptionActivations = subscriptionActivationRepository
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.stepDecisions = new StepDecisionController({
@@ -473,6 +464,35 @@ export class ExecutionService {
       failRun: (ws, id, message, kind, detail, reason) =>
         this.failRun(ws, id, message, kind, detail, reason),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
+    })
+    // The two surfaces a HUMAN drives on a whole run (its lifecycle + the iteration-cap
+    // resolution), built as one pair by the sibling factory: the cap gate's `stop-reset` branch is
+    // a run cancel, so it is bound to the lifecycle controller there rather than back through this
+    // instance. The engine methods they reach into are passed BOUND, as with the gate windows.
+    this.runActions = buildRunActionControllers({
+      admission: this.admission,
+      blockRepository: this.blockRepository,
+      clock: this.clock,
+      contextBuilder: this.contextBuilder,
+      events: this.events,
+      executionRepository: this.executionRepository,
+      idGenerator: this.idGenerator,
+      pipelineRepository: this.pipelineRepository,
+      runStateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      workRunner: this.workRunner,
+      subscriptionActivations: subscriptionActivationRepository,
+      logger: this.log,
+      // The one merge-policy fact the start path needs, as a bound callback: the lifecycle
+      // controller launches runs and has no other business with the preset layer.
+      resolveDryRunRoles: async (ws, block) =>
+        (await this.mergePolicy.resolve(ws, block)).dryRunRoles,
+      requireWorkspace: (ws) => this.requireWorkspace(ws),
+      requireBlock: (ws, id) => this.requireBlock(ws, id),
+      failRun: (ws, id, message, kind, detail, reason) =>
+        this.failRun(ws, id, message, kind, detail, reason),
+      inferBlockTechnical: (ws, block, producer, companionStep) =>
+        this.inferBlockTechnical(ws, block, producer, companionStep),
     })
   }
 
@@ -537,7 +557,7 @@ export class ExecutionService {
       ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
-      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
+      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
   }
@@ -692,237 +712,6 @@ export class ExecutionService {
       resolveDefault ? (kind) => resolveDefault(workspaceId, kind, modelPresetId) : undefined,
       hasPersonalSubscription,
     )
-  }
-
-  /** Start a pipeline against a block, replacing any prior run on it. */
-  async start(
-    workspaceId: string,
-    blockId: string,
-    pipelineId: string,
-    options: RunStartOptions = {},
-  ): Promise<ExecutionInstance> {
-    const { initiatedBy, activate, origin = 'manual', intakeOrigin, gatesOverride } = options
-    await this.requireWorkspace(workspaceId)
-    const block = await this.requireBlock(workspaceId, blockId)
-    const pipeline = assertFound(
-      await this.pipelineRepository.get(workspaceId, pipelineId),
-      'Pipeline',
-      pipelineId,
-    )
-
-    // Launch-constraint gate (start-only, NOT part of the shared retry re-validation): reject a
-    // manual start of a recurring-only pipeline (or a scheduled fire of a one-off-only one), and
-    // a bug-intake pipeline that isn't recurring. Before any side effects.
-    assertPipelineLaunchable(pipeline.agentKinds, pipeline.availability, origin, pipeline.enabled)
-
-    // Per-run gate override must be parallel to the pipeline's steps (one boolean per step,
-    // original-index-aligned like `pipeline.gates`). A mismatch means a preset's review mapping
-    // is out of step with the pipeline it targets — reject up front, before any side effects.
-    if (gatesOverride && gatesOverride.length !== pipeline.agentKinds.length) {
-      throw new ValidationError(
-        `Gate override has ${gatesOverride.length} entr${gatesOverride.length === 1 ? 'y' : 'ies'} but pipeline '${pipeline.id}' has ${pipeline.agentKinds.length} step(s).`,
-      )
-    }
-
-    // Shared config/resource preconditions (pipeline shape, frame type, tester infra, binary
-    // storage, agent backend, provider/preset satisfiability, budget) — the SAME gate a retry
-    // runs, so the two can't drift. See assertRunnable.
-    await this.admission.assertRunnable(workspaceId, block, pipeline, initiatedBy)
-
-    // A Ralph-loop step needs a programmatic completion command (its exit condition); refuse to
-    // start a misconfigured run rather than dispatch a validation-less coding pass that never
-    // gates. The command is a per-task agent-config value (the SPA also requires it at creation).
-    if (
-      pipeline.agentKinds.some(isRalphKind) &&
-      !resolveRalphConfig(block.agentConfig).validationCommand
-    ) {
-      throw new ValidationError(
-        'A Ralph loop task needs a validation command (its completion criterion) before it can ' +
-          'start. Set one in the task configuration.',
-      )
-    }
-
-    // START-ONLY gates below: a retry REPLACES the failed run rather than adding a new one, so
-    // the concurrency limit doesn't apply to it, and a re-drive of an already-started task isn't
-    // re-gated on its dependencies.
-
-    // Enforce the workspace's per-service running-task limit (off by default) — a clear,
-    // actionable error before any side effects, so the human knows why the start was refused.
-    await this.admission.assertWithinTaskLimit(workspaceId, block)
-
-    // Hard dependency gate: a task cannot start while any block it `dependsOn` is unfinished
-    // (not yet `done`/merged). Enforced server-side so it holds for manual starts, recurring
-    // fires, auto-start propagation and direct API calls alike — the frontend's runnable
-    // check is only a hint. Before any side effects so nothing is torn down on a refusal.
-    await this.admission.assertDependenciesMet(workspaceId, block)
-
-    // Mint the activation next: if the credential can't be unlocked, fail before
-    // tearing down the block's prior run or creating a new one.
-    const executionId = this.idGenerator.next('exec')
-    await activate?.(executionId)
-
-    // Read the block's prior run once: a manual re-start of an already-running block REPLACES
-    // it (the board offers "start" on a live block), so we pass its id to `insertLive` as the
-    // `replaceId` it supersedes atomically. A genuinely-CONCURRENT second start reads the SAME
-    // prior (or none), so only one insert wins and the other is rejected 409 — the loser's
-    // `replaceId` deletes only what it read, never the winner's fresh row (see insertLive).
-    const prior = await this.executionRepository.getByBlock(workspaceId, blockId)
-    // Replacing the block's prior run: clear its per-run activation now (it never reaches
-    // the terminal cleanup in emitInstance when it's still running), so a replaced run's
-    // system-encrypted token copy doesn't linger to its TTL. Keyed by the OLD run id, so
-    // the activation just minted for the new run is untouched.
-    if (this.subscriptionActivations && prior && prior.id !== executionId) {
-      // Best-effort + idempotent, mirroring the terminal cleanup in RunStateMachine.emit: a
-      // failure here must never derail the start. In mothership mode this repo is remote and
-      // `deleteByExecution` is not yet allow-listed (it throws `unknown_method`), so an
-      // unguarded call would otherwise break re-running any block; the TTL sweep reclaims the
-      // stale activation row as the backstop.
-      try {
-        await this.subscriptionActivations.deleteByExecution(prior.id)
-      } catch {
-        // Swallow — see above.
-      }
-    }
-
-    // NB: do NOT `deleteByBlock` here — `claimLiveRunOrConflict` (below) atomically clears the
-    // block's terminal rows AND the `prior` run it replaces, then inserts the new live run, so a
-    // concurrent double-start is rejected by the live-run index instead of both wiping each
-    // other's row (see insertLive).
-
-    // Build the run only from the ENABLED steps. A step the pipeline marked
-    // `enabled[i] === false` is kept in the saved pipeline (so it can be toggled back
-    // on later) but skipped here entirely. Gates/thresholds are read by the kind's
-    // ORIGINAL index `i`, so they stay aligned to the kind even when earlier steps are
-    // skipped; the first SURVIVING step is the one that starts working.
-    const steps: PipelineStep[] = pipeline.agentKinds
-      .map((kind, i) => ({ kind, i }))
-      .filter(({ i }) => pipeline.enabled?.[i] !== false)
-      .map(({ kind, i }, position) => {
-        const companionDef = companionFor(kind)
-        return {
-          agentKind: kind,
-          state: position === 0 ? 'working' : 'pending',
-          progress: 0,
-          decision: null,
-          // A gated step pauses for human approval once its proposal is ready (see
-          // recordStepResult). A per-run override (the initiative-preset seam) wins over the
-          // pipeline's own gate for this step; else the pipeline definition at run start. Both
-          // read by the step's ORIGINAL index `i`, so they stay aligned to the kind even when
-          // earlier steps are disabled.
-          requiresApproval: gatesOverride?.[i] ?? pipeline.gates?.[i] ?? false,
-          approval: null,
-          // A consensus-enabled step runs through the multi-model mechanism (the consensus
-          // executor reads this off the context). Copied from the pipeline at run start.
-          ...(pipeline.consensus?.[i] ? { consensus: pipeline.consensus[i] } : {}),
-          // Estimate gating: when set+enabled the step is skipped at runtime unless the
-          // block estimate (written by an earlier task-estimator step) meets the threshold.
-          ...(pipeline.gating?.[i] ? { gating: pipeline.gating[i] } : {}),
-          // The extensible per-step options bag (the new home for per-step parameters — see
-          // stepOptionsSchema). Copied from the pipeline at run start, keyed by the step's
-          // ORIGINAL index `i`, so it stays aligned to the kind even when earlier steps are
-          // disabled. Today it carries the requirements-review `autoRecommend` toggle.
-          ...(pipeline.stepOptions?.[i] ? { stepOptions: pipeline.stepOptions[i] } : {}),
-          // A companion step carries its quality bar + rework budget, seeded from the
-          // pipeline's per-step threshold (else the companion's default).
-          ...(companionDef
-            ? {
-                companion: {
-                  threshold: pipeline.thresholds?.[i] ?? companionDef.defaultThreshold,
-                  maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
-                  attempts: 0,
-                  verdicts: [],
-                },
-              }
-            : {}),
-          // The Follow-up companion is on by default for a `coder` step; the pipeline's
-          // per-step `followUps[i] === false` toggle disables it. Seeded empty here; the
-          // harness streams items in as the Coder surfaces them (see pollAgentJob).
-          ...(kind === FOLLOW_UP_PRODUCER_KIND && pipeline.followUps?.[i] !== false
-            ? {
-                followUps: {
-                  enabled: true,
-                  items: [],
-                  loops: 0,
-                  maxLoops: DEFAULT_FOLLOW_UP_MAX_LOOPS,
-                },
-              }
-            : {}),
-          // The test quality-control companion is on by default for a Tester step; the
-          // pipeline's per-step `testerQuality[i].enabled === false` disables it. `maxAttempts`
-          // is seeded with the default ceiling here and refreshed from the task's resolved
-          // merge preset on the first report (TesterController). Optional estimate gating is
-          // carried through so it can be evaluated against the block estimate at gate time.
-          ...(isTesterKind(kind) && pipeline.testerQuality?.[i]?.enabled !== false
-            ? {
-                testerQuality: {
-                  enabled: true,
-                  attempts: 0,
-                  maxAttempts: DEFAULT_RISK_POLICY.maxTesterQualityIterations,
-                  verdicts: [],
-                  ...(pipeline.testerQuality?.[i]?.gating
-                    ? { gating: pipeline.testerQuality[i]!.gating }
-                    : {}),
-                },
-              }
-            : {}),
-          // A `ralph` step carries its persistent-loop state — the iteration count, the budget,
-          // and the programmatic completion command — seeded from the block's per-task agent
-          // config. Riding the persisted step is what lets a mid-loop run survive a restart
-          // (both durable drivers + sweepers re-drive from it). See ralph.logic.ts.
-          ...(isRalphKind(kind)
-            ? { ralph: seedRalphState(resolveRalphConfig(block.agentConfig)) }
-            : {}),
-        }
-      })
-    if (steps.length === 0) {
-      throw new ValidationError('Pipeline has no enabled steps to run.')
-    }
-    // For a visual (UI-test) pipeline on a frontend frame, resolve its backend bindings ONCE at
-    // start and stamp both the resolved bindings and the non-fatal advisories (duplicate env vars,
-    // or a partial-live set of bound services) on the run. The bindings are a frozen snapshot so
-    // the SPA's run/step detail projects what the run ACTUALLY drove against (truthful after the
-    // envs are torn down). Only paid for a visual pipeline — the same condition the tester infra
-    // gate keys off — so a plain backend run does no extra env read. Absent → no notes/bindings.
-    const frontendRun = pipelineHasVisualStep({ agentKinds: pipeline.agentKinds })
-      ? await this.contextBuilder.resolveFrontendRunInfo(workspaceId, block)
-      : undefined
-    // Settle the run's MODE once and pin it (contract doc: why it is never re-read at merge time).
-    const { mode, notes } = await settleRunModeForStart({
-      requested: options.mode,
-      role: options.initiatedByRole,
-      loadDryRunRoles: async () => (await this.mergePolicy.resolve(workspaceId, block)).dryRunRoles,
-      baseNotes: frontendRun?.notes ?? [],
-      logger: this.log,
-      fields: { workspaceId, executionId, blockId },
-    })
-
-    const instance: ExecutionInstance = {
-      id: executionId,
-      blockId,
-      pipelineId: pipeline.id,
-      pipelineName: pipeline.name,
-      steps,
-      currentStep: 0,
-      status: 'running',
-      initiatedBy: initiatedBy ?? null,
-      // Pinned for the durable merge path; `mode` is stored only when sandboxed (`live` is read).
-      initiatedByRole: options.initiatedByRole ?? null,
-      ...(mode === 'dry_run' ? { mode } : {}),
-      // Only a headless start carries an explicit intake origin; `ui` is the read-time
-      // default, so an ordinary board/schedule start stores nothing extra.
-      ...(intakeOrigin != null ? { intakeOrigin } : {}),
-      createdAt: this.clock.now(),
-      ...(notes.length ? { notes } : {}),
-      ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
-    }
-    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, prior?.id)
-    await this.blockRepository.update(workspaceId, blockId, {
-      status: 'in_progress',
-      progress: 0,
-      executionId: instance.id,
-    })
-    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
-    return instance
   }
 
   /**
@@ -1263,142 +1052,19 @@ export class ExecutionService {
       : this.requirementsBrainstormKind
   }
 
-  /**
-   * Route an iteration-cap resolution to its gate-specific handlers. `stop-reset` is
-   * uniform across gates: cancel the run and return the block to phase zero (editable),
-   * keeping whatever reference artifact each gate persists (the requirements doc on its
-   * own table; a companion's producer output on its branch). Shared by the requirements
-   * gate (`requirementsReview.resolveExceeded`, via {@link ReviewGateController}) and the
-   * companion gate ({@link resolveCompanionExceeded}) so the three-way choice lives in one place.
-   */
-  private async dispatchIterationCap(
-    workspaceId: string,
-    blockId: string,
-    choice: IterationCapChoice,
-    handlers: { extraRound: () => Promise<unknown>; proceed: () => Promise<unknown> },
-  ): Promise<void> {
-    if (choice === 'extra-round') {
-      await handlers.extraRound()
-    } else if (choice === 'proceed') {
-      await handlers.proceed()
-    } else {
-      // stop-reset: tear down the run + reset the block to phase zero (editable).
-      await this.cancel(workspaceId, blockId)
-    }
-  }
-
-  /**
-   * Resolve a companion step parked at its automatic-rework cap (`companion.exceeded`):
-   * grant one more round, proceed accepting the producer's current output, or stop the
-   * task and reset it to phase zero. The companion mirror of the requirements
-   * iteration-cap resolution (`requirementsReview.resolveExceeded`), sharing the iteration-cap dispatch + the
-   * gate-resume plumbing. Idempotent — an already-resolved gate returns the instance
-   * unchanged. Scoped by execution + approval id (the execution controller surface),
-   * since a companion gate is not block-addressed like the requirements window.
-   */
-  async resolveCompanionExceeded(
+  /** @see IterationCapController.resolveCompanionExceeded */
+  resolveCompanionExceeded(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     choice: IterationCapChoice,
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    // Optimistic-concurrency human-action write (race-audit 2.2 controller-half): both non-cancel
-    // branches persist under `mutateInstance` (load fresh → re-find the gate → mutate → CAS), so a
-    // concurrent driver poll — or a `stopRun`/`cancel` racing this resolve — can't be clobbered by a
-    // blind full-row upsert, and a cancelled run is never resurrected. The pure in-memory mutation
-    // runs inside the CAS; the non-idempotent side effects (block writes, `technical` inference,
-    // driver signal, emit) run once after, on the winning snapshot — the same pure/side-effect split
-    // `approveStep` and the review gate-resume use. The validation snapshot below gives a fast
-    // 404/409 (and the idempotent already-resolved early return).
-    const snapshot = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
+    return this.runActions.iterationCap.resolveCompanionExceeded(
+      workspaceId,
       executionId,
+      approvalId,
+      choice,
     )
-    const snapStep = snapshot.steps.find((s) => s.approval?.id === approvalId)
-    if (!snapStep || !snapStep.approval) throw new NotFoundError('Approval', approvalId)
-    if (!snapStep.companion?.exceeded) {
-      throw new ConflictError(`Approval '${approvalId}' is not a companion iteration-cap gate`)
-    }
-    if (snapStep.approval.status === 'approved') return snapshot
-
-    // The state the caller sees: the winning post-mutation snapshot for extra-round/proceed, or
-    // the pre-cancel snapshot for stop-reset (the run row is deleted, so there's nothing to re-read).
-    let result = snapshot
-    await this.dispatchIterationCap(workspaceId, snapshot.blockId, choice, {
-      // Grant one more automatic rework: raise the budget by one, clear the cap flag, then loop
-      // the producer back through the companion to re-grade (`loopCompanionProducer` re-arms the
-      // run `running`). The last verdict's feedback drives the rework.
-      extraRound: async () => {
-        let signalId: string | undefined
-        const persisted = await this.runStateMachine.mutateInstance(
-          workspaceId,
-          executionId,
-          (inst) => {
-            const i = inst.steps.findIndex((s) => s.approval?.id === approvalId)
-            const s = inst.steps[i]
-            if (!s?.companion || !s.approval) throw new NotFoundError('Approval', approvalId)
-            // Another writer already resolved this gate: no-op (idempotent) and skip the signal.
-            if (s.approval.status === 'approved') {
-              signalId = undefined
-              return
-            }
-            s.companion.maxAttempts += 1
-            s.companion.exceeded = undefined
-            const producer = inst.steps[this.stepGraph.companionProducerIndex(inst, i)]
-            // Capture the approval id BEFORE `loopCompanionProducer`: it resets the companion
-            // step for re-run (`resetStepForRerun`), which NULLS `s.approval`, so reading
-            // `s.approval.id` after would throw. The signal targets the gate's original approval.
-            signalId = s.approval.id
-            this.stepGraph.loopCompanionProducer(inst, i, {
-              previousProposal: producer?.output ?? '',
-              feedback: s.companion.verdicts.at(-1)?.feedback ?? '',
-            })
-          },
-        )
-        result = persisted
-        if (!signalId) return
-        await this.runStateMachine.updateBlockProgress(workspaceId, persisted, 'in_progress')
-        await this.workRunner.signalDecision(workspaceId, persisted.id, signalId, 'extra-round')
-        await this.runStateMachine.emitInstance(workspaceId, persisted)
-      },
-      // Proceed: accept the producer's current output and advance past the gate.
-      proceed: async () => {
-        let stepIndex = -1
-        const persisted = await this.runStateMachine.mutateInstance(
-          workspaceId,
-          executionId,
-          (inst) => {
-            stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
-            const s = inst.steps[stepIndex]
-            if (!s?.companion || !s.approval) throw new NotFoundError('Approval', approvalId)
-            if (s.approval.status === 'approved') {
-              stepIndex = -1
-              return
-            }
-            s.companion.exceeded = undefined
-            s.approval.status = 'approved'
-            this.runStateMachine.advanceRunPastGate(inst, stepIndex)
-          },
-        )
-        result = persisted
-        if (stepIndex === -1) return
-        // The spec-companion never reached its automatic PASS branch, but both signals are
-        // persisted (the producer's `noBusinessSpecs` + this step's `technicalCorroborated`),
-        // so infer the block's `technical` label here too — best-effort, human-authority
-        // preserved — before settling the advance.
-        const step = persisted.steps[stepIndex]!
-        if (step.agentKind === 'spec-companion') {
-          const producer =
-            persisted.steps[this.stepGraph.companionProducerIndex(persisted, stepIndex)]
-          const block = await this.blockRepository.get(workspaceId, persisted.blockId)
-          if (producer && block) await this.inferBlockTechnical(workspaceId, block, producer, step)
-        }
-        await this.runStateMachine.settleAdvancedGate(workspaceId, persisted, stepIndex)
-      },
-    })
-    return result
   }
 
   // The clarity / human-testing / visual-confirmation gate-window actions now live on the
@@ -1532,6 +1198,14 @@ export class ExecutionService {
   }
 
   /**
+   * Resolve the merge threshold preset that governs a task — delegated to {@link RunMergePolicy}
+   * (preset resolution + its cache read-through live there, alongside the track-record settle).
+   */
+  private resolveRiskPolicy(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
+    return this.mergePolicy.resolve(workspaceId, block)
+  }
+
+  /**
    * Materialise the module a merged task was assigned to. Delegates to
    * {@link PostMergeBoardController}.
    */
@@ -1627,330 +1301,69 @@ export class ExecutionService {
     return this.runStateMachine.failRun(workspaceId, executionId, message, kind, detail, reason)
   }
 
-  /**
-   * Retry a failed run: re-drive the same pipeline on the same block, **resuming
-   * from the step that actually failed** rather than restarting from step 0. The
-   * steps that already completed are preserved (so a `coder` failure in `pl_full`
-   * doesn't re-run the human-gated `requirements`/`architect` steps before it);
-   * the failed step and everything after it are reset to a clean, re-runnable
-   * state. Only a `failed` run can be retried.
-   *
-   * A fresh instance id is minted because the durable runner addresses one
-   * Workflows instance per execution id and the failed one is terminal — the new
-   * instance simply starts with `currentStep` pointed at the failed step, so the
-   * driver advances forward from there and never re-issues the completed steps'
-   * work. Mirrors {@link BootstrapService.retry}; both are reached via the unified
-   * `POST /agent-runs/:id/retry` endpoint.
-   */
-  async retry(
+  // ---- run-lifecycle pass-throughs ----------------------------------------
+  // Launching, re-launching, resuming and ending a run all live on
+  // {@link RunLifecycleController} (they share the claim-then-hand-off order documented there);
+  // these thin delegations keep this service the single surface the HTTP layer talks to.
+
+  /** @see RunLifecycleController.start */
+  start(
     workspaceId: string,
-    executionId: string,
-    /** The retrying user (their personal subscription is used for individual-usage
-     *  models). Falls back to the original initiator when omitted. */
-    initiatedBy?: string | null,
-    /** Mint the per-run personal-credential activation (see {@link start}). */
-    activate?: (executionId: string) => Promise<void>,
+    blockId: string,
+    pipelineId: string,
+    options: RunStartOptions = {},
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    const previous = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    if (previous.status !== 'failed') {
-      throw new ConflictError(
-        `Only a failed run can be retried (run is '${previous.status}').`,
-        'run_not_retryable',
-        { status: previous.status },
-      )
-    }
-    const block = await this.requireBlock(workspaceId, previous.blockId)
-
-    // Run the SAME config/resource preconditions start() does (shape, frame type, tester infra,
-    // binary storage, agent backend, provider/preset satisfiability, budget), so a retry can't
-    // silently proceed on a config a fresh start would refuse — the drift that let a
-    // subscription-only preset fail mid-run against the routing default. Validated over the
-    // STORED steps (what the retry actually re-drives), not the current pipeline definition, so
-    // an out-of-band pipeline edit can't skew the gate and a deleted pipeline needs no special
-    // case. Before any side effects.
-    await this.admission.assertRunnable(
-      workspaceId,
-      block,
-      this.admission.runnableShapeOf(previous.steps),
-      initiatedBy ?? previous.initiatedBy,
-    )
-
-    const { steps, currentStep } = planResumedSteps(previous)
-    // Mint the activation before replacing the failed run, so a bad password aborts
-    // the retry without losing the retryable terminal run.
-    const newId = this.idGenerator.next('exec')
-    const replaceId = previous.id
-    await activate?.(newId)
-    // Replace the terminal failed run for this block with the resumed one (single run per
-    // block, matching the board's by-block projection). This mints a FRESH run id; the
-    // atomic `claimLiveRunOrConflict` below replaces `previous` (via `replaceId`) and clears
-    // any terminal rows in the SAME transaction, so a concurrent double-retry is serialised by
-    // the live-run index (the loser gets a 409) instead of both deleting-then-inserting.
-    const instance = buildResumedInstance({
-      previous,
-      id: newId,
-      plan: { steps, currentStep },
-      initiatedBy,
-      now: this.clock.now(),
-    })
-    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
-    const done = steps.filter((s) => s.state === 'done').length
-    await this.blockRepository.update(workspaceId, previous.blockId, {
-      status: 'in_progress',
-      progress: steps.length > 0 ? done / steps.length : 0,
-      executionId: instance.id,
-    })
-    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
-    return instance
+    return this.runActions.lifecycle.start(workspaceId, blockId, pipelineId, options)
   }
 
-  /**
-   * Restart a run from a human-chosen step: re-run from `fromStepIndex` onward,
-   * regardless of how far the run had progressed (a `done`, `failed`, `blocked`,
-   * `paused` or still-`running` run are all valid sources). Unlike {@link retry}
-   * (which resumes at the first FAILURE) this rewinds to an arbitrary step the user
-   * picked — so it can re-run steps that already completed.
-   *
-   * What is preserved vs reset:
-   * - Steps BEFORE `fromStepIndex` keep their `output`/approval/timing untouched, so
-   *   the engine still hands the restarted step its predecessors' work as
-   *   `priorOutputs` (and their resolved `decisions`) — a useful handoff.
-   * - The chosen step and every later one are reset to a clean, re-runnable state,
-   *   dropping each step's iteration counters (companion attempts, gate/test attempts,
-   *   eviction recoveries) so the restart starts those loops from zero.
-   * - A block's incorporated requirements are NOT touched: they live on the
-   *   requirement-review record, so a restarted spec-writer/coder still receives the
-   *   incorporated document (or the base description when none was generated). When the
-   *   chosen step is the `requirements-review` gate ITSELF, re-running it mints a fresh
-   *   iteration-1 review (the reviewer's `review()` replaces the prior one), which is
-   *   exactly the "reset the iterations counter from this step" semantics.
-   *
-   * Like {@link retry} a fresh instance id is minted (the durable runner addresses one
-   * driver per execution id). Any still-live driver/container for the run being
-   * replaced is torn down first, so restarting a RUNNING run never orphans a container
-   * or a parked Workflows instance.
-   */
-  async restartFromStep(
+  /** @see RunLifecycleController.retry */
+  retry(
+    workspaceId: string,
+    executionId: string,
+    initiatedBy?: string | null,
+    activate?: (executionId: string) => Promise<void>,
+  ): Promise<ExecutionInstance> {
+    return this.runActions.lifecycle.retry(workspaceId, executionId, initiatedBy, activate)
+  }
+
+  /** @see RunLifecycleController.restartFromStep */
+  restartFromStep(
     workspaceId: string,
     executionId: string,
     fromStepIndex: number,
-    /** The restarting user (their personal subscription is used for individual-usage
-     *  models). Falls back to the original initiator when omitted. */
     initiatedBy?: string | null,
-    /** Mint the per-run personal-credential activation (see {@link start}). */
     activate?: (executionId: string) => Promise<void>,
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    const previous = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    const block = await this.requireBlock(workspaceId, previous.blockId)
-    if (
-      !Number.isInteger(fromStepIndex) ||
-      fromStepIndex < 0 ||
-      fromStepIndex >= previous.steps.length
-    ) {
-      throw new ValidationError(
-        `Step ${fromStepIndex} is out of range for this run (it has ${previous.steps.length} step(s)).`,
-      )
-    }
-
-    // Run the SAME config/resource preconditions start()/retry() do, over the STORED steps this
-    // restart re-drives (frame type, tester infra, binary storage, agent backend, provider/preset
-    // satisfiability, budget). A restart re-dispatches provider-bearing steps just like a retry,
-    // so it must be gated identically — otherwise a run whose preset can't run every step (e.g. a
-    // subscription-only model an inline reviewer can't drive) strands mid-run instead of being
-    // refused up front. Before any teardown/side effects.
-    await this.admission.assertRunnable(
+    return this.runActions.lifecycle.restartFromStep(
       workspaceId,
-      block,
-      this.admission.runnableShapeOf(previous.steps),
-      initiatedBy ?? previous.initiatedBy,
-    )
-
-    // Tear down whatever was driving the run we're about to replace — its per-run
-    // container AND its durable driver — before minting the restart. A `done`/`failed`
-    // run is already terminal (a no-op teardown), but a still-`running` run would
-    // otherwise leak a container and a live Workflows/pg-boss driver.
-    await this.runStateMachine.stopRunContainer(workspaceId, previous)
-    await this.workRunner.cancelRun(workspaceId, executionId)
-
-    const { steps, currentStep } = planRestartFromStep(previous, fromStepIndex)
-    // Mint the activation before replacing the prior run, so a bad password aborts the
-    // restart without losing the source run.
-    const newId = this.idGenerator.next('exec')
-    const replaceId = previous.id
-    await activate?.(newId)
-    // Like retry(), this mints a FRESH run id. `claimLiveRunOrConflict` atomically supersedes
-    // the torn-down source run (`replaceId`, which here may still be LIVE — running/paused/
-    // blocked) and clears terminal rows in one transaction, so a concurrent start that already
-    // created a NEW live run for the block loses (409) instead of being silently clobbered.
-    const instance = buildResumedInstance({
-      previous,
-      id: newId,
-      plan: { steps, currentStep },
+      executionId,
+      fromStepIndex,
       initiatedBy,
-      now: this.clock.now(),
-    })
-    await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, replaceId)
-    const done = steps.filter((s) => s.state === 'done').length
-    await this.blockRepository.update(workspaceId, previous.blockId, {
-      status: 'in_progress',
-      progress: steps.length > 0 ? done / steps.length : 0,
-      executionId: instance.id,
-    })
-    await handOffLiveRun(this.runStartDeps, workspaceId, instance, block)
-    return instance
+      activate,
+    )
   }
 
-  /**
-   * The bound callbacks the two run-start funnels (`runStart.ts`) need, so they depend on no
-   * concrete repository or service. Those funnels own the ORDER between a run's atomic claim and
-   * its hand-off and are documented there; every start path calls both, writing the block state
-   * that path owns in between.
-   */
-  private get runStartDeps(): RunStartDeps {
-    return {
-      insertLive: (ws, instance, options) =>
-        this.executionRepository.insertLive(ws, instance, options),
-      startRun: (ws, id) => this.workRunner.startRun(ws, id),
-      emitInstance: (ws, instance) => this.runStateMachine.emitInstance(ws, instance),
-      publishRunStarted: (ws, instance, block) =>
-        this.runStateMachine.publishRunStarted(ws, instance, block),
-    }
+  /** @see RunLifecycleController.resumePaused */
+  resumePaused(workspaceId: string): Promise<ExecutionInstance[]> {
+    return this.runActions.lifecycle.resumePaused(workspaceId)
   }
 
-  /**
-   * Resume every run paused by the spend safeguard in this workspace. Flips them
-   * back to `running` and re-drives the durable runner. If the budget is still
-   * exhausted the spend gate will simply pause them again on their next step.
-   */
-  async resumePaused(workspaceId: string): Promise<ExecutionInstance[]> {
-    await this.requireWorkspace(workspaceId)
-    // Lean projection: only the paused runs' ids are needed to re-drive them — no `detail` decode.
-    const live = await this.executionRepository.listLive(workspaceId)
-    const paused = live.filter((e) => e.status === 'paused')
-    for (const p of paused) {
-      // Optimistic-concurrency write: only flip + re-drive a run that is STILL paused at
-      // write time, so a resume racing the driver (or a concurrent resume) can't clobber a
-      // run another writer already advanced. A vanished/contended run is skipped (the next
-      // sweep retries) rather than failing the whole batch.
-      let flipped = false
-      const resumed = await this.runStateMachine
-        .mutateInstance(workspaceId, p.id, (inst) => {
-          flipped = inst.status === 'paused'
-          if (flipped) inst.status = 'running'
-        })
-        .catch(() => null)
-      if (resumed && flipped) {
-        // `startRun` re-drives runners that re-create the run from scratch (pg-boss re-enqueues
-        // the same id). On Cloudflare the paused run's Workflows instance is still ALIVE parked
-        // on a `waitForEvent`, so `startRun`'s `create` no-ops there; `signalResume` delivers the
-        // event that wakes it immediately instead of waiting out the periodic budget re-check.
-        await this.workRunner.startRun(workspaceId, resumed.id)
-        await this.workRunner.signalResume?.(workspaceId, resumed.id)
-        await this.runStateMachine.emitInstance(workspaceId, resumed)
-      }
-    }
-    // Clear the workspace-scoped `budget_paused` card now the pause is being lifted (F3). If the
-    // budget is still exhausted a resumed run re-pauses and re-raises it on its next step.
-    await this.runStateMachine.clearBudgetPaused(workspaceId)
-    return this.executionRepository.listByWorkspace(workspaceId)
+  /** @see RunLifecycleController.cancel */
+  cancel(workspaceId: string, blockId: string): Promise<Block> {
+    return this.runActions.lifecycle.cancel(workspaceId, blockId)
   }
 
-  /** Cancel the run on a block, returning it to `planned`. */
-  async cancel(workspaceId: string, blockId: string): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    await this.requireBlock(workspaceId, blockId)
-    // Tear down the durable run (if any) AND its per-run container before removing
-    // the record, so a cancel never leaves a container running until its watchdog.
-    const existing = await this.executionRepository.getByBlock(workspaceId, blockId)
-    if (existing) {
-      await this.runStateMachine.stopRunContainer(workspaceId, existing)
-      await this.workRunner.cancelRun(workspaceId, existing.id)
-    }
-    await this.executionRepository.deleteByBlock(workspaceId, blockId)
-    await this.blockRepository.update(workspaceId, blockId, {
-      status: 'planned',
-      progress: 0,
-      executionId: null,
-    })
-    // The run record is gone and the block is back to planned; the client can't
-    // reconstruct that from a per-instance event, so signal a coarse refresh. Name the block
-    // so the refresh fans out to every board mounting its shared service.
-    await this.events.boardChanged(workspaceId, 'cancel', blockId)
-    return this.requireBlock(workspaceId, blockId)
-  }
-
-  /**
-   * Explicitly stop a *running* run by id (the unified `POST /agent-runs/:id/stop`
-   * surface): kill its per-run container, tear down the durable driver, then record
-   * a terminal `cancelled` failure so the board shows the run stopped (with retry)
-   * rather than spinning forever. Idempotent — a run already terminal is returned
-   * as-is. `opts.reason`/`opts.kind` let the orphan sweep reuse this with its own
-   * wording instead of the user-facing default.
-   */
-  async stopRun(
+  /** @see RunLifecycleController.stopRun */
+  stopRun(
     workspaceId: string,
     executionId: string,
     opts: { reason?: string; kind?: AgentFailureKind } = {},
   ): Promise<ExecutionInstance> {
-    await this.requireWorkspace(workspaceId)
-    const instance = assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
-    if (instance.status === 'failed' || instance.status === 'done') return instance
-    await this.runStateMachine.stopRunContainer(workspaceId, instance)
-    await this.workRunner.cancelRun(workspaceId, executionId)
-    await this.failRun(
-      workspaceId,
-      executionId,
-      opts.reason ?? 'Stopped by the user.',
-      opts.kind ?? 'cancelled',
-    )
-    return assertFound(
-      await this.executionRepository.get(workspaceId, executionId),
-      'Execution',
-      executionId,
-    )
+    return this.runActions.lifecycle.stopRun(workspaceId, executionId, opts)
   }
 
-  /**
-   * Tear down every run under a block subtree — kill each container, terminate each
-   * durable driver, and delete the run record — so deleting a service/module never
-   * orphans a container or a Workflows instance. Best-effort and silent: the board
-   * delete that follows emits the coarse refresh, so no per-run event is needed.
-   *
-   * Returns the workspace block list it loaded so the immediately-following `removeBlock`
-   * can reuse it instead of re-listing the whole board (this teardown deletes only run
-   * records, never blocks, so the list is still current) — see {@link PreloadedBlocks}.
-   */
-  async teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
-    const blocks = await this.blockRepository.listByWorkspace(workspaceId)
-    // Resolve every run in one query and index by block id, rather than a per-block
-    // getByBlock (N+1) over the whole subtree.
-    const runsByBlock = new Map(
-      (await this.executionRepository.listByWorkspace(workspaceId)).map((run) => [
-        run.blockId,
-        run,
-      ]),
-    )
-    for (const blockId of descendantIds(blocks, rootId)) {
-      const run = runsByBlock.get(blockId)
-      if (!run) continue
-      await this.runStateMachine.stopRunContainer(workspaceId, run)
-      await this.workRunner.cancelRun(workspaceId, run.id)
-      await this.executionRepository.deleteByBlock(workspaceId, blockId)
-    }
-    return { workspaceId, blocks }
+  /** @see RunLifecycleController.teardownForBlockTree */
+  teardownForBlockTree(workspaceId: string, rootId: string): Promise<PreloadedBlocks> {
+    return this.runActions.lifecycle.teardownForBlockTree(workspaceId, rootId)
   }
 }
