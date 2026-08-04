@@ -394,6 +394,9 @@ export type {
   MergeDecisionThresholds,
   MergeClassRule,
   MergeClassRules,
+  // Role-scoped narrowing of the per-class rules, plus the sandboxed run mode.
+  ClassRulesByRole,
+  RunMode,
   // Merge track record (per-class human evidence behind the auto-merge policy).
   ChangeClass,
   ReviewEffort,

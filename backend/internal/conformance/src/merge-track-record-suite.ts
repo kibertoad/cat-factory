@@ -269,6 +269,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
 
     registerMergeEffortTagTests(harness, driveMergerRun, rollupFor)
     registerMergeClassFallbackTests(harness, driveMergerRun, rollupFor)
+    registerRoleScopedPolicyTests(harness)
   })
 }
 
@@ -525,5 +526,85 @@ function registerMergeClassFallbackTests(
     expect(byClass.get('schema')?.total).toBe(0)
     // One response, every class — never one request per class.
     expect(res.body).toHaveLength(7)
+  })
+}
+
+/**
+ * Role-scoped merge policy + the sandboxed run mode, asserted across runtimes.
+ *
+ * What genuinely differs between D1 and Postgres here is the PERSISTENCE of the two new preset
+ * columns — a JSON map and a JSON array, written and read back by two independently-written
+ * repositories. The narrowing rule itself is pure kernel logic pinned by unit tests, so what
+ * these assert is that a preset authored on either runtime resolves to the same policy.
+ *
+ * Registered from the suite above; split out to keep each function within the per-function
+ * line budget.
+ */
+function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
+  it('round-trips role-scoped class rules and sandboxed roles on a preset', async () => {
+    const app = harness.makeApp({})
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const created = await app.call<RiskPolicy>('POST', `/workspaces/${wsId}/risk-policies`, {
+      name: 'Role scoped',
+      maxComplexity: 0.5,
+      maxRisk: 0.4,
+      maxImpact: 0.5,
+      ciMaxAttempts: 10,
+      maxRequirementIterations: 6,
+      maxRequirementConcernAllowed: 'none',
+      classRules: { docs: 'always', dependency: 'always' },
+      classRulesByRole: { member: { dependency: 'never' } },
+      dryRunRoles: ['viewer'],
+    })
+    expect(created.status).toBe(201)
+    expect(created.body.classRulesByRole).toEqual({ member: { dependency: 'never' } })
+    expect(created.body.dryRunRoles).toEqual(['viewer'])
+
+    // Read back through a SECOND request, so the assertion covers the repository's row→entity
+    // mapping rather than only what the create handler happened to echo.
+    const listed = await app.call<RiskPolicy[]>('GET', `/workspaces/${wsId}/risk-policies`)
+    expect(listed.status).toBe(200)
+    const stored = listed.body.find((p) => p.id === created.body.id)
+    expect(stored?.classRulesByRole).toEqual({ member: { dependency: 'never' } })
+    expect(stored?.dryRunRoles).toEqual(['viewer'])
+  })
+
+  it('rejects a role-scoped rule authored for the unruleable `unknown` class', async () => {
+    // The same invariant the base map carries, one tier in: an unreadable diff must fall back to
+    // the score thresholds, so no rule may be authored against `unknown` — at either tier.
+    const app = harness.makeApp({})
+    const { workspace } = await app.createWorkspace()
+    const res = await app.call<RiskPolicy>('POST', `/workspaces/${workspace.id}/risk-policies`, {
+      name: 'Bad role rule',
+      maxComplexity: 0.5,
+      maxRisk: 0.4,
+      maxImpact: 0.5,
+      ciMaxAttempts: 10,
+      maxRequirementIterations: 6,
+      maxRequirementConcernAllowed: 'none',
+      classRulesByRole: { member: { unknown: 'always' } } as never,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('defaults both to empty on a preset that authors neither', async () => {
+    // The identity that keeps every pre-existing preset on exactly its previous behaviour: no
+    // role narrows anything, nobody is sandboxed.
+    const app = harness.makeApp({})
+    const { workspace } = await app.createWorkspace()
+    const res = await app.call<RiskPolicy>('POST', `/workspaces/${workspace.id}/risk-policies`, {
+      name: 'Plain',
+      maxComplexity: 0.5,
+      maxRisk: 0.4,
+      maxImpact: 0.5,
+      ciMaxAttempts: 10,
+      maxRequirementIterations: 6,
+      maxRequirementConcernAllowed: 'none',
+    })
+    expect(res.status).toBe(201)
+    expect(res.body.classRulesByRole).toEqual({})
+    expect(res.body.dryRunRoles).toEqual([])
   })
 }

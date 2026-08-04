@@ -565,7 +565,8 @@
         "foundational_service_exists": "Ce service fondamental existe déjà",
         "binary_output_service_invalid": "Service des sorties binaires introuvable",
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
-        "foundational_service_not_inherited": "Ce tableau a enregistré ce service"
+        "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
+        "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -597,7 +598,8 @@
         "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception.",
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
-        "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau."
+        "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
+        "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1241,7 +1243,9 @@
         "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne.",
         "merge_partial": "Certaines des pull requests de la tâche ont été fusionnées, mais une suivante n'a pas pu l'être, le changement attend donc qu'une personne termine ou annule la fusion multi-dépôt.",
         "class_auto_merge": "Ce préréglage fusionne toujours automatiquement cette catégorie de changement : les scores n’ont donc pas été comparés.",
-        "class_requires_review": "Ce préréglage envoie toujours cette catégorie de changement à un humain, quels que soient les scores."
+        "class_requires_review": "Ce préréglage envoie toujours cette catégorie de changement à un humain, quels que soient les scores.",
+        "role_requires_review": "Ce préréglage soumet les exécutions lancées par un {role} à une revue humaine pour ce type de modification, quels que soient les scores. Un collègue d'un niveau supérieur peut fusionner cette PR telle quelle.",
+        "dry_run": "Il s'agissait d'une exécution à blanc : la pull request est restée ouverte pour une personne et les scores n'ont pas été comparés. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "scores": "Scores",
       "axis": {
@@ -6252,6 +6256,12 @@
       "minor": "Remarques mineures",
       "major": "Reprise importante",
       "classHistory": "{merged} fusionnés dans cette catégorie, dont {autoShare} automatiquement"
+    },
+    "role": {
+      "admin": "administrateur",
+      "member": "membre",
+      "viewer": "lecteur",
+      "unattributed": "un démarrage automatique"
     }
   },
   "vcs": {

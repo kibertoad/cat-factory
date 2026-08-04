@@ -58,6 +58,11 @@ export const CONFLICT_REASONS = [
   'agent_backend_unconfigured',
   'run_not_retryable',
   'no_pr_to_merge',
+  // The block's PR came from a DRY RUN, so the platform merge path refuses it. Kept apart from
+  // `no_pr_to_merge` because the PR is real and awaiting review — what is missing is the
+  // authority to land it, and the remedy is to re-run the task live rather than to look for a
+  // PR that does not exist.
+  'dry_run_not_mergeable',
   'github_not_connected',
   'bootstrap_not_retryable',
   'bootstrap_reference_missing',

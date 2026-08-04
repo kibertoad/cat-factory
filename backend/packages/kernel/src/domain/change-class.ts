@@ -1,4 +1,10 @@
-import type { ChangeClass, MergeClassRule, MergeClassRules } from '@cat-factory/contracts'
+import type {
+  ChangeClass,
+  ClassRulesByRole,
+  MergeClassRule,
+  MergeClassRules,
+  WorkspaceRole,
+} from '@cat-factory/contracts'
 
 // ---------------------------------------------------------------------------
 // Pure, DETERMINISTIC change classification: given the paths a pull request
@@ -319,4 +325,84 @@ export function resolveMergeClassRule(
 ): MergeClassRule {
   if (changeClass === 'unknown') return 'thresholds'
   return rules?.[changeClass] ?? 'thresholds'
+}
+
+/**
+ * How much review a rule DEMANDS — higher is stricter. The ordering is the point of the scale:
+ * `always` merges with nothing consulted, `thresholds` merges only within the score ceilings, and
+ * `never` merges nothing, so it is total and every pair has a strictest member.
+ *
+ * A plain rank rather than a `Record<MergeClassRule, number>` of opaque numbers used once: this is
+ * the only place the three rules are ORDERED, and {@link narrowMergeClassRule} is the only
+ * consumer, so the two are kept adjacent and a new rule fails the typecheck here first.
+ */
+const MERGE_CLASS_RULE_STRICTNESS: Record<MergeClassRule, number> = {
+  always: 0,
+  thresholds: 1,
+  never: 2,
+}
+
+/**
+ * Compose a base rule with a ROLE's rule, taking the STRICTER of the two.
+ *
+ * Narrow-only is the whole safety property of role-scoped rules, and it is enforced here rather
+ * than trusted to whoever authors a preset: a role entry can subtract capability but can never add
+ * it, so `{ source: 'always' }` under `viewer` on a preset whose base holds `source` at
+ * `thresholds` grants a viewer nothing — it reads as a mistake and behaves as a no-op, instead of
+ * quietly becoming the widest rule in the preset for its least-trusted tier.
+ *
+ * The consequence worth stating: a role entry is REVIEWABLE ON ITS OWN. Reading one tells you what
+ * that role at most may do, with no need to hold the base map in your head at the same time.
+ */
+export function narrowMergeClassRule(base: MergeClassRule, role: MergeClassRule): MergeClassRule {
+  return MERGE_CLASS_RULE_STRICTNESS[role] > MERGE_CLASS_RULE_STRICTNESS[base] ? role : base
+}
+
+/** The rule that governs a run, before and after its initiator's role narrowed it. */
+export interface RoleScopedMergeClassRule {
+  /** What the preset's base `classRules` say for this change class. */
+  base: MergeClassRule
+  /** What actually applies: `base` narrowed by the initiator's role entry. */
+  effective: MergeClassRule
+  /**
+   * Whether the role CHANGED the outcome. False both when no role was pinned and when the role's
+   * entry was no stricter than the base, so a caller can report "a role narrowed this" without
+   * re-comparing — and never attributes to a role a refusal the base map would have made anyway.
+   */
+  narrowedByRole: boolean
+}
+
+/**
+ * Resolve the per-class rule that governs one run: the preset's base rule for the run's change
+ * class, narrowed by the entry (if any) its initiator's ROLE carries.
+ *
+ * Two absences pass straight through to the base rule, deliberately and for the same reason:
+ * an unattributed run (no pinned role — a schedule fire, a public-API start, auth-disabled dev)
+ * and a role with no authored entry. Neither is evidence about how much review the work needs,
+ * and inventing a tier for the first would either hand it the preset's widest rules or sandbox
+ * every scheduled run in the deployment the day someone first authors a role entry.
+ *
+ * `unknown` remains inert through both layers: {@link resolveMergeClassRule} already forces it to
+ * `thresholds`, and narrowing `thresholds` by a rule authored for some OTHER class cannot reach
+ * it, so a diff we could not read still falls back to the score comparison whoever started it.
+ */
+export function resolveRoleScopedMergeClassRule(input: {
+  rules: MergeClassRules | null | undefined
+  byRole: ClassRulesByRole | null | undefined
+  role: WorkspaceRole | null | undefined
+  changeClass: ChangeClass
+}): RoleScopedMergeClassRule {
+  const base = resolveMergeClassRule(input.rules, input.changeClass)
+  if (!input.role || input.changeClass === 'unknown') {
+    return { base, effective: base, narrowedByRole: false }
+  }
+  // Read the role's entry as an OPTIONAL lookup, NOT through `resolveMergeClassRule`. That helper
+  // substitutes `thresholds` for an absent class, which is right when it IS the policy and wrong
+  // here: a role that authored nothing has said nothing, and folding its silence in as
+  // `thresholds` would narrow every `always` in the base map the moment a preset gained its first
+  // role entry — for the roles that entry is not even about. Absent is not a rule.
+  const roleRule = input.byRole?.[input.role]?.[input.changeClass]
+  if (!roleRule) return { base, effective: base, narrowedByRole: false }
+  const effective = narrowMergeClassRule(base, roleRule)
+  return { base, effective, narrowedByRole: effective !== base }
 }

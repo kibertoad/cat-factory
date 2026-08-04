@@ -565,7 +565,8 @@
         "foundational_service_exists": "Temel hizmet zaten var",
         "binary_output_service_invalid": "İkili çıktı hizmeti çözümlenemiyor",
         "binary_output_generator_invalid": "İkili çıktı üreticisi çözümlenemiyor",
-        "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti"
+        "foundational_service_not_inherited": "Bu hizmeti bu pano kaydetti",
+        "dry_run_not_mergeable": "Prova çalışması birleştirilemez"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -597,7 +598,8 @@
         "foundational_service_exists": "Bu kimliğe sahip bir temel hizmet bu kapsamda zaten kayıtlı. Var olan kaydı açıp düzenleyin — iki hizmet aynı kimliği paylaşamaz, çünkü kimlik bir mimarın tasarımında andığı addır.",
         "binary_output_service_invalid": "İkili çıktılar üreten bir adım, bu çalışma alanının kataloğunda çözümlenemeyen bir temel hizmet seçiyor: kimlik bilinmiyor ya da seçilen depolama hizmeti asset-storage yeteneğini taşımıyor. Adımın seçimini düzeltin veya hizmeti kaydedin, sonra yeniden başlatın.",
         "binary_output_generator_invalid": "İkili çıktı üreten bir adım, bu dağıtımın kaydetmediği bir üretken entegrasyon seçiyor ya da seçilen entegrasyonların hiçbiri adımın teslim etmesi gereken içerik türünü üretmiyor. Üretken entegrasyonlar bu çalışma alanında değil, dağıtımın kodunda kaydedilir: entegrasyonu kaydedin veya adımın seçimini düzeltin, sonra yeniden başlatın.",
-        "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin."
+        "foundational_service_not_inherited": "Devre dışı bırakma, hesaptan devralınan bir hizmet için geçerlidir. Bu kimlik bu pano tarafından kaydedilmiş, dolayısıyla devre dışı bırakılacak bir şey yok - bunun yerine panonun kendi kaydını silin.",
+        "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1241,7 +1243,9 @@
         "merge_failed": "Puanlar {preset} eşiklerinin içindeydi ancak otomatik birleştirme tamamlanamadı (örneğin dal koruması veya bir çakışma), bu yüzden PR bir kişinin birleştirmesini bekliyor.",
         "merge_partial": "Görevin bazı pull request'leri birleştirildi ancak sonraki biri birleştirilemedi, bu yüzden değişiklik bir kişinin çoklu depo birleştirmesini tamamlamasını veya geri almasını bekliyor.",
         "class_auto_merge": "Bu ön ayar bu değişiklik kategorisini her zaman otomatik birleştirir, bu yüzden puanlar karşılaştırılmadı.",
-        "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir."
+        "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir.",
+        "role_requires_review": "Bu ön ayar, bir {role} tarafından başlatılan çalışmaları bu tür değişiklikler için puanlardan bağımsız olarak insan incelemesine yönlendirir. Daha yetkili bir ekip arkadaşı bu PR’ı olduğu gibi birleştirebilir.",
+        "dry_run": "Bu bir prova çalışmasıydı; bu nedenle pull request bir insan için açık bırakıldı ve puanlar karşılaştırılmadı. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "scores": "Puanlar",
       "axis": {
@@ -6264,6 +6268,12 @@
       "minor": "Küçük notlar",
       "major": "Ciddi yeniden çalışma",
       "classHistory": "Bu kategoride {merged} birleştirildi, {autoShare} otomatik"
+    },
+    "role": {
+      "admin": "yönetici",
+      "member": "üye",
+      "viewer": "izleyici",
+      "unattributed": "otomatik bir başlatma"
     }
   },
   "vcs": {

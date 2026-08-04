@@ -973,6 +973,13 @@ export const riskPolicies = pgTable(
     // `thresholds` | `always` | `never` (mirror of D1's `class_rules` TEXT column). `{}` — the
     // default — means every class uses the score ceilings above, the historical behaviour.
     class_rules: text('class_rules').notNull().default('{}'),
+    // Per-ROLE narrowing of `class_rules`: a JSON partial map from workspace role to that role's
+    // own rule map (mirror of D1's `class_rules_by_role`). Narrow-only in the domain, so `{}` —
+    // the default — leaves every role on the base rules above.
+    class_rules_by_role: text('class_rules_by_role').notNull().default('{}'),
+    // JSON array of the roles whose runs are forced into dry-run mode: the pipeline runs and
+    // opens its PR, but nothing merges (mirror of D1's `dry_run_roles`). `[]` sandboxes nobody.
+    dry_run_roles: text('dry_run_roles').notNull().default('[]'),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
     is_default: integer('is_default').notNull().default(0),

@@ -1678,7 +1678,9 @@
         "merge_failed": "Die Bewertungen lagen innerhalb der {preset}-Schwellenwerte, aber der automatische Merge konnte nicht abgeschlossen werden (zum Beispiel Branch-Schutz oder ein Konflikt), daher wartet der PR darauf, dass ein Mensch mergt.",
         "merge_partial": "Einige der Pull Requests der Aufgabe wurden gemergt, aber ein späterer nicht, daher wartet die Änderung darauf, dass ein Mensch den Multi-Repo-Merge abschließt oder zurückrollt.",
         "class_auto_merge": "Diese Vorlage führt diese Änderungskategorie immer automatisch zusammen, daher wurden die Bewertungen nicht verglichen.",
-        "class_requires_review": "Diese Vorlage gibt diese Änderungskategorie unabhängig von den Bewertungen immer an einen Menschen."
+        "class_requires_review": "Diese Vorlage gibt diese Änderungskategorie unabhängig von den Bewertungen immer an einen Menschen.",
+        "role_requires_review": "Diese Vorgabe lässt Läufe, die ein {role} startet, für diese Art von Änderung unabhängig von den Bewertungen immer von einem Menschen prüfen. Ein Teammitglied mit höherer Berechtigung kann diesen PR unverändert zusammenführen.",
+        "dry_run": "Dies war ein Probelauf, daher blieb der Pull Request für einen Menschen offen und die Bewertungen wurden nicht verglichen. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "scores": "Bewertungen",
       "axis": {
@@ -5096,7 +5098,8 @@
         "foundational_service_exists": "Basisdienst existiert bereits",
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
-        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert"
+        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
+        "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5128,7 +5131,8 @@
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
-        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards."
+        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
+        "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -6264,6 +6268,12 @@
       "minor": "Kleine Anmerkungen",
       "major": "Echte Nacharbeit",
       "classHistory": "{merged} in dieser Kategorie zusammengeführt, {autoShare} automatisch"
+    },
+    "role": {
+      "admin": "Administrator",
+      "member": "Mitglied",
+      "viewer": "Betrachter",
+      "unattributed": "ein automatischer Start"
     }
   },
   "vcs": {

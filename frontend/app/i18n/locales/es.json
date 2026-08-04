@@ -565,7 +565,8 @@
         "foundational_service_exists": "El servicio fundacional ya existe",
         "binary_output_service_invalid": "No se puede resolver el servicio de salidas binarias",
         "binary_output_generator_invalid": "No se puede resolver el generador de salidas binarias",
-        "foundational_service_not_inherited": "Este tablero registró ese servicio"
+        "foundational_service_not_inherited": "Este tablero registró ese servicio",
+        "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -597,7 +598,8 @@
         "foundational_service_exists": "Ya hay un servicio fundacional con este identificador registrado en este ámbito. Abre la entrada existente y edítala: dos servicios no pueden compartir un identificador, porque es el nombre que un arquitecto usa en su diseño.",
         "binary_output_service_invalid": "Un paso que genera salidas binarias selecciona un servicio fundacional que el catálogo de este espacio de trabajo no puede resolver: el identificador es desconocido, o el servicio de almacenamiento elegido no tiene la capacidad asset-storage. Corrige la selección del paso o registra el servicio y vuelve a iniciarlo.",
         "binary_output_generator_invalid": "Un paso que genera salidas binarias selecciona una integración generativa que esta instalación no registra, o ninguna de las integraciones seleccionadas produce un tipo de contenido que el paso debe entregar. Las integraciones generativas se registran en el código de la instalación, no en este espacio de trabajo: regístrala o corrige la selección del paso y vuelve a iniciar.",
-        "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero."
+        "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero.",
+        "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1241,7 +1243,9 @@
         "merge_failed": "Las puntuaciones estaban dentro de los umbrales de {preset}, pero la fusión automática no pudo completarse (por ejemplo, protección de rama o un conflicto), por lo que el PR espera a que una persona lo fusione.",
         "merge_partial": "Algunas de las solicitudes de incorporación de la tarea se fusionaron, pero una posterior no pudo, por lo que el cambio espera a que una persona termine o revierta la fusión multirrepositorio.",
         "class_auto_merge": "Este preajuste fusiona siempre esta categoría de cambio de forma automática, así que no se compararon las puntuaciones.",
-        "class_requires_review": "Este preajuste envía siempre esta categoría de cambio a una persona, sean cuales sean las puntuaciones."
+        "class_requires_review": "Este preajuste envía siempre esta categoría de cambio a una persona, sean cuales sean las puntuaciones.",
+        "role_requires_review": "Esta configuración obliga a que las ejecuciones iniciadas por un {role} pasen por revisión humana para este tipo de cambio, sean cuales sean las puntuaciones. Un compañero con un nivel superior puede fusionar este PR tal como está.",
+        "dry_run": "Esta fue una ejecución de prueba, así que la pull request quedó abierta para una persona y no se compararon las puntuaciones. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "scores": "Puntuaciones",
       "axis": {
@@ -6252,6 +6256,12 @@
       "minor": "Comentarios menores",
       "major": "Retrabajo real",
       "classHistory": "{merged} fusionados en esta categoría, {autoShare} de forma automática"
+    },
+    "role": {
+      "admin": "administrador",
+      "member": "miembro",
+      "viewer": "observador",
+      "unattributed": "un inicio automático"
     }
   },
   "vcs": {

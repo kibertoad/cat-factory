@@ -1129,6 +1129,19 @@ false`**, because the headings are now the REPO's and `splitTitle`'s lone-`#` ru
   with no merger raises `pipeline_complete` instead of auto-`done`.
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
+- **Who started the run is part of the merge policy.** A preset also carries `classRulesByRole` (the
+  class rules NARROWED by the initiator's workspace role) and `dryRunRoles` (roles whose runs are
+  SANDBOXED: the pipeline opens its PR, nothing merges). Three rules bind anything added here.
+  **Narrowing is subtractive** (`narrowMergeClassRule`, over `always < thresholds < never`), so a role
+  entry can never grant what the base map withholds and is reviewable on its own. **Absent is not a
+  rule**: a role silent on a class, and a run with NO pinned role (a schedule fire, a public-API start,
+  auth-disabled dev), both fall through to the base rules rather than being read as `thresholds` or
+  guessed onto a tier. And **the role and the mode are PINNED at admission**
+  (`ExecutionInstance.initiatedByRole` / `.mode`), never re-resolved: the merge settles on the durable
+  path, which has no request context to resolve a role from and must not let a preset edited mid-run
+  re-govern a run already in flight. A sandbox is refused at BOTH exits — the auto-merge AND `mergePr`,
+  since the review card the first one raises is a merge button. Doc:
+  [`role-scoped-merge-policy.md`](./docs/initiatives/role-scoped-merge-policy.md).
 - **Merge track record**: a **best-effort side channel** persisting each decision to
   `merge_track_records`. Classification is pure backend TS over ONE VCS call, deliberately not in the
   harness (no image bump); classes rank `docs < test < dependency < config < source < schema` and a mixed

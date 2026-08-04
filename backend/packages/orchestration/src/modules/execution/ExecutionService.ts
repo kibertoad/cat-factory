@@ -28,6 +28,7 @@ import { companionFor } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { assertPipelineLaunchable } from '../pipelines/pipelineShape.js'
 import type { RunStartOptions } from './runStartOptions.js'
+import { settleRunModeForStart } from './runMode.logic.js'
 import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
@@ -97,7 +98,6 @@ import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
 import { RunMergePolicy } from './RunMergePolicy.js'
-import type { ResolvedRunRiskPolicy } from './policy-types.js'
 import type { WorkRunner } from '@cat-factory/kernel'
 import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 import { descendantIds } from '../board/board.logic.js'
@@ -365,7 +365,7 @@ export class ExecutionService {
       blockRepository,
       notificationService,
       mergeTrackRecord,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
       finalizeMerge: (ws, blockId) => this.finalizeMerge(ws, blockId),
     })
     this.companionController = new CompanionController({
@@ -395,7 +395,7 @@ export class ExecutionService {
       idGenerator,
       clock,
       clockNow: () => this.clock.now(),
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
       dispatchIterationCap: (ws, blockId, choice, handlers) =>
         this.dispatchIterationCap(ws, blockId, choice, handlers),
       testerQualityReviewer,
@@ -537,7 +537,7 @@ export class ExecutionService {
       ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
-      resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+      resolveRiskPolicy: (ws, block) => this.mergePolicy.resolve(ws, block),
       modelIdIsMetered: (id, caps) => this.admission.modelIdIsMetered(id, caps),
     })
   }
@@ -886,6 +886,16 @@ export class ExecutionService {
     const frontendRun = pipelineHasVisualStep({ agentKinds: pipeline.agentKinds })
       ? await this.contextBuilder.resolveFrontendRunInfo(workspaceId, block)
       : undefined
+    // Settle the run's MODE once and pin it (contract doc: why it is never re-read at merge time).
+    const { mode, notes } = await settleRunModeForStart({
+      requested: options.mode,
+      role: options.initiatedByRole,
+      loadDryRunRoles: async () => (await this.mergePolicy.resolve(workspaceId, block)).dryRunRoles,
+      baseNotes: frontendRun?.notes ?? [],
+      logger: this.log,
+      fields: { workspaceId, executionId, blockId },
+    })
+
     const instance: ExecutionInstance = {
       id: executionId,
       blockId,
@@ -895,11 +905,14 @@ export class ExecutionService {
       currentStep: 0,
       status: 'running',
       initiatedBy: initiatedBy ?? null,
+      // Pinned for the durable merge path; `mode` is stored only when sandboxed (`live` is read).
+      initiatedByRole: options.initiatedByRole ?? null,
+      ...(mode === 'dry_run' ? { mode } : {}),
       // Only a headless start carries an explicit intake origin; `ui` is the read-time
       // default, so an ordinary board/schedule start stores nothing extra.
       ...(intakeOrigin != null ? { intakeOrigin } : {}),
       createdAt: this.clock.now(),
-      ...(frontendRun?.notes.length ? { notes: frontendRun.notes } : {}),
+      ...(notes.length ? { notes } : {}),
       ...(frontendRun?.bindings.length ? { frontendBindings: frontendRun.bindings } : {}),
     }
     await claimLiveRunOrConflict(this.runStartDeps, workspaceId, instance, prior?.id)
@@ -1516,14 +1529,6 @@ export class ExecutionService {
    */
   private autoStartDependents(workspaceId: string, mergedBlockId: string): Promise<void> {
     return this.postMergeBoard.autoStartDependents(workspaceId, mergedBlockId)
-  }
-
-  /**
-   * Resolve the merge threshold preset that governs a task — delegated to {@link RunMergePolicy}
-   * (preset resolution + its cache read-through live there, alongside the track-record settle).
-   */
-  private resolveRiskPolicy(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
-    return this.mergePolicy.resolve(workspaceId, block)
   }
 
   /**

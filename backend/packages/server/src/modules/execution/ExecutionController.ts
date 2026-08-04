@@ -42,7 +42,7 @@ export function executionController(): Hono<AppEnv> {
     const container = c.get('container')
     const workspaceId = param(c, 'workspaceId')
     const blockId = c.req.valid('param').blockId
-    const { pipelineId } = c.req.valid('json')
+    const { pipelineId, mode } = c.req.valid('json')
     // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
     // subscription: resolve the initiator + an activation closure (throws 428 when a
     // password is needed). The password rides on the X-Personal-Password header. A run
@@ -57,6 +57,14 @@ export function executionController(): Hono<AppEnv> {
     )
     const instance = await container.executionService.start(workspaceId, blockId, pipelineId, {
       initiatedBy,
+      // The tier this run is admitted under, CONSUMED from what the auth gate already resolved —
+      // never re-derived here (workspace-rbac keeps membership resolution in exactly one place).
+      // Absent with auth disabled, which is the honest reading: dev-open has no roles to scope by,
+      // so such a run stays on the preset's base policy rather than being scoped to a guess.
+      initiatedByRole: c.get('workspaceAccess')?.role ?? null,
+      // A REQUEST for a sandboxed run; the task's merge preset can still force one (see
+      // `resolveRunMode`), so the engine settles the mode rather than trusting this.
+      ...(mode ? { mode } : {}),
       activate,
     })
     return c.json(instance, 201)

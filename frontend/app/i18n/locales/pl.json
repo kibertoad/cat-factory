@@ -565,7 +565,8 @@
         "foundational_service_exists": "Usługa fundamentalna już istnieje",
         "binary_output_service_invalid": "Nie można rozpoznać usługi dla wyników binarnych",
         "binary_output_generator_invalid": "Nie można rozpoznać generatora danych binarnych",
-        "foundational_service_not_inherited": "Ta tablica zarejestrowała tę usługę"
+        "foundational_service_not_inherited": "Ta tablica zarejestrowała tę usługę",
+        "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -597,7 +598,8 @@
         "foundational_service_exists": "Usługa fundamentalna o tym identyfikatorze jest już zarejestrowana w tym zakresie. Otwórz istniejący wpis i go edytuj — dwie usługi nie mogą współdzielić identyfikatora, ponieważ to jego nazwą architekt posługuje się w projekcie.",
         "binary_output_service_invalid": "Krok generujący wyniki binarne wybiera usługę fundamentalną, której katalog tego obszaru roboczego nie może rozpoznać: identyfikator jest nieznany albo wybrana usługa przechowywania nie ma zdolności asset-storage. Popraw wybór w kroku lub zarejestruj usługę, a następnie uruchom ponownie.",
         "binary_output_generator_invalid": "Krok generujący dane binarne wybiera integrację generatywną, której to wdrożenie nie rejestruje, albo żadna z wybranych integracji nie tworzy typu treści, który krok ma dostarczyć. Integracje generatywne rejestruje się w kodzie wdrożenia, a nie w tej przestrzeni roboczej: zarejestruj ją lub popraw wybór w kroku, a następnie uruchom ponownie.",
-        "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy."
+        "foundational_service_not_inherited": "Wyłączenie dotyczy usługi dziedziczonej z konta. Ten identyfikator jest zarejestrowany przez tę tablicę, więc nie ma czego wyłączać - usuń zamiast tego własny wpis tablicy.",
+        "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1241,7 +1243,9 @@
         "merge_failed": "Oceny mieściły się w progach {preset}, ale automatyczne scalenie nie mogło się powieść (np. ochrona gałęzi lub konflikt), więc PR czeka na scalenie przez człowieka.",
         "merge_partial": "Część pull requestów zadania została scalona, ale kolejnego nie udało się scalić, więc zmiana czeka, aż człowiek dokończy lub cofnie scalanie wielorepozytoryjne.",
         "class_auto_merge": "Ten zestaw zawsze scala automatycznie tę kategorię zmian, więc oceny nie były porównywane.",
-        "class_requires_review": "Ten zestaw zawsze przekazuje tę kategorię zmian człowiekowi, niezależnie od ocen."
+        "class_requires_review": "Ten zestaw zawsze przekazuje tę kategorię zmian człowiekowi, niezależnie od ocen.",
+        "role_requires_review": "Ten zestaw ustawień kieruje uruchomienia rozpoczęte przez rolę {role} do przeglądu przez człowieka dla tego rodzaju zmiany, niezależnie od ocen. Osoba z wyższymi uprawnieniami może scalić ten PR bez żadnych poprawek.",
+        "dry_run": "To było uruchomienie próbne, więc pull request pozostał otwarty dla człowieka, a oceny nie były porównywane. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
       "scores": "Oceny",
       "axis": {
@@ -6252,6 +6256,12 @@
       "minor": "Drobne uwagi",
       "major": "Istotne przeróbki",
       "classHistory": "Scalono {merged} w tej kategorii, {autoShare} automatycznie"
+    },
+    "role": {
+      "admin": "administrator",
+      "member": "członek",
+      "viewer": "obserwator",
+      "unattributed": "uruchomienie automatyczne"
     }
   },
   "vcs": {
