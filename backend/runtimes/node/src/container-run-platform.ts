@@ -21,6 +21,7 @@ import {
   buildResolveRepoTarget,
   buildResolveRepoTargets,
   buildToolSecretChain,
+  toolSecretContainerFields,
   createResolveRunInitiatorToken,
   logger,
 } from '@cat-factory/server'
@@ -328,10 +329,10 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     baseDeployMint,
     deployDeps,
     standardAgentExecutor,
-    // Surfaced so the credential checklist can state what sits behind the store. See
-    // `ServerContainer.toolSecretEnvironmentFallback`. Undefined when a deployment replaced the
-    // chain with its own resolver, which is the honest answer rather than a default.
-    toolSecretEnvironmentFallback: toolSecretChain.environmentFallback,
+    // The composed capability-credential chain: the resolver the tool-server probe resolves through
+    // (a probe must resolve exactly as a dispatch would) plus the description the credential
+    // checklist renders. One shared projection, so the facades cannot drift about the pair.
+    ...toolSecretContainerFields(toolSecretChain),
     githubClient,
     tasks,
     fileGitHubIssue,

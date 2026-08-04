@@ -34,17 +34,22 @@ const SOURCES: Record<string, string[]> = {
   ],
   // `start()` forwarding them onto the options object it builds the container from.
   '../src/server.ts': ['createToolSecretResolver', 'capabilityCredentialEnvironmentFallback'],
-  // The composition root composing the chain ONCE from both, and surfacing its description beside
-  // the resolver: the checklist has to describe the chain the dispatch path actually got, and an
-  // executor cannot say what it was handed.
+  // The composition root composing the chain ONCE from both, handing the RESOLVER to the executor
+  // and PROJECTING the pair onto the container: the checklist has to describe the chain the dispatch
+  // path actually got, and an executor cannot say what it was handed. The projection is one call
+  // (`toolSecretContainerFields`) rather than two fields on purpose — the resolver and the
+  // description of what sits behind it must travel together, and each facade assembling the pair by
+  // hand is what let them drift.
   '../src/container-run-platform.ts': [
     'options.createToolSecretResolver',
     'options.capabilityCredentialEnvironmentFallback',
     'toolSecretChain.resolver',
-    'toolSecretEnvironmentFallback',
+    'toolSecretContainerFields',
   ],
-  // …carried onto the container the credential controller resolves from.
-  '../src/container.ts': ['toolSecretEnvironmentFallback'],
+  // …carried onto the container the credential controller and the tool-server PROBE resolve from,
+  // resolver INCLUDED: the probe resolves through the same chain a dispatch does, so a lost link
+  // there would silently report every board's servers against this node's own environment.
+  '../src/container.ts': ['toolSecretEnvironmentFallback', 'toolSecretResolver'],
   // The executor taking the composed chain as a REQUIRED dependency. This link is the one the
   // type system now pins by itself: the field carried a bare environment default until it was
   // made required, and that default failed OPEN, so dropping the link here resolved every tenant
