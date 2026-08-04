@@ -1,5 +1,5 @@
-import type { BlockPatch, RunLifecycleEventKind } from '@cat-factory/kernel'
-import { isRunLifecycleEventKind } from '@cat-factory/kernel'
+import type { BlockPatch, PlatformAlertEventKind, RunLifecycleEventKind } from '@cat-factory/kernel'
+import { isPlatformAlertEventKind, isRunLifecycleEventKind } from '@cat-factory/kernel'
 import type {
   AgentFailure,
   Block,
@@ -777,6 +777,27 @@ export function parseRunLifecycleEvents(value: string | null | undefined): RunLi
     const parsed: unknown = JSON.parse(value)
     if (!Array.isArray(parsed)) return []
     return parsed.filter(isRunLifecycleEventKind)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Parse a `notification_webhooks.alert_events` JSON column onto the record's platform-health
+ * filter. Lenient exactly like {@link parseRunLifecycleEvents}, and empty means the same thing:
+ * deliver none. That degradation matters more here than for either sibling — this is the family
+ * a pager is wired to, so a corrupted column costs a receiver its alerts, and the operator finds
+ * out from the management API reporting an empty subscription rather than from a silent page
+ * that never came. Shared by both runtimes' repos so the column can't drift.
+ */
+export function parsePlatformAlertEvents(
+  value: string | null | undefined,
+): PlatformAlertEventKind[] {
+  if (!value) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(isPlatformAlertEventKind)
   } catch {
     return []
   }

@@ -867,6 +867,9 @@ export const notificationWebhooks = pgTable('notification_webhooks', {
   // The run-lifecycle subscription (D1 migration 0072). EMPTY means NONE, unlike `types` above:
   // an endpoint registered before run events existed must not start receiving a new family.
   run_events: text('run_events').notNull().default('[]'),
+  // The platform-health subscription (D1 migration 0080) — the family an ON-CALL system is paged
+  // by. EMPTY means NONE, like `run_events` and for the sharper version of the same reason.
+  alert_events: text('alert_events').notNull().default('[]'),
   enabled: integer('enabled').notNull().default(1),
   secret_sealed: text('secret_sealed'),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),

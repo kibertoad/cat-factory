@@ -5,7 +5,7 @@ import type {
   PlatformObservability,
 } from '@cat-factory/contracts'
 import { createRecordingLogger } from '@cat-factory/kernel'
-import type { Workspace } from '@cat-factory/kernel'
+import type { PlatformAlertEvent, Workspace } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ServerContainer } from '../src/http/env.js'
 import { sweepPlatformHealth } from '../src/runtime/platformHealth.js'
@@ -82,10 +82,16 @@ function makeContainer(opts: {
     createdAt: number
     workspaceFailedTotal: number
   }[]
+  /** Whether the outbound on-call sink is wired (a facade with no encryption key has none). */
+  hasAlertSink?: boolean
+  /** Make the sink throw, to pin that a broken sink cannot abort the pass. */
+  alertSinkThrows?: boolean
 }) {
   const raises: RaiseCall[] = []
   const clears: string[] = []
   const listByTypeCalls: string[][] = []
+  const alerts: { workspaceId: string; event: PlatformAlertEvent }[] = []
+  let cardSeq = 0
   const container = {
     config: {
       platformAlerts: {
@@ -131,16 +137,29 @@ function makeContainer(opts: {
                   reasons: input.payload?.platformAlerts,
                   payload: input.payload,
                 })
-                return {}
+                cardSeq += 1
+                return { id: `ntf_${cardSeq}`, createdAt: 1_000 + cardSeq }
               },
               clearByType: async (workspaceId: string) => {
                 clears.push(workspaceId)
-                return {} // a non-null "cleared" card
+                cardSeq += 1
+                // A non-null "cleared" card: the sweep reads its id as the resolved edge's
+                // incident identity, and null would mean there was nothing open to clear.
+                return { id: `ntf_${cardSeq}`, createdAt: 500, resolvedAt: 2_000 + cardSeq }
               },
             },
           },
+    platformAlertSink:
+      opts.hasAlertSink === false
+        ? undefined
+        : {
+            platformHealthChanged: async (workspaceId: string, event: PlatformAlertEvent) => {
+              alerts.push({ workspaceId, event })
+              if (opts.alertSinkThrows) throw new Error('receiver exploded')
+            },
+          },
   } as unknown as ServerContainer
-  return { container, raises, clears, listByTypeCalls }
+  return { container, raises, clears, listByTypeCalls, alerts }
 }
 
 describe('sweepPlatformHealth', () => {
@@ -364,5 +383,107 @@ describe('sweepPlatformHealth', () => {
     expect(result).toEqual({ raised: 1, cleared: 0 })
     expect(raises.map((r) => r.workspaceId)).toEqual(['ws-2'])
     expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
+  })
+
+  describe('the outbound on-call push', () => {
+    it('announces a firing edge beside the card, carrying the tripped numbers', async () => {
+      const { container, alerts } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1'), workspace('ws-2', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        failingRuns: [
+          {
+            workspaceId: 'ws-1',
+            executionId: 'exec_1',
+            blockId: 'blk_1',
+            failureKind: 'agent',
+            createdAt: 5,
+            workspaceFailedTotal: 8,
+          },
+        ],
+      })
+      await sweepPlatformHealth(container)
+
+      // One edge per workspace: health is evaluated per ACCOUNT but endpoints are registered per
+      // workspace, so the account id is what lets a receiver collapse the fan-out.
+      expect(alerts.map((a) => a.workspaceId).sort()).toEqual(['ws-1', 'ws-2'])
+      const first = alerts.find((a) => a.workspaceId === 'ws-1')!.event
+      expect(first.event).toBe('platform_health.firing')
+      expect(first.accountId).toBe('acc-1')
+      expect(first.window).toBe('1h')
+      expect(first.cardId).toBe('ntf_1')
+      // The card carries reasons only (its payload is its dedup identity); the edge carries the
+      // observed value and the threshold it crossed, which is what a pager routes on.
+      expect(first.conditions).toEqual([
+        {
+          reason: 'failure_rate_high',
+          value: 0.8,
+          threshold: DEFAULT_PLATFORM_ALERT_THRESHOLDS.maxFailureRate,
+        },
+      ])
+      expect(first.failingRuns.map((r) => r.executionId)).toEqual(['exec_1'])
+      expect(first.failedTotal).toBe(8)
+      // The other workspace's edge names no runs — the sample is workspace-scoped, and an alert
+      // reaching one workspace must never name another's runs.
+      const second = alerts.find((a) => a.workspaceId === 'ws-2')!.event
+      expect(second.failingRuns).toEqual([])
+      // ...and says NULL rather than 0, because "nothing failed here" is not what was observed.
+      expect(second.failedTotal).toBeNull()
+    })
+
+    it('announces a resolved edge when the account recovers', async () => {
+      const { container, alerts } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1')],
+        summaries: { 'acc-1': HEALTHY },
+      })
+      await sweepPlatformHealth(container)
+      expect(alerts).toHaveLength(1)
+      expect(alerts[0]!.event.event).toBe('platform_health.resolved')
+      // The absence of conditions IS the content of this edge.
+      expect(alerts[0]!.event.conditions).toEqual([])
+      expect(alerts[0]!.event.failedTotal).toBeNull()
+    })
+
+    it('stays silent while the firing set is unchanged', async () => {
+      // The state-change dedup the card already had now governs the pager too: an incident pages
+      // once rather than every couple of minutes for as long as it lasts.
+      const { container, alerts, raises } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        openCardReasons: ['failure_rate_high'],
+      })
+      await sweepPlatformHealth(container)
+      expect(raises).toEqual([])
+      expect(alerts).toEqual([])
+    })
+
+    it('runs the card write FIRST, so a dead receiver costs the alert and not the record', async () => {
+      // Ordering + isolation in one: the sink throwing (a violation of its own best-effort
+      // contract) must not lose the card, abort the account's remaining workspaces, or take down
+      // the sweep that noticed the deployment was unhealthy in the first place.
+      const { container, raises, alerts } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1'), workspace('ws-2', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        alertSinkThrows: true,
+      })
+      const logger = createRecordingLogger()
+      const result = await sweepPlatformHealth(container, logger)
+      expect(result).toEqual({ raised: 2, cleared: 0 })
+      expect(raises).toHaveLength(2)
+      expect(alerts).toHaveLength(2)
+      // Swallowed, never silent.
+      expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(2)
+    })
+
+    it('still raises the card when no endpoint feature is wired', async () => {
+      // A facade with no encryption key has no webhook feature at all; the in-app alert is
+      // unaffected, because the sweep's own state lives in the card rather than in the sink.
+      const { container, raises } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        hasAlertSink: false,
+      })
+      expect(await sweepPlatformHealth(container)).toEqual({ raised: 1, cleared: 0 })
+      expect(raises).toHaveLength(1)
+    })
   })
 })

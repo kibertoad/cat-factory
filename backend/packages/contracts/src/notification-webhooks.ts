@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { notificationSchema, notificationTypeSchema } from './notifications.js'
+import { platformFailingRunSchema } from './observability.js'
 
 // ---------------------------------------------------------------------------
 // Notification-webhook wire contracts. A workspace can register ONE outbound HTTPS endpoint that
@@ -29,6 +30,26 @@ import { notificationSchema, notificationTypeSchema } from './notifications.js'
 export const runLifecycleEventSchema = v.picklist(['run.started', 'run.completed', 'run.failed'])
 export type RunLifecycleEventName = v.InferOutput<typeof runLifecycleEventSchema>
 
+/**
+ * The PLATFORM-HEALTH transitions the same endpoint can subscribe to: the deployment watching
+ * ITSELF, which is what an on-call integration is wired to. `firing` is delivered when the set of
+ * tripped conditions CHANGES (so an incident pages once, and again only if it gets worse or
+ * better in kind), `resolved` when the sweep observes the account recover.
+ *
+ * This is deliberately its own family rather than the `platform_health` notification type on the
+ * `types` filter next door, which delivers the same alert as a CARD. Both are legitimate — a
+ * human inbox wants the card — but only this one is safe to page on: a card is re-delivered when
+ * a human acts on it or waves it off, and on the wire that dismissal is indistinguishable from
+ * the sweep clearing the card because the deployment recovered.
+ *
+ * Mirrors kernel's `PLATFORM_ALERT_EVENTS`; keep the member lists in step.
+ */
+export const platformAlertEventSchema = v.picklist([
+  'platform_health.firing',
+  'platform_health.resolved',
+])
+export type PlatformAlertEventName = v.InferOutput<typeof platformAlertEventSchema>
+
 /** A workspace's registered notification webhook, as exposed to clients (never the secret). */
 export const notificationWebhookSchema = v.object({
   /** The HTTPS endpoint deliveries are POSTed to. */
@@ -45,6 +66,11 @@ export const notificationWebhookSchema = v.object({
    * family it never asked for, so subscribing is explicit.
    */
   runEvents: v.array(runLifecycleEventSchema),
+  /**
+   * Which platform-health transitions are delivered. EMPTY means NONE, like {@link runEvents}:
+   * subscribing a receiver to alerts about the deployment itself is always an explicit choice.
+   */
+  alertEvents: v.array(platformAlertEventSchema),
   /** Whether deliveries are currently attempted. Registering an endpoint enables it. */
   enabled: v.boolean(),
   /** Whether a signing secret is set (the secret itself is never returned). */
@@ -70,6 +96,8 @@ export const putNotificationWebhookSchema = v.object({
   types: v.optional(v.array(notificationTypeSchema)),
   /** Omit ⇒ keep the current run-event subscription (none, for an endpoint that never set one). */
   runEvents: v.optional(v.array(runLifecycleEventSchema)),
+  /** Omit ⇒ keep the current platform-health subscription (none, for an endpoint that never set one). */
+  alertEvents: v.optional(v.array(platformAlertEventSchema)),
   enabled: v.optional(v.boolean()),
   /** New signing secret; omit to keep the current one. */
   secret: v.optional(v.pipe(v.string(), v.trim(), v.minLength(16), v.maxLength(200))),
@@ -150,6 +178,97 @@ export const runWebhookDeliverySchema = v.object({
   }),
 })
 export type RunWebhookDelivery = v.InferOutput<typeof runWebhookDeliverySchema>
+
+/**
+ * One condition that tripped on a platform-health delivery, with the numbers behind it.
+ *
+ * `reason` is a plain string rather than the closed {@link platformAlertReasonSchema} picklist,
+ * and that is the same call the SDKs make for the error envelope's `code`: the vocabulary grows
+ * additively, so narrowing it here would mean a deployment one release ahead of its receiver
+ * either fails to encode, or silently drops, the very condition it is paging about. The current
+ * members are `failure_rate_high`, `duration_p99_high`, `backlog_high`, `throughput_stalled`,
+ * `failure_kind_dominant` and `sweep_degraded`; a receiver routes on the ones it knows and treats
+ * the rest as an unrecognised condition rather than as no condition.
+ */
+export const platformAlertWebhookConditionSchema = v.object({
+  /** The tripped condition (see above for the current vocabulary). */
+  reason: v.string(),
+  /** The observed value that crossed the threshold (a rate 0..1, ms, or a count by reason). */
+  value: v.number(),
+  /** The configured threshold it crossed, in the same unit as {@link value}. */
+  threshold: v.number(),
+})
+export type PlatformAlertWebhookCondition = v.InferOutput<
+  typeof platformAlertWebhookConditionSchema
+>
+
+/**
+ * The JSON body of one PLATFORM-HEALTH delivery, POSTed to the same endpoint with the same
+ * signature headers. `event` is what a receiver switches on: a notification delivery carries
+ * `notification`, a run delivery carries `run`, this one carries `alert`.
+ *
+ * `deliveryId` is `<cardId>:<event>:<reasons>` — stable across the retries of one delivery and
+ * distinct for each transition of one incident, so a receiver dedupes on it. The card id is the
+ * platform's own record of the open alert, which is what makes the id survive a re-delivery while
+ * still changing when the incident escalates from one condition to two.
+ *
+ * Three properties of this feed are worth stating plainly, because an on-call integration is
+ * built differently depending on them:
+ *
+ * - **Edges only, and only on a CHANGE of the firing set.** The sweep runs every couple of
+ *   minutes for the length of an incident; it does not re-deliver an unchanged alert, so absence
+ *   of traffic means "nothing changed", never "recovered".
+ * - **One account-level condition fans out per subscribed WORKSPACE.** Health is aggregated per
+ *   account and endpoints are registered per workspace, so a receiver watching several workspaces
+ *   of one account sees one delivery each. Group on `alert.accountId` to collapse them.
+ * - **The resolved edge follows the platform's own open card.** If a human dismisses the
+ *   `platform_health` card from the in-app inbox while the condition is still firing, the sweep
+ *   has nothing left to clear, so a later recovery emits no `platform_health.resolved`. The next
+ *   change to the firing set raises a fresh card and delivers `firing` again. A receiver that
+ *   cannot tolerate a hanging incident should auto-resolve on its own timer rather than waiting
+ *   for an edge the platform may have no state to produce.
+ */
+export const platformAlertWebhookDeliverySchema = v.object({
+  deliveryId: v.string(),
+  /** Epoch-ms the delivery was produced (also the signed timestamp — see the signature headers). */
+  sentAt: v.number(),
+  workspaceId: v.string(),
+  event: platformAlertEventSchema,
+  alert: v.object({
+    /**
+     * The account whose aggregate health this describes — the grain the condition is actually
+     * evaluated at, and the id to group the per-workspace fan-out by.
+     */
+    accountId: v.string(),
+    /**
+     * The window the aggregate was computed over. One of `1h` / `24h` / `7d` today (the
+     * {@link platformAlertWindowSchema} vocabulary), sent as a plain string for the same
+     * additive-tolerance reason as the condition's `reason`.
+     */
+    window: v.string(),
+    /**
+     * The conditions firing at this transition, sorted by reason. EMPTY on
+     * `platform_health.resolved`, where the absence of conditions IS the content.
+     */
+    conditions: v.array(platformAlertWebhookConditionSchema),
+    /** Epoch-ms the transition was observed. */
+    occurredAt: v.number(),
+    /**
+     * A bounded sample of the runs behind a failure-driven alert, in THIS workspace only. Empty
+     * for a condition with no run evidence behind it (a backlog or throughput alert), and empty
+     * when the evidence read failed — {@link failedTotal} is what tells those apart from a
+     * workspace where nothing failed.
+     */
+    failingRuns: v.array(platformFailingRunSchema),
+    /**
+     * How many runs in this workspace had failed in the window when the alert fired, so the
+     * capped sample states what it left out. NULL when the platform could not read it: a
+     * different fact from zero, reported as one.
+     */
+    failedTotal: v.nullable(v.number()),
+  }),
+})
+export type PlatformAlertWebhookDelivery = v.InferOutput<typeof platformAlertWebhookDeliverySchema>
 
 /**
  * The notification types delivered when a webhook declares no explicit `types` filter: the

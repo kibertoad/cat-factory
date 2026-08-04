@@ -125,6 +125,45 @@ links are omitted entirely (not sent empty) for a condition with no failing run 
 the evidence read is best-effort inside its own catch, because the deep link is an enhancement and
 the ALERT is the thing that matters.
 
+### What slice 9 (the on-call webhook family) shipped
+
+Slice 5 delivered alerts to the in-app inbox and Slack. Neither is where a rotation is paged, and
+the third channel that already existed — the per-workspace outbound webhook — could technically
+carry the `platform_health` card (its `types` filter accepts the type), which is precisely the trap:
+
+**a card is not an alert.** A notification card is delivered on every content change AND
+re-delivered when a human ACTS on it or DISMISSES it. On the wire that dismissal is byte-identical
+in shape to the sweep dismissing the card because the account recovered, so an integration built on
+the card resolves its incident whenever somebody tidies the inbox. The card stays the right thing
+for a human overseer; paging needs an edge that only the sweep's own verdict can produce.
+
+So the alerts got their own family on the same endpoint, beside `types` and `runEvents`:
+`alertEvents` (`platform_health.firing` / `platform_health.resolved`), delivered through a kernel
+`PlatformAlertSink` port implemented by `WebhookPlatformAlertSink` and built by the SAME
+`buildNotificationWebhookSupport` as its two siblings, so a facade cannot wire the management
+surface and leave the alerts undelivered. Empty means NONE, like `runEvents`.
+
+Four things about it are worth carrying forward:
+
+- **The edge carries the numbers the card deliberately omits.** The card's payload is its dedup
+  identity, so a fluctuating value in it would re-toast the inbox every sweep; the delivery is an
+  edge, stored nowhere, fired only on a change, so it carries each condition's observed value and
+  the threshold it crossed. The sweep therefore keeps the WHOLE verdict and derives the reason set
+  from it, rather than the other way round.
+- **The card supplies the incident identity, and the dedupe key needs both halves.** The key is
+  `<cardId>:<event>:<reasons>`. The card id alone would collapse an escalation (one condition
+  becoming two re-raises the same card) onto the page it escalated from; the reason set alone would
+  collapse two separate incidents that trip the same condition.
+- **The resolved edge follows the card, which leaves one honest hole.** A human dismissing the card
+  mid-incident leaves the sweep nothing to clear, so a later recovery emits no `resolved`. Closing
+  that would mean a second store of alert state beside the card, which is a table to keep in step
+  for an edge a receiver can already cover with its own timer. It is documented in the delivery
+  contract rather than papered over.
+- **One account-level condition fans out per subscribed workspace**, because health is aggregated
+  per account and endpoints are registered per workspace. The delivery names the `accountId` so a
+  receiver can collapse the fan-out, rather than the platform inventing an account-scoped endpoint
+  registry for it.
+
 ### What slice 8 (OpenTelemetry export) shipped
 
 The read-path dashboard is a pull surface (an admin loads it). Slice 8 adds the **push**

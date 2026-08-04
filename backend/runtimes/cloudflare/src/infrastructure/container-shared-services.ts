@@ -15,11 +15,8 @@ import { CryptoIdGenerator, SystemClock } from './runtime'
 import { resolveWorkerRegistries } from './container-registries.js'
 import { buildAccountSettings } from './container-account-settings.js'
 import { cloudflareContentStorage } from './container-artifact-storage.js'
-import {
-  buildNotificationWebhookSupportForWorker,
-  buildResolvePackageRegistries,
-  selectEventPublisher,
-} from './container.js'
+import { buildResolvePackageRegistries, selectEventPublisher } from './container.js'
+import { buildNotificationWebhookSupportForWorker } from './container-notification-webhook.js'
 import {
   buildApiKeyService,
   buildLocalModelEndpointService,
@@ -187,9 +184,9 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
   // gateway exposes, rather than reaching for the queue binding a second time.
   const githubWebhookIngest = new CfGitHubWebhookIngest(env.GITHUB_SYNC_QUEUE)
 
-  // The outbound notification webhook: management service + delivery channel from ONE builder, so
-  // the surface that reports an endpoint as configured and the channel that delivers to it can
-  // never end up on different repositories/ciphers.
+  // The outbound notification webhook: management service + all three delivery halves from ONE
+  // builder, so the surface that reports an endpoint as configured and the sinks that deliver to
+  // it can never end up on different repositories/ciphers.
   const notificationWebhookSupport = buildNotificationWebhookSupportForWorker(
     env,
     config,

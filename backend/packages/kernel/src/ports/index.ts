@@ -652,6 +652,14 @@ export type {
 } from './run-lifecycle.js'
 export { RUN_LIFECYCLE_EVENTS, isRunLifecycleEventKind } from './run-lifecycle.js'
 export type {
+  PlatformAlertCondition,
+  PlatformAlertEvent,
+  PlatformAlertEventKind,
+  PlatformAlertFailingRun,
+  PlatformAlertSink,
+} from './platform-alert.js'
+export { PLATFORM_ALERT_EVENTS, isPlatformAlertEventKind } from './platform-alert.js'
+export type {
   SlackConnectionRecord,
   SlackConnectionRepository,
   SlackSettingsRecord,
