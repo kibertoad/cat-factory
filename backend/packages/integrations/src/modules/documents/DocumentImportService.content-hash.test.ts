@@ -33,10 +33,18 @@ function makeService(body: { value: string }) {
     async listByWorkspace() {
       return [...store.values()]
     },
+    async listByRefs(_ws, refs) {
+      return refs.flatMap((ref) => {
+        const hit = store.get(ref.externalId)
+        return hit && hit.source === ref.source ? [hit] : []
+      })
+    },
     async listByBlock() {
       return []
     },
     async linkBlock() {},
+    async linkBlockMany() {},
+    async detachBlocks() {},
     async getRoleLink() {
       return null
     },

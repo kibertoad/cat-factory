@@ -631,6 +631,7 @@
         "input_gate_not_parked": "Nothing to answer",
         "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task",
+        "document_already_linked": "Document already attached",
         "dry_run_not_mergeable": "Dry run cannot be merged"
       },
       "description": {
@@ -670,6 +671,7 @@
         "input_gate_not_parked": "This run is not waiting on its input check any more. Someone may have answered it already, or the run has moved on.",
         "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
+        "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "action": {

@@ -135,7 +135,7 @@ async function attach(item: PendingContext) {
         :key="`${doc.source}:${doc.externalId}`"
         :url="doc.url"
         class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
-        :class="{ 'hover:bg-slate-800/60': !!doc.url }"
+        hover-class="hover:bg-slate-800/60"
       >
         <UIcon
           :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"

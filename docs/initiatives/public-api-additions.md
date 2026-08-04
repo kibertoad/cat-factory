@@ -282,11 +282,13 @@ Worth reading before extending it, because the shape was not obvious:
   covers only the stored row and its block/role links, where the origin is a label. A future
   origin with no provider (a pasted-in artifact, a generated brief) copies this rather than
   widening `DocumentSourceKind`.
-- **The readability refusal MOVED, it was not added.** The platform already refuses a context
-  document that renders to nothing, on the first step that resolves context, which is deep inside a
-  run the caller has started and paid for. `ingest` refuses the same condition at the boundary,
-  where the body is in hand and the caller can fix it. The run-time refusal stays: it is the one
-  that covers a page whose SOURCE went empty after import.
+- **The readability refusal at the boundary is STRICTER than the run-time one, on purpose.**
+  `hasReadableContent` passes anything with a non-empty raw body, because a container agent opens
+  the materialised markdown and can at least see what is in it; only the excerpt-only inline
+  readers refuse a body that renders to nothing. `assertUploadReadable` refuses it for everyone,
+  because here the bytes are in hand and the caller can fix them, where the run-time refusal costs
+  a step already paid for. The run-time refusal stays: it is the one that covers a page whose
+  SOURCE went empty after import.
 - **An uploaded document has no URL, and every reader had to be taught the difference between
   "no origin" and "a broken one".** `originSuffix` / `originHeaderLine` (kernel) are what the
   prompt index, the inline injection and the `.cat-context/` file header all render through, so
@@ -298,6 +300,16 @@ Worth reading before extending it, because the shape was not obvious:
   retry re-imports rather than accumulating half-written state. The attach runs BEFORE the ticket
   claim on purpose: a block removed after a successful claim would leave the ticket pointing at a
   task nobody can open, which then refuses every future filing of it.
+- **The rollback detaches by BLOCK, never by the refs it resolved.** A rollback can be running
+  BECAUSE the attach was refused (a named document belongs to another task), and clearing that
+  document by ref would strip the task that legitimately holds it — the same silent loss the guard
+  just refused, committed by the cleanup path. Asking "what is attached to the block being removed"
+  can only ever clear links this creation made.
+- **The uploads are WRITTEN LAST, after the whole list resolves.** An import is idempotent on its
+  `(source, externalId)` key, so a retry lands on the same row; every upload mints a fresh id, so
+  an eagerly-written one leaves an unreachable copy behind on each attempt. Writing them after the
+  refusable half means an integration retrying in a loop cannot fill a workspace with orphans.
+  Anything added here that MINTS rather than keys must go in the same pass.
 - **The corpus bound was deliberately NOT duplicated.** The contract caps one document
   (100,000 characters) and the list (10 entries); the ~256 KB materialised-context budget is
   enforced where it always was, at the first dispatch, because it also sizes in linked tracker

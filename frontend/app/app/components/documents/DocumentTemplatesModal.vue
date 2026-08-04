@@ -160,7 +160,7 @@ async function unlink(doc: SourceDocument) {
               <DocumentOriginLink
                 :url="template.url"
                 class="truncate text-sm font-medium text-white"
-                :class="{ 'hover:underline': !!template.url }"
+                hover-class="hover:underline"
               >
                 {{ template.title }}
               </DocumentOriginLink>
@@ -197,7 +197,7 @@ async function unlink(doc: SourceDocument) {
                 <DocumentOriginLink
                   :url="doc.url"
                   class="truncate text-sm font-medium text-white"
-                  :class="{ 'hover:underline': !!doc.url }"
+                  hover-class="hover:underline"
                 >
                   {{ doc.title }}
                 </DocumentOriginLink>

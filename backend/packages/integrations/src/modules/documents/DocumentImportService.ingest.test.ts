@@ -75,9 +75,11 @@ describe('DocumentImportService.ingest', () => {
     const { service, store } = makeService()
 
     // An empty fenced block: non-empty as bytes, nothing at all once rendered to text (the shape
-    // an extractor emits for an embed it could not render). The platform already refuses such a
-    // document, but only on the first step that resolves context, by which point the caller has
-    // started and paid for a run.
+    // an extractor emits for an embed it could not render). The refusal is deliberately STRICTER
+    // than the run-time one, which passes anything with a non-empty raw body because a container
+    // agent can at least open the file; only the excerpt-only inline readers would find this
+    // blank. Refusing here means a document that would reach half the readers as nothing is
+    // caught while the caller still holds the bytes and can fix them.
     await expect(service.ingest('ws_1', { title: 'Spec', content: '```\n\n```' })).rejects.toThrow(
       ValidationError,
     )

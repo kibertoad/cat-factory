@@ -172,8 +172,8 @@ describe('public API: creating a task WITH requirements documents', () => {
     expect(documents.every((d) => d.linkedBlockId === created.body.taskId)).toBe(true)
   })
 
-  it('leaves the board untouched when a named page cannot be resolved', async () => {
-    const { app, auth, serviceId } = await setup()
+  it('leaves the board AND the workspace untouched when a named page cannot be resolved', async () => {
+    const { app, auth, workspaceId, serviceId } = await setup()
 
     // `notion` is a grammatically valid source this workspace has not connected. The refusal has
     // to land BEFORE the block is created: the other order hands back a `201` for a task the
@@ -199,14 +199,58 @@ describe('public API: creating a task WITH requirements documents', () => {
       auth,
     )
     expect(list.body.tasks).toEqual([])
+    // And the upload LISTED FIRST left nothing behind. Uploads are written only once the whole
+    // list has resolved, precisely because each one mints a fresh id: written eagerly, an
+    // integration retrying this call in a loop would fill the workspace with unreachable copies
+    // of the same spec (an import, keyed by its ref, would simply land on the same row).
+    expect(await storedDocuments(app, workspaceId)).toEqual([])
+  })
+
+  it('refuses to steal a page a live task already holds, naming that task', async () => {
+    const { app, auth, workspaceId, serviceId } = await setup()
+
+    const first = await app.call<PublicTask>(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      {
+        title: 'First',
+        documents: [{ kind: 'source', source: 'confluence', ref: 'PAGE-1' }],
+      },
+      auth,
+    )
+    expect(first.status).toBe(201)
+
+    // A document row holds ONE `linkedBlockId`, so attaching the same page again would MOVE the
+    // link: the first task would silently lose the spec it was created with, and its run would
+    // report nothing. The refusal names the holder, exactly as a re-filed ticket's does.
+    const second = await app.call(
+      'POST',
+      `/api/v1/services/${serviceId}/tasks`,
+      {
+        title: 'Second',
+        documents: [{ kind: 'source', source: 'confluence', ref: 'PAGE-1' }],
+      },
+      auth,
+    )
+    expect(second.status).toBe(409)
+    expect(second.body).toMatchObject({
+      error: { details: { reason: 'document_already_linked', taskId: first.body.taskId } },
+    })
+
+    // And the first task kept it.
+    const documents = await storedDocuments(app, workspaceId)
+    expect(documents).toEqual([
+      expect.objectContaining({ externalId: 'PAGE-1', linkedBlockId: first.body.taskId }),
+    ])
   })
 
   it('refuses an upload with no readable text', async () => {
     const { app, auth, serviceId } = await setup()
 
-    // An empty fenced block: bytes, but nothing at all once rendered to text. The platform would
-    // refuse this document anyway, on the first step that resolves context, after the caller has
-    // started and paid for a run. Refusing at the boundary is where the caller can still fix it.
+    // An empty fenced block: bytes, but nothing at all once rendered to text. Refused at the
+    // boundary, where the caller still holds the bytes, rather than left to the inline readers
+    // that would find it blank mid-run (a container agent would open the file and see nothing
+    // useful, without the platform ever calling it unreadable).
     const refused = await app.call(
       'POST',
       `/api/v1/services/${serviceId}/tasks`,

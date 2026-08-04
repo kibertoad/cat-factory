@@ -688,6 +688,60 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
       expect(await repo.getByUrl(ws, '')).toBeNull()
     })
 
+    it('batch-resolves, batch-links and detaches documents identically across origins', async () => {
+      // The batched trio behind attaching a LIST of documents to one task. Every one of them
+      // spans ORIGINS (an imported page beside an uploaded body), which is where a facade that
+      // grouped or filtered by origin differently would diverge — and the divergence is silent:
+      // a document missing from the batch read is a document missing from the agent's corpus.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+
+      const base = {
+        workspaceId: ws,
+        title: 'doc',
+        excerpt: 'x',
+        body: 'x',
+        contentHash: 'h',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 3_000,
+        deletedAt: null,
+      }
+      await repo.upsert({ ...base, source: 'confluence', externalId: 'PAGE-1', url: 'https://w/1' })
+      await repo.upsert({ ...base, source: 'confluence', externalId: 'PAGE-2', url: 'https://w/2' })
+      await repo.upsert({ ...base, source: 'upload', externalId: 'doc_up', url: '' })
+
+      const refs = [
+        { source: 'confluence', externalId: 'PAGE-1' },
+        { source: 'upload', externalId: 'doc_up' },
+      ] as const
+      // A ref that resolves nothing is absent rather than an error, and never drags in a
+      // same-id row from another origin.
+      const found = await repo.listByRefs(ws, [...refs, { source: 'notion', externalId: 'PAGE-1' }])
+      expect(found.map((d) => `${d.source}:${d.externalId}`).sort()).toEqual([
+        'confluence:PAGE-1',
+        'upload:doc_up',
+      ])
+
+      await repo.linkBlockMany(ws, refs, 'task_1')
+      expect((await repo.listByBlock(ws, 'task_1')).map((d) => d.externalId).sort()).toEqual([
+        'PAGE-1',
+        'doc_up',
+      ])
+      // PAGE-2 was not named, so it stays unattached: a batch write must not widen to its origin.
+      expect((await repo.get(ws, 'confluence', 'PAGE-2'))?.linkedBlockId).toBeNull()
+
+      // The block-delete cascade's detach, keyed by BLOCK rather than by ref — a link naming a
+      // deleted block would otherwise make its document look permanently spoken for.
+      await repo.detachBlocks(ws, ['task_1'])
+      expect(await repo.listByBlock(ws, 'task_1')).toEqual([])
+      // The documents themselves survive; only the link went.
+      expect(await repo.get(ws, 'upload', 'doc_up')).not.toBeNull()
+    })
+
     it('persists an interactive document-interview session identically (WS5)', async () => {
       // The interactive-interview session (WS5) is written by the interviewer LLM (off in
       // conformance), so — like the role-link probe above — exercise the persistence through

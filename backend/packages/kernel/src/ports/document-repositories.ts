@@ -76,6 +76,16 @@ export interface DocumentRecord {
   deletedAt: number | null
 }
 
+/**
+ * A (origin, externalId) pointer to one stored document — the key {@link DocumentRepository.get}
+ * resolves a single row by, and the batch methods take a list of. Named explicitly so callers
+ * pass typed refs instead of positional origin strings. Mirrors `TaskRef`.
+ */
+export interface DocumentRef {
+  source: DocumentOrigin
+  externalId: string
+}
+
 export interface DocumentRepository {
   upsert(record: DocumentRecord): Promise<void>
   get(
@@ -83,6 +93,14 @@ export interface DocumentRepository {
     source: DocumentOrigin,
     externalId: string,
   ): Promise<DocumentRecord | null>
+  /**
+   * Batch-resolve live documents by their {@link DocumentRef}s in ONE chunked-`IN` read per
+   * origin — the batch counterpart to {@link get}, so attaching a LIST of documents never
+   * becomes a point-read-per-document. Refs that don't resolve are simply absent from the
+   * result; order is not guaranteed (callers index the result into a `Map`). Empty input is a
+   * no-op. Mirrors `TaskRepository.listByRefs`, which serves the same need for issues.
+   */
+  listByRefs(workspaceId: string, refs: readonly DocumentRef[]): Promise<DocumentRecord[]>
   /** Every live document imported into the workspace, across sources. */
   listByWorkspace(workspaceId: string): Promise<DocumentRecord[]>
   /**
@@ -100,6 +118,31 @@ export interface DocumentRepository {
     externalId: string,
     blockId: string | null,
   ): Promise<void>
+  /**
+   * Attach (or with null, detach) SEVERAL documents to one block in one chunked statement per
+   * origin — the batch counterpart to {@link linkBlock}.
+   *
+   * Two callers need it as a batch rather than a loop: a task created with a list of documents
+   * links them together, and the rollback that undoes such a creation detaches them together.
+   * Both are bounded lists known up front, which is exactly the shape the point method turns
+   * into an N+1. Empty input is a no-op. Refs naming no row are silently skipped, so a detach
+   * stays idempotent (the rollback re-runs against rows a concurrent delete may already have
+   * removed).
+   */
+  linkBlockMany(
+    workspaceId: string,
+    refs: readonly DocumentRef[],
+    blockId: string | null,
+  ): Promise<void>
+  /**
+   * Detach every document attached to ANY of the given blocks, in one chunked statement.
+   *
+   * The block-delete cascade's counterpart to {@link linkBlock}'s null form: a delete knows the
+   * doomed block ids, not which documents name them, and a document row carries exactly one
+   * `linkedBlockId`, so a link left naming a deleted block makes that document look permanently
+   * spoken for. Empty input is a no-op; blocks with no attached document are silently skipped.
+   */
+  detachBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void>
   // ---- Workspace+DocKind role links (WS1 items 2–4) -----------------------
   /**
    * The single live document tagged with `role` for `docKind` (newest wins), or null. Used for

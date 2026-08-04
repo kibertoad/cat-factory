@@ -1,6 +1,9 @@
 import type {
   Block,
+  BlockRepository,
+  DocumentRepository,
   InitiativeRepository,
+  ServiceConnection,
   ServiceRepository,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
@@ -24,6 +27,7 @@ export interface RemovalCascadeDeps {
   serviceRepository?: ServiceRepository
   workspaceMountRepository?: WorkspaceMountRepository
   initiativeRepository?: InitiativeRepository
+  documentRepository?: DocumentRepository
 }
 
 export interface RemovalCascadeInput {
@@ -97,6 +101,31 @@ async function reclaimInitiatives(
 }
 
 /**
+ * Detach every document attached to a doomed block, so the delete doesn't leave a link naming a
+ * block that is gone.
+ *
+ * Unlike the reclaims above this deletes NOTHING: the document is a projection of a page (or an
+ * uploaded body) that outlives the task it was attached to, and re-attaching it elsewhere is the
+ * normal next step. What must not survive is the LINK, because a document row carries exactly one
+ * `linked_block_id`. Left stale it makes the document look permanently spoken for by a task
+ * nobody can open, which the attach guard would then have to refuse on
+ * (`DocumentLinkService.assertNotHeldElsewhere` treats a dangling link as free precisely so
+ * pre-existing rows are not wedged; this stops new ones being made).
+ *
+ * One batched write over the whole doomed subtree, never a detach per block.
+ */
+async function detachDoomedDocuments(
+  deps: RemovalCascadeDeps,
+  { homeWorkspaceId, deletedId, doomed }: RemovalCascadeInput,
+): Promise<void> {
+  const repo = deps.documentRepository
+  if (!repo) return
+  // `deletedId` joins the set for the dangling case: the block row may already be gone (so it is
+  // absent from `doomed`'s source list) while its document links live on.
+  await repo.detachBlocks(homeWorkspaceId, [...new Set([...doomed, deletedId])])
+}
+
+/**
  * Run every side-table reclaim for a block delete, in the order `removeBlock` performed them
  * inline. Sequential on purpose: these are independent writes, but a burst of parallel deletes
  * against D1 buys nothing and makes a partial failure harder to reason about.
@@ -107,4 +136,54 @@ export async function reclaimDoomedEntities(
 ): Promise<void> {
   await reclaimServices(deps, input)
   await reclaimInitiatives(deps, input)
+  await detachDoomedDocuments(deps, input)
+}
+
+/**
+ * After a set of blocks leaves `homeWorkspaceId` (deleted, or moved to another workspace),
+ * drop the now-dangling references on the surviving blocks in one pass: dependency edges
+ * pointing into `removed`, and epic membership whose epic was removed (the member task itself
+ * survives — epic grouping is non-structural, never cascaded). Shared by the delete and the
+ * reparent/detach paths so they can't drift.
+ *
+ * Lives here rather than on `BoardService` for the reason stated above: it is a removal-cascade
+ * concern, and this is where that concern's next member goes. It takes the block repository
+ * rather than reading one off `this`.
+ */
+export async function pruneDanglingEdges(
+  blockRepository: BlockRepository,
+  homeWorkspaceId: string,
+  survivors: Block[],
+  removed: Set<string>,
+): Promise<void> {
+  for (const b of survivors) {
+    if (removed.has(b.id)) continue
+    const patch: {
+      dependsOn?: string[]
+      epicId?: string | null
+      initiativeId?: string | null
+      serviceConnections?: ServiceConnection[]
+      involvedServiceIds?: string[]
+    } = {}
+    const next = b.dependsOn.filter((d) => !removed.has(d))
+    if (next.length !== b.dependsOn.length) patch.dependsOn = next
+    if (b.epicId && removed.has(b.epicId)) patch.epicId = null
+    // Initiative membership is non-structural (epic-style): a task the loop spawned
+    // isn't a descendant of the deleted initiative block, so detach the dangling link
+    // here the same way epic membership is pruned above.
+    if (b.initiativeId && removed.has(b.initiativeId)) patch.initiativeId = null
+    // Service-connection edges into the removed set, and task selections of a removed
+    // involved service, dangle the same way dependency edges do — drop them here too.
+    const connections = (b.serviceConnections ?? []).filter((c) => !removed.has(c.serviceBlockId))
+    if (connections.length !== (b.serviceConnections ?? []).length) {
+      patch.serviceConnections = connections
+    }
+    const involved = (b.involvedServiceIds ?? []).filter((sid) => !removed.has(sid))
+    if (involved.length !== (b.involvedServiceIds ?? []).length) {
+      patch.involvedServiceIds = involved
+    }
+    if (Object.keys(patch).length) {
+      await blockRepository.update(homeWorkspaceId, b.id, patch)
+    }
+  }
 }

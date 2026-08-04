@@ -31,14 +31,36 @@ Two vocabularies, and which one a surface takes says what it can do with the row
   [`public-api.md`](./public-api.md#attaching-requirements-documents)). Downstream it is an
   ordinary document: it lists with the rest, links to a block, can be tagged as a doc-kind
   template, and is read by the same context path. The app has no upload UI, and the context
-  picker is keyed by source, so the SPA can detach one but not attach it to a SECOND task;
-  that is a UI gap, not a model one, and the `POST /documents/link` route already serves it.
+  picker is keyed by source, so the SPA can detach one but not re-attach it elsewhere; that is a
+  UI gap, not a model one, and the `POST /documents/link` route already serves it.
 
 Keeping the narrow union on the provider surfaces is what makes the missing `upload` provider a
 COMPILE error (an exhaustive `Record<DocumentSourceKind, DocumentSourceDescriptor>` still has to
 name every member) rather than an `undefined` at whichever call site reaches for it first. Narrow a
 wide origin with `isConnectableSource` (`@cat-factory/contracts`), the predicate derived from the
 source picklist, never with an optional lookup.
+
+## A document is attached to at most ONE block
+
+`linkedBlockId` is a single column, so attaching a document that another block already holds would
+MOVE the link, not copy it: the earlier task silently loses a document it was created with, and
+nothing in its next run reports the absence. `DocumentLinkService.linkToBlock` therefore refuses
+with a `ConflictError` carrying `document_already_linked` and the holder's id, the same rule and the
+same shape as one-task-per-ticket. To put the same text on two tasks, attach two documents (import
+the page twice under different refs, or upload the body again).
+
+Two things keep that refusal from wedging anything:
+
+- **A link naming a block that no longer exists is not a holder.** The guard checks whether the
+  holder is still live, so a document whose task was deleted re-attaches on first use. That also
+  heals rows left by deletes made before the cascade below existed.
+- **Deleting a block detaches its documents.** `BoardService.removeBlock` runs
+  `documentRepository.detachBlocks` through the removal cascade (`removal-cascade.ts`). Nothing is
+  deleted, only unlinked: the document outlives the task it was attached to.
+
+Attaching a LIST of documents goes through `linkManyToBlock`, which asserts the block once, resolves
+the whole list in one `listByRefs` read and writes the links in one batched statement. Reach for it
+rather than looping the point method (the repo's no-N+1 rule).
 
 An `upload` has **no origin URL**, and empty is how it says so. Every renderer goes through kernel's
 `originSuffix` / `originHeaderLine`, so the prompt index, the inline injection and the materialised

@@ -123,17 +123,26 @@ export function contextExcerptFor(doc: { body?: string | null; excerpt?: string 
 
 /**
  * Refuse the run when any referenced context document resolved to an unreadable page, naming each
- * one plus the two remedies. Nothing to report ⇒ a no-op, so every caller can assert
- * unconditionally.
+ * one plus the remedies that actually apply. Nothing to report ⇒ a no-op, so every caller can
+ * assert unconditionally.
+ *
+ * "Re-import the page" is offered only when at least one of the named references HAS an origin
+ * page. A document with no URL was handed to the platform directly and there is nothing to
+ * re-import it from, so telling its owner to try would send them looking for a source that never
+ * existed — the same distinction {@link originSuffix} draws for the renderers, made here because
+ * this is the message a human acts on.
  */
 export function assertContextDocumentsReadable(unreadable: readonly ContextReferenceRef[]): void {
   if (!unreadable.length) return
   const plural = unreadable.length === 1 ? 'document' : 'documents'
+  const reimportable = unreadable.some((ref) => ref.url.trim())
+  const remedy = reimportable
+    ? `Re-import the page (its source may have returned an empty body), or detach it from the task `
+    : `Re-attach it with the document body, or detach it from the task `
   throw new ValidationError(
     `This task references ${unreadable.length} context ${plural} with no readable content, so the ` +
       `agent would run without ${unreadable.length === 1 ? 'it' : 'them'}: ${joinRefs(unreadable)}. ` +
-      `Re-import the page (its source may have returned an empty body), or detach it from the task ` +
-      `to run without it.`,
+      `${remedy}to run without it.`,
     { reason: CONTEXT_DOCUMENT_UNREADABLE, references: referenceIds(unreadable) },
   )
 }

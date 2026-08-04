@@ -302,6 +302,7 @@ export type {
   DocumentConnectionRecord,
   DocumentConnectionRepository,
   DocumentRecord,
+  DocumentRef,
   DocumentRepository,
 } from './document-repositories.js'
 export type {

@@ -5157,6 +5157,7 @@
         "input_gate_not_parked": "Nichts zu beantworten",
         "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
+        "document_already_linked": "Dokument bereits angehängt",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
       },
       "description": {
@@ -5193,6 +5194,7 @@
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
+        "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "action": {

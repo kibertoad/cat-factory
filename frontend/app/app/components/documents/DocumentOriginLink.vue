@@ -6,13 +6,19 @@
 // page, which reads as a link that BROKE rather than as a document that never had one — the same
 // distinction kernel's `originSuffix` / `originHeaderLine` draw for the agent-facing renderers.
 // One component so the three places the SPA lists documents cannot each get it half right.
-const props = defineProps<{ url: string }>()
+//
+// `hoverClass` is the caller's hover affordance, applied ONLY when there is somewhere to go: a
+// hover style on an element that does not navigate is the same lie as the empty `href`, one
+// rendering later. It lives here rather than at each call site so a caller cannot pass the style
+// and forget the condition.
+const props = defineProps<{ url: string; hoverClass?: string }>()
 const { t } = useI18n()
 </script>
 
 <template>
   <component
     :is="props.url ? 'a' : 'span'"
+    :class="props.url ? props.hoverClass : undefined"
     v-bind="
       props.url
         ? { href: props.url, title: props.url, target: '_blank', rel: 'noopener' }

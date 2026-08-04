@@ -32,6 +32,31 @@ export interface UploadedDocument {
   content: string
 }
 
+/**
+ * The excerpt an uploaded body yields, or a refusal when it yields none.
+ *
+ * PURE and exported so a caller writing several uploads can validate the whole list before the
+ * first write, rather than discovering the fourth one is empty with three rows already stored.
+ * `ingest` calls it too, so the rule holds however the upload arrives.
+ *
+ * The refusal is STRICTER than the run-time one, deliberately. `hasReadableContent` passes
+ * anything with a non-empty raw `body`, because a container agent opens the materialised markdown
+ * and can at least see what is in it; only the excerpt-only inline readers refuse a body that
+ * renders to nothing. Here the bytes are in hand and the caller can still fix them, so a document
+ * that would reach HALF the readers as blank is refused for all of them rather than shipped and
+ * discovered mid-run.
+ */
+export function assertUploadReadable(input: UploadedDocument): string {
+  const excerpt = buildExcerpt(input.content)
+  if (!excerpt.trim()) {
+    throw new ValidationError(
+      `Document '${input.title}' has no readable text, so an agent would receive an empty ` +
+        `attachment. Supply the document body as Markdown or plain text.`,
+    )
+  }
+  return excerpt
+}
+
 /** Project a stored document record onto the wire shape (drops body + tombstone). */
 export function toSourceDocument(record: DocumentRecord): SourceDocument {
   return {
@@ -125,20 +150,13 @@ export class DocumentImportService {
    * carries a single `linkedBlockId` the second upload would silently steal the first task's
    * attachment. Each upload is its own document.
    *
-   * REFUSES text that yields no readable excerpt (a body that is pure markup collapses to nothing
-   * through `markdownToText`). The platform already refuses such a document, but at the first step
-   * that resolves context, deep inside a run the caller has by then started and paid for. Here the
-   * body is in hand and the caller can fix it, so the refusal belongs at the boundary.
+   * REFUSES text that yields no readable excerpt, through {@link assertUploadReadable} — which a
+   * caller sequencing several uploads calls FIRST, on its own, so nothing is written until the
+   * whole list is known to be good. See its own note for what that refusal is and is not.
    */
   async ingest(workspaceId: string, input: UploadedDocument): Promise<SourceDocument> {
     await requireWorkspace(this.deps.workspaceRepository, workspaceId)
-    const excerpt = buildExcerpt(input.content)
-    if (!excerpt.trim()) {
-      throw new ValidationError(
-        `Document '${input.title}' has no readable text, so an agent would receive an empty ` +
-          `attachment. Supply the document body as Markdown or plain text.`,
-      )
-    }
+    const excerpt = assertUploadReadable(input)
     const record: DocumentRecord = {
       workspaceId,
       source: 'upload',

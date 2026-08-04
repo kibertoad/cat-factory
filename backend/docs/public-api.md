@@ -122,6 +122,7 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                  |
   | `no_review`                      | 404     | requirements decision routes: the run has no live requirements review                                        |
   | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
+  | `document_already_linked`        | 409     | task create: a named document is already attached to another live task (`details.taskId` names it)           |
 
 ### Pagination
 
@@ -404,19 +405,28 @@ POST /api/v1/services/svc_api/tasks
 
 At most 10 documents per create, in the order agents should read them.
 
-Three refusals matter:
+Four refusals matter:
 
 - **Everything is resolved before the task is created.** An unconfigured source, a ref the provider
   cannot parse, a page it will not serve, or an upload with no readable text refuses the whole
   request and leaves the board untouched. The other order hands you a `201` for a task you believe
   carries its spec, running on its title alone.
 - **An upload with no readable text is refused** (`422`) rather than stored. A body that renders to
-  nothing would reach the agent as an empty attachment, and the platform refuses such a document
-  anyway: doing it here means you can still fix it, rather than losing the first step of a run you
-  have already paid for.
+  nothing would reach the agent as an empty attachment, so it is caught while you still hold the
+  bytes and can fix them, rather than costing you the first step of a run.
+- **One task per document.** A document already attached to another live task comes back `409` with
+  `details.reason: "document_already_linked"` and `details.taskId` naming the task that holds it.
+  A document carries a single attachment, so a second attach would MOVE it: the earlier task would
+  lose a document it was created with, and nothing in its next run would say so. Attach a separate
+  copy (upload the text again), or detach it from the other task first. A link naming a task that
+  has since been deleted is not a holder, so a deleted task never strands its documents.
 - **A `201` means the task carries every document you named.** If an attachment fails to land after
   the task is created, the task is taken back off the board and you get the error, so your retry
   files it once and whole.
+
+A refused request leaves nothing behind to clean up: pages resolve onto the same row every time
+(they are keyed by their ref), and uploads are stored only once the whole list has resolved, so
+retrying in a loop cannot fill the workspace with copies of a spec that was never attached.
 
 The per-document cap bounds one attachment; the whole attached corpus (documents plus any linked
 tracker issues) is bounded by the run's materialised-context budget of ~256 KB. Overflowing it
