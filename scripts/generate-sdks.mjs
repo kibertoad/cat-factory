@@ -6,6 +6,9 @@
 // and this renders the spec to four clients. Twinned with `scripts/check-sdks.mjs` (the CI drift
 // guard), exactly like `gen:openapi` ⇄ `check:openapi`.
 //
+// A fifth emitter renders the MCP facade's tool table (`sdk/mcp`), which is not a client: it is
+// the same operations projected as MCP tools over the TypeScript SDK.
+//
 // What is generated is deliberately narrow — the wire MODELS and the operation methods. Each
 // SDK's transport, error hierarchy, retry policy, pagination helper and SSE reader are
 // hand-written and live beside the generated files. That split is what keeps a contract change
@@ -25,6 +28,7 @@ import * as typescript from './sdk/emit-typescript.mjs'
 import * as python from './sdk/emit-python.mjs'
 import * as go from './sdk/emit-go.mjs'
 import * as java from './sdk/emit-java.mjs'
+import * as mcp from './sdk/emit-mcp.mjs'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SDK_ROOT = resolve(repoRoot, 'sdk')
@@ -45,6 +49,10 @@ const EMITTERS = [
   { dir: 'python', emit: python.emit, generatedDirs: [] },
   { dir: 'go', emit: go.emit, generatedDirs: [] },
   { dir: 'java', emit: java.emit, generatedDirs: java.GENERATED_DIRS },
+  // Not a fifth client: the MCP facade renders the same IR as a TOOL TABLE over the TypeScript
+  // SDK. It rides this generator because it must not be able to drift from the surface it
+  // exposes, which is the whole reason the four clients ride it.
+  { dir: 'mcp', emit: mcp.emit, generatedDirs: [] },
 ]
 
 /** Build every SDK's generated files, keyed by repo-relative path. */
@@ -104,7 +112,7 @@ async function main() {
     await writeFile(abs, contents, 'utf8')
   }
   console.log(
-    `Wrote ${files.size} generated SDK files across ${EMITTERS.length} languages` +
+    `Wrote ${files.size} generated SDK files across ${EMITTERS.length} targets` +
       (stale.length ? `, removed ${stale.length} stale` : '') +
       '.',
   )

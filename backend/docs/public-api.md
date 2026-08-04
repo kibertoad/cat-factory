@@ -223,6 +223,29 @@ status class with the machine-readable `code` exposed verbatim.
 Details, the design rules the four share, and the Java/Kotlin story:
 [`sdk/README.md`](../../sdk/README.md).
 
+### From an MCP host
+
+`@cat-factory/mcp-server` exposes this surface as **Model Context Protocol tools**, so a model in an
+MCP host can plan work on the board, start and watch runs, answer parked decisions and read a run's
+telemetry. It is a thin facade over the TypeScript client with its tool table generated from the
+same spec, so it inherits every convention on this page rather than re-stating them.
+
+```jsonc
+{
+  "mcpServers": {
+    "cat-factory": {
+      "command": "npx",
+      "args": ["-y", "@cat-factory/mcp-server"],
+      "env": { "CAT_FACTORY_BASE_URL": "$BASE", "CAT_FACTORY_API_KEY": "cf_live_..." },
+    },
+  },
+}
+```
+
+The key's SCOPE is what decides what the model may do — mint the narrowest one that does the job.
+The two SSE endpoints are deliberately not tools (a tool call has no streaming channel; see
+[`sdk/mcp/README.md`](../../sdk/mcp/README.md)).
+
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
 error codes, scopes and paging rules are the same whichever you use.
 
