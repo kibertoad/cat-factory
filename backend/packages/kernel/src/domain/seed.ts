@@ -675,7 +675,7 @@ function buildSpecialtyPipelines(): Pipeline[] {
     },
     // The first PUBLIC-API pipeline: a single inline `initiative-breakdown` step that
     // decomposes an initiative brief into a structured plan. `public: true` exposes it to
-    // external callers via `POST /api/v1/initiatives`; being inline (no container / no repo)
+    // external callers via `POST /api/v1/jobs`; being inline (no container / no repo)
     // it runs headlessly and persists its result to the DB, never touching GitHub. The kind
     // itself is registered in @cat-factory/agents (like every other kind referenced here).
     {

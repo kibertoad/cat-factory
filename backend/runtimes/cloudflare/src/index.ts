@@ -122,8 +122,9 @@ export {
 // call this directly, since `createWorker({ createToolSecretResolver })` registers on their
 // behalf; it is exported for one assembling its own app, and for tests.
 export {
-  registerToolSecretResolverFactory,
-  clearToolSecretResolverFactory,
+  registerToolSecretPolicy,
+  clearToolSecretPolicy,
+  type ToolSecretPolicy,
   type ToolSecretResolverFactory,
 } from './infrastructure/toolSecretResolver'
 

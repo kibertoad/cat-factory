@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { useExecutionStore } from '~/stores/execution'
 import { agentKindMeta } from '~/utils/catalog'
 import { dedicatedParkView } from '~/utils/pipelineRender'
+import { createRunStepOpeners } from './runStepOpeners'
 
 /**
  * The step-inspection / result-view slice of the UI store: the dedicated result-view overlay
@@ -126,84 +127,16 @@ export function createUiResultViews() {
   function openInitiativePlanning(blockId: string) {
     resultView.value = { view: 'initiative-planning', blockId, instanceId: null, stepIndex: null }
   }
-  // Open the Follow-up companion window for a run's Coder step (the blinking chip + the
-  // `followup_pending` notification). Resolves the Coder step index from the run when not
-  // given, so callers that only know the run can still open it.
-  function openFollowUps(instanceId: string, stepIndex: number | null = null) {
-    const execution = useExecutionStore()
-    const instance = execution.getInstance(instanceId)
-    if (!instance) return
-    // A pipeline may carry more than one follow-up-enabled Coder step, so don't blindly pick
-    // the first when no index is given: prefer the step that still has undecided items (the
-    // one the run is parked on), else the current step, else the first enabled one.
-    const resolveIdx = () => {
-      const pending = instance.steps.findIndex(
-        (s) => s.followUps?.enabled && s.followUps.items.some((i) => i.status === 'pending'),
-      )
-      if (pending >= 0) return pending
-      const current = instance.steps[instance.currentStep]
-      if (current?.followUps?.enabled) return instance.currentStep
-      return instance.steps.findIndex((s) => s.followUps?.enabled)
-    }
-    const idx = stepIndex ?? resolveIdx()
-    if (idx < 0) return
-    resultView.value = {
-      view: 'follow-ups',
-      blockId: instance.blockId,
-      instanceId,
-      stepIndex: idx,
-    }
-  }
-  // Open the implementation-fork decision window for a run's coder step (from the inspector /
-  // pipeline chip / `fork_decision_pending` notification). Resolves the coder step index from
-  // the run when not given, preferring the step parked awaiting a choice.
-  function openForkDecision(instanceId: string, stepIndex: number | null = null) {
-    const execution = useExecutionStore()
-    const instance = execution.getInstance(instanceId)
-    if (!instance) return
-    const resolveIdx = () => {
-      const awaiting = instance.steps.findIndex(
-        (s) => s.agentKind === 'coder' && s.forkDecision?.status === 'awaiting_choice',
-      )
-      if (awaiting >= 0) return awaiting
-      const current = instance.steps[instance.currentStep]
-      if (current?.agentKind === 'coder' && current.forkDecision) return instance.currentStep
-      return instance.steps.findIndex((s) => s.agentKind === 'coder' && s.forkDecision)
-    }
-    const idx = stepIndex ?? resolveIdx()
-    if (idx < 0) return
-    resultView.value = {
-      view: 'fork-decision',
-      blockId: instance.blockId,
-      instanceId,
-      stepIndex: idx,
-    }
-  }
-  // Open the PR deep-review window for a run's `pr-reviewer` step (from the `pr_review_ready`
-  // notification / the step). Resolves the step index from the run when not given, preferring
-  // the step parked awaiting a finding selection.
-  function openPrReview(instanceId: string, stepIndex: number | null = null) {
-    const execution = useExecutionStore()
-    const instance = execution.getInstance(instanceId)
-    if (!instance) return
-    const resolveIdx = () => {
-      const awaiting = instance.steps.findIndex(
-        (s) => s.agentKind === 'pr-reviewer' && s.prReview?.status === 'awaiting_selection',
-      )
-      if (awaiting >= 0) return awaiting
-      const current = instance.steps[instance.currentStep]
-      if (current?.agentKind === 'pr-reviewer' && current.prReview) return instance.currentStep
-      return instance.steps.findIndex((s) => s.agentKind === 'pr-reviewer' && s.prReview)
-    }
-    const idx = stepIndex ?? resolveIdx()
-    if (idx < 0) return
-    resultView.value = {
-      view: 'pr-review',
-      blockId: instance.blockId,
-      instanceId,
-      stepIndex: idx,
-    }
-  }
+  // The run-scoped openers (a caller that knows only the RUN, so the step index has to be
+  // resolved) live in a sibling module: they share one shape and one hazard, and lifting them out
+  // keeps this factory inside its per-function line budget. Their two seams are bound here.
+  const { openFollowUps, openForkDecision, openPrReview, openTestEvidence } = createRunStepOpeners({
+    dispatchStepView: (instanceId, stepIndex) => dispatchStepView(instanceId, stepIndex),
+    setResultView: (view, instance, stepIndex) => {
+      resultView.value = { view, blockId: instance.blockId, instanceId: instance.id, stepIndex }
+    },
+  })
+
   function closeResultView() {
     resultView.value = null
   }
@@ -243,6 +176,7 @@ export function createUiResultViews() {
     openFollowUps,
     openForkDecision,
     openPrReview,
+    openTestEvidence,
     closeResultView,
     closeRequirementReview,
     openStepDetail,

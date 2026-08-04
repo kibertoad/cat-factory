@@ -140,7 +140,7 @@ public final class Smoketest {
             // A required-but-NULLABLE field: the server always sends it, and it is null here.
             // Recording it explicitly is what proves the four SDKs agree that "the server said
             // null" and "the server said nothing" are different facts.
-            observations.put("createdExecutionIdIsNull", task.executionId() == null);
+            observations.put("createdRunIdIsNull", task.runId() == null);
             observations.put("createdPullRequestUrlIsNull", task.pullRequestUrl() == null);
         });
 
@@ -243,7 +243,7 @@ public final class Smoketest {
             }
             PublicTask task = client.tasks().start(taskId, body.build());
             observations.put("startedStatus", task.status().wireValue());
-            observations.put("startedHasExecutionId", task.executionId() != null);
+            observations.put("startedHasRunId", task.runId() != null);
         });
 
         step("tasks.stream (SSE)", () -> {

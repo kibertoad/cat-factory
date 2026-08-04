@@ -17,7 +17,7 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // the clarification loop it previously could not even start.
 //
 // Keyed by RUN id, not task id: the same surface then serves BOTH a headless initiative job
-// (`POST /api/v1/initiatives`, anchored on an internal block with no board task) and an ordinary
+// (`POST /api/v1/jobs`, anchored on an internal block with no board task) and an ordinary
 // board task run (`POST /api/v1/tasks/:taskId/start`). Every route is workspace-scoped by the
 // caller's key.
 //

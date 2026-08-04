@@ -18,14 +18,12 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
-    CreateInitiativeJob,
+    CreatePublicJob,
     CreatePublicTask,
     DebugAgentContextSnapshot,
     DebugLlmCall,
     DebugRunOverview,
     GetDebugLlmCallView,
-    InitiativeAccepted,
-    InitiativeAcceptedStatus,
     ListDebugAgentContextResponse,
     ListDebugLlmCallsOrder,
     ListDebugLlmCallsResponse,
@@ -39,6 +37,8 @@ from .models import (
     PublicDecisionList,
     PublicIncorporate,
     PublicJob,
+    PublicJobAccepted,
+    PublicJobStatus,
     PublicNotificationList,
     PublicPipelineList,
     PublicReplyFinding,
@@ -67,15 +67,17 @@ def _quote(value: str) -> str:
     return quote(str(value), safe="")
 
 
-class InitiativesResource:
-    """Headless initiative-breakdown runs: start one against a brief, poll or stream it."""
+class JobsResource:
+    """Headless jobs (a public, inline pipeline run against a brief): start, poll or stream
+    one.
+    """
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
     def cancel(self, id: str, timeout: float | None = None) -> PublicJob:
-        """Cancel an initiative job
-        Stop a headless initiative run, freeing its concurrency slot. Idempotent — an
+        """Cancel a job
+        Stop a headless job run, freeing its concurrency slot. Idempotent — an
         already-finished job is returned as-is. Use this to abandon a run parked on a
         decision you do not intend to answer.
         `POST /api/v1/jobs/{id}/cancel` (operation `cancelPublicJob`).
@@ -88,25 +90,25 @@ class InitiativesResource:
         )
         return PublicJob.from_dict(raw)
 
-    def create(self, body: CreateInitiativeJob, timeout: float | None = None) -> InitiativeAccepted:
-        """Start an initiative-breakdown run
+    def create(self, body: CreatePublicJob, timeout: float | None = None) -> PublicJobAccepted:
+        """Start a headless job
         Start a public, inline pipeline headlessly against a supplied brief. Returns a job
         id to poll or stream. Nothing is pushed to GitHub.
-        `POST /api/v1/initiatives` (operation `createInitiativeJob`).
+        `POST /api/v1/jobs` (operation `createPublicJob`).
         """
         raw = self._transport.request(
             "POST",
-            f"/api/v1/initiatives",
+            f"/api/v1/jobs",
             body=_encode(body),
             query=None,
             timeout=timeout,
         )
-        return InitiativeAccepted.from_dict(raw)
+        return PublicJobAccepted.from_dict(raw)
 
     def get(self, id: str, timeout: float | None = None) -> PublicJob:
-        """Get an initiative job
-        Poll a headless initiative run started by this key: its status and, once finished,
-        its result.
+        """Get a job
+        Poll a headless job started through this surface: its status and, once finished, its
+        result.
         `GET /api/v1/jobs/{id}` (operation `getPublicJob`).
         """
         raw = self._transport.request(
@@ -117,11 +119,11 @@ class InitiativesResource:
         )
         return PublicJob.from_dict(raw)
 
-    def list(self, *, limit: int | None = None, cursor: str | None = None, status: InitiativeAcceptedStatus | None = None, since: int | None = None, timeout: float | None = None) -> ListPublicJobsResponse:
-        """List the workspace's initiative jobs
-        List the headless initiative runs THIS surface created, newest first and
-        keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read,
-        so an external key can never enumerate the workspace’s ordinary board runs.
+    def list(self, *, limit: int | None = None, cursor: str | None = None, status: PublicJobStatus | None = None, since: int | None = None, timeout: float | None = None) -> ListPublicJobsResponse:
+        """List the workspace's jobs
+        List the headless runs THIS surface created, newest first and keyset-paginated.
+        Scoped to internal-anchored runs exactly like the single-job read, so an external
+        key can never enumerate the workspace’s ordinary board runs.
         `GET /api/v1/jobs` (operation `listPublicJobs`).
         """
         raw = self._transport.request(
@@ -132,7 +134,7 @@ class InitiativesResource:
         )
         return ListPublicJobsResponse.from_dict(raw)
 
-    def list_all(self, *, limit: int | None = None, cursor: str | None = None, status: InitiativeAcceptedStatus | None = None, since: int | None = None, timeout: float | None = None) -> Iterator[Any]:
+    def list_all(self, *, limit: int | None = None, cursor: str | None = None, status: PublicJobStatus | None = None, since: int | None = None, timeout: float | None = None) -> Iterator[Any]:
         """Every `jobs` across every page of `list()`, as they arrive.
         Follows `next_cursor` until the server reports no further page. A page may
         legitimately come back empty while `next_cursor` is still set, so this pages until
@@ -150,8 +152,8 @@ class InitiativesResource:
             page_cursor = page.next_cursor
 
     def stream(self, id: str, timeout: float | None = None) -> EventStream:
-        """Stream an initiative job (SSE)
-        Server-sent events for a headless initiative run: `progress` frames until a terminal
+        """Stream a job (SSE)
+        Server-sent events for a headless job run: `progress` frames until a terminal
         `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
         `GET /api/v1/jobs/{id}/events` (operation `streamPublicJobEvents`).
         """
@@ -220,8 +222,8 @@ class TasksResource:
 
     def get(self, task_id: str, timeout: float | None = None) -> PublicTask:
         """Get a task's status
-        Read a task’s current lifecycle status, run progress, execution id, and PR URL (once
-        one exists).
+        Read a task’s current lifecycle status, run progress, run id, and PR URL (once one
+        exists).
         `GET /api/v1/tasks/{taskId}` (operation `getPublicTask`).
         """
         raw = self._transport.request(
@@ -294,7 +296,8 @@ class TasksResource:
     def start(self, task_id: str, body: StartPublicTask, timeout: float | None = None) -> PublicTask:
         """Start (run) a task
         Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned
-        pipeline. A task on an individual-usage model cannot be started through the API (no
+        pipeline. A pipeline that can park on a human decision requires a `decide`-scope
+        key. A task on an individual-usage model cannot be started through the API (no
         headless personal-credential unlock).
         `POST /api/v1/tasks/{taskId}/start` (operation `startPublicTask`).
         """
@@ -816,7 +819,7 @@ class DebugResource:
 def build_resources(transport: Transport) -> dict[str, Any]:
     """Every resource client, keyed by the attribute it is mounted at on the client."""
     return {
-        "initiatives": InitiativesResource(transport),
+        "jobs": JobsResource(transport),
         "services": ServicesResource(transport),
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),

@@ -107,7 +107,7 @@ recurring-schedule fire AND for auth-disabled local dev. `RunStartOptions.origin
 is what every legacy run is). It rides the `agent_runs.detail` JSON through the SHARED
 `@cat-factory/server` mappers, so both runtimes gain it in one edit with **no migration**:
 the same seam `initiatedBy` / `createdAt` / `diagnostics` already use. `RunStartOptions`
-grows a matching optional field, set by the two public-API start paths (`POST /initiatives`
+grows a matching optional field, set by the two public-API start paths (`POST /jobs`
 and `POST /tasks/:taskId/start`) and nowhere else. `retry` / `restart` carry the previous
 run's value forward, exactly like `initiatedBy`.
 

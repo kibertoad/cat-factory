@@ -100,7 +100,7 @@ def create_task() -> None:
     # A required-but-NULLABLE field: the server always sends it, and it is null here. Recording it
     # explicitly is what proves the four SDKs agree that "the server said null" and "the server
     # said nothing" are different facts.
-    observations["createdExecutionIdIsNull"] = task.execution_id is None
+    observations["createdRunIdIsNull"] = task.run_id is None
     observations["createdPullRequestUrlIsNull"] = task.pull_request_url is None
 
 
@@ -180,7 +180,7 @@ def start_task() -> None:
     body = StartPublicTask(pipeline_id=state["pipeline_id"] or None)
     task = client.tasks.start(state["task_id"], body)
     observations["startedStatus"] = str(task.status)
-    observations["startedHasExecutionId"] = task.execution_id is not None
+    observations["startedHasRunId"] = task.run_id is not None
 
 
 def stream_task() -> None:

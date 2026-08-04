@@ -1,5 +1,6 @@
 // Public-API ADMISSION: what an external, key-authenticated caller may launch through
-// `/api/v1/initiatives`, and the `headlessStartable` flag pipeline discovery reports.
+// `POST /api/v1/jobs` and `POST /api/v1/tasks/:taskId/start`, and the `headlessStartable`
+// flag pipeline discovery reports.
 //
 // Extracted from `PublicApiController` so the policy is unit-testable in isolation: the built-in
 // public pipeline is READ-ONLY, so there is no way to construct a public-and-parking pipeline over
@@ -18,6 +19,7 @@ import {
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
 } from '@cat-factory/agents'
+import { HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
 
 /**
  * Inline agent kinds that PARK a run on a human/gate decision. This MUST list every
@@ -26,7 +28,7 @@ import {
  *
  * The guard these drive used to be a FLAT refusal, because a public run was headless with no way
  * to answer: the run would sit `blocked` forever while its anchor stayed `in_progress`, permanently
- * consuming one of the workspace's `MAX_ACTIVE_INITIATIVE_RUNS` slots. Note what is NOT available
+ * consuming one of the workspace's `MAX_ACTIVE_JOB_RUNS` slots. Note what is NOT available
  * as a backstop — a parked run waits for a human INDEFINITELY (`ExecutionWorkflow` re-arms its
  * `waitForEvent` on expiry rather than failing the run; the old hard decision timeout was removed
  * deliberately), so "it will eventually time out" was never true.
@@ -52,6 +54,32 @@ export const PARKING_INLINE_KINDS = new Set<string>([
  * enumerated for a caller.
  */
 export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
+
+/**
+ * POLLING-GATE kinds that park on a human, re-exported from `@cat-factory/contracts` so every park
+ * surface this module enumerates is reachable from one place.
+ *
+ * A third category beside {@link PARKING_INLINE_KINDS} and {@link APPROVAL_GATE_PARK_SURFACE},
+ * because it is a third MECHANISM: not an inline review that sets the run `blocked`, and not an
+ * approval flag riding an ordinary step, but a gate step whose own poll loop never times out
+ * (`pollExhaustion: 'rearm'`) because it is waiting on a person. `human-review` is the one built-in
+ * that qualifies, and it is why `pl_full` (the shipped Adaptive build preset, which carries a
+ * risk-gated `human-review`) is a parking pipeline.
+ *
+ * Missing it was a real hole rather than a theoretical one: `human-review` is not answerable through
+ * `/api/v1/runs/:runId/decisions` at all, so a plain `write` key could start the platform's flagship
+ * board preset and have it park forever on the one surface with no public answer path.
+ */
+export { HUMAN_WAIT_GATE_KINDS }
+
+/**
+ * The route that frees an abandoned park, per public START surface. Named here rather than inlined
+ * at each call site because {@link parkingRefusalMessage} puts one of them in front of an operator:
+ * a route that only exists as a literal in a controller and a second literal in a test is a route
+ * that can be renamed in one of the two.
+ */
+export const PUBLIC_JOB_CANCEL_PATH = 'POST /api/v1/jobs/:id/cancel'
+export const PUBLIC_TASK_STOP_PATH = 'POST /api/v1/tasks/:taskId/stop'
 
 /**
  * The park surfaces `/api/v1/runs/:runId/decisions` can actually ANSWER today.
@@ -88,7 +116,7 @@ function enabledSteps(pipeline: AdmissiblePipelineShape): { kind: string; i: num
 /**
  * Whether every enabled step of a pipeline runs INLINE — no container, no repo, no push. This is
  * the non-negotiable half of public admission: an external key must never be able to trigger
- * container work or a GitHub write through the initiative surface, whatever its scope.
+ * container work or a GitHub write through the jobs surface, whatever its scope.
  */
 export function isInlineOnlyPipeline(
   pipeline: AdmissiblePipelineShape,
@@ -100,26 +128,36 @@ export function isInlineOnlyPipeline(
 }
 
 /**
- * Whether a pipeline can PARK the run on a human decision — an approval gate on an enabled step,
- * or one of the {@link PARKING_INLINE_KINDS} review/brainstorm kinds. Parking is not a defect: it
- * is the clarification loop. It just needs an answerer, which is what the `decide` scope asserts.
+ * Whether a pipeline can PARK the run on a human decision: an approval gate on an enabled step, one
+ * of the {@link PARKING_INLINE_KINDS} review/brainstorm kinds, or one of the
+ * {@link HUMAN_WAIT_GATE_KINDS} unbounded-wait gates. Parking is not a defect: it is the
+ * clarification loop. It just needs an answerer, which is what the `decide` scope asserts.
  */
 export function canParkOnHuman(pipeline: AdmissiblePipelineShape): boolean {
   return parkSurfacesOf(pipeline).length > 0
 }
 
 /**
- * Every park surface an ENABLED step of `pipeline` can put the run on, in step order and deduped:
- * an approval gate on the step, or the step's own {@link PARKING_INLINE_KINDS} kind.
+ * Every park surface an ENABLED step of `pipeline` can put the run on, in step order and deduped.
+ * Three mechanisms, each a separate check because each parks for a different reason:
+ *
+ *  1. an approval gate flag on the step ({@link APPROVAL_GATE_PARK_SURFACE});
+ *  2. the step's own kind being an inline review/brainstorm ({@link PARKING_INLINE_KINDS});
+ *  3. the step's own kind being a polling gate that waits on a human with no deadline
+ *     ({@link HUMAN_WAIT_GATE_KINDS}).
  *
  * This is the single enumeration {@link canParkOnHuman} derives its boolean from, so the predicate
  * and the explanation a caller is given can never disagree about what parks.
+ *
+ * Note what is deliberately NOT here: a park raised dynamically mid-run (an agent-raised decision, a
+ * judge `park` disposition) is not knowable from the step chain at start time, so the rule cannot
+ * see it and does not pretend to. See ADR 0032.
  */
 export function parkSurfacesOf(pipeline: AdmissiblePipelineShape): string[] {
   const surfaces = new Set<string>()
   for (const { kind, i } of enabledSteps(pipeline)) {
     if (pipeline.gates?.[i]) surfaces.add(APPROVAL_GATE_PARK_SURFACE)
-    if (PARKING_INLINE_KINDS.has(kind)) surfaces.add(kind)
+    if (PARKING_INLINE_KINDS.has(kind) || HUMAN_WAIT_GATE_KINDS.has(kind)) surfaces.add(kind)
   }
   return [...surfaces]
 }
@@ -134,11 +172,24 @@ export function parkSurfacesOf(pipeline: AdmissiblePipelineShape): string[] {
  * got a run whose only exit is `POST /api/v1/jobs/:id/cancel` — the platform's degrade-loudly rule
  * inverted, since the refusal was confidently describing a capability it does not have.
  *
- * What is ADMITTED is unchanged: whether a start path should refuse a park nothing can answer is a
- * policy question left open for the maintainer in the tracker. This only stops the refusal lying
- * about the surface while that question is open.
+ * Both public start paths apply the parking rule now: `POST /jobs` always has, and
+ * `POST /tasks/:taskId/start` adopted it with the API-stability commitment (the tracker's open
+ * question, settled): a `write` key must not be able to set in motion a park it is by definition
+ * not trusted to answer.
+ *
+ * `cancelPath` is REQUIRED rather than defaulted, because which route frees an abandoned park is a
+ * property of the START SURFACE and every surface answers differently: a headless job is cancelled
+ * at `POST /api/v1/jobs/:id/cancel`, a board task is stopped at `POST /api/v1/tasks/:taskId/stop`.
+ * Defaulting it to either one is wrong for the other and wrong-but-plausible for a third, which is
+ * precisely the defect this message exists to fix: a refusal must not steer a caller at a route that
+ * 404s for the run it is about. Required means a new start surface that forgets to say which route
+ * it offers fails to typecheck, rather than shipping another surface's exit as advice.
  */
-export function parkingRefusalMessage(pipeline: AdmissiblePipelineShape): string {
+export function parkingRefusalMessage(
+  pipeline: AdmissiblePipelineShape,
+  options: { cancelPath: string },
+): string {
+  const { cancelPath } = options
   const surfaces = parkSurfacesOf(pipeline)
   const answerable = surfaces.filter((s) => PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
   const unanswerable = surfaces.filter((s) => !PUBLICLY_ANSWERABLE_PARK_SURFACES.has(s))
@@ -150,7 +201,7 @@ export function parkingRefusalMessage(pipeline: AdmissiblePipelineShape): string
   )
   if (unanswerable.length > 0) {
     parts.push(
-      `The public decision surface cannot answer ${unanswerable.join(', ')} yet, so a run that parks there can only be ended with POST /api/v1/jobs/:id/cancel.`,
+      `The public decision surface cannot answer ${unanswerable.join(', ')} yet, so a run that parks there can only be answered in the app or ended with ${cancelPath}.`,
     )
   }
   return parts.join(' ')

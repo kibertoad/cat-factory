@@ -5,7 +5,6 @@ import type {
   MergeDecision,
   PipelineStep,
   PrReportCheck,
-  PrReportEnvironment,
   PrReportIssue,
   PrReportRequirement,
   PrVerificationReport,
@@ -15,8 +14,13 @@ import type {
 } from '@cat-factory/kernel'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { PR_VERIFICATION_REPORT_VERSION } from '@cat-factory/contracts'
-import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
+import {
+  type PrReportEnvironmentInputs,
+  composeEnvironments,
+  renderEnvironments,
+} from './prReport.environments.js'
+import { findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -28,6 +32,12 @@ import { CI_AGENT_KIND, MERGER_AGENT_KIND, isTesterKind } from './ci.logic.js'
 // (`step.custom`). Nothing re-probes a provider: a re-probe costs a round trip AND can
 // disagree with the verdict the gate actually acted on, which would make the report a
 // worse record than the run it describes.
+//
+// The TEST ENVIRONMENT LIFECYCLE section lives next door in `prReport.environments.ts`: it is
+// the one section composed from a source outside the in-memory run (the provisioning event log,
+// which is what dates the bring-up and the teardown), and it joins three producers into one
+// computed proof. The caller resolves its inputs and passes them in, so this file stays the
+// report's spine.
 //
 // Sections whose producing step did not run are emitted with `status: 'absent'` and a `note`
 // that SAYS so. A silently missing section is indistinguishable from a clean one, which is
@@ -107,30 +117,14 @@ export interface PrReportInputs {
    * a spec that IS readable but records no requirements.
    */
   spec?: SpecDoc | null
+  /**
+   * The environment-lifecycle section's own resolved inputs: the run's rows in the provisioning
+   * event log (the DATED half of the up → observed → torn-down proof) and the deep link into
+   * its captured evidence. See `prReport.environments.ts`.
+   */
+  environments: PrReportEnvironmentInputs
   /** Epoch ms stamped as the report's `generatedAt`. */
   now: number
-}
-
-/**
- * The step a section should report on: the LAST matching step that carries evidence, else the
- * first matching step (so a pipeline that has the step but hasn't reached it still gets the
- * "not run yet" note rather than nothing).
- *
- * Last-with-evidence, not first-match: a pipeline may legitimately carry the same kind twice —
- * a `ci` gate after the coder and another after the tester, say — and the later run is the one
- * that describes the PR head as it stands now. Reporting the first would pin the section to a
- * verdict two steps of work out of date.
- */
-function findStep(
-  instance: ExecutionInstance,
-  matches: (step: PipelineStep) => boolean,
-  hasEvidence: (step: PipelineStep) => boolean,
-): PipelineStep | undefined {
-  const matching = instance.steps.filter(matches)
-  for (let i = matching.length - 1; i >= 0; i--) {
-    if (hasEvidence(matching[i]!)) return matching[i]
-  }
-  return matching[0]
 }
 
 /** A step is "settled" once it finished — a pending step has no evidence to report yet. */
@@ -229,64 +223,6 @@ function composeTests(
     fixerAttempts: step.test?.attempts ?? 0,
     maxFixerAttempts: step.test?.maxAttempts ?? null,
   }
-}
-
-/**
- * Whether the ephemeral environments a run stood up are gone again. Read off the live
- * per-step environment projections rather than the terminal `deployEnvs` outcomes, because
- * only the projection carries the CURRENT lifecycle state (`torn_down` / `expired`).
- */
-function teardownState(
-  instance: ExecutionInstance,
-  entries: PrReportEnvironment[],
-): PrVerificationReport['environments']['teardown'] {
-  if (!entries.some((e) => e.status === 'ready')) return 'not_applicable'
-  const live = instance.steps.some(
-    (s) =>
-      s.environment != null &&
-      s.environment.status !== 'torn_down' &&
-      s.environment.status !== 'expired' &&
-      s.environment.status !== 'failed',
-  )
-  return live ? 'pending' : 'confirmed'
-}
-
-function composeEnvironments(
-  instance: ExecutionInstance,
-  truncations: string[],
-): PrVerificationReport['environments'] {
-  const step = findStep(
-    instance,
-    (s) => s.agentKind === DEPLOYER_AGENT_KIND,
-    (s) => Object.keys(s.deployEnvs ?? {}).length > 0,
-  )
-  if (!step) {
-    return {
-      status: 'absent',
-      note: 'No deployer step in this pipeline — no ephemeral environment was provisioned.',
-      entries: [],
-      teardown: 'not_applicable',
-    }
-  }
-  const entries: PrReportEnvironment[] = cap(
-    Object.entries(step.deployEnvs ?? {}),
-    'environments.entries',
-    truncations,
-  ).map(([frameId, state]) => ({
-    frameId,
-    status: state.status,
-    url: state.url ?? null,
-    error: scrub(state.error),
-  }))
-  if (entries.length === 0) {
-    return {
-      status: 'absent',
-      note: 'The deployer step recorded no environment outcomes (it did not run to completion).',
-      entries: [],
-      teardown: 'not_applicable',
-    }
-  }
-  return { status: 'reported', entries, teardown: teardownState(instance, entries) }
 }
 
 /**
@@ -588,7 +524,9 @@ export function composePrVerificationReport(
     ci: composeCi(instance, truncations),
     tests: composeTests(instance, truncations),
     requirements: composeRequirements(instance, inputs.spec, truncations),
-    environments: composeEnvironments(instance, truncations),
+    environments: composeEnvironments(instance, inputs.environments, (items, label) =>
+      cap(items, label, truncations),
+    ),
     merge: composeMerge(instance),
     judges: composeJudges(instance, truncations),
     observability: { runUrl: inputs.runUrl },
@@ -737,24 +675,6 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
     '',
   )
   return out
-}
-
-function renderEnvironments(envs: PrVerificationReport['environments']): string[] {
-  const out = ['### Ephemeral environment', '']
-  if (envs.status === 'absent') return [...out, `_${envs.note}_`, '']
-  out.push('| Service frame | State | URL | Error |', '| --- | --- | --- | --- |')
-  for (const entry of envs.entries) {
-    out.push(
-      `| \`${hostMarkdown.cell(entry.frameId)}\` | ${entry.status} | ${hostMarkdown.cell(entry.url ?? '')} | ${hostMarkdown.cell(entry.error ?? '')} |`,
-    )
-  }
-  const teardown =
-    envs.teardown === 'confirmed'
-      ? '✅ torn down'
-      : envs.teardown === 'pending'
-        ? '⏳ still live'
-        : 'nothing to tear down'
-  return [...out, '', `**Teardown:** ${teardown}`, '']
 }
 
 function renderMerge(merge: PrVerificationReport['merge']): string[] {

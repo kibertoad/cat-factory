@@ -30,7 +30,7 @@ public record PublicJob(
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("result") @Nullable PublicJobResult result,
 
-    @JsonProperty("status") InitiativeAcceptedStatus status
+    @JsonProperty("status") PublicJobStatus status
 ) {
 
     /** A new builder for {@link PublicJob}. */
@@ -50,7 +50,7 @@ public record PublicJob(
         private @Nullable String jobId;
         private @Nullable String pipelineId;
         private @Nullable PublicJobResult result;
-        private @Nullable InitiativeAcceptedStatus status;
+        private @Nullable PublicJobStatus status;
 
         /** Set {@code createdAt}. */
         public Builder createdAt(@Nullable Double createdAt) {
@@ -83,7 +83,7 @@ public record PublicJob(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable InitiativeAcceptedStatus status) {
+        public Builder status(@Nullable PublicJobStatus status) {
             this.status = status;
             return this;
         }
