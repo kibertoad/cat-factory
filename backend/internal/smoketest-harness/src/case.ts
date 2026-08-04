@@ -55,8 +55,12 @@ export interface RunCaseOptions {
  * of this constant is that the guard never ends a captured run, so a knob missing here is a run cut
  * short by a bound nobody chose. The non-action backstop is the live one, since a Pi loop reads and
  * searches constantly with no action call between.
+ *
+ * Typed `Required<…>` rather than the interface itself, whose streak knobs are optional so a caller
+ * can omit them and take the defaults. Omitting one HERE is the bug, so this is the one place that
+ * must not compile without it.
  */
-const RELAXED_GUARD: ProgressGuardLimits = {
+const RELAXED_GUARD: Required<ProgressGuardLimits> = {
   maxToolCallsWithoutEdit: Number.MAX_SAFE_INTEGER,
   maxConsecutiveErrors: Number.MAX_SAFE_INTEGER,
   maxConsecutiveWebCalls: Number.MAX_SAFE_INTEGER,
