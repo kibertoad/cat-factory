@@ -108,7 +108,7 @@ function bodyOf(calls: ReturnType<typeof fetchStub>['calls'], index = 0) {
     alert: {
       accountId: string
       window: string
-      conditions: { reason: string; value: number; threshold: number }[]
+      conditions: { reason: string; value: number; threshold: number; kind?: string }[]
       occurredAt: number
       failingRuns: { executionId: string }[]
       failedTotal: number | null
@@ -162,6 +162,30 @@ describe('WebhookPlatformAlertSink', () => {
     expect(body.alert.window).toBe('1h')
     expect(body.alert.failingRuns.map((run) => run.executionId)).toEqual(['exec_9'])
     expect(body.alert.failedTotal).toBe(23)
+  })
+
+  it('carries the failure kind of a kind-scoped condition, and omits it elsewhere', async () => {
+    // Every per-kind rule fires under ONE reason code, so the kind is the only thing telling a
+    // receiver which rule tripped. It also has to be absent, not empty, on the deployment-wide
+    // conditions: a `kind` on a backlog alert would name a failure kind that had nothing to do
+    // with it.
+    const { sink: s, calls } = sink(webhook())
+    await s.platformHealthChanged(
+      'ws1',
+      event({
+        conditions: [
+          { reason: 'backlog_high', value: 60, threshold: 50 },
+          { reason: 'failure_kind_rate_high', kind: 'evicted', value: 0.25, threshold: 0.1 },
+        ],
+      }),
+    )
+    const body = bodyOf(calls)
+    expect(body.alert.conditions[0]).toEqual({ reason: 'backlog_high', value: 60, threshold: 50 })
+    expect(body.alert.conditions[1]!.kind).toBe('evicted')
+    // And the dedupe key names it, so three per-kind rules do not read as one code repeated.
+    expect(body.deliveryId).toBe(
+      'ntf_1:platform_health.firing:1:backlog_high,failure_kind_rate_high=evicted',
+    )
   })
 
   it('reports an unreadable failed total as null rather than as zero', async () => {

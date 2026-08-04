@@ -207,7 +207,8 @@ export type RunWebhookDelivery = v.InferOutput<typeof runWebhookDeliverySchema>
  * additively, so narrowing it here would mean a deployment one release ahead of its receiver
  * either fails to encode, or silently drops, the very condition it is paging about. The current
  * members are `failure_rate_high`, `duration_p99_high`, `backlog_high`, `throughput_stalled`,
- * `failure_kind_dominant` and `sweep_degraded`; a receiver routes on the ones it knows and treats
+ * `failure_kind_dominant`, `failure_kind_rate_high` and `sweep_degraded`; a receiver routes on
+ * the ones it knows and treats
  * the rest as an unrecognised condition rather than as no condition.
  */
 export const platformAlertWebhookConditionSchema = v.object({
@@ -217,6 +218,13 @@ export const platformAlertWebhookConditionSchema = v.object({
   value: v.number(),
   /** The configured threshold it crossed, in the same unit as {@link value}. */
   threshold: v.number(),
+  /**
+   * The failure kind a KIND-SCOPED condition is about (`evicted`, `timeout`, …), on the
+   * conditions that have one: today only `failure_kind_rate_high`, where several rules fire
+   * under the same `reason` and this is what tells them apart. Absent on every deployment-wide
+   * condition, and a receiver that ignores it still routes correctly on the reason.
+   */
+  kind: v.optional(v.string()),
 })
 export type PlatformAlertWebhookCondition = v.InferOutput<
   typeof platformAlertWebhookConditionSchema

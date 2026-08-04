@@ -447,6 +447,7 @@
       "start": "Iniciar",
       "blocked": "Bloqueada",
       "startPipeline": "Iniciar {name}",
+      "startPipelineDryRun": "Iniciar {name} como ejecución de prueba: abre una pull request y no fusiona nada",
       "pipelineFallback": "pipeline",
       "waitingOn": "Esperando a: {deps}",
       "blockedByDependenciesTitle": "Bloqueada por dependencias",
@@ -471,6 +472,10 @@
         "title": "Ejecución iniciada",
         "body": "Ejecutando \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Ejecución de prueba iniciada",
+      "body": "Ejecutando \"{name}\". Las ejecuciones de tu rol no fusionan nada en esta tarea."
     },
     "epic": {
       "label": "Épica",
@@ -1077,7 +1082,9 @@
       "chooseApproach": "Elegir enfoque",
       "triageFollowUps": "Decidir seguimientos",
       "elapsedTooltip": "Tiempo transcurrido en este paso",
-      "reviewFindings": "Revisar hallazgos"
+      "reviewFindings": "Revisar hallazgos",
+      "dryRun": "Ejecución de prueba",
+      "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
     },
     "structure": {
       "title": "Estructura",
@@ -1498,7 +1505,10 @@
         "title": "¿Archivar este servicio?",
         "body": "«{name}» y sus tareas se ocultarán del tablero. Puedes restaurarlo en cualquier momento."
       },
-      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}"
+      "runBlocked": "Bloqueado por una dependencia sin terminar: {names} | Bloqueado por {count} dependencias sin terminar: {names}",
+      "dryRun": "Ejecución de prueba: no fusionar nada",
+      "dryRunForced": "Ejecución de prueba: las ejecuciones de tu rol nunca se fusionan aquí",
+      "dryRunHint": "Esta ejecución abre una pull request y no fusiona nada."
     }
   },
   "observability": {
@@ -2622,7 +2632,7 @@
         },
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
-          "help": "Cuando una ejecución iniciada por la API se detiene para aclarar requisitos, publica sus preguntas abiertas — cada una con el id que debe nombrar la respuesta — en la incidencia vinculada. Las tareas iniciadas en la aplicación no se ven afectadas."
+          "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
         }
       },
       "probeFailure": {
@@ -2738,6 +2748,19 @@
           "always": "Fusionar siempre automáticamente",
           "never": "Exigir siempre revisión"
         }
+      },
+      "roleRules": {
+        "heading": "Límites según el rol que inicia",
+        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede quedar sujeto a reglas más estrictas que las de arriba, o solo a ejecuciones de prueba: la canalización trabaja y abre una pull request, pero no se fusiona nada. Un rol solo puede endurecer esta política, nunca relajarla.",
+        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request ya pasa por una persona y los límites de categoría de abajo no añaden nada. Las ejecuciones de prueba siguen aplicándose: también rechazan una fusión manual.",
+        "sandboxLabel": "Solo ejecuciones de prueba",
+        "sandboxNote": "Las ejecuciones iniciadas por este rol abren una pull request y no fusionan nada, así que las reglas por categoría de abajo no pueden restringirlas más.",
+        "noRules": "Sin límites por categoría",
+        "ruleCount": "{count} categoría limitada | {count} categorías limitadas",
+        "inherit": "Igual que esta política",
+        "redundant": "Sin efecto: esta política ya es igual de estricta o más.",
+        "alreadyStrictest": "Ya se revisa siempre",
+        "baseHint": "Esta política compara las puntuaciones en todas las categorías, así que un rol solo puede endurecer una categoría hasta exigir revisión."
       }
     },
     "observabilityConnection": {
@@ -3518,7 +3541,28 @@
         "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
       },
       "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
-      "invalidNumbers": "Estos límites no son números"
+      "invalidNumbers": "Estos límites no son números",
+      "failureKinds": {
+        "label": "Reglas por tipo de fallo",
+        "description": "Avisa cuando un tipo de fallo alcanza la proporción de fallos que le permites. El límite de causa dominante de arriba pregunta si un tipo está desbordando al resto; estas reglas preguntan si un tipo concreto ha alcanzado lo que este despliegue tolera de él.",
+        "overrideLabel": "Definir reglas por tipo propias de esta cuenta",
+        "overrideHint": "Desactivado, la cuenta usa las reglas configuradas en el despliegue. Activado, la lista de abajo las sustituye por completo, y una lista vacía significa ninguna regla por tipo.",
+        "empty": "Sin reglas. Esta cuenta no generará la alerta por tipo de fallo.",
+        "kindLabel": "Tipo de fallo",
+        "shareLabel": "Proporción de fallos (%)",
+        "shareHint": "La regla se activa a partir de esta proporción.",
+        "minCountLabel": "Fallos mínimos",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Cuántos fallos de ese tipo necesita la ventana antes de que la regla pueda dispararse. Sin esto, una proporción baja salta a la mínima: cinco ejecuciones con un desalojo ya son el 20 %.",
+        "addRule": "Añadir regla",
+        "allKindsCovered": "Cada tipo de fallo ya tiene una regla.",
+        "removeRule": "Eliminar regla",
+        "duplicateKind": "Cada tipo de fallo admite como máximo una regla.",
+        "tooManyRules": "Como máximo {max} reglas por tipo. Elimina algunas antes de guardar.",
+        "unknownKind": "{kind} (no reconocido)",
+        "invalidTitle": "Estas reglas por tipo no se pueden guardar",
+        "invalidRows": "Revisa las reglas {rows}: la proporción debe ser mayor que 0 y como máximo 100, el mínimo debe ser un número entero de 1 o más, y cada tipo puede aparecer una sola vez."
+      }
     }
   },
   "providers": {
@@ -5224,7 +5268,10 @@
     "description": "Descripción",
     "overallProgress": "Progreso general",
     "dependencies": "Dependencias",
-    "noDependencies": "Ninguna"
+    "noDependencies": "Ninguna",
+    "dryRun": "Ejecución de prueba",
+    "dryRunHint": "Ejecutar la canalización y abrir una pull request, pero no fusionar nada.",
+    "dryRunForcedHint": "La política de riesgo de esta tarea limita tu rol a ejecuciones de prueba."
   },
   "environments": {
     "title": "Entorno efímero",
@@ -5913,7 +5960,10 @@
       "manualHeading": "Solo revisión manual",
       "manualExplainer": "Esta política nunca fusiona por su cuenta, así que cada pull request espera una revisión humana sea cual sea su puntuación.",
       "ciHeading": "Correcciones de CI",
-      "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse."
+      "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse.",
+      "roleHeading": "Quién inició la ejecución",
+      "roleSandboxed": "Las ejecuciones iniciadas por {roles} abren una pull request y nunca se fusionan.",
+      "roleNarrowed": "Las ejecuciones iniciadas por {roles} siguen reglas más estrictas en algunas categorías de cambio."
     }
   },
   "modelPreset": {

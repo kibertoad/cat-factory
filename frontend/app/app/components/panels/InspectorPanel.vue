@@ -178,6 +178,10 @@ const taskBranchUrl = computed(() => {
   return base ? `${base}/tree/${pr.branch}` : null
 })
 
+// The run MODE, shared with the focus view's Run picker so the two surfaces offer (and force)
+// the same thing.
+const runStart = useRunStart(() => block.value?.id)
+
 // Hide UI-testing pipelines when this block's frame has no UI to exercise, `'recurring'`-only
 // pipelines (a manual run of one is refused server-side), and every pipeline whose purpose doesn't
 // match this block's task type or LEVEL — they'd be refused at run start (see utils/pipeline + the
@@ -186,7 +190,7 @@ const taskBranchUrl = computed(() => {
 // frames and modules too, which is why it reads `block.level` rather than assuming a task.
 const runMenu = computed(() => {
   const frame = block.value ? board.serviceOf(block.value) : undefined
-  return pipelines.pipelines
+  const runnable = pipelines.pipelines
     .filter((p) =>
       pipelineAllowedForManualStart(
         p,
@@ -199,8 +203,40 @@ const runMenu = computed(() => {
     .map((p) => ({
       label: p.name,
       icon: 'i-lucide-play',
-      onSelect: () => block.value && execution.start(block.value.id, p),
+      onSelect: () => void runStart.start(p),
     }))
+  // The run MODE leads the menu, because it changes what every row below it does. A policy
+  // sandbox is stated in both interface tiers as a disabled row: there is nothing to choose, and
+  // a menu that said nothing would leave the user to discover it from a run that never merges.
+  if (runStart.forced.value) {
+    return [
+      [
+        {
+          label: t('panels.inspector.dryRunForced'),
+          icon: 'i-lucide-shield',
+          disabled: true,
+          type: 'label' as const,
+        },
+      ],
+      runnable,
+    ]
+  }
+  if (!runStart.canRequest.value) return runnable
+  return [
+    [
+      {
+        label: t('panels.inspector.dryRun'),
+        icon: 'i-lucide-shield',
+        type: 'checkbox' as const,
+        checked: runStart.requested.value,
+        // Keep the menu open: the choice is a modifier on the pipeline row the user is about to
+        // pick, so closing here would make them reopen the menu to act on it.
+        onSelect: (e: Event) => e.preventDefault(),
+        onUpdateChecked: (checked: boolean) => runStart.setRequested(checked),
+      },
+    ],
+    runnable,
+  ]
 })
 
 // Delegate to the shared confirm-gated deletion so the button and the keyboard shortcut
@@ -515,10 +551,19 @@ const showOriginalDescription = ref(false)
             :color="canRun ? 'primary' : 'neutral'"
             variant="soft"
             size="sm"
-            :icon="canRun ? 'i-lucide-play' : 'i-lucide-lock'"
+            :icon="
+              !canRun
+                ? 'i-lucide-lock'
+                : runStart.dryRun.value
+                  ? 'i-lucide-shield'
+                  : 'i-lucide-play'
+            "
             trailing-icon="i-lucide-chevron-down"
             :disabled="!canRun"
-            :title="runBlockedReason ?? undefined"
+            :title="
+              runBlockedReason ??
+              (runStart.dryRun.value ? t('panels.inspector.dryRunHint') : undefined)
+            "
             data-testid="run-start"
           >
             {{ instance ? t('panels.inspector.reRun') : t('panels.inspector.run') }}

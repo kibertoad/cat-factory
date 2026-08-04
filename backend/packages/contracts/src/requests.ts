@@ -8,7 +8,7 @@ import {
   testerQualityConfigSchema,
   writebackOverrideSchema,
 } from './entities.js'
-import { runModeSchema } from './execution.js'
+import { runModeSchema } from './run-provenance.js'
 import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { serviceProvisioningSchema } from './environments.js'
 import { frontendConfigSchema } from './frontend.js'

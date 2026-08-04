@@ -37,9 +37,10 @@ export const trackerSettingsSchema = v.object({
    * issue(s), so the loop is answerable from where the work was requested. Per-task
    * overridable via `Block.trackerQuestionsOnPark`. Default off.
    *
-   * Deliberately scoped to runs whose `ExecutionInstance.intakeOrigin` is `public-api`:
-   * a task started in the SPA has a human overseer in the app and its clarification
-   * surface is unchanged (see `docs/initiatives/headless-clarification-loop.md`).
+   * Deliberately scoped to runs whose `ExecutionInstance.intakeOrigin` is HEADLESS
+   * (`isHeadlessIntake`: a `/api/v1` start or a per-ticket tracker dispatch): a task started
+   * in the SPA has a human overseer in the app and its clarification surface is unchanged
+   * (see `docs/initiatives/headless-clarification-loop.md`).
    */
   writebackQuestionsOnPark: v.boolean(),
   updatedAt: v.number(),

@@ -447,6 +447,7 @@
       "start": "Başlat",
       "blocked": "Engellendi",
       "startPipeline": "{name} başlat",
+      "startPipelineDryRun": "{name} prova çalışması olarak başlat: bir pull request açar, hiçbir şeyi birleştirmez",
       "pipelineFallback": "pipeline",
       "waitingOn": "Bekleniyor: {deps}",
       "blockedByDependenciesTitle": "Bağımlılıklar tarafından engellendi",
@@ -471,6 +472,10 @@
         "title": "Çalıştırma başladı",
         "body": "\"{name}\" çalıştırılıyor."
       }
+    },
+    "dryRunToast": {
+      "title": "Prova çalışması başladı",
+      "body": "\"{name}\" çalıştırılıyor. Rolünün çalıştırmaları bu görevde hiçbir şeyi birleştirmez."
     },
     "epic": {
       "label": "Epik",
@@ -1077,7 +1082,9 @@
       "chooseApproach": "Yaklaşım seç",
       "triageFollowUps": "Takipleri karara bağla",
       "elapsedTooltip": "Bu adımda geçen süre",
-      "reviewFindings": "Bulguları incele"
+      "reviewFindings": "Bulguları incele",
+      "dryRun": "Prova çalışması",
+      "dryRunHint": "Bu çalıştırma bir pull request açar ve hiçbir şeyi birleştirmez."
     },
     "structure": {
       "title": "Yapı",
@@ -1498,7 +1505,10 @@
         "title": "Bu hizmet arşivlensin mi?",
         "body": "\"{name}\" ve görevleri panodan gizlenecek. İstediğin zaman geri yükleyebilirsin."
       },
-      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}"
+      "runBlocked": "Tamamlanmamış bir bağımlılık tarafından engellendi: {names} | Tamamlanmamış {count} bağımlılık tarafından engellendi: {names}",
+      "dryRun": "Prova çalışması: hiçbir şeyi birleştirme",
+      "dryRunForced": "Prova çalışması: rolünün başlattığı çalıştırmalar burada asla birleştirilmez",
+      "dryRunHint": "Bu çalıştırma bir pull request açar ve hiçbir şeyi birleştirmez."
     }
   },
   "observability": {
@@ -2763,7 +2773,7 @@
         },
         "questionsOnPark": {
           "label": "Duraklatılan başsız çalıştırmanın açık sorularını gönder",
-          "help": "API üzerinden başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında, açık sorularını — her biri bir yanıtın belirteceği kimlikle — bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
+          "help": "Uygulama dışında başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında (API üzerinden ya da bir izleyici kaydından gönderilerek), açık sorularını, her biri bir yanıtın belirteceği kimlikle, bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
         }
       },
       "probeFailure": {
@@ -2879,6 +2889,19 @@
           "always": "Her zaman otomatik birleştir",
           "never": "Her zaman inceleme iste"
         }
+      },
+      "roleRules": {
+        "heading": "Başlatan role göre sınırlar",
+        "help": "Bir çalıştırmanın ne yapabileceği, onu kimin başlattığına da bağlıdır. Bir rol yukarıdaki kurallardan daha katı kurallara ya da yalnızca prova çalışmalarına tabi tutulabilir: pipeline çalışır ve bir pull request açar, hiçbir şey birleştirilmez. Bir rol bu ilkeyi yalnızca sıkılaştırabilir, asla gevşetemez.",
+        "autoMergeOffWarning": "Bu ön ayarda otomatik birleştirme kapalı, bu yüzden her pull request zaten bir kişiye gidiyor ve aşağıdaki kategori sınırları bir şey eklemiyor. Prova çalışmaları yine geçerli: elle birleştirmeyi de reddederler.",
+        "sandboxLabel": "Yalnızca prova çalışmaları",
+        "sandboxNote": "Bu rolün başlattığı çalıştırmalar bir pull request açar ve hiçbir şeyi birleştirmez, bu nedenle aşağıdaki kategori kuralları onları daha da katılaştıramaz.",
+        "noRules": "Kategori sınırı yok",
+        "ruleCount": "{count} kategori sınırlandırıldı | {count} kategori sınırlandırıldı",
+        "inherit": "Bu ilkeyle aynı",
+        "redundant": "Etkisi yok: bu ilke zaten en az bu kadar katı.",
+        "alreadyStrictest": "Zaten her zaman inceleniyor",
+        "baseHint": "Bu ilke her kategori için puanları karşılaştırır, bu yüzden bir rol bir kategoriyi yalnızca inceleme zorunluluğuna kadar sıkılaştırabilir."
       }
     },
     "observabilityConnection": {
@@ -3518,7 +3541,28 @@
         "maxSweepFailures": "Bir arka plan taramasının üst üste başarısız geçişi."
       },
       "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin.",
-      "invalidNumbers": "Bu üst sınırlar sayı değil"
+      "invalidNumbers": "Bu üst sınırlar sayı değil",
+      "failureKinds": {
+        "label": "Hata türü başına kurallar",
+        "description": "Bir hata türü, ona tanıdığınız hata payına ulaştığında uyarır. Yukarıdaki baskın neden tavanı bir türün diğerlerini bastırıp bastırmadığını sorar; buradaki kurallar ise adı geçen bir türün bu kurulumun ondan kabul ettiği sınıra ulaşıp ulaşmadığını sorar.",
+        "overrideLabel": "Bu hesaba özel tür kuralları tanımla",
+        "overrideHint": "Kapalıyken hesap, kurulumda yapılandırılan kuralları kullanır. Açıkken aşağıdaki liste onların yerini tamamen alır ve boş liste hiç tür kuralı olmaması demektir.",
+        "empty": "Kural yok. Bu hesap tür bazlı uyarı üretmeyecek.",
+        "kindLabel": "Hata türü",
+        "shareLabel": "Hatalar içindeki pay (%)",
+        "shareHint": "Kural bu paydan itibaren tetiklenir.",
+        "minCountLabel": "En az hata sayısı",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Kuralın tetiklenebilmesi için pencerede o türden kaç hata gerektiğini belirler. Bu olmadan düşük bir pay çok hassas kalır: beş çalıştırmada bir tahliye zaten %20 eder.",
+        "addRule": "Kural ekle",
+        "allKindsCovered": "Her hata türünün zaten bir kuralı var.",
+        "removeRule": "Kuralı kaldır",
+        "duplicateKind": "Her hata türü en fazla bir kural taşıyabilir.",
+        "tooManyRules": "En fazla {max} tür kuralı. Kaydetmeden önce bir kısmını kaldırın.",
+        "unknownKind": "{kind} (tanınmıyor)",
+        "invalidTitle": "Bu tür kuralları kaydedilemiyor",
+        "invalidRows": "{rows} numaralı kuralları gözden geçirin: pay 0'dan büyük ve en fazla 100 olmalı, en az sayı 1 veya üzeri bir tam sayı olmalı ve her tür yalnızca bir kez yer alabilir."
+      }
     }
   },
   "providers": {
@@ -5224,7 +5268,10 @@
     "description": "Açıklama",
     "overallProgress": "Genel ilerleme",
     "dependencies": "Bağımlılıklar",
-    "noDependencies": "Yok"
+    "noDependencies": "Yok",
+    "dryRun": "Prova çalışması",
+    "dryRunHint": "Pipeline'ı çalıştır ve bir pull request aç, ama hiçbir şeyi birleştirme.",
+    "dryRunForcedHint": "Bu görevin risk ilkesi rolünü yalnızca prova çalışmalarıyla sınırlıyor."
   },
   "environments": {
     "title": "Geçici ortam",
@@ -5913,7 +5960,10 @@
       "manualHeading": "Yalnızca elle inceleme",
       "manualExplainer": "Bu ilke asla kendiliğinden birleştirmez, bu yüzden puanı ne olursa olsun her pull request insan incelemesini bekler.",
       "ciHeading": "CI düzeltmeleri",
-      "ciAttempts": "Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir. | Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir."
+      "ciAttempts": "Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir. | Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir.",
+      "roleHeading": "Çalıştırmayı kim başlattı",
+      "roleSandboxed": "{roles} tarafından başlatılan çalıştırmalar bir pull request açar ve asla birleştirilmez.",
+      "roleNarrowed": "{roles} tarafından başlatılan çalıştırmalar bazı değişiklik kategorilerinde daha katı kurallara tabidir."
     }
   },
   "modelPreset": {
