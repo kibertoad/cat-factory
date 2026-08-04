@@ -179,6 +179,52 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
 }
 
 /**
+ * The run-observability surface: the telemetry sinks and their stores, the deployment-level
+ * projections the operator dashboard aggregates, the provisioning event log and the
+ * prompt-recording switch. The Node twin of the Worker's `selectWorkerObservabilityDeps`, in the
+ * same shape and for the same two reasons: the per-function line budget (budgets are split
+ * triggers, never numbers to raise), and keeping the facades legible side by side so a
+ * projection wired on one is visibly missing from the other.
+ *
+ * `Partial` for the bulk, INTERSECTED with the one dependency `CoreDependencies` marks required:
+ * without that intersection the spread erases the guarantee and the facade typechecks with the
+ * engine's gate projection silently unwired, which is the failure this exists to prevent.
+ */
+function selectNodeObservabilityDeps(args: {
+  config: NodeCoreDepsBundle['config']
+  repos: NodeCoreDepsBundle['repos']
+  agentContextObservability: NodeCoreDepsBundle['agentContextObservability']
+  searchQueryObservability: NodeCoreDepsBundle['searchQueryObservability']
+}): Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
+  const { config, repos, agentContextObservability, searchQueryObservability } = args
+  return {
+    llmCallMetricRepository: repos.llmCallMetricRepository,
+    // Deployment-level rollups over `agent_runs` for the operator dashboard.
+    platformMetricsRepository: repos.platformMetricsRepository,
+    // The settled-gate projection behind the dashboard's attempt statistics. This is the
+    // dependency the ENGINE's gate machine records through, not only a read: wiring it on the
+    // retention sweep alone leaves the table pruned and never written.
+    gateOutcomeRepository: repos.gateOutcomeRepository,
+    // Cross-cutting usage analytics over `token_usage` + `agent_runs` for the Reports view.
+    reportsRepository: repos.reportsRepository,
+    // Unified provisioning event log (its own Postgres schema). Threads the recorder
+    // into the env services and exposes the read service for the logs controller.
+    provisioningLogRepository: repos.provisioningLogRepository,
+    recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance
+    // is injected into the container executor for the write path.
+    agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
+    // The stores behind the two sinks above, handed in alongside them for the remote
+    // debugging reader: a pure reader that wants neither sink's capture gate.
+    agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
+    agentSearchQueryRepository: repos.agentSearchQueryRepository,
+  }
+}
+
+/**
  * The first half of the dependency literal: the app-owned registries, every persisted
  * repository the engine reads, and the module fragments that carry their own stores
  * (release-health / incident-enrichment / package-registry / tasks).
@@ -297,25 +343,12 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     serviceRepository: repos.serviceRepository,
     workspaceMountRepository: repos.workspaceMountRepository,
     tokenUsageRepository: repos.tokenUsageRepository,
-    llmCallMetricRepository: repos.llmCallMetricRepository,
-    // Deployment-level rollups over `agent_runs` for the operator dashboard.
-    platformMetricsRepository: repos.platformMetricsRepository,
-    // Cross-cutting usage analytics over `token_usage` + `agent_runs` for the Reports view.
-    reportsRepository: repos.reportsRepository,
-    // Unified provisioning event log (its own Postgres schema). Threads the recorder
-    // into the env services and exposes the read service for the logs controller.
-    provisioningLogRepository: repos.provisioningLogRepository,
-    recordLlmPrompts: config.observability.recordPrompts,
-    // Re-exposed on the core for the agent-context read endpoint; the same instance
-    // is injected into the container executor above for the write path.
-    agentContextObservability,
-    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
-    // write path (it reads it off the request container).
-    searchQueryObservability,
-    // The stores behind the two sinks above, handed in alongside them for the remote
-    // debugging reader — a pure reader that wants neither sink's capture gate.
-    agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
-    agentSearchQueryRepository: repos.agentSearchQueryRepository,
+    ...selectNodeObservabilityDeps({
+      config,
+      repos,
+      agentContextObservability,
+      searchQueryObservability,
+    }),
     // Opt-in external trace sink(s) — Langfuse and/or OpenTelemetry — fanning every
     // recorded LLM call out as a generation. Built only when configured; otherwise
     // undefined and there is no external emission.

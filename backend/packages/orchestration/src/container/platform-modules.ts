@@ -102,6 +102,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     dependencies.platformMetricsRepository
       ? new PlatformObservabilityService({
           platformMetricsRepository: dependencies.platformMetricsRepository,
+          gateOutcomeRepository: dependencies.gateOutcomeRepository,
           clock: dependencies.clock,
         })
       : undefined,

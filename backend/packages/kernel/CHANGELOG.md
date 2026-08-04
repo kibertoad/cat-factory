@@ -1,5 +1,122 @@
 # @cat-factory/kernel
 
+## 0.222.0
+
+### Minor Changes
+
+- c8ba2cd: OTLP traces: arrange a run's spans into a `run → agent kind → generations + tool calls`
+  hierarchy instead of siblings sharing a trace id, and document the GenAI semantic-convention
+  coverage explicitly.
+
+  Parent ids are derived from the run rather than held anywhere, so a stateless per-call emission
+  names a parent it has never seen; the parents themselves are emitted when the run settles, through
+  the new optional `LlmTraceSink.recordRunSpans`. Their extent is folded from stamps the run already
+  recorded rather than read off a clock, so the terminal hook re-firing for an already-settled run
+  re-exports a byte-identical tree instead of the same span ids carrying a different duration.
+
+  A step that dispatched a helper kind (a gate's `ci-fixer`, a Tester's fixer, a two-phase coder's
+  `fork-proposer`) gets a span for that kind nested under it. Those dispatches are what the helper's
+  telemetry is tagged with, so without one every generation and tool span they produced would name a
+  parent nobody emits. The run now records what it dispatched on `PipelineStep.dispatches`, written
+  through the single `recordDispatchAttribution` funnel.
+
+  Cycles are counted rather than separated. A fixer loop, a Ralph iteration and a bounced step all
+  repeat under one span, and the events beneath it carry no attempt ordinal to split it by, so each
+  step span states `cat_factory.attempt_count` beside `step_count`. A re-run step's span now starts
+  from the new `PipelineStep.firstStartedAt`, which survives the reset that re-stamps `startedAt`;
+  without it the span began after the generations of its own earlier attempts.
+
+  Span names changed, so an existing dashboard filtering on them needs re-pointing. A generation
+  adopts the convention's `{operation} {model}` (the agent kind now names the step span above it and
+  still rides as `cat_factory.agent_kind`), a tool call becomes `execute_tool {tool}`, and a run's
+  root span is the bare `run` with its pipeline as `cat_factory.pipeline`, keeping every span name a
+  bounded class rather than workspace-authored free text.
+
+- 807e442: Let a deployment register its own task source in code. The source vocabulary is now
+  `builtin picklist ∪ <namespace>:<name>`, matching the shape task types already use, so a
+  deployment's provider on the app-owned `TaskSourceRegistry` is served by connect, import,
+  search, bug hunt and webhook intake without a fork.
+
+  The built-ins keep their bare ids, so no persisted row changes. A bare non-built-in id still
+  fails validation, keeping a typo distinguishable from a registration.
+
+  Issue-intake board scope gains an opaque `boardId` leg for registered sources; without it a
+  registered source's board id fell through to the GitHub field.
+
+- 175f78f: Security hardening round 2, P1: close SEC-3, SEC-4 and SEC-5 (docs/initiatives/security-hardening-round-2.md).
+
+  - **Machine tokens are revocable (SEC-5).** Every `POST /auth/machine-token` mint is recorded on
+    the new `machine_nodes` roster (kernel `MachineNodeRepository`; D1 migration
+    `0077_machine_nodes.sql` ⇄ Drizzle `machineNodes`), the new shared machine gate
+    (`verifyMachineRequest`) checks the revocation tombstone on every `/internal/*` machine surface
+    plus the WS subscribe handshake, and the owner drives `GET /auth/machine-nodes` /
+    `POST /auth/machine-nodes/:nodeId/revoke`. A revoked node id can never be re-minted and a
+    foreign node id cannot be taken over, enforced by the roster WRITE itself (a guarded
+    `ON CONFLICT ... WHERE`) so two concurrent mints of one id cannot leave a row whose owner did
+    not mint it. A mothership with no roster wired refuses to mint at all, since an unrecorded token
+    could never be revoked; a roster read that fails refuses the call rather than serving it, and on
+    the WS handshake answers 503 (retry) rather than crashing the upgrade. Rows prune once past
+    their latest signed `exp`.
+  - **The password throttle is durable and spoof-resistant (SEC-4).** Attempts land in the new
+    cross-replica `auth_attempts` ledger (kernel `AuthAttemptRepository`; D1 migration
+    `0078_auth_attempts.sql` ⇄ Drizzle `authAttempts`) with a per-`ip:email` burst cap AND a per-IP
+    aggregate that catches one-password-many-emails credential stuffing; the in-process Map remains
+    only as the store-outage backstop. WHICH header carries the client address is a per-facade
+    decision behind `ServerContainer.resolveClientAddress`: Node reads the socket peer, and
+    `x-forwarded-for` (rightmost hop, `AUTH_TRUST_PROXY_HOPS` deep) only under the new
+    `AUTH_TRUST_PROXY=true`; the Worker reads `cf-connecting-ip`, which is authentic only there.
+    Addresses are normalised before keying (port stripped, non-IP refused, IPv6 bucketed to its
+    /64). The 429 carries `details.reason: 'auth_attempts'` and `retryAfterSeconds`, and both a trip
+    and a store outage are counted (`auth.throttle.limited`, `auth.throttle.store_unavailable`).
+    Completes the durable-auth-rate-limiting initiative, now ADR 0032.
+  - **Local-runner hosts are loopback-only by default (SEC-3). BEHAVIOUR BREAK:** registering or
+    calling a locally-run model endpoint on a private-LAN host (RFC1918 / ULA / mDNS `.local`) now
+    requires the operator opt-in `LOCAL_MODELS_ALLOW_LAN=true` on hosted deployments; single-tenant
+    local mode defaults the opt-in on. The policy binds the write boundary, the test probe and every
+    run-time redirect hop, so an existing LAN row on a hosted deployment is refused instead of
+    silently serving an internal-network SSRF surface. Such a row is now also reported on the
+    endpoint itself (`LocalModelEndpoint.urlBlockedReason`) and its models are withheld from the
+    picker, so the failure surfaces in settings rather than mid-run.
+  - **BEHAVIOUR BREAK (SEC-3):** a runner base URL may no longer carry a query string, a `#`
+    fragment or `.`/`..` path segments, and `*.localhost` subdomains are no longer accepted (plain
+    `localhost` still is). A base URL ending in `#` made the fixed `/models` and `/chat/completions`
+    suffixes inert, which turned both server-side forwards into an arbitrary-path request against
+    whatever listens on loopback; endpoint URLs are now composed through one validating helper
+    rather than concatenated. Every refusal carries a machine-readable
+    `LocalRunnerUrlReason` the SPA maps to translated copy.
+
+- 807e442: Judge a pushed tracker issue against a schedule's intake scope, and let each dispatch mode decide
+  what an unanswerable predicate means.
+
+  The push matcher reported a boolean and failed OPEN on any field a delivery did not carry, which was
+  correct for the queue mode it was written for: the fired run's vendor search re-checks every
+  predicate, so the worst case is one no-op run. Per-ticket dispatch reused it with nothing downstream
+  to re-check, where the same guess costs a real task block and a real agent run on a ticket nobody
+  triaged.
+
+  It now reports a verdict (`match` / `miss` / `unconfirmed`) and `dispatchAdmits` picks the
+  disposition per mode: `queue` still fires on an unconfirmed predicate, `per-ticket` withholds and
+  logs which predicate it could not confirm.
+
+  Board scope is evaluated for the first time. `TrackerIssueEvent` carries the vendor board in the
+  shape the intake config stores (a Jira project key, an `owner/repo` slug, a Linear team UUID), read
+  from payloads the adapters already parse, so a per-ticket schedule scoped to one project no longer
+  runs tickets from every project its connection can see. This tightens the queue mode too: a delivery
+  from a board the schedule is not scoped to no longer fires it. That only ever spent a run which
+  completed as "no matching open issues", so the change removes wasted runs rather than pickups.
+
+  The schedule form locks on-demand while the tracker trigger is on, rather than only defaulting it,
+  and both intake refusals carry a machine-readable reason mapped to translated copy.
+
+### Patch Changes
+
+- Updated dependencies [c8ba2cd]
+- Updated dependencies [807e442]
+- Updated dependencies [807e442]
+- Updated dependencies [175f78f]
+- Updated dependencies [807e442]
+  - @cat-factory/contracts@0.220.0
+
 ## 0.221.1
 
 ### Patch Changes

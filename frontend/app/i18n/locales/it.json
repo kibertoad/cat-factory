@@ -1108,6 +1108,48 @@
       "offHint": "Non impostato: ogni board decide da sé. Le board esistenti mantengono la loro scelta.",
       "saved": "Criterio per le credenziali di esecuzione salvato",
       "saveFailed": "Impossibile salvare il criterio per le credenziali di esecuzione"
+    },
+    "platformAlerts": {
+      "title": "Avvisi sullo stato della piattaforma",
+      "description": "Soglie con cui viene confrontato lo stato delle esecuzioni di questo account. I campi vuoti ereditano i valori del deployment.",
+      "muteLabel": "Silenzia gli avvisi per questo account",
+      "muteHint": "Qui gli avvisi si possono solo disattivare. Se la scansione venga eseguita è un'impostazione del deployment.",
+      "windowLabel": "Finestra di valutazione",
+      "windowHint": "Quanto indietro guarda ogni condizione. Una finestra più lunga reagisce più lentamente e avvisa meno.",
+      "thresholdsLabel": "Soglie",
+      "inheritHint": "Lascia vuoto un campo per ereditare il valore del deployment. Uno zero è un'impostazione reale, non un campo vuoto.",
+      "inheritPlaceholder": "Ereditato",
+      "reset": "Cancella le sostituzioni",
+      "saved": "Impostazioni degli avvisi salvate",
+      "saveFailed": "Impossibile salvare le impostazioni degli avvisi",
+      "window": {
+        "inherit": "Valore del deployment",
+        "oneHour": "Ultima ora",
+        "oneDay": "Ultime 24 ore",
+        "sevenDays": "Ultimi 7 giorni"
+      },
+      "thresholds": {
+        "minRuns": "Esecuzioni minime",
+        "maxFailureRate": "Soglia del tasso di errore",
+        "maxP99DurationMs": "Soglia di durata p99 (minuti)",
+        "maxBacklog": "Soglia del lavoro arretrato",
+        "stalledBuckets": "Intervalli vuoti prima di uno stallo",
+        "minStalledPriorRuns": "Esecuzioni prima che uno stallo conti",
+        "maxFailureKindShare": "Quota della causa dominante",
+        "maxSweepFailures": "Fallimenti consecutivi della scansione"
+      },
+      "hints": {
+        "minRuns": "Esecuzioni concluse che la finestra richiede prima che gli avvisi sugli errori possano scattare.",
+        "maxFailureRate": "Quota di esecuzioni che può fallire, da 0 a 1.",
+        "maxP99DurationMs": "Quanto possono durare le esecuzioni più lente.",
+        "maxBacklog": "Esecuzioni non concluse che possono essere in corso insieme.",
+        "stalledBuckets": "Intervalli vuoti finali della tendenza che contano come stallo.",
+        "minStalledPriorRuns": "Esecuzioni che la prima parte della finestra deve aver avuto. Zero avvisa a ogni silenzio.",
+        "maxFailureKindShare": "Quota degli errori che una sola causa può rappresentare, sopra 0 e fino a 1.",
+        "maxSweepFailures": "Passaggi falliti consecutivi di una scansione in background."
+      },
+      "notLoaded": "Non è stato possibile caricare le impostazioni correnti di questo account, quindi il salvataggio sovrascriverebbe le altre. Ricarica prima di modificare.",
+      "invalidNumbers": "Questi limiti non sono numeri"
     }
   },
   "inspector": {
@@ -2096,7 +2138,10 @@
         "budget_paused": "Segna come letto",
         "key_drift": "Elimina credenziali obsolete",
         "merge_tag_request": "Registra l’impegno"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "altre {count} non mostrate",
+      "failingRunGone": "Questa esecuzione non è più caricata e non ha alcuna attività da aprire."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -2619,16 +2664,25 @@
       "addFailedTitle": "Impossibile aggiungere la pipeline ricorrente",
       "onDemand": "Su richiesta (solo manuale)",
       "onDemandHint": "Viene eseguita solo quando la attivi tu, senza pianificazione. Poiché sei presente ogni volta, la sua attività può usare un modello con abbonamento a uso individuale.",
+      "onDemandLockedHint": "Bloccato: una pianificazione attivata dal tracker è guidata dai webhook, quindi non ha una cadenza propria.",
       "intake": "Acquisizione issue",
       "intakeHint": "Ogni esecuzione seleziona una issue aperta corrispondente dal tracker e la porta a termine dall'inizio alla fine.",
       "intakeNoSources": "Connetti prima una sorgente di attività per estrarne le issue.",
       "intakeGithubRepo": "Repository",
+      "intakeBoardId": "ID della board",
+      "intakeBoardIdHelp": "La board, il progetto o la coda a cui questo tracker limita l’acquisizione. Il formato è definito dal tracker.",
+      "trackerTrigger": "Avvia esecuzioni dai webhook del tracker",
+      "trackerTriggerHint": "Un ticket che corrisponde ai filtri qui sotto viene importato come attività a sé e eseguito su questa pipeline. Richiede una pianificazione su richiesta.",
+      "intakeDispatchQueueHint": "Un evento corrispondente avvia questa pianificazione, che prende il ticket corrispondente più vecchio della board. Utile per un arretrato, dove è la piattaforma a decidere cosa lavorare per primo.",
+      "intakeDispatchPerTicketHint": "Un evento corrispondente importa quel ticket come attività a sé e vi esegue la pipeline. Utile per i ticket già selezionati da una persona.",
       "intakeTitleFragment": "Il titolo contiene",
       "intakeTitleFragmentPlaceholder": "es. crash",
       "intakeLabels": "Etichette",
       "intakeLabelsPlaceholder": "separate da virgole",
       "intakeIssueType": "Tipo di issue",
-      "intakeInProgressLabel": "Etichetta in corso"
+      "intakeInProgressLabel": "Etichetta in corso",
+      "refusalPerTicketRequiresOnDemand": "Una pianificazione attivata dal tracker deve essere su richiesta. Un ciclo a cadenza non porta con sé alcun ticket da assegnare.",
+      "refusalPerTicketConflictsWithBugIntake": "Questa pipeline sceglie da sola il proprio problema dalla bacheca, quindi non può essere guidata anche da un ticket in arrivo. Scegli una pipeline senza passaggio di raccolta bug."
     },
     "failure": {
       "containerFailedToStart": "Avvio del container fallito",
@@ -3267,7 +3321,9 @@
     "window": {
       "oneHour": "Ultima ora",
       "oneDay": "Ultime 24 ore",
-      "sevenDays": "Ultimi 7 giorni"
+      "sevenDays": "Ultimi 7 giorni",
+      "thirtyDays": "Ultimi 30 giorni",
+      "ninetyDays": "Ultimi 90 giorni"
     },
     "outcomes": {
       "title": "Esiti delle esecuzioni",
@@ -3317,6 +3373,22 @@
     },
     "live": {
       "title": "Attive ora"
+    },
+    "rollup": {
+      "none": "L'aggregazione giornaliera non ha ancora prodotto nulla: questa finestra è vuota per mancanza di dati, non di esecuzioni.",
+      "stale": "L'aggregazione giornaliera arriva solo al {date}. Quello che viene dopo sono dati mancanti, non tempo inattivo.",
+      "current": "Dall'aggregazione giornaliera, completa fino al {date}."
+    },
+    "gates": {
+      "title": "Tentativi dei gate",
+      "empty": "Nessun gate si è concluso in questa finestra.",
+      "gate": "Gate",
+      "settled": "Conclusi",
+      "cleanPasses": "Superati senza riparatore",
+      "attempts": "Tentativi del riparatore",
+      "helperFailures": "Fallimenti del riparatore",
+      "exhausted": "Passati a una persona",
+      "hint": "Superato senza riparatore significa che il controllo preliminare è bastato e non è stato avviato alcun riparatore. I fallimenti del riparatore sono tentativi il cui lavoro è andato in crash, a differenza di quelli che sono stati eseguiti lasciando il controllo rosso."
     }
   },
   "reports": {

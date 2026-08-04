@@ -362,16 +362,25 @@
       "addFailedTitle": "Could not add recurring pipeline",
       "onDemand": "On-demand (manual only)",
       "onDemandHint": "Runs only when you trigger it, with no schedule. Because you are present each time, its task may use an individual-usage subscription model.",
+      "onDemandLockedHint": "Locked on: a tracker-triggered schedule is driven by webhooks, so it has no cadence of its own.",
       "intake": "Issue intake",
       "intakeHint": "Each run picks one matching open issue from the tracker and works it end to end.",
       "intakeNoSources": "Connect a task source first to pull issues from it.",
       "intakeGithubRepo": "Repository",
+      "intakeBoardId": "Board id",
+      "intakeBoardIdHelp": "The board, project or queue this tracker scopes intake to. Its format is defined by the tracker.",
+      "trackerTrigger": "Start runs from tracker webhooks",
+      "trackerTriggerHint": "A ticket matching the filters below is imported as its own task and run on this pipeline. Needs an on-demand schedule.",
+      "intakeDispatchQueueHint": "A matching event starts this schedule, which picks up the oldest matching issue on the board. Use this for a backlog, where the platform decides what is worked next.",
+      "intakeDispatchPerTicketHint": "A matching event imports that ticket as its own task and runs the pipeline on it. Use this for tickets someone has already triaged.",
       "intakeTitleFragment": "Title contains",
       "intakeTitleFragmentPlaceholder": "e.g. crash",
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "comma-separated",
       "intakeIssueType": "Issue type",
-      "intakeInProgressLabel": "In-progress label"
+      "intakeInProgressLabel": "In-progress label",
+      "refusalPerTicketRequiresOnDemand": "A tracker-triggered schedule must be on-demand. A cadence tick carries no ticket to dispatch.",
+      "refusalPerTicketConflictsWithBugIntake": "This pipeline picks its own issue from the board, so it cannot also be driven by a pushed ticket. Choose a pipeline without a bug-intake step."
     },
     "failure": {
       "containerFailedToStart": "Container failed to start",
@@ -1637,7 +1646,9 @@
     "window": {
       "oneHour": "Last hour",
       "oneDay": "Last 24 hours",
-      "sevenDays": "Last 7 days"
+      "sevenDays": "Last 7 days",
+      "thirtyDays": "Last 30 days",
+      "ninetyDays": "Last 90 days"
     },
     "outcomes": {
       "title": "Run outcomes",
@@ -1687,6 +1698,22 @@
     },
     "live": {
       "title": "Live now"
+    },
+    "rollup": {
+      "none": "The daily rollup has produced nothing yet, so this window is empty for lack of data, not for lack of runs.",
+      "stale": "The daily rollup only reaches {date}. Anything after that is missing data, not idle time.",
+      "current": "From the daily rollup, complete through {date}."
+    },
+    "gates": {
+      "title": "Gate attempts",
+      "empty": "No gate settled in this window.",
+      "gate": "Gate",
+      "settled": "Settled",
+      "cleanPasses": "Clean passes",
+      "attempts": "Fixer attempts",
+      "helperFailures": "Fixer failures",
+      "exhausted": "Handed to a human",
+      "hint": "A clean pass is a gate the precheck satisfied without starting a fixer at all. Fixer failures are attempts whose own job crashed, as opposed to attempts that ran and left the check red."
     }
   },
   "reports": {
@@ -2041,7 +2068,10 @@
         "budget_paused": "Mark read",
         "key_drift": "Drop stale credentials",
         "merge_tag_request": "Record effort"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} more not shown",
+      "failingRunGone": "This run is no longer loaded and has no task to open."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3484,6 +3514,48 @@
       "offHint": "Not set: each board decides for itself. Existing boards keep whatever they have chosen.",
       "saved": "Run credential policy saved",
       "saveFailed": "Could not save the run credential policy"
+    },
+    "platformAlerts": {
+      "title": "Platform health alerts",
+      "description": "Ceilings this account's own run health is checked against. Blank fields inherit the deployment defaults.",
+      "muteLabel": "Mute alerts for this account",
+      "muteHint": "Alerts can only be switched off here. Whether the sweep runs at all is a deployment setting.",
+      "windowLabel": "Evaluation window",
+      "windowHint": "How far back each condition looks. A longer window reacts more slowly and stays quieter.",
+      "thresholdsLabel": "Thresholds",
+      "inheritHint": "Leave a field empty to inherit the deployment default. A zero is a real setting, not an empty one.",
+      "inheritPlaceholder": "Inherited",
+      "reset": "Clear overrides",
+      "saved": "Alert settings saved",
+      "saveFailed": "Could not save the alert settings",
+      "window": {
+        "inherit": "Deployment default",
+        "oneHour": "Last hour",
+        "oneDay": "Last 24 hours",
+        "sevenDays": "Last 7 days"
+      },
+      "thresholds": {
+        "minRuns": "Minimum runs",
+        "maxFailureRate": "Failure rate ceiling",
+        "maxP99DurationMs": "p99 duration ceiling (minutes)",
+        "maxBacklog": "Backlog ceiling",
+        "stalledBuckets": "Empty buckets before a stall",
+        "minStalledPriorRuns": "Runs before a stall counts",
+        "maxFailureKindShare": "Dominant failure share",
+        "maxSweepFailures": "Sweep failures in a row"
+      },
+      "hints": {
+        "minRuns": "Finished runs the window needs before the failure alerts can fire.",
+        "maxFailureRate": "Share of runs that may fail, from 0 to 1.",
+        "maxP99DurationMs": "How long the slowest runs may take.",
+        "maxBacklog": "Unfinished runs that may be in flight at once.",
+        "stalledBuckets": "Trailing empty trend buckets that count as a stall.",
+        "minStalledPriorRuns": "Runs the earlier part of the window must have carried. Zero alerts on any silence.",
+        "maxFailureKindShare": "Share of failures one cause may account for, above 0 and up to 1.",
+        "maxSweepFailures": "Consecutive failed passes of one background sweep."
+      },
+      "notLoaded": "This account's current settings could not be loaded, so saving would overwrite the rest of them. Reload before editing.",
+      "invalidNumbers": "These ceilings are not numbers"
     }
   },
   "providers": {

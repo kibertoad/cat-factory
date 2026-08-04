@@ -537,6 +537,43 @@ describe('post-release-health settings surface (observability / release-health /
   // The record-based `upsert(record)` methods bind on the record's `workspaceId` FIELD (the
   // `workspaceField` rule): the write targets exactly `record.workspaceId`, so an out-of-scope
   // workspace in the record is refused before any repo write.
+  // The settled-gate projection's engine write rides the same `workspaceField` rule, under a
+  // method named `record` rather than `upsert`. It matters more than most: a mothership-mode node
+  // runs the gates, so this is the only way a gate outcome reaches the store the dashboard reads.
+  it('forwards gateOutcomeRepository.record when the row targets an in-scope workspace', async () => {
+    await expect(
+      remoteRegistry().gateOutcomeRepository!.record!({ workspaceId: 'ws_in', id: 'ex:0:passed' }),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejects gateOutcomeRepository.record when the row targets another account (404)', async () => {
+    await expect(
+      remoteRegistry().gateOutcomeRepository!.record!({ workspaceId: 'ws_out', id: 'ex:0:passed' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
+
+  for (const [label, arg] of [
+    ['no workspaceId field', {}],
+    ['null', null],
+    ['a non-string primitive', 'not-a-record'],
+  ] as const) {
+    it(`rejects gateOutcomeRepository.record when the arg has ${label} (404, fail-closed)`, async () => {
+      await expect(remoteRegistry().gateOutcomeRepository!.record!(arg)).rejects.toMatchObject({
+        code: 'not_found',
+      })
+    })
+  }
+
+  it('keeps the gate projection READ and PRUNE off the machine API', async () => {
+    // The account-scoped dashboard read is admin-gated and the prune is the sweep's; only the
+    // engine's per-row write crosses.
+    for (const method of ['statsSince', 'deleteOlderThan']) {
+      await expect(remoteRegistry().gateOutcomeRepository![method]!('acc_in', 0)).rejects.toThrow(
+        /not callable/,
+      )
+    }
+  })
+
   const UPSERTS = [
     'observabilityConnectionRepository',
     'releaseHealthConfigRepository',

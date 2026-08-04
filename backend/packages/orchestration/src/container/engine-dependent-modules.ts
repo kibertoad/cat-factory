@@ -83,6 +83,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
       executionService,
       executionEventPublisher,
       tasks?.connectionService,
+      tasks,
     ),
   )
   // Inbound tracker webhooks. Built LAST of the intake modules because it composes the two

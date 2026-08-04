@@ -80,6 +80,7 @@ import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextS
 import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
+import { D1GateOutcomeRepository } from './repositories/D1GateOutcomeRepository.js'
 import { D1PlatformMetricsRepository } from './repositories/D1PlatformMetricsRepository'
 import { D1ProvisioningLogRepository } from './repositories/D1ProvisioningLogRepository'
 import { D1ReferenceArchitectureRepository } from './repositories/D1ReferenceArchitectureRepository'
@@ -313,6 +314,11 @@ function selectWorkerProviderCapabilities(
  * prompt-recording switch. Grouped out of {@link buildWorkerCoreDependencies} for the
  * per-function line budget, like {@link selectWorkerDurableJobDeps}; every entry is spread
  * straight back into the same position in the same literal.
+ *
+ * The two DATABASES are the thing worth stating once: the per-call / per-dispatch / per-search
+ * SINKS live in the dedicated `TELEMETRY_DB`, while the deployment-level PROJECTIONS the
+ * operator dashboard aggregates sit in the MAIN db beside `agent_runs`, which is what lets them
+ * be account-scoped through the same `workspaces` sub-select every other platform rollup uses.
  */
 function selectWorkerObservabilityDeps(args: {
   config: AppConfig
@@ -321,7 +327,11 @@ function selectWorkerObservabilityDeps(args: {
   provisioningLogRepository: WorkerContainerAssemblyInput['provisioningLogRepository']
   agentContextObservability: AgentContextObservabilityService
   searchQueryObservability: SearchQueryObservabilityService
-}): Partial<CoreDependencies> {
+}): // `Partial` for the bulk (one entry is conditionally spread), INTERSECTED with the one
+// dependency `CoreDependencies` marks required. Without that intersection the spread erases the
+// guarantee and the facade typechecks with the engine's gate projection silently unwired, which
+// is the whole failure mode making it required was meant to catch.
+Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
   const {
     config,
     db,
@@ -340,6 +350,10 @@ function selectWorkerObservabilityDeps(args: {
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
     // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // The settled-gate projection behind the dashboard's attempt statistics. MAIN db for the
+    // same reason as the rollups above, and wired HERE rather than only on the retention sweep:
+    // this is the dependency the ENGINE's gate machine records through.
+    gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
     // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
     // the Reports view.
     reportsRepository: new D1ReportsRepository({ db }),

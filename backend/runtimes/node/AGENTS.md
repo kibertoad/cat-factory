@@ -19,8 +19,10 @@ transport, and Node model provisioning.
   `schema.ts` is the single entry point every repo imports; the VCS/projection tables live in
   `db/tables/vcs.ts` and the tenancy & identity ones (the `workspaces`/`users` roots, login
   identities, the account + membership graph, invitations / password resets and the per-account
-  rows) in `db/tables/identity.ts`, both re-exported from it (a size-budget split, so drizzle-kit
-  and every importer still see one module). `identity.ts` is also where the schema's only two FK
+  rows) in `db/tables/identity.ts`, and the observability group (the `telemetry` Postgres schema
+  with its three append-heavy sinks, plus the two main-schema projections the operator dashboard
+  aggregates) in `db/tables/observability.ts`, all re-exported from it (size-budget splits, so
+  drizzle-kit and every importer still see one module). `identity.ts` is also where the schema's only two FK
   targets live, so the referencing credential tables import FROM it and the graph stays acyclic. `migrate()`
   (`db/migrate.ts`) bootstraps it idempotently on boot, failing fast with an actionable error on
   a ledger↔schema desync and wrapping apply failures with a recovery hint. `scripts/db-reset.mjs`

@@ -361,9 +361,31 @@ export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
 // port; this schema is the wire projection the admin dashboard renders.
 // ---------------------------------------------------------------------------
 
-/** The time window the dashboard aggregates over. */
-export const platformObservabilityWindowSchema = v.picklist(['1h', '24h', '7d'])
+/**
+ * The time window the dashboard aggregates over. `1h`/`24h`/`7d` are scanned live off
+ * `agent_runs`; `30d`/`90d` are served from the DAILY ROLLUP table the retention sweep
+ * materialises, because a fine-grained scan over a quarter of run history is exactly the
+ * "load rows and reduce" cost the rollup exists to avoid. Which source answered is carried
+ * on the projection ({@link platformTrendSourceSchema}) rather than left to be inferred.
+ *
+ * The rollup-backed windows are INCLUSIVE of the day their start falls in, so a `30d` window
+ * covers 30 or 31 calendar days depending on the time of day it is read, where the live windows
+ * are exact to the millisecond. A day is the smallest bucket that table can answer, and dropping
+ * the partial oldest day would under-report it by more than including it over-reports; `since`
+ * on the projection is still the exact window start, so a reader is never told otherwise.
+ */
+export const platformObservabilityWindowSchema = v.picklist(['1h', '24h', '7d', '30d', '90d'])
 export type PlatformObservabilityWindow = v.InferOutput<typeof platformObservabilityWindowSchema>
+
+/**
+ * Where a window's outcome totals, trend and failure taxonomy came from: a live scan of
+ * `agent_runs` (`runs`) or the daily rollup table (`daily-rollup`). Reported rather than
+ * derived from the window, so a reader never has to know the routing table to know what it
+ * is looking at, and so a rollup that has not run yet reads as missing data rather than as
+ * a quiet deployment (see `rolledUpThrough`).
+ */
+export const platformTrendSourceSchema = v.picklist(['runs', 'daily-rollup'])
+export type PlatformTrendSource = v.InferOutput<typeof platformTrendSourceSchema>
 
 /** Run-outcome totals over the window (each a status bucket, plus the derived success rate). */
 export const platformOutcomeTotalsSchema = v.object({
@@ -400,6 +422,46 @@ export const platformFailureSliceSchema = v.object({
 })
 export type PlatformFailureSlice = v.InferOutput<typeof platformFailureSliceSchema>
 
+/**
+ * One gate kind's attempt statistics over the window: the operator view of the
+ * precheck-or-escalate loop that `ci` / `conflicts` / `post-release-health` (and a
+ * deployment's own gates) run. Folded from the `gate_outcomes` projection, one row of which
+ * is written when a gate SETTLES; the per-round detail stays on the run's `step.gate`.
+ *
+ * The numbers answer three different operator questions that a bare attempt count conflates:
+ * how often the gate is satisfied with nothing spun up ({@link cleanPasses}, the whole point
+ * of a precheck-first gate), how much helper-agent work the deployment is spending
+ * ({@link attempts}), and how often that work runs out without fixing anything
+ * ({@link exhausted}, the human hand-off).
+ */
+export const platformGateStatSchema = v.object({
+  /** The gate step's agent kind (`ci` / `conflicts` / `post-release-health` / a custom one). */
+  gateKind: v.string(),
+  /** The helper agent this gate escalates to (`ci-fixer` / …), or null when it has none. */
+  helperKind: v.nullable(v.string()),
+  /** Gate steps that reached a terminal verdict in the window. */
+  gates: v.number(),
+  /** Of those, how many the precheck ultimately passed. */
+  passed: v.number(),
+  /** Of those, how many spent the attempt budget and handed off to a human. */
+  exhausted: v.number(),
+  /**
+   * Gates that passed WITHOUT dispatching a helper at all. Reported separately from
+   * {@link passed} because "the gate was green on the first look" and "the fixer got it green
+   * on the third try" are the same `passed` and completely different platform health.
+   */
+  cleanPasses: v.number(),
+  /** Helper-agent dispatches across every gate of this kind (the CI-fixer attempt count). */
+  attempts: v.number(),
+  /**
+   * Helper dispatches whose own job FAILED (as opposed to finishing and leaving the precheck
+   * still red). Kept apart because a fixer that keeps crashing is a platform fault, while a
+   * fixer that runs clean and cannot fix the build is a product one.
+   */
+  helperFailures: v.number(),
+})
+export type PlatformGateStat = v.InferOutput<typeof platformGateStatSchema>
+
 /** The complete deployment-health projection the admin dashboard renders. */
 export const platformObservabilitySchema = v.object({
   window: platformObservabilityWindowSchema,
@@ -408,6 +470,29 @@ export const platformObservabilitySchema = v.object({
   /** Start of the window (epoch ms) — `generatedAt - window`. */
   since: v.number(),
   outcomes: platformOutcomeTotalsSchema,
+  /**
+   * Which store answered the outcome totals, trend and failure taxonomy for this window.
+   * `runs` = a live scan of `agent_runs`; `daily-rollup` = the pre-aggregated daily table.
+   */
+  source: platformTrendSourceSchema,
+  /**
+   * On a `daily-rollup` window: the newest day (epoch ms, UTC midnight) the rollup SWEEP has
+   * covered, or NULL when no pass has ever completed.
+   *
+   * Null is the whole reason this field exists. A rollup that has never run and a deployment
+   * that has never run anything both produce an empty series, and only one of them is a fact
+   * about the platform, so the reader is told which, rather than being shown 90 days of
+   * confident zeros. A value well behind `generatedAt` says the same thing more quietly: the
+   * sweep is behind, and the tail of the window is not missing work but missing data.
+   * Always null on a `runs` window, where there is no rollup in the path to be behind.
+   *
+   * It is the SWEEP's recorded coverage, not the newest rolled-up row, and DEPLOYMENT-wide
+   * rather than per account. Deriving it from the rows cannot support either reading above: an
+   * account idle for a fortnight and a wedged pass share a newest row, and an account created
+   * yesterday and a rollup that never ran share an absence. Both pairs call for opposite
+   * operator responses, so the number has to come from the thing being asked about.
+   */
+  rolledUpThrough: v.nullable(v.number()),
   trend: v.object({
     /** Width of each trend bucket (ms). */
     bucketMs: v.number(),
@@ -415,6 +500,13 @@ export const platformObservabilitySchema = v.object({
   }),
   /** Failure taxonomy over the window, most frequent first. */
   failures: v.array(platformFailureSliceSchema),
+  /**
+   * Gate attempt statistics over the window, busiest gate first. Always a live read of the
+   * `gate_outcomes` projection (it is small and not rolled up), so it is present on every
+   * window; EMPTY means no gate settled in the window, which on a `daily-rollup` window may
+   * simply mean the gate projection does not reach that far back.
+   */
+  gates: v.array(platformGateStatSchema),
   /** Live/parked run depth right now (a snapshot, not windowed). */
   live: v.object({
     running: v.number(),
@@ -487,6 +579,82 @@ export const platformAlertReasonSchema = v.picklist([
 ])
 export type PlatformAlertReason = v.InferOutput<typeof platformAlertReasonSchema>
 
+/**
+ * The windows the ALERT sweep may evaluate over: the live-scanned subset of
+ * {@link platformObservabilityWindowSchema}. The rollup-backed `30d`/`90d` windows are
+ * deliberately excluded: an alert is a statement about NOW, and a threshold averaged over a
+ * quarter answers a question nobody pages on, while riding a table that is materialised at
+ * best hourly.
+ */
+export const platformAlertWindowSchema = v.picklist(['1h', '24h', '7d'])
+export type PlatformAlertWindow = v.InferOutput<typeof platformAlertWindowSchema>
+
+/**
+ * Operator-tunable ceilings for the platform-health alert sweep. EVERY field is optional and
+ * an absent one INHERITS the deployment's env-derived default rather than meaning zero. The
+ * distinction matters here more than most places, because a zero is a live threshold in this
+ * vocabulary ("alert on silence even in an idle window") and would page instantly.
+ *
+ * The bounds mirror the env parser's clamps (`resolvePlatformAlertConfig`), so a threshold
+ * typed into the settings panel is refused at the write boundary for the same reasons an
+ * env value is corrected at boot: a `stalledBuckets` of 0 makes "the last zero buckets were
+ * empty" trivially true, and a `maxFailureKindShare` of 0 is satisfied by any distribution.
+ */
+export const platformAlertThresholdOverridesSchema = v.object({
+  /** Minimum terminal runs before the failure-rate + dominant-kind alerts can fire. */
+  minRuns: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(100_000))),
+  /** Run failure rate (0..1) at or above which `failure_rate_high` fires. */
+  maxFailureRate: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1))),
+  /** p99 wall-clock run duration (ms) at or above which `duration_p99_high` fires. */
+  maxP99DurationMs: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(30 * 24 * 60 * 60_000)),
+  ),
+  /** Live running/blocked/paused/pending depth at or above which `backlog_high` fires. */
+  maxBacklog: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1_000_000))),
+  /** Trailing empty trend buckets before `throughput_stalled` can fire. */
+  stalledBuckets: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1_000))),
+  /**
+   * Runs the earlier part of the window must have carried before a stall counts. `0` is a
+   * meaningful setting ("this deployment should never be quiet"), which is why the floor here
+   * is 0 and not 1, unlike every other count in this object.
+   */
+  minStalledPriorRuns: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(1_000_000)),
+  ),
+  /**
+   * Share (0..1] of the window's failures one kind must reach for `failure_kind_dominant`.
+   * The floor excludes 0 on its own (a share of 0 is satisfied by any distribution, so it would
+   * page constantly), which is why there is no separate `notValue(0)` beside it.
+   */
+  maxFailureKindShare: v.optional(v.pipe(v.number(), v.minValue(Number.EPSILON), v.maxValue(1))),
+  /** Consecutive failed passes of one sweeper before `sweep_degraded` fires. */
+  maxSweepFailures: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10_000))),
+})
+export type PlatformAlertThresholdOverrides = v.InferOutput<
+  typeof platformAlertThresholdOverridesSchema
+>
+
+/**
+ * An account's stored platform-health alert settings: the settings-UI half of the alert
+ * config, layered over the deployment's env-derived defaults so an operator can retune a
+ * threshold without a redeploy.
+ *
+ * `enabled` can only turn the account's alerts OFF, never on: the env switch
+ * (`PLATFORM_ALERTS`) decides whether the SWEEP RUNS AT ALL on this deployment, and no stored
+ * row can start a timer that was never started. Saying so here rather than pretending the
+ * setting is symmetric is what keeps the panel from offering a toggle that silently does
+ * nothing on a deployment that never opted in.
+ */
+export const platformAlertSettingsSchema = v.object({
+  /** `false` mutes this account's alerts. Absent ⇒ follow the deployment switch. */
+  enabled: v.optional(v.boolean()),
+  /** The window each condition is evaluated over. Absent ⇒ the deployment default. */
+  window: v.optional(platformAlertWindowSchema),
+  /** Per-condition ceilings; each absent field inherits the deployment default. */
+  thresholds: v.optional(platformAlertThresholdOverridesSchema),
+})
+export type PlatformAlertSettings = v.InferOutput<typeof platformAlertSettingsSchema>
+
 /** One fired platform-health alert: the tripped condition, its observed value + threshold. */
 export const platformAlertSchema = v.object({
   reason: platformAlertReasonSchema,
@@ -496,3 +664,24 @@ export const platformAlertSchema = v.object({
   threshold: v.number(),
 })
 export type PlatformAlert = v.InferOutput<typeof platformAlertSchema>
+
+/**
+ * One failed run behind a `platform_health` card, so the alert deep-links to the EVIDENCE
+ * rather than only to the dashboard. Carried on the notification payload, always scoped to
+ * the card's own workspace (a card in one workspace must never link into another's run).
+ *
+ * Captured at the moment the firing set CHANGES, not refreshed every sweep: the payload is
+ * the card's dedup identity, so a list that churned with each new failure would re-deliver
+ * the alert (and re-toast the inbox) for the entire length of an incident.
+ */
+export const platformFailingRunSchema = v.object({
+  /** The run id, which is what the SPA opens. */
+  executionId: v.string(),
+  /** The block the run belongs to, so the SPA can reveal it on the board. Null if unset. */
+  blockId: v.nullable(v.string()),
+  /** The run's `failure.kind` (or `unknown`): why this one is in the list. */
+  failureKind: v.string(),
+  /** When the run was created (epoch ms). */
+  createdAt: v.number(),
+})
+export type PlatformFailingRun = v.InferOutput<typeof platformFailingRunSchema>

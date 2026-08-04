@@ -4,6 +4,7 @@ import type {
   LocalModeConfig,
   ModelFlavor,
   ModelOption,
+  PlatformAlertWindow,
   PlatformObservabilityWindow,
 } from '@cat-factory/contracts'
 import type { DetectionConventions } from '@cat-factory/integrations'
@@ -330,6 +331,21 @@ export interface RetentionConfig {
    * intact. 0 disables.
    */
   notificationsMs: number
+  /**
+   * The settled-gate projection (`gate_outcomes`) behind the operator dashboard's gate /
+   * CI-fixer attempt statistics. One row per settled gate, so it grows far slower than the
+   * call telemetry, but it is still unbounded: pruned on a generous window (default 90 days,
+   * matching the longest dashboard window plus room to spare). 0 disables.
+   */
+  gateOutcomesMs: number
+  /**
+   * The daily run rollup (`platform_run_days`) behind the `30d` / `90d` dashboard windows.
+   * Deliberately the LONGEST window of the lot (default 400 days): a rolled-up day is a
+   * handful of tiny rows, and the whole point of the table is answering questions the raw
+   * scan is too expensive for, which is exactly what a short retention would take away.
+   * 0 disables.
+   */
+  runDaysMs: number
 }
 
 export interface FragmentLibraryConfig {
@@ -418,8 +434,12 @@ export interface OtelPlatformMetricsConfig {
 export interface PlatformAlertConfig {
   /** Opt-in flag (`PLATFORM_ALERTS=true`). */
   enabled: boolean
-  /** The trailing window each evaluation aggregates over (`1h`/`24h`/`7d`; default `1h`). */
-  window: PlatformObservabilityWindow
+  /**
+   * The trailing window each evaluation aggregates over (default `1h`). Deliberately the
+   * live-scanned subset of the dashboard's windows: an alert is a statement about NOW, and the
+   * `30d`/`90d` windows read a table materialised at best hourly.
+   */
+  window: PlatformAlertWindow
   /**
    * How often the sweep runs (ms). Node reads `PLATFORM_ALERTS_INTERVAL_MS` (default 5min);
    * the Worker is cron-driven (its 2-minute `scheduled` tick) and ignores this.

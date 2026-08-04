@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { modelFamilyPolicySchema } from './modelPolicy.js'
+import { platformAlertSettingsSchema } from './observability.js'
 
 // ---------------------------------------------------------------------------
 // Per-account (deployment-wide) integration settings, moved out of env vars into a
@@ -81,6 +82,18 @@ export const accountSettingsConfigSchema = v.object({
    * `backend/docs/security-model.md`.
    */
   allowInitiatorPat: v.optional(v.boolean()),
+  /**
+   * Per-account overrides for the platform-health alert sweep (see
+   * {@link platformAlertSettingsSchema}). Absent ⇒ the deployment's env-derived defaults,
+   * unchanged. This is the settings-UI half of the alerting slice: retuning a ceiling that
+   * pages too often, or muting one account, without a redeploy.
+   *
+   * It lives on the ACCOUNT rather than the workspace because that is the scope the sweep
+   * already evaluates: the run-health projection behind every condition is one account-scoped
+   * rollup, so a per-workspace threshold would be a setting with nothing of its own to
+   * measure.
+   */
+  platformAlerts: v.optional(platformAlertSettingsSchema),
 })
 export type AccountSettingsConfig = v.InferOutput<typeof accountSettingsConfigSchema>
 

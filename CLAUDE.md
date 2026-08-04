@@ -898,8 +898,13 @@ an unconfigured one **FAILS CLOSED**. Push never replaces the `bug-intake` recon
 qualifying issue event FIRES that schedule rather than re-implementing intake. Ticket-comment replies take
 explicit first-token commands only and route through the SAME service methods the SPA calls (**never a
 parallel mutation path into the engine**), behind three guards on reply text (identity,
-data-not-instructions, the iteration budget). Doc:
-[`tracker-webhook-intake.md`](./docs/initiatives/tracker-webhook-intake.md).
+data-not-instructions, the iteration budget). A schedule may instead dispatch **per ticket**, running the
+pushed ticket as its own task; that mode REQUIRES on-demand and refuses a `bug-intake` pipeline, because
+each combination would otherwise work a different ticket than the one pushed. **The match is a VERDICT,
+never a boolean**: a predicate the delivery cannot answer is `unconfirmed`, which `queue` fires on (its
+run's vendor search re-checks everything) and `per-ticket` withholds on and LOGS, since nothing downstream
+would catch a wrong dispatch and no cadence sweep will retry it. Doc:
+[`0032-tracker-webhook-intake.md`](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
 **Bug hunt**: scan a tracker board's open + UNASSIGNED bugs, rate impact against complexity, adopt one
 onto `pl_bugfix`. **Persists NOTHING**, so runtime symmetry is by construction. **One vendor call per scan
@@ -1428,6 +1433,40 @@ Rules that bind new work here:
   store needs its `workspaceSettingsRepository`**, or that gate is OPEN and an opted-out workspace's bodies
   are retained anyway.
 
+**The DEPLOYMENT-level projections are the exception to that store split, deliberately.**
+`gate_outcomes` (one row per polling gate that reaches a terminal verdict) and
+`platform_run_days` (the daily rollup behind the dashboard's `30d`/`90d` windows) live in the
+MAIN store beside `agent_runs`, are account-scoped through the same `workspaces` sub-select every
+other platform rollup uses, and are pruned by the RETENTION sweep rather than the telemetry one. A
+telemetry-store home would have forced a cross-store join or a workspace-id list threaded through
+every read. Three rules bind anything added beside them.
+
+- **A rollup is REWRITTEN, never appended, and an UPSERT is not a rewrite.** The current day's
+  counts are not final, so each pass recomputes a short trailing window; but the source rows
+  MUTATE (a run goes `running` → `done` with its `created_at` fixed), so a bucket the new pass no
+  longer produces is one `ON CONFLICT DO UPDATE` never touches. The pass therefore DELETEs its
+  window and re-inserts it, both in one transaction so no reader sees the gap. Left as an upsert,
+  every run that happened to be mid-flight at a sweep is counted twice, for as long as retention
+  keeps the orphan.
+- **A rollup's coverage is a fact about the SWEEP, so it cannot be derived from the rolled-up
+  rows.** `dailyRollupWatermark` reads what the pass RECORDED (`platform_rollup_state`, written in
+  the same transaction, deployment-scoped, moving only forward), never `max(day_start)`: an
+  account idle for a fortnight and a wedged sweep share a newest row, and a new account and a
+  rollup that never ran share an absence. Each pair needs the opposite operator response, so a
+  derived number answers a different question than the one being asked and sounds certain doing it.
+- **A projection whose writer REPLAYS derives its row id** from the run
+  (`<runId>:<stepIndex>:<outcome>`) rather than minting one, or one settle becomes two rows and
+  inflates every number the table exists to report.
+
+**A projection the ENGINE writes is `remote` in mothership mode, not `telemetry`.** The local-first
+bucket is for state a node also READS locally; a gate outcome is written on the node and read only
+by the admin-gated dashboard on the mothership, so a `node:sqlite` copy would be a write-only store
+nobody can see. It is allow-listed on the record's own `workspaceId` field. And because an un-wired
+writer reads downstream as "this never happens" rather than as an outage,
+`CoreDependencies.gateOutcomeRepository` is REQUIRED (`noopGateOutcomeRepository` for a caller with
+no store), the same rule as `logger` and `operationalMetrics`.
+Doc: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+
 **Remote debugging reads** (`/api/v1/debug/*`) expose the same sinks to an external caller (in practice an
 LLM diagnosing a run) under one rule a new endpoint must obey too: **a response's size has to be
 computable BEFORE the request.** So fan-out lists never carry bodies, slicing/filtering/searching happen in
@@ -1442,9 +1481,27 @@ array, never a new call site.** Every sink is opt-in on a FULL config, **never t
 and honours `LLM_RECORD_PROMPTS` (usage and timing still export; bodies don't). The OTel package is the one
 place the runtimes deliberately differ in TRANSPORT, not behaviour (workerd can't run the official SDK),
 sharing `src/mapping.ts` pinned equal by `conformity.test.ts`, so span names, attributes and metric names
-change in the mapping layer. Deployment-level metrics are the dual, swept per account and opt-in on top of
-the base exporter:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+change in the mapping layer. **A run's spans are a HIERARCHY (`run → agent kind → generations + tool
+calls`) built from DERIVED ids, never shared state**: every parent id is a pure function of the run, so a
+stateless per-call emission names a parent it has never seen. The parents are emitted at settlement, from
+the same terminal hook the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`),
+for the same reason: a run reaches `done` from four sites. That hook fires AGAIN for an already-settled
+run, so **the parents' EXTENT is folded from stamps the run recorded, never read off a clock at emit
+time** (`buildRunTraceSpans`): derived ids alone make a replay re-export the same span ids, and pairing
+those with a duration that moved is a contradiction where a byte-identical duplicate is something a
+backend collapses. The step level's grain is the agent KIND because that is the finest thing a generation
+event can NAME. **A step that dispatched a HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a
+`fork-proposer`) gets a span for that kind too, nested under it**: the helper's telemetry is tagged with
+the HELPER, so without one every row of it names a parent nobody emits. What ran is recorded at dispatch
+on `PipelineStep.dispatches` through the ONE funnel (`recordDispatchAttribution`), never re-derived from
+`agentKind`. **What a span cannot separate it STATES**: the runs here repeat as CYCLES (a fixer loop, a
+Ralph iteration, a bounced step), and the events under a span carry no attempt ordinal to split it by, so
+each step span reports `step_count` AND `attempt_count` rather than passing six rounds off as one. A
+re-run's extent comes from `firstStartedAt`, which survives the reset that re-stamps `startedAt`, or the
+parent would begin after its own earlier children. **A span NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
+counterpart of the bounded-dimension rule: free text like a pipeline name rides an attribute, or a tenant
+mints unbounded series on the operator's backend by renaming things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
+exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model
 

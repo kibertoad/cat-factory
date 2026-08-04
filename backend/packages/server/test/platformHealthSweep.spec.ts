@@ -1,5 +1,9 @@
 import { DEFAULT_PLATFORM_ALERT_THRESHOLDS } from '@cat-factory/orchestration'
-import type { PlatformObservability, PlatformObservabilityWindow } from '@cat-factory/contracts'
+import type {
+  PlatformAlertSettings,
+  PlatformAlertWindow,
+  PlatformObservability,
+} from '@cat-factory/contracts'
 import { createRecordingLogger } from '@cat-factory/kernel'
 import type { Workspace } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -28,6 +32,9 @@ const HEALTHY: PlatformObservability = {
     other: 0,
     successRate: 1,
   },
+  source: 'runs',
+  rolledUpThrough: null,
+  gates: [],
   trend: { bucketMs: 300_000, points: [] },
   failures: [],
   live: { running: 0, blocked: 0, paused: 0, pending: 0 },
@@ -50,6 +57,7 @@ const UNHEALTHY: PlatformObservability = {
 interface RaiseCall {
   workspaceId: string
   reasons: unknown
+  payload?: Record<string, unknown>
 }
 
 function makeContainer(opts: {
@@ -61,6 +69,19 @@ function makeContainer(opts: {
   /** Workspaces that already hold an open card (drives the batched `listOpenByType`). Defaults
    * to "every workspace has one", so a healthy workspace is probed for clearing as before. */
   openCardWorkspaces?: string[]
+  /** The reason set stored on those open cards, if any; drives the state-change dedup. */
+  openCardReasons?: string[]
+  /** The account's stored alert overrides, layered over the deployment defaults. */
+  accountSettings?: PlatformAlertSettings
+  /** Failing runs the deep-link sample resolves to, keyed by workspace. */
+  failingRuns?: {
+    workspaceId: string
+    executionId: string
+    blockId: string | null
+    failureKind: string
+    createdAt: number
+    workspaceFailedTotal: number
+  }[]
 }) {
   const raises: RaiseCall[] = []
   const clears: string[] = []
@@ -69,16 +90,26 @@ function makeContainer(opts: {
     config: {
       platformAlerts: {
         enabled: opts.enabled ?? true,
-        window: '1h' as PlatformObservabilityWindow,
+        window: '1h' as PlatformAlertWindow,
         intervalMs: 60_000,
         thresholds: DEFAULT_PLATFORM_ALERT_THRESHOLDS,
       },
     },
     workspaceService: { list: async () => opts.workspaces },
+    accountSettings: opts.accountSettings
+      ? {
+          service: {
+            resolve: async () => ({ config: { platformAlerts: opts.accountSettings } }),
+          },
+        }
+      : undefined,
     platformObservability:
       opts.hasObservability === false
         ? undefined
-        : { summarize: async (accountId: string) => opts.summaries[accountId] ?? HEALTHY },
+        : {
+            summarize: async (accountId: string) => opts.summaries[accountId] ?? HEALTHY,
+            failingRuns: async () => opts.failingRuns ?? [],
+          },
     notifications:
       opts.hasNotifications === false
         ? undefined
@@ -87,13 +118,19 @@ function makeContainer(opts: {
               listOpenByType: async (workspaceIds: string[]) => {
                 listByTypeCalls.push(workspaceIds)
                 const held = opts.openCardWorkspaces ?? workspaceIds
-                return new Map(workspaceIds.filter((id) => held.includes(id)).map((id) => [id, {}]))
+                const card = opts.openCardReasons
+                  ? { payload: { platformAlerts: opts.openCardReasons } }
+                  : {}
+                return new Map(
+                  workspaceIds.filter((id) => held.includes(id)).map((id) => [id, card]),
+                )
               },
-              raise: async (
-                workspaceId: string,
-                input: { payload?: { platformAlerts?: unknown } },
-              ) => {
-                raises.push({ workspaceId, reasons: input.payload?.platformAlerts })
+              raise: async (workspaceId: string, input: { payload?: Record<string, unknown> }) => {
+                raises.push({
+                  workspaceId,
+                  reasons: input.payload?.platformAlerts,
+                  payload: input.payload,
+                })
                 return {}
               },
               clearByType: async (workspaceId: string) => {
@@ -187,6 +224,124 @@ describe('sweepPlatformHealth', () => {
       expect(raises).toEqual([])
       expect(clears).toEqual([])
     }
+  })
+
+  it('does not re-raise while the firing set is unchanged', async () => {
+    // The card's identity IS the reason set, so a persistently-unhealthy deployment must not
+    // rewrite the row (or re-toast the inbox) on every pass.
+    const { container, raises, clears } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': UNHEALTHY },
+      openCardReasons: ['failure_rate_high'],
+    })
+    const result = await sweepPlatformHealth(container)
+    expect(result).toEqual({ raised: 0, cleared: 0 })
+    expect(raises).toEqual([])
+    expect(clears).toEqual([])
+  })
+
+  it('re-raises when a second condition joins the firing set', async () => {
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: {
+        'acc-1': {
+          ...UNHEALTHY,
+          live: { running: 60, blocked: 0, paused: 0, pending: 0 },
+        },
+      },
+      openCardReasons: ['failure_rate_high'],
+    })
+    const result = await sweepPlatformHealth(container)
+    expect(result).toEqual({ raised: 1, cleared: 0 })
+    expect(raises[0]!.reasons).toEqual(['backlog_high', 'failure_rate_high'])
+  })
+
+  it('deep-links the card to the failing runs in its OWN workspace, and says what it capped', async () => {
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1'), workspace('ws-2', 'acc-1')],
+      summaries: { 'acc-1': UNHEALTHY },
+      failingRuns: [
+        {
+          workspaceId: 'ws-1',
+          executionId: 'run-a',
+          blockId: 'blk-a',
+          failureKind: 'agent',
+          createdAt: 5,
+          workspaceFailedTotal: 23,
+        },
+        {
+          workspaceId: 'ws-2',
+          executionId: 'run-b',
+          blockId: null,
+          failureKind: 'evicted',
+          createdAt: 6,
+          workspaceFailedTotal: 4,
+        },
+      ],
+    })
+    await sweepPlatformHealth(container)
+    const first = raises.find((r) => r.workspaceId === 'ws-1')!
+    expect(first.payload?.platformFailingRuns).toEqual([
+      { executionId: 'run-a', blockId: 'blk-a', failureKind: 'agent', createdAt: 5 },
+    ])
+    // The cap reports the denominator it is a sample of, so the card can say "1 of 23".
+    expect(first.payload?.platformFailedTotal).toBe(23)
+    // A card never links into another workspace's runs.
+    const second = raises.find((r) => r.workspaceId === 'ws-2')!
+    expect(second.payload?.platformFailingRuns).toEqual([
+      { executionId: 'run-b', blockId: null, failureKind: 'evicted', createdAt: 6 },
+    ])
+  })
+
+  it('omits the run links entirely for a condition with no failing runs behind it', async () => {
+    // A backlog alert has no failure to point at, and an EMPTY list would render as "no
+    // failures found" rather than "this alert is not about failures".
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: {
+        'acc-1': { ...HEALTHY, live: { running: 60, blocked: 0, paused: 0, pending: 0 } },
+      },
+      failingRuns: [
+        {
+          workspaceId: 'ws-1',
+          executionId: 'run-a',
+          blockId: null,
+          failureKind: 'agent',
+          createdAt: 1,
+          workspaceFailedTotal: 1,
+        },
+      ],
+    })
+    await sweepPlatformHealth(container)
+    expect(raises[0]!.reasons).toEqual(['backlog_high'])
+    expect(raises[0]!.payload?.platformFailingRuns).toBeUndefined()
+    expect(raises[0]!.payload?.platformFailedTotal).toBeUndefined()
+  })
+
+  it('evaluates an account against its own stored thresholds', async () => {
+    // The deployment default would fire at a 50% failure rate; this account raised its ceiling.
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': UNHEALTHY }, // 80% failure rate
+      accountSettings: { thresholds: { maxFailureRate: 0.9 } },
+    })
+    const result = await sweepPlatformHealth(container)
+    expect(result).toEqual({ raised: 0, cleared: 1 })
+    expect(raises).toEqual([])
+  })
+
+  it('mutes an account that switched its alerts off, without touching its open card', async () => {
+    // A muted account is SKIPPED, not "healthy": clearing its card would silently resolve an
+    // alert the operator only asked to stop being told about again.
+    const { container, raises, clears } = makeContainer({
+      workspaces: [workspace('ws-1', 'acc-1')],
+      summaries: { 'acc-1': UNHEALTHY },
+      accountSettings: { enabled: false },
+    })
+    const result = await sweepPlatformHealth(container)
+    expect(result).toEqual({ raised: 0, cleared: 0 })
+    expect(raises).toEqual([])
+    expect(clears).toEqual([])
   })
 
   it('isolates a per-account failure, still processing the others', async () => {

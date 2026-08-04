@@ -246,17 +246,30 @@ export {
   toSpendRow,
 } from './modules/reports/reports.logic.js'
 export {
+  DAY_MS,
   PLATFORM_WINDOWS,
   buildTrend,
+  dailyFailureSlices,
+  dailyTrendRows,
+  summarizeGateOutcomes,
   summarizeOutcomes,
 } from './modules/observability/platform-observability.logic.js'
+export {
+  GateOutcomeRecorder,
+  type GateOutcomeRecorderDeps,
+  type SettledGate,
+} from './modules/observability/GateOutcomeRecorder.js'
 export {
   sweepPlatformMetrics,
   distinctAccountIds,
   type PlatformMetricsSink,
   type PlatformMetricsSweepDeps,
 } from './modules/observability/platformMetricsSweep.js'
-export { createRetentionPass, type RetentionPass } from './modules/observability/retentionPass.js'
+export {
+  RUN_DAY_ROLLUP_LOOKBACK_MS,
+  createRetentionPass,
+  type RetentionPass,
+} from './modules/observability/retentionPass.js'
 export {
   flushOperationalMetrics,
   type OperationalMetricsFlushDeps,
@@ -264,10 +277,13 @@ export {
 } from './modules/observability/operationalMetricsFlush.js'
 export {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+  alertsHaveRunEvidence,
   evaluatePlatformHealth,
   platformAlertReasons,
   platformHealthCardContent,
+  resolveAccountAlertConfig,
   type PlatformAlertThresholds,
+  type ResolvedAccountAlertConfig,
 } from './modules/observability/platform-health.logic.js'
 export {
   cacheHitRate,

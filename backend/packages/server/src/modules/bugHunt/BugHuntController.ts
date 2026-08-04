@@ -35,11 +35,15 @@ function requireTasks<E extends AppEnv>(c: Context<E>): TasksModule {
   return requireCapability(c.get('container').tasks, 'Task-source integration is not configured')
 }
 
-/** Read + validate the `:source` path param as a known source kind. */
+/**
+ * Read + validate the `:source` path param against the source GRAMMAR (a built-in id, or a
+ * `<ns>:<name>` id a deployment may have registered). `BugHuntService` resolves the source on the
+ * app-owned registry and refuses an unregistered one there, naming the capability it lacks.
+ */
 function sourceParam<E extends AppEnv>(c: Context<E>): TaskSourceKind {
   const source = param(c, 'source')
   if (!v.is(taskSourceKindSchema, source)) {
-    throw new ValidationError(`Unknown task source '${source}'`)
+    throw new ValidationError(`Malformed task source '${source}'`)
   }
   return source
 }

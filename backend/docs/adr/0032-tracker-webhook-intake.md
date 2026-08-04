@@ -1,43 +1,51 @@
-# Initiative: tracker webhook intake + issue-comment answers
+# ADR 0032: Tracker webhook intake, ticket-comment answers, and per-ticket dispatch
 
-**Status:** in progress · **Owner:** core · **Started:** 2026-07-27
+- **Status:** Accepted (implemented)
+- **Date:** 2026-08-04
+- **Context layer:** backend (`@cat-factory/contracts`, `@cat-factory/kernel`,
+  `@cat-factory/integrations`, `@cat-factory/orchestration`, `@cat-factory/server`, both runtime
+  facades) + the SPA
 
-> Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the next
-> slice; update the checklist at the end of each PR.
+Supersedes the `tracker-webhook-intake` initiative tracker, whose committed scope is complete.
 
-## Goal & rationale
+## Context
 
-The task-source layer is complete on the write side and on the POLLING read side (see the
-"Requirements review flow" and bug-triage notes in [`CLAUDE.md`](../../CLAUDE.md), plus
-[`headless-clarification-loop.md`](./headless-clarification-loop.md)). Two asymmetries remain:
+The task-source layer was complete on the write side and on the POLLING read side (see the
+"Requirements review flow" and bug-triage notes in [`CLAUDE.md`](../../../CLAUDE.md), plus
+[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md)). Two
+asymmetries remained:
 
-1. **Intake is pull-only.** An issue enters the system when a recurring `bug-intake` schedule
-   fires or a human imports it, so intake latency is the schedule interval and every idle poll
-   costs a tracker API call. The GitHub VCS side already has the push pattern this needs:
-   verified deliveries ack fast and ride the `githubWebhook` gateway seam onto a queue, with an
-   inline fallback for queue-less containers. There was no tracker analogue.
+1. **Intake was pull-only.** An issue entered the system when a recurring `bug-intake` schedule
+   fired or a human imported it, so intake latency was the schedule interval and every idle poll
+   cost a tracker API call. The GitHub VCS side already had the push pattern this needed: verified
+   deliveries ack fast and ride the `githubWebhook` gateway seam onto a queue, with an inline
+   fallback for queue-less containers. There was no tracker analogue.
 2. **The question loop was half-duplex.** `IssueWritebackProvider.postReviewQuestions` posts a
    parked review's findings onto the linked issue, each with its **stable finding id rendered
    verbatim so an answer can name it**, but answers could only arrive in-app or over
    `/api/v1/runs/:runId/decisions`. The reporter who lives in Jira had to switch surfaces. The ids
-   were designed for exactly this reply path (slice 2b of the clarification-loop tracker); it was
-   never built.
+   were designed for exactly this reply path; it was never built.
+
+A third gap surfaced once the first two shipped: a pushed event could only ever mean "drain the
+board", which is right for a bug backlog and wrong for a ticket someone already triaged.
 
 **End state.** A labelled issue starts intake within seconds of the webhook delivery on both
-runtimes (with the polling sweep still covering missed deliveries), and a reporter's
-finding-addressed comment lands as a reply on the parked review so the loop re-reviews exactly as
-if answered in-app. Replays and duplicate deliveries provably apply once.
+runtimes (with the polling sweep still covering missed deliveries); a reporter's finding-addressed
+comment lands as a reply on the parked review so the loop re-reviews exactly as if answered in-app;
+and a triaged ticket can instead run as its own task. Replays and duplicate deliveries provably
+apply once.
 
-This initiative COMPLETES slice 2b of
-[`headless-clarification-loop.md`](./headless-clarification-loop.md): that tracker's D4 (reply
-grammar), D5 (per-provider ingest), D6 (loop policy) and D7 (threat model) are the design of record
-for the reply half and are not restated here, only refined where reality differed.
+This work COMPLETED slice 2b of
+[`headless-clarification-loop.md`](../../../docs/initiatives/headless-clarification-loop.md): that
+tracker's D4 (reply grammar), D5 (per-provider ingest), D6 (loop policy) and D7 (threat model) are
+the design of record for the reply half and are not restated here, only refined where reality
+differed.
 
 ## The target pattern
 
 The reference implementation is the GitHub VCS webhook path, copied step for step:
 
-| Concern         | GitHub VCS (the model)                              | Tracker (this initiative)                                             |
+| Concern         | GitHub VCS (the model)                              | Tracker (this ADR)                                                    |
 | --------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
 | Receiver        | `githubWebhookController` (`POST /github/webhooks`) | `taskWebhookController` (`POST /webhooks/tasks/:source/:workspaceId`) |
 | Verify          | HMAC over the RAW body, before any parse            | same, per-connection secret, per-provider header                      |
@@ -51,7 +59,7 @@ The reference implementation is the GitHub VCS webhook path, copied step for ste
 remains the sweep for missed deliveries: the same webhook + sweeper duality as GitHub sync +
 `sweepStuckRuns`.
 
-## Decisions
+## Decision
 
 ### D1: The delivery URL carries the workspace; the secret is per connection
 
@@ -97,9 +105,9 @@ its replace-link, its pickup writeback, its block seeding, and the pipeline run 
 `bug-intake` step drives).
 
 **Decision.** A qualifying issue event is a **trigger to fire the matching schedule now**. The pure
-`issueEventMatchesIntake` predicate (labels ⊇ config labels, title fragment, issue type) decides
-whether an event qualifies for a given schedule's `issueIntake` config; a match calls the same
-`fire` the cron sweeper calls. The `bug-intake` step then runs the unchanged
+`judgeIssueEventForIntake` (board scope, labels ⊇ config labels, title fragment, issue type) decides
+whether an event qualifies for a given schedule's `issueIntake` config; a qualifying verdict calls
+the same `fire` the cron sweeper calls. The `bug-intake` step then runs the unchanged
 `BugIntakeService.pickForBlock`, which searches, dedups, imports, links and claims exactly as
 before. Consequences, all deliberate:
 
@@ -111,9 +119,11 @@ before. Consequences, all deliberate:
 - **Overlap protection is inherited.** `fire` refuses while a prior run is `running`/`paused`/
   `blocked`, so a burst of deliveries cannot start a second run over a parked one: the event for an
   already-being-worked board is a no-op with no extra bookkeeping.
-- **On-demand schedules are not webhook-fired** and an individual-usage model still refuses an
-  unattended fire, because the trigger is non-forced: a webhook has no human present to unlock a
-  personal credential, which is exactly the cadence-fire situation those guards exist for.
+- **On-demand schedules are not webhook-fired in this mode** and an individual-usage model still
+  refuses an unattended fire, because the trigger is non-forced: a webhook has no human present to
+  unlock a personal credential, which is exactly the cadence-fire situation those guards exist for.
+  (D8's per-ticket mode is the deliberate exception: it is REQUIRED to be on-demand, so it applies
+  the individual-usage guard itself rather than inheriting `fire`'s refusal.)
 
 ### D4: Reply ingest reuses the SPA's service methods, and is claimed before it is applied
 
@@ -171,53 +181,105 @@ auto-proceed; there is no decision timeout to hang one off, and inventing one wo
 requirements nobody approved); a reply landing after the park settled gets a "the review has already
 moved on" follow-up rather than a silent drop.
 
-### D7: `taskSourceKindSchema` stays closed (for now)
+### D7: `taskSourceKindSchema` widens to `builtin ∪ <ns>:<name>`
 
-Widening it the way `taskTypeSchema` was widened (deployment-registered kinds) would let a
-deployment ship its own tracker provider: including its own webhook adapter, which this initiative
-makes a first-class provider capability. That is a genuinely separable slice: it touches the
-contracts union, the SPA's per-kind presentation records, and the connect-descriptor plumbing, none
-of which this work needs. **Worth its own slice; deliberately not done here.** Nothing added here
-assumes the union is closed except the (already existing) per-kind switches.
+Closed at first, on the grounds that widening was separable. It was, and it was done the way
+`taskTypeSchema` was widened: a union of the shipped picklist and `namespacedIdSchema`, so a
+deployment registers its own provider (webhook adapter included) on the app-owned
+`TaskSourceRegistry` and every registry-reading surface serves it.
 
-## Slices
+Three properties carried the decision:
 
-| #   | Slice                                                                      | Status  | PR      |
-| --- | -------------------------------------------------------------------------- | ------- | ------- |
-| 1   | Tracker event ingestion (provider webhook capability, receiver, queue seam | 🟡 this | this PR |
-| 2   | Event-driven intake) qualifying issue events fire the matching schedule    | 🟡 this | this PR |
-| 3   | Issue-comment answers to a parked review: grammar, ingest claim, follow-up | 🟡 this | this PR |
-| 4   | Deployment-registered tracker kinds (`taskSourceKindSchema` widening)      | ⬜ todo |         |
+- **The built-ins keep their BARE ids**, so no persisted `source` column, stored connection or
+  imported issue row changed. The widening needed no migration because it added no encoding.
+- **A bare non-built-in id still fails validation.** `servicenow` is a typo; `acme:servicenow` is a
+  registration. Keeping the namespace mandatory is what tells them apart, so widening did not turn
+  every misspelled `:source` segment into a plausible-looking miss.
+- **The schema is the GRAMMAR, never the authority on what exists.** A namespaced id passes the
+  schema and is then resolved on the registry, which is what refuses an unregistered one. The two
+  failures stay distinct because they have different fixes.
 
-### Slice 1 checklist
+The one place the old closed union was load-bearing beyond a type was
+`IssueIntakeQuery.board`: three vendor-named string fields with a fall-through default. A
+registered source would have had its board id delivered to `githubRepo` and failed as "no matching
+issues". It gains an opaque `boardId` leg, and the default is now keyed on the source being a
+BUILT-IN rather than on it being un-matched.
 
-| #   | Item                                                                              | Status  |
-| --- | --------------------------------------------------------------------------------- | ------- |
-| 1.1 | `TrackerWebhookEvent` + `TaskSourceWebhookAdapter` kernel port                    | ✅ done |
-| 1.2 | GitHub / Jira / Linear adapters (shared HMAC helper, per-vendor header + parse)   | ✅ done |
-| 1.3 | Per-connection webhook secret: mint/read/patch/clear + sealed credential storage  | ✅ done |
-| 1.4 | `TrackerWebhookIngest` gateway seam + `taskWebhookController`                     | ✅ done |
-| 1.5 | CF queue consumer ⇄ pg-boss `tracker.sync` worker + inline fallback, both facades | ✅ done |
+### D8: Per-ticket dispatch is a MODE on the intake config, not a second entity
 
-### Slice 2 checklist
+D3 settled that a pushed event fires the schedule and the `bug-intake` step decides what to work.
+That is right for a bug BACKLOG and wrong for a ticket a human already triaged: a feature request
+filed in Jira could only enter the platform through an API call, because the queue mode's whole
+point is that the platform picks what is next.
 
-| #   | Item                                                                      | Status  |
-| --- | ------------------------------------------------------------------------- | ------- |
-| 2.1 | `issueEventMatchesIntake` pure predicate                                  | ✅ done |
-| 2.2 | `RecurringPipelineService.triggerForIssueEvent` (fires, never re-imports) | ✅ done |
-| 2.3 | Conformance: a qualifying event fires; a non-qualifying one does not      | ✅ done |
+**Decision.** `issueIntake.dispatch` selects between the two, absent ⇒ `queue` (so every existing
+schedule is unchanged). `per-ticket` imports the pushed ticket, materialises it as its own task
+under the schedule's frame, and starts the schedule's pipeline on it.
 
-### Slice 3 checklist
+It is a mode on the existing config rather than a new `tracker_triggers` entity because a schedule
+already IS "a workspace-scoped, frame-anchored, pipeline-bound, predicate-carrying, enable-able
+rule", and `onDemand` already models the one thing a trigger lacks: a cadence. A parallel entity
+would have duplicated all of that plus its repository on both runtimes, its controller, its RBAC
+mount and its SPA surface, to express one extra field. `issue_intake` is a JSON column on both
+runtimes, so the mode needed no migration either.
 
-| #   | Item                                                                            | Status  |
-| --- | ------------------------------------------------------------------------------- | ------- |
-| 3.1 | `parseReviewReplyCommands`: the D4 grammar, pure + unit-tested                  | ✅ done |
-| 3.2 | `tracker_comment_ingests` claim, D1 ⇄ Drizzle + parity conformance              | ✅ done |
-| 3.3 | `TrackerWebhookService` reply path, through the SPA's service methods only      | ✅ done |
-| 3.4 | `postReviewReplyAck` follow-up comment (outstanding / rejected / moved-on)      | ✅ done |
-| 3.5 | Conformance: reply → resume; replay applies once; unauthorized dropped silently | ✅ done |
+What the modes do NOT share is the reason they stay exclusive rather than becoming a knob:
 
-## Deferred, deliberately
+- **`queue` reuses ONE block and competes for it; `per-ticket` creates a block per ticket and never
+  queues.** A cadence tick carries no triggering ticket, so a per-ticket schedule that could also
+  fire on cadence would silently fall back to draining the queue: the `queue` behaviour under a
+  config saying `per-ticket`. Hence `per-ticket` REQUIRES `onDemand`, which removes the fallback
+  rather than documenting it.
+- **A `bug-intake` step and per-ticket dispatch are two ways to pick work, and a pipeline may use
+  only one.** The pushed ticket is already the work, so an intake step would search the board and
+  adopt a DIFFERENT issue onto the block created for this one. Refused at save; and `origin:
+'manual'` at start makes `assertPipelineLaunchable` refuse it again at run time, because a
+  per-ticket run IS a one-off task run.
+- **Idempotency is the issue's existing single `linkedBlockId`**, not a new claim table. A
+  redelivery (or the `updated` event that follows a `created` one) finds the issue already linked
+  and is read as "already dispatched". The link already guarantees what a claim would have bought.
+- **The unattended-fire guard is the same one `fire` applies**, checked against the CREATED block
+  rather than the schedule's reused one. A refusal still leaves the ticket on the board as a task a
+  human can start, with the reason recorded in the run history rather than a task that mysteriously
+  never ran.
+
+The SPA DERIVES the mode from the pipeline instead of offering it: a `bug-intake` pipeline can only
+mean `queue`, anything else can only mean `per-ticket`. That makes the refused combination
+unrepresentable in the form rather than reported after a save, and the on-demand switch is LOCKED
+(not merely defaulted) while the tracker trigger is on, or the second refusal stays reachable by
+turning it back off after opting in. Both refusals still carry a machine-readable
+`details.reason` from `issueIntakeRefusalReasonSchema` mapped to translated copy, because a stale
+form or an API client reaches them anyway and the backend does not localize prose.
+
+### D9: The match is a VERDICT, and the two modes dispose of an unanswerable predicate oppositely
+
+D3's matcher was written for the queue, and its fail-open rule was justified BY the queue: a false
+positive costs one no-op run because the fired run's `searchIssues` re-checks every predicate
+against the vendor, so an event that did not carry a field simply fired anyway. D8 then reused that
+matcher for a mode with no downstream authority at all, where the same false positive costs a real
+block and a real agent run on a ticket nobody triaged. The rule had silently outlived its
+justification, and the board scope was never evaluated by either mode.
+
+**Decision.** `judgeIssueEventForIntake` reports one of three outcomes rather than a boolean:
+`match`, `miss` (a predicate is definitively violated), or `unconfirmed` (the delivery does not
+carry a field the configuration asks about). `dispatchAdmits` then picks the disposition per mode:
+`queue` acts on `unconfirmed` exactly as it always did, `per-ticket` withholds and says so in the
+log. Two things follow:
+
+- **The board scope became evaluable**, so `TrackerIssueEvent` carries a `board` in exactly the
+  shape the matching `IssueIntakeQuery.board` leg holds (a Jira project KEY, an `owner/repo` slug, a
+  Linear team UUID, a registered source's opaque id), read from payloads the adapters already parse.
+  One connection spans every project its credential can see, so without this a per-ticket schedule
+  scoped to one project ran tickets from all of them. A delivery that names no board is
+  `unconfirmed`, never a match: absent is not "no board".
+- **The withheld dispatch is REPORTED, never merely skipped.** A per-ticket schedule is on-demand,
+  so no cadence sweep will pick the ticket up later, and "the delivery could not confirm the labels
+  you scoped on" and "no delivery ever arrived" are opposite facts with the same silence.
+
+Stating facts in the matcher and disposition at the caller is what keeps this from recurring: a
+third mode cannot inherit a fail-open rule written for someone else's cost model.
+
+## Deliberately out of scope
 
 - **No SPA panel for the webhook secret.** It is managed over
   `GET|POST|PATCH|DELETE /workspaces/:ws/task-sources/:source/webhook` (behind
@@ -227,8 +289,10 @@ assumes the union is closed except the (already existing) per-kind switches.
   ( a surface the SPA cannot cover) so a panel saves half a round trip. Worth adding when a
   human-facing deployment asks; the read route already returns everything a panel would render
   (`supported` / `configured` / `deliveryPath` / `replyAllow`).
-- **`taskSourceKindSchema` stays closed**: see D7. Widening it for deployment-registered trackers
-  is slice 4 and worth its own change.
+- **No `taskType` on a per-ticket config.** The created task inherits the board's default type,
+  exactly as the SPA's own "create task from issue" does, and the schedule's `pipelineId` already
+  carries the behavioural half. A configurable type would have been a contract field with no
+  surface able to set it.
 - **No reply path for the CLARITY gate.** Its questions carry no stable ids, so a comment could not
   name one and the parser would have to guess, which the grammar exists to avoid. The clarity echo
   stays an echo; only the id-addressed requirements findings are answerable from a ticket.
@@ -239,7 +303,7 @@ assumes the union is closed except the (already existing) per-kind switches.
   which is the same guarantee `review_question_posts` gives; a proactive sweeper would be a second
   runtime-symmetric cron for a row that costs nothing while it sits.
 
-## Conventions & gotchas carried between iterations
+## Consequences: the rules a change here must keep
 
 - **The receiver must verify against the RAW bytes before any parse**, like both existing webhook
   receivers. Parsing first and verifying the re-serialised body is a classic signature bypass.

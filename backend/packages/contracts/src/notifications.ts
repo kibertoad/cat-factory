@@ -1,7 +1,11 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
 import { infraSetupAreaSchema } from './infra-setup.js'
-import { platformAlertReasonSchema, platformObservabilityWindowSchema } from './observability.js'
+import {
+  platformAlertReasonSchema,
+  platformAlertWindowSchema,
+  platformFailingRunSchema,
+} from './observability.js'
 import { changeClassSchema, reviewEffortSchema } from './mergeTrackRecord.js'
 import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 
@@ -242,16 +246,33 @@ export const notificationPayloadSchema = v.object({
   /** The repos whose PRs are still UNMERGED after a partial multi-repo merge (see {@link mergedRepos}). */
   unmergedRepos: v.optional(v.array(v.string())),
   /** The window the aggregate was computed over, on a `platform_health` notification. */
-  platformWindow: v.optional(platformObservabilityWindowSchema),
+  platformWindow: v.optional(platformAlertWindowSchema),
   /**
    * On a `platform_health` notification: the alert conditions currently firing, sorted. This
-   * is the card's dedup identity — the sweep re-raises the SAME card every pass, but the
-   * service only re-delivers when this set (hence the content) changes, so a persistently
-   * unhealthy deployment doesn't re-toast the inbox on every sweep. Live per-condition NUMBERS
-   * are deliberately NOT carried here (they fluctuate every sweep and live on the dashboard the
-   * card links to); the reason set + window are enough to convey "what's wrong, go look".
+   * is the card's dedup identity: the sweep raises the card only when this set CHANGES, so a
+   * persistently unhealthy deployment doesn't re-toast the inbox on every sweep. Live
+   * per-condition NUMBERS are deliberately NOT carried here (they fluctuate every sweep and
+   * live on the dashboard the card links to); the reason set + window convey "what's wrong".
    */
   platformAlerts: v.optional(v.array(platformAlertReasonSchema)),
+  /**
+   * On a `platform_health` notification whose firing set includes a failure condition: a
+   * bounded sample of the runs the alert is aggregating, in THIS workspace, so the card
+   * deep-links to the evidence instead of only to the dashboard. Newest first.
+   *
+   * It rides the payload (the card's dedup identity) precisely because it is captured once,
+   * when the firing set changes, rather than refreshed each sweep: a list that churned with
+   * every new failure would re-deliver the card for the whole incident, which is the failure
+   * mode the reason-set identity exists to prevent. The runs are therefore the ones that were
+   * failing WHEN THE ALERT FIRED, and the dashboard behind the card is the live view.
+   */
+  platformFailingRuns: v.optional(v.array(platformFailingRunSchema)),
+  /**
+   * How many runs in this workspace had failed in the window when the card was raised.
+   * Reported alongside the capped {@link platformFailingRuns} sample so the card states what
+   * it left out ("5 of 23") rather than presenting the cap as the whole story.
+   */
+  platformFailedTotal: v.optional(v.number()),
   /**
    * On an `infra_unreachable` notification: the configured infrastructure areas whose live probe
    * is currently failing, sorted. Like {@link platformAlerts} this is the card's dedup identity —

@@ -1,9 +1,4 @@
 import type {
-  JudgeAssessor,
-  JudgeDefinition,
-  JudgeRegistry,
-  JudgeStepState,
-  ResolveJudgeInput,
   AgentExecutor,
   AgentJobHandle,
   AgentRunContext,
@@ -12,33 +7,39 @@ import type {
   BlockRepository,
   BlueprintService,
   BrainstormSession,
+  ChallengePrReviewFindingInput,
+  ChooseForkInput,
   ClarityReview,
   Clock,
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
   FollowUpsStepState,
-  ForkDecisionStepState,
-  ChooseForkInput,
   ForkChatRequestInput,
-  PrReviewStepState,
-  ResolvePrReviewInput,
-  ChallengePrReviewFindingInput,
+  ForkDecisionStepState,
   GateDefinition,
+  GateOutcomeRepository,
   GateRegistry,
-  StepResolverRegistry,
-  ProviderRegistry,
   IdGenerator,
   IssueWritebackProvider,
+  JudgeAssessor,
+  JudgeDefinition,
+  JudgeRegistry,
+  JudgeStepState,
   Logger,
   PipelineStep,
+  PrReviewStepState,
   ProviderCapabilities,
+  ProviderRegistry,
   RequirementConcernLevel,
-  StepGating,
   RequirementReview,
+  ResolveJudgeInput,
+  ResolvePrReviewInput,
   ResolveRunRepoContext,
   RunInitiatorScope,
   StepCompletionResolver,
+  StepGating,
+  StepResolverRegistry,
   TicketTrackerProvider,
   WorkRunner,
 } from '@cat-factory/kernel'
@@ -75,6 +76,8 @@ import { ForkDecisionController } from './ForkDecisionController.js'
 import { JudgeStepController } from './JudgeStepController.js'
 import { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import { GateStepController } from './GateStepController.js'
+import { GateOutcomeRecorder } from '../observability/GateOutcomeRecorder.js'
+import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 import {
   buildGateMap,
   type ExtensionContextDeps,
@@ -174,6 +177,11 @@ export interface RunDispatcherDeps {
    * their drops. Absent ⇒ `noopLogger`, which is what the engine unit tests construct with.
    */
   logger?: Logger
+  /**
+   * Optional settled-gate projection: the gate machine records each terminal verdict into it
+   * for the operator dashboard's attempt statistics. Absent ⇒ nothing is recorded.
+   */
+  gateOutcomeRepository?: GateOutcomeRepository
   spend: SpendService
   stepGraph: StepGraph
   runStateMachine: RunStateMachine
@@ -237,6 +245,33 @@ export interface RunDispatcherDeps {
  * engine's `finalizeMerge`). `ExecutionService.stepInstance` / `pollAgentJob` / `pollGate`
  * delegate here; no behaviour changes in the move.
  */
+/**
+ * The `recordGateOutcome` callback both gate-settling controllers take, or nothing when no
+ * projection is wired.
+ *
+ * Computed ONCE and spread into both: a gate reaches a terminal verdict down two paths, the
+ * precheck/exhaustion machine in {@link GateStepController} and the investigate-don't-fix
+ * completion in {@link PollRunningController}, and wiring only the first is why the
+ * `post-release-health` gate was absent from the statistics entirely. Two call sites, one
+ * recorder, so a third settling path has one obvious thing to reach for.
+ *
+ * A free function rather than an inline branch in the constructor: each controller takes ONE
+ * bound callback and must stay independent of the sink's collaborators, and the constructor is
+ * already at its statement budget (budgets are split triggers).
+ */
+function gateOutcomeRecording(
+  deps: Pick<RunDispatcherDeps, 'gateOutcomeRepository' | 'clock'>,
+  logger: Logger,
+): { recordGateOutcome?: (settled: SettledGate) => Promise<void> } {
+  if (!deps.gateOutcomeRepository) return {}
+  const recorder = new GateOutcomeRecorder({
+    gateOutcomeRepository: deps.gateOutcomeRepository,
+    now: () => deps.clock.now(),
+    logger,
+  })
+  return { recordGateOutcome: (settled) => recorder.record(settled) }
+}
+
 export class RunDispatcher {
   private readonly blockRepository: BlockRepository
   private readonly executionRepository: ExecutionRepository
@@ -245,7 +280,6 @@ export class RunDispatcher {
   private readonly gateRegistry: GateRegistry
   private readonly stepResolverRegistry: StepResolverRegistry
   private readonly providerRegistry: ProviderRegistry
-  private readonly workRunner: WorkRunner
   private readonly events: ExecutionEventPublisher
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
@@ -272,9 +306,7 @@ export class RunDispatcher {
   private readonly prVerificationReport: PrVerificationReportController
   private readonly runInitiatorScope: RunInitiatorScope
   private readonly environmentProvisioning?: EnvironmentProvisioningService
-  private readonly ticketTrackerProvider?: TicketTrackerProvider
   private readonly issueWriteback?: IssueWritebackProvider
-  private readonly bugIntakeService?: BugIntakeService
   private readonly notificationService?: NotificationService
   private readonly blueprintReconciler?: BlueprintReconciler
   private readonly initiativeService?: InitiativeService
@@ -350,11 +382,12 @@ export class RunDispatcher {
     this.gateRegistry = deps.gateRegistry
     this.stepResolverRegistry = deps.stepResolverRegistry
     this.providerRegistry = deps.providerRegistry
-    this.workRunner = deps.workRunner
     this.events = deps.events
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
     this.log = (deps.logger ?? noopLogger).child({ scope: 'runDispatcher' })
+    // Shared by BOTH controllers that can settle a gate (see `gateOutcomeRecording`).
+    const gateOutcomeRecorder = gateOutcomeRecording(deps, this.log)
     this.spend = deps.spend
     this.stepGraph = deps.stepGraph
     this.runStateMachine = deps.runStateMachine
@@ -374,9 +407,7 @@ export class RunDispatcher {
     this.prVerificationReport = deps.prVerificationReport
     this.runInitiatorScope = deps.runInitiatorScope
     this.environmentProvisioning = deps.environmentProvisioning
-    this.ticketTrackerProvider = deps.ticketTrackerProvider
     this.issueWriteback = deps.issueWriteback
-    this.bugIntakeService = deps.bugIntakeService
     this.notificationService = deps.notificationService
     this.blueprintReconciler = deps.blueprintReconciler
     this.initiativeService = deps.initiativeService
@@ -434,6 +465,7 @@ export class RunDispatcher {
       followUpGate: this.followUpGate,
       runInitiatorScope: this.runInitiatorScope,
       gateFor: (agentKind) => this.gateFor(agentKind),
+      ...gateOutcomeRecorder,
       recordStepResult: (ws, instance, step, isFinalStep, result) =>
         this.recordStepResult(ws, instance, step, isFinalStep, result),
       recordBackendDiagnostics: (instance, backend) =>
@@ -476,6 +508,7 @@ export class RunDispatcher {
         runStateMachine: deps.runStateMachine,
         runInitiatorScope: this.runInitiatorScope,
         resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        ...gateOutcomeRecorder,
         recordStepResult: (ws, instance, step, isFinalStep, result) =>
           this.recordStepResult(ws, instance, step, isFinalStep, result),
       },
@@ -677,7 +710,7 @@ export class RunDispatcher {
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
-        recordDispatchAttribution(step, handle)
+        recordDispatchAttribution(step, handle, context.agentKind)
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search

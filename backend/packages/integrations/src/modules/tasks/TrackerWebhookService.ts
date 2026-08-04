@@ -35,7 +35,7 @@ import {
 //
 //  - An ISSUE event may qualify a recurring `bug-intake` schedule, in which case the schedule is
 //    FIRED — it does not import anything itself. The whole point (D3 of
-//    `docs/initiatives/tracker-webhook-intake.md`) is that push removes the latency and reuses the
+//    `backend/docs/adr/0032-tracker-webhook-intake.md`) is that push removes the latency and reuses the
 //    unchanged `BugIntakeService` path for everything else, so there is exactly one intake
 //    implementation and its dedup/replace-link/pickup-mark behaviour cannot drift.
 //  - A COMMENT event on an issue linked to a block with a parked requirements review may answer

@@ -1,12 +1,16 @@
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type {
+  PlatformDailyRunCount,
   PlatformDurationStats,
+  PlatformFailedRunRef,
   PlatformFailureCount,
   PlatformLiveCounts,
   PlatformMetricsRepository,
   PlatformRunOutcome,
   PlatformRunTrendPoint,
 } from '@cat-factory/kernel'
+import { RUN_DAYS_ROLLUP } from '@cat-factory/kernel'
+import { DAY_MS } from '@cat-factory/orchestration'
 import { decodeEnum } from '@cat-factory/server'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -153,5 +157,150 @@ export class D1PlatformMetricsRepository implements PlatformMetricsRepository {
       p90Ms: at(row?.p90_ms),
       p99Ms: at(row?.p99_ms),
     }
+  }
+
+  async rollupRunDays(fromEpochMs: number, toEpochMs: number): Promise<number> {
+    // The aggregation happens in SQLite and no run row is ever loaded. Snapping the bounds to
+    // day edges keeps a partially-covered day from being written with only the covered part's
+    // counts, which would then look complete.
+    const from = Math.floor(fromEpochMs / DAY_MS) * DAY_MS
+    const to = Math.ceil(toEpochMs / DAY_MS) * DAY_MS
+    if (to <= from) return 0
+    // DELETE the window, then INSERT it: an upsert alone is NOT a rewrite. A run's `status`
+    // MUTATES in place (`running` → `done`) while its `created_at` stays put, so a pass that ran
+    // while the day was in flight wrote a `(day, 'running')` bucket that a later pass's SELECT no
+    // longer produces — `DO UPDATE` never touches a row the new result set omits, and the orphan
+    // then sits in the table until retention, inflating every long-window total and trend by
+    // every run that happened to be mid-flight at a sweep.
+    //
+    // `batch()` runs both in ONE implicit transaction, so a concurrent dashboard read never
+    // observes the window mid-rewrite (it would see an empty stretch and render it as an idle
+    // period). The `ON CONFLICT` is kept as a belt on top of the braces: the `GROUP BY` makes the
+    // incoming keys unique, so it can only fire against a pass racing this one.
+    const [, inserted] = await this.db.batch([
+      this.db
+        .prepare('DELETE FROM platform_run_days WHERE day_start >= ? AND day_start < ?')
+        .bind(from, to),
+      this.db
+        .prepare(
+          // `failure_kind` is '' for a non-failed status because it is part of the primary key
+          // and SQLite does not treat two NULLs there as equal (see migration 0079).
+          `INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
+           SELECT workspace_id,
+                  CAST(created_at / ? AS INTEGER) * ? AS day_start,
+                  status,
+                  CASE WHEN status = 'failed'
+                       THEN COALESCE(json_extract(failure, '$.kind'), 'unknown')
+                       ELSE '' END AS failure_kind,
+                  COUNT(*) AS run_count
+           FROM agent_runs
+           WHERE created_at >= ? AND created_at < ?
+           GROUP BY workspace_id, day_start, status, failure_kind
+           ON CONFLICT(workspace_id, day_start, status, failure_kind)
+             DO UPDATE SET run_count = excluded.run_count`,
+        )
+        .bind(DAY_MS, DAY_MS, from, to),
+      // The sweep's coverage, in the SAME batch (hence the same transaction) as the rewrite it
+      // describes, so the watermark can never claim a day the rows do not have. `through_day` is
+      // the last day the pass actually covered (`to` is the exclusive end) and only ever moves
+      // FORWARD: a pass recomputing an OLD window (a backfill, a replay) must not walk it
+      // backwards and make a current rollup read as behind. `updated_at` is the pass's own upper
+      // bound, which is the caller's `now` before it was snapped to a day edge.
+      this.db
+        .prepare(
+          `INSERT INTO platform_rollup_state (rollup, through_day, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(rollup) DO UPDATE SET
+             through_day = MAX(platform_rollup_state.through_day, excluded.through_day),
+             updated_at = MAX(platform_rollup_state.updated_at, excluded.updated_at)`,
+        )
+        .bind(RUN_DAYS_ROLLUP, to - DAY_MS, toEpochMs),
+    ])
+    return inserted?.meta.changes ?? 0
+  }
+
+  async dailyRunTotalsSince(
+    accountId: string,
+    sinceEpochMs: number,
+  ): Promise<PlatformDailyRunCount[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT day_start, status, failure_kind, SUM(run_count) AS run_count
+         FROM platform_run_days
+         WHERE workspace_id IN (${ACCOUNT_WORKSPACES}) AND day_start >= ?
+         GROUP BY day_start, status, failure_kind
+         ORDER BY day_start`,
+      )
+      // Snap to the day the window starts IN, so a window beginning mid-day still includes
+      // that day's bucket instead of silently dropping it (the bucket is the smallest unit
+      // this table can answer, and omitting it would under-report the oldest day).
+      .bind(accountId, Math.floor(sinceEpochMs / DAY_MS) * DAY_MS)
+      .all<{ day_start: number; status: string; failure_kind: string; run_count: number }>()
+    return (results ?? []).map((r) => ({
+      dayStart: Number(r.day_start),
+      status: r.status,
+      failureKind: r.failure_kind === '' ? null : r.failure_kind,
+      count: Number(r.run_count),
+    }))
+  }
+
+  async dailyRollupWatermark(): Promise<number | null> {
+    const row = await this.db
+      .prepare('SELECT through_day FROM platform_rollup_state WHERE rollup = ?')
+      .bind(RUN_DAYS_ROLLUP)
+      .first<{ through_day: number | null }>()
+    return row?.through_day != null ? Number(row.through_day) : null
+  }
+
+  async deleteRunDaysOlderThan(cutoff: number): Promise<number> {
+    const res = await this.db
+      .prepare('DELETE FROM platform_run_days WHERE day_start < ?')
+      .bind(cutoff)
+      .run()
+    return res.meta.changes ?? 0
+  }
+
+  async recentFailedRuns(
+    accountId: string,
+    sinceEpochMs: number,
+    perWorkspaceLimit: number,
+  ): Promise<PlatformFailedRunRef[]> {
+    if (perWorkspaceLimit <= 0) return []
+    const { results } = await this.db
+      .prepare(
+        // Capped PER WORKSPACE by a window function, not by one global LIMIT: a card belongs to
+        // one workspace, and a single noisy workspace must not starve every other one's card of
+        // its own evidence. The partition COUNT rides along so the cap can report what it left
+        // out without a second query that could disagree with the sample it accompanies.
+        `SELECT workspace_id, id, block_id, failure_kind, created_at, workspace_failed_total
+         FROM (
+           SELECT workspace_id, id, block_id, created_at,
+                  COALESCE(json_extract(failure, '$.kind'), 'unknown') AS failure_kind,
+                  ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY created_at DESC, id DESC)
+                    AS rn,
+                  COUNT(*) OVER (PARTITION BY workspace_id) AS workspace_failed_total
+           FROM agent_runs
+           WHERE workspace_id IN (${ACCOUNT_WORKSPACES}) AND created_at >= ?
+             AND status = 'failed' AND kind = 'execution'
+         )
+         WHERE rn <= ?
+         ORDER BY workspace_id, created_at DESC`,
+      )
+      .bind(accountId, sinceEpochMs, perWorkspaceLimit)
+      .all<{
+        workspace_id: string
+        id: string
+        block_id: string | null
+        failure_kind: string
+        created_at: number
+        workspace_failed_total: number
+      }>()
+    return (results ?? []).map((r) => ({
+      workspaceId: r.workspace_id,
+      executionId: r.id,
+      blockId: r.block_id ?? null,
+      failureKind: r.failure_kind ?? 'unknown',
+      createdAt: Number(r.created_at),
+      workspaceFailedTotal: Number(r.workspace_failed_total),
+    }))
   }
 }

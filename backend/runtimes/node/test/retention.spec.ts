@@ -22,6 +22,9 @@ function fakeRepos(): {
     provisioningLog: number | null
     commits: number | null
     notifications: number | null
+    gateOutcomes: number | null
+    runDays: number | null
+    rollup: [number, number] | null
   }
 } {
   const cutoffs = {
@@ -33,6 +36,10 @@ function fakeRepos(): {
     provisioningLog: null as number | null,
     commits: null as number | null,
     notifications: null as number | null,
+    gateOutcomes: null as number | null,
+    runDays: null as number | null,
+    /** The [from, to) window the rollup pass recomputed. */
+    rollup: null as [number, number] | null,
   }
   return {
     cutoffs,
@@ -101,6 +108,22 @@ function fakeRepos(): {
           return 9
         },
       },
+      gateOutcomeRepository: {
+        deleteOlderThan: async (c) => {
+          cutoffs.gateOutcomes = c
+          return 2
+        },
+      },
+      platformMetricsRepository: {
+        rollupRunDays: async (from, to) => {
+          cutoffs.rollup = [from, to]
+          return 11
+        },
+        deleteRunDaysOlderThan: async (c) => {
+          cutoffs.runDays = c
+          return 1
+        },
+      },
     },
   }
 }
@@ -113,6 +136,8 @@ function policy(overrides: Partial<RetentionConfig> = {}): RetentionConfig {
     llmCallMetricsMs: 3 * DAY,
     provisioningLogMs: 14 * DAY,
     notificationsMs: 90 * DAY,
+    gateOutcomesMs: 90 * DAY,
+    runDaysMs: 400 * DAY,
     ...overrides,
   }
 }
@@ -132,6 +157,11 @@ describe('sweepRetention', () => {
     expect(cutoffs.commits).toBe(now - 90 * DAY)
     expect(cutoffs.subscriptionQuotaCycles).toBe(now - 30 * DAY) // fixed 30-day window
     expect(cutoffs.notifications).toBe(now - 90 * DAY)
+    expect(cutoffs.gateOutcomes).toBe(now - 90 * DAY)
+    expect(cutoffs.runDays).toBe(now - 400 * DAY)
+    // The rollup recomputes a short trailing lookback, so a missed pass self-heals instead of
+    // leaving a day permanently half-counted.
+    expect(cutoffs.rollup).toEqual([now - 3 * DAY, now])
     expect(result).toEqual({
       tokenUsage: 3,
       llmCallMetrics: 7,
@@ -146,6 +176,9 @@ describe('sweepRetention', () => {
       authAttempts: 4,
       commits: 4,
       notifications: 9,
+      gateOutcomes: 2,
+      runDays: 1,
+      runDaysRolledUp: 11,
       failedTables: [],
     })
   })
@@ -172,6 +205,11 @@ describe('sweepRetention', () => {
       authAttempts: 4,
       commits: 4,
       notifications: 9,
+      gateOutcomes: 2,
+      runDays: 1,
+      // The rollup is a WRITE, not a prune: disabling a RETENTION window says "never delete",
+      // never "stop materialising", so it still runs.
+      runDaysRolledUp: 11,
       failedTables: [],
     })
   })

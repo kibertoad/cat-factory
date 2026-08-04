@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { credentialFieldSchema } from './documents.js'
+import { namespacedIdSchema } from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // Task-source integration wire contracts. A workspace can connect to one or
@@ -16,15 +17,53 @@ import { credentialFieldSchema } from './documents.js'
 // it lives in the core ports / D1 layer.
 // ---------------------------------------------------------------------------
 
-/** The external task trackers cat-factory can link to. */
-export const taskSourceKindSchema = v.picklist(['jira', 'github', 'linear'])
+/** The task sources this build ships. A deployment registers its own beside them (see below). */
+export const BUILTIN_TASK_SOURCE_KINDS = ['jira', 'github', 'linear'] as const
+
+/**
+ * A BUILT-IN task source OR a CONSUMER-namespaced one ({@link namespacedIdSchema},
+ * `<ns>:<name>`, e.g. `acme:servicenow`) a deployment registers in code on its app-owned
+ * `TaskSourceRegistry` — the same `picklist ∪ namespaced` shape `taskTypeSchema` uses, for the
+ * same reasons.
+ *
+ * Two consequences are load-bearing:
+ *
+ *  - **The built-ins keep their BARE ids**, so every persisted `source` column, every stored
+ *    connection and every imported issue row is unchanged by the widening. There is no migration
+ *    here because there is nothing to migrate.
+ *  - **A bare non-built-in id still FAILS validation.** `servicenow` is a typo; `acme:servicenow`
+ *    is a deployment's registration. Keeping the namespace mandatory is what tells those apart,
+ *    and it is why widening does not turn every misspelled `:source` path segment into a
+ *    plausible-looking miss.
+ *
+ * The schema is the GRAMMAR, never the authority on what EXISTS: a namespaced id passes here and
+ * is then resolved against the registry at the boundary, so an id no deployment registered is
+ * refused by the thing that actually knows.
+ */
+export const taskSourceKindSchema = v.union([
+  v.picklist(BUILTIN_TASK_SOURCE_KINDS),
+  namespacedIdSchema,
+])
 export type TaskSourceKind = v.InferOutput<typeof taskSourceKindSchema>
+
+/**
+ * Type guard for the source GRAMMAR, so a caller with a raw path segment (the webhook receiver's
+ * `:source`) can pre-filter without importing valibot.
+ *
+ * It deliberately does NOT answer whether the source EXISTS. A grammatically valid id is resolved
+ * against the registry immediately afterwards, and that is what refuses an unregistered one — so
+ * the two failures stay distinct: a malformed segment is a bad request, an unregistered one is a
+ * source this deployment does not serve.
+ */
+export function isTaskSourceKind(value: unknown): value is TaskSourceKind {
+  return typeof value === 'string' && v.is(taskSourceKindSchema, value)
+}
 
 // ---- Inbound tracker webhooks (push-driven intake + ticket replies) --------
 // The per-connection delivery endpoint an operator pastes into the tracker's webhook form, plus
 // the secret that authenticates it. The secret rides the connection's sealed credential bag (no
 // new table), so this surface is purely mint/read/clear. See
-// `docs/initiatives/tracker-webhook-intake.md`.
+// `backend/docs/adr/0032-tracker-webhook-intake.md`.
 
 /** The webhook state of one task-source connection, safe to read back at any time. */
 export const taskSourceWebhookSchema = v.object({

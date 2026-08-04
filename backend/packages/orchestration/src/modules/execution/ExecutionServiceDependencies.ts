@@ -2,7 +2,6 @@ import type {
   AccountRepository,
   AgentExecutor,
   AgentPromptRepository,
-  WorkspaceAgentSettingsRepository,
   BinaryGeneratorSource,
   BlockRepository,
   BlueprintService,
@@ -10,12 +9,13 @@ import type {
   BrainstormStage,
   BranchUpdater,
   ClarityReviewRepository,
-  ConsensusGroupRepository,
   Clock,
+  ConsensusGroupRepository,
   DocInterviewRepository,
   DocumentRepository,
   ExecutionEventPublisher,
   ExecutionRepository,
+  GateOutcomeRepository,
   GateRegistry,
   GroupCacheHandle,
   IdGenerator,
@@ -28,9 +28,9 @@ import type {
   ModelPresetRepository,
   ModelRef,
   PipelineRepository,
+  PrVerificationReportPublisher,
   ProviderCapabilities,
   ProviderRegistry,
-  PrVerificationReportPublisher,
   ProvisioningLogRepository,
   PullRequestMerger,
   RequirementReviewRepository,
@@ -46,6 +46,7 @@ import type {
   TestSecretRef,
   TicketTrackerProvider,
   WorkRunner,
+  WorkspaceAgentSettingsRepository,
   WorkspaceRepository,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -547,6 +548,13 @@ export interface ExecutionServiceDependencies {
    * `publishPrVerificationReport` opt-out. Absent ⇒ the default (on).
    */
   workspaceSettingsRepository?: WorkspaceSettingsRepository
+  /**
+   * Optional: the settled-gate projection behind the operator dashboard's gate/CI-fixer
+   * attempt statistics. Written best-effort when a polling gate reaches a terminal verdict.
+   * Absent ⇒ nothing is projected and the dashboard reports no gate statistics, which is the
+   * honest reading for a deployment that does not keep the sink.
+   */
+  gateOutcomeRepository?: GateOutcomeRepository
   /**
    * Optional structured logger (the facade's pino logger) for the engine's best-effort paths —
    * today the PR verification report, whose whole contract is that it never fails a run. Absent

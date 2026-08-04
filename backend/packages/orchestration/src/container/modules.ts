@@ -1201,6 +1201,7 @@ export function createRecurringModule(
   executionService: ExecutionService,
   executionEventPublisher: ExecutionEventPublisher,
   taskConnectionService?: TaskConnectionService,
+  tasks?: Pick<TasksModule, 'importService' | 'linkService'>,
 ): RecurringModule | undefined {
   const { pipelineScheduleRepository } = deps
   if (!pipelineScheduleRepository) return undefined
@@ -1223,6 +1224,42 @@ export function createRecurringModule(
     // Gives `triggerForIssueEvent`'s per-schedule isolation somewhere to report to; without it a
     // webhook-fired schedule that consistently fails leaves no trace at all.
     logger: deps.logger,
+    // PER-TICKET dispatch. Bound to the SAME import + create-task services a human's "create task
+    // from issue" goes through, so a webhook-dispatched ticket and a hand-adopted one produce
+    // byte-for-byte the same block, link and seeded title/description.
+    ...(tasks
+      ? {
+          adoptIssueAsTask: async (input) => {
+            // The import is an idempotent projection upsert, and it hands back the row — whose
+            // `linkedBlockId` is exactly "has this ticket already been dispatched". An issue
+            // carries ONE link, so that field IS the idempotency a redelivery needs; no claim
+            // table buys anything the link does not already guarantee.
+            //
+            // Read off the returned row rather than by catching `createTaskFromIssue`'s conflict:
+            // its refusal is prose, and matching prose would silently start double-dispatching
+            // the day someone rewords it. A genuine RACE (two deliveries interleaving between
+            // this read and the create) still lands on that conflict and propagates, which is
+            // correct — the caller's per-schedule isolation logs it and the ticket is already
+            // dispatched by the winner.
+            const issue = await tasks.importService.import(
+              input.workspaceId,
+              input.source,
+              input.externalId,
+            )
+            if (issue.linkedBlockId) return null
+
+            const { block } = await tasks.linkService.createTaskFromIssue(
+              input.workspaceId,
+              input.containerId,
+              input.source,
+              input.externalId,
+              null,
+              { pipelineId: input.pipelineId },
+            )
+            return { blockId: block.id }
+          },
+        }
+      : {}),
   })
   return { service }
 }

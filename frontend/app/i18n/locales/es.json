@@ -332,16 +332,25 @@
       "addFailedTitle": "No se pudo añadir la pipeline recurrente",
       "onDemand": "Bajo demanda (solo manual)",
       "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual.",
+      "onDemandLockedHint": "Fijado: una programación activada por el rastreador se controla mediante webhooks, así que no tiene cadencia propia.",
       "intake": "Admisión de incidencias",
       "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
       "intakeGithubRepo": "Repositorio",
+      "intakeBoardId": "ID del tablero",
+      "intakeBoardIdHelp": "El tablero, proyecto o cola al que este rastreador limita la admisión. El formato lo define el rastreador.",
+      "trackerTrigger": "Iniciar ejecuciones desde webhooks del rastreador",
+      "trackerTriggerHint": "Una incidencia que coincida con los filtros de abajo se importa como su propia tarea y se ejecuta en esta canalización. Requiere una programación bajo demanda.",
+      "intakeDispatchQueueHint": "Un evento coincidente inicia esta programación, que toma la incidencia coincidente más antigua del tablero. Úsalo para una lista pendiente, donde la plataforma decide qué se trabaja a continuación.",
+      "intakeDispatchPerTicketHint": "Un evento coincidente importa esa incidencia como su propia tarea y ejecuta la canalización sobre ella. Úsalo para incidencias que alguien ya ha clasificado.",
       "intakeTitleFragment": "El título contiene",
       "intakeTitleFragmentPlaceholder": "p. ej. crash",
       "intakeLabels": "Etiquetas",
       "intakeLabelsPlaceholder": "separadas por comas",
       "intakeIssueType": "Tipo de incidencia",
-      "intakeInProgressLabel": "Etiqueta de en progreso"
+      "intakeInProgressLabel": "Etiqueta de en progreso",
+      "refusalPerTicketRequiresOnDemand": "Una programación activada por el rastreador debe ser bajo demanda. Un ciclo de cadencia no lleva ningún ticket que despachar.",
+      "refusalPerTicketConflictsWithBugIntake": "Esta canalización elige su propia incidencia del tablero, así que no puede además activarse con un ticket entrante. Elija una canalización sin paso de admisión de errores."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -1558,7 +1567,9 @@
     "window": {
       "oneHour": "Última hora",
       "oneDay": "Últimas 24 horas",
-      "sevenDays": "Últimos 7 días"
+      "sevenDays": "Últimos 7 días",
+      "thirtyDays": "Últimos 30 días",
+      "ninetyDays": "Últimos 90 días"
     },
     "outcomes": {
       "title": "Resultados de las ejecuciones",
@@ -1608,6 +1619,22 @@
     },
     "live": {
       "title": "Activas ahora"
+    },
+    "rollup": {
+      "none": "La agregación diaria aún no ha producido nada, así que esta ventana está vacía por falta de datos, no por falta de ejecuciones.",
+      "stale": "La agregación diaria solo llega hasta {date}. Lo posterior son datos que faltan, no tiempo inactivo.",
+      "current": "De la agregación diaria, completa hasta {date}."
+    },
+    "gates": {
+      "title": "Intentos de las puertas",
+      "empty": "Ninguna puerta se resolvió en esta ventana.",
+      "gate": "Puerta",
+      "settled": "Resueltas",
+      "cleanPasses": "Aprobadas sin reparador",
+      "attempts": "Intentos del reparador",
+      "helperFailures": "Fallos del reparador",
+      "exhausted": "Pasadas a una persona",
+      "hint": "Aprobada sin reparador significa que la comprobación previa quedó satisfecha y no se inició ningún reparador. Los fallos del reparador son intentos cuyo propio trabajo se cayó, a diferencia de los que se ejecutaron y dejaron la comprobación en rojo."
     }
   },
   "reports": {
@@ -1959,7 +1986,10 @@
         "dismissed": "Descartado",
         "actFailed": "No se pudo completar esa acción",
         "dismissFailed": "No se pudo descartar"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} más sin mostrar",
+      "failingRunGone": "Esta ejecución ya no está cargada y no tiene ninguna tarea que abrir."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3378,6 +3408,48 @@
       "offHint": "Sin definir: cada tablero decide por sí mismo. Los tableros existentes conservan lo que hayan elegido.",
       "saved": "Política de credenciales de ejecución guardada",
       "saveFailed": "No se pudo guardar la política de credenciales de ejecución"
+    },
+    "platformAlerts": {
+      "title": "Alertas de salud de la plataforma",
+      "description": "Límites con los que se compara la salud de las ejecuciones de esta cuenta. Los campos vacíos heredan los valores de la instalación.",
+      "muteLabel": "Silenciar las alertas de esta cuenta",
+      "muteHint": "Aquí las alertas solo se pueden desactivar. Que el barrido se ejecute o no es un ajuste de la instalación.",
+      "windowLabel": "Ventana de evaluación",
+      "windowHint": "Hasta dónde mira atrás cada condición. Una ventana más larga reacciona más despacio y avisa menos.",
+      "thresholdsLabel": "Umbrales",
+      "inheritHint": "Deja un campo vacío para heredar el valor de la instalación. Un cero es un ajuste real, no un campo vacío.",
+      "inheritPlaceholder": "Heredado",
+      "reset": "Borrar las sustituciones",
+      "saved": "Ajustes de alertas guardados",
+      "saveFailed": "No se pudieron guardar los ajustes de alertas",
+      "window": {
+        "inherit": "Valor de la instalación",
+        "oneHour": "Última hora",
+        "oneDay": "Últimas 24 horas",
+        "sevenDays": "Últimos 7 días"
+      },
+      "thresholds": {
+        "minRuns": "Ejecuciones mínimas",
+        "maxFailureRate": "Límite de tasa de fallos",
+        "maxP99DurationMs": "Límite de duración p99 (minutos)",
+        "maxBacklog": "Límite de trabajo acumulado",
+        "stalledBuckets": "Intervalos vacíos hasta considerarlo parado",
+        "minStalledPriorRuns": "Ejecuciones antes de contar una parada",
+        "maxFailureKindShare": "Proporción de la causa dominante",
+        "maxSweepFailures": "Fallos seguidos del barrido"
+      },
+      "hints": {
+        "minRuns": "Ejecuciones terminadas que necesita la ventana antes de que puedan dispararse las alertas de fallos.",
+        "maxFailureRate": "Proporción de ejecuciones que pueden fallar, de 0 a 1.",
+        "maxP99DurationMs": "Cuánto pueden tardar las ejecuciones más lentas.",
+        "maxBacklog": "Ejecuciones sin terminar que pueden estar en curso a la vez.",
+        "stalledBuckets": "Intervalos finales vacíos de la tendencia que cuentan como parada.",
+        "minStalledPriorRuns": "Ejecuciones que debe haber tenido la parte anterior de la ventana. Cero avisa ante cualquier silencio.",
+        "maxFailureKindShare": "Proporción de los fallos que puede acaparar una sola causa, por encima de 0 y hasta 1.",
+        "maxSweepFailures": "Pasadas fallidas consecutivas de un barrido en segundo plano."
+      },
+      "notLoaded": "No se pudieron cargar los ajustes actuales de esta cuenta, así que guardar sobrescribiría el resto. Vuelve a cargar antes de editar.",
+      "invalidNumbers": "Estos límites no son números"
     }
   },
   "providers": {

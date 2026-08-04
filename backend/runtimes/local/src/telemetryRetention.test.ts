@@ -15,6 +15,8 @@ const RETENTION: RetentionConfig = {
   commitMs: 0,
   llmCallMetricsMs: 3 * 24 * 60 * 60 * 1000,
   provisioningLogMs: 14 * 24 * 60 * 60 * 1000,
+  gateOutcomesMs: 90 * 24 * 60 * 60_000,
+  runDaysMs: 400 * 24 * 60 * 60_000,
   notificationsMs: 0,
 }
 

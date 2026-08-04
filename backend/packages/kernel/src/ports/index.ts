@@ -119,13 +119,23 @@ export type {
 } from './llm-metrics.js'
 export { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from './llm-metrics.js'
 export type {
+  PlatformDailyRunCount,
   PlatformDurationStats,
+  PlatformFailedRunRef,
   PlatformFailureCount,
   PlatformLiveCounts,
   PlatformMetricsRepository,
   PlatformRunOutcome,
   PlatformRunTrendPoint,
 } from './platform-metrics.js'
+export { RUN_DAYS_ROLLUP } from './platform-metrics.js'
+export type {
+  GateOutcomeKind,
+  GateOutcomeRecord,
+  GateOutcomeRepository,
+  PlatformGateOutcomeCount,
+} from './gate-outcomes.js'
+export { noopGateOutcomeRepository } from './gate-outcomes.js'
 export type {
   ReportActivityGroup,
   ReportRange,
@@ -154,6 +164,8 @@ export type {
 } from './agent-search-queries.js'
 export type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
@@ -312,6 +324,7 @@ export type {
   TrackerWebhookEvent,
 } from './tracker-webhook.js'
 export {
+  BUILTIN_TASK_SOURCE_KINDS,
   TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
   TRACKER_WEBHOOK_SECRET_KEY,
   isTaskSourceKind,

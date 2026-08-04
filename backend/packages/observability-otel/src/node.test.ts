@@ -6,8 +6,9 @@ import {
   InMemoryMetricExporter,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
-import type { LlmGenerationEvent } from '@cat-factory/kernel'
+import type { LlmGenerationEvent, LlmRunSpan, LlmStepSpan } from '@cat-factory/kernel'
 import { NodeOtelTraceSink } from './node.js'
+import { deriveRunSpanId, deriveStepSpanId } from './mapping.js'
 
 function baseEvent(overrides: Partial<LlmGenerationEvent> = {}): LlmGenerationEvent {
   return {
@@ -57,8 +58,11 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
 
     const [span] = spans.getFinishedSpans()
     expect(span).toBeDefined()
-    expect(span!.name).toBe('coder')
+    expect(span!.name).toBe('chat gpt-4o-mini')
     expect(span!.attributes['gen_ai.system']).toBe('openai')
+    expect(span!.attributes['gen_ai.operation.name']).toBe('chat')
+    // Parented onto its agent kind's step span (derived, not minted by the SDK).
+    expect(span!.parentSpanContext?.spanId).toBe(deriveStepSpanId('exec1', 'coder'))
     expect(span!.attributes['gen_ai.request.model']).toBe('gpt-4o-mini')
     expect(span!.attributes['gen_ai.usage.input_tokens']).toBe(100)
     expect(span!.attributes['gen_ai.usage.output_tokens']).toBe(40)
@@ -130,8 +134,63 @@ describe('NodeOtelTraceSink (official SDK exporter)', () => {
     ])
 
     const finished = spans.getFinishedSpans()
-    expect(finished.map((s) => s.name)).toEqual(['edit_file', 'run_command'])
+    expect(finished.map((s) => s.name)).toEqual([
+      'execute_tool edit_file',
+      'execute_tool run_command',
+    ])
     expect(finished[1]!.status.code).toBe(SpanStatusCode.ERROR)
+    for (const span of finished) {
+      expect(span.parentSpanContext?.spanId).toBe(deriveStepSpanId('exec1', 'coder'))
+    }
+    await sink.shutdown()
+  })
+
+  it('emits the settled run root + step spans with the DERIVED ids their children named', async () => {
+    const { sink, spans } = harness()
+    // The generation exports first and names a parent that does not exist yet.
+    sink.recordGeneration(baseEvent())
+
+    const run: LlmRunSpan = {
+      workspaceId: 'ws1',
+      executionId: 'exec1',
+      pipelineName: 'Bugfix',
+      startedAt: 500,
+      endedAt: 9_000,
+      ok: true,
+      errorMessage: null,
+    }
+    const steps: LlmStepSpan[] = [
+      {
+        workspaceId: 'ws1',
+        executionId: 'exec1',
+        agentKind: 'coder',
+        startedAt: 900,
+        endedAt: 4_000,
+        stepCount: 1,
+        attemptCount: 1,
+        ok: true,
+        errorMessage: null,
+      },
+    ]
+    sink.recordRunSpans(run, steps)
+
+    const [generation, rootSpan, stepSpan] = spans.getFinishedSpans()
+    expect(rootSpan!.name).toBe('run')
+    expect(rootSpan!.attributes['cat_factory.pipeline']).toBe('Bugfix')
+    // The SDK would otherwise mint a random span id here, leaving every child pointing at a
+    // parent that never exists — the id has to come from the mapping layer's derivation.
+    expect(rootSpan!.spanContext().spanId).toBe(deriveRunSpanId('exec1'))
+    expect(rootSpan!.parentSpanContext).toBeUndefined()
+
+    expect(stepSpan!.name).toBe('invoke_agent coder')
+    expect(stepSpan!.spanContext().spanId).toBe(deriveStepSpanId('exec1', 'coder'))
+    expect(stepSpan!.parentSpanContext?.spanId).toBe(rootSpan!.spanContext().spanId)
+    expect(stepSpan!.attributes['cat_factory.step_count']).toBe(1)
+
+    // One trace, and the generation's earlier guess at its parent turned out right.
+    expect(generation!.parentSpanContext?.spanId).toBe(stepSpan!.spanContext().spanId)
+    expect(stepSpan!.spanContext().traceId).toBe(rootSpan!.spanContext().traceId)
+    expect(generation!.spanContext().traceId).toBe(rootSpan!.spanContext().traceId)
     await sink.shutdown()
   })
 
