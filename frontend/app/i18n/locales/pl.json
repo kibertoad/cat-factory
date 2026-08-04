@@ -2334,7 +2334,8 @@
         "deleteTitle": "Usuń ustawienie",
         "basePrefix": "Bazowy:",
         "overrideCount": "{count} nadpisanie | {count} nadpisania | {count} nadpisań",
-        "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów."
+        "empty": "Brak ustawień. Utwórz jedno, aby przypisać modele do swoich agentów.",
+        "customRouteOrder": "własna kolejność tras"
       },
       "editor": {
         "useBaseModel": "Użyj modelu bazowego",
@@ -2359,6 +2360,30 @@
       "confirmDelete": {
         "title": "Usunąć ten preset modelu?",
         "body": "\"{name}\" zostanie usunięty. Zadania go używające wrócą do domyślnego ustawienia obszaru roboczego."
+      },
+      "routes": {
+        "direct": "Własne API dostawcy modelu",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "Brama OpenRouter",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Subskrypcja (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Wymaga klucza API tego dostawcy.",
+        "bedrock": "Działa w Twoim regionie AWS, na modelach dozwolonych dla Twojego konta.",
+        "openrouter": "Jeden klucz, wielu dostawców, odsprzedawanych z marżą.",
+        "cloudflare": "Zawsze dostępne, bez buforowania promptów.",
+        "subscription": "Zryczałtowany limit w połączonym planie."
+      },
+      "routeOrder": {
+        "label": "Kolejność tras",
+        "defaultHint": "Ten preset korzysta z domyślnej kolejności wdrożenia. Przesuń trasę w górę, aby ją preferować.",
+        "customHint": "Ten preset preferuje trasy w tej kolejności. Model dostępny tylko na niższej trasie nadal działa, jest tylko próbowany później.",
+        "reset": "Użyj domyślnej kolejności",
+        "moveUp": "Preferuj tę trasę bardziej",
+        "moveDown": "Preferuj tę trasę mniej",
+        "subscriptionOverrideHint": "Podłączona subskrypcja nadal wygrywa w przypadku modeli, które ją oferują: silnik kieruje je do planu niezależnie od tej kolejności. Trasy poniżej pozycji subskrypcji dotyczą wszystkich pozostałych modeli.",
+        "badgesUseDefaultPresetHint": "Trasa pokazana obok każdego modelu powyżej to trasa domyślnego presetu przestrzeni roboczej, a nie tego presetu."
       }
     },
     "account": {
@@ -5806,7 +5831,7 @@
       "newDescription": "Pojawiły się nowe wbudowane presety modelu. Dodaj je do biblioteki tej tablicy.",
       "add": "Dodaj",
       "updatesHeading": "Dostępne aktualizacje",
-      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów modelu. Zregeneruj, aby ją przyjąć (domyślny i kolejność są zachowane).",
+      "updatesDescription": "Dostępna jest nowsza wersja tych wbudowanych presetów modelu. Zregeneruj, aby ją przyjąć: domyślny i kolejność są zachowane, ale własna kolejność tras na presecie zostanie wyczyszczona.",
       "versionAvailable": "Dostępna wersja {from} → {to}.",
       "reseed": "Zregeneruj",
       "reseedAll": "Zaktualizuj wszystkie ({count})",

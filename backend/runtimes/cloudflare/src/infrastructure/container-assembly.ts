@@ -49,6 +49,7 @@ import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
+import { buildResolvePresetProviderPreference } from './container-model-resolver.js'
 import type { ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import {
@@ -260,8 +261,8 @@ function selectWorkerDurableJobDeps(args: {
 
 /**
  * The pipeline-start capability probe: what a workspace + run initiator actually has
- * configured, which is what refuses a start with a clear cause instead of failing deep in a
- * provider SDK.
+ * configured, under the model PRESET the run will use, which is what refuses a start with a clear
+ * cause instead of failing deep in a provider SDK.
  *
  * Extracted from {@link buildWorkerCoreDependencies} to keep it inside its size budget. It is a
  * cohesive unit: every argument here exists only to answer that one question, and the closure is
@@ -284,7 +285,7 @@ function selectWorkerProviderCapabilities(
   > & { bedrockModels: Set<string> | undefined },
 ): NonNullable<CoreDependencies['resolveProviderCapabilities']> {
   const { env, config, db } = deps
-  return (workspaceId, initiatedBy) =>
+  return (workspaceId, initiatedBy, modelPresetId) =>
     resolveWorkspaceCapabilities(
       {
         apiKeys: deps.apiKeys,
@@ -299,9 +300,11 @@ function selectWorkerProviderCapabilities(
         workspaceAccountOf: (id) => new D1WorkspaceRepository({ db }).accountOf(id),
         modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
         caches: deps.caches,
+        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db, deps.caches),
       },
       workspaceId,
       initiatedBy,
+      modelPresetId,
     )
 }
 
@@ -466,12 +469,13 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // production but must not fire for tests that never reach the real executor.
     agentExecutor:
       overrides.agentExecutor ??
-      maybeWrapConsensus(
-        selectAgentExecutor({
+      maybeWrapConsensus({
+        standard: selectAgentExecutor({
           env,
           config,
           db,
           clock,
+          caches,
           resolveTransport,
           agentKindRegistry,
           subscriptions,
@@ -486,7 +490,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
         db,
         eventPublisher,
         agentKindRegistry,
-      ),
+        caches,
+      }),
     agentKindRegistry,
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.
@@ -579,7 +584,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     caches,
-    // The pipeline-start guard resolves what's configured for a workspace + initiator.
+    // The pipeline-start guard resolves what's configured for a workspace + initiator, under the
+    // model preset the run will use (so the guard walks each model's routes in dispatch order).
     resolveProviderCapabilities: selectWorkerProviderCapabilities({
       env,
       config,

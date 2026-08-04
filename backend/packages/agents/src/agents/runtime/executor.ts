@@ -1,6 +1,11 @@
 import { generateText } from 'ai'
 import type { AgentExecutor, AgentRunContext, AgentRunResult } from '@cat-factory/kernel'
-import type { ModelProvider, ModelProviderResolver, ModelRef } from '@cat-factory/kernel'
+import type {
+  ModelFlavor,
+  ModelProvider,
+  ModelProviderResolver,
+  ModelRef,
+} from '@cat-factory/kernel'
 import { type AgentKindRegistry, defaultAgentKindRegistry } from '../kinds/registry.js'
 import { standardsVerbosityFor } from '../kinds/traits.js'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
@@ -33,7 +38,10 @@ export interface AiAgentExecutorDependencies {
    * worker supplies it; absent/unknown ids return undefined to fall back to the
    * agent routing. Defaults to "no per-block override".
    */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  resolveBlockModel?: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve the workspace's per-agent-kind default model id, consulted when the
    * block pins no usable model. Optional: absent → the env routing for the kind is
@@ -78,7 +86,10 @@ export class AiAgentExecutor implements AgentExecutor {
   private readonly modelProviderResolver?: ModelProviderResolver
   private readonly modelProvider?: ModelProvider
   private readonly agentRouting: AgentRouting
-  private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  private readonly resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   private readonly resolveWorkspaceModelDefault?: (
     workspaceId: string,
     agentKind: string,
@@ -154,6 +165,9 @@ export class AiAgentExecutor implements AgentExecutor {
         blockModelId: context.block.modelId,
         modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
+        // The preset's route order, resolved once per dispatch by the engine. Read off the
+        // CONTEXT so this inline path and the container/consensus paths agree on the provider.
+        ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
       },
     )
   }

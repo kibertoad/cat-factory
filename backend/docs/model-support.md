@@ -64,6 +64,40 @@ Each flavour supplies its `declared`/`usable`/`build` arms through an exhaustive
 `Record<ModelFlavor, …>`, so **adding a route fails to compile until every arm is
 handled**.
 
+### The order is a per-preset choice
+
+That table is the DEFAULT order. A **model preset** can state its own
+(`ModelPreset.providerPreference`), which is what lets one workspace run a compliance preset
+pinned to a residency-guaranteed route (AWS Bedrock) and an everyday preset riding a flat-rate
+subscription. It is per preset rather than per deployment because it is a per-workload choice,
+and it needs no new env var: the knob is the preset row.
+
+Three rules make it safe:
+
+- **A preference REORDERS, it never filters.** Routes a preset omits are appended in default
+  order and tried last, so a preset naming three routes cannot make a model whose only route is
+  the fourth unresolvable. `orderedModelFlavorPreference` (contracts) returns a total order over
+  every route, which is what makes that structural rather than a rule to remember, and it is why
+  the editor offers no way to remove a route. The write boundary refuses a REPEATED route (an
+  order can't say two things about one route) but accepts a partial list.
+- **It rides `ProviderCapabilities`, not a resolution parameter.** Every site that resolves a
+  model already threads a capability set, so a new call site cannot silently resolve under a
+  different order than the picker displayed. The facades fold it ONTO the deployment
+  capabilities rather than replacing them: which routes exist is a deployment fact, and the
+  preset only reorders how they are preferred.
+- **It is resolved ONCE per dispatch by the engine**, onto `AgentRunContext.providerPreference`
+  (`resolveDispatchProviderPreference`, beside the prompt override and the output budget), so
+  the container, inline and consensus paths cannot disagree about which provider a step ran on.
+  Inline callers that run OUTSIDE a dispatch (the judge, the fork chat, the iterative reviewers,
+  the interviewers, the tester QC companion, the bug-hunt assessor) resolve it themselves
+  through the one shared `resolveInlineBlockModelRef`; the start guard resolves capabilities
+  under the block's own preset for the same reason.
+
+The default order itself lives in ONE place, `DEFAULT_MODEL_FLAVOR_ORDER` in
+`@cat-factory/contracts` (the picklist order IS that order), because the preset editor renders
+the same fold the resolver walks — a copy in the SPA would let the picker display an order the
+run does not take.
+
 Several shapes of entry fall out of this:
 
 - **Cloudflare-only**, e.g. `cloudflare-llama`, `kimi-k2.7`, `gpt-oss-120b`. One
@@ -149,11 +183,13 @@ Given a resolved catalog model, which flavour actually runs?
 subscription  >  direct  >  cloudflare
 ```
 
-- **Base flavour** (`effectiveVariant`, kernel `models.ts`): the first route in
-  `DEFAULT_PROVIDER_PREFERENCE` the capabilities make usable: `direct` when a key for its
-  provider is in the pool, else `bedrock` when the allow-list carries the model, else
-  `openrouter`, else `cloudflare` (§2). This is what `GET /models` shows as the model's
-  active flavour.
+- **Base flavour** (`effectiveVariant`, kernel `models.ts`): the first route the capabilities
+  make usable, walking the preset's own order when it states one and
+  `DEFAULT_PROVIDER_PREFERENCE` otherwise: `direct` when a key for its provider is in the pool,
+  else `bedrock` when the allow-list carries the model, else `openrouter`, else `cloudflare`
+  (§2). This is what `GET /models` shows as the model's active flavour, under the workspace
+  DEFAULT preset's order (a task that selected another preset resolves under it at dispatch,
+  where the block is in hand).
 - **Subscription override** (`subscriptionOptionFor` + the executor's
   `resolveEffectiveRef`, [`ContainerAgentExecutor.ts`](../packages/server/src/agents/ContainerAgentExecutor.ts)):
   a subscription-only model carries its harness already; a **dual-mode** model is
@@ -176,6 +212,19 @@ holding no token, and degrade a dual-mode pin to the _routing default_ at every 
 site rather than to the model's own base. Unifying them is the right end state and is
 tracked as its own slice in
 [`model-provider-preference.md`](../../docs/initiatives/model-provider-preference.md).
+
+Note what the per-preset order (§2) does and does not change here: it decides which route the
+BASE flavour walk picks, and the subscription override still sits on top of it. So a preset that
+puts `subscription` first does not yet bypass that override, and a workspace holding no token is
+unaffected by such an order — which is exactly the separation the outstanding slice removes.
+
+The consequence runs the other way too, and it is the one a user can hit: on a workspace WITH a
+token, a preset promoting a residency-guaranteed route is overruled for every dual-mode model,
+because the override is applied after the walk rather than inside it. The preset editor therefore
+warns whenever a stated order does not itself put `subscription` first
+(`ProviderPreferenceEditor.logic.ts`), rather than letting the copy promise a route a connected
+plan quietly takes back. That warning is deleted by the same slice that moves the override into
+the order.
 
 ---
 

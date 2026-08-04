@@ -27,9 +27,9 @@ import {
   catFactoryObservability,
   KAIZEN_SYSTEM_PROMPT,
   promptVersionForKind,
-  resolveInlineModelRef,
 } from '@cat-factory/agents'
 import type { AgentContextObservabilityService } from '../observability/AgentContextObservabilityService.js'
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import { comboKeyFor, isVerified, nextComboState } from './kaizen.logic.js'
 
 /** The agent kind keying the workspace default model + observability for the grader. */
@@ -57,19 +57,18 @@ export interface KaizenServiceDependencies {
   modelProvider?: ModelProvider
   /** Default model ref when nothing else resolves — the agents' routing default. */
   modelRef?: ModelRef
-  /** Resolve a pinned model id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a pinned model id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /**
    * Whether a subscription harness ref can run as an INLINE call in this deployment (local
    * mode's ambient CLI). Keeps it instead of degrading to the routing default. Absent → degrade.
    */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-kind default model id for the `kaizen` kind. */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
+  /**
+   * The workspace's per-kind default MODEL for `kaizen` and the ROUTE order the preset in force
+   * states, from ONE read. Absent ⇒ block pin plus the routing default, on the default order.
+   */
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
 }
 
 /**
@@ -319,29 +318,20 @@ export class KaizenService {
   }
 
   /**
-   * The grader's model. Kaizen grading is just another inline LLM step, so it resolves its
-   * model through the SAME shared seam every inline agent uses ({@link resolveInlineModelRef}
-   * — block pin > workspace per-kind default > routing default, keeping an ambient-eligible
-   * subscription harness ref instead of degrading it) rather than re-deriving that precedence
-   * here. Returns undefined only when no routing default is wired (grader disabled).
+   * The grader's model. Kaizen grading is just another inline LLM step, so it resolves its model
+   * through the SAME shared seam every inline agent uses ({@link resolveInlineBlockModelRef} —
+   * block pin > workspace per-kind default > routing default, under the preset's route order,
+   * keeping an ambient-eligible subscription harness ref instead of degrading it) rather than
+   * re-deriving that precedence here. Returns undefined only when no routing default is wired
+   * (grader disabled), which is why the guard short-circuits the block read.
    */
   private async modelFor(workspaceId: string, blockId: string): Promise<ModelRef | undefined> {
     if (!this.deps.modelRef) return undefined
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
-    return resolveInlineModelRef(
-      {
-        agentRouting: { default: { ref: this.deps.modelRef }, byKind: {} },
-        resolveBlockModel: this.deps.resolveBlockModel ?? (() => undefined),
-        resolveWorkspaceModelDefault: this.deps.resolveWorkspaceModelDefault,
-        ...(this.deps.runsInline ? { runsInline: this.deps.runsInline } : {}),
-      },
-      {
-        agentKind: KAIZEN_AGENT_KIND,
-        blockModelId: block?.modelId,
-        modelPresetId: block?.modelPresetId,
-        workspaceId,
-      },
-    )
+    return resolveInlineBlockModelRef(this.deps, workspaceId, KAIZEN_AGENT_KIND, {
+      ...(block?.modelId ? { modelId: block.modelId } : {}),
+      ...(block?.modelPresetId ? { modelPresetId: block.modelPresetId } : {}),
+    })
   }
 
   private async updateCombo(

@@ -82,6 +82,9 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // Read-through slice for `resolveRiskPolicy` (the merge preset re-read on every gate
     // evaluation); `RiskPolicyService` invalidates it on every preset write.
     riskPolicyCache: caches.riskPolicy,
+    // Its sibling one row over: the block's MODEL preset, resolved on every dispatch for the
+    // step's model AND the route order. Invalidated by `ModelPresetService` on every write.
+    modelPresetCache: caches.modelPreset,
     // The per-class change classification the merge policy's rules key off, plus the best-effort
     // record of every merge decision. Absent ⇒ `unknown` class, no rule matches, nothing stored.
     mergeTrackRecord: mergeTrackRecords?.service,

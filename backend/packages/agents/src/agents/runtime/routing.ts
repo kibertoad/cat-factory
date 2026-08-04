@@ -1,4 +1,4 @@
-import type { AgentKind } from '@cat-factory/kernel'
+import type { AgentKind, ModelFlavor } from '@cat-factory/kernel'
 import type { ModelRef } from '@cat-factory/kernel'
 import { inlineModelRef } from '@cat-factory/kernel'
 
@@ -30,8 +30,18 @@ export function resolveAgentConfig(routing: AgentRouting, kind: AgentKind): Agen
 /** The resolvers a caller supplies so a step's model is picked the same way everywhere. */
 export interface StepModelResolvers {
   agentRouting: AgentRouting
-  /** Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined. */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /**
+   * Resolve a model catalog id to a concrete ref; unknown/absent ids return undefined.
+   *
+   * `providerPreference` is the route order the MODEL PRESET in force states, folded onto the
+   * deployment capability set the facade closes over. Omitted (a test fake, a caller with no
+   * preset in hand) ⇒ the deployment's default order, which is what every caller got before
+   * presets could state one.
+   */
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve a workspace's default model id for an agent kind (via the task's selected
    * or the workspace's default model preset), consulted when the block pins no usable
@@ -61,6 +71,11 @@ export interface StepModelInputs {
   modelPresetId?: string
   /** The workspace the step runs in; required to consult a preset default. */
   workspaceId?: string
+  /**
+   * The route order the preset in force states, resolved ONCE per dispatch by the engine and
+   * carried on `AgentRunContext.providerPreference`. Absent ⇒ the deployment's default order.
+   */
+  providerPreference?: readonly ModelFlavor[]
 }
 
 /**
@@ -76,7 +91,8 @@ export async function resolveStepModelRef(
   resolvers: StepModelResolvers,
   inputs: StepModelInputs,
 ): Promise<ModelRef> {
-  const fromBlock = resolvers.resolveBlockModel(inputs.blockModelId)
+  const preference = inputs.providerPreference
+  const fromBlock = resolvers.resolveBlockModel(inputs.blockModelId, preference)
   if (fromBlock) return fromBlock
   if (resolvers.resolveWorkspaceModelDefault && inputs.workspaceId) {
     const defaultId = await resolvers.resolveWorkspaceModelDefault(
@@ -84,7 +100,7 @@ export async function resolveStepModelRef(
       inputs.agentKind,
       inputs.modelPresetId,
     )
-    const fromDefault = resolvers.resolveBlockModel(defaultId)
+    const fromDefault = resolvers.resolveBlockModel(defaultId, preference)
     if (fromDefault) return fromDefault
   }
   return resolveAgentConfig(resolvers.agentRouting, inputs.agentKind).ref

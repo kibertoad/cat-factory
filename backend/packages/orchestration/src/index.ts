@@ -188,6 +188,7 @@ export {
   ModelPresetService,
   type ModelPresetServiceDependencies,
   resolvePresetModelForKind,
+  resolvePresetProviderPreference,
 } from './modules/modelPresets/ModelPresetService.js'
 export {
   ConsensusGroupService,

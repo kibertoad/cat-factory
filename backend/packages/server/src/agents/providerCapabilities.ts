@@ -10,6 +10,7 @@ import {
   ALL_SUBSCRIPTION_VENDORS,
   type AppCaches,
   type ModelFamilyPolicy,
+  type ModelFlavor,
   type ProviderCapabilities,
   type SubscriptionVendor,
 } from '@cat-factory/kernel'
@@ -65,6 +66,16 @@ export interface CapabilityServices {
    * invalidated by the account-settings write). Absent ⇒ the read runs live each time.
    */
   caches?: AppCaches
+  /**
+   * The route order the MODEL PRESET in force states, from the preset library
+   * (`resolvePresetProviderPreference`). Called with the preset the caller is resolving under —
+   * a block's selected one, or `undefined` for the workspace default preset. Absent (tests /
+   * unwired facades) ⇒ the deployment's default order.
+   */
+  resolvePresetProviderPreference?: (
+    workspaceId: string,
+    modelPresetId?: string,
+  ) => Promise<readonly ModelFlavor[] | undefined>
 }
 
 // Direct providers whose AI-SDK resolver works without an explicit base URL (the SDK
@@ -72,10 +83,49 @@ export interface CapabilityServices {
 // base URL (see `buildDirectResolver`), so it is unusable until that URL resolves.
 const BASE_URL_OPTIONAL = new Set(['openai', 'anthropic'])
 
+/**
+ * The account-wide model-family policy in force for a workspace, or undefined for no restriction.
+ * A `null`/legacy account and an `off` policy both mean the latter.
+ *
+ * Read THROUGH the per-account cache (slow-moving, admin-changed, on the `/models` + start-guard
+ * hot paths): the load reads only the non-secret config, and wraps the result so the common "no
+ * policy" case caches as a value rather than a re-loaded null.
+ *
+ * Its own function rather than a block inside {@link resolveWorkspaceCapabilities} because it is
+ * the only capability with three optional collaborators, a cache and a swallow — everything else
+ * there is one read per field.
+ */
+async function resolveAccountModelPolicy(
+  services: CapabilityServices,
+  workspaceId: string,
+): Promise<ModelFamilyPolicy | undefined> {
+  const accountSettings = services.accountSettings
+  if (!services.modelPolicySupported || !accountSettings || !services.workspaceAccountOf) {
+    return undefined
+  }
+  try {
+    const accountId = await services.workspaceAccountOf(workspaceId)
+    if (!accountId) return undefined
+    const load = async () => ({
+      policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
+    })
+    const cached = services.caches?.accountModelPolicy
+    const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
+    return policy && policy.mode !== 'off' ? policy : undefined
+  } catch {
+    // Account settings aren't always readable — mothership mode delegates org state over an RPC
+    // whose allow-list doesn't yet include the account-settings read (the same limitation the
+    // binary-storage infra probe degrades on). Treat an unreadable policy as "no restriction"
+    // rather than failing run start / the model catalog.
+    return undefined
+  }
+}
+
 export async function resolveWorkspaceCapabilities(
   services: CapabilityServices,
   workspaceId: string,
   userId?: string | null,
+  modelPresetId?: string,
 ): Promise<ProviderCapabilities> {
   const configured = services.apiKeys
     ? await services.apiKeys.configuredProviders(workspaceId, { userId })
@@ -114,31 +164,17 @@ export async function resolveWorkspaceCapabilities(
       openRouterModels.add(m.id)
     }
   }
-  // The account-wide model-family policy, resolved from the workspace's owning account when
-  // the deployment supports it. A `null`/legacy account or an `off` policy ⇒ no restriction.
-  // Read-through the per-account cache (slow-moving, admin-changed) — the load reads only
-  // the non-secret config (`read`, no secret decryption) and wraps the result so the common
-  // "no policy" case caches as a value rather than a re-loaded null.
-  let modelPolicy: ModelFamilyPolicy | undefined
-  const accountSettings = services.accountSettings
-  if (services.modelPolicySupported && accountSettings && services.workspaceAccountOf) {
-    try {
-      const accountId = await services.workspaceAccountOf(workspaceId)
-      if (accountId) {
-        const load = async () => ({
-          policy: (await accountSettings.read(accountId)).config.modelPolicy ?? null,
-        })
-        const cached = services.caches?.accountModelPolicy
-        const { policy } = cached ? await cached.get(accountId, accountId, load) : await load()
-        if (policy && policy.mode !== 'off') modelPolicy = policy
-      }
-    } catch {
-      // Account settings aren't always readable — mothership mode delegates org state over an
-      // RPC whose allow-list doesn't yet include the account-settings read (the same limitation
-      // the binary-storage infra probe degrades on). Treat an unreadable policy as "no
-      // restriction" rather than failing run start / the model catalog.
-    }
-  }
+  const modelPolicy = await resolveAccountModelPolicy(services, workspaceId)
+  // The route order the preset in force states. It rides the capability set (rather than a
+  // parameter each resolution site would have to remember) so the catalog the picker renders and
+  // the guard that admits the run walk the SAME order. A read failure is NOT swallowed: unlike the
+  // account policy above, which degrades to "no restriction", an unreadable preference has no safe
+  // default — every route stays reachable either way, so the honest thing is to let the caller see
+  // the failure rather than admit a compliance-motivated run on the wrong route.
+  const providerPreference = await services.resolvePresetProviderPreference?.(
+    workspaceId,
+    modelPresetId,
+  )
   return {
     directProviders,
     subscriptionVendors,
@@ -147,5 +183,6 @@ export async function resolveWorkspaceCapabilities(
     openRouterModels,
     ...(services.bedrockModels?.size ? { bedrockModels: services.bedrockModels } : {}),
     ...(modelPolicy ? { modelPolicy } : {}),
+    ...(providerPreference?.length ? { providerPreference } : {}),
   }
 }

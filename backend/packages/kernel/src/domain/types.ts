@@ -484,7 +484,9 @@ export type {
   CloudProvider,
   InstanceSize,
   UpdateAccountInput,
-  // Per-workspace model presets (named model→agent mappings; a task picks one).
+  // Per-workspace model presets (named model→agent mappings; a task picks one) plus the route
+  // vocabulary a preset's `providerPreference` orders.
+  ModelFlavor,
   ModelPreset,
   CreateModelPresetInput,
   UpdateModelPresetInput,

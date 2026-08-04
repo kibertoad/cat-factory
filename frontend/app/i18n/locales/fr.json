@@ -2334,7 +2334,8 @@
         "deleteTitle": "Supprimer le préréglage",
         "basePrefix": "Base :",
         "overrideCount": "{count} remplacement | {count} remplacements",
-        "empty": "Aucun préréglage pour l'instant. Créez-en un pour associer des modèles à vos agents."
+        "empty": "Aucun préréglage pour l'instant. Créez-en un pour associer des modèles à vos agents.",
+        "customRouteOrder": "ordre de routes personnalisé"
       },
       "editor": {
         "useBaseModel": "Utiliser le modèle de base",
@@ -2359,6 +2360,30 @@
       "confirmDelete": {
         "title": "Supprimer ce préréglage de modèle ?",
         "body": "\"{name}\" sera supprimé. Les tâches qui l'utilisent reviendront au préréglage par défaut de l'espace de travail."
+      },
+      "routes": {
+        "direct": "L'API propre du fournisseur du modèle",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "Passerelle OpenRouter",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abonnement (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Nécessite une clé API pour ce fournisseur.",
+        "bedrock": "Exécuté dans votre région AWS, sur les modèles autorisés par votre compte.",
+        "openrouter": "Une clé, plusieurs fournisseurs, revendus avec une marge.",
+        "cloudflare": "Toujours disponible, sans mise en cache des prompts.",
+        "subscription": "Quota forfaitaire d'un forfait connecté."
+      },
+      "routeOrder": {
+        "label": "Ordre des routes",
+        "defaultHint": "Ce préréglage suit la valeur par défaut du déploiement. Remontez une route pour la préférer.",
+        "customHint": "Ce préréglage préfère les routes dans cet ordre. Un modèle accessible uniquement par une route inférieure fonctionne toujours, il est simplement essayé plus tard.",
+        "reset": "Utiliser l'ordre par défaut",
+        "moveUp": "Préférer davantage cette route",
+        "moveDown": "Préférer moins cette route",
+        "subscriptionOverrideHint": "Un abonnement connecté l'emporte toujours pour les modèles qui en proposent un : le moteur les achemine vers le forfait quel que soit cet ordre. Les routes situées sous l'entrée abonnement s'appliquent à tous les autres modèles.",
+        "badgesUseDefaultPresetHint": "La route affichée à côté de chaque modèle ci-dessus est celle du preset par défaut de l'espace de travail, pas celle de ce preset."
       }
     },
     "account": {
@@ -5806,7 +5831,7 @@
       "newDescription": "De nouveaux presets de modèle intégrés sont arrivés. Ajoutez-les à la bibliothèque de ce tableau.",
       "add": "Ajouter",
       "updatesHeading": "Mises à jour disponibles",
-      "updatesDescription": "Une version plus récente de ces presets de modèle intégrés est arrivée. Régénérez pour l'adopter (le preset par défaut et l'ordre sont conservés).",
+      "updatesDescription": "Une version plus récente de ces presets de modèle intégrés est arrivée. Régénérez pour l'adopter : le preset par défaut et l'ordre sont conservés, mais un ordre de routes personnalisé sur le preset est effacé.",
       "versionAvailable": "Version {from} → {to} disponible.",
       "reseed": "Régénérer",
       "reseedAll": "Tout mettre à jour ({count})",
