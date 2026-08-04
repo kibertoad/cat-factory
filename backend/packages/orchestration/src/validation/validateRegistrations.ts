@@ -745,12 +745,55 @@ function checkTaskTypeFragments(
 }
 
 /**
+ * A descriptor-driven create FORM that structurally cannot be filled. Each of these is a typo in the
+ * deployment's own descriptor with no run-time recovery, and each fails SILENTLY without this check:
+ * a duplicate key means the later declaration wins wherever the fields are indexed, an optionless
+ * picker renders an empty control (and, if required, makes the type un-creatable), and a `showWhen`
+ * naming no declared field hides its own field forever, so the value can never be collected.
+ *
+ * Errors rather than warnings, because unlike a `defaultFragmentIds` id (which may legitimately name
+ * a tenant-tier fragment invisible at boot) every input here is fully known from the registration.
+ */
+function checkTaskTypeForm(taskType: CustomTaskType): RegistrationProblem[] {
+  const fields = taskType.fields ?? []
+  const problems: RegistrationProblem[] = []
+  const seen = new Set<string>()
+  const declared = new Set(fields.map((field) => field.key))
+  const bad = (code: string, message: string): void => {
+    problems.push({
+      severity: 'error',
+      code,
+      message: `Custom task type "${taskType.taskType}" ${message}`,
+    })
+  }
+  for (const field of fields) {
+    if (seen.has(field.key))
+      bad('task_type_field_duplicate', `declares field "${field.key}" twice.`)
+    seen.add(field.key)
+    if ((field.type === 'select' || field.type === 'checkbox-group') && !field.options?.length) {
+      bad(
+        'task_type_field_no_options',
+        `declares "${field.key}" as a ${field.type} with no options, so the form renders an empty picker.`,
+      )
+    }
+    if (field.showWhen && !declared.has(field.showWhen.key)) {
+      bad(
+        'task_type_field_unknown_condition',
+        `gates field "${field.key}" on "${field.showWhen.key}", which it does not declare, so the field never shows.`,
+      )
+    }
+  }
+  return problems
+}
+
+/**
  * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
  * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
  * must resolve against the built-in + registered pipeline catalog (else the created task would
- * silently fall back to the positional default), and its `defaultFragmentIds` are checked against
- * the code fragment pool (see {@link checkTaskTypeFragments}). Only run when a task-type registry
- * is supplied. Split out to keep the collector under the complexity ceiling.
+ * silently fall back to the positional default); its `defaultFragmentIds` are checked against the
+ * code fragment pool (see {@link checkTaskTypeFragments}); and its create form must be fillable (see
+ * {@link checkTaskTypeForm}). Only run when a task-type registry is supplied. Split out to keep the
+ * collector under the complexity ceiling.
  */
 function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -759,6 +802,7 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
   const fragmentPool = new Set(universalFragments().map((fragment) => fragment.id))
   for (const taskType of opts.taskTypeRegistry.all()) {
     problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
+    problems.push(...checkTaskTypeForm(taskType))
     if (!isNamespacedId(taskType.taskType)) {
       problems.push({
         severity: 'error',

@@ -1,6 +1,14 @@
 import * as v from 'valibot'
 import { createTaskTypeSchema, taskTypeFieldsSchema } from './primitives.js'
 import { agentConfigValuesSchema } from './agent-config.js'
+import {
+  DESCRIPTOR_FIELD_ARRAY_MAX,
+  DESCRIPTOR_FIELD_VALUE_MAX,
+  descriptorFieldValueSchema,
+  descriptorFieldValuesSchema,
+  type DescriptorFieldValue,
+  type DescriptorFieldValues,
+} from './form-fields.js'
 
 // ---------------------------------------------------------------------------
 // Initiative wire contracts. An Initiative is the longer-running counterpart to
@@ -51,36 +59,29 @@ const shortProseField = v.pipe(v.string(), v.maxLength(INITIATIVE_SHORT_MAX))
 
 // ---------------------------------------------------------------------------
 // Initiative-preset inputs. A preset (see `initiative-preset.ts`) bundles a
-// backend-supplied FORM the user fills at create time; the filled values are this
+// backend-supplied FORM the user fills at create time; the filled values are a
 // bounded JSON record, persisted on the entity (`presetInputs`) and FROZEN after
-// create. Kept HERE (with the entity that persists them, next to the item `spawn`
-// bag) rather than in `initiative-preset.ts` so the entity can reference the shape
-// without a module cycle — the preset descriptor imports these back the other way.
+// create. The shape itself is the SHARED descriptor-form value bag (`form-fields.ts`,
+// the vocabulary a custom task type's per-case form also fills); these are the
+// preset-named aliases, kept here beside the entity that persists them.
 // ---------------------------------------------------------------------------
 
 /** Bound on a single string / string-array element value in {@link initiativePresetInputsSchema}. */
-export const INITIATIVE_PRESET_INPUT_MAX = 2000
+export const INITIATIVE_PRESET_INPUT_MAX = DESCRIPTOR_FIELD_VALUE_MAX
 /** Bound on the number of elements in a `checkbox-group`/multi-value input. */
-export const INITIATIVE_PRESET_INPUT_ARRAY_MAX = 50
+export const INITIATIVE_PRESET_INPUT_ARRAY_MAX = DESCRIPTOR_FIELD_ARRAY_MAX
 
-/** One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a number. */
-export const initiativePresetInputValueSchema = v.union([
-  v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX)),
-  v.pipe(
-    v.array(v.pipe(v.string(), v.maxLength(INITIATIVE_PRESET_INPUT_MAX))),
-    v.maxLength(INITIATIVE_PRESET_INPUT_ARRAY_MAX),
-  ),
-  v.boolean(),
-  v.number(),
-])
-export type InitiativePresetInputValue = v.InferOutput<typeof initiativePresetInputValueSchema>
+/**
+ * One filled preset-form value: a scalar (`text`/`select`/`path`/…), a multi-select, a toggle, or a
+ * number. The shared descriptor-form value shape ({@link descriptorFieldValueSchema}) under the
+ * preset's own name, so this entity keeps referencing the vocabulary it persists.
+ */
+export const initiativePresetInputValueSchema = descriptorFieldValueSchema
+export type InitiativePresetInputValue = DescriptorFieldValue
 
-/** The user's filled preset form — a bounded map from field `key` to its value. */
-export const initiativePresetInputsSchema = v.record(
-  v.pipe(v.string(), v.minLength(1), v.maxLength(INITIATIVE_ID_MAX)),
-  initiativePresetInputValueSchema,
-)
-export type InitiativePresetInputs = v.InferOutput<typeof initiativePresetInputsSchema>
+/** The user's filled preset form: a bounded map from field `key` to its value. */
+export const initiativePresetInputsSchema = descriptorFieldValuesSchema
+export type InitiativePresetInputs = DescriptorFieldValues
 
 /** Lifecycle of a single tracker item (one unit of work → one spawned task). */
 export const initiativeItemStatusSchema = v.picklist([

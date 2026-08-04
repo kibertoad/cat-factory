@@ -83,7 +83,8 @@
       "confirm": "Odrzuć",
       "keep": "Kontynuuj edycję"
     },
-    "edit": "Edytuj"
+    "edit": "Edytuj",
+    "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych)."
   },
   "access": {
     "noBoardWrite": "Dostęp tylko do odczytu: możesz przeglądać tę tablicę, ale nie możesz jej edytować.",
@@ -5871,7 +5872,6 @@
       "titlePlaceholder": "np. Migracja API do nowego modelu uwierzytelniania",
       "goalField": "Cel",
       "goalPlaceholder": "Opisz cel, ograniczenia i przyblizony zakres. Planista doprecyzuje to w wielofazowy plan.",
-      "pathInvalid": "Podaj sciezke wewnatrz repozytorium (bez \"..\", sciezek bezwzglednych ani ukosnikow wstecznych).",
       "hint": "Nic jeszcze nie jest uruchamiane: po utworzeniu uruchom na bloku pipeline planowania inicjatywy. Analizuje on kod i przygotowuje wielofazowy plan do zatwierdzenia.",
       "submit": "Utworz inicjatywe",
       "failedTitle": "Nie udalo sie utworzyc inicjatywy",

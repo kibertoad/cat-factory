@@ -67,6 +67,12 @@ export type {
   TaskTypePresentation,
   TaskTypeFieldDescriptor,
   TaskTypeFieldOption,
+  // The shared descriptor-driven form vocabulary (`contracts/src/form-fields.ts`): one field
+  // shape and one filled-value bag behind both the initiative-preset form and a custom task
+  // type's per-case form, so `DescriptorFields.vue` renders either.
+  DescriptorField,
+  DescriptorFieldValue,
+  DescriptorFieldValues,
   Pipeline,
   PipelinePurpose,
   SpendStatus,

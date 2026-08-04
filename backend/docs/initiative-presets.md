@@ -162,8 +162,8 @@ the stored steps' `requiresApproval`.
    handlers), so every registered descriptor reaches the SPA with no per-facade wiring, exactly like
    `customAgentKinds`.
 2. **Create**: `CreateInitiativeModal.vue` is a preset picker (defaulting to `preset_generic`,
-   hidden when it's the only preset) + a generic descriptor-driven form renderer
-   (`InitiativePresetFields.vue`). `InitiativeService.create` validates + freezes the inputs; for an
+   hidden when it's the only preset) + the shared descriptor-driven form renderer
+   (`DescriptorFields.vue`, which a custom task type's per-case form renders through too). `InitiativeService.create` validates + freezes the inputs; for an
    `interview: 'skip'` preset it seeds the interview `qa` digest from the filled form (the form IS
    the interview) and templates the goal. `POST /workspaces/:id/initiative-presets/:presetId/probe
 { frameId }` runs `detect` over the frame's repo and returns detected defaults: best-effort,

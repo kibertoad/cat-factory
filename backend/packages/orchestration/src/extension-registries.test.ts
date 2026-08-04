@@ -1049,6 +1049,64 @@ describe('custom task types (reusable operations)', () => {
     expect(warned).toContain('task_type_unknown_fragment')
   })
 
+  it('ERRORS on a create form that structurally cannot be filled', () => {
+    // The three ways the richer field vocabulary lets a descriptor break itself, each of which
+    // fails silently in the form rather than anywhere a test or a user could name.
+    const optionless = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [{ key: 'style', label: 'Style', type: 'select' }],
+    })
+    expect(optionless[0]?.severity).toBe('error')
+    expect(optionless[0]?.code).toBe('task_type_field_no_options')
+
+    const danglingCondition = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [
+        {
+          key: 'verb',
+          label: 'Verb',
+          type: 'text',
+          showWhen: { key: 'resourceStyle', equals: 'a' },
+        },
+      ],
+    })
+    expect(danglingCondition[0]?.code).toBe('task_type_field_unknown_condition')
+
+    const duplicate = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [
+        { key: 'entity', label: 'Entity', type: 'text' },
+        { key: 'entity', label: 'Entity again', type: 'textarea' },
+      ],
+    })
+    expect(duplicate[0]?.code).toBe('task_type_field_duplicate')
+
+    // A well-formed form, including a condition on a field it does declare, is silent.
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        fields: [
+          {
+            key: 'style',
+            label: 'Style',
+            type: 'select',
+            options: [{ value: 'action', label: 'Action' }],
+          },
+          {
+            key: 'verb',
+            label: 'Verb',
+            type: 'text',
+            showWhen: { key: 'style', equals: 'action' },
+          },
+        ],
+      }),
+    ).toEqual([])
+  })
+
   it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
     // The pipeline reference is a different bar from the fragment one: an unknown id means the
     // created task silently falls back to the workspace's positional default pipeline, and

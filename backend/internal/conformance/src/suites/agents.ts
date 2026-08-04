@@ -1,8 +1,7 @@
 import { defaultAgentKindRegistry } from '@cat-factory/agents'
-import { ConflictError, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+import { ConflictError } from '@cat-factory/kernel'
 import type {
   AgentRunContext,
-  Block,
   Pipeline,
   RepoFiles,
   SandboxExperiment,
@@ -13,6 +12,7 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { defineAgentFragmentConformance } from './agent-fragments.js'
 import { defineAgentGateConformance } from './agent-gates.js'
+import { defineTaskTypeConformance } from './agent-task-types.js'
 import { defineValidationChecksConformance } from './validation-checks.js'
 import { defineReproductionProofConformance } from './reproduction-proof.js'
 import type { ConformanceHarness } from '../harness.js'
@@ -21,6 +21,7 @@ export function defineAgentConformance(harness: ConformanceHarness): void {
   describe(`[${harness.name}] conformance`, () => {
     registerSandboxAndCustomKindTests(harness)
     registerKindCapabilityTests(harness)
+    defineTaskTypeConformance(harness)
     registerSpikeAndPostOpTests(harness)
     registerEstimatorAndGateTests(harness)
   })
@@ -604,151 +605,6 @@ function registerKindCapabilityTests(harness: ConformanceHarness): void {
       // survive the driver, `failRun`, and the runtime's own failure column mapping.
       expect(exec.failure?.reason).toBe('providers_unconfigured')
       expect(exec.failure?.message ?? '').toContain('no configured provider')
-    })
-  })
-
-  describe('registered custom task type', () => {
-    // A deployment registers a namespaced task type on its app-owned TaskTypeRegistry (the
-    // frontend analogue of a custom agent kind). This asserts the SAME injected instance reaches
-    // BOTH the HTTP snapshot projection (`customTaskTypes`) AND `defaultPipelineIdForTaskType`'s
-    // registry consult — and that a task created with the namespaced type + its descriptor-driven
-    // `custom` fields round-trips through create + a full snapshot re-read — identically on D1 and
-    // Postgres, so a facade that forgot to thread the registry fails here rather than shipping.
-    it('projects a custom task type into the snapshot, defaults its pipeline, and round-trips a typed task', async () => {
-      const taskTypeRegistry = defaultTaskTypeRegistry()
-      taskTypeRegistry.register({
-        taskType: 'conf:incident',
-        presentation: {
-          label: 'Incident',
-          icon: 'i-lucide-siren',
-          color: '#ef4444',
-          description: 'A production incident to triage.',
-        },
-        fields: [
-          {
-            key: 'severity',
-            label: 'Severity',
-            type: 'select',
-            options: [
-              { value: 'sev1', label: 'SEV1' },
-              { value: 'sev2', label: 'SEV2' },
-            ],
-          },
-        ],
-        // A BUILT-IN pipeline id (resolves via `seedPipelines()`), so the assertion that the
-        // registry default wins needs no separately-registered pipeline.
-        defaultPipelineId: 'pl_review',
-      })
-      const app = harness.makeApp(undefined, { taskTypeRegistry })
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-
-      // 1. Advertised in the snapshot's custom-task-type catalog on every runtime.
-      const snap = await app.call<{
-        customTaskTypes?: { taskType: string; defaultPipelineId?: string }[]
-      }>('GET', `/workspaces/${wsId}`)
-      const listed = (snap.body.customTaskTypes ?? []).find((t) => t.taskType === 'conf:incident')
-      expect(listed).toBeTruthy()
-      expect(listed?.defaultPipelineId).toBe('pl_review')
-
-      // 2. A task created with the namespaced type + descriptor `custom` fields round-trips, and
-      //    (with no pinned pipeline) defaults to the registry's pipeline — proving
-      //    `defaultPipelineIdForTaskType` consults the injected registry after the built-in map.
-      const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
-        title: 'DB outage',
-        description: 'Investigate the incident.',
-        taskType: 'conf:incident',
-        taskTypeFields: { custom: { severity: 'sev1' } },
-      })
-      expect(created.status).toBe(201)
-      expect(created.body.taskType).toBe('conf:incident')
-      expect(created.body.taskTypeFields?.custom?.severity).toBe('sev1')
-      expect(created.body.pipelineId).toBe('pl_review')
-
-      // 3. And it survives a full REPLACE-style snapshot re-read (the persistence mappers carry
-      //    the widened `taskType` + the sparse `custom` bag through the scalar/JSON columns).
-      const reread = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
-      const block = reread.body.blocks.find((b) => b.id === created.body.id)
-      expect(block?.taskType).toBe('conf:incident')
-      expect(block?.taskTypeFields?.custom?.severity).toBe('sev1')
-    })
-
-    // The REUSABLE OPERATION bundle (docs/initiatives/reusable-operations.md): a registered type
-    // carrying a per-case form AND its standing-context fragments. Both halves are engine-level,
-    // but both cross persistence (the seeded fragment ids onto the task row, the collected values
-    // through the sparse `custom` JSON column), so a mapper that dropped either would ship.
-    it('seeds an operation’s standing context and folds its parameters into the run', async () => {
-      const taskTypeRegistry = defaultTaskTypeRegistry()
-      taskTypeRegistry.register({
-        taskType: 'conf:introduce-api',
-        presentation: {
-          label: 'Introduce API',
-          icon: 'i-lucide-plug',
-          color: '#0ea5e9',
-          description: 'Expose functionality over HTTP.',
-          category: 'API delivery',
-        },
-        fields: [
-          { key: 'entity', label: 'Entity', type: 'text' },
-          {
-            key: 'authRequirement',
-            label: 'Auth requirement',
-            type: 'select',
-            options: [{ value: 'service', label: 'Service-to-service token' }],
-          },
-        ],
-        defaultFragmentIds: ['conf.api-guidelines'],
-      })
-      const app = harness.makeApp({ echoTaskParams: true }, { taskTypeRegistry })
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-
-      // 1. Creating the task seeds the operation's standing context onto its own selection.
-      const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
-        title: 'Expose orders',
-        description: 'Expose the order entity.',
-        taskType: 'conf:introduce-api',
-        taskTypeFields: { custom: { entity: 'Order', authRequirement: 'service' } },
-      })
-      expect(created.status).toBe(201)
-      expect(created.body.fragmentIds).toEqual(['conf.api-guidelines'])
-
-      // 2. Dispatching resolves the collected values under the descriptor's labels, rendering the
-      //    select's CAPTION rather than its stored enum value.
-      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-        name: 'Build',
-        agentKinds: ['coder'],
-      })
-      const start = await app.call(
-        'POST',
-        `/workspaces/${wsId}/blocks/${created.body.id}/executions`,
-        { pipelineId: pipeline.body.id },
-      )
-      expect(start.status).toBe(201)
-      const exec = (await app.drive(wsId)).find((e) => e.blockId === created.body.id)!
-      expect(exec.steps[0]?.output).toContain(
-        '[params]Introduce API|Entity=Order;Auth requirement=Service-to-service token[/params]',
-      )
-    })
-
-    it('folds nothing for a built-in task type, so its prompt is unchanged', async () => {
-      // The regression bar for the fold: a run that collected no parameters must carry none.
-      const app = harness.makeApp({ echoTaskParams: true })
-      const { workspace } = await app.createWorkspace()
-      const wsId = workspace.id
-      const created = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
-        title: 'A plain feature',
-        taskType: 'feature',
-      })
-      const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
-        name: 'Build',
-        agentKinds: ['coder'],
-      })
-      await app.call('POST', `/workspaces/${wsId}/blocks/${created.body.id}/executions`, {
-        pipelineId: pipeline.body.id,
-      })
-      const exec = (await app.drive(wsId)).find((e) => e.blockId === created.body.id)!
-      expect(exec.steps[0]?.output).toContain('[params][/params]')
     })
   })
 }
