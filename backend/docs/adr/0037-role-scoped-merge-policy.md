@@ -212,10 +212,10 @@ Without that the setting would be theatre, since the obvious way around a sandbo
 
 ### Why the PR still opens
 
-The deliverable a non-developer initiator needs to SEE is the diff. Withholding the push would leave them
-reading prose about work they cannot inspect, and would need new harness plumbing rather than
-composition. What makes the mode a sandbox is that the change cannot reach the default branch, not
-that it stays invisible.
+The deliverable a non-developer initiator needs to SEE is the diff. Withholding the push would
+leave them reading prose about work they cannot inspect, and would need new harness plumbing
+rather than composition. What makes the mode a sandbox is that the change cannot reach the
+default branch, not that it stays invisible.
 
 ### Why `dryRunRoles` lives on the PRESET
 
@@ -251,7 +251,7 @@ only when the merger settles.
 
 ## Consequences
 
-- A workspace can hand a task to a non-engineer with the sandbox on, and take it off per role and
+- A workspace can hand a task to a non-developer with the sandbox on, and take it off per role and
   per preset, without a second pipeline or a second preset library.
 - Every start route now has to declare its attribution, enforced by a coverage spec rather than by
   the typecheck, because pinning nothing stays legitimate for schedules and the public API.
