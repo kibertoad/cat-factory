@@ -1,5 +1,13 @@
 # @cat-factory/integrations
 
+## 0.121.2
+
+### Patch Changes
+
+- Updated dependencies [413095f]
+  - @cat-factory/contracts@0.222.0
+  - @cat-factory/kernel@0.224.0
+
 ## 0.121.1
 
 ### Patch Changes
