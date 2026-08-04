@@ -1083,9 +1083,12 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
-    // Only persisted for a headless (`public-api`) run — `ui` is the read-time default, so
-    // storing it would put a redundant key on every ordinary run's detail JSON.
-    intakeOrigin: instance.intakeOrigin === 'public-api' ? 'public-api' : undefined,
+    // Only persisted for a NON-`ui` run — `ui` is the read-time default, so storing it would put
+    // a redundant key on every ordinary run's detail JSON. Written as "anything but the default"
+    // rather than as an allow-list of the origins that existed when this was authored: an
+    // allow-list here drops a newly added origin on the floor at write time, and the run then
+    // reads back as UI-started with nothing to grep for.
+    intakeOrigin: instance.intakeOrigin === 'ui' ? undefined : instance.intakeOrigin,
     // The tier the run was ADMITTED under, and whether it may land its work. Both are settled
     // once at start and read back on the DURABLE path, which rebuilds the run from this JSON and
     // nothing else — so a field missing here is a merge policy that silently never applies.

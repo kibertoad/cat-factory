@@ -2620,7 +2620,7 @@
         },
         "questionsOnPark": {
           "label": "Publicar preguntas abiertas cuando un ejecución headless se detiene",
-          "help": "Cuando una ejecución iniciada por la API se detiene para aclarar requisitos, publica sus preguntas abiertas — cada una con el id que debe nombrar la respuesta — en la incidencia vinculada. Las tareas iniciadas en la aplicación no se ven afectadas."
+          "help": "Cuando una ejecución iniciada fuera de la aplicación se detiene para aclarar requisitos (por la API o despachada desde una incidencia del rastreador), publica sus preguntas abiertas en la incidencia vinculada, cada una con el id que debe nombrar la respuesta. Las tareas iniciadas en la aplicación no se ven afectadas."
         }
       },
       "probeFailure": {

@@ -406,7 +406,7 @@
         },
         "questionsOnPark": {
           "label": "Offene Fragen bei einem pausierten Headless-Lauf posten",
-          "help": "Wenn ein über die API gestarteter Lauf zur Klärung der Anforderungen pausiert, poste seine offenen Fragen — jeweils mit der ID, die eine Antwort nennt — am verknüpften Issue. In der App gestartete Aufgaben sind nicht betroffen."
+          "help": "Wenn ein außerhalb der App gestarteter Lauf zur Klärung der Anforderungen pausiert (über die API oder aus einem Tracker-Ticket gestartet), poste seine offenen Fragen am verknüpften Issue, jeweils mit der ID, die eine Antwort nennt. In der App gestartete Aufgaben sind nicht betroffen."
         }
       },
       "probeFailure": {

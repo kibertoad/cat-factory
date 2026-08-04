@@ -2620,7 +2620,7 @@
         },
         "questionsOnPark": {
           "label": "Publier les questions ouvertes d'une exécution headless en pause",
-          "help": "Quand une exécution lancée via l'API se met en pause pour clarifier les exigences, publie ses questions ouvertes — chacune avec l'identifiant qu'une réponse doit nommer — sur le ticket lié. Les tâches lancées dans l'application ne sont pas concernées."
+          "help": "Quand une exécution lancée hors de l'application se met en pause pour clarifier les exigences (via l'API ou depuis un ticket du traqueur), publie ses questions ouvertes sur le ticket lié, chacune avec l'identifiant qu'une réponse doit nommer. Les tâches lancées dans l'application ne sont pas concernées."
         }
       },
       "probeFailure": {

@@ -517,6 +517,15 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
       expect(dispatched?.parentId).toBe(frame.body.id)
       expect(dispatched?.executionId).toBeTruthy()
 
+      // The run is HEADLESS, and it has to still say so after the round-trip through each facade's
+      // real store: `intakeOrigin` rides the `agent_runs.detail` JSON, and the requirements-review
+      // writeback is the only thing that will ever tell the requester their ticket is waiting on
+      // them. Read back off the repository rather than the response, because the write side is
+      // where a facade could drop it — and the failure would be invisible, a run that simply looks
+      // like somebody started it in the app.
+      const run = await app.executionRepository().getByBlock(ws, row!.linkedBlockId!)
+      expect(run?.intakeOrigin).toBe('tracker')
+
       // A REDELIVERY (trackers retry, and an `updated` event follows a `created` one) must not
       // dispatch the ticket twice. The issue's single `linkedBlockId` is the idempotency: no claim
       // table, no second block, no second run.

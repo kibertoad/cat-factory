@@ -2850,7 +2850,7 @@
         },
         "questionsOnPark": {
           "label": "Post open questions on a parked headless run",
-          "help": "When a run started through the API pauses to clarify requirements, post its open questions — each with the id an answer names — on the linked issue. Tasks started in the app are unaffected."
+          "help": "When a run started outside the app pauses to clarify requirements (through the API, or dispatched from a tracker ticket), post its open questions on the linked issue, each with the id an answer names. Tasks started in the app are unaffected."
         }
       },
       "probeFailure": {

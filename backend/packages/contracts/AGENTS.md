@@ -23,6 +23,12 @@ top-level files are the domain contracts.
   with that surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same:
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
+- `execution.ts`: the pipeline STEP and run shapes. `run-provenance.ts` beside it holds the
+  facts about a run rather than its work: `intakeOrigin` (how it entered: `ui`, `public-api` or
+  `tracker`, classified by `isHeadlessIntake`, which the clarification writeback keys off),
+  `mode` (whether it may land its work) and `diagnostics` (where it actually ran). All three
+  ride the run's `detail` JSON, so a new member is free to add and easy to forget to SET: a
+  start path that leaves `intakeOrigin` unset is claiming a human is watching in the app.
 - `repo-url.ts`: pure parsing of a pasted repository web URL (`parseRepoWebUrl` /
   `normalizeRepoSearchQuery`), shared by the SPA's paste-a-directory fragment import and the
   backend's available-repos picker (which resolves a pasted URL by its slug instead of feeding

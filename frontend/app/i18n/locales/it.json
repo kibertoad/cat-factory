@@ -406,7 +406,7 @@
         },
         "questionsOnPark": {
           "label": "Pubblica le domande aperte di un'esecuzione headless in pausa",
-          "help": "Quando un'esecuzione avviata tramite API si mette in pausa per chiarire i requisiti, pubblica le sue domande aperte — ciascuna con l'id che una risposta deve indicare — sull'issue collegato. Le attivita avviate nell'app non sono interessate."
+          "help": "Quando un'esecuzione avviata fuori dall'app si mette in pausa per chiarire i requisiti (tramite API o da un ticket del tracker), pubblica le sue domande aperte sull'issue collegato, ciascuna con l'id che una risposta deve indicare. Le attività avviate nell'app non sono interessate."
         }
       },
       "probeFailure": {

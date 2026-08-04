@@ -263,6 +263,13 @@ What the modes do NOT share is the reason they stay exclusive rather than becomi
   rather than the schedule's reused one. A refusal still leaves the ticket on the board as a task a
   human can start, with the reason recorded in the run history rather than a task that mysteriously
   never ran.
+- **The run is marked HEADLESS: `intakeOrigin: 'tracker'`.** A different question from `origin`
+  above, which gates pipeline availability; this one records that nobody is in the app, and it is
+  what the clarification writeback keys off. Unset, a run reads back as `ui`, and a parked
+  requirements review then waits on a human who was never told: the reply channel (ticket comments,
+  ungated by intake) sits ready for finding ids that no comment ever posted. So the writeback gate
+  asks `isHeadlessIntake` and not `=== 'public-api'`, and an unattended start path must STATE its
+  origin, because the default is a claim that someone is watching.
 
 The SPA DERIVES the mode from the pipeline instead of offering it: a `bug-intake` pipeline can only
 mean `queue`, anything else can only mean `per-ticket`. That makes the refused combination

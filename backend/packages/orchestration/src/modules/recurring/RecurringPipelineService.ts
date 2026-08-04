@@ -605,6 +605,12 @@ export class RecurringPipelineService {
    *    once, never reused. That also makes `assertPipelineLaunchable` refuse a `recurring`-only
    *    pipeline, which is exactly right — a `bug-intake` pipeline would go and pick a DIFFERENT
    *    ticket — and it is the run-time half of the create-time `assertValidIssueIntake` rule.
+   *  - **`intakeOrigin: 'tracker'`**, which is a different question from `origin` and the one the
+   *    clarification loop asks. Nobody is in the app: the requester is on the ticket, which is
+   *    where this run's questions have to go when its requirements review parks. Leaving it unset
+   *    reads the run back as UI-started, and a parked review then asks a human who is not there
+   *    while the reply channel (ticket comments, ungated by intake) sits waiting for finding ids
+   *    that were never posted.
    */
   private async firePerTicket(
     workspaceId: string,
@@ -665,7 +671,7 @@ export class RecurringPipelineService {
       workspaceId,
       adopted.blockId,
       schedule.pipelineId,
-      { initiatedBy: null, origin: 'manual' },
+      { initiatedBy: null, origin: 'manual', intakeOrigin: 'tracker' },
     )
     await this.schedules.insertRun(workspaceId, {
       id: this.idGenerator.next('schr'),

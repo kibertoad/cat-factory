@@ -633,6 +633,12 @@ describe('ReviewGateController — headless question writeback', () => {
     expect(t.logger.warn).toHaveBeenCalled()
   })
 
+  it('echoes a ticket-dispatched park too — a webhook run has no overseer in the app', async () => {
+    const t = headlessSetup({ intakeOrigin: 'tracker' })
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+  })
+
   it('posts NOTHING for a UI-started run — the SPA path is untouched', async () => {
     const t = headlessSetup({ intakeOrigin: 'ui' })
     const result = await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
