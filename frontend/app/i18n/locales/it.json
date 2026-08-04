@@ -3133,18 +3133,13 @@
     },
     "addService": {
       "title": "Aggiungi un servizio da un repository",
-      "intro": "Scegli un repository GitHub esistente da aggiungere come servizio sulla board. Nessun bootstrapping: il repo viene collegato a un nuovo frame di servizio così com'è, e le attività che vi esegui puntano a quel repo.",
-      "connectFirst": "Collega prima questo workspace a GitHub. Collega un'installazione su cui la App è già presente, oppure installala.",
       "repository": "Repository",
-      "repositoryHint": "Repository a cui la GitHub App può accedere. Non vedi il tuo? Concedi l'accesso alla App qui sotto, poi aggiorna.",
       "repoType": "Tipo di repository",
       "repoTypeHint": "Cos'è questo repo: un servizio backend, un'app frontend, una libreria condivisa o un repository di documenti (solo docs/spike).",
-      "noReposAvailable": "Nessun repository ancora disponibile. Concedi alla App l'accesso a uno qui sotto, poi aggiorna.",
       "searchPlaceholder": "Cerca repository per proprietario o nome…",
       "searchMinChars": "Digita almeno {min} carattere per cercare. | Digita almeno {min} caratteri per cercare.",
       "noMatches": "Nessun repository trovato per {query}.",
       "clearSelection": "Cancella selezione",
-      "showingCount": "Visualizzati {shown} di {total} repository.",
       "repoLabel": {
         "private": " (privato)",
         "monorepo": " · monorepo",
@@ -3161,7 +3156,6 @@
       "addedConfigure": "{title} aggiunto, configuralo",
       "grantAccess": "Concedi alla App l'accesso a un repo",
       "grantAccessTitle": "Apri le impostazioni di installazione della App per concederle l'accesso a un repository",
-      "refreshList": "Aggiorna l'elenco",
       "done": "Fatto",
       "donePendingHint": "Aggiungi prima i servizi selezionati oppure annulla la selezione, altrimenti quelle scelte andranno perse.",
       "add": "Aggiungi servizio",
@@ -4215,13 +4209,6 @@
         "tooLong": "Deve essere di massimo 100 caratteri."
       }
     },
-    "intro": {
-      "canCreate": "Crea un repository GitHub vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; per questo account puo anche creare il repository per te.",
-      "manual": "Crea un repository GitHub vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; sei tu a creare il repository (con un clic qui sotto), quindi non serve alcun permesso di creazione del repository."
-    },
-    "github": {
-      "prompt": "Collega questo workspace a GitHub prima dell'avvio; un'esecuzione invia dei commit in un repository. Collega un'installazione su cui l'App e gia presente, oppure installala."
-    },
     "section": {
       "newRepo": "Nuovo repository"
     },
@@ -4250,9 +4237,7 @@
     },
     "createRepo": {
       "now": "Crea repository",
-      "onGitHub": "Crea su GitHub",
-      "titleNow": "Crea subito il repository",
-      "titleGitHub": "Apri la pagina di nuovo repository di GitHub, precompilata"
+      "titleNow": "Crea subito il repository"
     },
     "grantAccess": {
       "label": "Concedi all'App l'accesso a questo repository",
@@ -4294,7 +4279,6 @@
       "title": "Architetture di riferimento",
       "add": "Aggiungi",
       "pickRepo": {
-        "label": "Scegli un repository GitHub esistente",
         "description": "Scegli un repository a cui hai accesso per compilarne owner e nome, oppure inseriscili manualmente qui sotto.",
         "placeholder": "owner/name"
       },
@@ -6370,6 +6354,22 @@
       "title": "Collega cat-factory a {provider}",
       "titleAny": "Collega cat-factory ai tuoi repository",
       "intro": "cat-factory funziona aprendo pull request sui tuoi repository. Collega il tuo host di repository per continuare."
+    },
+    "addService": {
+      "intro": "Scegli un repository {provider} esistente da aggiungere come servizio sulla board. Nessun bootstrapping: il repo viene collegato a un nuovo frame di servizio così com'è, e le attività che vi esegui puntano a quel repo.",
+      "introAny": "Scegli un repository esistente da aggiungere come servizio sulla board. Nessun bootstrapping: il repo viene collegato a un nuovo frame di servizio così com'è, e le attività che vi esegui puntano a quel repo.",
+      "connectFirst": "Collega prima questo workspace a un host di repository, poi scegli un repository da aggiungere.",
+      "repositoryHintApp": "Repository a cui la GitHub App può accedere. Non vedi il tuo? Concedi l'accesso alla App qui sotto, poi cerca di nuovo.",
+      "repositoryHintToken": "Repository raggiungibili dal tuo token {provider}. Non vedi il tuo? Controlla l'ambito del token e il tuo accesso al progetto, poi cerca di nuovo."
+    },
+    "bootstrap": {
+      "connectPrompt": "Collega questo workspace a un host di repository prima dell'avvio; un'esecuzione invia dei commit in un repository.",
+      "createRepoOn": "Crea su {provider}",
+      "createRepoTitle": "Apri la pagina di nuovo repository di {provider}",
+      "introCanCreate": "Crea un repository {provider} vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; per questo account può anche creare il repository per te.",
+      "introManual": "Crea un repository {provider} vuoto, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; sei tu a creare il repository (con un clic qui sotto), quindi non serve alcun permesso di creazione del repository.",
+      "introManualAny": "Crea un repository vuoto sul tuo host di repository, poi lascia che un agente bootstrapper lo popoli in un container sandbox, adattando una delle tue architetture di riferimento oppure partendo da zero seguendo un prompt libero. cat-factory invia il commit iniziale in quel repository; il repository lo crei tu, quindi non serve alcun permesso di creazione del repository.",
+      "archPickRepo": "Scegli un repository {provider} esistente"
     },
     "branchProtection": {
       "heading": "Protezione del ramo predefinito",

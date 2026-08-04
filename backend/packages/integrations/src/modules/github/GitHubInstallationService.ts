@@ -44,6 +44,16 @@ function toConnection(
     targetType: installation.targetType,
     connectedAt: installation.createdAt,
     provider: installation.provider,
+    // This service reads back whatever wrote the row, so the method is DERIVED from the row
+    // rather than asserted: it also serves the per-workspace PAT connect's rows and local
+    // mode's synthetic PAT-backed connection, and calling either of those an App installation
+    // is what puts a github.com installation-settings link that 404s in front of the user.
+    // `appId` is the discriminator because only the App connect path fills it (probed at
+    // connect to route this installation's token mints, ADR 0005); both PAT paths leave it
+    // null. A row predating the multi-App tier also has none, so it reads as `pat` and loses
+    // the grant-access link until it reconnects — stale internal state re-created, not a
+    // compatibility shim.
+    method: installation.appId !== null ? 'app' : 'pat',
     canCreateRepos,
     canManageWorkflows,
   }
