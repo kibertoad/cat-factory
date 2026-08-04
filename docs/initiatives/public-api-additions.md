@@ -243,8 +243,8 @@ Three decisions worth keeping:
   edit carry a value the caller never meant to change, and a client re-sending a URL cached before
   someone else rotated the receiver would redirect every future delivery while looking like it only
   added a subscription. The first `PUT` on an empty workspace still needs one
-  (`reason: 'webhook_url_required'`). Worth doing BEFORE 1.4.0 shipped: relaxing a required field
-  stays legal afterwards, but the false doc would have been baked into four published SDKs.
+  (`reason: 'webhook_url_required'`). Worth doing BEFORE the version shipped: relaxing a required
+  field stays legal afterwards, but the false doc would have been baked into four published SDKs.
 
 ### D1: Ticket context on task creation ✅
 
