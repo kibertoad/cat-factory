@@ -333,7 +333,7 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
     })
 
     it('serves a DEPLOYMENT-REGISTERED task source through the same lifecycle', async () => {
-      // Slice 4 of `docs/initiatives/tracker-webhook-intake.md`: the source vocabulary is
+      // Slice 4 of `backend/docs/adr/0032-tracker-webhook-intake.md`: the source vocabulary is
       // `builtin picklist ∪ <ns>:<name>`, so a deployment registers a fourth tracker in CODE on
       // the app-owned `TaskSourceRegistry` and it is served by every surface that reads the
       // registry rather than a hard-coded list. Registered here exactly as a deployment would:

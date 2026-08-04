@@ -63,7 +63,7 @@ export function isTaskSourceKind(value: unknown): value is TaskSourceKind {
 // The per-connection delivery endpoint an operator pastes into the tracker's webhook form, plus
 // the secret that authenticates it. The secret rides the connection's sealed credential bag (no
 // new table), so this surface is purely mint/read/clear. See
-// `docs/initiatives/tracker-webhook-intake.md`.
+// `backend/docs/adr/0032-tracker-webhook-intake.md`.
 
 /** The webhook state of one task-source connection, safe to read back at any time. */
 export const taskSourceWebhookSchema = v.object({

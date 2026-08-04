@@ -332,6 +332,7 @@
       "addFailedTitle": "Nie udało się dodać cyklicznego pipeline’u",
       "onDemand": "Na żądanie (tylko ręcznie)",
       "onDemandHint": "Uruchamia się tylko po ręcznym wyzwoleniu, bez harmonogramu. Ponieważ za każdym razem jesteś obecny, jego zadanie może korzystać z modelu subskrypcji do użytku indywidualnego.",
+      "onDemandLockedHint": "Zablokowane: harmonogram wyzwalany przez tracker jest sterowany webhookami, więc nie ma własnego cyklu.",
       "intake": "Pobieranie zgłoszeń",
       "intakeHint": "Każde uruchomienie wybiera jedno pasujące otwarte zgłoszenie z trackera i realizuje je od początku do końca.",
       "intakeNoSources": "Najpierw połącz źródło zadań, aby pobierać z niego zgłoszenia.",
@@ -347,7 +348,9 @@
       "intakeLabels": "Etykiety",
       "intakeLabelsPlaceholder": "oddzielone przecinkami",
       "intakeIssueType": "Typ zgłoszenia",
-      "intakeInProgressLabel": "Etykieta w toku"
+      "intakeInProgressLabel": "Etykieta w toku",
+      "refusalPerTicketRequiresOnDemand": "Harmonogram wyzwalany przez tracker musi być na żądanie. Takt cyklu nie niesie ze sobą żadnego zgłoszenia do przekazania.",
+      "refusalPerTicketConflictsWithBugIntake": "Ten potok sam wybiera zgłoszenie z tablicy, więc nie może być dodatkowo sterowany przesłanym zgłoszeniem. Wybierz potok bez kroku bug-intake."
     },
     "failure": {
       "containerFailedToStart": "Nie udało się uruchomić kontenera",

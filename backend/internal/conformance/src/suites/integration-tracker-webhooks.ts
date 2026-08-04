@@ -4,7 +4,7 @@ import type { ConformanceApp, ConformanceHarness } from '../harness.js'
 import { signFakeTrackerDelivery } from '../fakeTrackerWebhook.js'
 
 // Cross-runtime conformance for INBOUND tracker webhooks — push-driven intake and ticket replies
-// to a parked requirements review (docs/initiatives/tracker-webhook-intake.md).
+// to a parked requirements review (backend/docs/adr/0032-tracker-webhook-intake.md).
 //
 // What only a shared suite can prove here is that BOTH facades wired the whole chain, because
 // every link is per-facade: the route must be mounted, the session gate must let an anonymous
@@ -382,6 +382,53 @@ export function defineTrackerWebhookConformance(harness: ConformanceHarness): vo
 }
 
 /**
+ * A workspace carrying one enabled PER-TICKET schedule, scoped to Jira project `PROJ`, on a
+ * pipeline with no `bug-intake` step (which the mode refuses), plus its minted webhook secret.
+ *
+ * Extracted because the setup is eight REST calls of pure arrangement and two tests need the same
+ * one; keeping it here also holds each `it` inside the per-function line budget.
+ */
+async function perTicketWorkspace(
+  harness: ConformanceHarness,
+  predicates: Record<string, unknown>,
+): Promise<{ app: ConformanceApp; ws: string; frameId: string; secret: string }> {
+  const app = harness.makeApp()
+  const { call } = app
+  const snapshot = await app.createWorkspace({ seed: true })
+  const ws = snapshot.workspace.id
+  const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+    type: 'service',
+    position: { x: 0, y: 0 },
+  })
+  await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+    credentials: { baseUrl: 'https://acme.atlassian.net', accountEmail: 'd@a.io', apiToken: 't' },
+  })
+  const pipeline = await call<{ id: string }>('POST', `/workspaces/${ws}/pipelines`, {
+    name: 'Feature intake',
+    agentKinds: ['architect'],
+  })
+  const schedule = await call('POST', `/workspaces/${ws}/recurring-pipelines`, {
+    frameId: frame.body.id,
+    pipelineId: pipeline.body.id,
+    name: 'Tracker triggers',
+    onDemand: true,
+    issueIntake: {
+      source: 'jira',
+      board: { jiraProjectKey: 'PROJ' },
+      predicates,
+      dispatch: 'per-ticket',
+    },
+  })
+  expect(schedule.status).toBe(201)
+  const minted = await call<{ secret: string }>(
+    'POST',
+    `/workspaces/${ws}/task-sources/jira/webhook`,
+    {},
+  )
+  return { app, ws, frameId: frame.body.id, secret: minted.body.secret }
+}
+
+/**
  * PER-TICKET dispatch: the second mode a pushed issue event can take (D8) — the ticket itself
  * becomes a task and a run, rather than firing a schedule that drains the board.
  *
@@ -450,6 +497,9 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
         title: 'Add bulk export',
         labels: ['accepted'],
         issueType: null,
+        // Per-ticket dispatch checks the board scope, because nothing downstream will: there is no
+        // vendor search to re-confine the work the way the queue mode's `bug-intake` step has.
+        board: 'PROJ',
         url: null,
       }
 
@@ -477,6 +527,59 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
       const afterSnap = await call<WorkspaceSnapshot>('GET', `/workspaces/${ws}`)
       const stillOne = afterSnap.body.blocks.find((b) => b.id === row!.linkedBlockId)
       expect(stillOne?.executionId).toBe(dispatched?.executionId)
+    })
+
+    it('WITHHOLDS a per-ticket dispatch the delivery does not qualify for', async () => {
+      // The queue mode can afford to fire on a maybe: its run re-checks every predicate against the
+      // vendor and completes as a no-op when nothing matches. Per-ticket has no such authority
+      // behind it, so a delivery that is out of scope, or that cannot answer a configured
+      // predicate, must not become a block and an agent run.
+      const app = await perTicketWorkspace(harness, { labels: ['accepted'] })
+      const base = {
+        kind: 'issue',
+        source: 'jira',
+        action: 'created',
+        title: 'Add bulk export',
+        labels: ['accepted'],
+        issueType: null,
+        board: 'PROJ',
+        url: null,
+      }
+
+      // Another project on the same connection. One Jira connection spans every project the
+      // credential can see, so without the board check this ticket runs under a schedule that was
+      // explicitly scoped away from it.
+      const offScope = await deliver(app.app, app.ws, app.secret, {
+        ...base,
+        externalId: 'OTHER-1',
+        board: 'OTHER',
+      })
+      expect(offScope.status).toBe(202)
+
+      // The label predicate is what "already triaged" MEANS for this schedule, and this delivery
+      // does not carry labels at all. Firing on it would dispatch an untriaged ticket (the exact
+      // thing the mode exists to avoid), so it is withheld rather than assumed.
+      const unlabelled = await deliver(app.app, app.ws, app.secret, {
+        ...base,
+        externalId: 'PROJ-777',
+        labels: [],
+      })
+      expect(unlabelled.status).toBe(202)
+
+      // Both are acked (a webhook consumer's only lever is retry, and neither is a failure), and
+      // neither produced a task or a run.
+      const tasks = await app.app.call<SourceTask[]>('GET', `/workspaces/${app.ws}/tasks`)
+      expect(tasks.body.filter((t) => t.linkedBlockId)).toHaveLength(0)
+
+      // The same schedule still dispatches a delivery that DOES qualify, so the guard is a
+      // predicate rather than an outage.
+      const qualifying = await deliver(app.app, app.ws, app.secret, {
+        ...base,
+        externalId: 'PROJ-778',
+      })
+      expect(qualifying.status).toBe(202)
+      const after = await app.app.call<SourceTask[]>('GET', `/workspaces/${app.ws}/tasks`)
+      expect(after.body.find((t) => t.externalId === 'PROJ-778')?.linkedBlockId).toBeTruthy()
     })
 
     it('refuses a per-ticket schedule that could also fire on a cadence', async () => {

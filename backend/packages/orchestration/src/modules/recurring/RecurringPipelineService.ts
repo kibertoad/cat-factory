@@ -32,13 +32,13 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import type { IssueIntakeConfig } from '@cat-factory/contracts'
-import { issueEventMatchesIntake, type TaskConnectionService } from '@cat-factory/integrations'
+import { judgeIssueEventForIntake, type TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
 } from '../pipelines/pipelineShape.js'
-import { assertValidIssueIntake, dispatchOf } from './issueIntake.logic.js'
+import { assertValidIssueIntake, dispatchAdmits, dispatchOf } from './issueIntake.logic.js'
 import { computeNextRun } from './schedule.logic.js'
 
 export interface RecurringPipelineServiceDependencies {
@@ -490,20 +490,31 @@ export class RecurringPipelineService {
    * A tracker pushed an issue event: fire every ENABLED schedule in the workspace whose
    * issue-intake configuration that event plausibly qualifies for. Returns how many started.
    *
-   * This is the whole of push-driven intake (D3 of `docs/initiatives/tracker-webhook-intake.md`).
-   * It imports nothing and links nothing — the fired run's `bug-intake` step does all of that
-   * through the unchanged `BugIntakeService`, so there is exactly ONE intake implementation and a
-   * pushed pickup is byte-for-byte a cadence pickup that simply happened sooner. Consequently the
-   * run may legitimately pick a DIFFERENT, older issue than the one that triggered it: intake is
-   * oldest-first fair queueing, and the webhook's job is to drain the queue promptly, not reorder
-   * it.
+   * This is the whole of push-driven intake (D3 + D8 of
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`), and what a qualifying event DOES depends on the
+   * schedule's dispatch mode:
    *
-   * Deliberately NOT forced. `force` is the human run-now lever — it throws on overlap and bypasses
-   * the on-demand guard — and a webhook has no human present to unlock a personal credential, which
-   * is exactly the situation the unattended-fire guards exist for. So an on-demand schedule is never
-   * webhook-fired, an individual-usage model still refuses, and a burst of deliveries cannot start a
-   * second run over one that is already running or parked (`fire` returns false and leaves
-   * `nextRunAt` for the sweeper).
+   *  - **`queue`** (the default, and every pre-existing schedule) imports nothing and links
+   *    nothing: {@link fire} runs the schedule's reused block and the `bug-intake` step does all of
+   *    it through the unchanged `BugIntakeService`, so there is exactly ONE intake implementation
+   *    and a pushed pickup is byte-for-byte a cadence pickup that happened sooner. The run may
+   *    legitimately pick a DIFFERENT, older issue than the one that triggered it: intake is
+   *    oldest-first fair queueing, and the webhook's job is to drain the queue promptly, not
+   *    reorder it.
+   *  - **`per-ticket`** dispatches the pushed ticket itself ({@link firePerTicket}), which DOES
+   *    import and link.
+   *
+   * Neither path is FORCED. `force` is the human run-now lever (it throws on overlap and bypasses
+   * the on-demand guard) and a webhook has no human present to unlock a personal credential, which
+   * is exactly the situation the unattended-fire guards exist for. So a burst of deliveries cannot
+   * start a second run over one already running or parked (`fire` returns false and leaves
+   * `nextRunAt` for the sweeper), and an individual-usage model still refuses on BOTH paths.
+   *
+   * The on-demand guard reads differently per mode, and deliberately so. `fire` refuses an
+   * on-demand schedule outright, so a queue schedule is never webhook-fired unattended. A
+   * per-ticket schedule is REQUIRED to be on-demand (it has no cadence to be driven by), so
+   * `firePerTicket` does not consult that guard and applies the individual-usage check itself,
+   * against the block it just created rather than a reused one.
    *
    * ONE schedule read for the workspace, filtered in memory — never a point-read per schedule.
    */
@@ -513,13 +524,34 @@ export class RecurringPipelineService {
     let fired = 0
     for (const schedule of schedules) {
       if (!schedule.enabled || !schedule.issueIntake) continue
-      if (!issueEventMatchesIntake(schedule.issueIntake, event)) continue
+      const dispatch = dispatchOf(schedule.issueIntake)
+      const verdict = judgeIssueEventForIntake(schedule.issueIntake, event)
+      if (!dispatchAdmits(verdict, dispatch)) {
+        // A withheld PER-TICKET dispatch is REPORTED, never merely skipped. A per-ticket schedule
+        // is on-demand, so no cadence sweep will pick the ticket up later: "the delivery could not
+        // confirm the labels you scoped on" and "no delivery ever arrived" are opposite facts with
+        // the same silence, and only this line tells them apart. A `miss` needs no line: that is
+        // the predicate doing its job on an unrelated issue, which is most of the traffic.
+        if (dispatch === 'per-ticket' && verdict.outcome === 'unconfirmed') {
+          this.log.warn(
+            'per-ticket dispatch withheld: the delivery could not confirm a predicate',
+            {
+              workspaceId,
+              scheduleId: schedule.id,
+              source: event.source,
+              externalId: event.externalId,
+              unconfirmed: verdict.predicates.join(','),
+            },
+          )
+        }
+        continue
+      }
       // Best-effort per schedule: one schedule whose pipeline fails to start (a disconnected
       // source, a missing model) must not stop the others — the same isolation `runDue` gets from
       // `fire`'s own internal error handling, extended to the errors it deliberately rethrows.
       try {
         const started =
-          dispatchOf(schedule.issueIntake) === 'per-ticket'
+          dispatch === 'per-ticket'
             ? await this.firePerTicket(workspaceId, schedule, event, now)
             : await this.fire(workspaceId, schedule, { now })
         if (started) fired++
@@ -556,10 +588,15 @@ export class RecurringPipelineService {
    *
    * Three properties are load-bearing:
    *
-   *  - **Idempotency is `createTaskFromIssue`'s existing refusal**, not a new marker. An issue
-   *    carries a single `linkedBlockId`, so a redelivery (or an overlapping delivery of an `updated`
-   *    event) hits the same `ConflictError` a second manual create would, and is read here as
-   *    "already dispatched". A claim table would buy nothing the link already guarantees.
+   *  - **Idempotency is the issue's existing single `linkedBlockId`**, not a new marker. A
+   *    redelivery (or the `updated` event that follows a `created` one) finds the issue already
+   *    linked, and `adoptIssueAsTask` reports that as `null`. The link already guarantees what a
+   *    claim table would have bought. It is read off the row the import returns rather than by
+   *    catching `createTaskFromIssue`'s conflict, because that refusal is PROSE: matching it would
+   *    start double-dispatching the day someone rewords the message. A genuine RACE (two deliveries
+   *    interleaving between that read and the create) still lands on the conflict and propagates,
+   *    which is correct: the caller's per-schedule isolation logs it and the winner has already
+   *    dispatched the ticket.
    *  - **The unattended-fire guard is the SAME one `fire` applies.** A webhook has no human present
    *    to unlock a personal credential, so an individual-usage model must refuse here too — checked
    *    against the CREATED block, which is the block that will actually run, rather than the

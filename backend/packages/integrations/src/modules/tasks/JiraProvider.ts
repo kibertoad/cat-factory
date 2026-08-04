@@ -75,7 +75,7 @@ export class JiraProvider implements TaskSourceProvider {
   /**
    * Inbound webhook capability (verify + parse), so a jira delivery can drive intake and
    * ticket replies without waiting for the next polling sweep. See
-   * `docs/initiatives/tracker-webhook-intake.md`.
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   readonly webhook = jiraWebhookAdapter
   readonly descriptor = JIRA_DESCRIPTOR

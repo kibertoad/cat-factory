@@ -13,4 +13,5 @@ and starts the pipeline on it. Absent means `queue`, so existing schedules are u
 
 `per-ticket` requires an on-demand schedule and refuses a `bug-intake` pipeline, because a cadence
 tick has no triggering ticket and an intake step would pick a different one. The SPA derives the
-mode from the pipeline rather than offering it, so the refused combination cannot be expressed.
+mode from the pipeline rather than offering it, and locks the on-demand switch while the tracker
+trigger is on, so neither refused combination can be expressed in the form.

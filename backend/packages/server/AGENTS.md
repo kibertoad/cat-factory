@@ -29,7 +29,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   acks fast, and hands off through a `gateways` seam. The tracker one is the odd shape: its
   workspace rides the PATH (a tracker delivery has no installation id to resolve one from) and its
   secret is per CONNECTION rather than per deployment. See
-  `docs/initiatives/tracker-webhook-intake.md`.
+  `backend/docs/adr/0032-tracker-webhook-intake.md`.
 - `agents/`: the **shared, runtime-neutral** agent-dispatch layer: `CompositeAgentExecutor`,
   `ContainerAgentExecutor`, `RunnerJobClient`, `ContainerRepoBootstrapper`, `ModelRouter`.
   Two collaborators split out of the executor to keep it inside its (ratcheting-down) size

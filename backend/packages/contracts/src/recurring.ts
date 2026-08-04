@@ -101,6 +101,25 @@ export const issueIntakeConfigSchema = v.object({
 })
 export type IssueIntakeConfig = v.InferOutput<typeof issueIntakeConfigSchema>
 
+/**
+ * Why a schedule's issue-intake configuration was refused, as `error.details.reason`.
+ *
+ * The backend does not localize prose, so a refusal that carried only its `message` would reach a
+ * non-English user as English. These are the machine-readable half the SPA maps to translated copy
+ * through an exhaustive `Record`, which is why the vocabulary lives HERE rather than as string
+ * literals at the throw site: both sides import the same union, and adding a member fails the SPA's
+ * typecheck until it has copy.
+ *
+ * Both members describe the same underlying rule (the two dispatch modes are exclusive) from the
+ * two directions an author can hit it, and they are kept apart because the fix differs: one is
+ * "make the schedule on-demand", the other is "pick a pipeline with no `bug-intake` step".
+ */
+export const issueIntakeRefusalReasonSchema = v.picklist([
+  'per_ticket_requires_on_demand',
+  'per_ticket_conflicts_with_bug_intake',
+])
+export type IssueIntakeRefusalReason = v.InferOutput<typeof issueIntakeRefusalReasonSchema>
+
 const hourOfDaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(23))
 const weekdaySchema = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(6))
 

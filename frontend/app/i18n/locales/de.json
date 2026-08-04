@@ -2586,6 +2586,7 @@
       "addFailedTitle": "Wiederkehrende Pipeline konnte nicht hinzugefügt werden",
       "onDemand": "On-Demand (nur manuell)",
       "onDemandHint": "Läuft nur, wenn Sie ihn auslösen, ohne Zeitplan. Da Sie jedes Mal anwesend sind, kann seine Aufgabe ein Modell mit individueller Nutzung verwenden.",
+      "onDemandLockedHint": "Fest aktiviert: Ein per Tracker ausgelöster Zeitplan wird von Webhooks gesteuert und hat daher keinen eigenen Rhythmus.",
       "intake": "Issue-Aufnahme",
       "intakeHint": "Jeder Lauf wählt ein passendes offenes Issue aus dem Tracker und bearbeitet es von Anfang bis Ende.",
       "intakeNoSources": "Verbinden Sie zuerst eine Task-Quelle, um Issues daraus zu ziehen.",
@@ -2601,7 +2602,9 @@
       "intakeLabels": "Labels",
       "intakeLabelsPlaceholder": "durch Komma getrennt",
       "intakeIssueType": "Issue-Typ",
-      "intakeInProgressLabel": "In-Bearbeitung-Label"
+      "intakeInProgressLabel": "In-Bearbeitung-Label",
+      "refusalPerTicketRequiresOnDemand": "Ein per Tracker ausgelöster Zeitplan muss bedarfsgesteuert sein. Ein Rhythmus-Tick enthält kein Ticket, das übergeben werden könnte.",
+      "refusalPerTicketConflictsWithBugIntake": "Diese Pipeline wählt ihr Issue selbst vom Board und kann daher nicht zusätzlich von einem eingehenden Ticket gesteuert werden. Wählen Sie eine Pipeline ohne Bug-Intake-Schritt."
     },
     "failure": {
       "containerFailedToStart": "Container konnte nicht gestartet werden",

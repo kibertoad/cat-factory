@@ -123,7 +123,8 @@ export {
   type TrackerWebhookOutcome,
   type TrackerWebhookServiceDependencies,
 } from './modules/tasks/TrackerWebhookService.js'
-export { issueEventMatchesIntake } from './modules/tasks/intakeMatch.logic.js'
+export { judgeIssueEventForIntake } from './modules/tasks/intakeMatch.logic.js'
+export type { IntakeMatchVerdict, IntakePredicateName } from './modules/tasks/intakeMatch.logic.js'
 export {
   githubIssuesWebhookAdapter,
   jiraWebhookAdapter,

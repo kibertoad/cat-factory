@@ -332,6 +332,7 @@
       "addFailedTitle": "No se pudo añadir la pipeline recurrente",
       "onDemand": "Bajo demanda (solo manual)",
       "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual.",
+      "onDemandLockedHint": "Fijado: una programación activada por el rastreador se controla mediante webhooks, así que no tiene cadencia propia.",
       "intake": "Admisión de incidencias",
       "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
@@ -347,7 +348,9 @@
       "intakeLabels": "Etiquetas",
       "intakeLabelsPlaceholder": "separadas por comas",
       "intakeIssueType": "Tipo de incidencia",
-      "intakeInProgressLabel": "Etiqueta de en progreso"
+      "intakeInProgressLabel": "Etiqueta de en progreso",
+      "refusalPerTicketRequiresOnDemand": "Una programación activada por el rastreador debe ser bajo demanda. Un ciclo de cadencia no lleva ningún ticket que despachar.",
+      "refusalPerTicketConflictsWithBugIntake": "Esta canalización elige su propia incidencia del tablero, así que no puede además activarse con un ticket entrante. Elija una canalización sin paso de admisión de errores."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",

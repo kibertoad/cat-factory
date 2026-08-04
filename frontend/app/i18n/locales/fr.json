@@ -332,6 +332,7 @@
       "addFailedTitle": "Impossible d’ajouter la pipeline récurrente",
       "onDemand": "À la demande (manuel uniquement)",
       "onDemandHint": "Ne s'exécute que lorsque vous le déclenchez, sans planification. Comme vous êtes présent à chaque fois, sa tâche peut utiliser un modèle d'abonnement à usage individuel.",
+      "onDemandLockedHint": "Verrouillé : une planification déclenchée par le traqueur est pilotée par des webhooks, elle n'a donc pas de cadence propre.",
       "intake": "Prise en charge des tickets",
       "intakeHint": "Chaque exécution sélectionne un ticket ouvert correspondant dans le suivi et le traite de bout en bout.",
       "intakeNoSources": "Connectez d'abord une source de tâches pour en extraire des tickets.",
@@ -347,7 +348,9 @@
       "intakeLabels": "Étiquettes",
       "intakeLabelsPlaceholder": "séparées par des virgules",
       "intakeIssueType": "Type de ticket",
-      "intakeInProgressLabel": "Étiquette en cours"
+      "intakeInProgressLabel": "Étiquette en cours",
+      "refusalPerTicketRequiresOnDemand": "Une planification déclenchée par le traqueur doit être à la demande. Un cycle de cadence ne porte aucun ticket à répartir.",
+      "refusalPerTicketConflictsWithBugIntake": "Ce pipeline choisit lui-même son ticket sur le tableau : il ne peut pas être piloté en plus par un ticket entrant. Choisissez un pipeline sans étape de collecte de bogues."
     },
     "failure": {
       "containerFailedToStart": "Le conteneur n’a pas pu démarrer",

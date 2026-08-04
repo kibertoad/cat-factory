@@ -1,7 +1,8 @@
+import type { IntakeMatchVerdict } from '@cat-factory/integrations'
 import type { IssueIntakeConfig } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { assertValidIssueIntake, dispatchOf } from './issueIntake.logic.js'
+import { assertValidIssueIntake, dispatchAdmits, dispatchOf } from './issueIntake.logic.js'
 
 function config(overrides: Partial<IssueIntakeConfig> = {}): IssueIntakeConfig {
   return {
@@ -20,6 +21,27 @@ describe('dispatchOf', () => {
   it('reads an explicit mode verbatim', () => {
     expect(dispatchOf(config({ dispatch: 'queue' }))).toBe('queue')
     expect(dispatchOf(config({ dispatch: 'per-ticket' }))).toBe('per-ticket')
+  })
+})
+
+describe('dispatchAdmits', () => {
+  const match: IntakeMatchVerdict = { outcome: 'match' }
+  const miss: IntakeMatchVerdict = { outcome: 'miss', predicate: 'labels' }
+  const unconfirmed: IntakeMatchVerdict = { outcome: 'unconfirmed', predicates: ['labels'] }
+
+  it('acts on a match and never on a miss, whichever the mode', () => {
+    for (const dispatch of ['queue', 'per-ticket'] as const) {
+      expect(dispatchAdmits(match, dispatch)).toBe(true)
+      expect(dispatchAdmits(miss, dispatch)).toBe(false)
+    }
+  })
+
+  it('splits on an UNCONFIRMED verdict, because the cost of being wrong differs', () => {
+    // `queue` fires: the run's vendor search re-checks every predicate, so the worst case is one
+    // no-op run. `per-ticket` withholds: nothing downstream re-checks, so firing would mean a real
+    // block and a real agent run on a ticket whose triage labels were never confirmed.
+    expect(dispatchAdmits(unconfirmed, 'queue')).toBe(true)
+    expect(dispatchAdmits(unconfirmed, 'per-ticket')).toBe(false)
   })
 })
 

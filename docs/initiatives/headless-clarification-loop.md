@@ -432,7 +432,7 @@ so the next driver replay retries it. Recorded here rather than papered over wit
 ## Slice 2b (replies back in) DELIVERED BY THE TRACKER-WEBHOOK INITIATIVE
 
 Slice 2b landed as part of
-[`tracker-webhook-intake.md`](./tracker-webhook-intake.md), which is its durable source of truth
+[`0032-tracker-webhook-intake.md`](./tracker-webhook-intake.md), which is its durable source of truth
 (its D4–D7 supersede the notes here). It was folded into that initiative rather than built
 standalone because the two share their entire transport: 2b needs a verified, parsed inbound
 tracker event keyed `(source, externalId)`, and that ingestion seam is exactly what push-driven

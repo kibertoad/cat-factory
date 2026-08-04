@@ -76,7 +76,7 @@ export interface IssueWritebackProvider {
    * the block's linked tracker issue(s) so the reporter sees the ask where they filed the
    * bug. This is an ECHO only: answers to a CLARITY gate still arrive in-app (the clarity
    * window). The tracker-side reply path built in
-   * `docs/initiatives/tracker-webhook-intake.md` is scoped to the REQUIREMENTS review — its
+   * `backend/docs/adr/0032-tracker-webhook-intake.md` is scoped to the REQUIREMENTS review — its
    * findings carry the stable ids a reply names ({@link postReviewQuestions}); a clarity
    * question has none, so a comment answering one is ignored rather than guessed at.
    * Best-effort like the other hooks (a tracker outage never
@@ -116,7 +116,7 @@ export interface IssueWritebackProvider {
    * findings has no way to learn that the third is still holding the run, and a reply that named
    * an unknown id or landed after the review settled looks identical to one that worked. So the
    * ack always states the disposition — what was applied, what is still outstanding, and what was
-   * rejected and why (see D6 of `docs/initiatives/tracker-webhook-intake.md`).
+   * rejected and why (see D6 of `backend/docs/adr/0032-tracker-webhook-intake.md`).
    *
    * Targeted at ONE issue (`source`/`externalId`) rather than the block's whole linked set: the
    * reply came from a specific thread, and broadcasting the ack to sibling issues would answer

@@ -2586,6 +2586,7 @@
       "addFailedTitle": "Impossibile aggiungere la pipeline ricorrente",
       "onDemand": "Su richiesta (solo manuale)",
       "onDemandHint": "Viene eseguita solo quando la attivi tu, senza pianificazione. Poiché sei presente ogni volta, la sua attività può usare un modello con abbonamento a uso individuale.",
+      "onDemandLockedHint": "Bloccato: una pianificazione attivata dal tracker è guidata dai webhook, quindi non ha una cadenza propria.",
       "intake": "Acquisizione issue",
       "intakeHint": "Ogni esecuzione seleziona una issue aperta corrispondente dal tracker e la porta a termine dall'inizio alla fine.",
       "intakeNoSources": "Connetti prima una sorgente di attività per estrarne le issue.",
@@ -2601,7 +2602,9 @@
       "intakeLabels": "Etichette",
       "intakeLabelsPlaceholder": "separate da virgole",
       "intakeIssueType": "Tipo di issue",
-      "intakeInProgressLabel": "Etichetta in corso"
+      "intakeInProgressLabel": "Etichetta in corso",
+      "refusalPerTicketRequiresOnDemand": "Una pianificazione attivata dal tracker deve essere su richiesta. Un ciclo a cadenza non porta con sé alcun ticket da assegnare.",
+      "refusalPerTicketConflictsWithBugIntake": "Questa pipeline sceglie da sola il proprio problema dalla bacheca, quindi non può essere guidata anche da un ticket in arrivo. Scegli una pipeline senza passaggio di raccolta bug."
     },
     "failure": {
       "containerFailedToStart": "Avvio del container fallito",

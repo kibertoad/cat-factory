@@ -7,6 +7,9 @@
 // where that pipeline files its ticket) and saved alongside.
 import type { IssueIntakeConfig, Recurrence, ScheduleTemplate } from '~/types/recurring'
 import type { TaskSourceKind } from '~/types/domain'
+import type { IssueIntakeRefusalReason } from '@cat-factory/contracts'
+import { BUILTIN_TASK_SOURCE_KINDS } from '@cat-factory/contracts'
+import { apiErrorReason } from '~/composables/api/errors'
 import { pipelineAllowedForSchedule } from '~/utils/pipeline'
 
 const ui = useUiStore()
@@ -17,7 +20,7 @@ const tracker = useTrackerStore()
 const tasks = useTasksStore()
 const toast = useToast()
 const access = useWorkspaceAccess()
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const open = computed({
   get: () => ui.addRecurringFrameId !== null,
@@ -70,12 +73,47 @@ function setTrackerTrigger(on: boolean): void {
   if (on) onDemand.value = true
 }
 
-/** Whether the picked source is one this build ships (and so has a vendor-specific board field). */
-const intakeSourceIsBuiltin = computed(
-  () =>
-    intakeSource.value === 'jira' ||
-    intakeSource.value === 'linear' ||
-    intakeSource.value === 'github',
+/**
+ * On-demand is FORCED, not merely defaulted, while the tracker trigger is on: the server refuses a
+ * per-ticket schedule that could also fire on a cadence, and setting the switch once at opt-in time
+ * left the refusal reachable by turning it back off afterwards. The switch is disabled rather than
+ * hidden, so the state it is locked into stays visible and the reason is stated beside it.
+ */
+const onDemandLocked = computed(() => trackerTrigger.value)
+
+/**
+ * Translated copy for a refused intake configuration, keyed off the backend's machine-readable
+ * `details.reason`.
+ *
+ * The form makes both refusals unrepresentable, so this is the SECOND line rather than the first:
+ * a stale form whose pipeline gained a `bug-intake` step since it opened, or an API client driving
+ * the same endpoint, still reaches them, and the backend does not localize its prose. An EXHAUSTIVE
+ * `Record` over the contracts union is the drift guard: a new refusal reason fails this typecheck
+ * until it has copy, which a runtime `t()` lookup could not catch.
+ */
+const INTAKE_REFUSAL_KEYS: Record<IssueIntakeRefusalReason, string> = {
+  per_ticket_requires_on_demand: 'board.recurring.refusalPerTicketRequiresOnDemand',
+  per_ticket_conflicts_with_bug_intake: 'board.recurring.refusalPerTicketConflictsWithBugIntake',
+}
+
+function intakeRefusalCopy(error: unknown): string | null {
+  const reason = apiErrorReason(error)
+  if (!reason || !(reason in INTAKE_REFUSAL_KEYS)) return null
+  // `te` before `t`, the `usePipelineErrorToast` idiom: a locale missing the key falls through to
+  // the backend's prose rather than rendering the key path at the user.
+  const key = INTAKE_REFUSAL_KEYS[reason as IssueIntakeRefusalReason]
+  return te(key) ? t(key) : null
+}
+
+/**
+ * Whether the picked source is one this build ships (and so has a vendor-specific board field).
+ *
+ * Read from the contracts constant rather than re-listing the three ids: the vocabulary has one
+ * owner, and a fourth built-in source would otherwise render the opaque board field here while
+ * every other surface offered its vendor one.
+ */
+const intakeSourceIsBuiltin = computed(() =>
+  (BUILTIN_TASK_SOURCE_KINDS as readonly string[]).includes(intakeSource.value ?? ''),
 )
 const intakeTitleFragment = ref('')
 const intakeLabels = ref('') // comma-separated in the UI, sent as an array
@@ -290,7 +328,7 @@ async function add() {
   } catch (e) {
     toast.add({
       title: t('board.recurring.addFailedTitle'),
-      description: e instanceof Error ? e.message : String(e),
+      description: intakeRefusalCopy(e) ?? (e instanceof Error ? e.message : String(e)),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -344,10 +382,16 @@ async function add() {
         </UFormField>
 
         <div class="flex items-start gap-2 rounded-lg border border-slate-800 p-3">
-          <USwitch v-model="onDemand" size="sm" class="mt-0.5" />
+          <USwitch v-model="onDemand" :disabled="onDemandLocked" size="sm" class="mt-0.5" />
           <div class="space-y-0.5">
             <p class="text-xs font-medium text-slate-200">{{ t('board.recurring.onDemand') }}</p>
-            <p class="text-[11px] text-slate-500">{{ t('board.recurring.onDemandHint') }}</p>
+            <p class="text-[11px] text-slate-500">
+              {{
+                onDemandLocked
+                  ? t('board.recurring.onDemandLockedHint')
+                  : t('board.recurring.onDemandHint')
+              }}
+            </p>
           </div>
         </div>
 

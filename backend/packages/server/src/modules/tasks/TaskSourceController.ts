@@ -202,7 +202,7 @@ export function taskSourceController(): Hono<AppEnv> {
   //
   // The delivery endpoint is per (workspace, source) and authenticated by a per-connection secret
   // stored in the connection's sealed credential bag — so this surface is just mint / read / clear
-  // and needs no table of its own. See `docs/initiatives/tracker-webhook-intake.md`.
+  // and needs no table of its own. See `backend/docs/adr/0032-tracker-webhook-intake.md`.
 
   // Where deliveries go and whether a secret is stored. Never echoes the secret back.
   buildHonoRoute(app, getTaskSourceWebhookContract, async (c) => {

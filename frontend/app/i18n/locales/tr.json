@@ -332,6 +332,7 @@
       "addFailedTitle": "Yinelenen pipeline eklenemedi",
       "onDemand": "İstek üzerine (yalnızca manuel)",
       "onDemandHint": "Yalnızca siz tetiklediğinizde çalışır, zamanlama yoktur. Her seferinde siz hazır bulunduğunuz için görevi bireysel kullanımlı bir abonelik modeli kullanabilir.",
+      "onDemandLockedHint": "Sabitlendi: izleyici tetiklemeli bir zamanlama webhook’larla sürülür, bu yüzden kendine ait bir döngüsü yoktur.",
       "intake": "Sorun alımı",
       "intakeHint": "Her çalıştırma, izleyiciden eşleşen açık bir sorunu seçer ve baştan sona işler.",
       "intakeNoSources": "Sorunları çekmek için önce bir görev kaynağı bağlayın.",
@@ -347,7 +348,9 @@
       "intakeLabels": "Etiketler",
       "intakeLabelsPlaceholder": "virgülle ayrılmış",
       "intakeIssueType": "Sorun türü",
-      "intakeInProgressLabel": "Devam ediyor etiketi"
+      "intakeInProgressLabel": "Devam ediyor etiketi",
+      "refusalPerTicketRequiresOnDemand": "İzleyici tetiklemeli bir zamanlama istek üzerine olmalıdır. Döngü tikinin gönderilecek bir kaydı yoktur.",
+      "refusalPerTicketConflictsWithBugIntake": "Bu işlem hattı kendi kaydını panodan seçer, bu nedenle ayrıca gelen bir kayıtla sürülemez. Bug-intake adımı olmayan bir işlem hattı seçin."
     },
     "failure": {
       "containerFailedToStart": "Konteyner başlatılamadı",

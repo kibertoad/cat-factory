@@ -332,6 +332,7 @@
       "addFailedTitle": "לא ניתן היה להוסיף צינור מחזורי",
       "onDemand": "לפי דרישה (ידני בלבד)",
       "onDemandHint": "רץ רק כשאתה מפעיל אותו, ללא תזמון. מכיוון שאתה נוכח בכל פעם, המשימה יכולה להשתמש במודל מנוי לשימוש אישי.",
+      "onDemandLockedHint": "נעול: תזמון המופעל ממערכת המעקב מונע על ידי וובהוקים, ולכן אין לו קצב משלו.",
       "intake": "קליטת תקלות",
       "intakeHint": "כל הרצה בוחרת תקלה פתוחה תואמת אחת מהמעקב ומטפלת בה מקצה לקצה.",
       "intakeNoSources": "חבר תחילה מקור משימות כדי למשוך ממנו תקלות.",
@@ -347,7 +348,9 @@
       "intakeLabels": "תוויות",
       "intakeLabelsPlaceholder": "מופרדות בפסיקים",
       "intakeIssueType": "סוג תקלה",
-      "intakeInProgressLabel": "תווית בתהליך"
+      "intakeInProgressLabel": "תווית בתהליך",
+      "refusalPerTicketRequiresOnDemand": "תזמון המופעל ממערכת המעקב חייב להיות לפי דרישה. פעימת קצב אינה נושאת כרטיס לשיגור.",
+      "refusalPerTicketConflictsWithBugIntake": "צינור זה בוחר בעצמו את הנושא מהלוח, ולכן אינו יכול להיות מונע גם מכרטיס נכנס. בחרו צינור ללא שלב bug-intake."
     },
     "failure": {
       "containerFailedToStart": "מכל הקונטיינר נכשל בהפעלה",
