@@ -1083,7 +1083,7 @@ export function executionToDetail(instance: ExecutionInstance): string {
     steps: instance.steps.map((s) => ({ ...s, runId: undefined })),
     currentStep: instance.currentStep,
     initiatedBy: instance.initiatedBy ?? null,
-    // Only persisted for a NON-`ui` run — `ui` is the read-time default, so storing it would put
+    // Only persisted for a NON-`ui` run, since `ui` is the read-time default and storing it would put
     // a redundant key on every ordinary run's detail JSON. Written as "anything but the default"
     // rather than as an allow-list of the origins that existed when this was authored: an
     // allow-list here drops a newly added origin on the floor at write time, and the run then

@@ -1,6 +1,6 @@
-import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { loadCode } from './coverageScan.js'
 
 // ---------------------------------------------------------------------------
 // Every path that STARTS a run has to decide whether a human is watching it in the app, because
@@ -24,6 +24,10 @@ import { describe, expect, it } from 'vitest'
 // It scans BOTH packages, because half the starters are HTTP controllers and half are engine
 // services. `@cat-factory/server` depends on `@cat-factory/orchestration`, so reading across from
 // here respects the layering; the reverse would not.
+//
+// Every read goes through `coverageScan`, which strips comments first. That is load-bearing, not
+// tidiness: `firePerTicket` documents its own `intakeOrigin: 'tracker'` in JSDoc, so a text match
+// over the raw file stayed green with the value deleted from the call site below it.
 // ---------------------------------------------------------------------------
 
 const PACKAGES = join(import.meta.dirname, '..', '..')
@@ -87,27 +91,14 @@ const IN_APP: Record<string, string> = {
     'blueprint-only pipeline, which has no requirements review and therefore no park to report.',
 }
 
-/** Every `.ts` under a root, recursively, prefixed with its package name. */
-function sourceFiles(root: string, pkg: string, dir = root, prefix = ''): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-    if (entry.isDirectory()) return sourceFiles(root, pkg, join(dir, entry.name), rel)
-    return entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts') ? [`${pkg}:${rel}`] : []
-  })
-}
-
-function read(key: string): string {
-  const [pkg, rel] = key.split(':') as [string, string]
-  return readFileSync(join(ROOTS[pkg]!, rel), 'utf8')
-}
-
 describe('run-start paths classify their intake origin', () => {
-  const starters = Object.entries(ROOTS)
-    .flatMap(([pkg, root]) => sourceFiles(root, pkg))
+  const code = loadCode(ROOTS)
+  const starters = [...code.entries()]
     // `ExecutionService` is the engine's own re-entry into the lifecycle, not an intake surface:
     // it forwards whatever its caller decided, which is precisely what the callers above decide.
-    .filter((key) => !key.endsWith('modules/execution/ExecutionService.ts'))
-    .filter((key) => START_CALLS.some((call) => read(key).includes(call)))
+    .filter(([key]) => !key.endsWith('modules/execution/ExecutionService.ts'))
+    .filter(([, source]) => START_CALLS.some((call) => source.includes(call)))
+    .map(([key]) => key)
 
   it('finds the start paths at all (the scan itself must not silently match nothing)', () => {
     // A rename of either spelling would otherwise turn every assertion below vacuous.
@@ -123,7 +114,7 @@ describe('run-start paths classify their intake origin', () => {
     for (const [key, { origins, why }] of Object.entries(UNATTENDED)) {
       expect(starters, `${key} no longer starts a run`).toContain(key)
       expect(why.length, `${key} needs a real reason, not a placeholder`).toBeGreaterThan(40)
-      const source = read(key)
+      const source = code.get(key)!
       for (const origin of origins) {
         expect(source, `${key} must pass intakeOrigin: ${origin}`).toContain(
           `intakeOrigin: ${origin}`,
@@ -137,8 +128,9 @@ describe('run-start paths classify their intake origin', () => {
       expect(starters, `${key} no longer starts a run`).toContain(key)
       expect(reason.length, `${key} needs a real reason, not a placeholder`).toBeGreaterThan(60)
       // An in-app path taking the default must not ALSO set an origin: that would mean the
-      // classification here and the code disagree, and the code would win silently.
-      expect(read(key), `${key} is classified in-app but sets an origin`).not.toContain(
+      // classification here and the code disagree, and the code would win silently. Comments are
+      // already stripped, so a file is free to say at its call site WHY it takes the default.
+      expect(code.get(key), `${key} is classified in-app but sets an origin`).not.toContain(
         'intakeOrigin:',
       )
     }

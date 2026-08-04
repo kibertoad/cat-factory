@@ -316,7 +316,7 @@ describe('RecurringPipelineService bug-intake intake-config validation', () => {
 // ---------------------------------------------------------------------------
 // Per-ticket webhook dispatch: the run's INTAKE ORIGIN.
 //
-// A ticket-dispatched run has no human in the app — the requester is on the ticket. That fact is
+// A ticket-dispatched run has no human in the app: the requester is on the ticket. That fact is
 // carried by `intakeOrigin`, and it is the only thing standing between a parked requirements
 // review and a clarification loop that asks nobody: the writeback gate reads it, and the value it
 // degrades to when unset (`ui`) claims an overseer who is not there. Nothing downstream re-derives
@@ -338,6 +338,8 @@ describe('RecurringPipelineService per-ticket dispatch', () => {
     url: null,
   }
 
+  // Typed, not cast: the `issueIntake` shape is what decides which dispatch branch runs, so a
+  // contract change there has to surface here rather than be waved through by an `as unknown`.
   function perTicketSchedule(): PipelineSchedule {
     return {
       ...onDemandSchedule(),
@@ -347,7 +349,7 @@ describe('RecurringPipelineService per-ticket dispatch', () => {
         predicates: {},
         dispatch: 'per-ticket',
       },
-    } as unknown as PipelineSchedule
+    }
   }
 
   function makePerTicketService() {
@@ -396,7 +398,7 @@ describe('RecurringPipelineService per-ticket dispatch', () => {
     expect(start.mock.calls[0]![3]).toMatchObject({ intakeOrigin: 'tracker' })
   })
 
-  it('keeps `origin: manual` — the launch-availability question, which is a different one', async () => {
+  it('keeps `origin: manual`, the launch-availability question, which is a different one', async () => {
     const { service, start } = makePerTicketService()
     await service.triggerForIssueEvent(WS, { ...ISSUE_EVENT })
     expect(start.mock.calls[0]![3]).toMatchObject({ origin: 'manual', initiatedBy: null })
@@ -409,7 +411,7 @@ describe('RecurringPipelineService per-ticket dispatch', () => {
 // `fire` serves three callers, and they do not agree about who is watching: the cadence sweeper
 // and the queue-drain push are unattended, run-now is a person pressing a button. All three go
 // through one private method, so the origin has to be threaded from the caller rather than
-// inferred inside it — and `schedule` is deliberately NOT classified headless, because a fire
+// inferred inside it, and `schedule` is deliberately NOT classified headless, because a fire
 // works the schedule's reused block whose ticket link moves on the next pass.
 // ---------------------------------------------------------------------------
 
@@ -457,13 +459,13 @@ describe('RecurringPipelineService schedule-fire intake origin', () => {
     return { service: new RecurringPipelineService(deps), start }
   }
 
-  it('fires a cadence schedule as SCHEDULE — nobody is watching a sweeper tick', async () => {
+  it('fires a cadence schedule as SCHEDULE: nobody is watching a sweeper tick', async () => {
     const { service, start } = makeFireService(cadenceSchedule())
     expect(await service.runDue(1000)).toMatchObject({ fired: 1 })
     expect(start.mock.calls[0]![3]).toMatchObject({ intakeOrigin: 'schedule', origin: 'recurring' })
   })
 
-  it('fires run-now as UI — a person pressed the button and is looking at the app', async () => {
+  it('fires run-now as UI: a person pressed the button and is looking at the app', async () => {
     // The same private `fire`, the opposite answer. Inferring this inside `fire` (from `force`,
     // say) would make the two indistinguishable to a reader of the call sites.
     const { service, start } = makeFireService(onDemandSchedule())

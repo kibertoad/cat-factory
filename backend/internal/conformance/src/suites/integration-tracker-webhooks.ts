@@ -521,7 +521,7 @@ function registerPerTicketDispatchTests(harness: ConformanceHarness): void {
       // real store: `intakeOrigin` rides the `agent_runs.detail` JSON, and the requirements-review
       // writeback is the only thing that will ever tell the requester their ticket is waiting on
       // them. Read back off the repository rather than the response, because the write side is
-      // where a facade could drop it — and the failure would be invisible, a run that simply looks
+      // where a facade could drop it, and the failure would be invisible: a run that simply looks
       // like somebody started it in the app.
       const run = await app.executionRepository().getByBlock(ws, row!.linkedBlockId!)
       expect(run?.intakeOrigin).toBe('tracker')

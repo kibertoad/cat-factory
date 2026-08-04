@@ -633,7 +633,7 @@ describe('ReviewGateController — headless question writeback', () => {
     expect(t.logger.warn).toHaveBeenCalled()
   })
 
-  it('echoes a ticket-dispatched park too — a webhook run has no overseer in the app', async () => {
+  it('echoes a ticket-dispatched park too: a webhook run has no overseer in the app', async () => {
     const t = headlessSetup({ intakeOrigin: 'tracker' })
     await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
     expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)

@@ -26,6 +26,13 @@ describe('isHeadlessIntake', () => {
     expect(isHeadlessIntake(origin as IntakeOrigin)).toBe(headless)
   })
 
+  it('treats an origin outside the vocabulary as not headless, not as undefined', () => {
+    // The value arrives off a run's persisted `detail` JSON, which outlives any member retired
+    // from the picklist. The bare `Record` lookup answers `undefined` there, which the declared
+    // `boolean` would hide until a caller wrote `=== false` and got a surprise.
+    expect(isHeadlessIntake('mailbox' as IntakeOrigin)).toBe(false)
+  })
+
   it('treats an absent origin as the in-app default, never as headless', () => {
     // Every legacy run predates the field. The safe reading is "no outbound writeback for a run
     // whose intake cannot be proven headless".

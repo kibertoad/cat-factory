@@ -559,7 +559,7 @@ export class RecurringPipelineService {
             : // `schedule`, the same as a cadence tick: the push only made the tick happen
               // sooner, and the run it starts is identical (ADR 0032). The queue mode's reused
               // block re-points its ticket link on every fire, so it is deliberately NOT
-              // classified headless — see `HEADLESS_INTAKE`.
+              // classified headless (see `HEADLESS_INTAKE`).
               await this.fire(workspaceId, schedule, { now, intakeOrigin: 'schedule' })
         if (started) fired++
       } catch (error) {

@@ -139,6 +139,14 @@ Two rules carry forward from that.
   flag: the flip alone would post the question and discard the answer, which is worse than the
   silence it replaces.
 
+**The one classification to revisit first is the initiative spawn.** `InitiativeLoopService`
+starts a child run unattended and takes the `ui` default, which is right only for as long as a
+spawned block carries no linked ticket: the writeback would resolve no issue and post nothing
+either way, and propagating the parent run's origin would cost a repository read per spawned item
+on the ticker path (the no-N+1 rule) to change nothing observable. That is a fact about how the
+breakdown mints blocks, not about the origin, so **giving initiative children a linked ticket
+means reclassifying this start path in the same change**, not afterwards.
+
 ### D3: Park notification out: SSE frames plus a webhook `NotificationChannel`
 
 A caller should not have to poll to learn its run parked. Both shapes ride existing seams:

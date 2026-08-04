@@ -7,7 +7,7 @@ import {
 
 // The scope boundary of the whole headless-clarification initiative lives in this one predicate:
 // a task started in the SPA must behave EXACTLY as it did before, so every case below whose
-// intake is not HEADLESS has to come back false — and every headless one, however it entered,
+// intake is not HEADLESS has to come back false, and every headless one, however it entered,
 // has to come back true.
 
 function item(over: Partial<RequirementReviewItem> = {}): RequirementReviewItem {
@@ -37,7 +37,7 @@ describe('shouldPostReviewQuestions', () => {
     expect(shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review())).toBe(true)
   })
 
-  it('posts for a ticket-dispatched run — the requester is on the ticket, not in the app', () => {
+  it('posts for a ticket-dispatched run: the requester is on the ticket, not in the app', () => {
     expect(shouldPostReviewQuestions({ intakeOrigin: 'tracker' }, review())).toBe(true)
   })
 

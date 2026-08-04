@@ -58,9 +58,16 @@ const HEADLESS_INTAKE: Record<IntakeOrigin, boolean> = {
  * Whether a run entered headlessly ({@link HEADLESS_INTAKE}). `undefined` is every legacy run
  * and degrades to `ui`, the safe reading: no outbound writeback for a run whose intake cannot
  * be proven headless.
+ *
+ * `=== true` rather than the bare lookup, which the type says is already a `boolean`. The value
+ * reaches here off a run's persisted `detail` JSON, and the picklist is a CLOSED vocabulary whose
+ * members outlive their retirement in stored rows: a run written under a member later dropped
+ * from the type indexes to `undefined` at runtime, and the declared `boolean` would be a lie the
+ * caller reads as "not headless" anyway. Saying so explicitly makes unrecognised and absent one
+ * answer on purpose rather than by luck.
  */
 export function isHeadlessIntake(origin: IntakeOrigin | undefined): boolean {
-  return origin != null && HEADLESS_INTAKE[origin]
+  return origin != null && HEADLESS_INTAKE[origin] === true
 }
 
 /**
@@ -102,7 +109,7 @@ export const runDiagnosticsSchema = v.object({
       /** Resolved model ref `provider:model` (e.g. `anthropic:claude-opus-4-8`); null if unresolved. */
       model: v.optional(v.nullable(v.string())),
       /**
-       * Which runner backend the step actually ran on — the datum that distinguishes a native
+       * Which runner backend the step actually ran on, the datum that distinguishes a native
        * host-process run from a sandboxed container: `local-native` | `local-container` |
        * `runner-pool` | `cloudflare-container`. Filled on the first poll (the transport reports
        * it); absent until then or on an older runtime.
@@ -124,9 +131,9 @@ export const runDiagnosticsSchema = v.object({
     }),
   ),
   /**
-   * The control-plane (orchestrator) host running the engine — NOT necessarily where the agent
+   * The control-plane (orchestrator) host running the engine, NOT necessarily where the agent
    * ran (a container step runs elsewhere; see `lastDispatch.executionBackend`). `platform` is the
-   * orchestrator's `process.platform` (e.g. `win32` pins a Windows local deployment — the class
+   * orchestrator's `process.platform` (e.g. `win32` pins a Windows local deployment, the class
    * of host that surfaced the native-Windows git-auth break). Best-effort.
    */
   host: v.optional(
