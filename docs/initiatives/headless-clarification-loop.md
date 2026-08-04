@@ -113,6 +113,40 @@ run's value forward, exactly like `initiatedBy`.
 
 Naming: `intakeOrigin`, not `origin`; `RunOrigin` is taken and means something else.
 
+**Amended after the tracker-webhook initiative landed** (ADR 0032). The vocabulary gained two
+members, `tracker` (a run a per-ticket intake schedule dispatched from a pushed ticket) and
+`schedule` (a cadence fire, or the queue-drain push that only makes the tick happen sooner). The
+writeback gate now asks the CLASSIFICATION (`isHeadlessIntake` in `@cat-factory/contracts`, a
+`Record` over the picklist so a new member has to answer it) rather than `=== 'public-api'`.
+
+The equality test was the actual defect, not a simplification that aged: per-ticket dispatch is
+headless by construction, its questions have exactly one place to go, and its reply channel was
+already ungated, so a ticket-driven trial parked and told nobody while the loop looked wired.
+
+Two rules carry forward from that.
+
+- **`ui` is a POSITIVE claim that a human is watching in the app**, never a catch-all for "nothing
+  said". Every unattended start path states its origin; only the in-app start may take the
+  default. The field has to stay optional for that one caller, so the rule cannot be a typecheck:
+  `intakeOrigin.coverage.spec.ts` classifies each start path instead, and a new one fails there
+  until someone answers it.
+- **The classification is not "was anyone present" but "is there a STABLE place to hold a
+  conversation."** That is why `schedule` is `false` despite being unattended: a fire works the
+  schedule's REUSED block, and queue mode's `BugIntakeService` replace-links each pick onto it, so
+  a question posted there loses its reply channel on the next fire (the reply resolves to no block
+  and is dropped). Making queue mode clarify on its ticket is a change to the LINKAGE (a per-run
+  link, or a block per pick, which is what per-ticket dispatch already is), never a flip of the
+  flag: the flip alone would post the question and discard the answer, which is worse than the
+  silence it replaces.
+
+**The one classification to revisit first is the initiative spawn.** `InitiativeLoopService`
+starts a child run unattended and takes the `ui` default, which is right only for as long as a
+spawned block carries no linked ticket: the writeback would resolve no issue and post nothing
+either way, and propagating the parent run's origin would cost a repository read per spawned item
+on the ticker path (the no-N+1 rule) to change nothing observable. That is a fact about how the
+breakdown mints blocks, not about the origin, so **giving initiative children a linked ticket
+means reclassifying this start path in the same change**, not afterwards.
+
 ### D3: Park notification out: SSE frames plus a webhook `NotificationChannel`
 
 A caller should not have to poll to learn its run parked. Both shapes ride existing seams:
@@ -403,7 +437,7 @@ registry the `headlessStartable` flag is computed against.
 | 2a.1 | `writebackQuestionsOnPark` setting + `trackerQuestionsOnPark` block override     | ✅ done |
 | 2a.2 | `postReviewQuestions` port + `IssueWritebackService` implementation              | ✅ done |
 | 2a.3 | Comment renderer (stable ids, iteration, the answer channel, capped + declared)  | ✅ done |
-| 2a.4 | Engine park hook, gated on `intakeOrigin === 'public-api'`                       | ✅ done |
+| 2a.4 | Engine park hook, gated on a HEADLESS `intakeOrigin` (see the D2 amendment)      | ✅ done |
 | 2a.5 | `review_question_posts` persistence, D1 ⇄ Drizzle, wired in both facades         | ✅ done |
 | 2a.6 | Conformance: marker parity (the atomic claim) + the settings/override round-trip | ✅ done |
 | 2a.7 | SPA: the workspace toggle + the per-task override, all 10 locales                | ✅ done |

@@ -438,7 +438,8 @@ export const blockSchema = v.object({
    * Per-task override for the "post a parked headless requirements review's open findings on
    * the linked tracker issue" writeback action. Absent/null ⇒ inherit the workspace's
    * `writebackQuestionsOnPark`. Only meaningful on `task`-level blocks that have a linked
-   * tracker issue, and only consulted for runs with `intakeOrigin: 'public-api'`.
+   * tracker issue, and only consulted for runs whose `intakeOrigin` is headless
+   * (`isHeadlessIntake`).
    */
   trackerQuestionsOnPark: v.optional(v.nullable(writebackOverrideSchema)),
   /**

@@ -263,6 +263,22 @@ What the modes do NOT share is the reason they stay exclusive rather than becomi
   rather than the schedule's reused one. A refusal still leaves the ticket on the board as a task a
   human can start, with the reason recorded in the run history rather than a task that mysteriously
   never ran.
+- **The run is marked HEADLESS: `intakeOrigin: 'tracker'`.** A different question from `origin`
+  above, which gates pipeline availability; this one records that nobody is in the app, and it is
+  what the clarification writeback keys off. Unset, a run reads back as `ui`, and a parked
+  requirements review then waits on a human who was never told: the reply channel (ticket comments,
+  ungated by intake) sits ready for finding ids that no comment ever posted. So the writeback gate
+  asks `isHeadlessIntake` and not `=== 'public-api'`, and an unattended start path must STATE its
+  origin, because the default is a claim that someone is watching.
+
+  **A QUEUE-mode fire is `intakeOrigin: 'schedule'` and is deliberately NOT headless**, which is
+  the sharpest illustration of what the classification actually asks. Both modes are unattended;
+  only per-ticket has somewhere durable to hold the conversation. Queue mode works the schedule's
+  reused block and `BugIntakeService` REPLACE-links each pick onto it, dropping the previous
+  fire's ticket, so a question posted there loses its answer channel the next time the schedule
+  fires (the reply lands on an issue whose `linkedBlockId` has moved and is dropped as
+  `issue_not_linked`). Reading the flag as "was anyone present" would post it anyway. Giving queue
+  mode a clarification loop is a change to the LINKAGE, not to this flag.
 
 The SPA DERIVES the mode from the pipeline instead of offering it: a `bug-intake` pipeline can only
 mean `queue`, anything else can only mean `per-ticket`. That makes the refused combination

@@ -1,3 +1,4 @@
+import { isHeadlessIntake } from '@cat-factory/contracts'
 import type { ExecutionInstance, ReviewQuestionPost } from '@cat-factory/kernel'
 import type { ReviewCommon } from '../review/IterativeReviewService.js'
 
@@ -14,10 +15,13 @@ import type { ReviewCommon } from '../review/IterativeReviewService.js'
  *
  * Three conditions, all necessary:
  *
- * - **The run entered headlessly** (`intakeOrigin === 'public-api'`). This is the scope
- *   boundary the whole initiative is built on: a task started in the SPA has a human overseer
- *   in the app, and its clarification surface must not change. `intakeOrigin` is absent on
- *   every legacy run and degrades to `ui`, so the default is "post nothing".
+ * - **The run entered headlessly** (`isHeadlessIntake`). This is the scope boundary the whole
+ *   initiative is built on: a task started in the SPA has a human overseer in the app, and its
+ *   clarification surface must not change. `intakeOrigin` is absent on every legacy run and
+ *   degrades to `ui`, so the default is "post nothing". It is deliberately the CLASSIFICATION
+ *   and not `=== 'public-api'`: a ticket pushed in by a per-ticket intake schedule is every bit
+ *   as headless as an `/api/v1` start, and asking against the origin that shipped first is how
+ *   the second one silently never reached the requester's ticket.
  * - **The review is actually parked on findings.** `incorporated` has settled (the run
  *   advances) and the transient `incorporating` / `reviewing` / `merged` states are the
  *   driver's own work, not a wait on a human. Only `ready` and `exceeded` park.
@@ -32,7 +36,7 @@ export function shouldPostReviewQuestions(
   instance: Pick<ExecutionInstance, 'intakeOrigin'>,
   review: Pick<ReviewCommon, 'status' | 'items'>,
 ): boolean {
-  if (instance.intakeOrigin !== 'public-api') return false
+  if (!isHeadlessIntake(instance.intakeOrigin)) return false
   if (review.status !== 'ready' && review.status !== 'exceeded') return false
   return review.items.some((item) => item.status === 'open')
 }

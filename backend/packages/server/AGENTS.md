@@ -104,6 +104,12 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `child`-bound fields folded in and behind the same level gate. Patterns and rules:
   [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
+- `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
+  typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the
+  default (`initiatedByRole`, `intakeOrigin`). Each classifies every call site and fails on a new
+  one until someone writes down which bucket it is in. They read through `loadCode`, which strips
+  comments first: a guard matching raw text is satisfied by a file that merely NAMES the literal
+  it should pass, which is exactly how one stayed green over a call site missing its value.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +
   `modules/persistence/` (the repository RPC + GitHub installation-token delegation),

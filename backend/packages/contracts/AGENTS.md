@@ -23,6 +23,17 @@ top-level files are the domain contracts.
   with that surface instead (`tasks.ts`'s `TASK_SOURCE_READ_REASONS`), but the rule is the same:
   the code is declared HERE, so a rename fails the typecheck on both sides rather than degrading
   the SPA to the backend's untranslated prose.
+- `execution.ts`: the pipeline STEP and run shapes. `run-provenance.ts` beside it holds the
+  facts about a run rather than its work: `intakeOrigin` (how it entered: `ui`, `public-api`,
+  `tracker` or `schedule`, classified by `isHeadlessIntake`, which the clarification writeback
+  keys off), `mode` (whether it may land its work, read through `isDryRun`) and `diagnostics`
+  (where it actually ran).
+  All three ride the run's `detail` JSON, so a member is free to add and easy to forget to SET.
+  Two rules follow: **`ui` is a positive claim that a human is watching in the app**, so every
+  unattended start path names itself and only the in-app start may take the default
+  (`intakeOrigin.coverage.spec.ts` in `@cat-factory/server` classifies each one); and
+  **`isHeadlessIntake` is not "was anyone present"** but "is there a stable place to hold a
+  conversation", which is why `schedule` answers `false`.
 - `form-fields.ts`: ONE descriptor-driven form vocabulary (field shape, filled-value bag, and the
   pure visibility / validation / sanitization / prose-rendering rules) behind every surface where a
   DEPLOYMENT declares a form and the platform collects it: an initiative preset's create form

@@ -2773,7 +2773,7 @@
         },
         "questionsOnPark": {
           "label": "Duraklatılan başsız çalıştırmanın açık sorularını gönder",
-          "help": "API üzerinden başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında, açık sorularını — her biri bir yanıtın belirteceği kimlikle — bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
+          "help": "Uygulama dışında başlatılan bir çalıştırma gereksinimleri netleştirmek için duraklattığında (API üzerinden ya da bir izleyici kaydından gönderilerek), açık sorularını, her biri bir yanıtın belirteceği kimlikle, bağlı soruna gönderir. Uygulamada başlatılan görevler etkilenmez."
         }
       },
       "probeFailure": {
