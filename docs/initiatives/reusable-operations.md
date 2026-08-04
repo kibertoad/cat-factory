@@ -1,7 +1,8 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-3 landed (the fold + the bundle; the shared field vocabulary; the grouped
-picker); slices 4-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-4 landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker; the canned-pipeline lifecycle); slices 5-8 pending · **Owner:** orchestration ·
+**Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -435,7 +436,7 @@ else could offer the way back). Mechanics:
 | 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
 | 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ✅ done |                                                             |
 | 3   | **Picker grouping (D7)**: category captions in the type picker; `presentation.description` rendered; one chrome i18n key (the "Other" bucket)                                                                                                                                                                                                         | SPA    | 2          | ✅ done | [#1672](https://github.com/kibertoad/cat-factory/pull/1672) |
-| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
+| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ✅ done |                                                             |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
 | 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
 | 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
@@ -621,6 +622,46 @@ final so neither ships a shape that changes a slice later.
   choice inside its own captioned row, the built-in row still uncaptioned, the description in the
   help slot on selection). The unit spec pins the ORDER; only the e2e catches a template regression
   that flattens the rows or drops a caption while leaving every unit test green.
+
+### What slice 4 surfaced (carry into the rest)
+
+- **The RETIREMENT half of D10 was already covered; only ADOPTION was missing.** `core-planning.ts`'s
+  `pl_org_flow` test already drives a `builtin: true, version: 1` registration through seed → retire →
+  tombstone → delete, so this slice's assertion (`suites/agent-task-types.ts`) covers the other
+  direction and nothing else: a board seeded BEFORE the operation ships, the pipeline advertised in
+  `pipelineCatalogVersions` with no stored row, one reseed INSERTING it read-only, a version bump
+  moving the catalog ahead of the stored copy, and the same reseed adopting it. Driven as three apps
+  over ONE store, because a workspace created after the registration is seeded at creation and proves
+  nothing about adoption. Slices 7 and 8 should extend that test rather than add a second
+  pipeline-lifecycle one.
+- **`builtin` and `version` buy DIFFERENT things, and a test must read `registered()` to see both.**
+  `builtin` is what keeps the pipeline read-only in a workspace (clone to deviate, so nothing can
+  reshape the definition the operation pins); the explicit `version` is the rollout channel. Asserting
+  through `seedPipelines()` would pass for a registration declaring NEITHER, because the seeding path
+  defaults every built-in's version to 1.
+- **The versionless trap is worse than "un-updatable": it is editable AND frozen.** `reseed` refuses a
+  stored non-builtin and `usePipelineHealth`'s `outdated` check requires `pipeline.builtin` on the
+  STORED row, so a versionless registration gives each workspace a copy it can edit or delete out from
+  under the operation and that the org can never fix. The rule now lives once in
+  [`pipeline-catalog-lifecycle.md`](../../backend/docs/pipeline-catalog-lifecycle.md) rather than
+  restated per initiative.
+- **The example package's OTHER pipelines are still versionless, deliberately left alone.**
+  `pl_org_audit`, `pl_org_scope`, `pl_org_research` and `pl_org_apply` are initiative-preset routing
+  targets (`seedPlan` pins them by id), so they want the same shape for the same reason and today a
+  workspace can delete one. That is the initiative-presets examples' own scope, not this slice's;
+  named here so the mixed shapes inside one worked-example package don't read as intentional contrast.
+- **A task of an operation is creatable before its pipeline is adopted, and only startable after.**
+  `pipelineIdFor` resolves the pin off the REGISTRY with no check that the workspace stores the row
+  (`taskTypeCreationDefaults.ts`), which is the right disposition: refusing creation would punish a
+  board for not having reseeded, and falling through to the positional default would silently run the
+  operation on the wrong pipeline. So the advisory is the adoption PATH, not a nicety. Not pinned by a
+  test yet, and **slice 8 owns the door where it bites**: `tasks.create({ taskType }) + tasks.start()`
+  against a board that never adopted the operation's pipeline is the headless spelling of it.
+- **The `builtinPipelineName` humanisation nit is now REACHABLE** (fact 4): a board predating the
+  operation sees its pipeline offered as "org introduce api". Still unfixed per D10, and the fix is
+  not a better humaniser: `pipelineCatalogVersions` is a `Record<string, number>`, so a real name
+  needs a sibling map on the snapshot (internal, so additive and cheap) plus the store/composable
+  reads. Worth doing when a slice is already in that snapshot.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 
