@@ -1,9 +1,24 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   CAT_FACTORY_OMITTED_OPERATIONS,
   CAT_FACTORY_TOOL_GROUPS,
   CAT_FACTORY_TOOLS,
 } from '../src/tools.generated.ts'
+
+/** Every `operationId` in the committed spec, the emitter's own input. */
+function specOperationIds(): string[] {
+  const path = fileURLToPath(new URL('../../../docs/openapi.json', import.meta.url))
+  const spec = JSON.parse(readFileSync(path, 'utf8')) as {
+    paths: Record<string, Record<string, { operationId?: string }>>
+  }
+  return Object.values(spec.paths).flatMap((methods) =>
+    Object.values(methods)
+      .map((operation) => operation.operationId)
+      .filter((id): id is string => typeof id === 'string'),
+  )
+}
 
 // The tool table is generated, so these do not re-test the emitter's output field by field. They
 // pin the properties a HOST and a MODEL depend on, which no typecheck can state: names are unique
@@ -20,13 +35,19 @@ function anyOfs(node: unknown): unknown[][] {
 
 describe('the generated tool table', () => {
   it('accounts for every published operation, exposed or omitted with a reason', () => {
-    // The spec has 42 operations. Two of them stream, and a tool call has no channel for that —
-    // so the arithmetic here is the guard that a future endpoint cannot quietly fail to become a
-    // tool: generation fails on an unclassified stream, and this fails on a changed total that
-    // nobody has looked at. (38 → 39: the pre-dispatch input gate's resolve, an ordinary
-    // request/response operation, so it becomes a tool rather than an omission. 39 → 42: the
-    // three outbound-webhook management operations, likewise ordinary.)
-    expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(42)
+    // Derived from the spec, never a pinned total: a count would only re-assert what generation
+    // already refuses (an operation with no SURFACE entry, an unclassified stream, an omission
+    // naming an operation the spec dropped) at the price of an edit on every added endpoint.
+    // What it does catch is the case `check:sdk` structurally cannot: that check REGENERATES and
+    // diffs, so an emitter that consistently drops or double-emits an operation produces output
+    // matching its own bug and passes. Partitioning the committed table against the committed
+    // spec is the assertion that fails on it.
+    const accounted = [
+      ...CAT_FACTORY_TOOLS.map((tool) => tool.operationId),
+      ...CAT_FACTORY_OMITTED_OPERATIONS.map((omitted) => omitted.operationId),
+    ]
+    expect(new Set(accounted).size).toBe(accounted.length)
+    expect([...accounted].sort()).toEqual([...specOperationIds()].sort())
     expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId)).toEqual([
       'streamPublicJobEvents',
       'streamPublicTaskRun',

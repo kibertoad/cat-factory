@@ -1065,6 +1065,17 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
+- **A pinned TOTAL is not an assertion; assert the RELATION.** `toBe(42)` over a generated table, a
+  registry or a catalog fails on every ordinary addition, names nothing about what broke, and so
+  trains the next person to re-pin it unread: the guard degrades into a rebase tax exactly as the
+  surface it watches grows. Derive the expectation from the same source the code reads and assert the
+  structural property instead: every spec operation accounted for EXACTLY ONCE across exposed and
+  omitted, a facade listing EXACTLY its table, a `Record` total over the union. Before writing either,
+  check what already refuses the case: generation throws on an unregistered or unclassified member and
+  the drift guards fail on a stale artifact, so the assertion worth having is the one they
+  structurally CANNOT make (a regenerate-and-diff check passes an emitter whose bug is consistent in
+  both halves). Pin a literal only where the number IS the rule (a protocol limit, a declared cap),
+  and say so at the site.
 - **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw
   script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces
   as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`:
