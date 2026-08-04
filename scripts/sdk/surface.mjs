@@ -1,4 +1,4 @@
-// The SDK's PUBLIC shape: how the 41 `/api/v1` operations are grouped into resource clients
+// The SDK's PUBLIC shape: how the 42 `/api/v1` operations are grouped into resource clients
 // and what each method is called.
 //
 // This is a chosen table, not a derivation, for the same reason `OPERATION_DOCS` in
@@ -99,6 +99,42 @@ export const MCP_OMITTED_OPERATIONS = {
     '`tasks_get_run` instead (a parked run waits for a human indefinitely, so a bounded "wait ' +
     'for the run to finish" tool would be a timeout dressed up as an answer), or consume the ' +
     'SSE endpoint through an SDK.',
+}
+
+/**
+ * The MCP tool annotations that cannot be derived from the HTTP method, per operation.
+ *
+ * `readOnlyHint` follows from the method and is emitted for every tool. These two do not: the
+ * protocol's defaults for an UNSET hint are already the cautious ones (`destructiveHint` defaults
+ * to true, `idempotentHint` to false), so a mutating tool that says nothing is treated as the
+ * worst case and needs no entry. What an entry buys is the hint being STATED, which is what a host
+ * showing a confirmation dialog reads, and it is worth stating exactly where the consequence is
+ * real money or a merged pull request.
+ *
+ * Deliberately NOT a blanket pass over the mutating operations: setting `destructive: false` on a
+ * cheap write would LOWER a host's caution below its own default, which is a guess dressed as
+ * information. An operation absent from this table keeps the protocol's cautious default.
+ *
+ * Generation fails on an entry naming an operation the spec no longer has, and on one naming a GET
+ * (a read changes nothing, so neither hint means anything about it).
+ */
+export const MCP_TOOL_HINTS = {
+  // The four that spend: each begins a real agent run against a real repository, or merges a real
+  // pull request. Not idempotent: a second call starts a second run.
+  startPublicTask: { destructive: true, idempotent: false },
+  retryPublicTask: { destructive: true, idempotent: false },
+  createPublicJob: { destructive: true, idempotent: false },
+  actPublicNotification: { destructive: true, idempotent: false },
+  // Destructive AND idempotent, which is the pair `readOnlyHint` alone cannot express: deleting a
+  // task twice leaves the board in the same state, and the first call is still irreversible.
+  deletePublicTask: { destructive: true, idempotent: true },
+  // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
+  // both overwrite state whose previous value cannot be recovered through this API — the endpoint
+  // someone else's integration is registered at, and a signing secret that is never readable back.
+  // What is lost is invisible from here, since the receiver that stops hearing from this workspace
+  // is somewhere else entirely.
+  putPublicNotificationWebhook: { destructive: true, idempotent: true },
+  deletePublicNotificationWebhook: { destructive: true, idempotent: true },
 }
 
 /** One-line descriptions of each resource client, rendered into every SDK's docs. */

@@ -752,6 +752,7 @@ async function bootServer(
     gateRegistry: container.gateRegistry,
     pipelineRegistry: container.pipelineRegistry,
     taskTypeRegistry: container.taskTypeRegistry,
+    initiativePresetRegistry: container.initiativePresetRegistry,
     foundationalServiceRegistry: container.foundationalServiceRegistry,
     binaryGeneratorRegistry: container.binaryGeneratorRegistry,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),

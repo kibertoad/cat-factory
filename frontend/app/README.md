@@ -79,6 +79,29 @@ earlier than before takes the entire SPA down at boot, and the unit suite cannot
 (nothing there installs the plugin). Every e2e spec does, because every one of them boots
 the app.
 
+### A backend-DECLARED form renders through `DescriptorFields.vue`
+
+When the backend declares the fields and the SPA only collects them, render them with the shared
+`components/common/DescriptorFields.vue` over the contracts vocabulary
+(`contracts/src/form-fields.ts`), and never hand-roll a second renderer for the same shapes. Two
+surfaces use it: an initiative preset's create form and a reusable operation's per-case form on a
+custom task type (`AddTaskModal`). Adding a third is a `:fields` binding, not a component.
+
+Four rules travel with it. **Validate with the shared `validateDescriptorFields`** so the submit
+button reflects exactly what the server will refuse, and **submit the shared
+`sanitizeDescriptorFields` result** so a stale answer on a since-hidden `showWhen` field never
+reaches the wire. **The labels are deployment-authored English rendered verbatim**: only the chrome
+around them (a path-invalid message, section captions) is i18n, so no descriptor string enters a
+locale catalog. And **the value-bag rules live in `utils/descriptorFields.ts`, not in the SFC**
+(`defaultDescriptorValues` for the initial values, `setDescriptorValue` / `setDescriptorCheckbox` /
+`toggleDescriptorGroupValue` for one edit): what an edit freezes on an entity is what a unit test
+must be able to reach, and a rule inside a component is only reachable by mounting one.
+
+Mirroring the server's check leaves one refusal still reachable, deliberately: the deployment can
+re-register the descriptor while the dialog sits open, so a create can come back `422` with
+`details.reason: 'task_type_fields_invalid'`. Map it to translated copy like any other reason
+(`AddTaskModal`'s `createRefusalMessage`) rather than showing the server's field-key prose.
+
 ### Always import a layer component explicitly
 
 **Import a component under `components/` by path before using it in a template.** Do not lean on Nuxt's auto-registration. This layer sets no `components` config, so the default `pathPrefix: true` applies and a component is registered under its path-prefixed name: `components/panels/StepEffortReport.vue` becomes `PanelsStepEffortReport`, and a bare `<StepEffortReport>` matches nothing.

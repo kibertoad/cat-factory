@@ -285,11 +285,15 @@ no "unassign": narrowing a built-in kind means defining your own kind instead.
   current API contract before generating a client"). Omit for the generic hint; don't
   write a paragraph: it is spliced into a sentence.
 - **`tuning.guardLimits`**: per-kind loosening of the harness anti-rabbithole guards
-  (`maxToolCallsWithoutEdit`, `maxConsecutiveErrors`, `maxConsecutiveWebCalls`).
-  **Loosen-only**: the harness clamps each override up to its own base, so a value
-  tighter than the default no-ops. Declare one only with a documented reason the kind's
-  NORMAL pattern trips a default guard (the built-in `researcher` raises the
-  consecutive-web cap because a real survey IS many searches in a row).
+  (`maxToolCallsWithoutEdit`, `maxConsecutiveErrors`, `maxConsecutiveWebCalls`,
+  `maxConsecutiveMcpCalls`, `maxConsecutiveNonActionCalls`). **Loosen-only**: the harness
+  clamps each override up to its own base, so a value tighter than the default no-ops.
+  Declare one only with a documented reason the kind's NORMAL pattern trips a default
+  guard (the built-in `researcher` raises the consecutive-web cap because a real survey IS
+  many searches in a row). Raising a per-family cap past
+  `maxConsecutiveNonActionCalls` (200) does nothing on its own: that one bounds the exempt
+  families together, so a kind that genuinely needs a longer uninterrupted research run
+  raises both.
 - **`configContributions`**: task-level config descriptors surfaced on task creation and
   the inspector, editable until the kind's step starts. Give each descriptor
   `agentKind: <your kind>` so the freeze targets the right step.

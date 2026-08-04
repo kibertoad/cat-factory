@@ -30,7 +30,13 @@ from cat_factory import (  # noqa: E402
     CatFactoryNotFoundError,
     CatFactoryUnauthorizedError,
 )
-from cat_factory.models import CreatePublicTask, StartPublicTask, UpdatePublicTask  # noqa: E402
+from cat_factory.models import (  # noqa: E402
+    CreatePublicTask,
+    NotificationWebhookRunEvent,
+    PutNotificationWebhook,
+    StartPublicTask,
+    UpdatePublicTask,
+)
 
 TERMINAL_SSE_EVENTS = {"done", "error", "timeout"}
 KNOWN_SSE_EVENTS = {"progress", "done", "error", "decision", "timeout"}
@@ -142,6 +148,32 @@ def list_notifications() -> None:
     observations["notificationCount"] = len(result.notifications)
 
 
+def round_trip_webhook() -> None:
+    # The webhook round-trip is where the four clients are most exposed to a null decoding
+    # differently: an unregistered endpoint is a ``webhook: null`` FIELD, and "the server said
+    # null" must not arrive as an absence, an empty object, or a zero-valued struct in any
+    # language.
+    before = client.webhook.get()
+    observations["webhookInitiallyNull"] = before.webhook is None
+    saved = client.webhook.set(
+        PutNotificationWebhook(
+            url="https://hooks.example.com/cat-factory-smoketest",
+            secret="smoketest-signing-secret",
+            run_events=[NotificationWebhookRunEvent.RUN_COMPLETED],
+        )
+    )
+    observations["webhookSavedUrl"] = saved.url
+    # The secret is write-only: what comes back is the boolean, never the value.
+    observations["webhookSavedHasSecret"] = saved.has_secret
+    observations["webhookSavedRunEvents"] = ",".join(str(event) for event in saved.run_events)
+    read = client.webhook.get()
+    observations["webhookReadMatchesSaved"] = (
+        read.webhook is not None and read.webhook.url == saved.url
+    )
+    client.webhook.delete()
+    observations["webhookNullAfterDelete"] = client.webhook.get().webhook is None
+
+
 def expect_not_found() -> None:
     try:
         client.tasks.get("blk_definitely_not_a_real_task")
@@ -228,6 +260,7 @@ step("tasks.listByService (one page)", list_one_page)
 step("tasks.listByServiceAll (auto-paging)", list_all_pages)
 step("usage.get", get_usage)
 step("notifications.list", list_notifications)
+step("webhook.get / set / delete", round_trip_webhook)
 step("error: not found", expect_not_found)
 step("error: unauthorized", expect_unauthorized)
 step("error: insufficient scope", expect_insufficient_scope)

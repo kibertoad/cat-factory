@@ -127,6 +127,28 @@ await step('notifications.list', async () => {
   observations.notificationCount = result.notifications.length
 })
 
+// The webhook round-trip is where the four clients are most exposed to a null decoding
+// differently: an unregistered endpoint is a `webhook: null` FIELD, and "the server said null"
+// must not arrive as an absence, an empty object, or a zero-valued struct in any language.
+await step('webhook.get / set / delete', async () => {
+  const before = await client.webhook.get()
+  observations.webhookInitiallyNull = before.webhook === null
+  const saved = await client.webhook.set({
+    url: 'https://hooks.example.com/cat-factory-smoketest',
+    secret: 'smoketest-signing-secret',
+    runEvents: ['run.completed'],
+  })
+  observations.webhookSavedUrl = saved.url
+  // The secret is write-only: what comes back is the boolean, never the value.
+  observations.webhookSavedHasSecret = saved.hasSecret
+  observations.webhookSavedRunEvents = saved.runEvents.join(',')
+  const read = await client.webhook.get()
+  observations.webhookReadMatchesSaved = read.webhook?.url === saved.url
+  await client.webhook.delete()
+  const after = await client.webhook.get()
+  observations.webhookNullAfterDelete = after.webhook === null
+})
+
 await step('error: not found', async () => {
   try {
     await client.tasks.get('blk_definitely_not_a_real_task')

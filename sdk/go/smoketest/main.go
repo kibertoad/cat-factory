@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	catfactory "github.com/kibertoad/cat-factory/sdk/go"
@@ -212,6 +213,48 @@ func main() {
 			return err
 		}
 		observations["notificationCount"] = len(result.Notifications)
+		return nil
+	})
+
+	// The webhook round-trip is where the four clients are most exposed to a null decoding
+	// differently: an unregistered endpoint is a `webhook: null` FIELD, and "the server said null"
+	// must not arrive as an absence, an empty object, or a zero-valued struct in any language.
+	step("webhook.get / set / delete", func() error {
+		before, err := client.Webhook.Get(ctx)
+		if err != nil {
+			return err
+		}
+		observations["webhookInitiallyNull"] = before.Webhook == nil
+		secret := "smoketest-signing-secret"
+		saved, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
+			URL:       "https://hooks.example.com/cat-factory-smoketest",
+			Secret:    &secret,
+			RunEvents: []catfactory.NotificationWebhookRunEvent{catfactory.NotificationWebhookRunEventRunCompleted},
+		})
+		if err != nil {
+			return err
+		}
+		observations["webhookSavedUrl"] = saved.URL
+		// The secret is write-only: what comes back is the boolean, never the value.
+		observations["webhookSavedHasSecret"] = saved.HasSecret
+		events := make([]string, 0, len(saved.RunEvents))
+		for _, event := range saved.RunEvents {
+			events = append(events, string(event))
+		}
+		observations["webhookSavedRunEvents"] = strings.Join(events, ",")
+		read, err := client.Webhook.Get(ctx)
+		if err != nil {
+			return err
+		}
+		observations["webhookReadMatchesSaved"] = read.Webhook != nil && read.Webhook.URL == saved.URL
+		if err := client.Webhook.Delete(ctx); err != nil {
+			return err
+		}
+		after, err := client.Webhook.Get(ctx)
+		if err != nil {
+			return err
+		}
+		observations["webhookNullAfterDelete"] = after.Webhook == nil
 		return nil
 	})
 

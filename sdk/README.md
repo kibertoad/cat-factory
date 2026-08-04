@@ -37,7 +37,7 @@ the generator would produce.
 What is generated is deliberately narrow: the wire **models** and the **operation methods**. Each
 SDK's transport, error hierarchy, retry policy, pagination helper and SSE reader are hand-written
 and live beside the generated files. That split is what keeps a contract change from rewriting
-behaviour, and a behaviour fix from having to be re-applied across 41 operations × 4 languages.
+behaviour, and a behaviour fix from having to be re-applied across 42 operations × 4 languages.
 
 Generated files are marked as such in their header and named so it is obvious:
 `*.generated.ts`, `models.py` / `operations.py`, `*_gen.go`, and everything under the Java

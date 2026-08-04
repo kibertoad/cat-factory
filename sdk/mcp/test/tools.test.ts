@@ -9,14 +9,24 @@ import {
 // pin the properties a HOST and a MODEL depend on, which no typecheck can state: names are unique
 // and stable-looking, every operation is accounted for, and no schema lies about what it accepts.
 
+/** Every `anyOf` branch list anywhere in a schema tree. */
+function anyOfs(node: unknown): unknown[][] {
+  if (Array.isArray(node)) return node.flatMap(anyOfs)
+  if (typeof node !== 'object' || node === null) return []
+  const record = node as Record<string, unknown>
+  const here = Array.isArray(record.anyOf) ? [record.anyOf] : []
+  return [...here, ...Object.values(record).flatMap(anyOfs)]
+}
+
 describe('the generated tool table', () => {
   it('accounts for every published operation, exposed or omitted with a reason', () => {
-    // The spec has 39 operations. Two of them stream, and a tool call has no channel for that —
+    // The spec has 42 operations. Two of them stream, and a tool call has no channel for that —
     // so the arithmetic here is the guard that a future endpoint cannot quietly fail to become a
     // tool: generation fails on an unclassified stream, and this fails on a changed total that
     // nobody has looked at. (38 → 39: the pre-token input gate's resolve, an ordinary
-    // request/response operation, so it becomes a tool rather than an omission.)
-    expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(39)
+    // request/response operation, so it becomes a tool rather than an omission. 39 → 42: the
+    // three outbound-webhook management operations, likewise ordinary.)
+    expect(CAT_FACTORY_TOOLS.length + CAT_FACTORY_OMITTED_OPERATIONS.length).toBe(42)
     expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId)).toEqual([
       'streamPublicJobEvents',
       'streamPublicTaskRun',
@@ -54,6 +64,79 @@ describe('the generated tool table', () => {
     for (const name of ['tasks_get', 'debug_list_runs', 'usage_get']) {
       expect(CAT_FACTORY_TOOLS.find((t) => t.name === name)!.readOnly, name).toBe(true)
     }
+  })
+
+  it('hints destructive only where a call cannot be taken back', () => {
+    // A hint is present where the consequence is real money or a merged pull request, and ABSENT
+    // everywhere else: the protocol's default for an unset hint is already the cautious one, so a
+    // blanket `destructive: false` over the cheap writes would lower a host's caution on a guess.
+    const irreversible = [
+      'tasks_start',
+      'tasks_retry',
+      'jobs_create',
+      'notifications_act',
+      'tasks_delete',
+    ]
+    for (const name of irreversible) {
+      const tool = CAT_FACTORY_TOOLS.find((t) => t.name === name)!
+      expect(tool.hints?.destructive, name).toBe(true)
+    }
+    for (const tool of CAT_FACTORY_TOOLS) {
+      // A read has no destructive semantics at all, which the emitter refuses to generate.
+      if (tool.readOnly) expect(tool.hints, tool.name).toBeUndefined()
+    }
+    expect(CAT_FACTORY_TOOLS.find((t) => t.name === 'tasks_update')!.hints).toBeUndefined()
+  })
+
+  it('describes a result without asserting anything a newer deployment could break', () => {
+    // An output schema is ENFORCED by the caller's own MCP client against an answer the deployment
+    // has already committed to, and `/api/v1` is additive forever. So every assertion a new enum
+    // member, union variant or required field could invalidate is dropped on the way out. That is
+    // the same "an unknown value never raises" invariant the four SDK clients hold to.
+    const describing = CAT_FACTORY_TOOLS.filter((tool) => tool.outputSchema)
+    expect(describing.length).toBeGreaterThan(30)
+    for (const tool of describing) {
+      expect(tool.outputSchema!.type, tool.name).toBe('object')
+      const json = JSON.stringify(tool.outputSchema)
+      expect(json, tool.name).not.toContain('"required"')
+      expect(json, tool.name).not.toContain('"enum"')
+      expect(json, tool.name).not.toContain('"const"')
+      // The only `anyOf` an output schema may carry is the NULLABLE pair, which admits a value the
+      // deployment already sends. A union's `anyOf` is the assertion a new variant breaks outright,
+      // and this surface adds decision kinds.
+      for (const branches of anyOfs(tool.outputSchema)) {
+        expect(branches, `${tool.name}: ${JSON.stringify(branches)}`).toHaveLength(2)
+        expect(branches[1]).toEqual({ type: 'null' })
+      }
+    }
+    // A closed vocabulary still reaches the model, as prose that no future member can invalidate.
+    const status = (
+      CAT_FACTORY_TOOLS.find((t) => t.name === 'tasks_get')!.outputSchema!.properties as {
+        status: { description: string }
+      }
+    ).status
+    expect(status.description).toContain('planned')
+    expect(status.description).toContain('may report a member not in this list')
+    // A `204` has no object to describe, and claiming one would oblige the facade to return
+    // structured content it does not have.
+    expect(CAT_FACTORY_TOOLS.find((t) => t.name === 'tasks_delete')!.outputSchema).toBeUndefined()
+  })
+
+  it('leaves a response union asserting NOTHING but its discriminator, in prose', () => {
+    // The union is the one place where dropping the `anyOf` is not enough. Every union on this
+    // surface has object variants today, so `type: 'object'` would be accurate about the spec as it
+    // stands and would still be the assertion this mode exists to remove: the IR resolves each
+    // `oneOf` branch generically, so a future response union with a string or array variant would
+    // have its honest answer rejected by an older copy of this package. The nullable-pair rule
+    // above cannot see this, because a union rendered on the way out carries no `anyOf` at all.
+    const decisions = CAT_FACTORY_TOOLS.find((tool) => tool.name === 'decisions_list')!
+    const items = (
+      decisions.outputSchema!.properties as { decisions: { items: Record<string, unknown> } }
+    ).decisions.items
+    expect(Object.keys(items)).toEqual(['description'])
+    // What a model actually reads: the discriminator, its known members, and that the list is open.
+    expect(items.description).toContain('Discriminated by `kind`')
+    expect(items.description).toContain('may report a variant not in this list')
   })
 
   it('describes its inputs with path ids required and the body kept in its own namespace', () => {
