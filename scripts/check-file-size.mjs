@@ -53,7 +53,10 @@ const LEGACY_ALLOWANCES = new Map([
   // half of the poll branch tree (`PollRunningController.ts`, the sibling of the settled-poll
   // `PollCompletionController`) and the one-shot engine steps tracker / bug-intake /
   // initiative-committer (`OneShotStepController.ts`) — ratcheted 2430 -> 1900.
-  ['backend/packages/orchestration/src/modules/execution/RunDispatcher.ts', 1900],
+  // (The `max-lines` step-2 slice then split out the DISPATCH side of a step
+  // (`AgentDispatchController.ts`, the other side of the park from the two poll controllers) and
+  // shed the deps declaration block to `RunDispatcherDependencies.ts`, so it fits the DEFAULT
+  // budget — which oxlint's `max-lines` now enforces at the same 1500 — and its allowance is gone.)
   // `ExecutionService.ts` shed its ~350-line `ExecutionServiceDependencies` declaration block to
   // its own module (re-exported, so no call site changed) when the PR-verification-report hook
   // needed headroom — ratcheted DOWN to lock the win in.
@@ -69,7 +72,11 @@ const LEGACY_ALLOWANCES = new Map([
   // stays where the slice above put it, since that one had already left headroom. What separates
   // them is that `start`/`retry`/`restartFrom` differ ONLY in the block patch they write between
   // the two, so the ORDER across them is the thing worth owning in one place rather than three.
-  ['backend/packages/orchestration/src/modules/execution/ExecutionService.ts', 2000],
+  // The `max-lines` step-2 slice then took that observation to its conclusion: `start` joined
+  // `retry`/`restartFrom` (plus `resumePaused`/`cancel`/`stopRun`/`teardownForBlockTree`) on
+  // `RunLifecycleController`, and the iteration-cap resolution both rework gates park for on
+  // `IterationCapController`. The engine keeps the per-step machine and now fits the DEFAULT
+  // budget — which oxlint's `max-lines` now enforces at the same 1500 — so its allowance is gone.
   // The three DI composition roots (refactoring-candidates.md #6/#8 own the structural fix).
   // The orchestration root's optional-module factories now live in `container/modules.ts` and its
   // optional wiring flows through `container/module-registry.ts` (refactoring-candidates.md #6), so
@@ -123,14 +130,20 @@ const LEGACY_ALLOWANCES = new Map([
   // plus the two deployment-level projections the operator dashboard aggregates) moved to
   // `db/tables/observability.ts` when the gate + daily-rollup projections landed, ratcheted
   // 1700 -> 1600.
-  ['backend/runtimes/node/src/db/schema.ts', 1600],
+  // The OUTBOUND MODEL-PROVIDER CREDENTIAL group (the pooled subscription tokens, the
+  // direct-provider keys, the personal subscriptions + per-run activations, the per-user local
+  // endpoints, the gateway-model catalog and the quota-cycle windows they accumulate into) then
+  // moved to `db/tables/model-credentials.ts` the same way, so the schema fits the DEFAULT budget
+  // — which oxlint's `max-lines` now enforces at the same 1500 — and its allowance is gone.
   // Remaining oversized service/logic files — split candidates, ratcheted meanwhile.
   // (`EnvironmentConnectionService.ts` has since dropped under DEFAULT_MAX_LINES — entry removed.)
   // The Kubernetes half of the detector (what counts as a cluster manifest, the manifest-tree scan
   // and the facts inferred back off it) now lives in `provision-detect.kubernetes.ts`, over the
   // YAML/loose-value primitives both halves share in `provision-detect.yaml.ts` — ratcheted
   // 2250 -> 1850.
-  ['backend/packages/integrations/src/modules/environments/provision-detect.logic.ts', 1850],
+  // (The COMPOSE / stack-recipe half then moved to `provision-detect.compose.ts` over the shared
+  // detector contract in `provision-detect.contract.ts`, leaving the Kubernetes half plus the two
+  // entry points; it fits the DEFAULT budget now, so this allowance is gone too.)
   // The repo-targeting declaration block (RepoTarget/ResolveRepoTarget/RepoOrigin/…) moved to
   // `agents/repoTargeting.ts`, and the poll site's pure runner-view → engine-update shaping
   // (`buildRunningUpdate` / `buildFailureMeta`) now lives with the rest of the output-boundary
