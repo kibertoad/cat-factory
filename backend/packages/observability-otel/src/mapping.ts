@@ -1,5 +1,7 @@
 import type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   OperationalCounter,
@@ -29,10 +31,13 @@ export const SCOPE_NAME = '@cat-factory/observability-otel'
 /**
  * Attribute keys, following the OpenTelemetry GenAI semantic conventions where they exist
  * (`gen_ai.*`) plus a small `cat_factory.*` namespace for our own dimensions. Centralised
- * so the two transports can never disagree on a key.
+ * so the two transports can never disagree on a key. What of the convention we cover, what
+ * we deliberately omit, and where we extend it is documented per key in the README's "GenAI
+ * semantic-convention coverage" table — that table and this object are edited together.
  */
 export const ATTR = {
   system: 'gen_ai.system',
+  operationName: 'gen_ai.operation.name',
   requestModel: 'gen_ai.request.model',
   inputTokens: 'gen_ai.usage.input_tokens',
   cacheReadTokens: 'gen_ai.usage.cache_read_input_tokens',
@@ -40,10 +45,35 @@ export const ATTR = {
   outputTokens: 'gen_ai.usage.output_tokens',
   finishReasons: 'gen_ai.response.finish_reasons',
   tokenType: 'gen_ai.token.type',
+  agentName: 'gen_ai.agent.name',
+  toolName: 'gen_ai.tool.name',
   workspaceId: 'cat_factory.workspace_id',
   agentKind: 'cat_factory.agent_kind',
+  executionId: 'cat_factory.execution_id',
+  pipeline: 'cat_factory.pipeline',
+  stepCount: 'cat_factory.step_count',
+  attemptCount: 'cat_factory.attempt_count',
   serviceName: 'service.name',
 } as const
+
+/**
+ * The `gen_ai.operation.name` values we emit. The convention's registry is open, but every
+ * value here is one of its own: `chat` for a model call, `execute_tool` for a tool
+ * invocation, `invoke_agent` for an agent's whole turn (our step span). A run's ROOT span
+ * carries none of them on purpose — a pipeline run is not a GenAI operation, so claiming one
+ * would put non-model work on an operator's GenAI dashboards.
+ */
+export const OPERATION = {
+  chat: 'chat',
+  executeTool: 'execute_tool',
+  invokeAgent: 'invoke_agent',
+} as const
+
+/**
+ * The run root span's name. A constant rather than an interpolation, because a span name is a
+ * low-cardinality CLASS; see {@link mapRunSpan} for why the pipeline stays an attribute.
+ */
+export const RUN_SPAN_NAME = 'run'
 
 /** Metric names + units (OTel GenAI client metrics). */
 export const METRIC = {
@@ -74,11 +104,27 @@ interface MappedEvent {
   attributes: AttributeMap
 }
 
+/**
+ * Which OTel span kind a mapped span carries, named neutrally so the two transports each
+ * translate it into their own enum instead of the caller passing a proto number to one and an
+ * SDK enum to the other (which is a way for them to silently disagree).
+ */
+export type MappedSpanKind = 'client' | 'internal'
+
 /** A transport-neutral span, ready to encode as OTLP JSON or feed the SDK tracer. */
 export interface MappedSpan {
-  /** 32-hex trace id (a run's calls share one; standalone calls get a random one). */
+  /** 32-hex trace id (a run's spans share one; standalone calls get a random one). */
   traceId: string
+  /** 16-hex span id. Random for a leaf; DERIVED for a parent (see {@link deriveRunSpanId}). */
+  spanId: string
+  /**
+   * 16-hex id of this span's parent, or undefined for a root. A leaf names its parent by
+   * DERIVING the id rather than by having been told it, which is what lets a stateless
+   * per-call emission take part in a hierarchy assembled by the backend.
+   */
+  parentSpanId?: string
   name: string
+  kind: MappedSpanKind
   /** Epoch ms. */
   startTimeMs: number
   /** Epoch ms. */
@@ -121,6 +167,14 @@ function randomHex(bytes: number): string {
  * SAME trace id and the backend groups them into one trace — the fetch and SDK transports
  * therefore agree without sharing state. FNV-1a, re-hashed with a counter salt to fill the
  * width. Guaranteed non-zero (OTLP rejects an all-zero id).
+ *
+ * A SPREADING function, not a cryptographic one, and the ids it derives are chosen so that is
+ * enough: the only ones that must not collide are the handful within a single trace (one run
+ * span plus one step span per agent kind, each keyed on a distinct prefixed string), and a
+ * trace id collides only across two different execution ids over the full 128 bits. Nothing
+ * here is a security boundary, and no leaf span id comes from it: those are `randomSpanId`.
+ * A collision-resistant hash would be the right answer the moment an id is derived from
+ * something an untrusted party chooses.
  */
 function hashHex(input: string, bytes: number): string {
   let out = ''
@@ -150,6 +204,31 @@ function deriveTraceId(executionId: string | null): string {
   return executionId ? hashHex(executionId, 16) : randomTraceId()
 }
 
+// The span hierarchy is `run → agent-kind step → (generations, tool calls)`, and it is built
+// WITHOUT any shared state: the two parent ids are pure functions of ids every emitter already
+// holds, so a generation recorded by the LLM proxy on one isolate and a tool span drained by the
+// engine on another both name the same parent without either having seen it. The parents
+// themselves are emitted once, when the run settles (`mapRunSpan` / `mapStepSpan`) — the same
+// ordering any OTel SDK produces, where a parent exports after the children it outlives.
+//
+// The prefixes matter: without them a run and its step of the same id string would hash to the
+// same span id, and a run whose agent kind happened to equal its own id would collide with its
+// own root.
+
+/** The DERIVED span id of a run's root span. */
+export function deriveRunSpanId(executionId: string): string {
+  return hashHex(`run:${executionId}`, 8)
+}
+
+/**
+ * The DERIVED span id of one `(run, agent kind)` step span — the parent every generation and
+ * tool span of that kind hangs under. Keyed on the agent kind because that is all a generation
+ * event carries; see `LlmStepSpan` for why that grain is the right one rather than a compromise.
+ */
+export function deriveStepSpanId(executionId: string, agentKind: string): string {
+  return hashHex(`step:${executionId}:${agentKind}`, 8)
+}
+
 /** Epoch ms → OTLP unix-nano string (string arithmetic avoids float precision loss). */
 export function toUnixNano(ms: number): string {
   return `${Math.round(ms)}000000`
@@ -170,10 +249,14 @@ function metricDimensions(event: LlmGenerationEvent): AttributeMap {
   }
 }
 
-/** The dimensions on a generation's SPAN: the metric dimensions plus the workspace id. */
+/**
+ * The dimensions on a generation's SPAN: the metric dimensions plus the ids too
+ * high-cardinality for a metric time series but exactly what a trace is searched by.
+ */
 function generationDimensions(event: LlmGenerationEvent): AttributeMap {
   const attrs = metricDimensions(event)
   if (event.workspaceId) attrs[ATTR.workspaceId] = event.workspaceId
+  if (event.executionId) attrs[ATTR.executionId] = event.executionId
   return attrs
 }
 
@@ -181,6 +264,7 @@ function generationDimensions(event: LlmGenerationEvent): AttributeMap {
 export function mapGeneration(event: LlmGenerationEvent): MappedSpan {
   const attributes: AttributeMap = {
     ...generationDimensions(event),
+    [ATTR.operationName]: OPERATION.chat,
     // The three input classes stay APART on the span: they are priced ~0.1× / 1.25–2× / 1×
     // base input respectively, so a consumer that sums them loses the only signal that says
     // whether a long run is riding a warm cache or re-writing it every turn.
@@ -211,7 +295,18 @@ export function mapGeneration(event: LlmGenerationEvent): MappedSpan {
 
   return {
     traceId: deriveTraceId(event.executionId),
-    name: event.agentKind,
+    spanId: randomSpanId(),
+    // A run-scoped call hangs under its agent kind's step span; a standalone inline call
+    // (requirements review, doc planner, fragment selector) has no run and stays a ROOT, which
+    // is the honest shape — there is no hierarchy above it to point at.
+    ...(event.executionId
+      ? { parentSpanId: deriveStepSpanId(event.executionId, event.agentKind) }
+      : {}),
+    // The convention's span name is `{operation} {request model}`. The agent kind that used to
+    // name this span is now the STEP span's name one level up, so nothing was lost by adopting
+    // it — and it still rides here as `cat_factory.agent_kind`.
+    name: `${OPERATION.chat} ${event.model}`,
+    kind: 'client',
     startTimeMs: event.startedAt,
     endTimeMs: event.endedAt,
     ok: event.ok,
@@ -462,17 +557,100 @@ export function mapPlatformMetrics(
   return gauges
 }
 
-/** Map one container tool call to a neutral span under its run's trace. */
+/** Map one container tool call to a neutral span under its agent kind's step span. */
 export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): MappedSpan {
-  const attributes: AttributeMap = { [ATTR.agentKind]: context.agentKind }
+  const attributes: AttributeMap = {
+    [ATTR.operationName]: OPERATION.executeTool,
+    [ATTR.toolName]: span.tool,
+    [ATTR.agentKind]: context.agentKind,
+  }
   if (context.workspaceId) attributes[ATTR.workspaceId] = context.workspaceId
+  if (context.executionId) attributes[ATTR.executionId] = context.executionId
   return {
     // Tool spans only reach here with a non-null executionId (the sinks guard on it).
     traceId: deriveTraceId(context.executionId),
-    name: span.tool,
+    spanId: randomSpanId(),
+    ...(context.executionId
+      ? { parentSpanId: deriveStepSpanId(context.executionId, context.agentKind) }
+      : {}),
+    name: `${OPERATION.executeTool} ${span.tool}`,
+    kind: 'internal',
     startTimeMs: span.startedAt,
     endTimeMs: span.endedAt,
     ok: span.ok,
+    attributes,
+    events: [],
+  }
+}
+
+/**
+ * Map a settled run to its ROOT span: the ancestor of every step span, and transitively of
+ * every generation and tool span the run emitted.
+ *
+ * It carries no `gen_ai.operation.name`. A pipeline run is orchestration, not a model
+ * operation, and stamping one would file the wait on a human decision as GenAI activity.
+ *
+ * The name is the bare `run`, with the pipeline riding as `cat_factory.pipeline` rather than
+ * interpolated into it. A span name is the one field a backend treats as a low-cardinality
+ * CLASS: it keys the RED metrics a span-metrics connector derives, and the trace-side
+ * counterpart of the rule that a metric dimension must be BOUNDED. Every other name here is a
+ * closed vocabulary (an operation, a model, an agent kind, a tool), but a pipeline is
+ * workspace-authored free text, so interpolating it would let a tenant mint an unbounded
+ * number of series on an operator's backend by renaming pipelines.
+ */
+export function mapRunSpan(run: LlmRunSpan): MappedSpan {
+  const attributes: AttributeMap = {
+    [ATTR.executionId]: run.executionId,
+    [ATTR.pipeline]: run.pipelineName,
+  }
+  if (run.workspaceId) attributes[ATTR.workspaceId] = run.workspaceId
+  return {
+    traceId: deriveTraceId(run.executionId),
+    spanId: deriveRunSpanId(run.executionId),
+    name: RUN_SPAN_NAME,
+    kind: 'internal',
+    startTimeMs: run.startedAt,
+    endTimeMs: run.endedAt,
+    ok: run.ok,
+    ...(run.ok ? {} : { statusMessage: run.errorMessage ?? undefined }),
+    attributes,
+    events: [],
+  }
+}
+
+/**
+ * Map one `(run, agent kind)` slice to the step span its generations and tool calls hang under.
+ *
+ * A HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a `fork-proposer`) names its hosting
+ * kind as parent instead of the run, so an escalation reads as what it is rather than as a
+ * pipeline step of its own.
+ */
+export function mapStepSpan(step: LlmStepSpan): MappedSpan {
+  const attributes: AttributeMap = {
+    [ATTR.operationName]: OPERATION.invokeAgent,
+    [ATTR.agentName]: step.agentKind,
+    [ATTR.agentKind]: step.agentKind,
+    [ATTR.executionId]: step.executionId,
+    // Both counts are stated ALWAYS, not only when they exceed one: a reader who has to infer a
+    // fold from its absence reads a two-step slice as one step that took twice as long, and a
+    // six-round fixer loop as one long fix. `step_count` folds steps of a kind; `attempt_count`
+    // folds the DISPATCHES inside them, which is the cycle a run actually repeats.
+    [ATTR.stepCount]: step.stepCount,
+    [ATTR.attemptCount]: step.attemptCount,
+  }
+  if (step.workspaceId) attributes[ATTR.workspaceId] = step.workspaceId
+  return {
+    traceId: deriveTraceId(step.executionId),
+    spanId: deriveStepSpanId(step.executionId, step.agentKind),
+    parentSpanId: step.parentAgentKind
+      ? deriveStepSpanId(step.executionId, step.parentAgentKind)
+      : deriveRunSpanId(step.executionId),
+    name: `${OPERATION.invokeAgent} ${step.agentKind}`,
+    kind: 'internal',
+    startTimeMs: step.startedAt,
+    endTimeMs: step.endedAt,
+    ok: step.ok,
+    ...(step.ok ? {} : { statusMessage: step.errorMessage ?? undefined }),
     attributes,
     events: [],
   }
@@ -507,6 +685,8 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
   'cache.hit': 'cat_factory.platform.cache_hits',
   'cache.miss': 'cat_factory.platform.cache_misses',
+  'auth.throttle.limited': 'cat_factory.platform.auth_throttle_limited',
+  'auth.throttle.store_unavailable': 'cat_factory.platform.auth_throttle_store_unavailable',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -530,6 +710,8 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'notification.delivery_failed': '{failure}',
   'cache.hit': '{read}',
   'cache.miss': '{read}',
+  'auth.throttle.limited': '{refusal}',
+  'auth.throttle.store_unavailable': '{failure}',
 }
 
 /**

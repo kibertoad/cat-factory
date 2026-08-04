@@ -20,9 +20,10 @@ import type {
   WorkspaceSettingsCacheValue,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import type { LlmMetricsExport } from '@cat-factory/contracts'
+import type { ExecutionInstance, LlmMetricsExport } from '@cat-factory/contracts'
 import type { StoredPrompt } from './observability.logic.js'
 import { buildLlmMetricsExport, computeStoredPrompt } from './observability.logic.js'
+import { buildRunTraceSpans } from './runTraceSpans.logic.js'
 
 export interface LlmObservabilityServiceDependencies {
   llmCallMetricRepository: LlmCallMetricRepository
@@ -309,6 +310,36 @@ export class LlmObservabilityService {
         ),
       )
     }
+  }
+
+  /**
+   * Close a settled run's external trace by emitting the PARENTS its generations and tool
+   * spans have been naming all along: the run's root span and one span per agent kind that
+   * ran. Called from the engine's single terminal hook, so a run reaching `done`/`failed` by
+   * any of its four routes lands here exactly the same way.
+   *
+   * Best-effort and never throwing, like every other fan-out from this service: a trace whose
+   * root is missing is a degraded trace, and must never be a failed run. A sink that groups by
+   * something other than span parentage (Langfuse) simply omits the method and nothing here
+   * changes for it.
+   *
+   * AWAITED, where the per-call `recordGeneration` fan-out above is deliberately not. The two
+   * are on opposite sides of the same trade: a generation is one span among thousands on the
+   * metering hot path, so its round trip must never extend that path, and losing one costs one
+   * span. These are the PARENTS every other span of the run already named, they are emitted
+   * once per run on a path that has already committed the run's state, and losing them orphans
+   * the whole trace rather than thinning it. The wait is bounded by the sink's own per-request
+   * timeout, and on the Worker it is also what keeps the export from being cut off when the
+   * isolate finishes.
+   */
+  async recordRunTrace(workspaceId: string, instance: ExecutionInstance): Promise<void> {
+    const traceSink = this.traceSink
+    if (!traceSink?.recordRunSpans) return
+    const spans = buildRunTraceSpans(workspaceId, instance)
+    if (!spans) return
+    await runBestEffort(this.log, 'traceSink.recordRunSpans', () =>
+      Promise.resolve(traceSink.recordRunSpans?.(spans.run, spans.steps)),
+    )
   }
 
   /**

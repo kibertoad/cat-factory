@@ -11,11 +11,17 @@ import type {
   AccountRepository,
   AccountRole,
   AccountSettingsPatch,
+  AuthAttemptRecord,
+  AuthAttemptRepository,
   CloudProvider,
   EmailConnectionRecord,
   EmailConnectionRepository,
   EmailProviderKind,
   IdentityProvider,
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
   Membership,
   MembershipRepository,
   PasswordResetTokenRecord,
@@ -25,12 +31,15 @@ import type {
   UserRecord,
   UserRepository,
 } from '@cat-factory/kernel'
-import { and, desc, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { randomUUID } from 'node:crypto'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountInvitations,
   accounts,
+  authAttempts,
   emailConnections,
+  machineNodes,
   memberships,
   passwordResetTokens,
   userIdentities,
@@ -444,6 +453,129 @@ export class DrizzlePasswordResetTokenRepository implements PasswordResetTokenRe
     const result = await this.db
       .delete(passwordResetTokens)
       .where(lt(passwordResetTokens.expires_at, before))
+    return result.rowCount ?? 0
+  }
+}
+
+/** Postgres auth-attempt ledger for the password-endpoint throttle (SEC-4). Mirror of the D1 repo. */
+export class DrizzleAuthAttemptRepository implements AuthAttemptRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(attempt: AuthAttemptRecord): Promise<void> {
+    await this.db.insert(authAttempts).values({
+      id: `atmpt_${randomUUID()}`,
+      key: attempt.key,
+      ip: attempt.ip,
+      at: attempt.at,
+    })
+  }
+
+  async countByKeySince(key: string, sinceMs: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(authAttempts)
+      .where(and(eq(authAttempts.key, key), gte(authAttempts.at, sinceMs)))
+    return row?.n ?? 0
+  }
+
+  async countByIpSince(ip: string, sinceMs: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(authAttempts)
+      .where(and(eq(authAttempts.ip, ip), gte(authAttempts.at, sinceMs)))
+    return row?.n ?? 0
+  }
+
+  async deleteOlderThan(epochMs: number): Promise<number> {
+    const result = await this.db.delete(authAttempts).where(lt(authAttempts.at, epochMs))
+    return result.rowCount ?? 0
+  }
+}
+
+function rowToMachineNode(row: typeof machineNodes.$inferSelect): MachineNodeRecord {
+  return {
+    nodeId: row.node_id,
+    userId: row.user_id,
+    accountIds: JSON.parse(row.account_ids) as string[],
+    createdAt: row.created_at,
+    lastMintedAt: row.last_minted_at,
+    expiresAt: row.expires_at,
+    revokedAt: row.revoked_at,
+    revokedByUserId: row.revoked_by,
+  }
+}
+
+/** Postgres machine-node roster + revocation tombstones (SEC-5). Mirror of the D1 repo. */
+export class DrizzleMachineNodeRepository implements MachineNodeRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async recordMint(mint: MachineNodeMint): Promise<MachineNodeMintOutcome> {
+    // The upsert refreshes only the mint-shaped columns: `user_id`, `created_at` and the
+    // revocation tombstone never change here. `GREATEST` keeps `expires_at` the latest exp
+    // ever signed, so a shorter re-mint cannot make the roster forget a longer token.
+    //
+    // `setWhere` is what makes ownership atomic rather than check-then-write: a concurrent
+    // first mint of the same node id by another user updates nothing instead of stamping its
+    // scope onto the winner's row, and a revoked id can never be resurrected.
+    const result = await this.db
+      .insert(machineNodes)
+      .values({
+        node_id: mint.nodeId,
+        user_id: mint.userId,
+        account_ids: JSON.stringify(mint.accountIds),
+        created_at: mint.mintedAt,
+        last_minted_at: mint.mintedAt,
+        expires_at: mint.expiresAt,
+      })
+      .onConflictDoUpdate({
+        target: machineNodes.node_id,
+        set: {
+          account_ids: JSON.stringify(mint.accountIds),
+          last_minted_at: mint.mintedAt,
+          expires_at: sql`GREATEST(${machineNodes.expires_at}, ${mint.expiresAt})`,
+        },
+        setWhere: and(eq(machineNodes.user_id, mint.userId), isNull(machineNodes.revoked_at)),
+      })
+    // A guarded no-op and a successful refresh are both "no error", so the write count is the
+    // only thing that distinguishes them.
+    return (result.rowCount ?? 0) > 0 ? 'recorded' : 'refused'
+  }
+
+  async get(nodeId: string): Promise<MachineNodeRecord | null> {
+    const [row] = await this.db.select().from(machineNodes).where(eq(machineNodes.node_id, nodeId))
+    return row ? rowToMachineNode(row) : null
+  }
+
+  async listByUser(userId: string): Promise<MachineNodeRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(machineNodes)
+      .where(eq(machineNodes.user_id, userId))
+      .orderBy(desc(machineNodes.last_minted_at))
+    return rows.map(rowToMachineNode)
+  }
+
+  async revoke(nodeId: string, revokedAt: number, revokedByUserId: string): Promise<boolean> {
+    // Idempotent kill switch: only the FIRST revocation writes (the tombstone keeps its
+    // original timestamp/actor), but re-revoking an already-revoked node still reports true.
+    const result = await this.db
+      .update(machineNodes)
+      .set({ revoked_at: revokedAt, revoked_by: revokedByUserId })
+      .where(and(eq(machineNodes.node_id, nodeId), isNull(machineNodes.revoked_at)))
+    if ((result.rowCount ?? 0) > 0) return true
+    return (await this.get(nodeId)) !== null
+  }
+
+  async isRevoked(nodeId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ revoked_at: machineNodes.revoked_at })
+      .from(machineNodes)
+      .where(eq(machineNodes.node_id, nodeId))
+    return row?.revoked_at != null
+  }
+
+  async deleteExpired(before: number): Promise<number> {
+    const result = await this.db.delete(machineNodes).where(lt(machineNodes.expires_at, before))
     return result.rowCount ?? 0
   }
 }

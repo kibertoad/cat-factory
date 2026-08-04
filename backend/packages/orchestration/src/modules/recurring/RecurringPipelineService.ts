@@ -15,6 +15,7 @@ import type {
   ScheduleRun,
   ScheduleTemplate,
   ServiceRepository,
+  TaskSourceKind,
   TrackerIssueEvent,
   UpdateScheduleInput,
   WorkspaceMountRepository,
@@ -31,12 +32,13 @@ import {
   ValidationError,
 } from '@cat-factory/kernel'
 import type { IssueIntakeConfig } from '@cat-factory/contracts'
-import { issueEventMatchesIntake, type TaskConnectionService } from '@cat-factory/integrations'
+import { judgeIssueEventForIntake, type TaskConnectionService } from '@cat-factory/integrations'
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import {
   assertPipelineLaunchable,
   pipelineHasEnabledBugIntake,
 } from '../pipelines/pipelineShape.js'
+import { assertValidIssueIntake, dispatchAdmits, dispatchOf } from './issueIntake.logic.js'
 import { computeNextRun } from './schedule.logic.js'
 
 export interface RecurringPipelineServiceDependencies {
@@ -77,6 +79,26 @@ export interface RecurringPipelineServiceDependencies {
    * only "push intake never happens". Absent ⇒ those paths stay silent, as they were.
    */
   logger?: Logger
+  /**
+   * PER-TICKET dispatch: import a pushed tracker issue and materialise it as its own task inside
+   * `containerId`, resolving to the created block — or to `null` when the issue is ALREADY linked
+   * to a block, which is how a redelivery is recognised.
+   *
+   * Declared structurally and bound at the composition root (to `TaskImportService` +
+   * `TaskLinkService`) rather than imported, for the layering reason `TrackerWebhookService`
+   * states about its own gateway: it keeps the import/link behaviour in the ONE place that owns
+   * it, so a per-ticket dispatch and a human's "create task from issue" cannot drift.
+   *
+   * Absent ⇒ a per-ticket config cannot dispatch and says so in the log; the queue mode is
+   * unaffected, so a deployment with no task sources is byte-for-byte unchanged.
+   */
+  adoptIssueAsTask?: (input: {
+    workspaceId: string
+    source: TaskSourceKind
+    externalId: string
+    containerId: string
+    pipelineId: string
+  }) => Promise<{ blockId: string } | null>
 }
 
 /**
@@ -140,6 +162,7 @@ export class RecurringPipelineService {
   private readonly taskConnectionService?: TaskConnectionService
   private readonly events?: ExecutionEventPublisher
   private readonly log: Logger
+  private readonly adoptIssueAsTask?: RecurringPipelineServiceDependencies['adoptIssueAsTask']
 
   constructor(deps: RecurringPipelineServiceDependencies) {
     this.schedules = deps.pipelineScheduleRepository
@@ -155,6 +178,7 @@ export class RecurringPipelineService {
     this.taskConnectionService = deps.taskConnectionService
     this.events = deps.executionEventPublisher
     this.log = deps.logger ?? noopLogger
+    this.adoptIssueAsTask = deps.adoptIssueAsTask
   }
 
   private requireWorkspace(workspaceId: string) {
@@ -173,22 +197,36 @@ export class RecurringPipelineService {
     workspaceId: string,
     pipeline: Pipeline,
     issueIntake: IssueIntakeConfig | undefined,
+    onDemand: boolean,
   ): Promise<void> {
-    if (!pipelineHasEnabledBugIntake(pipeline.agentKinds, pipeline.enabled)) return
-    if (!issueIntake) {
+    const hasBugIntakeStep = pipelineHasEnabledBugIntake(pipeline.agentKinds, pipeline.enabled)
+    if (hasBugIntakeStep && !issueIntake) {
       throw new ValidationError(
         "A 'bug-intake' pipeline needs an issue-intake configuration (source, board and predicates) on its schedule.",
       )
     }
+    // Nothing to validate when the schedule carries no intake config and its pipeline needs none.
+    if (!issueIntake) return
+
+    assertValidIssueIntake({ config: issueIntake, onDemand, hasBugIntakeStep })
+
+    // The connected-source check applies exactly when something will actually READ the config: a
+    // `bug-intake` step searching the board, or a per-ticket dispatch importing the pushed ticket.
+    // A `queue` config on a pipeline with no intake step is inert by design (an unrelated schedule
+    // may carry one harmlessly), and refusing THAT would reject a save for a source the schedule
+    // never touches.
+    //
     // `isOffered` (available AND enabled), NOT `isEnabled`: the toggle defaults ON for a
     // never-connected source (no settings row), so `isEnabled` would wave through a source that
     // has no connection to search — the exact silent-no-op this guard exists to reject.
+    const configIsRead = hasBugIntakeStep || dispatchOf(issueIntake) === 'per-ticket'
     if (
+      configIsRead &&
       this.taskConnectionService &&
       !(await this.taskConnectionService.isOffered(workspaceId, issueIntake.source))
     ) {
       throw new ValidationError(
-        `The '${issueIntake.source}' task source is not connected for this workspace — connect it before scheduling bug intake from it.`,
+        `The '${issueIntake.source}' task source is not connected for this workspace — connect it before scheduling issue intake from it.`,
       )
     }
   }
@@ -244,7 +282,7 @@ export class RecurringPipelineService {
       input.pipelineId,
     )
     assertSchedulable(pipeline)
-    await this.assertIntakeConfigured(workspaceId, pipeline, input.issueIntake)
+    await this.assertIntakeConfigured(workspaceId, pipeline, input.issueIntake, input.onDemand)
     // A CADENCE schedule is defined by its cadence: reject a missing one (before any block is
     // materialised) rather than silently inventing a hidden every-24h/UTC schedule that fires
     // at a time the user never chose. Only an on-demand schedule may omit a recurrence.
@@ -358,6 +396,9 @@ export class RecurringPipelineService {
     // the EFFECTIVE pipeline (the patched one, else the existing schedule's) and the merged config
     // — so clearing `issueIntake` on a bug-intake schedule (or pointing it at a disconnected source)
     // is rejected up front rather than silently no-opping every future fire.
+    //
+    // `onDemand` needs no place in this condition: it is fixed at create time (there is no patch
+    // field for it), so the per-ticket rule that depends on it cannot be invalidated by an update.
     if (patch.pipelineId !== undefined || patch.issueIntake !== undefined) {
       const effectivePipeline =
         changedPipeline ??
@@ -366,7 +407,12 @@ export class RecurringPipelineService {
           'Pipeline',
           existing.pipelineId,
         )
-      await this.assertIntakeConfigured(workspaceId, effectivePipeline, updated.issueIntake)
+      await this.assertIntakeConfigured(
+        workspaceId,
+        effectivePipeline,
+        updated.issueIntake,
+        updated.onDemand,
+      )
     }
     await this.schedules.upsert(workspaceId, updated)
     if (patch.name !== undefined) {
@@ -444,20 +490,31 @@ export class RecurringPipelineService {
    * A tracker pushed an issue event: fire every ENABLED schedule in the workspace whose
    * issue-intake configuration that event plausibly qualifies for. Returns how many started.
    *
-   * This is the whole of push-driven intake (D3 of `docs/initiatives/tracker-webhook-intake.md`).
-   * It imports nothing and links nothing — the fired run's `bug-intake` step does all of that
-   * through the unchanged `BugIntakeService`, so there is exactly ONE intake implementation and a
-   * pushed pickup is byte-for-byte a cadence pickup that simply happened sooner. Consequently the
-   * run may legitimately pick a DIFFERENT, older issue than the one that triggered it: intake is
-   * oldest-first fair queueing, and the webhook's job is to drain the queue promptly, not reorder
-   * it.
+   * This is the whole of push-driven intake (D3 + D8 of
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`), and what a qualifying event DOES depends on the
+   * schedule's dispatch mode:
    *
-   * Deliberately NOT forced. `force` is the human run-now lever — it throws on overlap and bypasses
-   * the on-demand guard — and a webhook has no human present to unlock a personal credential, which
-   * is exactly the situation the unattended-fire guards exist for. So an on-demand schedule is never
-   * webhook-fired, an individual-usage model still refuses, and a burst of deliveries cannot start a
-   * second run over one that is already running or parked (`fire` returns false and leaves
-   * `nextRunAt` for the sweeper).
+   *  - **`queue`** (the default, and every pre-existing schedule) imports nothing and links
+   *    nothing: {@link fire} runs the schedule's reused block and the `bug-intake` step does all of
+   *    it through the unchanged `BugIntakeService`, so there is exactly ONE intake implementation
+   *    and a pushed pickup is byte-for-byte a cadence pickup that happened sooner. The run may
+   *    legitimately pick a DIFFERENT, older issue than the one that triggered it: intake is
+   *    oldest-first fair queueing, and the webhook's job is to drain the queue promptly, not
+   *    reorder it.
+   *  - **`per-ticket`** dispatches the pushed ticket itself ({@link firePerTicket}), which DOES
+   *    import and link.
+   *
+   * Neither path is FORCED. `force` is the human run-now lever (it throws on overlap and bypasses
+   * the on-demand guard) and a webhook has no human present to unlock a personal credential, which
+   * is exactly the situation the unattended-fire guards exist for. So a burst of deliveries cannot
+   * start a second run over one already running or parked (`fire` returns false and leaves
+   * `nextRunAt` for the sweeper), and an individual-usage model still refuses on BOTH paths.
+   *
+   * The on-demand guard reads differently per mode, and deliberately so. `fire` refuses an
+   * on-demand schedule outright, so a queue schedule is never webhook-fired unattended. A
+   * per-ticket schedule is REQUIRED to be on-demand (it has no cadence to be driven by), so
+   * `firePerTicket` does not consult that guard and applies the individual-usage check itself,
+   * against the block it just created rather than a reused one.
    *
    * ONE schedule read for the workspace, filtered in memory — never a point-read per schedule.
    */
@@ -467,12 +524,37 @@ export class RecurringPipelineService {
     let fired = 0
     for (const schedule of schedules) {
       if (!schedule.enabled || !schedule.issueIntake) continue
-      if (!issueEventMatchesIntake(schedule.issueIntake, event)) continue
+      const dispatch = dispatchOf(schedule.issueIntake)
+      const verdict = judgeIssueEventForIntake(schedule.issueIntake, event)
+      if (!dispatchAdmits(verdict, dispatch)) {
+        // A withheld PER-TICKET dispatch is REPORTED, never merely skipped. A per-ticket schedule
+        // is on-demand, so no cadence sweep will pick the ticket up later: "the delivery could not
+        // confirm the labels you scoped on" and "no delivery ever arrived" are opposite facts with
+        // the same silence, and only this line tells them apart. A `miss` needs no line: that is
+        // the predicate doing its job on an unrelated issue, which is most of the traffic.
+        if (dispatch === 'per-ticket' && verdict.outcome === 'unconfirmed') {
+          this.log.warn(
+            'per-ticket dispatch withheld: the delivery could not confirm a predicate',
+            {
+              workspaceId,
+              scheduleId: schedule.id,
+              source: event.source,
+              externalId: event.externalId,
+              unconfirmed: verdict.predicates.join(','),
+            },
+          )
+        }
+        continue
+      }
       // Best-effort per schedule: one schedule whose pipeline fails to start (a disconnected
       // source, a missing model) must not stop the others — the same isolation `runDue` gets from
       // `fire`'s own internal error handling, extended to the errors it deliberately rethrows.
       try {
-        if (await this.fire(workspaceId, schedule, { now })) fired++
+        const started =
+          dispatch === 'per-ticket'
+            ? await this.firePerTicket(workspaceId, schedule, event, now)
+            : await this.fire(workspaceId, schedule, { now })
+        if (started) fired++
       } catch (error) {
         // NOT rethrown: the caller is a webhook consumer whose only lever is retry, and retrying
         // would re-fire every OTHER matching schedule too. The polling sweep remains the backstop
@@ -492,6 +574,111 @@ export class RecurringPipelineService {
       }
     }
     return fired
+  }
+
+  /**
+   * PER-TICKET dispatch: import the pushed ticket, materialise it as its own task under the
+   * schedule's frame, and start the schedule's pipeline on THAT task. Returns whether a run
+   * started.
+   *
+   * The contrast with {@link fire} is the whole feature. `fire` re-runs one reused block and the
+   * run's `bug-intake` step decides what to work; this creates a block per ticket and the ticket
+   * IS the work, so a feature request enters the platform from the tracker it was filed in
+   * instead of through an API call.
+   *
+   * Three properties are load-bearing:
+   *
+   *  - **Idempotency is the issue's existing single `linkedBlockId`**, not a new marker. A
+   *    redelivery (or the `updated` event that follows a `created` one) finds the issue already
+   *    linked, and `adoptIssueAsTask` reports that as `null`. The link already guarantees what a
+   *    claim table would have bought. It is read off the row the import returns rather than by
+   *    catching `createTaskFromIssue`'s conflict, because that refusal is PROSE: matching it would
+   *    start double-dispatching the day someone rewords the message. A genuine RACE (two deliveries
+   *    interleaving between that read and the create) still lands on the conflict and propagates,
+   *    which is correct: the caller's per-schedule isolation logs it and the winner has already
+   *    dispatched the ticket.
+   *  - **The unattended-fire guard is the SAME one `fire` applies.** A webhook has no human present
+   *    to unlock a personal credential, so an individual-usage model must refuse here too — checked
+   *    against the CREATED block, which is the block that will actually run, rather than the
+   *    schedule's reused one.
+   *  - **`origin: 'manual'`**, because this run IS a one-off task run: a dedicated block, started
+   *    once, never reused. That also makes `assertPipelineLaunchable` refuse a `recurring`-only
+   *    pipeline, which is exactly right — a `bug-intake` pipeline would go and pick a DIFFERENT
+   *    ticket — and it is the run-time half of the create-time `assertValidIssueIntake` rule.
+   */
+  private async firePerTicket(
+    workspaceId: string,
+    schedule: PipelineSchedule,
+    event: TrackerIssueEvent,
+    now: number,
+  ): Promise<boolean> {
+    const adopt = this.adoptIssueAsTask
+    if (!adopt) {
+      // No task-source services on this deployment: per-ticket dispatch cannot import anything.
+      // Stated rather than silently counted as "not fired", because the config asks for something
+      // this deployment structurally cannot do.
+      this.log.warn('per-ticket dispatch skipped: task-source adoption is not wired', {
+        workspaceId,
+        scheduleId: schedule.id,
+        source: event.source,
+        externalId: event.externalId,
+      })
+      return false
+    }
+
+    const adopted = await adopt({
+      workspaceId,
+      source: event.source,
+      externalId: event.externalId,
+      containerId: schedule.frameId,
+      pipelineId: schedule.pipelineId,
+    })
+    // `null` = the issue is already linked to a block, i.e. this ticket has already been
+    // dispatched. Not an error and not a fire: the delivery is acked and nothing is duplicated.
+    if (!adopted) return false
+
+    const individualVendor =
+      (
+        await this.executionService.individualVendorsForBlock(
+          workspaceId,
+          adopted.blockId,
+          schedule.pipelineId,
+        )
+      )[0] ?? null
+    if (individualVendor) {
+      // The ticket is already on the board as a task, which is the useful half: a human can start
+      // it after switching the model. Record WHY it did not auto-start rather than leaving a task
+      // that mysteriously never ran.
+      await this.schedules.insertRun(workspaceId, {
+        id: this.idGenerator.next('schr'),
+        scheduleId: schedule.id,
+        executionId: null,
+        status: 'skipped',
+        startedAt: now,
+        finishedAt: now,
+        outcome: `${event.externalId} was imported as a task, but an individual-usage ${individualVendor} model cannot start unattended. Start it manually, or pick an API-key or coding-plan model.`,
+      })
+      return false
+    }
+
+    const instance = await this.executionService.start(
+      workspaceId,
+      adopted.blockId,
+      schedule.pipelineId,
+      { initiatedBy: null, origin: 'manual' },
+    )
+    await this.schedules.insertRun(workspaceId, {
+      id: this.idGenerator.next('schr'),
+      scheduleId: schedule.id,
+      executionId: instance.id,
+      status: 'running',
+      startedAt: now,
+      finishedAt: null,
+      outcome: `Dispatched ${event.externalId} as its own task.`,
+    })
+    // Deliberately NO `advanceCadence`: a per-ticket schedule is on-demand, so it has no cadence
+    // to advance, and moving `nextRunAt` would misreport a webhook dispatch as a scheduled fire.
+    return true
   }
 
   /**

@@ -168,3 +168,83 @@ describe('RunStateMachine.emitInstance — metrics rollup gating', () => {
     expect(instance.steps[0]!.metrics).toBeUndefined()
   })
 })
+
+// The external trace's PARENTS (the run root + one span per agent kind) are emitted from this
+// hook and nowhere else, because a run reaches a terminal state from several sites and any of
+// them added later would otherwise emit nothing. Nothing about that placement is visible in the
+// spans themselves, so these tests are what pin it: the previous coverage exercised the fold and
+// the service in isolation, which would both stay green if the call site were deleted.
+describe('RunStateMachine.emitInstance — external run-trace parents', () => {
+  function makeMachineWithTrace() {
+    const traced: string[] = []
+    const llmObservability = {
+      summarizeByExecution: async () => [],
+      recordRunTrace: async (_workspaceId: string, instance: ExecutionInstance) => {
+        traced.push(instance.status)
+      },
+    } as unknown as LlmObservabilityService
+    const machine = new RunStateMachine({
+      executionRepository: {} as never,
+      blockRepository: { get: async () => normalBlock } as unknown as BlockRepository,
+      events: { executionChanged: async () => {} } as unknown as ExecutionEventPublisher,
+      workRunner: {} as never,
+      agentExecutor: {} as never,
+      idGenerator: {} as never,
+      clock: {} as never,
+      stepGraph: {} as never,
+      llmObservability,
+    })
+    return { machine, traced }
+  }
+
+  function instanceWithStatus(status: ExecutionInstance['status']): ExecutionInstance {
+    return { ...makeInstance('task_y'), status } as ExecutionInstance
+  }
+
+  it.each(['done', 'failed'] as const)('emits the trace parents on a %s run', async (status) => {
+    const { machine, traced } = makeMachineWithTrace()
+    await machine.emitInstance('ws_1', instanceWithStatus(status))
+    expect(traced).toEqual([status])
+  })
+
+  it('emits nothing while the run is still going', async () => {
+    // A root span emitted mid-run would claim an extent the run has not reached yet, and the
+    // hook re-fires on the terminal emit anyway.
+    const { machine, traced } = makeMachineWithTrace()
+    await machine.emitInstance('ws_1', instanceWithStatus('running'))
+    expect(traced).toEqual([])
+  })
+
+  it('emits on a progress-only fold of an already-terminal run', async () => {
+    // `rollUpMetrics: false` suppresses the metrics query, never the trace: the parents are
+    // idempotent by construction, so the cheap disposition is to re-emit rather than to reason
+    // about which emit is the run's last.
+    const { machine, traced } = makeMachineWithTrace()
+    await machine.emitInstance('ws_1', instanceWithStatus('done'), { rollUpMetrics: false })
+    expect(traced).toEqual(['done'])
+  })
+
+  it('still emits for a headless internal run, whose live push is suppressed', async () => {
+    // The SPA must never see an internal anchor block, but an operator's trace backend is not
+    // the SPA: dropping the parents here would orphan every span a public-API run exported.
+    const { traced } = makeMachineWithTrace()
+    const machine = new RunStateMachine({
+      executionRepository: {} as never,
+      blockRepository: { get: async () => internalAnchor } as unknown as BlockRepository,
+      events: { executionChanged: async () => {} } as unknown as ExecutionEventPublisher,
+      workRunner: {} as never,
+      agentExecutor: {} as never,
+      idGenerator: {} as never,
+      clock: {} as never,
+      stepGraph: {} as never,
+      llmObservability: {
+        summarizeByExecution: async () => [],
+        recordRunTrace: async (_ws: string, instance: ExecutionInstance) => {
+          traced.push(instance.status)
+        },
+      } as unknown as LlmObservabilityService,
+    })
+    await machine.emitInstance('ws_1', instanceWithStatus('done'))
+    expect(traced).toEqual(['done'])
+  })
+})

@@ -6,9 +6,23 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
 import type { MetricData } from '@opentelemetry/sdk-metrics'
-import type { LlmGenerationEvent, LlmToolSpan, LlmToolSpanContext } from '@cat-factory/kernel'
+import type {
+  LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
+  LlmToolSpan,
+  LlmToolSpanContext,
+} from '@cat-factory/kernel'
 import { OtelTraceSink } from './index.js'
 import { NodeOtelTraceSink } from './node.js'
+import type { MappedSpanKind } from './mapping.js'
+
+// The two span-kind enums do NOT share numeric values (the API's `SpanKind.CLIENT` is 2, the
+// OTLP proto's is 3), which is the whole reason `MappedSpan.kind` is a neutral name each
+// transport translates. Normalise both back to that name so this suite compares the DECISION
+// rather than two encodings of it.
+const PROTO_SPAN_KIND: Record<number, MappedSpanKind> = { 1: 'internal', 3: 'client' }
+const SDK_SPAN_KIND_NAME: Record<number, MappedSpanKind> = { 0: 'internal', 2: 'client' }
 
 // The guard the CF↔Node transport split requires: the workerd-safe fetch exporter and the
 // official-SDK exporter go through the SAME `./mapping` layer, so feeding both the SAME
@@ -50,6 +64,54 @@ const TOOL_SPANS: LlmToolSpan[] = [
   { tool: 'edit_file', startedAt: 2_100, endedAt: 2_200, ok: true },
   { tool: 'run_command', startedAt: 2_300, endedAt: 2_400, ok: false },
 ]
+const RUN: LlmRunSpan = {
+  workspaceId: 'ws1',
+  executionId: 'exec-42',
+  pipelineName: 'Bugfix',
+  startedAt: 1_000,
+  endedAt: 5_000,
+  ok: true,
+  errorMessage: null,
+}
+const STEP_SPANS: LlmStepSpan[] = [
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec-42',
+    agentKind: 'coder',
+    startedAt: 1_500,
+    endedAt: 3_000,
+    stepCount: 1,
+    attemptCount: 1,
+    ok: true,
+    errorMessage: null,
+  },
+  // A HELPER kind: dispatched by the `ci` gate, so it nests under that step rather than under
+  // the run. Included here because parentage assembled from a NON-root parent is the part the
+  // two transports build most differently (an explicit parent Context on the SDK side).
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec-42',
+    agentKind: 'ci-fixer',
+    parentAgentKind: 'ci',
+    startedAt: 3_000,
+    endedAt: 4_500,
+    stepCount: 1,
+    attemptCount: 4,
+    ok: true,
+    errorMessage: null,
+  },
+  {
+    workspaceId: 'ws1',
+    executionId: 'exec-42',
+    agentKind: 'ci',
+    startedAt: 3_000,
+    endedAt: 5_000,
+    stepCount: 1,
+    attemptCount: 1,
+    ok: true,
+    errorMessage: null,
+  },
+]
 
 /** The normalised, transport-independent projection the two exporters must agree on. */
 interface NormalizedTelemetry {
@@ -57,6 +119,9 @@ interface NormalizedTelemetry {
   spans: {
     name: string
     traceId: string
+    spanId: string
+    parentSpanId: string | undefined
+    kind: MappedSpanKind
     attributes: Record<string, unknown>
     statusCode: number
     events: string[]
@@ -147,6 +212,7 @@ async function collectFetch(): Promise<NormalizedTelemetry> {
     const sink = new OtelTraceSink({ endpoint: COLLECTOR, serviceName: 'cat-factory', fetchImpl })
     await sink.recordGeneration(GENERATION)
     await sink.recordToolSpans(TOOL_CONTEXT, TOOL_SPANS)
+    await sink.recordRunSpans(RUN, STEP_SPANS)
 
     const spans: NormalizedTelemetry['spans'] = []
     let serviceName = ''
@@ -160,6 +226,9 @@ async function collectFetch(): Promise<NormalizedTelemetry> {
             spans.push({
               name: String(s.name),
               traceId: String(s.traceId),
+              spanId: String(s.spanId),
+              parentSpanId: s.parentSpanId === undefined ? undefined : String(s.parentSpanId),
+              kind: PROTO_SPAN_KIND[Number(s.kind)]!,
               attributes: attrs(s.attributes as KV[]),
               statusCode: (s.status as { code: number }).code,
               events: (s.events as Record<string, unknown>[]).map((e) => String(e.name)),
@@ -200,6 +269,7 @@ async function collectSdk(): Promise<NormalizedTelemetry> {
   })
   sink.recordGeneration(GENERATION)
   sink.recordToolSpans(TOOL_CONTEXT, TOOL_SPANS)
+  sink.recordRunSpans(RUN, STEP_SPANS)
   await sink.forceFlush()
 
   const finished = spanExporter.getFinishedSpans()
@@ -207,6 +277,9 @@ async function collectSdk(): Promise<NormalizedTelemetry> {
   const spans: NormalizedTelemetry['spans'] = finished.map((s) => ({
     name: s.name,
     traceId: s.spanContext().traceId,
+    spanId: s.spanContext().spanId,
+    parentSpanId: s.parentSpanContext?.spanId,
+    kind: SDK_SPAN_KIND_NAME[s.kind]!,
     attributes: { ...s.attributes },
     // ReadableSpan status uses the same numeric codes as OTLP (UNSET=0, ERROR=2).
     statusCode: s.status.code,
@@ -248,13 +321,23 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
     expect(fetchTel.duration.count).toBe(sdkTel.duration.count)
     expect(fetchTel.duration.sum).toBeCloseTo(sdkTel.duration.sum, 9)
 
-    // Same spans (name, attributes, status, events) keyed by name — span ids differ (random),
-    // trace ids must MATCH (deterministic per-run derivation shared via ./mapping).
+    // Same spans (name, kind, attributes, status, events, parentage) keyed by name. A LEAF's own
+    // span id is random and so differs between transports; every id that carries meaning — the
+    // trace id, a parent id, a derived parent's own id — must MATCH, because those are what
+    // assemble the hierarchy out of stateless emissions.
     const byName = (t: NormalizedTelemetry) => new Map(t.spans.map((s) => [s.name, s]))
     const fetchSpans = byName(fetchTel)
     const sdkSpans = byName(sdkTel)
     expect([...fetchSpans.keys()].sort()).toEqual([...sdkSpans.keys()].sort())
-    expect([...fetchSpans.keys()].sort()).toEqual(['coder', 'edit_file', 'run_command'])
+    expect([...fetchSpans.keys()].sort()).toEqual([
+      'chat claude-x',
+      'execute_tool edit_file',
+      'execute_tool run_command',
+      'invoke_agent ci',
+      'invoke_agent ci-fixer',
+      'invoke_agent coder',
+      'run',
+    ])
 
     for (const [name, fetchSpan] of fetchSpans) {
       const sdkSpan = sdkSpans.get(name)!
@@ -262,11 +345,32 @@ describe('OTLP transport conformity: fetch exporter ↔ SDK exporter', () => {
       expect(sdkSpan.statusCode, name).toBe(fetchSpan.statusCode)
       expect(sdkSpan.events, name).toEqual(fetchSpan.events)
       expect(sdkSpan.traceId, name).toBe(fetchSpan.traceId)
+      expect(sdkSpan.kind, name).toBe(fetchSpan.kind)
+      expect(sdkSpan.parentSpanId, name).toBe(fetchSpan.parentSpanId)
     }
 
-    // A run's generation + its tool spans share one trace id, in BOTH transports.
+    // The whole run is ONE trace, in BOTH transports.
     const traceIds = new Set([...fetchSpans.values()].map((s) => s.traceId))
     expect(traceIds.size).toBe(1)
     expect(new Set([...sdkSpans.values()].map((s) => s.traceId))).toEqual(traceIds)
+
+    // …and it is a HIERARCHY rather than a flat set of siblings: run → step → leaves, assembled
+    // identically by both transports even though each leaf was emitted before its parent existed.
+    for (const spans of [fetchSpans, sdkSpans]) {
+      const root = spans.get('run')!
+      const step = spans.get('invoke_agent coder')!
+      expect(root.parentSpanId).toBeUndefined()
+      expect(step.parentSpanId).toBe(root.spanId)
+      for (const leaf of ['chat claude-x', 'execute_tool edit_file', 'execute_tool run_command']) {
+        expect(spans.get(leaf)!.parentSpanId, leaf).toBe(step.spanId)
+      }
+      // A helper nests one level deeper: the `ci` gate escalated to a fixer, so the fixer hangs
+      // under the gate rather than beside it. Both transports have to agree about a parent that
+      // is itself a derived, not-yet-emitted span.
+      const gate = spans.get('invoke_agent ci')!
+      expect(gate.parentSpanId).toBe(root.spanId)
+      expect(spans.get('invoke_agent ci-fixer')!.parentSpanId).toBe(gate.spanId)
+      expect(spans.get('invoke_agent ci-fixer')!.attributes['cat_factory.attempt_count']).toBe(4)
+    }
   })
 })

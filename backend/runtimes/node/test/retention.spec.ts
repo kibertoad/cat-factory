@@ -90,6 +90,10 @@ function fakeRepos(): {
       },
       // Expired password-reset tokens (deleted by `now`, not a window).
       passwordResetTokenRepository: { deleteExpired: async () => 1 },
+      // Machine-node roster rows past their latest signed exp (deleted by `now`).
+      machineNodeRepository: { deleteExpired: async () => 2 },
+      // Password-throttle attempts, pruned to a fixed 1-hour window.
+      authAttemptRepository: { deleteOlderThan: async () => 4 },
       // GitHub commit projection, pruned to the `commitMs` window (Worker parity).
       commitRepository: {
         deleteOlderThan: async (c) => {
@@ -168,6 +172,8 @@ describe('sweepRetention', () => {
       subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      machineNodes: 2,
+      authAttempts: 4,
       commits: 4,
       notifications: 9,
       gateOutcomes: 2,
@@ -195,6 +201,8 @@ describe('sweepRetention', () => {
       subscriptionQuotaCycles: 8,
       provisioningLog: 5,
       passwordResetTokens: 1,
+      machineNodes: 2,
+      authAttempts: 4,
       commits: 4,
       notifications: 9,
       gateOutcomes: 2,

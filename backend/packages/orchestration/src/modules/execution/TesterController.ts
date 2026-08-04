@@ -361,7 +361,7 @@ export class TesterController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle)
+    recordDispatchAttribution(step, handle, context.agentKind)
     // The dispatch returned, so the container is up; the live phase + id/url arrive on the
     // first poll, surfaced via the same `container` projection identically to the Coder.
     step.container = { status: 'up' }
@@ -561,7 +561,7 @@ export class TesterController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle)
+    recordDispatchAttribution(step, handle, context.agentKind)
     // The fixer's container is up once the dispatch returns; the live phase + id/url arrive
     // on the first poll.
     step.container = { status: 'up' }

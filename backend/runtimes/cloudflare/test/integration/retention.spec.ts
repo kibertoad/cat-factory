@@ -5,10 +5,12 @@ import { CryptoIdGenerator } from '../../src/infrastructure/runtime'
 import { D1AgentContextSnapshotRepository } from '../../src/infrastructure/repositories/D1AgentContextSnapshotRepository'
 import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
+import { D1AuthAttemptRepository } from '../../src/infrastructure/repositories/D1AuthAttemptRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D1GateOutcomeRepository'
-import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
+import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D1MachineNodeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
+import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
@@ -48,6 +50,13 @@ function deps() {
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
     // Subscription quota-cycle counters live in the main DB (migration 0047).
     subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db }),
+    // Machine-node roster tombstones live in the main DB (migration 0077).
+    machineNodeRepository: new D1MachineNodeRepository({ db }),
+    // Password-throttle attempts live in the main DB (migration 0078).
+    authAttemptRepository: new D1AuthAttemptRepository({
+      db,
+      idGenerator: new CryptoIdGenerator(),
+    }),
     notificationRepository: new D1NotificationRepository({ db }),
     // Both operator-observability projections live in the main DB beside `agent_runs`.
     gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
@@ -270,6 +279,10 @@ describe('storage retention sweep', () => {
       scheduleRuns: 0,
       provisioningLog: 0,
       passwordResetTokens: 0,
+      // Machine-node rows expire by their own `expires_at`, not the policy; none seeded here.
+      machineNodes: 0,
+      // Auth attempts prune on a FIXED 1-hour window, not the policy; none seeded here.
+      authAttempts: 0,
       notifications: 0,
       gateOutcomes: 0,
       runDays: 0,

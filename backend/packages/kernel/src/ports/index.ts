@@ -164,6 +164,8 @@ export type {
 } from './agent-search-queries.js'
 export type {
   LlmGenerationEvent,
+  LlmRunSpan,
+  LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
   LlmTraceSink,
@@ -322,6 +324,7 @@ export type {
   TrackerWebhookEvent,
 } from './tracker-webhook.js'
 export {
+  BUILTIN_TASK_SOURCE_KINDS,
   TRACKER_WEBHOOK_REPLY_ALLOW_KEY,
   TRACKER_WEBHOOK_SECRET_KEY,
   isTaskSourceKind,
@@ -532,6 +535,13 @@ export type {
   LocalModelEndpointRecord,
   LocalModelEndpointRepository,
 } from './local-model-repositories.js'
+export type {
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
+} from './machine-node-repositories.js'
+export type { AuthAttemptRecord, AuthAttemptRepository } from './auth-attempt-repositories.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,

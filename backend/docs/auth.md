@@ -46,7 +46,36 @@ browser redirect entirely: the SPA posts credentials to `/auth/signup` or
 Sessions are **stateless**: the token is `base64url(JSON).base64url(HMAC)` with
 an absolute expiry, verified per request (see `infrastructure/auth/signing.ts`).
 There is no server-side session store: logout is a client-side token drop, and
-expiry bounds the blast radius. (Revocation lists are a possible follow-up.)
+expiry bounds the blast radius. (User-session revocation remains a possible
+follow-up; MACHINE tokens are revocable, below.)
+
+**Machine tokens are revocable.** Every `POST /auth/machine-token` mint is
+recorded on the machine-node roster (`machine_nodes`), and the shared machine
+gate (`verifyMachineRequest`) consults its revocation tombstone on every
+`/internal/*` call, so a leaked node token dies everywhere at once instead of
+running out its 30-day TTL. The owner lists their nodes at
+`GET /auth/machine-nodes` and kills one with
+`POST /auth/machine-nodes/:nodeId/revoke`; a revoked node id can never be
+re-minted (reconnecting mints a fresh one).
+
+**The password endpoints are throttled durably.** Signup / login / forgot /
+reset attempts land in the cross-replica `auth_attempts` ledger: a per-`ip:email`
+burst cap plus a per-IP aggregate that catches one-password-many-emails
+stuffing. The old in-process window remains only as the backstop when the store
+errors, and a trip is counted (`auth.throttle.limited`) as well as logged, since
+only a rate distinguishes one forgetful user from a stuffing sweep.
+
+Which header carries the client address is a per-FACADE decision, resolved by
+`ServerContainer.resolveClientAddress` rather than by shared throttle code. Node
+reads the socket peer, and `x-forwarded-for` only when `AUTH_TRUST_PROXY=true`
+(with `AUTH_TRUST_PROXY_HOPS` naming the chain depth, rightmost-first); it never
+reads `cf-connecting-ip`, because nginx / Caddy / ALB rewrite `x-forwarded-for`
+and forward every other header untouched, so trusting a Cloudflare-specific
+header behind a generic proxy would leave the identity client-chosen. The Worker
+reads `cf-connecting-ip` alone, which is authentic there because the edge injects
+and overwrites it. Addresses are normalised before keying: a port is stripped,
+anything not IP-shaped is refused, and IPv6 is bucketed to its /64 so a routine
+allocation is not 2^64 fresh buckets.
 
 The session token is carried as a bearer header rather than a cookie so the
 cross-origin SPA → Worker calls work without `SameSite=None` cookies or

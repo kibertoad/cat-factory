@@ -41,6 +41,7 @@ import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
+import { makeNodeClientAddressResolver } from './clientAddress.js'
 
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
@@ -475,6 +476,17 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       repoProjectionRepository,
       githubInstallationRepository,
     } as unknown as PersistenceRegistry,
+    // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
+    // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
+    // via /auth/machine-nodes. Wired symmetrically on the Cloudflare facade.
+    machineNodeRepository: repos.machineNodeRepository,
+    // The durable cross-replica window behind the password throttle (SEC-4). Wired
+    // symmetrically on the Cloudflare facade.
+    authAttemptRepository: repos.authAttemptRepository,
+    // The client address the password throttle keys on (SEC-4): the socket peer, or the
+    // operator's declared `x-forwarded-for` hop. See `clientAddress.ts` for why this facade
+    // never reads `cf-connecting-ip`.
+    resolveClientAddress: makeNodeClientAddressResolver(config.auth),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

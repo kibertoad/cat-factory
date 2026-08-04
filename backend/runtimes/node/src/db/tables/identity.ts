@@ -222,3 +222,45 @@ export const passwordResetTokens = pgTable(
     index('idx_password_reset_tokens_expiry').on(t.expires_at),
   ],
 )
+
+// The durable auth-attempt ledger behind the password-endpoint throttle (SEC-4): one row
+// per attempt, counted per bucket key AND per client IP, pruned aggressively (rows are
+// junk minutes after the window closes). Mirrors the D1 table (0078_auth_attempts.sql).
+export const authAttempts = pgTable(
+  'auth_attempts',
+  {
+    id: text('id').primaryKey(),
+    key: text('key').notNull(),
+    ip: text('ip').notNull(),
+    at: bigint('at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_auth_attempts_key').on(t.key, t.at),
+    index('idx_auth_attempts_ip').on(t.ip, t.at),
+    // `deleteOlderThan` sweeps on `at < ?`; same TTL-index convention as the tables above.
+    index('idx_auth_attempts_at').on(t.at),
+  ],
+)
+
+// The machine-node roster + revocation tombstones (SEC-5): one row per nodeId a mothership
+// minted a machine token for. `revoked_at` is a tombstone every `/internal/*` machine gate
+// consults; never cleared. Mirrors the D1 table (0077_machine_nodes.sql).
+export const machineNodes = pgTable(
+  'machine_nodes',
+  {
+    node_id: text('node_id').primaryKey(),
+    user_id: text('user_id').notNull(),
+    // JSON array of the most recent mint's account scope.
+    account_ids: text('account_ids').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    last_minted_at: bigint('last_minted_at', { mode: 'number' }).notNull(),
+    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
+    revoked_at: bigint('revoked_at', { mode: 'number' }),
+    revoked_by: text('revoked_by'),
+  },
+  (t) => [
+    index('idx_machine_nodes_user').on(t.user_id),
+    // `deleteExpired` sweeps on `expires_at < ?`; same TTL-index convention as above.
+    index('idx_machine_nodes_expiry').on(t.expires_at),
+  ],
+)

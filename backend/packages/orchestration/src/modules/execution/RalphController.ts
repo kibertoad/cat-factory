@@ -176,7 +176,7 @@ export class RalphController {
 
     const handle = await executor.startJob(context)
     step.jobId = handle.jobId
-    recordDispatchAttribution(step, handle)
+    recordDispatchAttribution(step, handle, context.agentKind)
     step.container = { status: 'up' }
     await this.deps.stateMachine.casPersist(workspaceId, instance)
     await this.deps.stateMachine.emitInstance(workspaceId, instance)

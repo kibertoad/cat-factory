@@ -154,6 +154,10 @@ export function buildNodeLocalModelEndpointService(
       info: 'cat-factory:local-model-endpoints',
     }),
     clock,
+    // Loopback-only unless the operator opts into LAN reach: on a shared multi-tenant
+    // Node deployment the LAN allow-list is an internal-network SSRF grant (SEC-3).
+    // Single-tenant local mode defaults this env var on (applyLocalDefaults).
+    allowPrivateLanHosts: env.LOCAL_MODELS_ALLOW_LAN?.trim() === 'true',
   })
 }
 

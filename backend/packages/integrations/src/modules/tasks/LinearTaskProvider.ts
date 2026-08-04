@@ -64,7 +64,7 @@ export class LinearTaskProvider implements TaskSourceProvider {
   /**
    * Inbound webhook capability (verify + parse), so a linear delivery can drive intake and
    * ticket replies without waiting for the next polling sweep. See
-   * `docs/initiatives/tracker-webhook-intake.md`.
+   * `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   readonly webhook = linearWebhookAdapter
   readonly descriptor = LINEAR_TASK_DESCRIPTOR

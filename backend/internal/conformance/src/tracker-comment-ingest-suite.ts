@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the INBOUND tracker-comment ingest markers — the rows that keep a
 // redelivered reporter comment from answering the same review finding twice
-// (docs/initiatives/tracker-webhook-intake.md, D4).
+// (backend/docs/adr/0032-tracker-webhook-intake.md, D4).
 //
 // The contract this pins is `claim`, and it is the whole reason the suite exists: it must be ONE
 // atomic statement whose insert-or-conditional-update reports whether the caller now owns the

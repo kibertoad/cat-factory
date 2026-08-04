@@ -131,7 +131,7 @@ introduces three kinds whose names invite confusion:
   Trap: an inbound tracker WEBHOOK does not run this step; it fires the SCHEDULE, which then runs
   it unchanged. So "push-driven intake" and "the recurring intake" are the same code reached
   sooner, and the fired run may legitimately pick a different, older issue than the one that
-  triggered it (see `docs/initiatives/tracker-webhook-intake.md`).
+  triggered it (see `backend/docs/adr/0032-tracker-webhook-intake.md`).
 - **`bug-investigator`**: a **structured `container-explore`** registered kind (read-only,
   multi-repo). Its `clarity`/`questions` drive the adjacent `clarity-review` gate; `clear`
   auto-passes with no human park.

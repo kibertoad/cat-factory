@@ -708,7 +708,7 @@ export class RunDispatcher {
         }
         step.jobId = handle.jobId
         // Record the model at dispatch — the poll site can't resolve it later.
-        recordDispatchAttribution(step, handle)
+        recordDispatchAttribution(step, handle, context.agentKind)
         // Surface web-search availability + provider on the step (run details), resolved
         // backend-side at dispatch. A static per-run fact, not gated by prompt telemetry.
         if (handle.search) step.search = handle.search

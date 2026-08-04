@@ -26,6 +26,8 @@ import { D1AgentSearchQueryRepository } from './infrastructure/repositories/D1Ag
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
 import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
+import { D1AuthAttemptRepository } from './infrastructure/repositories/D1AuthAttemptRepository'
+import { D1MachineNodeRepository } from './infrastructure/repositories/D1MachineNodeRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
 import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOutcomeRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
@@ -333,6 +335,11 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
       subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
       pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),
       passwordResetTokenRepository: new D1PasswordResetTokenRepository({ db: env.DB }),
+      machineNodeRepository: new D1MachineNodeRepository({ db: env.DB }),
+      authAttemptRepository: new D1AuthAttemptRepository({
+        db: env.DB,
+        idGenerator: new CryptoIdGenerator(),
+      }),
       notificationRepository: new D1NotificationRepository({ db: env.DB }),
       // Both operator-observability projections live in the main DB beside `agent_runs`
       // (they are account-scoped through the same `workspaces` sub-select).

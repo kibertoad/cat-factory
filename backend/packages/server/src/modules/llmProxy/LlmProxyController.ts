@@ -2,7 +2,6 @@ import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { promptCacheParams, readInputTokenClasses } from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
-import { fetchLocalRunner } from '@cat-factory/integrations'
 import {
   type ApiKeyProvider,
   contextWindowFor,
@@ -145,12 +144,26 @@ interface ProxyCallContext {
   record: (usage: LlmTokenUsage | null) => Promise<number>
 }
 
-/** A resolved OpenAI-compatible upstream (base URL + bearer key + optional leased pool key). */
+/** A resolved OpenAI-compatible upstream (the call URL + bearer key + optional leased pool key). */
 interface UpstreamTarget {
-  baseURL: string
+  /**
+   * The fully composed `/chat/completions` URL, not a base to append to. A locally-run
+   * model's base URL is USER-supplied, and appending to a string cannot state that the
+   * endpoint path is still ours (a base carrying `?`/`#` swallows the suffix), so the local
+   * branch composes it through the policy's `runnerRequestUrl` and there is no base left
+   * here for a later edit to concatenate onto.
+   */
+  upstreamUrl: string
   apiKey: string
   leasedApiKeyId: string | null
-  localRunner: boolean
+  /**
+   * Present only for a locally-run model: the endpoint service's policy-bound transport
+   * (`LocalModelEndpointService.fetchRunner`), which re-validates the SSRF allow-list on
+   * every redirect hop under the deployment's loopback/LAN policy. Bound where the
+   * endpoint was resolved, because that is the one place the service is known to exist.
+   * Cloud providers use a trusted, hardcoded base URL and keep plain `fetch`.
+   */
+  fetchRunner: ((url: string, init: RequestInit) => Promise<Response>) | null
 }
 
 /**
@@ -236,11 +249,10 @@ async function resolveUpstreamTarget(
   const { session, gateways, apiKeys, localModelEndpoints, log, observe } = ctx
   const localRunner = isLocalRunner(session.provider)
   if (localRunner) {
+    const endpoints = localModelEndpoints
     const resolved =
-      session.userId && localModelEndpoints
-        ? await localModelEndpoints.resolve(session.userId, session.provider)
-        : null
-    if (!resolved) {
+      session.userId && endpoints ? await endpoints.resolve(session.userId, session.provider) : null
+    if (!resolved || !endpoints) {
       log.error('llm proxy: no local runner endpoint configured for the run initiator')
       observe({
         usage: null,
@@ -263,12 +275,36 @@ async function resolveUpstreamTarget(
         ),
       }
     }
+    // Compose under the deployment's runner-URL policy rather than concatenating: a row
+    // written before the policy narrowed, or one whose base URL would discard the endpoint
+    // path, is refused HERE instead of reaching the forward.
+    const composed = endpoints.endpointUrl(resolved.baseUrl, '/chat/completions')
+    if ('refusal' in composed) {
+      log.error('llm proxy: local runner endpoint is refused by this deployment policy', {
+        reason: composed.refusal.reason,
+      })
+      observe({
+        usage: null,
+        finishReason: null,
+        responseText: '',
+        ok: false,
+        httpStatus: 502,
+        errorMessage: composed.refusal.message,
+        upstreamMs: 0,
+      })
+      return {
+        failure: c.json(
+          { error: { code: 'upstream_unavailable', message: composed.refusal.message } },
+          502,
+        ),
+      }
+    }
     // Most local runners ignore auth; the SDK/fetch still emit an Authorization header.
     return {
-      baseURL: resolved.baseUrl.replace(/\/+$/, ''),
+      upstreamUrl: composed.url,
       apiKey: resolved.apiKey || 'local',
       leasedApiKeyId: null,
-      localRunner,
+      fetchRunner: (url, init) => endpoints.fetchRunner(url, init),
     }
   }
   const upstream = gateways.llmUpstream.resolveOpenAiCompatible(session.provider)
@@ -323,10 +359,12 @@ async function resolveUpstreamTarget(
       userId: session.userId,
     })
     return {
-      baseURL: upstream.baseURL,
+      // A cloud provider's base URL is deployment-trusted (a gateway constant), never user
+      // input, so plain composition is right here.
+      upstreamUrl: `${upstream.baseURL}/chat/completions`,
       apiKey: leased.secret,
       leasedApiKeyId: leased.keyId,
-      localRunner,
+      fetchRunner: null,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -357,10 +395,11 @@ async function resolveUpstreamTarget(
 /**
  * Forward the hardened request to the resolved upstream and meter the response. The local-runner
  * base URL is user-supplied and forwarded server-side, so follow redirects manually and re-validate
- * every hop against the SSRF allow-list (`fetchLocalRunner`); cloud providers use a trusted,
- * hardcoded base URL, so they keep plain `fetch`. Non-2xx is passed straight back (nothing to
- * meter); a streamed body is teed through {@link observationStream} so spend + the observation are
- * recorded off the response path; a buffered body is metered then relayed verbatim.
+ * every hop against the SSRF allow-list under the deployment's loopback/LAN policy (the target's
+ * `fetchRunner`); cloud providers use a trusted, hardcoded base URL, so they keep plain `fetch`.
+ * Non-2xx is passed straight back (nothing to meter); a streamed body is teed through
+ * {@link observationStream} so spend + the observation are recorded off the response path; a
+ * buffered body is metered then relayed verbatim.
  */
 async function relayUpstream(
   c: Context<AppEnv>,
@@ -368,7 +407,7 @@ async function relayUpstream(
   target: UpstreamTarget,
 ): Promise<Response> {
   const { payload, streaming, log, observe, record, waitUntil } = ctx
-  const { baseURL, apiKey, localRunner } = target
+  const { upstreamUrl, apiKey, fetchRunner } = target
   if (streaming) {
     payload.stream_options = { include_usage: true }
   }
@@ -376,7 +415,6 @@ async function relayUpstream(
   // Upstream-dispatch clock: the slice between here and the response is the model's execution;
   // the rest of the proxy's time is transport overhead.
   const dispatchAt = Date.now()
-  const upstreamUrl = `${baseURL}/chat/completions`
   const upstreamInit: RequestInit = {
     method: 'POST',
     headers: {
@@ -386,9 +424,9 @@ async function relayUpstream(
     body: JSON.stringify(payload),
   }
   let upstreamRes: Response
-  if (localRunner) {
+  if (fetchRunner) {
     try {
-      upstreamRes = await fetchLocalRunner(upstreamUrl, upstreamInit)
+      upstreamRes = await fetchRunner(upstreamUrl, upstreamInit)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       log.error('llm proxy: local runner request blocked', { err: message })

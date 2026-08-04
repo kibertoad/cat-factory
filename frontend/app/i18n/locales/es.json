@@ -332,16 +332,25 @@
       "addFailedTitle": "No se pudo añadir la pipeline recurrente",
       "onDemand": "Bajo demanda (solo manual)",
       "onDemandHint": "Se ejecuta solo cuando lo activas, sin programación. Como estás presente cada vez, su tarea puede usar un modelo de suscripción de uso individual.",
+      "onDemandLockedHint": "Fijado: una programación activada por el rastreador se controla mediante webhooks, así que no tiene cadencia propia.",
       "intake": "Admisión de incidencias",
       "intakeHint": "Cada ejecución toma una incidencia abierta que coincide del rastreador y la resuelve de principio a fin.",
       "intakeNoSources": "Primero conecta una fuente de tareas para extraer incidencias de ella.",
       "intakeGithubRepo": "Repositorio",
+      "intakeBoardId": "ID del tablero",
+      "intakeBoardIdHelp": "El tablero, proyecto o cola al que este rastreador limita la admisión. El formato lo define el rastreador.",
+      "trackerTrigger": "Iniciar ejecuciones desde webhooks del rastreador",
+      "trackerTriggerHint": "Una incidencia que coincida con los filtros de abajo se importa como su propia tarea y se ejecuta en esta canalización. Requiere una programación bajo demanda.",
+      "intakeDispatchQueueHint": "Un evento coincidente inicia esta programación, que toma la incidencia coincidente más antigua del tablero. Úsalo para una lista pendiente, donde la plataforma decide qué se trabaja a continuación.",
+      "intakeDispatchPerTicketHint": "Un evento coincidente importa esa incidencia como su propia tarea y ejecuta la canalización sobre ella. Úsalo para incidencias que alguien ya ha clasificado.",
       "intakeTitleFragment": "El título contiene",
       "intakeTitleFragmentPlaceholder": "p. ej. crash",
       "intakeLabels": "Etiquetas",
       "intakeLabelsPlaceholder": "separadas por comas",
       "intakeIssueType": "Tipo de incidencia",
-      "intakeInProgressLabel": "Etiqueta de en progreso"
+      "intakeInProgressLabel": "Etiqueta de en progreso",
+      "refusalPerTicketRequiresOnDemand": "Una programación activada por el rastreador debe ser bajo demanda. Un ciclo de cadencia no lleva ningún ticket que despachar.",
+      "refusalPerTicketConflictsWithBugIntake": "Esta canalización elige su propia incidencia del tablero, así que no puede además activarse con un ticket entrante. Elija una canalización sin paso de admisión de errores."
     },
     "failure": {
       "containerFailedToStart": "El contenedor no pudo iniciarse",
@@ -3119,6 +3128,15 @@
       "confirmRemove": {
         "title": "¿Quitar este runner?",
         "body": "Se eliminará \"{name}\". Esta acción no se puede deshacer."
+      },
+      "blocked": "La URL de este runner no está permitida en esta instalación, por lo que sus modelos están ocultos en el selector.",
+      "urlReason": {
+        "invalid_url": "Esa URL no es válida.",
+        "scheme_not_allowed": "La URL de un runner debe empezar por http:// o https://.",
+        "credentials_not_allowed": "La URL de un runner no puede contener usuario ni contraseña.",
+        "query_or_fragment_not_allowed": "Introduce solo la URL base, sin consulta \"?\" ni fragmento \"#\".",
+        "host_not_loopback": "Esta instalación solo alcanza runners en su propia máquina (localhost). Pide a un operador que permita runners de la red local.",
+        "host_not_local": "Un runner debe estar en tu propia máquina o en tu red local. No se permiten hosts públicos."
       }
     },
     "infrastructure": {

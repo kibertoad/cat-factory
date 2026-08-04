@@ -588,7 +588,10 @@ Node, and each facade supplies only its differentiators behind the shared kernel
   aren't registered, so `resolve` throws a clear error instead of failing deep in the SDK. **Locally-run
   models** (Ollama / LM Studio / llama.cpp / vLLM / custom OpenAI-compatible) are per-user endpoints
   appended to `GET /models` with NO API key; the base URL is forwarded server-side, so it is constrained to
-  a loopback/LAN allow-list (`localRunnerUrlError`) at the write boundary and the test probe.
+  a loopback-only allow-list (`localRunnerUrlError`) at the write boundary, the test probe and every
+  run-time redirect hop. Private-LAN hosts are the `LOCAL_MODELS_ALLOW_LAN=true` operator opt-in
+  (single-tenant local mode defaults it on); on a shared deployment the LAN grant is an internal-network
+  SSRF surface.
 - **`deploy/preview`** carries the per-PR TEST environments for THIS repo (board wiring:
   [`docs/dogfooding.md`](./docs/dogfooding.md)). Three constraints bite when editing: the compose file must
   stay free of `include:` / cross-file `extends` / `privileged` and of bind mounts / `env_file` (so it
@@ -895,8 +898,13 @@ an unconfigured one **FAILS CLOSED**. Push never replaces the `bug-intake` recon
 qualifying issue event FIRES that schedule rather than re-implementing intake. Ticket-comment replies take
 explicit first-token commands only and route through the SAME service methods the SPA calls (**never a
 parallel mutation path into the engine**), behind three guards on reply text (identity,
-data-not-instructions, the iteration budget). Doc:
-[`tracker-webhook-intake.md`](./docs/initiatives/tracker-webhook-intake.md).
+data-not-instructions, the iteration budget). A schedule may instead dispatch **per ticket**, running the
+pushed ticket as its own task; that mode REQUIRES on-demand and refuses a `bug-intake` pipeline, because
+each combination would otherwise work a different ticket than the one pushed. **The match is a VERDICT,
+never a boolean**: a predicate the delivery cannot answer is `unconfirmed`, which `queue` fires on (its
+run's vendor search re-checks everything) and `per-ticket` withholds on and LOGS, since nothing downstream
+would catch a wrong dispatch and no cadence sweep will retry it. Doc:
+[`0032-tracker-webhook-intake.md`](./backend/docs/adr/0032-tracker-webhook-intake.md).
 
 **Bug hunt**: scan a tracker board's open + UNASSIGNED bugs, rate impact against complexity, adopt one
 onto `pl_bugfix`. **Persists NOTHING**, so runtime symmetry is by construction. **One vendor call per scan
@@ -1473,9 +1481,27 @@ array, never a new call site.** Every sink is opt-in on a FULL config, **never t
 and honours `LLM_RECORD_PROMPTS` (usage and timing still export; bodies don't). The OTel package is the one
 place the runtimes deliberately differ in TRANSPORT, not behaviour (workerd can't run the official SDK),
 sharing `src/mapping.ts` pinned equal by `conformity.test.ts`, so span names, attributes and metric names
-change in the mapping layer. Deployment-level metrics are the dual, swept per account and opt-in on top of
-the base exporter:
-[`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+change in the mapping layer. **A run's spans are a HIERARCHY (`run → agent kind → generations + tool
+calls`) built from DERIVED ids, never shared state**: every parent id is a pure function of the run, so a
+stateless per-call emission names a parent it has never seen. The parents are emitted at settlement, from
+the same terminal hook the run-lifecycle edge uses (`recordRunSpans` ← `LlmObservabilityService.recordRunTrace`),
+for the same reason: a run reaches `done` from four sites. That hook fires AGAIN for an already-settled
+run, so **the parents' EXTENT is folded from stamps the run recorded, never read off a clock at emit
+time** (`buildRunTraceSpans`): derived ids alone make a replay re-export the same span ids, and pairing
+those with a duration that moved is a contradiction where a byte-identical duplicate is something a
+backend collapses. The step level's grain is the agent KIND because that is the finest thing a generation
+event can NAME. **A step that dispatched a HELPER kind (a gate's `ci-fixer`, a Tester's fixer, a
+`fork-proposer`) gets a span for that kind too, nested under it**: the helper's telemetry is tagged with
+the HELPER, so without one every row of it names a parent nobody emits. What ran is recorded at dispatch
+on `PipelineStep.dispatches` through the ONE funnel (`recordDispatchAttribution`), never re-derived from
+`agentKind`. **What a span cannot separate it STATES**: the runs here repeat as CYCLES (a fixer loop, a
+Ralph iteration, a bounced step), and the events under a span carry no attempt ordinal to split it by, so
+each step span reports `step_count` AND `attempt_count` rather than passing six rounds off as one. A
+re-run's extent comes from `firstStartedAt`, which survives the reset that re-stamps `startedAt`, or the
+parent would begin after its own earlier children. **A span NAME is a bounded class** (`chat {model}`, `invoke_agent {agentKind}`, the bare `run`), the trace-side
+counterpart of the bounded-dimension rule: free text like a pipeline name rides an attribute, or a tenant
+mints unbounded series on the operator's backend by renaming things. Deployment-level metrics are the dual, swept per account and opt-in on top of the base
+exporter: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
 
 ## Board / service / repo-linkage model
 

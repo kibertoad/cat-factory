@@ -505,7 +505,7 @@ export interface OptionalCoreModules {
   /**
    * Inbound tracker webhook handling (push-driven intake + ticket replies to a parked review).
    * Present only when the task projection + connections are wired; the shared receiver 503s
-   * without it. See `docs/initiatives/tracker-webhook-intake.md`.
+   * without it. See `backend/docs/adr/0032-tracker-webhook-intake.md`.
    */
   trackerWebhook?: TrackerWebhookModule
   /** Present only when the service + mount repositories are wired (in-org sharing). */
