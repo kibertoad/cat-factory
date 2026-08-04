@@ -98,6 +98,7 @@ export type {
 export { inlineModelRef, resolveScopedModelProvider } from './model-provider.js'
 export type {
   TokenUsageRecord,
+  ScopedSpendWindow,
   TokenUsageRepository,
   TokenUsageTotals,
   UsageBilling,

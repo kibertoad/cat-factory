@@ -2216,6 +2216,7 @@
         "judge_review": "Segna come letto",
         "pr_review_ready": "Segna come letto",
         "budget_paused": "Segna come letto",
+        "budget_threshold": "Segna come letto",
         "key_drift": "Elimina credenziali obsolete",
         "merge_tag_request": "Registra l’impegno"
       },
@@ -3525,6 +3526,8 @@
     "spend": {
       "byModel": "Spesa per modello",
       "byAgentKind": "Spesa per tipo di agente",
+      "byRepo": "Spesa per repository",
+      "byTicket": "Spesa per ticket",
       "heading": "Spesa",
       "empty": "Nessun utilizzo registrato in questo periodo.",
       "calls": "{count} chiamata | {count} chiamate",

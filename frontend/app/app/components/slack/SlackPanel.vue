@@ -74,6 +74,7 @@ const routes = reactive<Record<NotificationType, SlackRoute>>({
   initiative: { enabled: false, channel: '' },
   platform_health: { enabled: false, channel: '' },
   budget_paused: { enabled: false, channel: '' },
+  budget_threshold: { enabled: false, channel: '' },
   // In-app only (not in ROUTABLE), but the map is exhaustive over the type.
   key_drift: { enabled: false, channel: '' },
   infra_unreachable: { enabled: false, channel: '' },

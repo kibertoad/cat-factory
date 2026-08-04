@@ -27,6 +27,10 @@ export const SLACK_ROUTABLE_TYPES: NotificationType[] = [
   // An infrastructure outage is the same shape of alert: routable, so it reaches the ops channel
   // rather than only an in-app banner someone has to be looking at the board to see.
   'infra_unreachable',
+  // A budget warning is routable for the same reason, and more sharply: its whole value is
+  // arriving BEFORE runs start pausing, which an in-app card only manages if somebody happens to
+  // have the board open. `budget_paused` stays in-app-only because by then the damage is done.
+  'budget_threshold',
 ]
 
 /** A mapping entry's role, defaulting to `engineering` when unset (legacy entries). */
@@ -92,6 +96,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A workspace-wide spend pause: no task creator (block-less), so it @-mentions no one. It is
   // in-app-only (absent from SLACK_ROUTABLE_TYPES) — this entry only satisfies the exhaustive map.
   budget_paused: { roles: [], includeCreator: false },
+  // The PROACTIVE spend warning, also block-less (no task creator): it goes to the engineers, who
+  // are the people who can raise the budget or stop what is burning it.
+  budget_threshold: { roles: ['engineering'], includeCreator: false },
   // An ENCRYPTION_KEY-drift alert (ADR 0026 D6.2): an operational, deployment-wide credential
   // issue for the operators who watch the deployment; in-app-only (absent from SLACK_ROUTABLE_TYPES).
   key_drift: { roles: ['engineering'], includeCreator: false },
@@ -189,6 +196,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   initiative: ':world_map: Initiative update',
   platform_health: ':bar_chart: Platform health alert',
   budget_paused: ':moneybag: Runs paused — spend budget reached',
+  budget_threshold: ':chart_with_upwards_trend: Spend budget warning',
   key_drift: ':key: Encryption-key drift — credentials need re-entry',
   infra_unreachable: ':electric_plug: Infrastructure unreachable',
 }

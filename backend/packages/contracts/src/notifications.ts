@@ -83,6 +83,13 @@ import { onCallAssessmentSchema, releaseSignalSchema } from './release.js'
 //                          a `paused` run, so without this card the ONLY signal is the paused
 //                          badge on the board. Raise the budget then resume from the spend panel;
 //                          `act` just marks it read.
+//   - `budget_threshold`: the spend-forecast sweep found a workspace's (or its account's) metered
+//                          spend has crossed an alert threshold of the monthly budget, or is
+//                          projected to overrun it before the period ends. The PROACTIVE
+//                          counterpart to `budget_paused`, which only arrives once runs are
+//                          already being paused: this one fires while there is still time to
+//                          raise the limit or stop a runaway. Workspace-scoped and purely
+//                          informational; it re-arms at the period rollover.
 //
 // In-app delivery is the only channel today, but the core models delivery behind
 // a `NotificationChannel` port so email / Slack channels can be added later
@@ -114,6 +121,7 @@ export const notificationTypeSchema = v.picklist([
   'platform_health',
   'infra_unreachable',
   'budget_paused',
+  'budget_threshold',
   'key_drift',
   'merge_tag_request',
 ])
@@ -130,8 +138,8 @@ export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
  *
  * Deliberately EXCLUDED: failure-remediation cards (`ci_failed`, `test_failed`,
  * `release_regression`) — "the machine needs help", not "a human owes a review" — and
- * block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`, `key_drift`,
- * `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR
+ * block-less/system cards (`platform_health`, `infra_unreachable`, `budget_paused`,
+ * `budget_threshold`, `key_drift`, `initiative`) that aren't tied to a reviewable task. `merge_tag_request` is excluded too: the PR
  * it concerns has ALREADY merged, so it is a post-hoc nudge for one tap — counting it as review
  * debt would friction task authoring over work that is finished.
  */
@@ -184,6 +192,37 @@ export const keyDriftAffectedSchema = v.object({
   sealedAt: v.nullable(v.number()),
 })
 export type KeyDriftAffected = v.InferOutput<typeof keyDriftAffectedSchema>
+
+/**
+ * Which budget tier a `budget_threshold` alert concerns. The USER tier is deliberately absent:
+ * a personal budget is not a fact a workspace-visible card may state, and there is no per-user
+ * inbox to raise it in. Warning an individual before their own budget runs out is a separate
+ * surface (see the spend-forecasting tracker), not a member of this vocabulary.
+ */
+export const budgetAlertTierSchema = v.picklist(['workspace', 'account'])
+export type BudgetAlertTier = v.InferOutput<typeof budgetAlertTierSchema>
+
+/**
+ * One firing budget tier on a `budget_threshold` card. STATE only (see
+ * {@link notificationPayloadSchema.budgetAlerts}): both fields are stable for as long as the
+ * tier's situation is unchanged, which is what lets the sweep re-raise the same card every pass
+ * without re-delivering it.
+ */
+export const budgetAlertSchema = v.object({
+  tier: budgetAlertTierSchema,
+  /**
+   * The highest alert threshold this tier's ACTUAL spend has crossed, as a fraction of the
+   * limit (e.g. `0.8`). Null when nothing is crossed and only the projection fired.
+   */
+  threshold: v.nullable(v.number()),
+  /**
+   * Whether the tier is PROJECTED to exceed its limit before the period ends while actual
+   * spend has not yet reached it. The forward-looking half of the alert: a board can be at 30%
+   * on the 10th and still be on pace to overrun.
+   */
+  projectedOverrun: v.boolean(),
+})
+export type BudgetAlert = v.InferOutput<typeof budgetAlertSchema>
 
 /**
  * Lifecycle of a notification: `open` until a human engages, terminal `acted`
@@ -318,6 +357,22 @@ export const notificationPayloadSchema = v.object({
    * (D6.3) targets. Sorted by `(source, id)` so the identity is stable across sweeps.
    */
   driftAffected: v.optional(v.array(keyDriftAffectedSchema)),
+  /**
+   * On a `budget_threshold` notification: the billing period the alert belongs to (epoch ms,
+   * UTC month start). Part of the card's dedup identity, and the field that RE-ARMS every
+   * signal below at the period rollover. Without it, a workspace that crossed 80% in July
+   * would look "already notified" for August's first crossing too.
+   */
+  budgetPeriodStart: v.optional(v.number()),
+  /**
+   * On a `budget_threshold` notification: which budget tiers are firing and how, sorted by
+   * tier. The card's dedup identity, so it carries only STATE (the threshold crossed, whether
+   * the projection overruns) and never live figures: spend and burn rate move on every sweep,
+   * and any payload change re-delivers the card, so putting the interesting number here would
+   * re-toast the inbox every few minutes for the rest of the month. The figures live on the
+   * Usage surface the card points at.
+   */
+  budgetAlerts: v.optional(v.array(budgetAlertSchema)),
   /**
    * The run's deterministic change class, on a `merge_review` / `pipeline_complete` /
    * `merge_tag_request` card — so the human sees WHAT KIND of change they are being asked to

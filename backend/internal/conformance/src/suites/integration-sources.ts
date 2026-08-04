@@ -125,6 +125,20 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
     })
   })
 
+  registerTaskSourceTests(harness)
+  registerDocumentSourceTests(harness)
+  registerDocumentPersistenceTests(harness)
+}
+
+/**
+ * Task sources: connect / toggle / import, filing a board task from an imported issue (and the
+ * one-task-per-ticket refusal, plus the re-file a deleted task allows), and the custom-source
+ * id vocabulary.
+ *
+ * Registered from the suite above; split out purely to keep each function within the
+ * per-function line budget. Every test is unchanged.
+ */
+function registerTaskSourceTests(harness: ConformanceHarness): void {
   describe('task sources', () => {
     it('creates a board task from an imported issue and links the issue to it', async () => {
       const { call, createWorkspace } = harness.makeApp()
@@ -180,6 +194,57 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
         containerId: frame.body.id,
       })
       expect(again.status).toBe(409)
+    })
+
+    it('re-files an issue whose task was deleted, instead of refusing forever', async () => {
+      // The delete cascade's whole point, end to end. `linked_block_id` is what three readers
+      // consult to decide an issue is spoken for, and none of them checks whether the block it
+      // names still exists, so before the cascade detached issues, deleting a filed task took
+      // its ticket out of circulation permanently: invisible to the intake sweep, and refused by
+      // `claimBlockLink` on every future filing, naming a task nobody could open.
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace({ seed: false })
+      const ws = workspace.id
+
+      const frame = await call<Block>('POST', `/workspaces/${ws}/blocks`, {
+        type: 'service',
+        position: { x: 0, y: 0 },
+      })
+      await call('POST', `/workspaces/${ws}/task-sources/jira/connect`, {
+        credentials: {
+          baseUrl: 'https://acme.atlassian.net',
+          accountEmail: 'd@a.io',
+          apiToken: 't',
+        },
+      })
+      await call('POST', `/workspaces/${ws}/task-sources/jira/import`, { ref: 'PROJ-77' })
+
+      const filed = await call<{ block: Block; task: SourceTask }>(
+        'POST',
+        `/workspaces/${ws}/tasks/create-block`,
+        { source: 'jira', externalId: 'PROJ-77', containerId: frame.body.id },
+      )
+      expect(filed.status).toBe(201)
+
+      const removed = await call('DELETE', `/workspaces/${ws}/blocks/${filed.body.block.id}`)
+      expect(removed.status).toBe(204)
+
+      // The link went with the block, so the issue is unclaimed again, asserted off the store
+      // rather than inferred from the re-file succeeding.
+      const issues = await call<SourceTask[]>('GET', `/workspaces/${ws}/tasks`)
+      expect(issues.body.find((t) => t.externalId === 'PROJ-77')?.linkedBlockId).toBeNull()
+
+      // And the issue itself survived the delete: nothing was removed, only unlinked.
+      expect(issues.body.some((t) => t.externalId === 'PROJ-77')).toBe(true)
+
+      const refiled = await call<{ block: Block; task: SourceTask }>(
+        'POST',
+        `/workspaces/${ws}/tasks/create-block`,
+        { source: 'jira', externalId: 'PROJ-77', containerId: frame.body.id },
+      )
+      expect(refiled.status).toBe(201)
+      expect(refiled.body.task.linkedBlockId).toBe(refiled.body.block.id)
+      expect(refiled.body.block.id).not.toBe(filed.body.block.id)
     })
 
     it('404s when the issue was never imported', async () => {
@@ -403,9 +468,6 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       expect(JSON.stringify(unregistered.body)).toContain('acme:servicenow')
     })
   })
-
-  registerDocumentSourceTests(harness)
-  registerDocumentPersistenceTests(harness)
 }
 
 /**
@@ -901,6 +963,57 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
       // action, the recurring intake's per-fire move): the claim narrows nothing for it.
       await repo.linkBlock(ws, 'jira', 'PROJ-9', 'task_c')
       expect((await repo.get(ws, 'jira', 'PROJ-9'))?.linkedBlockId).toBe('task_c')
+    })
+
+    it('detaches every issue filed as a doomed block, across sources (unlinkAllFromBlocks)', async () => {
+      // The block-delete cascade's detach, keyed by BLOCK rather than by issue: a delete knows the
+      // doomed subtree's ids, not which issues name them. It spans SOURCES, which is where a
+      // facade that grouped or filtered by source differently would diverge, and the divergence is
+      // silent in the worst direction: an issue left naming a deleted block is excluded from the
+      // intake sweep forever and refuses every future filing of its ticket.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.taskRepository()
+      const task = (source: TaskRecord['source'], externalId: string): TaskRecord => ({
+        workspaceId: ws,
+        source,
+        externalId,
+        title: `Issue ${externalId}`,
+        url: `https://tracker/${externalId}`,
+        status: 'open',
+        type: 'Bug',
+        assignee: null,
+        priority: null,
+        labels: [],
+        description: `Body of ${externalId}`,
+        comments: [],
+        excerpt: '',
+        linkedBlockId: null,
+        syncedAt: 1_000,
+        deletedAt: null,
+      })
+      await repo.upsert(task('jira', 'PROJ-11'))
+      await repo.upsert(task('github', 'octo/repo#11'))
+      await repo.linkBlock(ws, 'jira', 'PROJ-11', 'task_doomed')
+      await repo.linkBlock(ws, 'github', 'octo/repo#11', 'task_survivor')
+
+      // Empty input is a no-op (no query issued), which is what an unwired cascade hands it.
+      await repo.unlinkAllFromBlocks(ws, [])
+      expect((await repo.get(ws, 'jira', 'PROJ-11'))?.linkedBlockId).toBe('task_doomed')
+
+      await repo.unlinkAllFromBlocks(ws, ['task_doomed', 'task_never_existed'])
+
+      // Only the named block's issue was detached; the other block keeps its link.
+      expect(await repo.listByBlock(ws, 'task_doomed')).toEqual([])
+      expect((await repo.get(ws, 'jira', 'PROJ-11'))?.linkedBlockId).toBeNull()
+      expect((await repo.get(ws, 'github', 'octo/repo#11'))?.linkedBlockId).toBe('task_survivor')
+
+      // The issue rows themselves survive: only the link went, so the ticket returns to the pool
+      // rather than disappearing from the projection.
+      expect((await repo.get(ws, 'jira', 'PROJ-11'))?.title).toBe('Issue PROJ-11')
+      // Which is the whole point: a filing of it now succeeds instead of losing the claim.
+      expect(await repo.claimBlockLink(ws, 'jira', 'PROJ-11', 'task_refiled')).toBe(true)
     })
   })
 }

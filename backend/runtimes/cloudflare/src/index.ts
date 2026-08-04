@@ -42,6 +42,8 @@ import {
   sweepFoundationalSources,
   sweepInfraReachability,
   sweepPlatformHealth,
+  sweepSpendAlerts,
+  SPEND_ALERT_INTERVAL_MS,
   operationalMetrics,
 } from '@cat-factory/server'
 import { CryptoIdGenerator, SystemClock } from './infrastructure/runtime'
@@ -750,6 +752,19 @@ function runPeriodicBackstops(
       sweepPlatformHealth(buildContainer(env), clock.now(), logger).then(({ raised, cleared }) => {
         if (raised > 0 || cleared > 0)
           logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
+      }),
+    )
+  }
+
+  // Raise a `budget_threshold` card while a workspace's (or its account's) spend is still
+  // recoverable. The proactive half of the spend safeguard, whose only signal today is a run
+  // pausing mid-pipeline. Not opt-in: a configured budget is the opt-in. It rides the stateless
+  // window gate at the shared cadence, so the Worker and the Node timer sweep equally often.
+  if (shouldRunReachabilityPass(scheduledTime, FREQUENT_CRON_PERIOD_MS, SPEND_ALERT_INTERVAL_MS)) {
+    tick.run(
+      { name: 'spend-alerts', failureMessage: 'spend alert sweep failed' },
+      sweepSpendAlerts(buildContainer(env), clock.now(), logger).then(({ raised }) => {
+        if (raised > 0) logger.info('spend alert sweep', { cron: 'spend-alerts', raised })
       }),
     )
   }
