@@ -89,6 +89,16 @@ export const runModeSchema = v.picklist(['live', 'dry_run'])
 export type RunMode = v.InferOutput<typeof runModeSchema>
 
 /**
+ * Whether a run is sandboxed. A helper rather than `=== 'dry_run'` scattered across the merge path
+ * and the SPA, so every place that must refuse to land work (or must say that a run will never
+ * land any) reads the mode the same way, and so a run persisted before the mode existed
+ * (absent ⇒ `live`) can never be mistaken for one.
+ */
+export function isDryRun(mode: RunMode | null | undefined): boolean {
+  return mode === 'dry_run'
+}
+
+/**
  * Per-run diagnostic context captured for AFTER-THE-FACT investigation of a run (esp. a
  * failure): the "where/what did this run actually execute on" facts that were previously
  * spread across the DB (repo↔service↔installation joins), the harness transcript (model), or

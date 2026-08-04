@@ -22,6 +22,7 @@ import {
   isCompanionKind,
 } from '@cat-factory/agents'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
+import { isDryRun } from '@cat-factory/contracts'
 import type { ReviewEffort } from '@cat-factory/contracts'
 import {
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
@@ -35,7 +36,6 @@ import {
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
 import type { RunMergePolicy } from './RunMergePolicy.js'
-import { isDryRun } from './runMode.logic.js'
 import type { FinalizeMergeResult } from './MergeResolver.js'
 import type { RunDispatcher } from './RunDispatcher.js'
 

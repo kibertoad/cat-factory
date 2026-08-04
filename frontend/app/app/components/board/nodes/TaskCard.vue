@@ -36,6 +36,13 @@ const typeBadge = computed(() => {
 })
 const selected = computed(() => ui.selectedBlockId === props.taskId)
 
+// This card's Start is a ONE-TAP live start, so it has nothing to ask for and offers no dry-run
+// request. What it does owe the reader is the half that is not a choice: a preset that sandboxes
+// their role means this button opens a pull request and merges nothing, and a card that said so
+// only after the fact would leave that to be discovered from a run that stops at the merge.
+const { forcedFor } = useDryRunPolicy()
+const sandboxed = computed(() => forcedFor(props.taskId))
+
 // Drag-to-connect: dragging from this card's handle onto another task makes THAT task
 // depend on this one (this is the prerequisite). The composable tracks the gesture.
 const { start: startConnect } = useDependencyConnect()
@@ -106,12 +113,16 @@ async function run() {
   const started = await execution.start(props.taskId, pipeline)
   if (started) {
     // Confirm the (optimistic) start landed — the button unmounts once the stream pushes
-    // in_progress, so without this the successful action gives no feedback.
+    // in_progress, so without this the successful action gives no feedback. A sandboxed start
+    // says so here rather than borrowing the live wording: this is the moment the reader learns
+    // what they just started, and the two runs differ in what they will end up doing.
     toast.add({
-      title: t('board.task.startedToast.title'),
-      description: t('board.task.startedToast.body', { name: pipeline.name }),
-      color: 'success',
-      icon: 'i-lucide-play',
+      title: sandboxed.value ? t('board.dryRunToast.title') : t('board.task.startedToast.title'),
+      description: sandboxed.value
+        ? t('board.dryRunToast.body', { name: pipeline.name })
+        : t('board.task.startedToast.body', { name: pipeline.name }),
+      color: sandboxed.value ? 'warning' : 'success',
+      icon: sandboxed.value ? 'i-lucide-shield' : 'i-lucide-play',
     })
   } else {
     starting.value = false
@@ -357,15 +368,19 @@ function selectTask() {
           :color="runnable ? 'primary' : 'neutral'"
           variant="soft"
           size="xs"
-          :icon="runnable ? 'i-lucide-play' : 'i-lucide-lock'"
+          :icon="!runnable ? 'i-lucide-lock' : sandboxed ? 'i-lucide-shield' : 'i-lucide-play'"
           :loading="starting"
           :disabled="!runnable || starting"
           :title="
-            runnable
-              ? t('board.task.startPipeline', {
-                  name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
-                })
-              : t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })
+            !runnable
+              ? t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })
+              : sandboxed
+                ? t('board.task.startPipelineDryRun', {
+                    name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
+                  })
+                : t('board.task.startPipeline', {
+                    name: defaultPipeline?.name ?? t('board.task.pipelineFallback'),
+                  })
           "
           @click.stop="run"
         >

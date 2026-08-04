@@ -3,7 +3,6 @@ import {
   CHANGE_CLASS_RANK,
   classifyChangedFiles,
   classifyChangedPath,
-  narrowMergeClassRule,
   resolveMergeClassRule,
   resolveRoleScopedMergeClassRule,
 } from './change-class.js'
@@ -191,22 +190,6 @@ describe('resolveMergeClassRule', () => {
     // wire schema rejects an `unknown` rule, and this is the second line of defence.
     expect(resolveMergeClassRule({ unknown: 'always' } as never, 'unknown')).toBe('thresholds')
     expect(resolveMergeClassRule({ unknown: 'never' } as never, 'unknown')).toBe('thresholds')
-  })
-})
-
-describe('narrowMergeClassRule', () => {
-  it('takes the stricter of the two rules, in either argument order', () => {
-    expect(narrowMergeClassRule('always', 'never')).toBe('never')
-    expect(narrowMergeClassRule('never', 'always')).toBe('never')
-    expect(narrowMergeClassRule('always', 'thresholds')).toBe('thresholds')
-    expect(narrowMergeClassRule('thresholds', 'always')).toBe('thresholds')
-    expect(narrowMergeClassRule('thresholds', 'never')).toBe('never')
-  })
-
-  it('is idempotent on a pair of equal rules', () => {
-    expect(narrowMergeClassRule('always', 'always')).toBe('always')
-    expect(narrowMergeClassRule('thresholds', 'thresholds')).toBe('thresholds')
-    expect(narrowMergeClassRule('never', 'never')).toBe('never')
   })
 })
 

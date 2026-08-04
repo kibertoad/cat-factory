@@ -85,7 +85,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `requireWorkspacePermission`; the admin-tier controller middleware) and `optionalJsonBody`
   (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
   otherwise makes the transport require a body, which breaks body-less callers of a route that
-  merely gained an optional field); `config/`; the `AppConfig`
+  merely gained an optional field); `config/` (the runtime-neutral env parsers both facades
+  share; a rejected value is REPORTED through `config/warnOnce.ts`, once per process rather
+  than once per read, because the Worker re-derives its whole config on every invocation);
+  the `AppConfig`
   contract; `runtime/gateways.ts`; the gateway **interfaces** (real-time, GitHub ingest/backfill,
   LLM upstream, web-search upstream).
 - `runtime/` also holds the **runtime-neutral periodic sweeps** each facade drives from its own
@@ -96,7 +99,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `observability/logger.ts`: the **only place a logging library is named**: pino adapted onto the
   kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
   destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the
-  top of its boot path). Patterns and rules: [`backend/docs/logging.md`](../../docs/logging.md).
+  top of its boot path). It also owns the SECOND-destination seam: `setLogSink` installs a kernel
+  `LogSink` (the opt-in OTLP log exporter) that every emitted line is copied to, with the
+  `child`-bound fields folded in and behind the same level gate. Patterns and rules:
+  [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
 - `test/coverageScan.ts` + the `*.coverage.spec.ts` beside it: the guards for the rules a
   typecheck cannot hold, where a field must stay OPTIONAL because one caller is entitled to the

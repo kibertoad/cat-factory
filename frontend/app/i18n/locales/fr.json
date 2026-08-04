@@ -447,6 +447,7 @@
       "start": "Démarrer",
       "blocked": "Bloquée",
       "startPipeline": "Démarrer {name}",
+      "startPipelineDryRun": "Démarrer {name} en exécution à blanc : ouvre une pull request, ne fusionne rien",
       "pipelineFallback": "pipeline",
       "waitingOn": "En attente de : {deps}",
       "blockedByDependenciesTitle": "Bloquée par des dépendances",
@@ -471,6 +472,10 @@
         "title": "Exécution démarrée",
         "body": "Exécution de \"{name}\"."
       }
+    },
+    "dryRunToast": {
+      "title": "Exécution à blanc démarrée",
+      "body": "Exécution de \"{name}\". Les exécutions de ton rôle ne fusionnent rien sur cette tâche."
     },
     "epic": {
       "label": "Épopée",
@@ -1077,7 +1082,9 @@
       "chooseApproach": "Choisir l'approche",
       "triageFollowUps": "Trancher les suivis",
       "elapsedTooltip": "Temps écoulé sur cette étape",
-      "reviewFindings": "Examiner les remarques"
+      "reviewFindings": "Examiner les remarques",
+      "dryRun": "Exécution à blanc",
+      "dryRunHint": "Cette exécution ouvre une pull request et ne fusionne rien."
     },
     "structure": {
       "title": "Structure",
@@ -1498,7 +1505,10 @@
         "title": "Archiver ce service ?",
         "body": "« {name} » et ses tâches seront masqués du tableau. Vous pouvez le restaurer à tout moment."
       },
-      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}"
+      "runBlocked": "Bloqué par une dépendance non terminée : {names} | Bloqué par {count} dépendances non terminées : {names}",
+      "dryRun": "Exécution à blanc : ne rien fusionner",
+      "dryRunForced": "Exécution à blanc : les exécutions de votre rôle ne sont jamais fusionnées ici",
+      "dryRunHint": "Cette exécution ouvre une pull request et ne fusionne rien."
     }
   },
   "observability": {
@@ -2738,6 +2748,19 @@
           "always": "Toujours fusionner automatiquement",
           "never": "Toujours exiger une revue"
         }
+      },
+      "roleRules": {
+        "heading": "Limites selon le rôle qui lance l'exécution",
+        "help": "Ce qu'une exécution peut faire dépend aussi de qui l'a lancée. Un rôle peut être soumis à des règles plus strictes que celles ci-dessus, ou aux seules exécutions à blanc : le pipeline travaille et ouvre une pull request, mais rien n'est fusionné. Un rôle peut seulement durcir cette politique, jamais l'assouplir.",
+        "autoMergeOffWarning": "La fusion automatique est désactivée pour ce préréglage : chaque pull request passe déjà par un humain et les limites de catégorie ci-dessous n'ajoutent rien. Les exécutions à blanc restent en vigueur : elles refusent aussi une fusion manuelle.",
+        "sandboxLabel": "Exécutions à blanc uniquement",
+        "sandboxNote": "Les exécutions lancées par ce rôle ouvrent une pull request et ne fusionnent rien : les règles par catégorie ci-dessous ne peuvent donc rien durcir de plus.",
+        "noRules": "Aucune limite par catégorie",
+        "ruleCount": "{count} catégorie limitée | {count} catégories limitées",
+        "inherit": "Comme cette politique",
+        "redundant": "Sans effet : cette politique est déjà au moins aussi stricte.",
+        "alreadyStrictest": "Déjà toujours relu",
+        "baseHint": "Cette politique compare les scores pour chaque catégorie : un rôle ne peut donc durcir une catégorie que jusqu'à la revue obligatoire."
       }
     },
     "observabilityConnection": {
@@ -3518,7 +3541,28 @@
         "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
       },
       "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
-      "invalidNumbers": "Ces plafonds ne sont pas des nombres"
+      "invalidNumbers": "Ces plafonds ne sont pas des nombres",
+      "failureKinds": {
+        "label": "Règles par type d'échec",
+        "description": "Alerter quand un type d'échec atteint la part d'échecs que vous lui accordez. Le plafond de cause dominante ci-dessus demande si un type submerge les autres ; ces règles demandent si un type nommé a atteint ce que ce déploiement tolère de lui.",
+        "overrideLabel": "Définir les règles par type propres à ce compte",
+        "overrideHint": "Désactivé, le compte utilise les règles configurées par le déploiement. Activé, la liste ci-dessous les remplace entièrement, et une liste vide signifie aucune règle par type.",
+        "empty": "Aucune règle. Ce compte ne déclenchera pas l'alerte par type d'échec.",
+        "kindLabel": "Type d'échec",
+        "shareLabel": "Part des échecs (%)",
+        "shareHint": "La règle se déclenche à partir de cette part.",
+        "minCountLabel": "Échecs minimum",
+        "minCountPlaceholder": "1",
+        "minCountHint": "Combien d'échecs de ce type la fenêtre doit compter avant que la règle puisse se déclencher. Sans cela, une part faible se déclenche pour un rien : cinq exécutions avec une éviction, c'est déjà 20 %.",
+        "addRule": "Ajouter une règle",
+        "allKindsCovered": "Chaque type d'échec a déjà une règle.",
+        "removeRule": "Supprimer la règle",
+        "duplicateKind": "Chaque type d'échec ne peut porter qu'une seule règle.",
+        "tooManyRules": "Au plus {max} règles par type. Supprimez-en avant d’enregistrer.",
+        "unknownKind": "{kind} (non reconnu)",
+        "invalidTitle": "Ces règles par type ne peuvent pas être enregistrées",
+        "invalidRows": "Vérifiez les règles {rows} : la part doit être supérieure à 0 et au plus 100, un minimum doit être un entier supérieur ou égal à 1, et chaque type ne peut apparaître qu'une fois."
+      }
     }
   },
   "providers": {
@@ -5224,7 +5268,10 @@
     "description": "Description",
     "overallProgress": "Progression globale",
     "dependencies": "Dépendances",
-    "noDependencies": "Aucune"
+    "noDependencies": "Aucune",
+    "dryRun": "Exécution à blanc",
+    "dryRunHint": "Lancer le pipeline et ouvrir une pull request, sans rien fusionner.",
+    "dryRunForcedHint": "La politique de risque de cette tâche limite votre rôle aux exécutions à blanc."
   },
   "environments": {
     "title": "Environnement éphémère",
@@ -5913,7 +5960,10 @@
       "manualHeading": "Revue manuelle uniquement",
       "manualExplainer": "Cette politique ne fusionne jamais d'elle-même : chaque pull request attend une revue humaine, quelles que soient les notes.",
       "ciHeading": "Corrections CI",
-      "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner."
+      "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner.",
+      "roleHeading": "Qui a lancé l'exécution",
+      "roleSandboxed": "Les exécutions lancées par {roles} ouvrent une pull request et ne sont jamais fusionnées.",
+      "roleNarrowed": "Les exécutions lancées par {roles} suivent des règles plus strictes pour certaines catégories de changement."
     }
   },
   "modelPreset": {

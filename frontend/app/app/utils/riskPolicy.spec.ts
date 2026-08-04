@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { RiskPolicy } from '~/types/merge'
-import { RISK_POLICY_AXES, RISK_POLICY_CEILING_FIELD, riskPolicyCeilings } from '~/utils/riskPolicy'
+import {
+  RISK_POLICY_AXES,
+  RISK_POLICY_CEILING_FIELD,
+  riskPolicyCeilings,
+  rolePolicySummary,
+} from '~/utils/riskPolicy'
 
 const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
   ({
@@ -20,6 +25,8 @@ const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     judgeMaxBounces: 2,
     autoMergeEnabled: true,
     classRules: {},
+    classRulesByRole: {},
+    dryRunRoles: [],
     isDefault: true,
     version: 1,
     createdAt: 0,
@@ -49,5 +56,29 @@ describe('riskPolicyCeilings', () => {
     // settings editor all read it, so none of them can drift into its own sequence.
     expect(riskPolicyCeilings(policy()).map((c) => c.axis)).toEqual([...RISK_POLICY_AXES])
     expect(Object.keys(RISK_POLICY_CEILING_FIELD).sort()).toEqual([...RISK_POLICY_AXES].sort())
+  })
+})
+
+describe('rolePolicySummary', () => {
+  it('is empty on a policy that treats every initiator alike', () => {
+    expect(rolePolicySummary(policy())).toEqual({ sandboxed: [], narrowed: [] })
+  })
+
+  it('lists both layers in the shared role order', () => {
+    const p = policy({
+      dryRunRoles: ['viewer', 'member'],
+      classRulesByRole: { admin: { schema: 'never' } },
+    })
+    expect(rolePolicySummary(p)).toEqual({
+      sandboxed: ['member', 'viewer'],
+      narrowed: ['admin'],
+    })
+  })
+
+  // The sandbox outranks the class rules, so naming both for one role would report a second
+  // limit that changes nothing about what that role's runs can do.
+  it('does not also report class rules for a role the policy sandboxes', () => {
+    const p = policy({ dryRunRoles: ['member'], classRulesByRole: { member: { docs: 'never' } } })
+    expect(rolePolicySummary(p)).toEqual({ sandboxed: ['member'], narrowed: [] })
   })
 })

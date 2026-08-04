@@ -36,6 +36,7 @@ export type {
   PlatformAlertSettings,
   PlatformAlertThresholdOverrides,
   PlatformAlertWindow,
+  PlatformFailureKindRule,
   PlatformFailingRun,
   ReportWindow,
   ReportSpendDimension,
