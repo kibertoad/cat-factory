@@ -245,6 +245,13 @@ export {
   MAX_SEARCH_QUERY_CHARS,
 } from './modules/observability/SearchQueryObservabilityService.js'
 export {
+  ToolCallObservabilityService,
+  type ToolCallObservabilityServiceDependencies,
+  type ToolCallsRecordInput,
+  makeToolCallRecorder,
+  MAX_TOOL_BODY_CHARS,
+} from './modules/observability/ToolCallObservabilityService.js'
+export {
   PlatformObservabilityService,
   type PlatformObservabilityServiceDependencies,
 } from './modules/observability/PlatformObservabilityService.js'

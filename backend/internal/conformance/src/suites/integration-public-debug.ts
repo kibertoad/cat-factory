@@ -197,6 +197,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         ['llm-calls', 'calls'],
         ['agent-context', 'snapshots'],
         ['search-queries', 'queries'],
+        ['tool-calls', 'toolCalls'],
         ['logs', 'entries'],
       ] as const) {
         const res = await app.call<Record<string, unknown[]>>(
@@ -217,6 +218,37 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(overLimit.status).toBe(400)
+
+      // The trajectory ORDER is wired through the controller, and its one impossible combination
+      // is refused rather than quietly served in the other order: `trajectory` returns a bounded
+      // prefix and issues no cursor, so a caller supplying one is paging something that never
+      // paginates — the same infinite loop a malformed cursor would cause.
+      const trajectory = await app.call<{ toolCalls: unknown[]; nextCursor: string | null }>(
+        'GET',
+        `/api/v1/debug/runs/${runId}/tool-calls?order=trajectory&limit=5`,
+        undefined,
+        auth,
+      )
+      expect(trajectory.status).toBe(200)
+      expect(trajectory.body.nextCursor).toBeNull()
+      // A WELL-FORMED cursor (base64 of `1000|tc_1`), so this exercises the combination refusal
+      // rather than the malformed-cursor 400 that guards the line above it.
+      const resumedTrajectory = await app.call(
+        'GET',
+        `/api/v1/debug/runs/${runId}/tool-calls?order=trajectory&cursor=MTAwMHx0Y18x`,
+        undefined,
+        auth,
+      )
+      expect(resumedTrajectory.status).toBe(400)
+      // The same cursor is FINE in the default order: what is refused is the pairing, not the
+      // cursor, and an endpoint that rejected both would be unpageable.
+      const resumedRecent = await app.call(
+        'GET',
+        `/api/v1/debug/runs/${runId}/tool-calls?cursor=MTAwMHx0Y18x`,
+        undefined,
+        auth,
+      )
+      expect(resumedRecent.status).toBe(200)
 
       // The search and ordering narrowings ride the same route (their SQL semantics are pinned
       // by the per-store suite; what only this can see is that each facade wired the params).

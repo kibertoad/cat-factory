@@ -377,6 +377,7 @@ type DebugRunOverviewSinks struct {
 	LLMCalls        DebugRunOverviewSinksAgentContext `json:"llmCalls"`
 	ProvisioningLog DebugRunOverviewSinksAgentContext `json:"provisioningLog"`
 	SearchQueries   DebugRunOverviewSinksAgentContext `json:"searchQueries"`
+	ToolCalls       DebugRunOverviewSinksAgentContext `json:"toolCalls"`
 }
 
 // DebugRunOverviewSinksAgentContext is the `DebugRunOverviewSinksAgentContext` wire model.
@@ -609,6 +610,61 @@ type ListDebugSearchQueriesResponse struct {
 	NextCursor *string            `json:"nextCursor"`
 	Queries    []DebugSearchQuery `json:"queries"`
 }
+
+// ListDebugToolCallsOrder is the `ListDebugToolCallsOrder` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type ListDebugToolCallsOrder string
+
+const (
+	ListDebugToolCallsOrderRecent     ListDebugToolCallsOrder = "recent"
+	ListDebugToolCallsOrderTrajectory ListDebugToolCallsOrder = "trajectory"
+)
+
+// ListDebugToolCallsOrderValues lists every ListDebugToolCallsOrder this SDK release knows.
+var ListDebugToolCallsOrderValues = []ListDebugToolCallsOrder{ListDebugToolCallsOrderRecent, ListDebugToolCallsOrderTrajectory}
+
+// ListDebugToolCallsResponse is the `ListDebugToolCallsResponse` wire model.
+type ListDebugToolCallsResponse struct {
+	// NextCursor always present; nil when the server has no value for it.
+	NextCursor *string                              `json:"nextCursor"`
+	ToolCalls  []ListDebugToolCallsResponseToolCall `json:"toolCalls"`
+}
+
+// ListDebugToolCallsResponseToolCall is the `ListDebugToolCallsResponseToolCall` wire model.
+type ListDebugToolCallsResponseToolCall struct {
+	AgentKind     string                                   `json:"agentKind"`
+	Args          string                                   `json:"args"`
+	ArgsDropped   float64                                  `json:"argsDropped"`
+	Bodies        ListDebugToolCallsResponseToolCallBodies `json:"bodies"`
+	CreatedAt     float64                                  `json:"createdAt"`
+	EndedAt       float64                                  `json:"endedAt"`
+	ExecutionID   string                                   `json:"executionId"`
+	ID            string                                   `json:"id"`
+	JobID         string                                   `json:"jobId"`
+	Ok            bool                                     `json:"ok"`
+	Result        string                                   `json:"result"`
+	ResultDropped float64                                  `json:"resultDropped"`
+	Seq           float64                                  `json:"seq"`
+	StartedAt     float64                                  `json:"startedAt"`
+	Tool          string                                   `json:"tool"`
+	WorkspaceID   string                                   `json:"workspaceId"`
+}
+
+// ListDebugToolCallsResponseToolCallBodies is the `ListDebugToolCallsResponseToolCallBodies` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type ListDebugToolCallsResponseToolCallBodies string
+
+const (
+	ListDebugToolCallsResponseToolCallBodiesStored   ListDebugToolCallsResponseToolCallBodies = "stored"
+	ListDebugToolCallsResponseToolCallBodiesWithheld ListDebugToolCallsResponseToolCallBodies = "withheld"
+)
+
+// ListDebugToolCallsResponseToolCallBodiesValues lists every ListDebugToolCallsResponseToolCallBodies this SDK release knows.
+var ListDebugToolCallsResponseToolCallBodiesValues = []ListDebugToolCallsResponseToolCallBodies{ListDebugToolCallsResponseToolCallBodiesStored, ListDebugToolCallsResponseToolCallBodiesWithheld}
 
 // ListPublicJobsResponse is the `ListPublicJobsResponse` wire model.
 type ListPublicJobsResponse struct {

@@ -490,6 +490,12 @@ const OPERATION_DOCS = {
     description:
       'The web searches the run’s agents actually performed, keyset-paginated. Retained only when the deployment records agent context.',
   },
+  listDebugToolCalls: {
+    tag: 'Debug',
+    summary: "List a run's tool calls",
+    description:
+      'The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.',
+  },
   listDebugLogs: {
     tag: 'Debug',
     summary: "List a run's infrastructure log",
@@ -511,7 +517,7 @@ const TAG_DESCRIPTIONS = {
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Debug:
-    'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
+    'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */

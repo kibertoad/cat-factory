@@ -17,6 +17,7 @@ import {
   type RunnerJobRef,
   type RunnerJobView,
   type RunnerJobResult,
+  type StoreAgentContextGate,
   type SubscriptionQuotaTarget,
   type SubscriptionVendor,
   type TestSecretEntry,
@@ -51,6 +52,7 @@ import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAg
 import { buildKindBody } from './jobBody.js'
 import { containerJobLog } from './containerAgentLogging.js'
 import { buildAgentContextRecord } from './agentContextRecord.js'
+import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
 import {
   UI_TESTER_AGENT_KIND,
   isTesterKind,
@@ -263,6 +265,9 @@ export interface ContainerAgentExecutorDependencies {
    * absent ⇒ no subscription-harness call telemetry is captured. See {@link RecordHarnessCalls}.
    */
   recordHarnessCalls?: RecordHarnessCalls
+  /** The trajectory drain's two halves, both documented in `toolTrajectory.ts`. */
+  recordToolCalls?: RecordToolCalls
+  toolBodyGate?: StoreAgentContextGate
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
    * returns true for a resolved subscription harness + vendor, the job carries
@@ -549,24 +554,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       jobLog.pollFailed(error)
       throw error
     }
-    // Forward any tool spans the harness drained on this poll to the trace sink, as
-    // child spans under the RUN's trace (the run id is the trace id the LLM proxy's
-    // generations also use, so per-step jobs share one trace). Isolated + best-effort:
-    // never affects the lifecycle.
-    const traceSink = this.deps.llmTraceSink
-    if (traceSink?.recordToolSpans && view.spans && view.spans.length > 0) {
-      const spans = view.spans
-      await runBestEffort(jobLog.logger, 'containerAgent.recordToolSpans', () =>
-        traceSink.recordToolSpans?.(
-          {
-            workspaceId: handle.workspaceId ?? null,
-            executionId: handle.runId ?? handle.jobId,
-            agentKind: handle.agentKind ?? 'agent',
-          },
-          spans,
-        ),
-      )
-    }
+    // The tool calls the harness drained on this poll, to the trace sink as child spans under
+    // the RUN's trace (the run id is the trace id the LLM proxy's generations also use, so
+    // per-step jobs share one trace) AND to the trajectory store as persisted rows. Both
+    // isolated + best-effort: never affects the lifecycle. See `toolTrajectory.ts`.
+    await drainToolCalls(this.deps, handle, view.spans, jobLog.logger)
     // Per-call telemetry the harness drained on this poll: record it NOW rather than waiting
     // for the terminal result. A run whose container dies mid-flight never produces one, so
     // batching to the end meant a killed run reported zero calls no matter how many tokens it

@@ -154,6 +154,8 @@ moving spec. `src/mapping.ts`'s `ATTR` object and this table are edited together
 | `gen_ai.response.finish_reasons`   | generation span           | a one-element list; omitted when upstream reported none         |
 | `gen_ai.agent.name`                | step span                 | the agent kind                                                  |
 | `gen_ai.tool.name`                 | tool span                 |                                                                 |
+| `gen_ai.tool.arguments`            | tool span EVENT           | the call's arguments; only when body capture is permitted       |
+| `gen_ai.tool.result`               | tool span EVENT           | what the tool returned; same gate                               |
 | `gen_ai.client.token.usage`        | counter, `{token}`, DELTA | split by `gen_ai.token.type`                                    |
 | `gen_ai.client.operation.duration` | histogram, `s`, DELTA     |                                                                 |
 | span name `{operation} {model}`    | generation span           | e.g. `chat claude-sonnet-4-5`; other names stay low-cardinality |
@@ -171,6 +173,10 @@ load-bearing here:
 | `cat_factory.agent_kind`                                | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
 | `cat_factory.pipeline` / `cat_factory.step_count`       | The run span's pipeline, and the step span's fold size.                             |
 | `cat_factory.attempt_count`                             | Dispatches folded into a step span: the rounds of a loop, stated since not split.   |
+| `cat_factory.tool_call.seq`                             | The call's ordinal in its dispatch. Start time cannot order a tool loop: several    |
+|                                                         | calls routinely share one millisecond.                                              |
+| `cat_factory.tool_call.arguments_dropped_chars`         | What the harness's capture cap dropped, so a truncated body is legible AS           |
+| `cat_factory.tool_call.result_dropped_chars`            | truncated rather than read as the whole of a short one.                             |
 
 **Deliberately NOT emitted**, each for a reason rather than an oversight:
 

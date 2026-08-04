@@ -292,6 +292,7 @@ export interface DebugRunOverviewSinks {
   llmCalls: DebugRunOverviewSinksAgentContext
   provisioningLog: DebugRunOverviewSinksAgentContext
   searchQueries: DebugRunOverviewSinksAgentContext
+  toolCalls: DebugRunOverviewSinksAgentContext
 }
 
 export interface DebugRunOverviewSinksAgentContext {
@@ -455,6 +456,41 @@ export interface ListDebugSearchQueriesResponse {
   nextCursor: string | null
   queries: DebugSearchQuery[]
 }
+
+export type ListDebugToolCallsOrder = 'recent' | 'trajectory'
+
+/** Every `ListDebugToolCallsOrder` value, for exhaustive handling and runtime validation. */
+export const LIST_DEBUG_TOOL_CALLS_ORDER_VALUES = ['recent', 'trajectory'] as const
+
+export interface ListDebugToolCallsResponse {
+  /** Always present; `null` when the server has no value for it. */
+  nextCursor: string | null
+  toolCalls: ListDebugToolCallsResponseToolCall[]
+}
+
+export interface ListDebugToolCallsResponseToolCall {
+  agentKind: string
+  args: string
+  argsDropped: number
+  bodies: ListDebugToolCallsResponseToolCallBodies
+  createdAt: number
+  endedAt: number
+  executionId: string
+  id: string
+  jobId: string
+  ok: boolean
+  result: string
+  resultDropped: number
+  seq: number
+  startedAt: number
+  tool: string
+  workspaceId: string
+}
+
+export type ListDebugToolCallsResponseToolCallBodies = 'stored' | 'withheld'
+
+/** Every `ListDebugToolCallsResponseToolCallBodies` value, for exhaustive handling and runtime validation. */
+export const LIST_DEBUG_TOOL_CALLS_RESPONSE_TOOL_CALL_BODIES_VALUES = ['stored', 'withheld'] as const
 
 export interface ListPublicJobsResponse {
   jobs: PublicJob[]

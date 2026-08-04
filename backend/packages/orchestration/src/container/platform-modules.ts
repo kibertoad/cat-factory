@@ -162,6 +162,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
         llmCallMetricRepository: dependencies.llmCallMetricRepository,
         agentContextSnapshotRepository: dependencies.agentContextSnapshotRepository,
         agentSearchQueryRepository: dependencies.agentSearchQueryRepository,
+        agentToolCallRepository: dependencies.agentToolCallRepository,
         provisioningLogRepository: dependencies.provisioningLogRepository,
         // Bound to the SAME priced fold the board rollups read, so the debug overview and a
         // step's metrics bar can never quote different money for one run.

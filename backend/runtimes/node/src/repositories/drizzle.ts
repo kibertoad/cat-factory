@@ -12,6 +12,7 @@ import type {
   AgentPromptRepository,
   AgentRunRepository,
   AgentSearchQueryRepository,
+  AgentToolCallRepository,
   BinaryArtifactMetadataStore,
   BlockRepository,
   BrainstormSessionRepository,
@@ -99,6 +100,7 @@ import {
 import {
   DrizzleAgentContextSnapshotRepository,
   DrizzleAgentSearchQueryRepository,
+  DrizzleAgentToolCallRepository,
   DrizzleBinaryArtifactMetadataStore,
   DrizzleLlmCallMetricRepository,
   DrizzleProvisioningLogRepository,
@@ -167,6 +169,7 @@ export interface CoreRepositories {
   llmCallMetricRepository: LlmCallMetricRepository
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   agentSearchQueryRepository: AgentSearchQueryRepository
+  agentToolCallRepository: AgentToolCallRepository
   binaryArtifactMetadataStore: BinaryArtifactMetadataStore
   agentRunRepository: AgentRunRepository
   platformMetricsRepository: PlatformMetricsRepository
@@ -227,6 +230,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     llmCallMetricRepository: new DrizzleLlmCallMetricRepository(db),
     agentContextSnapshotRepository: new DrizzleAgentContextSnapshotRepository(db),
     agentSearchQueryRepository: new DrizzleAgentSearchQueryRepository(db),
+    agentToolCallRepository: new DrizzleAgentToolCallRepository(db),
     binaryArtifactMetadataStore: new DrizzleBinaryArtifactMetadataStore(db),
     agentRunRepository: new DrizzleAgentRunRepository(db),
     platformMetricsRepository: new DrizzlePlatformMetricsRepository(db),

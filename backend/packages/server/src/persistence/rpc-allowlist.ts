@@ -1220,6 +1220,7 @@ export const LOCAL_FIRST_PERSISTENCE_REPOSITORIES = [
   'llmCallMetricRepository',
   'agentContextSnapshotRepository',
   'agentSearchQueryRepository',
+  'agentToolCallRepository',
   'provisioningLogRepository',
   'subscriptionQuotaCycleRepository',
 ] as const

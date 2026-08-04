@@ -1,7 +1,8 @@
 import { bigint, index, integer, pgSchema, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 
-// The observability schema: the three append-heavy TELEMETRY sinks (one row per model call,
-// per dispatched agent context, per web search a container agent performed) plus the two
+// The observability schema: the four append-heavy TELEMETRY sinks (one row per model call,
+// per dispatched agent context, per web search a container agent performed, per tool call it
+// made) plus the two
 // deployment-level PROJECTIONS the operator dashboard aggregates (settled gates, and the daily
 // run rollup behind the long windows).
 //
@@ -123,6 +124,48 @@ export const agentSearchQueries = telemetry.table(
   (t) => [
     index('idx_agent_search_queries_execution').on(t.workspace_id, t.execution_id, t.created_at),
     index('idx_agent_search_queries_created').on(t.created_at),
+  ],
+)
+
+// One tool invocation an agent made, in trajectory order — what the agent DID, beside the
+// per-call cost (`llm_call_metrics`) and the context it was given (`agent_context_snapshots`).
+// The metadata is always recorded; `args`/`result` ride the same LLM_RECORD_PROMPTS +
+// storeAgentContext double gate as the other body-bearing sinks, and `bodies` says which, so a
+// withheld body never reads as a tool that took no arguments. Pruned on the same retention
+// window. Mirrors the D1 agent_tool_calls table column-for-column.
+export const agentToolCalls = telemetry.table(
+  'agent_tool_calls',
+  {
+    id: text('id').primaryKey(),
+    workspace_id: text('workspace_id').notNull(),
+    execution_id: text('execution_id').notNull(),
+    agent_kind: text('agent_kind').notNull(),
+    // The dispatch the call was made in: the drill-down filter, and the scope `seq` is
+    // numbered within. It is deliberately NOT the trajectory's sort key — a job id is a
+    // string, so ordering by it sorts a run's dispatches by agent-kind spelling.
+    job_id: text('job_id').notNull(),
+    seq: integer('seq').notNull(),
+    tool: text('tool').notNull(),
+    started_at: bigint('started_at', { mode: 'number' }).notNull(),
+    ended_at: bigint('ended_at', { mode: 'number' }).notNull(),
+    ok: integer('ok').notNull().default(1),
+    bodies: text('bodies').notNull().default('withheld'),
+    args: text('args').notNull().default(''),
+    result: text('result').notNull().default(''),
+    args_dropped: integer('args_dropped').notNull().default(0),
+    result_dropped: integer('result_dropped').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    index('idx_agent_tool_calls_trajectory').on(
+      t.workspace_id,
+      t.execution_id,
+      t.started_at,
+      t.seq,
+    ),
+    index('idx_agent_tool_calls_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_tool_calls_job').on(t.workspace_id, t.execution_id, t.job_id, t.created_at),
+    index('idx_agent_tool_calls_created').on(t.created_at),
   ],
 )
 

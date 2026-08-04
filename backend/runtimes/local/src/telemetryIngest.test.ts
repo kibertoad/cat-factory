@@ -102,6 +102,7 @@ class FakeTelemetryClient implements MachineTelemetryClient {
       metrics: batch.metrics?.length ?? 0,
       snapshots: batch.snapshots?.length ?? 0,
       searchQueries: batch.searchQueries?.length ?? 0,
+      toolCalls: batch.toolCalls?.length ?? 0,
     }
   }
 }
@@ -188,7 +189,7 @@ describe('mothership telemetry ingest sweep', () => {
       seen += 1
       if (seen === 1) throw new Error('transient')
       client.batches.push(batch)
-      return { metrics: batch.metrics?.length ?? 0, snapshots: 0, searchQueries: 0 }
+      return { metrics: batch.metrics?.length ?? 0, snapshots: 0, searchQueries: 0, toolCalls: 0 }
     }
     expect(await sweep()).toMatchObject({ runs: 1, failed: 1 })
   })

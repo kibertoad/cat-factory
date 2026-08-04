@@ -67,6 +67,7 @@ const EMPTY_SINKS = {
   llmCalls: { available: true, count: 1 },
   agentContext: { available: true, count: 1 },
   searchQueries: { available: true, count: 0 },
+  toolCalls: { available: true, count: 0 },
   provisioningLog: { available: true, count: 0 },
 }
 

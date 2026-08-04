@@ -669,10 +669,10 @@ a sibling workspace's spend.
 
 ### Run debugging (`/api/v1/debug/*`)
 
-Eight read-only endpoints for diagnosing a run from outside the browser: run index, per-run
+Nine read-only endpoints for diagnosing a run from outside the browser: run index, per-run
 overview with precomputed signals, and budgeted drill-downs into model calls, agent context,
-searches and provisioning logs. Same keys, `read` scope. Fully documented in
-[`debug-api.md`](./debug-api.md).
+searches, the agents' TOOL CALLS (what they actually did, in order) and provisioning logs. Same
+keys, `read` scope. Fully documented in [`debug-api.md`](./debug-api.md).
 
 ### Outbound webhook management
 

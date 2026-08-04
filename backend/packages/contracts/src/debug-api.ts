@@ -3,6 +3,7 @@ import { agentFailureSchema, executionStatusSchema } from './execution.js'
 import { runDiagnosticsSchema } from './run-provenance.js'
 import {
   agentSearchQuerySchema,
+  agentToolCallSchema,
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
@@ -355,6 +356,7 @@ export const debugRunOverviewSchema = v.object({
     llmCalls: debugSinkStatusSchema,
     agentContext: debugSinkStatusSchema,
     searchQueries: debugSinkStatusSchema,
+    toolCalls: debugSinkStatusSchema,
     provisioningLog: debugSinkStatusSchema,
   }),
   /**
@@ -708,6 +710,54 @@ export const debugSearchQueryListSchema = v.object({
   nextCursor: v.nullable(v.string()),
 })
 export type DebugSearchQueryList = v.InferOutput<typeof debugSearchQueryListSchema>
+
+/**
+ * Which order a run's tool calls come back in.
+ *
+ * `recent` (the default) is the newest-first keyset every other debug list serves: resumable
+ * with a cursor, for sweeping a long run. `trajectory` is oldest-first by when each call
+ * actually started — the order the agent worked in — bounded to `limit` and NOT resumable,
+ * because it answers a question about the run's beginning rather than a walk of all of it.
+ *
+ * The server computes both. A client holding rows could try to sort them itself, and would get
+ * it wrong in a way that looks right: `seq` restarts at zero on every dispatch, and `jobId` is
+ * a string that sorts a run's dispatches by agent-kind spelling.
+ */
+export const toolCallOrderSchema = v.picklist(['recent', 'trajectory'])
+export type ToolCallOrder = v.InferOutput<typeof toolCallOrderSchema>
+
+/**
+ * Query params for the tool-call trajectory list. It takes the small-row page params plus two
+ * of its own: the {@link toolCallOrderSchema order}, and a dispatch filter, because a run's step
+ * can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph iteration) and "what did
+ * the third ci-fixer round actually do" is a different question from "what did this run do".
+ */
+export const listDebugToolCallsQuerySchema = v.object({
+  limit: v.optional(pageLimitSchema),
+  cursor: v.optional(cursorSchema),
+  jobId: v.optional(v.string()),
+  order: v.optional(toolCallOrderSchema),
+})
+export type ListDebugToolCallsQuery = v.InferOutput<typeof listDebugToolCallsQuerySchema>
+
+/**
+ * The tool calls the run's agents made: the TRAJECTORY, which is the half of "how did this diff
+ * come about" that no diff and no prompt body answers.
+ *
+ * Rows come back WHOLE, bodies included, because a tool call's `args`/`result` are capped at
+ * CAPTURE time rather than stored unbounded and sliced at read time (unlike a prompt), so the
+ * page's size is `limit x cap` and computable before the request — the rule every endpoint here
+ * obeys. `bodies` says whether they were retained at all, so an empty `args` on a `withheld` row
+ * is read as an opt-out rather than as a tool that took no arguments.
+ *
+ * `nextCursor` is always null in `trajectory` order: that read is a bounded prefix by
+ * construction, not one page of a walk.
+ */
+export const debugToolCallListSchema = v.object({
+  toolCalls: v.array(agentToolCallSchema),
+  nextCursor: v.nullable(v.string()),
+})
+export type DebugToolCallList = v.InferOutput<typeof debugToolCallListSchema>
 
 /**
  * The run's slice of the provisioning event log — every attempt to spin up or tear down the

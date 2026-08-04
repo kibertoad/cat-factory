@@ -98,6 +98,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   reviewer-effort tag, and the per-class SQL rollups) and `externalMergeObserver` (attributing a
   PR merged directly on the provider). See CLAUDE.md → "Merge track record".
 - `observability/`: the read side of telemetry: `LlmObservabilityService` (per-call metrics),
+  `ToolCallObservabilityService` (the tool-call TRAJECTORY: what an agent DID, one row per
+  invocation; it honours the `bodies` state it is handed and never upgrades it, because the gate
+  is applied at the drain that also feeds the trace sinks),
   `PlatformObservabilityService` (deployment health) and `ReportsService` + `reports.logic.ts`
   (**Reports**; cross-cutting usage analytics: spend by model/agent kind and spend + run activity
   by workspace/service/task type, over the `ReportsRepository` port; see CLAUDE.md → "Reports" and

@@ -78,6 +78,7 @@ import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallat
 import { D1LlmCallMetricRepository } from './repositories/D1LlmCallMetricRepository'
 import { D1AgentContextSnapshotRepository } from './repositories/D1AgentContextSnapshotRepository'
 import { D1AgentSearchQueryRepository } from './repositories/D1AgentSearchQueryRepository'
+import { D1AgentToolCallRepository } from './repositories/D1AgentToolCallRepository'
 import { D1MembershipRepository } from './repositories/D1MembershipRepository'
 import { D1PipelineRepository } from './repositories/D1PipelineRepository'
 import { D1GateOutcomeRepository } from './repositories/D1GateOutcomeRepository.js'
@@ -353,6 +354,10 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
     // gate.
     agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
     agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    // The tool-call trajectory store, for the debug reader's list + the run overview's count.
+    // No sink service beside it here: the trajectory's only writer is the container executor,
+    // which builds its own recorder (see `container-executor-deps.ts`).
+    agentToolCallRepository: new D1AgentToolCallRepository({ db: telemetryDb }),
     // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
     platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     // The settled-gate projection behind the dashboard's attempt statistics. MAIN db for the

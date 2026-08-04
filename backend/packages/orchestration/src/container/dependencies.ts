@@ -33,6 +33,7 @@ import type {
   AgentExecutor,
   AgentPromptRepository,
   AgentSearchQueryRepository,
+  AgentToolCallRepository,
   ApiContractRepository,
   AppCaches,
   BinaryGeneratorRegistry,
@@ -519,6 +520,7 @@ export interface CoreDependencies {
    */
   agentContextSnapshotRepository?: AgentContextSnapshotRepository
   agentSearchQueryRepository?: AgentSearchQueryRepository
+  agentToolCallRepository?: AgentToolCallRepository
   /**
    * Optional external LLM trace sink (e.g. Langfuse). When wired, the observability
    * service fans every recorded call out to it as a generation. Opt-in and default-off;

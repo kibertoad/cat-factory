@@ -1,4 +1,4 @@
-// The SDK's PUBLIC shape: how the 66 `/api/v1` operations are grouped into resource clients
+// The SDK's PUBLIC shape: how the `/api/v1` operations are grouped into resource clients
 // and what each method is called.
 //
 // This is a chosen table, not a derivation, for the same reason `OPERATION_DOCS` in
@@ -96,6 +96,7 @@ const SURFACE = {
   getDebugLlmCall: { group: 'debug', method: 'getLlmCall' },
   listDebugAgentContext: { group: 'debug', method: 'listAgentContext', paginates: 'snapshots' },
   getDebugAgentContext: { group: 'debug', method: 'getAgentContext' },
+  listDebugToolCalls: { group: 'debug', method: 'listToolCalls', paginates: 'toolCalls' },
   listDebugLogs: { group: 'debug', method: 'listLogs', paginates: 'entries' },
   listDebugSearchQueries: {
     group: 'debug',
@@ -173,7 +174,8 @@ export const GROUP_DOCS = {
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
-  debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
+  debug:
+    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
 }
 
 /** The resource groups in emission order. */
