@@ -9,11 +9,11 @@
 Public API: answer every remaining park a run can stop on
 
 `/api/v1/runs/:runId/decisions` could answer four parks; a `decide` key could START many more than
-that, so a caller could put a run into a state only the app could get it out of. Twenty-two additive
-endpoints close the gap: the generic approval gate (approve / request-changes / reject, plus
-`resolve-exceeded` for a companion at its rework cap), agent-raised decisions, the clarity-review
-and both brainstorm loops, PR deep-review curation, and the two human-verdict gates. The decision
-list gained seven kinds alongside them, and the OpenAPI surface version is now `1.4.0`.
+that, so a caller could put a run into a state only the app could get it out of. Twenty-four
+additive endpoints close the gap: the generic approval gate (approve / request-changes / reject,
+plus `resolve-exceeded` for a companion at its rework cap), agent-raised decisions, the
+clarity-review and both brainstorm loops, PR deep-review curation, and the two human-verdict gates.
+The decision list gained seven kinds alongside them, and the OpenAPI surface version is now `1.4.0`.
 
 Of the parks a pipeline can carry, only `human-review` is now unanswerable, and by construction
 rather than omission: its answer is a person approving the pull request on the VCS host. Two park

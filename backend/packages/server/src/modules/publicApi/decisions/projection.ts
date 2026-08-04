@@ -15,9 +15,13 @@ import type {
   HumanTestStepState,
   JudgeStepState,
   PipelineStep,
+  PrReviewFinding,
+  PrReviewSlice,
   PrReviewStepState,
   PublicDecision,
   PublicDecisionList,
+  PublicPrReviewFinding,
+  PublicPrReviewSlice,
   RequirementReview,
   RunInputGate,
   StepApproval,
@@ -165,16 +169,60 @@ export function toAgentDecision(step: PipelineStep, decision: Decision): PublicD
   }
 }
 
-/** Project a parked PR deep review's curation state. */
+/**
+ * Project a parked PR deep review's curation state.
+ *
+ * The slices and findings go through their own projections rather than crossing the wire as the
+ * engine holds them: the internal shapes are mid-evolution (per-slice resume reports) while the
+ * published ones must not move, and the `optional | null` internals collapse to always-present
+ * nullables so four generated clients have one shape to check.
+ */
 export function toPrReviewDecision(state: PrReviewStepState): PublicDecision {
   return {
     kind: 'pr-review',
     status: state.status,
     summary: state.summary ?? null,
     prUrl: state.prUrl ?? null,
-    slices: state.slices ?? [],
-    findings: state.findings ?? [],
+    slices: (state.slices ?? []).map(toPrReviewSlice),
+    findings: (state.findings ?? []).map(toPrReviewFinding),
     selectedFindingIds: state.selectedFindingIds ?? [],
+  }
+}
+
+/** One reviewed slice, externally. */
+function toPrReviewSlice(slice: PrReviewSlice): PublicPrReviewSlice {
+  return {
+    sliceId: slice.id,
+    title: slice.title,
+    rationale: slice.rationale,
+    paths: slice.paths,
+  }
+}
+
+/**
+ * One review finding, externally. The challenge is projected rather than passed through so a
+ * caller sees the VERDICT and its justification without the engine's job bookkeeping.
+ */
+function toPrReviewFinding(finding: PrReviewFinding): PublicPrReviewFinding {
+  const challenge = finding.challenge
+  return {
+    findingId: finding.id,
+    sliceId: finding.sliceId ?? null,
+    path: finding.path,
+    line: finding.line ?? null,
+    side: finding.side ?? null,
+    severity: finding.severity,
+    category: finding.category,
+    title: finding.title,
+    detail: finding.detail,
+    suggestedFix: finding.suggestedFix ?? null,
+    challenge: challenge
+      ? {
+          status: challenge.status,
+          question: challenge.question ?? null,
+          justification: challenge.justification ?? null,
+        }
+      : null,
   }
 }
 
@@ -198,7 +246,11 @@ export function toVisualConfirmDecision(state: VisualConfirmStepState): PublicDe
   return {
     kind: 'visual-confirmation',
     phase: state.phase,
-    pairs: state.pairs ?? [],
+    pairs: (state.pairs ?? []).map((pair) => ({
+      view: pair.view,
+      actualArtifactId: pair.actualArtifactId ?? null,
+      referenceArtifactId: pair.referenceArtifactId ?? null,
+    })),
     degradedReason: state.degradedReason ?? null,
     attempts: state.attempts,
     maxAttempts: state.maxAttempts,
@@ -253,6 +305,62 @@ function isLivePrReview(state: PrReviewStepState): boolean {
 }
 
 /**
+ * Whether a human-test gate still wants a person. `awaiting_human` is the park; `provisioning`,
+ * `fixing` and `resolving_conflicts` are work in flight a poller should see; `passed` is settled.
+ *
+ * An EXHAUSTIVE switch rather than `phase !== 'passed'`, because the interesting direction is the
+ * one a negative test gets silently wrong: a phase added later (a `failed`, an `expired`) is
+ * terminal more often than not, and `!== 'passed'` would list it as a live question forever with
+ * nothing failing. Routed through {@link unclassifiedPhase} so the build breaks until somebody
+ * says which side the new phase is on.
+ */
+function isLiveHumanTest(state: HumanTestStepState): boolean {
+  switch (state.phase) {
+    case 'awaiting_human':
+    case 'provisioning':
+    case 'fixing':
+    case 'resolving_conflicts':
+      return true
+    case 'passed':
+      return false
+    default:
+      return unclassifiedPhase(state.phase)
+  }
+}
+
+/**
+ * Whether a visual-confirmation gate still wants a person. `awaiting_human` is the park, `fixing`
+ * is in flight, `approved` is settled. Exhaustive for the reason {@link isLiveHumanTest} is, and
+ * the pending phase is not hypothetical here: the internal schema's own comment records a
+ * `capturing` phase deferred until the re-capture loop is wired.
+ */
+function isLiveVisualConfirm(state: VisualConfirmStepState): boolean {
+  switch (state.phase) {
+    case 'awaiting_human':
+    case 'fixing':
+      return true
+    case 'approved':
+      return false
+    default:
+      return unclassifiedPhase(state.phase)
+  }
+}
+
+/**
+ * A gate phase this projection has no verdict for. Unreachable by TYPE: reaching it means a
+ * member was added to the picklist without being classified above, which is a build failure at the
+ * call site rather than a runtime branch.
+ *
+ * It still answers at runtime, because the type is total against the SCHEMA and only partial
+ * against the DATA: a row persisted by a newer build lands here. `false` is the safe answer, as a
+ * phase nobody classified is not something to put in front of a caller as an open question.
+ */
+function unclassifiedPhase(phase: never): boolean {
+  void phase
+  return false
+}
+
+/**
  * Project the PRE-DISPATCH INPUT GATE's verdict for an external caller. The issue CODES are the same
  * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
  * whoever filed the ticket) rather than parsing our prose.
@@ -302,9 +410,17 @@ export async function buildDecisionList<E extends AppEnv>(
   const execution =
     (await container.executionRepository.get(workspaceId, scoped.execution.id)) ?? scoped.execution
 
+  // The dialogue reads and the fork read are INDEPENDENT point lookups in separate stores, so they
+  // are issued together: this projection is on the poll path AND rebuilt after every answer, and
+  // awaiting them in sequence made its latency the sum of every park kind a run could carry rather
+  // than the slowest one. The concatenation order below is still deterministic.
+  const [dialogue, fork] = await Promise.all([
+    liveDialogueDecisions(c, workspaceId, scoped.blockId, execution),
+    liveForkDecisions(c, workspaceId, execution),
+  ])
   const decisions: PublicDecision[] = [
-    ...(await liveDialogueDecisions(c, workspaceId, scoped.blockId, execution)),
-    ...(await liveForkDecisions(c, workspaceId, execution)),
+    ...dialogue,
+    ...fork,
     ...liveStepDecisions(execution, container.agentKindRegistry),
   ]
 
@@ -350,27 +466,35 @@ async function liveDialogueDecisions<E extends AppEnv>(
   execution: ExecutionInstance,
 ): Promise<PublicDecision[]> {
   const container = c.get('container')
-  const decisions: PublicDecision[] = []
   const kinds = new Set(execution.steps.map((s) => s.agentKind))
+  const { requirements, clarity, brainstorm } = container
 
-  const requirements = container.requirements
-  if (requirements) {
-    const review = await requirements.service.getForBlock(workspaceId, blockId)
-    if (review && isLiveReview(review)) decisions.push(toRequirementsDecision(review))
+  // Each read is against a different store with nothing to say to the others, so they are issued
+  // together rather than chained. The RESULT order is fixed by the tuple, not by which store
+  // answered first, so a caller's decision list does not reshuffle between two polls of one run.
+  const [requirementsReview, clarityReview, brainstormSessions] = await Promise.all([
+    requirements ? requirements.service.getForBlock(workspaceId, blockId) : null,
+    clarity && kinds.has(CLARITY_REVIEW_AGENT_KIND)
+      ? clarity.service.getForBlock(workspaceId, blockId)
+      : null,
+    brainstorm
+      ? Promise.all(
+          liveBrainstormStages(kinds).map((stage) =>
+            brainstorm.services[stage].getForBlock(workspaceId, blockId),
+          ),
+        )
+      : [],
+  ])
+
+  const decisions: PublicDecision[] = []
+  if (requirementsReview && isLiveReview(requirementsReview)) {
+    decisions.push(toRequirementsDecision(requirementsReview))
   }
-
-  const clarity = container.clarity
-  if (clarity && kinds.has(CLARITY_REVIEW_AGENT_KIND)) {
-    const review = await clarity.service.getForBlock(workspaceId, blockId)
-    if (review && isLiveReview(review)) decisions.push(toClarityDecision(review))
+  if (clarityReview && isLiveReview(clarityReview)) {
+    decisions.push(toClarityDecision(clarityReview))
   }
-
-  const brainstorm = container.brainstorm
-  if (brainstorm) {
-    for (const stage of liveBrainstormStages(kinds)) {
-      const session = await brainstorm.services[stage].getForBlock(workspaceId, blockId)
-      if (session && isLiveReview(session)) decisions.push(toBrainstormDecision(session))
-    }
+  for (const session of brainstormSessions) {
+    if (session && isLiveReview(session)) decisions.push(toBrainstormDecision(session))
   }
   return decisions
 }
@@ -425,10 +549,10 @@ function liveStepDecisions(
     if (step.prReview && isLivePrReview(step.prReview)) {
       decisions.push(toPrReviewDecision(step.prReview))
     }
-    if (step.humanTest && step.humanTest.phase !== 'passed') {
+    if (step.humanTest && isLiveHumanTest(step.humanTest)) {
       decisions.push(toHumanTestDecision(step.humanTest))
     }
-    if (step.visualConfirm && step.visualConfirm.phase !== 'approved') {
+    if (step.visualConfirm && isLiveVisualConfirm(step.visualConfirm)) {
       decisions.push(toVisualConfirmDecision(step.visualConfirm))
     }
   })

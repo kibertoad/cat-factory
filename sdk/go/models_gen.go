@@ -1539,20 +1539,20 @@ type PublicPrReviewDecision struct {
 // PublicPrReviewDecisionFinding is the `PublicPrReviewDecisionFinding` wire model.
 type PublicPrReviewDecisionFinding struct {
 	Category PublicPrReviewDecisionFindingCategory `json:"category"`
-	// Challenge may be absent entirely.
-	Challenge *PublicPrReviewDecisionFindingChallenge `json:"challenge,omitempty"`
+	// Challenge always present; nil when the server has no value for it.
+	Challenge *PublicPrReviewDecisionFindingChallenge `json:"challenge"`
 	Detail    string                                  `json:"detail"`
-	ID        string                                  `json:"id"`
-	// Line may be absent entirely.
-	Line     *float64                              `json:"line,omitempty"`
+	FindingID string                                  `json:"findingId"`
+	// Line always present; nil when the server has no value for it.
+	Line     *float64                              `json:"line"`
 	Path     string                                `json:"path"`
 	Severity PublicPrReviewDecisionFindingSeverity `json:"severity"`
-	// Side may be absent entirely.
-	Side *PublicPrReviewDecisionFindingSide `json:"side,omitempty"`
-	// SliceID may be absent entirely.
-	SliceID *string `json:"sliceId,omitempty"`
-	// SuggestedFix may be absent entirely.
-	SuggestedFix *string `json:"suggestedFix,omitempty"`
+	// Side always present; nil when the server has no value for it.
+	Side *PublicPrReviewDecisionFindingSide `json:"side"`
+	// SliceID always present; nil when the server has no value for it.
+	SliceID *string `json:"sliceId"`
+	// SuggestedFix always present; nil when the server has no value for it.
+	SuggestedFix *string `json:"suggestedFix"`
 	Title        string  `json:"title"`
 }
 
@@ -1577,10 +1577,10 @@ var PublicPrReviewDecisionFindingCategoryValues = []PublicPrReviewDecisionFindin
 
 // PublicPrReviewDecisionFindingChallenge is the `PublicPrReviewDecisionFindingChallenge` wire model.
 type PublicPrReviewDecisionFindingChallenge struct {
-	// Justification may be absent entirely.
-	Justification *string `json:"justification,omitempty"`
-	// Question may be absent entirely.
-	Question *string                                      `json:"question,omitempty"`
+	// Justification always present; nil when the server has no value for it.
+	Justification *string `json:"justification"`
+	// Question always present; nil when the server has no value for it.
+	Question *string                                      `json:"question"`
 	Status   PublicPrReviewDecisionFindingChallengeStatus `json:"status"`
 }
 
@@ -1634,9 +1634,9 @@ var PublicPrReviewDecisionFindingSideValues = []PublicPrReviewDecisionFindingSid
 
 // PublicPrReviewDecisionSlice is the `PublicPrReviewDecisionSlice` wire model.
 type PublicPrReviewDecisionSlice struct {
-	ID        string   `json:"id"`
 	Paths     []string `json:"paths"`
 	Rationale string   `json:"rationale"`
+	SliceID   string   `json:"sliceId"`
 	Title     string   `json:"title"`
 }
 
@@ -2024,10 +2024,10 @@ type PublicVisualConfirmDecision struct {
 
 // PublicVisualConfirmDecisionPair is the `PublicVisualConfirmDecisionPair` wire model.
 type PublicVisualConfirmDecisionPair struct {
-	// ActualArtifactID may be absent entirely.
-	ActualArtifactID *string `json:"actualArtifactId,omitempty"`
-	// ReferenceArtifactID may be absent entirely.
-	ReferenceArtifactID *string `json:"referenceArtifactId,omitempty"`
+	// ActualArtifactID always present; nil when the server has no value for it.
+	ActualArtifactID *string `json:"actualArtifactId"`
+	// ReferenceArtifactID always present; nil when the server has no value for it.
+	ReferenceArtifactID *string `json:"referenceArtifactId"`
 	View                string  `json:"view"`
 }
 

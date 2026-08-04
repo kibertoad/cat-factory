@@ -4,23 +4,22 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicPrReviewDecisionFindingChallenge} wire model.
- * @param justification May be absent entirely.
- * @param question May be absent entirely.
+ * @param justification Always present; {@code null} when the server has no value for it.
+ * @param question Always present; {@code null} when the server has no value for it.
  * @param status the {@code status} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPrReviewDecisionFindingChallenge(
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("justification") @Nullable String justification,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("justification") @Nullable String justification,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("question") @Nullable String question,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("question") @Nullable String question,
 
     @JsonProperty("status") PublicPrReviewDecisionFindingChallengeStatus status
 ) {

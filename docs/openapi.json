@@ -1426,7 +1426,9 @@
                         }
                       },
                       "required": [
-                        "status"
+                        "status",
+                        "question",
+                        "justification"
                       ],
                       "type": "object"
                     },
@@ -1438,7 +1440,7 @@
                 "detail": {
                   "type": "string"
                 },
-                "id": {
+                "findingId": {
                   "type": "string"
                 },
                 "line": {
@@ -1503,12 +1505,17 @@
                 }
               },
               "required": [
-                "id",
+                "findingId",
+                "sliceId",
                 "path",
+                "line",
+                "side",
                 "severity",
                 "category",
                 "title",
-                "detail"
+                "detail",
+                "suggestedFix",
+                "challenge"
               ],
               "type": "object"
             },
@@ -1536,9 +1543,6 @@
           "slices": {
             "items": {
               "properties": {
-                "id": {
-                  "type": "string"
-                },
                 "paths": {
                   "items": {
                     "type": "string"
@@ -1548,12 +1552,15 @@
                 "rationale": {
                   "type": "string"
                 },
+                "sliceId": {
+                  "type": "string"
+                },
                 "title": {
                   "type": "string"
                 }
               },
               "required": [
-                "id",
+                "sliceId",
                 "title",
                 "rationale",
                 "paths"
@@ -2335,7 +2342,9 @@
                 }
               },
               "required": [
-                "view"
+                "view",
+                "actualArtifactId",
+                "referenceArtifactId"
               ],
               "type": "object"
             },

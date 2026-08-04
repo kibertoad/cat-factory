@@ -18,14 +18,17 @@ import { failureBody, gateDecisionAction } from './scope.js'
 // human-verdict gates (human-test, visual-confirmation).
 //
 // All three are reachable only through `POST /api/v1/tasks/:taskId/start`, since each is produced
-// by a container step and the jobs surface is inline-only. That is also why every route here runs
-// under the run's own initiator: resolving any of them can dispatch a container agent (a fixer, a
-// challenge investigator) or write to the pull request, and that work must keep using the
-// credentials the run was started with rather than the deployment default.
+// by a container step and the jobs surface is inline-only. That is also why a route here that can
+// DISPATCH runs under the run's own initiator: standing up a container agent (a fixer, a challenge
+// investigator) or writing to the pull request must keep using the credentials the run was started
+// with rather than the deployment default. `dismiss` is the one route that does not, and the
+// omission is deliberate rather than missed: dropping a finding from the parked review writes the
+// step and nothing else, so there is no outbound work for an initiator to credential.
 //
-// The human-verdict gates are addressed by RUN, not by the parked step: their service methods are
-// block-scoped (the SPA drives them from the task's window), and the run's anchor block is exactly
-// what this surface already resolved to gate the call.
+// The human-verdict gates are addressed by RUN, not by the parked step, because their service
+// methods are block-scoped (the SPA drives them from the task's window). That makes the `runId`
+// decorative to everything downstream, which is safe for the reason `loadScopedRun` documents: a
+// run that is no longer its block's live run is not resolvable, so resolution IS the check.
 
 export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
   // Resolve the parked review with the curated selection. `fix` and `post` act on the real pull
@@ -50,7 +53,8 @@ export function registerPrReviewDecisionRoutes(app: Hono<AppEnv>): void {
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
 
-  // Drop one finding from the review entirely. Curation, not a resolution: the run stays parked.
+  // Drop one finding from the review entirely. Curation, not a resolution: the run stays parked,
+  // and nothing is dispatched, hence no initiator scope (see the note at the top of this file).
   buildHonoRoute(app, dismissPublicRunPrReviewFindingContract, async (c) => {
     const { runId, findingId } = c.req.valid('param')
     const gated = await gateDecisionAction(c, runId)

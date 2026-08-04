@@ -36,6 +36,19 @@ export interface ScopedRun {
  * task (`getServiceTask`) — their union is exactly the set of runs this key may already read
  * through `GET /api/v1/jobs/:id` and `GET /api/v1/tasks/:taskId/run`, so nothing new is exposed.
  * Anything else in the workspace (or in another workspace) is a 404.
+ *
+ * WHY A RESOLVED RUN IS SAFE TO ANSWER THROUGH A BLOCK-SCOPED SERVICE METHOD. The three iterative
+ * reviews and both human-verdict gates delegate to methods keyed by BLOCK, not by run (the SPA
+ * drives them from the task's window), so the `runId` in the path names a run nothing downstream
+ * reads. That would be a misaddressing hazard (answer with a stale id, act on whatever run the
+ * block now holds), except the engine makes the two the same question: `insertLive` claims a
+ * block's live run under a partial unique index and DELETES that block's terminal rows in the same
+ * transaction, and a cancel / `stop-reset` deletes the run row outright. So a run that is no
+ * longer its block's live run is not resolvable AT ALL, and this 404 is already the refusal. That
+ * is an invariant of the execution repositories rather than of this file, so it is pinned by a
+ * conformance assertion (`refuses a block-scoped answer once the task has moved on`) instead of
+ * re-checked per request here. A runtime re-check would be an unreachable branch, and an
+ * unreachable branch in four published SDK error vocabularies.
  */
 export async function loadScopedRun<E extends AppEnv>(
   c: Context<E>,

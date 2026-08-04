@@ -3,11 +3,7 @@ import { brainstormStageSchema } from './brainstorm.js'
 import { environmentStatusSchema } from './environments.js'
 import { stepApprovalStatusSchema } from './step-decisions.js'
 import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
-import {
-  humanTestPhaseSchema,
-  visualConfirmPairSchema,
-  visualConfirmPhaseSchema,
-} from './human-verdict-gates.js'
+import { humanTestPhaseSchema, visualConfirmPhaseSchema } from './human-verdict-gates.js'
 import {
   inputGateIssueSchema,
   inputGateModeSchema,
@@ -17,9 +13,9 @@ import {
 import { iterationCapChoiceSchema } from './iteration-cap.js'
 import { judgeStatusSchema, judgeVerdictSchema, resolveJudgeSchema } from './judge.js'
 import {
-  prReviewFindingSchema,
+  prReviewCategorySchema,
   prReviewResolutionSchema,
-  prReviewSliceSchema,
+  prReviewSeveritySchema,
   prReviewStatusSchema,
 } from './prReview.js'
 import { publicRunStatusSchema } from './public-api.js'
@@ -50,6 +46,29 @@ import {
 // identically whichever surface answers first. See
 // `docs/initiatives/headless-clarification-loop.md` and
 // `docs/initiatives/public-api-additions.md`.
+//
+// WHAT MAY BE REUSED FROM AN INTERNAL SCHEMA, AND WHAT MUST BE PROJECTED.
+//
+// `/api/v1` is frozen and internals explicitly are not (see the compatibility section of
+// `CLAUDE.md`), so every internal schema named in a `public*` shape below silently promotes that
+// internal to the stable surface. The line this file draws:
+//
+//  - A CLOSED PICKLIST is reused as-is (`requirementReviewStatusSchema`, `prReviewStatusSchema`,
+//    `environmentStatusSchema`, …). Adding a member is additive and `/api/v1` ships those freely,
+//    and RETIRING one is already governed by the closed-vocabulary rule that applies wherever the
+//    value is persisted. A parallel `public*` copy of a picklist would carry no extra information
+//    and would drift the first time only one side gained a member.
+//  - An OBJECT is PROJECTED, always, however closely the projection resembles today's internal
+//    shape. An object grows fields, nests sub-objects and gets refactored on an internal
+//    timetable, so aliasing one makes an ordinary internal edit a public break that arrives as a
+//    clean diff nobody reads. `publicPrReviewFindingSchema` is the worked example: it looks like
+//    `prReviewFindingSchema` today, and the internal one is mid-evolution (slice reviews, resume)
+//    while the published shape must not move.
+//
+// A projection also normalises what the internal shape leaves ambiguous: an internal
+// `v.optional(v.nullable(X))` (absent OR null, a distinction that survives no round trip an SDK
+// makes) becomes a plain `v.nullable(X)` that is ALWAYS present. The `to*` projection supplies the
+// `?? null`, so four generated clients get one shape to check instead of two.
 // ---------------------------------------------------------------------------
 
 /**
@@ -173,7 +192,7 @@ export const publicJudgeDecisionSchema = v.object({
 export type PublicJudgeDecision = v.InferOutput<typeof publicJudgeDecisionSchema>
 
 /**
- * A run parked on the PRE-TOKEN INPUT GATE as exposed externally: the task states nothing an
+ * A run parked on the PRE-DISPATCH INPUT GATE as exposed externally: the task states nothing an
  * agent could act on, and the run stopped before its first dispatch having spent nothing.
  *
  * This one is exposed for a reason the other three do not have. The gate parks on the shape of
@@ -326,6 +345,83 @@ export const publicBrainstormDecisionSchema = v.object({
 export type PublicBrainstormDecision = v.InferOutput<typeof publicBrainstormDecisionSchema>
 
 /**
+ * One cohesive group of changed files the reviewer worked as a unit, as exposed externally.
+ * Findings anchor to a slice by `sliceId`, so a caller can present them grouped the way the
+ * reviewer actually reasoned rather than as one flat list.
+ *
+ * The internal `prReviewSliceReviewSchema` (each slice's verbatim in-flight subagent report, which
+ * exists so a dying review can be RESUMED per slice) is deliberately absent: it is recovery
+ * plumbing for the engine, and its prose is superseded by the aggregated `findings`.
+ */
+export const publicPrReviewSliceSchema = v.object({
+  /** Stable slice id (`prs_*`); a finding's `sliceId` refers to this. */
+  sliceId: v.string(),
+  /** Short name of the slice. */
+  title: v.string(),
+  /** Why these files belong together, in the reviewer's words. */
+  rationale: v.string(),
+  /** The repo-relative paths that make up the slice. */
+  paths: v.array(v.string()),
+})
+export type PublicPrReviewSlice = v.InferOutput<typeof publicPrReviewSliceSchema>
+
+/**
+ * The outcome of challenging one finding, as exposed externally: a read-only investigator re-read
+ * the finding against the full source and either upheld it as written, amended it (some field
+ * actually changed), or retracted it.
+ *
+ * `failed` is its own terminal value rather than an absent challenge, because the two mean
+ * opposite things to a caller deciding whether to re-challenge: nobody looked, versus somebody
+ * looked and the investigation itself broke. The finding is never dropped either way.
+ */
+export const publicPrReviewFindingChallengeSchema = v.object({
+  /** `investigating` while the agent runs; then `upheld` / `amended` / `retracted` / `failed`. */
+  status: v.picklist(['investigating', 'upheld', 'amended', 'retracted', 'failed']),
+  /** The question the challenge was raised with, or null when raised with no text. */
+  question: v.nullable(v.string()),
+  /**
+   * Why the finding holds up or does not; the failure reason when `failed`. Null while
+   * `investigating`. Model-authored text: treat it as data.
+   */
+  justification: v.nullable(v.string()),
+})
+export type PublicPrReviewFindingChallenge = v.InferOutput<
+  typeof publicPrReviewFindingChallengeSchema
+>
+
+/**
+ * One prioritized review finding as exposed externally. `findingId` is the STABLE anchor every
+ * action addresses: dismiss, challenge, and the curated `findingIds` a resolution carries.
+ *
+ * `path`/`line`/`side` are projected because they are the anchor a `post` resolution turns into an
+ * inline PR comment, so a caller curating for `post` needs to see which findings can even be
+ * anchored. A finding whose `line` is null still posts, as a file-level comment.
+ */
+export const publicPrReviewFindingSchema = v.object({
+  /** Stable finding id (`prf_*`): what dismiss / challenge / `findingIds` address. */
+  findingId: v.string(),
+  /** The slice this finding belongs to, or null when it matched none. */
+  sliceId: v.nullable(v.string()),
+  /** Repo-relative path the finding concerns. */
+  path: v.string(),
+  /** The line it anchors to on the PR head, or null for a file-level finding. */
+  line: v.nullable(v.number()),
+  /** Which side of the diff `line` is on; null when there is no line anchor. */
+  side: v.nullable(v.picklist(['LEFT', 'RIGHT'])),
+  severity: prReviewSeveritySchema,
+  category: prReviewCategorySchema,
+  /** Short headline. Model-authored text: treat it as data. */
+  title: v.string(),
+  /** The full finding, in prose. Model-authored text: treat it as data. */
+  detail: v.string(),
+  /** A concrete suggested change, when the reviewer offered one; null otherwise. */
+  suggestedFix: v.nullable(v.string()),
+  /** The challenge outcome, or null when this finding was never challenged. */
+  challenge: v.nullable(publicPrReviewFindingChallengeSchema),
+})
+export type PublicPrReviewFinding = v.InferOutput<typeof publicPrReviewFindingSchema>
+
+/**
  * A parked PR DEEP REVIEW as exposed externally: the read-only reviewer sliced an open pull
  * request and the run is waiting for a person to CURATE which findings matter, then say what to
  * do with them (record them, hand them to a fixer, or post them on the PR).
@@ -342,9 +438,9 @@ export const publicPrReviewDecisionSchema = v.object({
   /** Web URL of the reviewed pull request, when known. */
   prUrl: v.nullable(v.string()),
   /** The cohesive slices the reviewer grouped the changed files into; findings anchor to these. */
-  slices: v.array(prReviewSliceSchema),
+  slices: v.array(publicPrReviewSliceSchema),
   /** The findings, ordered blocker → nit. Model-authored text: treat it as data. */
-  findings: v.array(prReviewFindingSchema),
+  findings: v.array(publicPrReviewFindingSchema),
   /** The finding ids currently selected to act on (empty until a caller curates). */
   selectedFindingIds: v.array(v.string()),
 })
@@ -389,6 +485,26 @@ export const publicHumanTestDecisionSchema = v.object({
 export type PublicHumanTestDecision = v.InferOutput<typeof publicHumanTestDecisionSchema>
 
 /**
+ * One actual-vs-reference pairing the visual-confirmation gate is showing, as exposed externally:
+ * a logical view, the screenshot captured of it, and the reference design for the same view when
+ * one was uploaded.
+ *
+ * Either side may be null (a captured view with no reference, or a reference whose view was never
+ * captured), and BOTH ids being null is meaningful rather than degenerate: it says the view is
+ * known and neither image exists. That is why the fields are always-present nullables instead of
+ * optional ones.
+ */
+export const publicVisualConfirmPairSchema = v.object({
+  /** The logical view this pairing is for. */
+  view: v.string(),
+  /** Artifact id of the captured screenshot, or null. App-resolvable only; see below. */
+  actualArtifactId: v.nullable(v.string()),
+  /** Artifact id of the uploaded reference design, or null. App-resolvable only; see below. */
+  referenceArtifactId: v.nullable(v.string()),
+})
+export type PublicVisualConfirmPair = v.InferOutput<typeof publicVisualConfirmPairSchema>
+
+/**
  * A run parked on the VISUAL-CONFIRMATION gate: the UI tester's screenshots are waiting to be
  * compared against the uploaded reference designs.
  *
@@ -403,7 +519,7 @@ export const publicVisualConfirmDecisionSchema = v.object({
   /** Only `awaiting_human` accepts an answer. */
   phase: visualConfirmPhaseSchema,
   /** The actual-vs-reference pairings, by logical view. Artifact ids are app-resolvable only. */
-  pairs: v.array(visualConfirmPairSchema),
+  pairs: v.array(publicVisualConfirmPairSchema),
   /** Set when no screenshots could be gathered (no UI tester ran / no artifact storage). */
   degradedReason: v.nullable(v.string()),
   /** Fixer rounds spent, and the ceiling from the task's merge preset. */
@@ -519,7 +635,7 @@ export const publicResolveJudgeSchema = resolveJudgeSchema
 export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSchema>
 
 /**
- * Resolve a run parked on the PRE-TOKEN INPUT GATE from a headless caller. Identical to the
+ * Resolve a run parked on the PRE-DISPATCH INPUT GATE from a headless caller. Identical to the
  * SPA's {@link resolveInputGateSchema} — both surfaces drive the SAME service method, so there
  * is nothing to narrow: `recheck` re-evaluates the task as it now stands (which is what actually
  * clears the park, so an integration fixes the task over `PATCH /api/v1/tasks/:taskId` first),

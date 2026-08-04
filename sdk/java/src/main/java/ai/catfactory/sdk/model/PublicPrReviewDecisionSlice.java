@@ -10,18 +10,18 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicPrReviewDecisionSlice} wire model.
- * @param id the {@code id} field.
  * @param paths the {@code paths} field.
  * @param rationale the {@code rationale} field.
+ * @param sliceId the {@code sliceId} field.
  * @param title the {@code title} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPrReviewDecisionSlice(
-    @JsonProperty("id") String id,
-
     @JsonProperty("paths") List<String> paths,
 
     @JsonProperty("rationale") String rationale,
+
+    @JsonProperty("sliceId") String sliceId,
 
     @JsonProperty("title") String title
 ) {
@@ -38,16 +38,10 @@ public record PublicPrReviewDecisionSlice(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable String id;
         private @Nullable List<String> paths;
         private @Nullable String rationale;
+        private @Nullable String sliceId;
         private @Nullable String title;
-
-        /** Set {@code id}. */
-        public Builder id(@Nullable String id) {
-            this.id = id;
-            return this;
-        }
 
         /** Set {@code paths}. */
         public Builder paths(@Nullable List<String> paths) {
@@ -61,6 +55,12 @@ public record PublicPrReviewDecisionSlice(
             return this;
         }
 
+        /** Set {@code sliceId}. */
+        public Builder sliceId(@Nullable String sliceId) {
+            this.sliceId = sliceId;
+            return this;
+        }
+
         /** Set {@code title}. */
         public Builder title(@Nullable String title) {
             this.title = title;
@@ -69,7 +69,7 @@ public record PublicPrReviewDecisionSlice(
 
         /** Build the {@link PublicPrReviewDecisionSlice}. */
         public PublicPrReviewDecisionSlice build() {
-            return new PublicPrReviewDecisionSlice(id, paths, rationale, title);
+            return new PublicPrReviewDecisionSlice(paths, rationale, sliceId, title);
         }
     }
 }

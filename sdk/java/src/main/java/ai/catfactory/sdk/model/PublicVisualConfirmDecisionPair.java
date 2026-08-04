@@ -4,23 +4,22 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicVisualConfirmDecisionPair} wire model.
- * @param actualArtifactId May be absent entirely.
- * @param referenceArtifactId May be absent entirely.
+ * @param actualArtifactId Always present; {@code null} when the server has no value for it.
+ * @param referenceArtifactId Always present; {@code null} when the server has no value for it.
  * @param view the {@code view} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicVisualConfirmDecisionPair(
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("actualArtifactId") @Nullable String actualArtifactId,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("actualArtifactId") @Nullable String actualArtifactId,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("referenceArtifactId") @Nullable String referenceArtifactId,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("referenceArtifactId") @Nullable String referenceArtifactId,
 
     @JsonProperty("view") String view
 ) {

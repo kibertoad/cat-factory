@@ -3691,19 +3691,19 @@ class PublicPrReviewDecisionFinding:
 
     category: PublicPrReviewDecisionFindingCategory
     detail: str
-    id: str
+    finding_id: str
     path: str
     severity: PublicPrReviewDecisionFindingSeverity
     title: str
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     challenge: PublicPrReviewDecisionFindingChallenge | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     line: float | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     side: PublicPrReviewDecisionFindingSide | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     slice_id: str | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     suggested_fix: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -3714,11 +3714,11 @@ class PublicPrReviewDecisionFinding:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionFinding":
         """Decode a `PublicPrReviewDecisionFinding` from its JSON object."""
-        known = {"category", "detail", "id", "path", "severity", "title", "challenge", "line", "side", "sliceId", "suggestedFix"}
+        known = {"category", "detail", "findingId", "path", "severity", "title", "challenge", "line", "side", "sliceId", "suggestedFix"}
         return cls(
             category=_enum(PublicPrReviewDecisionFindingCategory, data.get("category")),
             detail=data.get("detail"),
-            id=data.get("id"),
+            finding_id=data.get("findingId"),
             path=data.get("path"),
             severity=_enum(PublicPrReviewDecisionFindingSeverity, data.get("severity")),
             title=data.get("title"),
@@ -3735,20 +3735,15 @@ class PublicPrReviewDecisionFinding:
         out: dict[str, Any] = dict(self.extra)
         out["category"] = _encode(self.category)
         out["detail"] = self.detail
-        out["id"] = self.id
+        out["findingId"] = self.finding_id
         out["path"] = self.path
         out["severity"] = _encode(self.severity)
         out["title"] = self.title
-        if self.challenge is not None:
-            out["challenge"] = _encode(self.challenge)
-        if self.line is not None:
-            out["line"] = self.line
-        if self.side is not None:
-            out["side"] = _encode(self.side)
-        if self.slice_id is not None:
-            out["sliceId"] = self.slice_id
-        if self.suggested_fix is not None:
-            out["suggestedFix"] = self.suggested_fix
+        out["challenge"] = _encode(self.challenge)
+        out["line"] = self.line
+        out["side"] = _encode(self.side)
+        out["sliceId"] = self.slice_id
+        out["suggestedFix"] = self.suggested_fix
         return out
 
 
@@ -3776,9 +3771,9 @@ class PublicPrReviewDecisionFindingChallenge:
     """`PublicPrReviewDecisionFindingChallenge`, as carried on the wire."""
 
     status: PublicPrReviewDecisionFindingChallengeStatus
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     justification: str | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     question: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -3801,10 +3796,8 @@ class PublicPrReviewDecisionFindingChallenge:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["status"] = _encode(self.status)
-        if self.justification is not None:
-            out["justification"] = self.justification
-        if self.question is not None:
-            out["question"] = self.question
+        out["justification"] = self.justification
+        out["question"] = self.question
         return out
 
 
@@ -3860,9 +3853,9 @@ class PublicPrReviewDecisionFindingSide(StrEnum):
 class PublicPrReviewDecisionSlice:
     """`PublicPrReviewDecisionSlice`, as carried on the wire."""
 
-    id: str
     paths: list[str]
     rationale: str
+    slice_id: str
     title: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -3873,11 +3866,11 @@ class PublicPrReviewDecisionSlice:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionSlice":
         """Decode a `PublicPrReviewDecisionSlice` from its JSON object."""
-        known = {"id", "paths", "rationale", "title"}
+        known = {"paths", "rationale", "sliceId", "title"}
         return cls(
-            id=data.get("id"),
             paths=[item for item in data.get("paths") or []],
             rationale=data.get("rationale"),
+            slice_id=data.get("sliceId"),
             title=data.get("title"),
             extra={k: v for k, v in data.items() if k not in known},
         )
@@ -3885,9 +3878,9 @@ class PublicPrReviewDecisionSlice:
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["id"] = self.id
         out["paths"] = [_encode(item) for item in self.paths]
         out["rationale"] = self.rationale
+        out["sliceId"] = self.slice_id
         out["title"] = self.title
         return out
 
@@ -4905,9 +4898,9 @@ class PublicVisualConfirmDecisionPair:
     """`PublicVisualConfirmDecisionPair`, as carried on the wire."""
 
     view: str
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     actual_artifact_id: str | None = None
-    #: May be absent entirely.
+    #: Always present; ``None`` when the server has no value for it.
     reference_artifact_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
@@ -4930,10 +4923,8 @@ class PublicVisualConfirmDecisionPair:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
         out["view"] = self.view
-        if self.actual_artifact_id is not None:
-            out["actualArtifactId"] = self.actual_artifact_id
-        if self.reference_artifact_id is not None:
-            out["referenceArtifactId"] = self.reference_artifact_id
+        out["actualArtifactId"] = self.actual_artifact_id
+        out["referenceArtifactId"] = self.reference_artifact_id
         return out
 
 

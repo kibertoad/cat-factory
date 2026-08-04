@@ -68,7 +68,7 @@ export function publicDecisionController(): Hono<AppEnv> {
 }
 
 function registerInputGateRoutes(app: Hono<AppEnv>): void {
-  // Answer a run parked on the PRE-TOKEN INPUT GATE: `recheck` after fixing the task, or
+  // Answer a run parked on the PRE-DISPATCH INPUT GATE: `recheck` after fixing the task, or
   // `proceed` to waive the findings.
   //
   // Runs under the RUN'S OWN initiator, for the same reason the fork route does: releasing the

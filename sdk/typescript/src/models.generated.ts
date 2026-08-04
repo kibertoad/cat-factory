@@ -892,15 +892,20 @@ export interface PublicPrReviewDecision {
 
 export interface PublicPrReviewDecisionFinding {
   category: PublicPrReviewDecisionFindingCategory
-  challenge?: PublicPrReviewDecisionFindingChallenge | null
+  /** Always present; `null` when the server has no value for it. */
+  challenge: PublicPrReviewDecisionFindingChallenge | null
   detail: string
-  id: string
-  line?: number | null
+  findingId: string
+  /** Always present; `null` when the server has no value for it. */
+  line: number | null
   path: string
   severity: PublicPrReviewDecisionFindingSeverity
-  side?: PublicPrReviewDecisionFindingSide | null
-  sliceId?: string | null
-  suggestedFix?: string | null
+  /** Always present; `null` when the server has no value for it. */
+  side: PublicPrReviewDecisionFindingSide | null
+  /** Always present; `null` when the server has no value for it. */
+  sliceId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  suggestedFix: string | null
   title: string
 }
 
@@ -910,8 +915,10 @@ export type PublicPrReviewDecisionFindingCategory = 'correctness' | 'security' |
 export const PUBLIC_PR_REVIEW_DECISION_FINDING_CATEGORY_VALUES = ['correctness', 'security', 'performance', 'maintainability', 'style', 'test', 'other'] as const
 
 export interface PublicPrReviewDecisionFindingChallenge {
-  justification?: string | null
-  question?: string | null
+  /** Always present; `null` when the server has no value for it. */
+  justification: string | null
+  /** Always present; `null` when the server has no value for it. */
+  question: string | null
   status: PublicPrReviewDecisionFindingChallengeStatus
 }
 
@@ -931,9 +938,9 @@ export type PublicPrReviewDecisionFindingSide = 'LEFT' | 'RIGHT'
 export const PUBLIC_PR_REVIEW_DECISION_FINDING_SIDE_VALUES = ['LEFT', 'RIGHT'] as const
 
 export interface PublicPrReviewDecisionSlice {
-  id: string
   paths: string[]
   rationale: string
+  sliceId: string
   title: string
 }
 
@@ -1164,8 +1171,10 @@ export interface PublicVisualConfirmDecision {
 }
 
 export interface PublicVisualConfirmDecisionPair {
-  actualArtifactId?: string | null
-  referenceArtifactId?: string | null
+  /** Always present; `null` when the server has no value for it. */
+  actualArtifactId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  referenceArtifactId: string | null
   view: string
 }
 

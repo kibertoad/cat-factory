@@ -4,50 +4,49 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicPrReviewDecisionFinding} wire model.
  * @param category the {@code category} field.
- * @param challenge May be absent entirely.
+ * @param challenge Always present; {@code null} when the server has no value for it.
  * @param detail the {@code detail} field.
- * @param id the {@code id} field.
- * @param line May be absent entirely.
+ * @param findingId the {@code findingId} field.
+ * @param line Always present; {@code null} when the server has no value for it.
  * @param path the {@code path} field.
  * @param severity the {@code severity} field.
- * @param side May be absent entirely.
- * @param sliceId May be absent entirely.
- * @param suggestedFix May be absent entirely.
+ * @param side Always present; {@code null} when the server has no value for it.
+ * @param sliceId Always present; {@code null} when the server has no value for it.
+ * @param suggestedFix Always present; {@code null} when the server has no value for it.
  * @param title the {@code title} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicPrReviewDecisionFinding(
     @JsonProperty("category") PublicPrReviewDecisionFindingCategory category,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("challenge") @Nullable PublicPrReviewDecisionFindingChallenge challenge,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("challenge") @Nullable PublicPrReviewDecisionFindingChallenge challenge,
 
     @JsonProperty("detail") String detail,
 
-    @JsonProperty("id") String id,
+    @JsonProperty("findingId") String findingId,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("line") @Nullable Double line,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("line") @Nullable Double line,
 
     @JsonProperty("path") String path,
 
     @JsonProperty("severity") PublicPrReviewDecisionFindingSeverity severity,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("side") @Nullable PublicPrReviewDecisionFindingSide side,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("side") @Nullable PublicPrReviewDecisionFindingSide side,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("sliceId") @Nullable String sliceId,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("sliceId") @Nullable String sliceId,
 
-    /** May be absent entirely. */
-    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("suggestedFix") @Nullable String suggestedFix,
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("suggestedFix") @Nullable String suggestedFix,
 
     @JsonProperty("title") String title
 ) {
@@ -67,7 +66,7 @@ public record PublicPrReviewDecisionFinding(
         private @Nullable PublicPrReviewDecisionFindingCategory category;
         private @Nullable PublicPrReviewDecisionFindingChallenge challenge;
         private @Nullable String detail;
-        private @Nullable String id;
+        private @Nullable String findingId;
         private @Nullable Double line;
         private @Nullable String path;
         private @Nullable PublicPrReviewDecisionFindingSeverity severity;
@@ -94,9 +93,9 @@ public record PublicPrReviewDecisionFinding(
             return this;
         }
 
-        /** Set {@code id}. */
-        public Builder id(@Nullable String id) {
-            this.id = id;
+        /** Set {@code findingId}. */
+        public Builder findingId(@Nullable String findingId) {
+            this.findingId = findingId;
             return this;
         }
 
@@ -144,7 +143,7 @@ public record PublicPrReviewDecisionFinding(
 
         /** Build the {@link PublicPrReviewDecisionFinding}. */
         public PublicPrReviewDecisionFinding build() {
-            return new PublicPrReviewDecisionFinding(category, challenge, detail, id, line, path, severity, side, sliceId, suggestedFix, title);
+            return new PublicPrReviewDecisionFinding(category, challenge, detail, findingId, line, path, severity, side, sliceId, suggestedFix, title);
         }
     }
 }
