@@ -1,6 +1,6 @@
 # LLM telemetry & agent-context observability
 
-Three sinks live in a dedicated telemetry store, separate from the transactional domain
+Four sinks live in a dedicated telemetry store, separate from the transactional domain
 (append-heavy, high-volume, short-retention): a required `TELEMETRY_DB` D1 database on Cloudflare
 and a `telemetry` Postgres schema on Node, all pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
 Parity is asserted by `defineAgentContextSuite`, and Cloudflare fails fast at build if
@@ -15,6 +15,10 @@ The sinks:
   and which therefore never reach proxy telemetry. A redacted allow-list projection, never a
   token or credential-bearing URL.
 - **`agent_search_queries`**: one row per web search a container agent PERFORMED.
+- **`agent_tool_calls`**: one row per tool invocation an agent MADE, in the order it made them:
+  the TRAJECTORY. Where the snapshot keeps what an agent was given and `llm_call_metrics` what
+  each model call cost, this keeps what it did with them, which is the half of "how did this diff
+  come about" that neither a diff nor a prompt body answers. See the section below.
 
 The deployment-level projections (`gate_outcomes`, `platform_run_days`) deliberately live in the
 MAIN store, not here; their rules are in
@@ -133,9 +137,42 @@ ahead of its backend would 404 EVERY model call. Doc:
 Every coarser view is a pure fold over it (kernel `domain/llm-rollup.ts`), running on EVERY step
 settlement. **A new consumer folds; it does not add a query.**
 
+## The tool-call trajectory
+
+An agent's tool loop is internal to its CLI: Pi's calls never appear as separate proxy requests
+and a subscription harness bypasses the proxy entirely, so the harness's own event stream is the
+only place the loop is visible, and the container is gone the moment the job settles. The harness
+therefore pairs each call's start with its result, NUMBERS the pair, and captures both bodies;
+the backend drains a window's worth on its existing job poll and sends it to two places.
+
+- **`seq` is the ordering, and the identity.** A tool loop routinely fires several calls inside
+  one millisecond, so a timestamp cannot sequence them; the ordinal is scoped to the DISPATCH,
+  because a run's step can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph
+  iteration) and each starts numbering at zero. The trajectory read therefore orders by
+  `(jobId, seq)` — the one telemetry read that is not on the `(createdAt, id)` keyset — and each
+  row's id derives from the same pair, so a replayed poll re-records instead of duplicating.
+  A harness image too old to number its calls has its trajectory SKIPPED with a log line naming
+  the job, because the only stateless substitute (the position in the batch) restarts every poll
+  window and would silently drop four calls in five.
+- **Both bodies are bounded and scrubbed at CAPTURE**, and each row states what the cap dropped:
+  a build log is routinely megabytes, and a reader has to be able to tell a short command from
+  the head of a long one. That cap is also what keeps the poll response small, and it is why the
+  debug list returns these rows WHOLE where a prompt body is sliced at read time.
+- **`bodies` says whether they were retained at all.** A withheld body and a tool that genuinely
+  took no arguments both leave `args` empty, and without the field an opted-out workspace's
+  trajectory reads as a run whose every tool took none.
+- **The gate is applied ONCE, at the drain** (`toolTrajectory.ts`), not in either destination:
+  the store and the external trace sinks receive the same already-gated batch. Reading it per
+  destination is how a body withheld from the store gets shipped to Langfuse anyway.
+
+On the trace side the bodies ride span EVENTS (`gen_ai.tool.arguments` / `gen_ai.tool.result`)
+rather than attributes, like a generation's prompt and for the same reason: they are payloads,
+not dimensions.
+
 ## Gating: the double gate on model bodies
 
-The snapshot and the search queries require BOTH `LLM_RECORD_PROMPTS` AND the per-workspace
+The snapshot, the search queries and the tool-call bodies require BOTH `LLM_RECORD_PROMPTS` AND
+the per-workspace
 `storeAgentContext` (the operator opt-out wins). **That double gate governs every path that
 captures a model BODY**, the EXTERNAL trace fan-out included, on the proxied AND inline paths. It
 is ONE shared helper, kernel's `createStoreAgentContextGate`, precisely because the two paths

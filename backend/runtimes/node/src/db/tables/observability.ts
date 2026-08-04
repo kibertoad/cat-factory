@@ -1,7 +1,8 @@
 import { bigint, index, integer, pgSchema, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 
-// The observability schema: the three append-heavy TELEMETRY sinks (one row per model call,
-// per dispatched agent context, per web search a container agent performed) plus the two
+// The observability schema: the four append-heavy TELEMETRY sinks (one row per model call,
+// per dispatched agent context, per web search a container agent performed, per tool call it
+// made) plus the two
 // deployment-level PROJECTIONS the operator dashboard aggregates (settled gates, and the daily
 // run rollup behind the long windows).
 //
@@ -155,12 +156,7 @@ export const agentToolCalls = telemetry.table(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
-    index('idx_agent_tool_calls_trajectory').on(
-      t.workspace_id,
-      t.execution_id,
-      t.job_id,
-      t.seq,
-    ),
+    index('idx_agent_tool_calls_trajectory').on(t.workspace_id, t.execution_id, t.job_id, t.seq),
     index('idx_agent_tool_calls_execution').on(t.workspace_id, t.execution_id, t.created_at),
     index('idx_agent_tool_calls_created').on(t.created_at),
   ],

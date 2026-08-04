@@ -17,7 +17,6 @@ const span = (partial: Partial<ToolSpan> & Pick<ToolSpan, 'tool'>): ToolSpan => 
   ...partial,
 })
 
-
 // The registry is generic over the job/result shape; the lifecycle/watchdog tests only
 // need a job carrying its id and a result carrying the optional fields they assert on.
 interface TestJob {

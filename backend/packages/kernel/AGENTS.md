@@ -149,6 +149,8 @@ else imports its **ports** and domain types from here.
   `storeAgentContext` half of the double gate governing prompt/response BODY capture. Shared by
   the proxied path (`LlmObservabilityService`) and the inline one (`InstrumentedModelProvider`)
   because those two DID diverge, and the inline half exported an opted-out workspace's bodies.
+  A third consumer is the tool-call drain (`@cat-factory/server`'s `toolTrajectory.ts`), which
+  gates a captured call's `args`/`result` the same way.
 - `ports/platform-metrics.ts` + `ports/gate-outcomes.ts`: the deployment-level (operator)
   reads, and the ONE place in the observability family that deliberately lives in the MAIN store
   rather than the telemetry one. Both are account-scoped through the same `workspaces`

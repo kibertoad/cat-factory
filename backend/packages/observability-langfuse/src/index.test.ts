@@ -186,7 +186,7 @@ describe('LangfuseTraceSink', () => {
     expect(batch[1]!.body.level).toBe('ERROR')
   })
 
-  it('carries a tool call\'s arguments and result in the span\'s input/output', async () => {
+  it("carries a tool call's arguments and result in the span's input/output", async () => {
     const captured = captureIngestion(CLOUD)
     const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk' })
 

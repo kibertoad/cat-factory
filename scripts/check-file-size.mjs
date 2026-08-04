@@ -185,7 +185,7 @@ const LEGACY_ALLOWANCES = new Map([
   // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
   // Ratcheted 1520 → 1450 by extracting `agentContextRecord.ts` (the observability snapshot's
   // allow-list projection) alongside `containerAgentLogging.ts`.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1444],
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1442],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

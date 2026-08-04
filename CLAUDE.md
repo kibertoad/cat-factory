@@ -884,8 +884,8 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Three sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`) live in a dedicated
-telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
+live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
 Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
 The full model, and the authority for anything recording an LLM call:
 [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
@@ -901,6 +901,10 @@ The full model, and the authority for anything recording an LLM call:
   spent it by whoever OWNS the boundary.
 - **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
   add a query.
+- **The tool-call TRAJECTORY is one sink per invocation, ordered by `(jobId, seq)`** and never by a
+  timestamp several calls share; a harness image that numbers nothing has its trajectory skipped
+  rather than collapsed onto colliding ids, and `bodies` marks a withheld arg list so it never reads
+  as a tool that took none.
 - **Bodies are double-gated** (`LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, via
   kernel's `createStoreAgentContextGate`), on every path that captures a model body, external trace
   fan-out included; a read that throws fails closed.

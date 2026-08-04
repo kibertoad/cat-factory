@@ -56,19 +56,42 @@ export function defineAgentToolCallSuite(
       // Every call in one millisecond, inserted out of order, across two dispatches — the exact
       // shape a `created_at` ordering renders as an arbitrary permutation.
       await repo.recordMany([
-        call({ id: `${ws}-b1`, workspaceId: ws, executionId: e1, jobId: 'job-b', seq: 1, createdAt: 7 }),
-        call({ id: `${ws}-a1`, workspaceId: ws, executionId: e1, jobId: 'job-a', seq: 1, createdAt: 7 }),
-        call({ id: `${ws}-a0`, workspaceId: ws, executionId: e1, jobId: 'job-a', seq: 0, createdAt: 7 }),
-        call({ id: `${ws}-b0`, workspaceId: ws, executionId: e1, jobId: 'job-b', seq: 0, createdAt: 7 }),
+        call({
+          id: `${ws}-b1`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'job-b',
+          seq: 1,
+          createdAt: 7,
+        }),
+        call({
+          id: `${ws}-a1`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'job-a',
+          seq: 1,
+          createdAt: 7,
+        }),
+        call({
+          id: `${ws}-a0`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'job-a',
+          seq: 0,
+          createdAt: 7,
+        }),
+        call({
+          id: `${ws}-b0`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'job-b',
+          seq: 0,
+          createdAt: 7,
+        }),
       ])
 
       const trajectory = await repo.listByExecution(ws, e1, 50)
-      expect(trajectory.map((c) => c.id)).toEqual([
-        `${ws}-a0`,
-        `${ws}-a1`,
-        `${ws}-b0`,
-        `${ws}-b1`,
-      ])
+      expect(trajectory.map((c) => c.id)).toEqual([`${ws}-a0`, `${ws}-a1`, `${ws}-b0`, `${ws}-b1`])
     })
 
     it('bounds the trajectory read at its OLDEST end, so a truncated read is a prefix', async () => {

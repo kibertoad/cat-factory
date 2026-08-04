@@ -275,6 +275,7 @@ describe('storage retention sweep', () => {
       llmCallMetrics: 0,
       agentContextSnapshots: 0,
       agentSearchQueries: 0,
+      agentToolCalls: 0,
       // The quota-cycle prune uses a FIXED 30-day window, not the policy — but no
       // quota rows are seeded here, so it reclaims nothing.
       subscriptionQuotaCycles: 0,

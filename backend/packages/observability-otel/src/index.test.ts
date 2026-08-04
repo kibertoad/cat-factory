@@ -224,7 +224,7 @@ describe('OtelTraceSink (fetch OTLP exporter)', () => {
     expect(firstSpan(first!.body).traceId).toBe(firstSpan(second!.body).traceId)
   })
 
-  it('carries a tool call\'s arguments and result as span events, with its ordinal', async () => {
+  it("carries a tool call's arguments and result as span events, with its ordinal", async () => {
     const { fetchImpl, calls } = capturingFetch()
     const sink = new OtelTraceSink({ endpoint: COLLECTOR, fetchImpl })
 

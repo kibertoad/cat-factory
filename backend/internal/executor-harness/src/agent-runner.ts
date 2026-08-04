@@ -551,6 +551,36 @@ function createClaudeProgressGuard(opts: SubscriptionRunOptions): {
   }
 }
 
+/**
+ * The run's TRAJECTORY, on the claude-code stream: each `tool_use` block paired with the
+ * `tool_result` that answers it on the following user turn, numbered and captured (scrubbed +
+ * capped). The CLI's stream is the only place this loop is visible at all — its tool calls never
+ * touch our proxy — so without this a subscription-harness run's account of what it DID dies with
+ * the container.
+ *
+ * Both halves are no-ops when the caller wants no spans, so a driver that only needs the run's
+ * output never pays to serialise a body nothing will read. Split out of {@link runClaudeCode} for
+ * the per-function line budget, like {@link createClaudeProgressGuard}.
+ */
+function createClaudeToolTrajectory(
+  opts: SubscriptionRunOptions,
+  secrets: readonly string[],
+): {
+  onToolUse: (id: string, name: string, input: unknown) => void
+  onToolResults: (content: unknown[]) => void
+} {
+  if (!opts.onSpan) return { onToolUse: () => {}, onToolResults: () => {} }
+  const onSpan = opts.onSpan
+  const tracker = new ToolCallTracker(secrets)
+  return {
+    onToolUse: (id, name, input) => tracker.started(id, name, input),
+    onToolResults: (content) =>
+      recordClaudeToolResults(tracker, content, (call: TrackedToolCall) =>
+        onSpan({ ...call, bodies: 'stored' }),
+      ),
+  }
+}
+
 export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRunOutcome> {
   const stats: PiRunStats = { toolCalls: 0, assistantChars: 0 }
   let summary = ''
@@ -641,14 +671,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
   // diagnostic. Disabled when the caller supplies no limits (only the external watchdog bounds it).
   const progressGuard = createClaudeProgressGuard(opts)
   const { rememberTool, feedGuard, guardAbort } = progressGuard
-  // The run's TRAJECTORY: each `tool_use` block paired with the `tool_result` that answers it on
-  // the following user turn, numbered and captured (scrubbed + capped). The CLI's stream is the
-  // only place this loop is visible at all — its tool calls never touch our proxy — so without
-  // this a subscription-harness run's "how" died with the container.
-  const tools = new ToolCallTracker(secrets)
-  const emitSpan = (call: TrackedToolCall): void => {
-    opts.onSpan?.({ ...call, bodies: 'stored' })
-  }
+  const trajectory = createClaudeToolTrajectory(opts, secrets)
 
   const onEvent = (event: Record<string, unknown>, meta?: { final?: boolean }): void => {
     const type = event.type
@@ -671,7 +694,7 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // `is_error` its `tool_result` carries on the next `user` turn.
         if (typeof block.id === 'string' && typeof block.name === 'string') {
           rememberTool(block.id, block.name)
-          tools.started(block.id, block.name, block.input)
+          trajectory.onToolUse(block.id, block.name, block.input)
         }
         if (block.name === 'TodoWrite') {
           const progress = todosToProgress((block.input as Record<string, unknown>)?.todos)
@@ -694,10 +717,9 @@ export async function runClaudeCode(opts: SubscriptionRunOptions): Promise<PiRun
         // Not on the at-close flush: the CLI has already exited, so tripping the guard there
         // would kill nothing and only convert a clean exit into a spurious failure.
         if (!meta?.final) feedGuard(content)
-        // The trajectory's other half. Fed on the FINAL flush too, unlike the guard: the CLI
-        // having exited is exactly when the last calls' results matter and killing nothing is
-        // no longer a risk.
-        if (opts.onSpan) recordClaudeToolResults(tools, content, emitSpan)
+        // The trajectory's other half — fed on the FINAL flush too, unlike the guard, since a
+        // CLI that has exited is exactly when the last calls' results matter.
+        trajectory.onToolResults(content)
         telemetry.onToolResult(dispatchId, content)
       }
     } else if (type === 'result') {

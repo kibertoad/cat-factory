@@ -197,6 +197,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         ['llm-calls', 'calls'],
         ['agent-context', 'snapshots'],
         ['search-queries', 'queries'],
+        ['tool-calls', 'toolCalls'],
         ['logs', 'entries'],
       ] as const) {
         const res = await app.call<Record<string, unknown[]>>(

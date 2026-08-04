@@ -265,16 +265,8 @@ export interface ContainerAgentExecutorDependencies {
    * absent ⇒ no subscription-harness call telemetry is captured. See {@link RecordHarnessCalls}.
    */
   recordHarnessCalls?: RecordHarnessCalls
-  /**
-   * Persist the tool calls drained on each poll as trajectory rows — what the agent DID,
-   * beside the `llm_call_metrics` account of what each model call cost. Best-effort;
-   * absent ⇒ the calls still reach any wired trace sink and nothing is persisted.
-   */
+  /** The trajectory drain's two halves, both documented in `toolTrajectory.ts`. */
   recordToolCalls?: RecordToolCalls
-  /**
-   * The double gate on a drained tool call's captured `args`/`result` (see `toolTrajectory.ts`).
-   * Absent ⇒ every body is withheld, and the calls say so.
-   */
   toolBodyGate?: StoreAgentContextGate
   /**
    * NATIVE LOCAL EXECUTION (local facade only, opt-in via `LOCAL_NATIVE_AGENTS`): when this
