@@ -1,5 +1,41 @@
 # @cat-factory/worker
 
+## 0.140.1
+
+### Patch Changes
+
+- 7f86f07: The capability-credential row is rev-guarded, closing two holes the per-key write opened. The row
+  is ONE sealed blob holding the whole set, so a per-key save is read-modify-write over it; blind,
+  two operators saving DIFFERENT keys would silently destroy each other's, with the loser's save
+  still returning success. `put`/`remove` now ride a `compareAndSwap`/`deleteIfRev` pair (a new
+  `rev` column on `capability_credentials`, both runtimes), reloading and re-applying on the
+  winner's snapshot, 409 only on a pathologically hot row. The whole-set PUT stays a blind write:
+  replacing whatever is stored is its semantics, and it bumps the stored rev in SQL so a concurrent
+  per-key save's guard still trips.
+
+  Also: a per-key save now stamps `updatedAt` on the touched key ONLY. "Last set" is a per-key fact
+  the checklist renders per row, and the previous write re-stamped the whole set, falsifying every
+  neighbour's date whenever any one key was saved.
+
+- Updated dependencies [7f86f07]
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+  - @cat-factory/integrations@0.119.0
+  - @cat-factory/server@0.200.0
+  - @cat-factory/kernel@0.220.0
+  - @cat-factory/agents@0.106.4
+  - @cat-factory/consensus@0.13.31
+  - @cat-factory/eks@0.1.205
+  - @cat-factory/gates@0.8.51
+  - @cat-factory/gitlab@0.15.10
+  - @cat-factory/observability-otel@0.5.5
+  - @cat-factory/orchestration@0.188.3
+  - @cat-factory/prompt-fragments@0.15.42
+  - @cat-factory/spend@0.13.7
+  - @cat-factory/caching@0.13.5
+  - @cat-factory/observability-langfuse@0.9.48
+  - @cat-factory/provider-cloudflare@0.7.357
+
 ## 0.140.0
 
 ### Minor Changes

@@ -578,7 +578,10 @@ export class DrizzleTestSecretsRepository implements TestSecretsRepository {
  * A workspace's capability credentials — the sealed, tenant-scoped home for the secrets a
  * registered tool server or generative binary integration declares by name. One row per
  * workspace; `credentials` is the sealed `CapabilityCredentialEntry[]` blob, `summary` the
- * non-secret display list. The D1 mirror is `D1CapabilityCredentialRepository`.
+ * non-secret display list. The per-key writes ride the rev-guarded
+ * `compareAndSwap`/`deleteIfRev` (an `UPDATE/DELETE … WHERE rev = ?` whose row count decides
+ * the winner); the blind `upsert` bumps the stored rev in SQL so it stays monotonic. The D1
+ * mirror is `D1CapabilityCredentialRepository`.
  */
 export class DrizzleCapabilityCredentialRepository implements CapabilityCredentialRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -595,6 +598,7 @@ export class DrizzleCapabilityCredentialRepository implements CapabilityCredenti
       workspaceId: row.workspace_id,
       credentials: row.credentials,
       summary: row.summary,
+      rev: row.rev,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
@@ -605,6 +609,7 @@ export class DrizzleCapabilityCredentialRepository implements CapabilityCredenti
       workspace_id: record.workspaceId,
       credentials: record.credentials,
       summary: record.summary,
+      rev: record.rev,
       created_at: record.createdAt,
       updated_at: record.updatedAt,
     }
@@ -616,9 +621,57 @@ export class DrizzleCapabilityCredentialRepository implements CapabilityCredenti
         set: {
           credentials: values.credentials,
           summary: values.summary,
+          rev: sql`${capabilityCredentials.rev} + 1`,
           updated_at: values.updated_at,
         },
       })
+  }
+
+  async compareAndSwap(
+    record: CapabilityCredentialRecord,
+    expectedRev: number | null,
+  ): Promise<boolean> {
+    if (expectedRev === null) {
+      const result = await this.db
+        .insert(capabilityCredentials)
+        .values({
+          workspace_id: record.workspaceId,
+          credentials: record.credentials,
+          summary: record.summary,
+          rev: record.rev,
+          created_at: record.createdAt,
+          updated_at: record.updatedAt,
+        })
+        .onConflictDoNothing({ target: capabilityCredentials.workspace_id })
+      return (result.rowCount ?? 0) > 0
+    }
+    const result = await this.db
+      .update(capabilityCredentials)
+      .set({
+        credentials: record.credentials,
+        summary: record.summary,
+        rev: record.rev,
+        updated_at: record.updatedAt,
+      })
+      .where(
+        and(
+          eq(capabilityCredentials.workspace_id, record.workspaceId),
+          eq(capabilityCredentials.rev, expectedRev),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async deleteIfRev(workspaceId: string, expectedRev: number): Promise<boolean> {
+    const result = await this.db
+      .delete(capabilityCredentials)
+      .where(
+        and(
+          eq(capabilityCredentials.workspace_id, workspaceId),
+          eq(capabilityCredentials.rev, expectedRev),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
   }
 
   async delete(workspaceId: string): Promise<void> {
