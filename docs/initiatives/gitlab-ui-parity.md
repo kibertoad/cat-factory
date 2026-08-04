@@ -1,6 +1,6 @@
 # Initiative: GitLab product-surface parity (SPA)
 
-**Status:** in progress (connect flow landed end to end: backend + UI) · **Owner:** core · **Started:** 2026-07-16
+**Status:** in progress (connect flow landed end to end; add-service + bootstrap are provider-aware) · **Owner:** core · **Started:** 2026-07-16
 
 > Durable source of truth for a multi-PR initiative. Read it first before picking up the
 > next slice; update the checklist at the end of each PR.
@@ -54,7 +54,7 @@ pipelines entirely through the UI, at feature parity with GitHub.
 | 1b  | **Provider pre-slice (gates all visual work):** add + populate a `provider: VcsProvider` discriminator on the repo/connection wire types + projections, symmetric across both runtimes, with a conformance assertion | ✅ done | this PR |
 | 2a  | Per-workspace GitLab PAT connect flow; **backend** (persistence + connect service/controller + provider-routing client, both runtimes + conformance)                                                                 | ✅ done | this PR |
 | 2b  | Per-workspace GitLab PAT connect flow; **connect UI** mirroring `GitHubConnect.vue` (provider-aware labels/icons, gitlab connection probe, i18n)                                                                     | ✅ done | this PR |
-| 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                                                                           | ⬜ todo |         |
+| 3   | Project browse / add-service-from-project through the shared store (provider-aware labels)                                                                                                                           | ✅ done | this PR |
 | 4   | Webhook setup surface (register the GitLab webhook + secret for a connected project)                                                                                                                                 | ⬜ todo |         |
 | 5   | Provider-keyed copy pass: PR/MR terminology, host/URL rendering, icons; i18n'd, all locales                                                                                                                          | ⬜ todo |         |
 | 6   | Onboarding: provider choice step (GitHub App / GitHub PAT / GitLab PAT) in the connect onboarding                                                                                                                    | ⬜ todo |         |
@@ -244,6 +244,97 @@ slice 5 (the copy pass): it establishes where provider presentation is decided.
 - **Still GitHub-hardcoded, and still slice 3/5's job:** `stores/github.ts`'s `repoUrl` /
   `pullUrl` / `issueUrl` builders and `AddServiceFromRepoModal.vue`'s `manageInstallUrl`. They now
   have `github.provider` to switch on: the data is no longer the blocker, only the work is.
+  (`manageInstallUrl` was settled by slice 3 below; the URL builders remain slice 5's.)
+
+## Findings (slice 3: browse + add-service)
+
+Slice 3 made the two surfaces that stand between a connected workspace and a running pipeline
+provider-aware: add-service-from-repo and bootstrap. Read this before slice 4 or 5.
+
+- **The connect fan-out is ONE component now (`components/vcs/VcsConnectSurfaces.vue`).** Slice 2b
+  taught the panel and the onboarding gate to render only the connect methods the deployment
+  serves, but the two MODALS that also strand a user on "not connected" (add-service, bootstrap)
+  each hardcoded `<GitHubConnect />`. On a GitLab-only deployment both offered an App
+  installation flow the deployment cannot serve, with no way to connect from where the user
+  actually was. The fan-out was already duplicated twice, so a third and fourth copy was the
+  wrong answer; every surface takes the shared component and passes only the App-path intro copy.
+- **What is App-only is now stated by the CONNECTION, not inferred from the provider.**
+  `GitHubConnection.method` (`app` | `pat`, the `VcsConnectMethod` vocabulary `connect-options`
+  already used) is required on the wire, and the App-only affordances key off it: the
+  installation settings page behind "grant the App access", which both modals previously built
+  from `connection.installationId` unconditionally. A provider test would have looked right and
+  still been wrong twice over: a GitHub PAT connect is a supported shape of
+  `VcsPatConnectionService`, and LOCAL mode's synthetic connection is `provider: 'github'` and
+  PAT-backed, so it was being handed a `github.com/settings/installations/<synthetic-id>` link
+  that 404s. That local bug predates GitLab and is fixed here too.
+- **`method` is DERIVED from the row, in the one mapper that reads back all three writers.**
+  `GitHubInstallationService.getConnection` serves rows written by its own App connect, by the
+  PAT connect, and by local mode's auto-provisioner, so it cannot assert a method. The
+  discriminator is `appId`: only the App connect path fills it (probed at connect to route token
+  mints, ADR 0005) and both PAT paths leave it null. A row predating the multi-App tier also has
+  none and therefore reads as `pat`, losing one convenience link until it reconnects; that is the
+  "let stale internal state be re-created" disposition, not a shim. Pinned by
+  `GitHubInstallationService.connectMethod.test.ts` (all three writers) plus the connect-response
+  and read assertions in both facades' specs.
+- **`method` is REQUIRED on the wire, and the absent case is not a supported state.** It is the
+  one field in `githubConnectionSchema` that is, and the contrast with `provider` beside it (which
+  is `v.optional` with a "backends predating the column" note) is worth stating once: an optional
+  `method` would be exactly the internal-compatibility fallback the repo rules forbid, and it
+  would leave both `toConnection` mappers free to forget the field. Required means a response
+  without it fails the SPA's contract validation, which is the honest outcome: no client can
+  decide what to offer from a value it never received. Readers still ask `=== 'app'`, so anything
+  that is not an App installation withholds the App affordances. Do not "harden" this by
+  defaulting an absent `method` at a call site.
+- **Copy moved to `vcs.addService.*` / `vcs.bootstrap.*`**, provider-parameterised, extending the
+  namespace slice 2b opened. The repository hint is now a PAIR of keys rather than one
+  parameterised string, because the two cases give different remedies: an App connection sends you
+  to the grant-access page, a token connection to the token's own scope and your project
+  membership. Which of the two renders is asked of `connection.method`, NOT of whether the
+  manage-installation URL could be built: those coincide today, but an App install whose settings
+  page we could not name (a future Enterprise host) would otherwise be told to go check its
+  token's scope. Three add-service keys no component had referenced (`noReposAvailable`,
+  `refreshList`, `showingCount`) went with them.
+- **Bootstrap's own paragraphs moved too, and the intro is THREE keys because it makes three
+  different promises.** `bootstrap.intro.canCreate` / `manual` said "Create an empty GitHub
+  repository" unconditionally, and `bootstrap.arch.pickRepo.label` said "Pick an existing GitHub
+  repo": the same bug this slice fixed one modal over, in the modal it was already editing. They
+  are now `vcs.bootstrap.introCanCreate` / `introManual` / `introManualAny` and
+  `vcs.bootstrap.archPickRepo`. The split is not decoration: cat-factory creating the repo, the
+  user creating it in one click, and the user creating it somewhere we cannot name are three
+  different instructions, and the third must not promise a button that (per the next point) is
+  absent. All three key off the SAME value the button does, so the copy and the affordance cannot
+  disagree.
+- **Copy rendered BEFORE a connection exists must not read `provider`.** It answers "what is
+  connected" and so defaults to `github`, which is right for the surfaces slice 2b touched (all
+  behind a connection) and wrong for an intro paragraph or a create-repo button that renders
+  while the connect box is still on screen: a GitLab-only deployment was offered "Pick an
+  existing GitHub repository". The store now derives `surfaceProvider` (connected provider, else
+  the sole connectable one, else null) and the panel's inline `chromeProvider` was already that
+  computation, so it adopts it. Null is a real case (several connectable, none bound) and gets
+  neutral copy (`vcs.addService.introAny`, the `vcs.onboarding.titleAny` pattern) rather than a
+  guessed brand; bootstrap's manual create-repo button HIDES there instead, since with no host
+  resolved there is no page to open. The derived provider questions moved beside the connect
+  actions in `stores/github/vcsConnect.ts` (`createVcsProviderViews`), which is also what kept
+  the store's setup under `max-lines-per-function`.
+- **An un-nameable host WITHHOLDS its link rather than guessing at gitlab.com.** `newRepoUrl`
+  (`~/utils/vcs`) answers `undefined` for GitLab, and the bootstrap modal's manual create-repo
+  button and copy both drop out, exactly as they already did for an unresolved provider. The
+  tempting alternative (`https://gitlab.com/projects/new`, following what slice 2b accepted for
+  the token link) fails differently from a dead link and worse: it looks like it worked, so a
+  self-hosted user creates the project on a server the bootstrap run will never push to, and
+  discovers it as a failed run. gitlab.com users lose a convenience they never had working (the
+  button previously opened `github.com/new`), and slice 5 hands it back the moment a host exists.
+  The `NEW_REPO_PAGES` map is `Record<VcsProvider, string | null>` so a new provider still has to
+  state its answer rather than inheriting one.
+- **What slice 5 still owns.** `stores/github.ts`'s `repoUrl` / `pullUrl` / `issueUrl` are
+  untouched: they need a HOST the SPA does not have, which is the real remaining question.
+  **`VCS_PROVIDER_TOKEN_URLS` still assumes `gitlab.com`** and is wrong for a self-hosted
+  instance; it stays because a wrong token link is a nuisance during connect where a wrong
+  new-project link costs a run, so the two got different dispositions here. Once a web base URL
+  lands, slice 5 fixes the token link AND restores the new-repo one from the same value. The
+  obvious carrier is the connection (a host is a per-connection fact, like `provider` and
+  `method`), derived from `config.gitlab.apiBase` with its `/api/v4` suffix stripped; a
+  repo-projection column would make it a per-repo fact it is not.
 
 ## Conventions & gotchas
 

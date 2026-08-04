@@ -2,13 +2,9 @@
 // Hard onboarding gate shown after login when the VCS integration is enabled but the workspace
 // has no connection yet. cat-factory's whole flow runs on a connected repository host (agents
 // open pull/merge requests on the user's repos), so the board is withheld until the workspace
-// connects one. Renders the connect surfaces the deployment can actually serve: <GitHubConnect>
-// drives the account-level App install (https://github.com/apps/<slug>/installations/new — the
-// user picks the account/org and grants all or a subset of repos) plus the
-// pick-an-existing-installation path, and <GitLabConnect> takes a pasted GitLab PAT. A "Sign
-// out" escape hatch avoids trapping a user who needs to switch accounts.
-import GitHubConnect from '~/components/github/GitHubConnect.vue'
-import GitLabConnect from '~/components/vcs/GitLabConnect.vue'
+// connects one. <VcsConnectSurfaces> renders whichever connect methods the deployment serves; a
+// "Sign out" escape hatch avoids trapping a user who needs to switch accounts.
+import VcsConnectSurfaces from '~/components/vcs/VcsConnectSurfaces.vue'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS } from '~/utils/vcs'
 
 const { t } = useI18n()
@@ -41,22 +37,7 @@ const title = computed(() =>
         </p>
       </div>
 
-      <template v-if="github.canConnectGitHubApp">
-        <p class="mb-3 text-sm text-slate-400">{{ t('github.onboarding.appIntro') }}</p>
-        <GitHubConnect />
-      </template>
-      <USeparator
-        v-if="github.canConnectGitHubApp && github.canConnectGitLabPat"
-        class="my-4"
-        :label="t('vcs.connect.or')"
-      />
-      <GitLabConnect v-if="github.canConnectGitLabPat" />
-      <p
-        v-if="!github.canConnectGitHubApp && !github.canConnectGitLabPat"
-        class="rounded-md border border-dashed border-slate-800 px-3 py-3 text-sm text-slate-400"
-      >
-        {{ t('vcs.connect.noneConfigured') }}
-      </p>
+      <VcsConnectSurfaces :app-intro="t('github.onboarding.appIntro')" />
 
       <p
         v-if="auth.required && auth.user"
