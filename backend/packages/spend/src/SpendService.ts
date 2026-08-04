@@ -6,6 +6,7 @@ import type {
   AccountRepository,
   BudgetLimitCacheValue,
   GroupCacheHandle,
+  ScopedSpendWindow,
   TokenUsageRepository,
   UsageBilling,
   UsageBreakdownRow,
@@ -15,6 +16,13 @@ import type {
 } from '@cat-factory/kernel'
 import { readCachedWorkspaceSettings } from '@cat-factory/kernel'
 import {
+  BURN_RATE_WINDOW_MS,
+  type SpendAlertState,
+  type SpendForecast,
+  forecastSpend,
+  spendAlertState,
+} from './forecast.logic.js'
+import {
   type InputTokenClassUsage,
   type SpendPricing,
   effectiveTierLimit,
@@ -22,6 +30,7 @@ import {
   estimateCost,
   mergeSpendPricing,
   startOfMonthUtc,
+  startOfNextMonthUtc,
   withDynamicPrices,
 } from './pricing.js'
 
@@ -110,6 +119,26 @@ export interface RecordUsageInput {
   vendor?: string | null
 }
 
+/**
+ * One scope's forward-looking spend position: where it stands, where it is heading, and which
+ * alert state that puts it in. Returned by {@link SpendService.forecastWorkspaces} /
+ * {@link SpendService.forecastAccounts}.
+ *
+ * `costLimit` and `currency` travel WITH the figures, never resolved again by a consumer: a
+ * workspace can override both, so a caller pairing an amount with the deployment's currency (or
+ * with another tier's limit) would put a wrong label on a right number.
+ */
+export interface ScopedSpendForecast {
+  /** Metered spend so far this period, in `currency`. */
+  costSpent: number
+  /** The scope's effective limit for the period, in `currency`. */
+  costLimit: number
+  /** ISO 4217 currency both amounts are expressed in. */
+  currency: string
+  forecast: SpendForecast
+  alert: SpendAlertState
+}
+
 /** Which budget tiers to check when gating a run (the caller passes what ids it has). */
 export interface BudgetTierScope {
   accountId?: string | null
@@ -194,6 +223,33 @@ export class SpendService {
   }
 
   /**
+   * The same for MANY workspaces, as ONE batched settings read.
+   *
+   * Deliberately not `resolvePricing` in a loop: that is a point read per workspace, which is the
+   * banned N+1 the moment a caller holds a list, and the alert sweep holds every spending
+   * workspace in the deployment. The shared cache is bypassed rather than consulted per id
+   * because it would not help and would hurt: the isolate-safe (Worker) profile disables the
+   * `workspaceSettings` slice outright, so every lookup there is a real D1 round trip, and on Node
+   * a sweep touching every tenant would churn a cache sized for the hot single-workspace gate.
+   *
+   * Every requested id is present in the result; a workspace with no persisted overrides maps to
+   * the base table, exactly as the single-workspace read resolves it.
+   */
+  private async resolvePricingMany(workspaceIds: string[]): Promise<Map<string, SpendPricing>> {
+    const out = new Map<string, SpendPricing>()
+    const repository = this.workspaceSettingsRepository
+    if (!repository) {
+      for (const id of workspaceIds) out.set(id, this.pricing)
+      return out
+    }
+    const settings = await repository.listByWorkspaceIds(workspaceIds)
+    for (const id of workspaceIds) {
+      out.set(id, mergeSpendPricing(this.pricing, settings.get(id) ?? null))
+    }
+    return out
+  }
+
+  /**
    * Invalidate a cached account effective limit (called after an account-budget edit, via
    * `AccountService`'s budget-change callback). A no-op when no cache is wired.
    */
@@ -225,6 +281,26 @@ export class SpendService {
       ? await this.accountBudgetLimitCache.get(accountId, accountId, load)
       : await load()
     return effectiveTierLimit(limit, cap)
+  }
+
+  /**
+   * The same for MANY accounts, as ONE batched account read (see {@link resolvePricingMany} for
+   * why the per-id cache is bypassed rather than consulted). Every requested id is present:
+   * an account with no configured limit resolves to the env cap alone, `Infinity` when unset.
+   */
+  private async resolveAccountLimits(accountIds: string[]): Promise<Map<string, number>> {
+    const cap = this.pricing.accountMonthlyLimitCap
+    const out = new Map<string, number>()
+    const repository = this.accountRepository
+    if (!repository) {
+      for (const id of accountIds) out.set(id, effectiveTierLimit(null, cap))
+      return out
+    }
+    const configured = new Map(
+      (await repository.listByIds(accountIds)).map((a) => [a.id, a.spendMonthlyLimit ?? null]),
+    )
+    for (const id of accountIds) out.set(id, effectiveTierLimit(configured.get(id) ?? null, cap))
+    return out
   }
 
   /** The user tier's effective monthly limit (configured user limit clamped by the env cap). */
@@ -401,6 +477,111 @@ export class SpendService {
       costLimit: limit,
       currency: this.pricing.currency,
       exceeded: totals.costEstimate >= limit,
+    }
+  }
+
+  /**
+   * The forward-looking position of many WORKSPACES at once: burn rate, projected period
+   * total, and the alert state each is in. Advisory only: nothing here can pause a run.
+   *
+   * Batched because the alert sweep asks about every workspace in the deployment on every
+   * pass: two grouped ledger reads (period-to-date and the trailing burn-rate window) plus one
+   * batched settings read serve the whole set, where a per-workspace point read would be the
+   * banned N+1 run every few minutes across every tenant. Workspaces with no metered spend this
+   * period are absent from the result: they have nothing to forecast, and skipping them is what
+   * keeps a deployment full of quiet boards cheap to sweep. Their pricing is never resolved
+   * either, which is why the settings read follows the ledger reads instead of joining them.
+   */
+  async forecastWorkspaces(
+    workspaceIds: string[],
+    now: number,
+  ): Promise<Map<string, ScopedSpendForecast>> {
+    const periodStart = startOfMonthUtc(now)
+    const windowStart = now - BURN_RATE_WINDOW_MS
+    const [period, window] = await Promise.all([
+      this.tokenUsageRepository.meteredSpendByWorkspaceSince(workspaceIds, periodStart),
+      this.tokenUsageRepository.meteredSpendByWorkspaceSince(workspaceIds, windowStart),
+    ])
+    const pricingByWorkspace = await this.resolvePricingMany([...period.keys()])
+    const out = new Map<string, ScopedSpendForecast>()
+    for (const [workspaceId, spent] of period) {
+      const pricing = pricingByWorkspace.get(workspaceId) ?? this.pricing
+      out.set(
+        workspaceId,
+        this.buildForecast({
+          costSpent: spent.costEstimate,
+          costLimit: pricing.monthlyLimit,
+          currency: pricing.currency,
+          window: window.get(workspaceId),
+          windowStart,
+          periodStart,
+          now,
+        }),
+      )
+    }
+    return out
+  }
+
+  /** The same for the ACCOUNT tier, priced in the base currency (an account spans workspaces). */
+  async forecastAccounts(
+    accountIds: string[],
+    now: number,
+  ): Promise<Map<string, ScopedSpendForecast>> {
+    const periodStart = startOfMonthUtc(now)
+    const windowStart = now - BURN_RATE_WINDOW_MS
+    const [period, window] = await Promise.all([
+      this.tokenUsageRepository.meteredSpendByAccountSince(accountIds, periodStart),
+      this.tokenUsageRepository.meteredSpendByAccountSince(accountIds, windowStart),
+    ])
+    const limitByAccount = await this.resolveAccountLimits([...period.keys()])
+    const out = new Map<string, ScopedSpendForecast>()
+    for (const [accountId, spent] of period) {
+      const costLimit = limitByAccount.get(accountId) ?? Number.POSITIVE_INFINITY
+      // An inactive tier (no configured limit, no operator cap) is skipped outright rather
+      // than forecast against `Infinity`: there is no ceiling to warn about approaching.
+      if (!Number.isFinite(costLimit)) continue
+      out.set(
+        accountId,
+        this.buildForecast({
+          costSpent: spent.costEstimate,
+          costLimit,
+          currency: this.pricing.currency,
+          window: window.get(accountId),
+          windowStart,
+          periodStart,
+          now,
+        }),
+      )
+    }
+    return out
+  }
+
+  /** Assemble one scope's forecast + alert state from the reads above (pure beyond this point). */
+  private buildForecast(input: {
+    costSpent: number
+    costLimit: number
+    currency: string
+    window: ScopedSpendWindow | undefined
+    windowStart: number
+    periodStart: number
+    now: number
+  }): ScopedSpendForecast {
+    const forecast = forecastSpend({
+      costSpent: input.costSpent,
+      costLimit: input.costLimit,
+      windowCost: input.window?.costEstimate ?? 0,
+      windowFirstSeenAt: input.window?.firstSeenAt ?? null,
+      windowStart: input.windowStart,
+      periodStart: input.periodStart,
+      periodEnd: startOfNextMonthUtc(input.periodStart),
+      now: input.now,
+    })
+    return {
+      costSpent: input.costSpent,
+      costLimit: input.costLimit,
+      currency: input.currency,
+      forecast,
+      alert: spendAlertState(forecast, input.periodStart, input.costLimit),
     }
   }
 

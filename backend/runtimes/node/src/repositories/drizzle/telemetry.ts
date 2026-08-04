@@ -32,11 +32,6 @@ import type {
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
-  TokenUsageRecord,
-  TokenUsageRepository,
-  TokenUsageTotals,
-  UsageBilling,
-  UsageBreakdownRow,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
@@ -47,7 +42,6 @@ import {
   desc,
   eq,
   gt,
-  gte,
   ilike,
   inArray,
   isNull,
@@ -65,161 +59,7 @@ import {
   binaryArtifacts,
   llmCallMetrics,
   provisioningLog,
-  tokenUsage,
 } from '../../db/schema.js'
-
-export class DrizzleTokenUsageRepository implements TokenUsageRepository {
-  constructor(private readonly db: DrizzleDb) {}
-
-  async record(usage: TokenUsageRecord): Promise<void> {
-    await this.db.insert(tokenUsage).values({
-      id: usage.id,
-      workspace_id: usage.workspaceId,
-      account_id: usage.accountId,
-      user_id: usage.userId,
-      execution_id: usage.executionId,
-      agent_kind: usage.agentKind,
-      provider: usage.provider,
-      model: usage.model,
-      input_tokens: usage.inputTokens,
-      output_tokens: usage.outputTokens,
-      cost_estimate: usage.costEstimate,
-      billing: usage.billing,
-      vendor: usage.vendor,
-      created_at: usage.createdAt,
-    })
-  }
-
-  async usageBreakdownForWorkspace(
-    workspaceId: string,
-    epochMs: number,
-  ): Promise<UsageBreakdownRow[]> {
-    // One GROUP BY over the workspace's current period — both billing kinds (the report
-    // shows total usage). Never a per-model loop. sum() of int columns is bigint; cast +
-    // coerce like the totals rollups. Ordered heaviest-first in SQL, mirroring the D1 repo.
-    const rows = await this.db
-      .select({
-        billing: tokenUsage.billing,
-        vendor: tokenUsage.vendor,
-        provider: tokenUsage.provider,
-        model: tokenUsage.model,
-        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
-        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
-        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-        calls: sql<string>`count(*)::bigint`,
-      })
-      .from(tokenUsage)
-      .where(and(eq(tokenUsage.workspace_id, workspaceId), gte(tokenUsage.created_at, epochMs)))
-      .groupBy(tokenUsage.billing, tokenUsage.vendor, tokenUsage.provider, tokenUsage.model)
-      .orderBy(
-        sql`(coalesce(sum(${tokenUsage.input_tokens}), 0) + coalesce(sum(${tokenUsage.output_tokens}), 0)) desc`,
-      )
-    return rows.map((r) => ({
-      billing: (r.billing === 'subscription' ? 'subscription' : 'metered') as UsageBilling,
-      vendor: r.vendor,
-      provider: r.provider,
-      model: r.model,
-      inputTokens: Number(r.input ?? 0),
-      outputTokens: Number(r.output ?? 0),
-      costEstimate: r.cost ?? 0,
-      calls: Number(r.calls ?? 0),
-    }))
-  }
-
-  async totalsSince(epochMs: number): Promise<TokenUsageTotals> {
-    // sum() of int columns is bigint in Postgres — cast to bigint (NOT int4, which
-    // overflows past ~2.1B tokens) and coerce: node-postgres returns bigint as a
-    // string to avoid precision loss, and token totals stay well within Number's
-    // safe-integer range. Matches the 64-bit sum the D1/SQLite store returns.
-    const [row] = await this.db
-      .select({
-        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
-        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
-        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-      })
-      .from(tokenUsage)
-      .where(and(gte(tokenUsage.created_at, epochMs), eq(tokenUsage.billing, 'metered')))
-    return {
-      inputTokens: Number(row?.input ?? 0),
-      outputTokens: Number(row?.output ?? 0),
-      costEstimate: row?.cost ?? 0,
-    }
-  }
-
-  async totalsSinceForWorkspace(workspaceId: string, epochMs: number): Promise<TokenUsageTotals> {
-    const [row] = await this.db
-      .select({
-        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
-        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
-        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-      })
-      .from(tokenUsage)
-      .where(
-        and(
-          eq(tokenUsage.workspace_id, workspaceId),
-          gte(tokenUsage.created_at, epochMs),
-          eq(tokenUsage.billing, 'metered'),
-        ),
-      )
-    return {
-      inputTokens: Number(row?.input ?? 0),
-      outputTokens: Number(row?.output ?? 0),
-      costEstimate: row?.cost ?? 0,
-    }
-  }
-
-  async totalsSinceForAccount(accountId: string, epochMs: number): Promise<TokenUsageTotals> {
-    const [row] = await this.db
-      .select({
-        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
-        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
-        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-      })
-      .from(tokenUsage)
-      .where(
-        and(
-          eq(tokenUsage.account_id, accountId),
-          gte(tokenUsage.created_at, epochMs),
-          eq(tokenUsage.billing, 'metered'),
-        ),
-      )
-    return {
-      inputTokens: Number(row?.input ?? 0),
-      outputTokens: Number(row?.output ?? 0),
-      costEstimate: row?.cost ?? 0,
-    }
-  }
-
-  async totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals> {
-    const [row] = await this.db
-      .select({
-        input: sql<string>`coalesce(sum(${tokenUsage.input_tokens}), 0)::bigint`,
-        output: sql<string>`coalesce(sum(${tokenUsage.output_tokens}), 0)::bigint`,
-        cost: sql<number>`coalesce(sum(${tokenUsage.cost_estimate}), 0)::float8`,
-      })
-      .from(tokenUsage)
-      .where(
-        and(
-          eq(tokenUsage.user_id, userId),
-          gte(tokenUsage.created_at, epochMs),
-          eq(tokenUsage.billing, 'metered'),
-        ),
-      )
-    return {
-      inputTokens: Number(row?.input ?? 0),
-      outputTokens: Number(row?.output ?? 0),
-      costEstimate: row?.cost ?? 0,
-    }
-  }
-
-  async deleteOlderThan(epochMs: number): Promise<number> {
-    const deleted = await this.db
-      .delete(tokenUsage)
-      .where(lt(tokenUsage.created_at, epochMs))
-      .returning({ id: tokenUsage.id })
-    return deleted.length
-  }
-}
 
 function rowToLlmMetric(row: typeof llmCallMetrics.$inferSelect): LlmCallMetric {
   return {

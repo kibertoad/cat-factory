@@ -49,6 +49,15 @@ function fakeRepo() {
       if (newest) for (const ws of workspaceIds) out.set(ws, newest)
       return out
     },
+    async listLatestByType(workspaceIds, type) {
+      // As above but with NO status filter: the newest block-less card of `type`, dismissed or not.
+      const out = new Map<string, Notification>()
+      const newest = [...rows.values()]
+        .filter((n) => n.blockId === null && n.type === type)
+        .sort((a, b) => b.createdAt - a.createdAt)[0]
+      if (newest) for (const ws of workspaceIds) out.set(ws, newest)
+      return out
+    },
     async upsert(_ws, n) {
       rows.set(n.id, { ...n })
     },

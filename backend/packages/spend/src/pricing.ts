@@ -392,3 +392,13 @@ export function startOfMonthUtc(epochMs: number): number {
   const d = new Date(epochMs)
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)
 }
+
+/**
+ * Start of the month AFTER the one containing `epochMs`, in UTC: the exclusive end of a
+ * billing period, which is what the spend forecast extrapolates to. `Date.UTC` normalises a
+ * month index of 12 into the next January, so no year wrap is needed here.
+ */
+export function startOfNextMonthUtc(epochMs: number): number {
+  const d = new Date(epochMs)
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)
+}

@@ -138,6 +138,40 @@ export class D1NotificationRepository implements NotificationRepository {
     return out
   }
 
+  async listLatestByType(
+    workspaceIds: string[],
+    type: NotificationType,
+  ): Promise<Map<string, Notification>> {
+    const out = new Map<string, Notification>()
+    if (workspaceIds.length === 0) return out
+    // As `listOpenByType`, but with NO status predicate: a dismissed card is still the last
+    // thing the sweep told this workspace, which is exactly what the caller is asking about.
+    //
+    // The per-workspace pick stays in SQL (the `DISTINCT ON` of the Drizzle twin, spelled as a
+    // window function because SQLite has no `DISTINCT ON`): returning every card and dropping all
+    // but the first in JS would read the workspace's whole `budget_threshold` history on every
+    // sweep, since `raise` never re-uses a dismissed card and the rows accumulate. `id` breaks a
+    // tie on `created_at` so two cards minted in the same millisecond resolve to the same one on
+    // every pass.
+    for (const chunk of chunkForIn(workspaceIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM (
+             SELECT *, ROW_NUMBER() OVER (
+                         PARTITION BY workspace_id
+                         ORDER BY created_at DESC, id DESC) AS latest_rank
+               FROM notifications
+              WHERE workspace_id IN (${placeholders}) AND block_id IS NULL AND type = ?
+           ) WHERE latest_rank = 1`,
+        )
+        .bind(...chunk, type)
+        .all<NotificationRow & { workspace_id: string }>()
+      for (const row of results ?? []) out.set(row.workspace_id, rowToNotification(row))
+    }
+    return out
+  }
+
   async upsert(workspaceId: string, notification: Notification): Promise<void> {
     await this.db
       .prepare(

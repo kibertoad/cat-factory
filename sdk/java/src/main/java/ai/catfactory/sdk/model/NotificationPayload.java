@@ -12,6 +12,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code NotificationPayload} wire model.
  * @param assessment May be absent entirely.
+ * @param budgetAlerts May be absent entirely.
+ * @param budgetPeriodStart May be absent entirely.
  * @param changeClass May be absent entirely.
  * @param driftAffected May be absent entirely.
  * @param findingCount May be absent entirely.
@@ -39,6 +41,12 @@ import org.jspecify.annotations.Nullable;
 public record NotificationPayload(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("assessment") @Nullable NotificationPayloadAssessment assessment,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("budgetAlerts") @Nullable List<NotificationPayloadBudgetAlert> budgetAlerts,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("budgetPeriodStart") @Nullable Double budgetPeriodStart,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("changeClass") @Nullable NotificationPayloadChangeClass changeClass,
@@ -120,6 +128,8 @@ public record NotificationPayload(
      */
     public static final class Builder {
         private @Nullable NotificationPayloadAssessment assessment;
+        private @Nullable List<NotificationPayloadBudgetAlert> budgetAlerts;
+        private @Nullable Double budgetPeriodStart;
         private @Nullable NotificationPayloadChangeClass changeClass;
         private @Nullable List<NotificationPayloadDriftAffected> driftAffected;
         private @Nullable Double findingCount;
@@ -146,6 +156,18 @@ public record NotificationPayload(
         /** Set {@code assessment}. */
         public Builder assessment(@Nullable NotificationPayloadAssessment assessment) {
             this.assessment = assessment;
+            return this;
+        }
+
+        /** Set {@code budgetAlerts}. */
+        public Builder budgetAlerts(@Nullable List<NotificationPayloadBudgetAlert> budgetAlerts) {
+            this.budgetAlerts = budgetAlerts;
+            return this;
+        }
+
+        /** Set {@code budgetPeriodStart}. */
+        public Builder budgetPeriodStart(@Nullable Double budgetPeriodStart) {
+            this.budgetPeriodStart = budgetPeriodStart;
             return this;
         }
 
@@ -283,7 +305,7 @@ public record NotificationPayload(
 
         /** Build the {@link NotificationPayload}. */
         public NotificationPayload build() {
-            return new NotificationPayload(assessment, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlertFailureKinds, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
+            return new NotificationPayload(assessment, budgetAlerts, budgetPeriodStart, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlertFailureKinds, platformAlertTransition, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
         }
     }
 }

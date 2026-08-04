@@ -8,34 +8,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code NotificationType} vocabulary.
+ * The {@code NotificationPayloadBudgetAlertTier} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum NotificationType {
-    MERGE_REVIEW("merge_review"),
-    PIPELINE_COMPLETE("pipeline_complete"),
-    CI_FAILED("ci_failed"),
-    TEST_FAILED("test_failed"),
-    REQUIREMENT_REVIEW("requirement_review"),
-    CLARITY_REVIEW("clarity_review"),
-    RELEASE_REGRESSION("release_regression"),
-    DECISION_REQUIRED("decision_required"),
-    HUMAN_TEST_READY("human_test_ready"),
-    VISUAL_CONFIRMATION_READY("visual_confirmation_ready"),
-    HUMAN_REVIEW("human_review"),
-    FOLLOWUP_PENDING("followup_pending"),
-    FORK_DECISION_PENDING("fork_decision_pending"),
-    JUDGE_REVIEW("judge_review"),
-    PR_REVIEW_READY("pr_review_ready"),
-    INITIATIVE("initiative"),
-    PLATFORM_HEALTH("platform_health"),
-    INFRA_UNREACHABLE("infra_unreachable"),
-    BUDGET_PAUSED("budget_paused"),
-    BUDGET_THRESHOLD("budget_threshold"),
-    KEY_DRIFT("key_drift"),
-    MERGE_TAG_REQUEST("merge_tag_request"),
+public enum NotificationPayloadBudgetAlertTier {
+    WORKSPACE("workspace"),
+    ACCOUNT("account"),
 
     /**
      * A value this SDK release does not know.
@@ -49,7 +29,7 @@ public enum NotificationType {
 
     private final String wire;
 
-    NotificationType(String wire) {
+    NotificationPayloadBudgetAlertTier(String wire) {
         this.wire = wire;
     }
 
@@ -61,8 +41,8 @@ public enum NotificationType {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static NotificationType fromWire(@Nullable String wire) {
-        for (NotificationType candidate : values()) {
+    public static NotificationPayloadBudgetAlertTier fromWire(@Nullable String wire) {
+        for (NotificationPayloadBudgetAlertTier candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

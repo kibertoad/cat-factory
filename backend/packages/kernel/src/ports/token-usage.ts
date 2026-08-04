@@ -68,6 +68,22 @@ export interface TokenUsageRecord {
   createdAt: number
 }
 
+/**
+ * One scope's METERED spend over a window, as the spend FORECAST reads it.
+ *
+ * Narrower than {@link TokenUsageTotals} (no token counts: a burn rate is money per day) and
+ * wider in the one way that matters: it carries when the window's evidence actually starts.
+ * Without `firstSeenAt` a rate has to divide by the nominal window, so a workspace that began
+ * spending two hours ago reads as 1/84th of its real pace: the runaway the forecast exists to
+ * catch is precisely the one it would report as calm.
+ */
+export interface ScopedSpendWindow {
+  /** Summed `cost_estimate` of the scope's metered rows in the window. */
+  costEstimate: number
+  /** Epoch ms of the OLDEST metered row in the window (never null for a present entry). */
+  firstSeenAt: number
+}
+
 /** Aggregated usage over a time window, used to evaluate the budget. */
 export interface TokenUsageTotals {
   inputTokens: number
@@ -109,6 +125,26 @@ export interface TokenUsageRepository {
    * `user_id` column. Subscription rows are excluded.
    */
   totalsSinceForUser(userId: string, epochMs: number): Promise<TokenUsageTotals>
+  /**
+   * Metered spend per WORKSPACE since `epochMs` (inclusive), for the given workspaces, as ONE
+   * chunked `GROUP BY`, the batched form of {@link totalsSinceForWorkspace}. The spend-forecast
+   * sweep needs both a period-to-date and a trailing-window figure for every workspace in the
+   * deployment on each pass; a point read per workspace would be exactly the N+1 the aggregate
+   * ban exists for, run every few minutes across every tenant.
+   *
+   * Keyed by workspace id, and a workspace with no metered rows in the window is ABSENT from the
+   * map rather than present as a zero: the caller distinguishes "spent nothing" from "not asked
+   * about", and skipping the silent majority is what keeps the sweep's steady state cheap.
+   */
+  meteredSpendByWorkspaceSince(
+    workspaceIds: string[],
+    epochMs: number,
+  ): Promise<Map<string, ScopedSpendWindow>>
+  /** The same, per ACCOUNT, off the denormalized `account_id` column (the account budget tier). */
+  meteredSpendByAccountSince(
+    accountIds: string[],
+    epochMs: number,
+  ): Promise<Map<string, ScopedSpendWindow>>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many
    * were removed. The budget query only reads the current period, so pruning old
