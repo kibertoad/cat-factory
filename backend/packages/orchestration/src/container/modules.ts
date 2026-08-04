@@ -282,6 +282,7 @@ export function createDocumentsModule(
     connectionService,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    idGenerator: deps.idGenerator,
   })
   const plannerService = new DocumentPlannerService({
     modelProviderResolver: deps.modelProviderResolver,

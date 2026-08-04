@@ -15,7 +15,14 @@ import { blockTypeSchema, DOC_KINDS } from './primitives.js'
 // wire — it lives in the core ports / D1 layer.
 // ---------------------------------------------------------------------------
 
-/** The external document sources cat-factory can link to. */
+/**
+ * The external document sources cat-factory can CONNECT to. Every member has a
+ * {@link DocumentSourceProvider} behind it, so this is the vocabulary of everything that can be
+ * connected, searched, imported from and re-probed for a fresher version.
+ *
+ * It is deliberately NARROWER than {@link documentOriginSchema}: a stored document need not have
+ * come from a source at all.
+ */
 export const documentSourceKindSchema = v.picklist([
   'confluence',
   'notion',
@@ -25,6 +32,33 @@ export const documentSourceKindSchema = v.picklist([
   'linear',
 ])
 export type DocumentSourceKind = v.InferOutput<typeof documentSourceKindSchema>
+
+/**
+ * Where a STORED document came from: one of the connected sources above, or `upload` for a body
+ * handed to the platform directly (today by a `/api/v1` caller attaching a spec to the task it is
+ * creating, which is the whole reason this widening exists).
+ *
+ * Two vocabularies rather than one because a provider is what tells them apart. Everything a
+ * provider does (connect, search, import a ref, `probeVersion` a stored copy against the live
+ * page) is defined only for a {@link DocumentSourceKind}, and there is no `upload` provider to
+ * ask. Keeping the narrow union on those surfaces is what makes the absence a COMPILE error
+ * (an exhaustive `Record<DocumentSourceKind, DocumentSourceDescriptor>` still has to name every
+ * member) instead of a runtime `undefined` at whichever call site reaches for the missing
+ * provider first. The wide union covers only what a stored row and its block/role links carry,
+ * where the origin is a label rather than a capability.
+ */
+export const documentOriginSchema = v.picklist([
+  // DERIVED from the narrow union rather than restated, so a source added there cannot be
+  // forgotten here and leave rows the wide union refuses to describe.
+  ...documentSourceKindSchema.options,
+  'upload',
+])
+export type DocumentOrigin = v.InferOutput<typeof documentOriginSchema>
+
+/** True for an origin that has a provider behind it (so it can be re-imported / re-probed). */
+export function isConnectableSource(origin: DocumentOrigin): origin is DocumentSourceKind {
+  return (documentSourceKindSchema.options as readonly string[]).includes(origin)
+}
 
 /**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
@@ -91,13 +125,17 @@ export const documentConnectionSchema = v.object({
 })
 export type DocumentConnection = v.InferOutput<typeof documentConnectionSchema>
 
-/** A page imported from a source, projected locally. */
+/** A page imported from a source (or uploaded through the API), projected locally. */
 export const sourceDocumentSchema = v.object({
-  source: documentSourceKindSchema,
+  source: documentOriginSchema,
   /** The source's stable id for the page (Confluence page id, Notion page id). */
   externalId: v.string(),
   title: v.string(),
-  /** Canonical URL of the page on the source. */
+  /**
+   * Canonical URL of the page on the source, or EMPTY for an `upload`, which has no page to
+   * link back to. Readers render the origin only when there is one: an empty parenthetical or a
+   * bare `Source:` line reads as a broken link rather than as a document that never had one.
+   */
   url: v.string(),
   /** A short plain-text excerpt of the body (full body stays in storage). */
   excerpt: v.string(),
@@ -166,7 +204,9 @@ export type PlanFrame = v.InferOutput<typeof planFrameSchema>
  * the UI can label a preview honestly.
  */
 export const documentBoardPlanSchema = v.object({
-  source: documentSourceKindSchema,
+  // The origin is echoed back from the planned document's own key, so it is as wide as a stored
+  // row: planning reads the cached body and asks nothing of a provider.
+  source: documentOriginSchema,
   externalId: v.string(),
   planner: v.picklist(['llm', 'headings']),
   frames: v.array(planFrameSchema),
@@ -217,9 +257,9 @@ export const spawnDocumentSchema = v.object({
 })
 export type SpawnDocumentInput = v.InferOutput<typeof spawnDocumentSchema>
 
-/** Attach an imported page to a task as extra agent context. */
+/** Attach an imported (or uploaded) page to a task as extra agent context. */
 export const linkDocumentSchema = v.object({
-  source: documentSourceKindSchema,
+  source: documentOriginSchema,
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
   blockId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
@@ -232,7 +272,7 @@ export type LinkDocumentInput = v.InferOutput<typeof linkDocumentSchema>
  * per kind — linking a new one replaces the prior override.
  */
 export const linkDocumentForKindSchema = v.object({
-  source: documentSourceKindSchema,
+  source: documentOriginSchema,
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
   role: documentLinkRoleSchema,
   docKind: v.picklist(DOC_KINDS),
@@ -241,7 +281,7 @@ export type LinkDocumentForKindInput = v.InferOutput<typeof linkDocumentForKindS
 
 /** Clear a document's workspace+`DocKind` role tag (falls back to the built-in template / drops the exemplar). */
 export const unlinkDocumentForKindSchema = v.object({
-  source: documentSourceKindSchema,
+  source: documentOriginSchema,
   externalId: v.pipe(v.string(), v.trim(), v.minLength(1)),
 })
 export type UnlinkDocumentForKindInput = v.InferOutput<typeof unlinkDocumentForKindSchema>

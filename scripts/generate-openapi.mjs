@@ -35,7 +35,7 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.6.0'
+const API_VERSION = '1.7.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -53,6 +53,12 @@ const COMPONENT_SCHEMAS = {
   PublicTaskList: 'publicTaskListSchema',
   CreatePublicTask: 'createPublicTaskSchema',
   PublicTaskTicket: 'publicTaskTicketSchema',
+  // Both variants are hoisted beside the union, exactly as the parked-decision variants are:
+  // an un-hoisted member is emitted as an anonymous `Variant0`/`Variant1` in every generated
+  // client, which is not a name an integrator should have to read.
+  PublicTaskSourceDocument: 'publicTaskSourceDocumentSchema',
+  PublicTaskUploadedDocument: 'publicTaskUploadedDocumentSchema',
+  PublicTaskDocument: 'publicTaskDocumentSchema',
   StartPublicTask: 'startPublicTaskSchema',
   UpdatePublicTask: 'updatePublicTaskSchema',
   PublicRun: 'publicRunSchema',
@@ -124,7 +130,7 @@ const OPERATION_DOCS = {
     tag: 'Tasks',
     summary: 'Create a task under a service',
     description:
-      'Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.',
+      'Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.',
   },
   listPublicServiceTasks: {
     tag: 'Tasks',

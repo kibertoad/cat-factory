@@ -204,11 +204,16 @@ routes on and an empty title is honest about what could be read.
   is a headless integration whose operator is already using the API; a settings panel is worth
   adding when a human-facing deployment wants one, and it would now carry the `runEvents` selector
   too.
-- **Tier 4 stays deferred, on demand only**: `POST /bootstrap` (container-backed and force-pushes to
-  GitHub, breaking the "public runs never touch GitHub" invariant), document/requirements ingestion
-  at task creation (wants the documents model exposed externally), and serving
-  `GET /api/v1/openapi.json` (trivial once wanted; the spec already ships as a repo file, so an
-  endpoint is only packaging).
+- **Tier 4 is now one item, not three**: `POST /bootstrap` stays deferred (container-backed and
+  force-pushes to GitHub, breaking the "public runs never touch GitHub" invariant), and serving
+  `GET /api/v1/openapi.json` stays unbuilt but trivial (the spec already ships as a repo file, so an
+  endpoint is only packaging). Document/requirements ingestion at task creation SHIPPED, as slice D2
+  of [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md): the create
+  takes an ordered `documents` list, each entry naming a page in a connected source or carrying the
+  text itself. It landed because the gap it names was never really about the documents model: it was
+  that this surface had no spec-sized input at all for a run that touches a repository, `description`
+  being a task's own framing at 2,000 characters and the 50,000-character `POST /jobs` brief being
+  inline-only.
 - **The parked-decision surface is INCOMPLETE, and what is missing is tracked in
   [`public-api-additions.md`](../../../docs/initiatives/public-api-additions.md)**: the public
   decision surface answers three park types (requirements review, fork, judge) while the engine has

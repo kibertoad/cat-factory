@@ -277,17 +277,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                 |
-| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                            |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                         |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                 |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                  |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                          |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                             |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                          |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                              |
+| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                  |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                               |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                       |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                        |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                    |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -354,6 +354,75 @@ ticket taken (the write had landed) or files cleanly (it had not).
 
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
+
+#### Attaching requirements documents
+
+A task's `description` is capped at 2,000 characters because it is the task's own framing, echoed
+into every prompt. A specification is not that, and there was previously nowhere on this surface to
+put one: the 50,000-character `POST /jobs` brief drives inline pipelines that never touch a
+repository, and the app's own "attach a document" flow is session-authed. `documents` closes that
+gap. Each entry is attached to the new task as context, and the full text is what agents receive:
+materialised into the run's checkout under `.cat-context/` for a container agent to open, folded
+into the prompt for an inline one.
+
+Two forms, differing only in where the text comes from:
+
+```http
+POST /api/v1/services/svc_api/tasks
+{ "title": "Split payments at checkout",
+  "description": "From the payments squad.",
+  "documents": [
+    { "kind": "source", "source": "confluence", "ref": "https://acme.atlassian.net/wiki/spaces/ENG/pages/4242" },
+    { "kind": "upload", "title": "Checkout PRD", "content": "# Checkout PRD\n\n## Goal\n…" }
+  ] }
+```
+
+- **`kind: "source"`** NAMES a page in a document source this workspace has connected
+  (`confluence`, `notion`, `github`, `figma`, `zeplin`, `linear`). `ref` is the page's id or its
+  full URL, the same grammar the app's own import takes. The platform fetches and projects it, so
+  the page stays the source of truth and a later re-import picks up edits. The GitHub docs source
+  needs no separate connect step: it rides the workspace's installed App, so
+  `{ "source": "github", "ref": "acme/api:docs/checkout-prd.md" }` works wherever the App does.
+  A page the source serves but which turns out to be BLANK (a permission-limited Confluence page,
+  an empty Notion page) is not caught here: the create succeeds and the run's first step refuses
+  with `details.reason: "context_document_unreadable"`, naming the page.
+- **`kind: "upload"`** CARRIES the text (Markdown, up to 100,000 characters). For a caller that
+  generated the spec, holds it in a file, or whose deployment has connected no document source at
+  all. There is no page behind it, so nothing re-fetches it and it shows in the app with no source
+  link: the bytes you send are what every agent on the run reads.
+
+At most 10 documents per create, in the order agents should read them.
+
+Four refusals matter:
+
+- **Everything is resolved before the task is created.** An unconfigured source, a ref the provider
+  cannot parse, a page it will not serve, or an upload with no readable text refuses the whole
+  request and leaves the board untouched. The other order hands you a `201` for a task you believe
+  carries its spec, running on its title alone.
+- **An upload with no readable text is refused** (`422`) rather than stored. A body that renders to
+  nothing would reach the agent as an empty attachment, so it is caught while you still hold the
+  bytes and can fix them, rather than costing you the first step of a run.
+- **One task per document.** A document already attached to another live task comes back `409` with
+  `details.reason: "document_already_linked"` and `details.taskId` naming the task that holds it.
+  A document carries a single attachment, so a second attach would MOVE it: the earlier task would
+  lose a document it was created with, and nothing in its next run would say so. Attach a separate
+  copy (upload the text again), or detach it from the other task first. A link naming a task that
+  has since been deleted is not a holder, so a deleted task never strands its documents.
+- **A `201` means the task carries every document you named.** If an attachment fails to land after
+  the task is created, the task is taken back off the board and you get the error, so your retry
+  files it once and whole.
+
+A refused request leaves nothing behind to clean up: pages resolve onto the same row every time
+(they are keyed by their ref), and uploads are stored only once the whole list has resolved, so
+retrying in a loop cannot fill the workspace with copies of a spec that was never attached.
+
+The per-document cap bounds one attachment; the whole attached corpus (documents plus any linked
+tracker issues) is bounded by the run's materialised-context budget of ~256 KB. Overflowing it
+refuses the run's first dispatch with `details.reason: "context_documents_over_budget"`, naming
+what did not fit.
+
+Documents attached this way are ordinary workspace documents: they appear in the app alongside
+imported pages, and a human can detach or re-attach them there.
 
 The inline-only rule stays jobs-only: a `decide` key may start container pipelines on board tasks.
 Parks raised dynamically mid-run (an agent-raised decision, a judge park) are not statically

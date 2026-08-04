@@ -456,7 +456,10 @@ type TasksService struct {
 
 // Create create a task under a service
 // Create a task inside a service frame the key’s workspace owns. The task starts in the `planned`
-// state; start it with the start endpoint.
+// state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or
+// attach the requirements documents it is to be built against (named in a connected document
+// source, or uploaded inline): the only way to get spec-sized input onto a repository-touching
+// run.
 // POST /api/v1/services/{serviceId}/tasks (operation createPublicTask).
 func (s *TasksService) Create(ctx context.Context, serviceID string, body CreatePublicTask) (*PublicTask, error) {
 	req := requestSpec{

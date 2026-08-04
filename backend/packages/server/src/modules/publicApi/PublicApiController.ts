@@ -47,7 +47,7 @@ import {
 } from '../notifications/notificationActions.js'
 import type { AppEnv } from '../../http/env.js'
 import { authorize } from './publicApiAuth.js'
-import { resolveTicket } from './ticketLinkage.js'
+import { createTaskWithAttachments, taskCreationDeps } from './taskCreation.js'
 import {
   type AdmissiblePipelineShape,
   publicRunParkSurfaces,
@@ -695,9 +695,9 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     return c.json({ services: services.map(toPublicService) }, 200)
   })
 
-  // Create a task under a service, optionally FROM a tracker ticket. The ordering below IS the
-  // contract and `ticketLinkage.ts` explains each step of it; the short version is that a filing
-  // must be refused before it changes the board, and claimed after.
+  // Create a task under a service, optionally FROM a tracker ticket and/or WITH the requirements
+  // documents the work is to be built against. The ordering of those attachments IS the contract
+  // and lives in `taskCreation.ts`, which is where to read before changing any of it.
   buildHonoRoute(app, createPublicTaskContract, async (c) => {
     const gate = await authorize(c, 'write')
     if ('fail' in gate) {
@@ -707,27 +707,12 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
       )
     }
     const { serviceId } = c.req.valid('param')
-    const { ticket, ...input } = c.req.valid('json')
-    const { workspaceId } = gate.auth
-    const container = c.get('container')
-    let linkage: Awaited<ReturnType<typeof resolveTicket>> | null = null
-    if (ticket) {
-      // The container is checked FIRST because resolving a ticket is an outbound call to the
-      // workspace's tracker: a bad `serviceId` should be answered by the 404 it could have had
-      // for free, not paid for with a live third-party fetch. `addServiceTask` re-applies the
-      // same rule (it is the one that must hold at the moment of the write); this only moves the
-      // cheap, deterministic half of it in front of the expensive work.
-      await container.boardService.assertTaskContainer(workspaceId, serviceId)
-      linkage = await resolveTicket(
-        { tasks: container.tasks, boardService: container.boardService, logger: container.logger },
-        workspaceId,
-        ticket,
-      )
-    }
-    const block = await container.boardService.addServiceTask(workspaceId, serviceId, input)
-    // Rolls the block back off the board if the claim is lost, so a caller that retries on the
-    // 409 does not accumulate the duplicates the ticket link exists to prevent.
-    if (linkage) await linkage.claim(block.id)
+    const block = await createTaskWithAttachments(
+      taskCreationDeps(c.get('container')),
+      gate.auth.workspaceId,
+      serviceId,
+      c.req.valid('json'),
+    )
     return c.json(toPublicTask(block, serviceId), 201)
   })
 
