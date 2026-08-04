@@ -98,6 +98,10 @@ export {
   type CiVerdict,
 } from './modules/execution/ci.logic.js'
 export {
+  dedicatedParkSurface,
+  type DedicatedParkSurface,
+} from './modules/execution/step-park.logic.js'
+export {
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,
   classifyReleaseHealth,
@@ -303,6 +307,10 @@ export {
   type PlatformAlertThresholds,
   type ResolvedAccountAlertConfig,
 } from './modules/observability/platform-health.logic.js'
+export {
+  spendThresholdCardContent,
+  type SpendAlertSubject,
+} from './modules/spend/spend-alert.logic.js'
 export {
   cacheHitRate,
   classifyCall,

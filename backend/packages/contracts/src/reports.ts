@@ -19,16 +19,23 @@ export type ReportWindow = v.InferOutput<typeof reportWindowSchema>
 
 /**
  * What a SPEND breakdown groups by. `model` keys on the canonical `provider:model`
- * id; `agentKind` on the metered call's agent kind; the remaining three resolve
- * through the call's run (`workspace` directly, `service`/`taskType` via the run
- * and its block).
+ * id; `agentKind` on the metered call's agent kind; the rest resolve through the
+ * call's run (`workspace` directly, the others via the run's service and block).
+ *
+ * `repo` and `ticket` are the TCO axes: the two dimensions an organisation actually
+ * budgets against. They key on the run's service repo and on the tracker issue linked
+ * to the run's block respectively, so "what did this repository cost us this quarter"
+ * and "what did this ticket cost" are one grouped query rather than a hand-written join
+ * against the database.
  */
 export const reportSpendDimensionSchema = v.picklist([
   'model',
   'agentKind',
   'workspace',
   'service',
+  'repo',
   'taskType',
+  'ticket',
 ])
 export type ReportSpendDimension = v.InferOutput<typeof reportSpendDimensionSchema>
 
@@ -131,7 +138,15 @@ export const reportsViewSchema = v.object({
     byAgentKind: v.array(reportSpendRowSchema),
     byWorkspace: v.array(reportSpendRowSchema),
     byService: v.array(reportSpendRowSchema),
+    /** Spend per linked REPOSITORY, keyed by the provider repo id and labelled `owner/name`. */
+    byRepo: v.array(reportSpendRowSchema),
     byTaskType: v.array(reportSpendRowSchema),
+    /**
+     * Spend per linked tracker TICKET, keyed `source:externalId` (e.g. `jira:PROJ-412`) and
+     * carrying NO label: the key is self-describing, and a block linked from two tickets could
+     * otherwise be labelled with one ticket's title beside the other's ref.
+     */
+    byTicket: v.array(reportSpendRowSchema),
   }),
   /** Run activity sliced every way, each busiest-first. */
   activity: v.object({

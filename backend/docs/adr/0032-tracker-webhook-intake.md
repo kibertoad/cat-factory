@@ -361,6 +361,17 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   line opens with the renderers' `PLATFORM_COMMENT_MARKER` is ours and is never ingested. Each ack
   carries a fresh comment id, so the ingest claim could not stop a loop. Adding a new outbound
   comment means emitting that marker and checking the body cannot be parsed as a command.
+- **A ticket is linked to at most ONE block, and deleting that block RELEASES it.** `linkedBlockId`
+  is a single column, so three readers take a non-null value to mean the issue is spoken for: the
+  intake sweep's `excludeExternalIds` set, `claimBlockLink`'s `… AND linked_block_id IS NULL`, and
+  the reply routing above. None of them checks whether the block it names still exists, so a link
+  left behind by a deleted task takes the ticket out of circulation permanently: invisible to
+  intake forever, and every future filing of it refused, naming a task nobody can open.
+  `BoardService.removeBlock` therefore runs `taskRepository.unlinkAllFromBlocks` over the whole
+  doomed subtree through the removal cascade (`removal-cascade.ts`), the same rule and the same
+  seam as the document half (`document-sources.md`). Nothing is deleted, only unlinked: the issue
+  lives in the tracker and its projection outlives the task it was filed as, which is exactly what
+  makes re-filing the right outcome. A new table keyed by a block id owes the same reclaim.
 - **Adding a workspace-scoped table means one line in `WORKSPACE_SCOPED_TABLES`** (kernel
   `domain/workspace-cascade.ts`): both facades' delete cascade is driven from it, and a completeness
   test fails the build if a `workspace_id` table is missing.

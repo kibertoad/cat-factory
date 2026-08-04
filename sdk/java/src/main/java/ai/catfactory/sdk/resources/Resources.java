@@ -71,7 +71,7 @@ public abstract class Resources {
         return usage;
     }
 
-    /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
+    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
     public DecisionsClient decisions() {
         return decisions;
     }

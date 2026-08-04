@@ -151,4 +151,10 @@ export interface TaskRepository {
    * linked context never accumulates across fires.
    */
   unlinkAllFromBlock(workspaceId: string, blockId: string): Promise<void>
+  /**
+   * Detach every issue linked to ANY of the given blocks, in one chunked statement: the batched
+   * form of {@link unlinkAllFromBlock}, for the block-delete cascade, which knows the doomed block
+   * ids rather than which issues name them. Empty input is a no-op.
+   */
+  unlinkAllFromBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void>
 }

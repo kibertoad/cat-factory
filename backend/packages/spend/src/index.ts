@@ -4,6 +4,7 @@ export {
   SpendService,
   type SpendServiceDependencies,
   type RecordUsageInput,
+  type ScopedSpendForecast,
   type BudgetTierScope,
 } from './SpendService.js'
 export {
@@ -25,4 +26,20 @@ export {
   estimateClassedCost,
   withDynamicPrices,
   startOfMonthUtc,
+  startOfNextMonthUtc,
 } from './pricing.js'
+export {
+  type SpendAlertSignals,
+  type SpendAlertState,
+  type SpendForecast,
+  type SpendForecastConfidence,
+  type SpendForecastInput,
+  BURN_RATE_WINDOW_MS,
+  DEFAULT_SPEND_ALERT_THRESHOLDS,
+  MIN_OBSERVED_SPAN_MS,
+  forecastSpend,
+  mergeSpendAlertStates,
+  spendAlertEscalated,
+  spendAlertFiring,
+  spendAlertState,
+} from './forecast.logic.js'

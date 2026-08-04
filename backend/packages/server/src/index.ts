@@ -53,6 +53,7 @@ export {
 } from './modules/webSearch/upstreams.js'
 export { escalateStaleNotifications } from './runtime/escalateNotifications.js'
 export { sweepPlatformHealth } from './runtime/platformHealth.js'
+export { SPEND_ALERT_INTERVAL_MS, sweepSpendAlerts } from './runtime/spendAlerts.js'
 export { sweepInfraReachability } from './runtime/infraReachability.js'
 export { sweepKeyDriftAndRaise } from './runtime/keyDrift.js'
 // The shared autorefresh pass for repo-linked foundational-service sources — one implementation

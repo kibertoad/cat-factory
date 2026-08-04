@@ -106,8 +106,8 @@ import {
   DrizzleBinaryArtifactMetadataStore,
   DrizzleLlmCallMetricRepository,
   DrizzleProvisioningLogRepository,
-  DrizzleTokenUsageRepository,
 } from './drizzle/telemetry.js'
+import { DrizzleTokenUsageRepository } from './drizzle/tokenUsage.js'
 
 import {
   DrizzleAccountSettingsRepository,

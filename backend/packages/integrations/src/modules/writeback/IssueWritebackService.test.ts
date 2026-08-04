@@ -51,6 +51,7 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
     linkBlock: async () => {},
     claimBlockLink: async () => true,
     unlinkAllFromBlock: async () => {},
+    unlinkAllFromBlocks: async () => {},
   }
 }
 

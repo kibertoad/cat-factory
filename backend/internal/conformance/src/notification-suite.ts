@@ -119,6 +119,63 @@ export function defineNotificationSuite(
       expect((await repo.listOpenByType([], 'platform_health')).size).toBe(0)
     })
 
+    it('lists the LATEST block-less card of a type per workspace including resolved ones', async () => {
+      const repo = makeRepo()
+      const a = ids().ws
+      const empty = ids().ws
+      await repo.upsert(
+        a,
+        notification({ id: `${a}-open`, type: 'budget_threshold', createdAt: 1 }),
+      )
+      // Newer, and DISMISSED. `listOpenByType` must skip it and `listLatestByType` must
+      // return it: for an alert whose condition persists all month, the last card the sweep
+      // WROTE is the notified-state record, and a human tidying their inbox does not un-notify
+      // them. A facade that reused the open-only query here would re-alert every pass.
+      await repo.upsert(
+        a,
+        notification({
+          id: `${a}-dismissed`,
+          type: 'budget_threshold',
+          status: 'dismissed',
+          createdAt: 9,
+          resolvedAt: 9,
+        }),
+      )
+      // Block-scoped and other-type cards stay excluded, exactly as in the open-only read.
+      await repo.upsert(
+        a,
+        notification({
+          id: `${a}-scoped`,
+          type: 'budget_threshold',
+          blockId: 'blk-1',
+          createdAt: 20,
+        }),
+      )
+      await repo.upsert(a, notification({ id: `${a}-other`, type: 'ci_failed', createdAt: 30 }))
+
+      expect((await repo.listLatestByType([a, empty], 'budget_threshold')).get(a)?.id).toBe(
+        `${a}-dismissed`,
+      )
+      expect((await repo.listOpenByType([a], 'budget_threshold')).get(a)?.id).toBe(`${a}-open`)
+      expect((await repo.listLatestByType([a, empty], 'budget_threshold')).has(empty)).toBe(false)
+      expect((await repo.listLatestByType([], 'budget_threshold')).size).toBe(0)
+    })
+
+    it('breaks a same-millisecond tie on id, so the pick is stable across passes', async () => {
+      // Both facades reduce to one row per workspace in SQL, so the tiebreak has to be in the
+      // ORDER BY rather than in whatever order rows happen to arrive. Without it the caller's
+      // "has this already been notified?" answer flaps between two cards minted in the same
+      // millisecond, and the spend sweep re-raises (or wrongly withholds) a card on alternate
+      // passes for the rest of the period.
+      const repo = makeRepo()
+      const a = ids().ws
+      await repo.upsert(a, notification({ id: `${a}-aaa`, type: 'budget_threshold', createdAt: 7 }))
+      await repo.upsert(a, notification({ id: `${a}-zzz`, type: 'budget_threshold', createdAt: 7 }))
+      for (let pass = 0; pass < 3; pass += 1) {
+        expect((await repo.listLatestByType([a], 'budget_threshold')).get(a)?.id).toBe(`${a}-zzz`)
+      }
+    })
+
     it('prunes resolved rows past the cutoff, keeping open + fresh-resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()

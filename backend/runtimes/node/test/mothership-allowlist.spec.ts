@@ -281,7 +281,16 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // org's budget safeguard, and its three rollups are read remotely by the spend gate, so `record`
   // is allow-listed (under the `usageRecord` rule, which pins the row's denormalized account/user
   // to the caller). Only the deployment-wide sweeps stay mothership-internal.
-  tokenUsageRepository: { totalsSince: 'sweeper', deleteOlderThan: 'sweeper' },
+  // The two batched forecast reads take a SET of scope ids spanning the whole deployment and
+  // serve the spend-alert sweep, which runs on the mothership beside the ledger it reads. There is
+  // no per-workspace caller to scope them to, and a node has no business asking about tenants it
+  // does not own.
+  tokenUsageRepository: {
+    totalsSince: 'sweeper',
+    meteredSpendByWorkspaceSince: 'sweeper',
+    meteredSpendByAccountSince: 'sweeper',
+    deleteOlderThan: 'sweeper',
+  },
   // The three agent-observability sinks are local-first in mothership mode: written on the hot
   // path of every LLM call / dispatch / web search, read back from the same local store by the
   // observability panel and the board's per-step rollups. `summarizeByExecution` used to be a
@@ -619,7 +628,13 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
   // only the cron sweeps stay mothership-internal: the retention prune of resolved cards, and
   // `listOpenByType` — the platform-health sweep's batched every-workspace dedup read (the
   // block-less analogue of `workspaceSettingsRepository.listByWorkspaceIds`, a global sweeper read).
-  notificationRepository: { deleteResolvedOlderThan: 'sweeper', listOpenByType: 'sweeper' },
+  // `listLatestByType` joins its open-only sibling: both are the cross-workspace batched reads the
+  // platform-health and spend-alert sweeps make once per pass, never a per-workspace SPA call.
+  notificationRepository: {
+    deleteResolvedOlderThan: 'sweeper',
+    listOpenByType: 'sweeper',
+    listLatestByType: 'sweeper',
+  },
   // The Slack management surface is now remote (the settings panels' connect/disconnect/route/map):
   // `slackConnectionRepository` get/upsert/softDelete (sealed `tokenCipher` — no plaintext crosses
   // the machine API), and the secret-free settings + member-mapping repos. `getByTeam` is the GLOBAL
@@ -642,6 +657,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
     // run path, not from the SPA; stays mothership-internal like the other task writes.
     unlinkAllFromBlock: 'pending',
+    // The block-delete cascade's batched detach: the same write as `unlinkAllFromBlock` one line
+    // up, keyed by a SET of doomed blocks. It joins that method's existing gap rather than opening
+    // a new one: every task-link write on this repo is `pending`, and the cascade only reaches a
+    // mothership node once the slice moves as a whole.
+    unlinkAllFromBlocks: 'pending',
   },
   taskConnectionRepository: {
     decodeCredentials: 'helper',

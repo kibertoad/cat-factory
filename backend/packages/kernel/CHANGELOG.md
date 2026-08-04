@@ -1,5 +1,126 @@
 # @cat-factory/kernel
 
+## 0.237.0
+
+### Minor Changes
+
+- 2c7d17d: Deleting a task now releases its tracker ticket
+
+  A ticket filed as a board task recorded that on `tasks.linked_block_id`, and deleting the block left
+  the column naming a block that no longer existed. Three readers take a non-null value there to mean
+  "this issue is spoken for", and none of them checks whether the block is still live: the bug-intake
+  sweep excluded the ticket from every future search, `claimBlockLink` refused every future filing of
+  it (naming a task nobody could open), and a comment reply on the ticket routed to the dead block and
+  bailed. So deleting a filed task took its ticket out of circulation permanently.
+
+  The block-delete cascade now clears the link over the whole doomed subtree, through a new batched
+  `TaskRepository.unlinkAllFromBlocks` implemented on both runtimes. This is the tracker half of the
+  same fix the document half took: same seam (`removal-cascade.ts`), same rule.
+
+  Two visible behaviour changes, both intended:
+
+  - **A deleted task's issue returns to the bug-intake candidate pool.** A workspace that has been
+    deleting filed tasks will see those issues re-appear as candidates on the next sweep.
+  - **Re-filing a previously-deleted ticket succeeds** instead of answering `409`
+    `ticket_already_linked`.
+
+  Nothing is deleted, only unlinked: issue rows, their bodies and their history are untouched, which
+  is what makes re-filing the right outcome. Rows already carrying a stale link are not healed
+  retroactively (no migration); they clear on the next delete of the block they name.
+
+- aa62acf: Warn about spend BEFORE the safeguard starts pausing runs. The budget gate was purely reactive:
+  `isOverBudget` paused a run at the ceiling and a `budget_paused` card appeared, so the first
+  signal a team got that their budget was running out was a pipeline stopping halfway through. The
+  new forecast layer measures a trailing-window burn rate, projects the period total, and raises a
+  `budget_threshold` notification once metered spend crosses 80% of the workspace or account budget,
+  or is projected to overrun it before the period ends. Gating is untouched: the forecast is
+  advisory, so a projection bug can cost a wrong card and never a paused or unpaused run.
+
+  The burn rate divides by the span the ledger was actually OBSERVED over, not the nominal window.
+  Without that, a workspace that started spending two hours ago is divided by seven days and reads
+  as 1/84th of its real pace, which is exactly the runaway the alert exists to catch. Below six
+  hours of history the projection is withheld rather than published as a number nobody should act
+  on, and `insufficient-history` is reported as its own state rather than rendered as a calm zero.
+
+  The card notifies once per crossing per period and re-arms at the period rollover. Its persisted
+  state IS the card row, read back through a new `listLatestByType` that ignores card status
+  deliberately: a crossed threshold stays crossed for the rest of the month, so reading only OPEN
+  cards would re-alert every fifteen minutes the moment somebody tidied their inbox. Its title and
+  body therefore name only stable facts (the threshold, the limit), never the live spend or burn
+  rate, which would re-toast the inbox on every sweep. The sweep runs on both facades from the same
+  shared driver and cadence; it is not behind an opt-in flag, because having configured a budget is
+  the opt-in. The USER budget tier is deliberately not alerted on: a personal budget is not a fact a
+  workspace-visible card may state, and there is no per-user inbox to raise it in.
+
+  `budget_threshold` is Slack-routable (unlike `budget_paused`, which arrives too late to act on).
+
+  Also adds two TCO axes to the Reports spend rollup: `repo` and `ticket`, grouping spend by the
+  run's linked repository and by the tracker issue linked to the run's block. Both are one grouped
+  query rather than a hand-written join against the database. A block legitimately linked to several
+  tickets is attributed to one deterministically (the lowest `source:externalId` ref) rather than
+  fanned out, which would have multiplied that block's cost by the number of tickets pointing at it
+  and left the breakdown disagreeing with the window totals.
+
+  The public API's notification-type enum gains `budget_threshold` (an additive change; OpenAPI
+  `info.version` 1.3.0 → 1.4.0, SDK clients regenerated). It is NOT in
+  `DEFAULT_NOTIFICATION_WEBHOOK_TYPES`: like the other operator-concern cards it ships only to
+  webhooks that name it in their `types` filter.
+
+### Patch Changes
+
+- Updated dependencies [aa62acf]
+  - @cat-factory/contracts@0.238.0
+
+## 0.236.1
+
+### Patch Changes
+
+- Updated dependencies [99be350]
+  - @cat-factory/contracts@0.237.0
+
+## 0.236.0
+
+### Minor Changes
+
+- c9c1dd3: Persist an agent's tool calls as a first-class trajectory: one row per invocation, in the order it
+  made them, carrying the tool's arguments and result. The evidence standard for a merged PR is
+  "how, not just the diff", and until now the tool loop survived a run only as metadata spans a
+  trace sink had to be wired to see, so reconstructing what an agent actually did meant diffing
+  consecutive prompt bodies against each other.
+
+  The fourth telemetry sink (`agent_tool_calls`), beside the per-call cost rows and the dispatch
+  context snapshots, in the same store and on the same retention window: D1 on Cloudflare, the
+  `telemetry` Postgres schema on Node, `node:sqlite` on a mothership-mode node, with the same
+  cross-runtime conformance assertions and the same local-first routing as its siblings. Readable
+  through a new `GET /api/v1/debug/runs/:runId/tool-calls` (additive; the spec's `info.version`
+  takes a minor and the four SDK clients plus the MCP facade gain the operation), and exported on
+  the OTel and Langfuse tool spans alongside the dispatch and ordinal a trajectory orders by.
+
+  The endpoint serves two orders, because the order is the product and a client cannot derive it
+  from the rows: `recent` is the newest-first keyset every sibling debug list shares, and
+  `order=trajectory` is the run's calls oldest-first as the agents made them, a bounded prefix that
+  issues no cursor (pairing one with it is refused rather than quietly served in the other order).
+  Both narrow to a single dispatch with `jobId`. The server orders by when each call STARTED, with
+  `seq` separating the calls that share a millisecond: sorting by the job id instead would order a
+  run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+
+  Both harnesses produce it: the Pi runner pairs each `tool_execution_start` with its end, and the
+  claude-code runner pairs each `tool_use` block with the `tool_result` that answers it — the CLI's
+  own stream being the only place a subscription run's tool loop is visible at all. Bodies are
+  capped and secret-scrubbed at capture, and ride the same `LLM_RECORD_PROMPTS` +
+  `storeAgentContext` double gate as every other captured body; a withheld body is recorded AS
+  withheld, so an opted-out workspace's trajectory never reads as a run whose every tool took no
+  arguments.
+
+  Breaks nothing, retains nothing new by default beyond a run's tool metadata, and requires the
+  `1.91.0` runner image (an older image's calls still reach the trace sinks; their trajectory is
+  skipped rather than persisted under colliding ids, and the skip is logged).
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+
 ## 0.235.1
 
 ### Patch Changes

@@ -13,9 +13,17 @@ import type {
   ReportSpendTrendBucket,
   ReportsRepository,
 } from '@cat-factory/kernel'
-import { type SQL, and, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { type SQL, and, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
-import { agentRuns, blocks, services, tokenUsage, workspaces } from '../../db/schema.js'
+import {
+  agentRuns,
+  blocks,
+  githubRepos,
+  services,
+  tasks,
+  tokenUsage,
+  workspaces,
+} from '../../db/schema.js'
 
 /**
  * The metered/subscription cost split. Anything that is not literally `'subscription'`
@@ -60,6 +68,36 @@ function serviceLabels(db: DrizzleDb) {
 type ServiceLabels = ReturnType<typeof serviceLabels>
 
 /**
+ * The tracker ticket a block is linked to, PRE-AGGREGATED to exactly one row per
+ * `(workspace_id, linked_block_id)`.
+ *
+ * `idx_tasks_block` is a plain index, not a unique one: a block can legitimately be linked from
+ * more than one imported issue (two sources, or a re-imported duplicate). Joining `tasks`
+ * straight into an aggregate would then FAN OUT, multiplying that block's calls, tokens and cost
+ * by the number of tickets pointing at it and leaving the ticket breakdown disagreeing with the
+ * window totals. The same trap `serviceLabels` exists for.
+ *
+ * `min(source || ':' || external_id)` makes the attribution DETERMINISTIC (the lowest ref wins).
+ * The ticket TITLE is deliberately not carried out: a second `min` over a different column need
+ * not come from the same row, so a multi-linked block could render one ticket's title beside
+ * another's ref. The ref is self-describing, so the dimension reports no label at all. Mirrors
+ * `TICKET_BY_BLOCK` in the D1 repository.
+ */
+function ticketByBlock(db: DrizzleDb) {
+  return db
+    .select({
+      workspaceId: sql<string>`${tasks.workspace_id}`.as('ticket_workspace_id'),
+      blockId: sql<string>`${tasks.linked_block_id}`.as('ticket_block_id'),
+      ticketKey: sql<string>`min(${tasks.source} || ':' || ${tasks.external_id})`.as('ticket_key'),
+    })
+    .from(tasks)
+    .where(and(isNotNull(tasks.linked_block_id), isNull(tasks.deleted_at)))
+    .groupBy(tasks.workspace_id, tasks.linked_block_id)
+    .as('tk')
+}
+type TicketByBlock = ReturnType<typeof ticketByBlock>
+
+/**
  * The grouped key + resolved label a spend dimension needs. `service` and `taskType` reach
  * the call's run through `execution_id` (a metered call records the run, not the board
  * shape), so a call with no resolvable run falls into the `''` (unattributed) bucket
@@ -68,6 +106,7 @@ type ServiceLabels = ReturnType<typeof serviceLabels>
 function spendKeyAndLabel(
   dimension: ReportSpendDimension,
   labels: ServiceLabels,
+  tickets: TicketByBlock,
 ): {
   key: SQL<string>
   label: SQL<string | null>
@@ -93,6 +132,19 @@ function spendKeyAndLabel(
     case 'taskType':
       return {
         key: sql<string>`coalesce(${blocks.task_type}, '')`,
+        label: sql<string | null>`null::text`,
+      }
+    case 'repo':
+      return {
+        // The KEY comes off the service (which always knows its repo id) and the LABEL off the
+        // projection (which the run's workspace may not hold a row in), so an unsynced repo
+        // loses its name and keeps its money.
+        key: sql<string>`coalesce(${services.repo_github_id}::text, '')`,
+        label: sql<string | null>`max(${githubRepos.owner} || '/' || ${githubRepos.name})`,
+      }
+    case 'ticket':
+      return {
+        key: sql<string>`coalesce(${tickets.ticketKey}, '')`,
         label: sql<string | null>`null::text`,
       }
   }
@@ -162,7 +214,8 @@ export class DrizzleReportsRepository implements ReportsRepository {
     range: ReportRange,
   ): Promise<ReportSpendGroup[]> {
     const labels = serviceLabels(this.db)
-    const { key, label } = spendKeyAndLabel(dimension, labels)
+    const tickets = ticketByBlock(this.db)
+    const { key, label } = spendKeyAndLabel(dimension, labels, tickets)
     // Alias the key expression and GROUP BY / ORDER BY the ALIAS, not the raw fragment:
     // Drizzle re-emits an inline `sql` expression with fresh bind-parameter placeholders in
     // each clause, and Postgres matches GROUP BY columns to the SELECT list by parse-tree
@@ -205,6 +258,41 @@ export class DrizzleReportsRepository implements ReportsRepository {
         .leftJoin(
           blocks,
           and(eq(blocks.workspace_id, agentRuns.workspace_id), eq(blocks.id, agentRuns.block_id)),
+        )
+    } else if (dimension === 'repo') {
+      // `services.id` is a primary key and `(workspace_id, github_id)` is `github_repos`'
+      // primary key, so both joins are provably 1:1 and cannot fan the aggregate out.
+      query = query
+        .leftJoin(
+          agentRuns,
+          and(
+            eq(agentRuns.workspace_id, tokenUsage.workspace_id),
+            eq(agentRuns.id, tokenUsage.execution_id),
+          ),
+        )
+        .leftJoin(services, eq(services.id, agentRuns.service_id))
+        .leftJoin(
+          githubRepos,
+          and(
+            eq(githubRepos.workspace_id, tokenUsage.workspace_id),
+            eq(githubRepos.github_id, services.repo_github_id),
+          ),
+        )
+    } else if (dimension === 'ticket') {
+      query = query
+        .leftJoin(
+          agentRuns,
+          and(
+            eq(agentRuns.workspace_id, tokenUsage.workspace_id),
+            eq(agentRuns.id, tokenUsage.execution_id),
+          ),
+        )
+        .leftJoin(
+          tickets,
+          and(
+            eq(tickets.workspaceId, agentRuns.workspace_id),
+            eq(tickets.blockId, agentRuns.block_id),
+          ),
         )
     }
     const rows = await query

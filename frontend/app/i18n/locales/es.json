@@ -1742,6 +1742,8 @@
     "spend": {
       "byModel": "Gasto por modelo",
       "byAgentKind": "Gasto por tipo de agente",
+      "byRepo": "Gasto por repositorio",
+      "byTicket": "Gasto por tique",
       "heading": "Gasto",
       "empty": "No se registró uso en este periodo.",
       "calls": "{count} llamada | {count} llamadas",
@@ -2036,6 +2038,7 @@
         "judge_review": "Marcar como leído",
         "pr_review_ready": "Marcar como leída",
         "budget_paused": "Marcar como leída",
+        "budget_threshold": "Marcar como leída",
         "key_drift": "Descartar credenciales obsoletas",
         "merge_tag_request": "Registrar esfuerzo"
       },
