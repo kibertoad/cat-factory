@@ -26,6 +26,7 @@ import type {
   Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
+  TaskRepository,
   TaskTypeRegistry,
   WorkspaceMount,
   WorkspaceMountRepository,
@@ -119,6 +120,15 @@ export interface BoardServiceDependencies {
    */
   documentRepository?: DocumentRepository
   /**
+   * Imported tracker issues, present only when the task-source integration is wired. Backs the
+   * same cascade for the OTHER table keyed by a single `linked_block_id`: an issue filed as a
+   * doomed block keeps a link naming it unless the delete clears it, and three readers take that
+   * link to mean "spoken for", so the stale value takes the ticket out of circulation for good
+   * (excluded from intake forever, and every future filing of it refused). Absent → the
+   * integration is unwired, so no issue can be filed as anything.
+   */
+  taskRepository?: TaskRepository
+  /**
    * Real-time push. When wired, every successful board mutation emits a coarse
    * {@link ExecutionEventPublisher.boardChanged} so OTHER users active on the workspace
    * (and every board mounting a shared service) see the create/rename/move/reparent/delete
@@ -189,6 +199,7 @@ export class BoardService {
   private readonly serviceFragmentDefaultsRepository?: ServiceFragmentDefaultsRepository
   private readonly initiativeRepository?: InitiativeRepository
   private readonly documentRepository?: DocumentRepository
+  private readonly taskRepository?: TaskRepository
   private readonly events?: ExecutionEventPublisher
   private readonly taskTypeRegistry?: TaskTypeRegistry
   private readonly workspaceSettings?: WorkspaceSettingsReader
@@ -227,6 +238,7 @@ export class BoardService {
     serviceFragmentDefaultsRepository,
     initiativeRepository,
     documentRepository,
+    taskRepository,
     executionEventPublisher,
     taskTypeRegistry,
     workspaceSettings,
@@ -246,6 +258,7 @@ export class BoardService {
     this.serviceFragmentDefaultsRepository = serviceFragmentDefaultsRepository
     this.initiativeRepository = initiativeRepository
     this.documentRepository = documentRepository
+    this.taskRepository = taskRepository
     this.events = executionEventPublisher
     this.taskTypeRegistry = taskTypeRegistry
     this.workspaceSettings = workspaceSettings
@@ -1336,6 +1349,7 @@ export class BoardService {
           : {}),
         ...(this.initiativeRepository ? { initiativeRepository: this.initiativeRepository } : {}),
         ...(this.documentRepository ? { documentRepository: this.documentRepository } : {}),
+        ...(this.taskRepository ? { taskRepository: this.taskRepository } : {}),
       },
       { homeWorkspaceId, deletedId: id, blocks, doomed },
     )

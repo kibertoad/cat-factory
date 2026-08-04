@@ -627,6 +627,11 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     // The recurring intake's replace-link write — fires on the (mothership-owned) recurring
     // run path, not from the SPA; stays mothership-internal like the other task writes.
     unlinkAllFromBlock: 'pending',
+    // The block-delete cascade's batched detach: the same write as `unlinkAllFromBlock` one line
+    // up, keyed by a SET of doomed blocks. It joins that method's existing gap rather than opening
+    // a new one: every task-link write on this repo is `pending`, and the cascade only reaches a
+    // mothership node once the slice moves as a whole.
+    unlinkAllFromBlocks: 'pending',
   },
   taskConnectionRepository: {
     decodeCredentials: 'helper',

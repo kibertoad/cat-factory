@@ -244,7 +244,9 @@ Notes for Phase F/G/H (which build on this step):
 - **Intake dedupe uses `TaskRepository.listByWorkspace`** filtered to `linkedBlockId && source`:
   one batched projection read, not a per-candidate lookup. The reused block's own previous-fire
   link is in the exclusion set (the search runs BEFORE `replaceForBlock` drops it), so a still-open
-  prior bug isn't immediately re-picked.
+  prior bug isn't immediately re-picked. An issue whose linked block was DELETED is not in the set:
+  the block-delete cascade clears the link (`removal-cascade.ts`, stated in ADR 0032), so a filed
+  bug that was deleted returns to the pool instead of being excluded forever.
 - **Validation home**: the `issueIntake`-required + connected-source check lives in
   `RecurringPipelineService` (create/update), NOT `assertPipelineLaunchable` (which has no access
   to the schedule config or the workspace's connections). It's skipped for the connected-source

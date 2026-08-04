@@ -393,4 +393,14 @@ export class DrizzleTaskRepository implements TaskRepository {
       .set({ linked_block_id: null })
       .where(and(eq(tasks.workspace_id, workspaceId), eq(tasks.linked_block_id, blockId)))
   }
+
+  async unlinkAllFromBlocks(workspaceId: string, blockIds: readonly string[]): Promise<void> {
+    if (blockIds.length === 0) return
+    await this.db
+      .update(tasks)
+      .set({ linked_block_id: null })
+      .where(
+        and(eq(tasks.workspace_id, workspaceId), inArray(tasks.linked_block_id, [...blockIds])),
+      )
+  }
 }
