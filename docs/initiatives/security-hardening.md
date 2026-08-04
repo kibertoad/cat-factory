@@ -60,9 +60,15 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
 
 ## Conventions & gotchas carried forward
 
-- **`redactSecrets` is O(n): keep it that way.** Any new rule with a greedy `X*` before a
-  required literal (e.g. a scheme before `://`) will backtrack quadratically on long
-  repetitive input (real LLM prompts are large). Bound such quantifiers (`{0,39}`).
+- **`redactSecrets` is O(n): keep it that way, and put the required literal FIRST.** Any new
+  rule with a greedy `X*` before a required literal (e.g. a scheme before `://`) backtracks
+  quadratically on long repetitive input (real LLM prompts are large), so such quantifiers are
+  bounded (`{0,39}`). Bounding is only half of it: a bounded run in the LEADING position is
+  still re-walked at every offset, which is linear with a 40x constant and made the scheme rule
+  cost ~15x more on base64 than on prose. Lead with the literal instead and match the prefix in
+  a lookbehind, so a non-matching offset is rejected on one character comparison; the prefix
+  then survives in the output untouched rather than being re-emitted by the replacement.
+  Shape-independence is pinned by a test comparing base64 against prose of the same size.
 - The SSRF `safeFetch` takes an injected `assertSafe` + error factory (and an optional
   `doFetch` for tests). Reuse it for any new provider that fetches an org-supplied URL;
   don't reintroduce a bare `fetch` with `redirect: 'follow'`. It also strips the body +

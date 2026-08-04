@@ -38,12 +38,19 @@ const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
       /\b(authorization|x-api-key|x-auth-token|proxy-authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]+)/gi,
     replace: (m) => `${m[1]}${m[2]}${REPLACEMENT}`,
   },
-  // Credentials embedded in a URL userinfo: `scheme://user:secret@host`. The scheme run
-  // is length-bounded (a real scheme is short) so a long non-URL string can't make the
-  // greedy scheme scan-then-backtrack at every offset — that turned this rule O(n²).
+  // Credentials embedded in a URL userinfo: `scheme://user:secret@host`. The scheme run is
+  // length-bounded (a real scheme is short) so a long non-URL string can't make the greedy
+  // scheme scan-then-backtrack at every offset, and it sits in a LOOKBEHIND rather than a
+  // leading capture so the pattern's first obligation at each offset is the literal `://`.
+  // A leading `[a-z]` made the engine walk that bounded run at every position of any
+  // alphanumeric text before failing: ~40 steps per character, which costs ~130ms per 512KB
+  // of base64 or minified source and made scrubbing one large context file the dominant cost
+  // of recording a snapshot. Behind the lookbehind the same offsets reject on a single
+  // character comparison (~2ms per 512KB), matching identically: the scheme is not consumed,
+  // so it survives in the output untouched instead of being re-emitted by the replacement.
   {
-    pattern: /([a-z][a-z0-9+.-]{0,39}:\/\/)([^/\s:@]+):([^/\s@]+)@/gi,
-    replace: (m) => `${m[1]}${m[2]}:${REPLACEMENT}@`,
+    pattern: /(?<=[a-z][a-z0-9+.-]{0,39}:\/\/)([^/\s:@]+):([^/\s@]+)@/gi,
+    replace: (m) => `${m[1]}:${REPLACEMENT}@`,
   },
   // Secret-ish query/JSON params: token, key, secret, password, sig, signature,
   // api_key/apikey, access_token, client_secret, etc. (`?token=…` or `"token":"…"`).

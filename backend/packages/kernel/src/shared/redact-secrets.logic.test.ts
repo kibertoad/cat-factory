@@ -31,6 +31,59 @@ describe('redactSecrets', () => {
     expect(out).toContain('user:[REDACTED]@')
   })
 
+  it('strips userinfo across scheme shapes, keeping the scheme itself intact', () => {
+    // The scheme is matched in a lookbehind and never consumed, so it must survive the
+    // replacement byte-for-byte, whatever it is.
+    const cases: [string, string][] = [
+      ['postgres://admin:hunter2@db.internal:5432/app', 'postgres://admin:[REDACTED]@'],
+      ['git+ssh://user:tok0@host/x.git', 'git+ssh://user:[REDACTED]@'],
+      ['x+custom-scheme.v1://u:p@h/', 'x+custom-scheme.v1://u:[REDACTED]@'],
+      ['HTTPS://User:Pass@Host/', 'HTTPS://User:[REDACTED]@'],
+    ]
+    for (const [input, expected] of cases) {
+      expect(redactSecrets(input), input).toContain(expected)
+    }
+    // Userinfo with no scheme in front of it is left alone: `user:pass@host` in prose is
+    // not a URL, and the `:`-separated-value rules cover the credential-shaped cases.
+    expect(redactSecrets('no scheme user:pass@host')).toBe('no scheme user:pass@host')
+  })
+
+  it('costs the same on credential-free text of any shape', () => {
+    // The scrub runs over every captured prompt and every injected context file, so its cost
+    // must depend on the SIZE of a body and not its shape. A rule whose bounded run can be
+    // retried at every offset (the URL-userinfo scheme prefix, before it moved into a
+    // lookbehind) is still linear, so only a comparison catches it: it cost ~15x more on
+    // base64 than on prose, ~130ms per 512KB, which is why one large context file dominated
+    // the cost of recording a whole agent-context snapshot.
+    const size = 2 * 1024 * 1024
+    const fill = (unit: string): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size)
+    // Base64 is the shape that bit: a long unbroken run of scheme-legal characters, and an
+    // ordinary thing to find in a lockfile, an inlined asset, or a data URI.
+    const base64 = fill('aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgcGF5bG9hZA')
+    const prose = fill('the quick brown fox jumps over the lazy dog ')
+    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
+    // with the rest of the monorepo's tests. Both bodies are measured the same way in the
+    // same process, so contention that survives the minimum hits both sides of the ratio.
+    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
+    // a millisecond's granularity is noise against samples an order of magnitude larger.
+    const fastest = (body: string): number => {
+      let best = Number.POSITIVE_INFINITY
+      for (let i = 0; i < 3; i++) {
+        const started = Date.now()
+        redactSecrets(body)
+        best = Math.min(best, Date.now() - started)
+      }
+      return best
+    }
+    const baseline = fastest(prose)
+    const ratio = fastest(base64) / baseline
+    // Parity is ~1x once no rule re-walks a bounded run per offset; the regression this pins
+    // is an order of magnitude away, so 4x separates them without riding on absolute timings.
+    expect(ratio, `base64 took ${ratio.toFixed(1)}x prose (${baseline.toFixed(1)}ms)`).toBeLessThan(
+      4,
+    )
+  })
+
   it('drops secret-ish query/JSON params keeping the field name', () => {
     const out = redactSecrets('{"token":"abcd1234efgh","note":"keep me"}')
     expect(out).not.toContain('abcd1234efgh')
