@@ -337,6 +337,49 @@ Three rules decide which of those a given declaration can hit:
   permission mode, and Codex cannot express a per-tool restriction at all. If an agent kind must
   never reach a server's other tools, do not wire that server for that kind.
 
+#### Testing one for real (the probe)
+
+Boot validation rules on the DECLARATION and a dispatch reports what it DROPPED. Neither can tell you
+whether a server that survives both actually answers, so a dead url, a rotated token or a typo'd tool
+name used to surface only as an agent quietly working without a tool it was promised.
+
+The Infrastructure window's "Capability credentials" tab lists every registered server with a **Test**
+button (`POST /workspaces/:ws/tool-servers/:id/test`, `secrets.manage`, read included). A test resolves
+the credentials through the SAME composed chain a dispatch uses — the workspace store in front of the
+environment, per key, with the reserved-key floor applied before the resolver is asked — then speaks
+`initialize` + `tools/list` to the server. So the verdict is about THIS board rather than about
+whoever set the deployment's variable.
+
+| Verdict               | What it means                                                                                                    | The fix                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `ok`                  | The handshake completed and the tool list came back                                                              | Nothing; the row names the server, its version and its tool count |
+| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                                                     | Store the value for this board, or set the variable               |
+| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                                                | The DECLARATION (setting the variable must not help)              |
+| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline (including a body that stalls after its 200) | The endpoint, or the network between here and it                  |
+| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)                                | The credential's value, or the url's path                         |
+| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect)                               | The url almost certainly names something else                     |
+| `not_probeable`       | The backend has no vantage point (see below)                                                                     | Verify from a run, or change the transport                        |
+
+Three declarations are refused BY NAME instead of being probed, because a probe from the backend would
+answer about the wrong process: a `stdio` server is a child of the harness inside the run container; a
+loopback url means "beside the agent, in its own container", and the backend's `127.0.0.1` is a
+different machine (a SUCCESS there would be the more misleading of the two outcomes); and a url that
+fails the transport rule is held to the same floor the dispatch holds it to.
+
+**A REDIRECT is followed, but a credential stops at its own origin.** Each hop is re-checked against
+the transport rule, so an https endpoint cannot redirect a credential-bearing request onto cleartext.
+A hop that leaves the DECLARED ORIGIN is refused outright while a credential is riding, and that is
+what a run does too rather than extra caution: the Web platform removes `Authorization` when a
+redirect crosses origins, so an agent's own MCP client reaches such a hop unauthenticated and would
+report a 401. Naming the origin change instead points at the fix, which is the declaration naming the
+final url. A server that needs no credential is followed across origins as usual.
+
+**The probe is also the only thing that can check `allowedTools` against reality.** Every other layer
+holds an entry to a NAME pattern and none can tell a well-formed name from a real one. When the tool
+list came back COMPLETE, the result names any declared tool the server does not expose. When it did
+not (a paginated list past the probe's page bound), the check reports itself as unchecked rather than
+calling a working tool missing — absence from a prefix is not absence from the server.
+
 #### Credentials
 
 - **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
@@ -344,6 +387,11 @@ Three rules decide which of those a given declaration can hit:
   at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
 - **`required` defaults to true**, because a tool whose first call 401s is worse than one the agent
   was told it does not have.
+- **Give each credential a `usage` line.** It is rendered beside the key in the operator's checklist,
+  and the checklist can only ever say what the declaration says: a bare `SLACK_MCP_TOKEN` names
+  neither the token TYPE nor the scopes it needs, so without it the operator goes back to your
+  source — the one trip the checklist exists to remove. One sentence, naming where to get the value.
+  It is operator-facing and non-secret, so it must name no value.
 - **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
   both the key it wants and the endpoint that key is sent to, so
   `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
@@ -410,6 +458,71 @@ Three rules decide which of those a given declaration can hit:
 
 The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
 `org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
+
+#### Runbook: give `coder` the Slack MCP server
+
+A real vendor server, end to end, because the worked example above is a house server on a house
+endpoint and every interesting rule shows up when a VENDOR fixes the names. Slack's MCP server is
+`stdio` (an npm package) and its client reads `SLACK_BOT_TOKEN` and `SLACK_TEAM_ID`, both of which
+fall inside a prefix family the platform reserves and neither of which the platform reads.
+
+1. **Register the server and attach it to a built-in**, in the deployment's composition root, beside
+   its other `register*` calls:
+
+   ```ts
+   registry.registerToolServer({
+     id: 'slack',
+     label: 'Slack',
+     guidance:
+       'Read Slack history to find the discussion behind a task. Prefer it over guessing at ' +
+       'intent from the ticket alone. Never post.',
+     transport: {
+       kind: 'stdio',
+       command: 'npx',
+       args: ['-y', '@modelcontextprotocol/server-slack'],
+     },
+     allowedTools: ['slack_list_channels', 'slack_get_channel_history', 'slack_get_thread_replies'],
+     secretKeys: [
+       {
+         key: 'ORG_SLACK_BOT_TOKEN',
+         envName: 'SLACK_BOT_TOKEN',
+         usage: 'A Slack bot token (xoxb-…) with channels:history and channels:read.',
+       },
+       {
+         key: 'ORG_SLACK_TEAM_ID',
+         envName: 'SLACK_TEAM_ID',
+         required: false,
+         usage: 'The workspace id (T…), from Slack’s About this workspace page.',
+       },
+     ],
+   })
+   registry.assignToolServers('coder', ['slack'])
+   ```
+
+   Three things in there are the rules above rather than taste. The LOOKUP keys are prefixed
+   `ORG_` because `SLACK_` is a reserved family, and `envName` carries the names Slack's own client
+   insists on — the floor binds what may be READ off the deployment's environment, and an injection
+   name reads nothing. `allowedTools` lists the three READ tools and omits `slack_post_message`,
+   which is scoping rather than a security boundary: if `coder` must never post, the right answer is
+   a Slack app without `chat:write`.
+
+2. **Fill in the values.** Infrastructure → Capability credentials shows both keys as a checklist
+   with the `usage` lines beside them. Store them for the board (sealed, per workspace) or set the
+   variables on the deployment; the store wins per key.
+
+3. **Check the row.** The tool-server list above the checklist should say `Given to: coder` and
+   `Works on: claude-code, codex`. `Given to:` empty means the `assignToolServers` call did not run.
+
+4. **Verify from a run, not from the Test button.** A `stdio` server is a child process of the
+   harness INSIDE the run container, so the button is absent and the row says why: there is no
+   vantage point here, and a probe that reached for the nearest thing it could talk to would answer
+   about the backend. Start a `coder` run and read the prompt's tool-server section, or the run's
+   context snapshot. A remote (`http`) vendor server is the case the Test button exists for.
+
+5. **If the run says the server is unavailable**, the reason names the fix: `missing_secret` is a
+   value to supply, `reserved_secret` is a declaration to change, `harness_unsupported` means the run
+   used Pi (no MCP client), and `over_budget` means `coder` has accreted more servers than one
+   dispatch carries.
 
 ### Binary-output generators (the `binary-output` trait)
 

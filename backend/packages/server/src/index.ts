@@ -127,8 +127,10 @@ export {
   buildToolSecretChain,
   createWorkspaceToolSecretResolver,
   composeToolSecretResolvers,
+  toolSecretContainerFields,
   type ToolSecretChain,
   type ToolSecretChainInput,
+  type ToolSecretContainerFields,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
 export {

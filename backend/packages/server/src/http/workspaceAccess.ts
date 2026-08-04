@@ -115,6 +115,17 @@ export function requirePermission<E extends AppEnv>(
  * `OPTIONS` (CORS preflight) is never gated. Where a controller mixes gated and ungated writes
  * under one mount (e.g. workspace create vs rename), call {@link requirePermission} per-handler
  * instead of mounting this.
+ *
+ * ⚠️ **A `'*'` mount is NOT scoped to the controller.** `app.route('/workspaces/:workspaceId', sub)`
+ * re-registers each of `sub`'s entries under that prefix, and a `sub.use('*', …)` becomes
+ * `ALL /workspaces/:workspaceId/*` on the shared app — so it also matches routes OTHER controllers
+ * mounted on the same prefix. Hono then runs whichever matching entry was registered first, which
+ * makes the blast radius depend on the order in `app.ts`: today the run controllers are registered
+ * before the config ones, so their routes win and the existing `'*'` mounts reach only the config
+ * controllers listed after them (all admin-tier, which is why nothing has surfaced). Prefer mounting
+ * on the controller's OWN path patterns (`/thing` and `/thing/*`), which cannot reach a sibling
+ * whatever the order — as {@link requireWorkspacePermissionIncludingReads}'s two call sites do,
+ * because for them the ordering accident stopped being harmless.
  */
 export function requireWorkspacePermission<E extends AppEnv>(
   permission: WorkspacePermission,
@@ -124,6 +135,45 @@ export function requireWorkspacePermission<E extends AppEnv>(
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
       requirePermission(c, permission)
     }
+    return next()
+  }
+}
+
+/**
+ * The same controller-level gate, applied to READS as well.
+ *
+ * {@link requireWorkspacePermission} lets GET/HEAD through by design: on almost every admin
+ * controller the permission guards MUTATION and the configuration itself is viewer-readable. A few
+ * controllers invert that, because their READ is the sensitive half — the capability-credential
+ * checklist and the tool-server inventory both project the credential KEY NAMES this deployment's
+ * capabilities want, which is exactly what the workspace snapshot withholds from a viewer ("no
+ * business learning which environment variables the deployment sets"). Moving the value into a
+ * sealed row did not change that judgement, and neither did adding a second surface over the same
+ * registry.
+ *
+ * A separate function rather than an option, so the choice is legible at the mount and a controller
+ * cannot acquire it by a default changing underneath it. `OPTIONS` still passes: a CORS preflight
+ * carries no credentials to judge, and refusing it breaks the browser before the real request that
+ * this gate is here to refuse.
+ *
+ * The failure this exists to prevent is not hypothetical. Both call sites documented the read as
+ * gated (in the controller, in the SPA's tab gate, in the store's 403 handling) while the mount let
+ * every member's GET through, because "gated on `secrets.manage`" reads as covering the controller
+ * and covered only its writes.
+ *
+ * ⚠️ **Mount this on the controller's OWN path patterns, never `'*'`.** See the warning on
+ * {@link requireWorkspacePermission}: a `'*'` mount lands on `/workspaces/:workspaceId/*` and can
+ * refuse a SIBLING controller's routes. That is survivable while only writes are gated (the
+ * siblings it can reach are admin-tier anyway); gating READS makes it fatal, because the same
+ * pattern then refuses every member-readable GET registered after it — `GET /github/repos` was the
+ * one that caught it. Two patterns are needed, `/thing` and `/thing/*`: Hono's `*` does not match
+ * the bare prefix.
+ */
+export function requireWorkspacePermissionIncludingReads<E extends AppEnv>(
+  permission: WorkspacePermission,
+): MiddlewareHandler<E> {
+  return (c, next) => {
+    if (c.req.method !== 'OPTIONS') requirePermission(c, permission)
     return next()
   }
 }

@@ -44,6 +44,26 @@ and no deployment can rename what a vendor's own SDK looks for. Injection names 
 narrower rule instead (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or the
 other names that would reconfigure the process rather than authenticate a call.
 
+### Name a capability credential under a prefix of your own
+
+The lookup name is yours to pick, so pick a family and stay in it. The convention this repo's own
+registrations follow is **`MCP_…` for a tool server's credentials and `GEN_…` for a generative binary
+integration's**, or a house prefix (`ACME_…`) where one deployment owns both. Two reasons, and the
+second is the one that bites:
+
+- Every family the platform uses is reserved (`AUTH_`, `GITHUB_`, `LOCAL_`, `SLACK_`, the
+  model-provider keys, …), so a name that reads naturally is quite often refused. `MCP_SLACK_TOKEN`
+  is not, and `envName` puts the value into the variable the vendor's own client insists on.
+- `allowKeys` is set PER DEPLOYMENT, not per capability, and it gates every subject the resolver
+  serves. An allow-list holding only `MCP_…` silently resolves nothing for a registered image or
+  music generator, and the failure surfaces as the agent reporting that integration unavailable with
+  nothing pointing back here. List a prefix per family, or the exact keys your registrations declare.
+
+Whether a name resolves at all is answerable without starting a run: Infrastructure → Capability
+credentials lists every key the deployment's capabilities declare, and the tool-server rows above it
+carry a **Test** button that resolves the credential through the real chain and speaks MCP to a remote
+server. See [`custom-agents.md`](../backend/docs/custom-agents.md).
+
 ### The environment is the FALLBACK, not the primary home
 
 Capability credentials are resolved from the per-workspace **capability-credential store** first,
