@@ -17,7 +17,16 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   family answers it — approval gates and agent questions, the three iterative-review loops, the
   container-backed PR review and human-verdict gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
-  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
+  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicEvidenceController`
+  (the `read`-scoped run **evidence** reads for a consumer that has to JUDGE a run rather than debug
+  one: the engine's verification report composed on read — the same bundle the pull request carries,
+  so there is no second projection to disagree with it — plus the run's captured artifacts and their
+  BYTES, the one route on this surface that is hand-mounted because an image response cannot be a
+  contract; its run-scoped reads take `decisions/scope.ts`'s NARROWER rule, because one path prefix
+  carries one authorization model), `PublicKeyController` (HEADLESS key provisioning at `admin`
+  scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
+  are derived from the gate, so a key minted here can never mint another),
+  `PublicMcpController` (the
   HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
   Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
   tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the

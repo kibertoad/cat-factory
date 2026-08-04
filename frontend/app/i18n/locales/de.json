@@ -657,6 +657,7 @@
         "neverUsed": "nie verwendet",
         "createdBy": "erstellt von {user}",
         "createdByYou": "Ihnen",
+        "createdByKey": "API-Schlüssel {id}",
         "revoke": "Token widerrufen"
       },
       "add": {

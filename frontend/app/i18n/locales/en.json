@@ -3137,6 +3137,7 @@
         "neverUsed": "never used",
         "createdBy": "created by {user}",
         "createdByYou": "you",
+        "createdByKey": "API key {id}",
         "revoke": "Revoke token"
       },
       "add": {

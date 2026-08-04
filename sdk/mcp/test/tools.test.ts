@@ -7,17 +7,48 @@ import {
   CAT_FACTORY_TOOLS,
 } from '../src/tools.generated.ts'
 
-/** Every `operationId` in the committed spec, the emitter's own input. */
-function specOperationIds(): string[] {
+type SpecOperation = {
+  operationId?: string
+  responses?: Record<string, { content?: Record<string, unknown> }>
+}
+
+/** Every operation in the committed spec, the emitter's own input. */
+function specOperations(): SpecOperation[] {
   const path = fileURLToPath(new URL('../../../docs/openapi.json', import.meta.url))
   const spec = JSON.parse(readFileSync(path, 'utf8')) as {
-    paths: Record<string, Record<string, { operationId?: string }>>
+    paths: Record<string, Record<string, SpecOperation>>
   }
-  return Object.values(spec.paths).flatMap((methods) =>
-    Object.values(methods)
-      .map((operation) => operation.operationId)
-      .filter((id): id is string => typeof id === 'string'),
-  )
+  return Object.values(spec.paths).flatMap((methods) => Object.values(methods))
+}
+
+/** Every `operationId` in the committed spec. */
+function specOperationIds(): string[] {
+  return specOperations()
+    .map((operation) => operation.operationId)
+    .filter((id): id is string => typeof id === 'string')
+}
+
+/**
+ * The operations whose SUCCESS body is not JSON — an SSE stream or an opaque blob.
+ *
+ * These are exactly the ones a tool call has no shape for: its result is text or a declared
+ * content block, so neither an open-ended event feed nor an arbitrary byte stream can be handed
+ * back honestly. Derived from the spec rather than listed, so the assertion below states the RULE
+ * ("a tool is omitted only when the protocol cannot carry its response") instead of re-pinning
+ * whichever set happened to be true the day it was written — a list that goes stale silently, and
+ * whose staleness reads as an oversight rather than a decision.
+ */
+function nonJsonOperationIds(): string[] {
+  return specOperations()
+    .filter((operation) =>
+      Object.entries(operation.responses ?? {}).some(
+        ([code, response]) =>
+          /^2\d\d$/.test(code) &&
+          Object.keys(response.content ?? {}).some((media) => media !== 'application/json'),
+      ),
+    )
+    .map((operation) => operation.operationId)
+    .filter((id): id is string => typeof id === 'string')
 }
 
 // The tool table is generated, so these do not re-test the emitter's output field by field. They
@@ -48,10 +79,13 @@ describe('the generated tool table', () => {
     ]
     expect(new Set(accounted).size).toBe(accounted.length)
     expect([...accounted].sort()).toEqual([...specOperationIds()].sort())
-    expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId)).toEqual([
-      'streamPublicJobEvents',
-      'streamPublicTaskRun',
-    ])
+    // An omission is legitimate exactly when the protocol cannot carry the response, so the
+    // expectation is derived from the spec's own media types. An operation that answers JSON and
+    // is nonetheless omitted fails here, which is the case worth catching: it is a capability
+    // quietly withheld from every host.
+    expect(CAT_FACTORY_OMITTED_OPERATIONS.map((o) => o.operationId).sort()).toEqual(
+      nonJsonOperationIds().sort(),
+    )
     for (const omitted of CAT_FACTORY_OMITTED_OPERATIONS) {
       // Every omission names the alternative. An absence with no way forward reads to a model as
       // an unsupported platform capability, which it then reports to its user as a limitation.

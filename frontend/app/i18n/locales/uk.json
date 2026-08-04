@@ -2889,6 +2889,7 @@
         "neverUsed": "ніколи не використовувався",
         "createdBy": "створено {user}",
         "createdByYou": "вами",
+        "createdByKey": "ключ API {id}",
         "revoke": "Відкликати токен"
       },
       "add": {

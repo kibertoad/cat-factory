@@ -3030,6 +3030,7 @@
         "neverUsed": "מעולם לא היה בשימוש",
         "createdBy": "נוצר על ידי {user}",
         "createdByYou": "אתה",
+        "createdByKey": "מפתח API {id}",
         "revoke": "בטל אסימון"
       },
       "add": {

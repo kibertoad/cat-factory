@@ -1,6 +1,6 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** A0, C1, D1 and D2 landed; **A1–A6 landed together**; the start-path scope question settled
+**Status:** A0, C1, D1, D2, **E1 and E2** landed; **A1–A6 landed together**; the start-path scope question settled
 by [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2 and C2 not started ·
 **Owner:** core · **Started:** 2026-08-02
 
@@ -85,9 +85,10 @@ the SPA can get it out of.
 
 **Where this stands:** A1–A6 landed as one change, so the asymmetry the tracker was opened for is
 closed: of the surfaces a pipeline can park on, `human-review` is the only one a `decide` key can
-start and not answer, and it is unanswerable by construction rather than unbuilt. What remains is
-B1/B2 (key introspection, spec endpoint), C1 (webhook management) and C2 (step output), none of
-which is a park. The former [open question](#open-question-for-the-maintainer-settled) about the
+start and not answer, and it is unanswerable by construction rather than unbuilt. E1/E2 then closed
+the other half of "what can a headless consumer NOT do here": read what a run PROVED, and get a key
+without a browser. What remains is B1/B2 (key introspection, spec endpoint) and C2 (step output),
+none of which is a park. The former [open question](#open-question-for-the-maintainer-settled) about the
 `POST /tasks/:taskId/start` scope rule is settled (tightened, with
 [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)). When the committed scope
 completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md); if it
@@ -363,6 +364,71 @@ Same mothership caveat as D1, and for the same reason: `documentRepository.upser
 are `pending` on the persistence allow-list, so naming `documents` on a node with no main database
 answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
 is one slice of the mothership tracker, not this one.
+
+### E1: Run EVIDENCE — the verification report + artifacts ✅
+
+`GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/artifacts` and
+`GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
+CAPTURED about a run was reachable only from a browser session, so a consumer whose job is to judge
+a run (a trial harness deciding whether to accept a change, an evaluation pipeline scoring a fleet)
+had to scrape the fenced JSON block out of a pull-request body for the report and could not reach
+the captured screenshots at all — the caveat A6 recorded against the visual-confirmation gate
+("approving screenshots it has not seen") was the same hole seen from the other side.
+
+Decisions worth keeping:
+
+- **The report is served VERBATIM**, the engine's own `PrVerificationReport`, composed on read by
+  the same code that writes the PR section (`PrVerificationReportController.composeForRun`). A
+  second, API-shaped projection of the same facts is how two surfaces start disagreeing about what
+  a run proved. The consequence is real and is now stated on the schema: the report shape is part
+  of the STABLE surface from here on, so it grows additively.
+- **The read differs from the publish in three ways, all about audience**: it answers for a run
+  with NO pull request (a headless job, a run that failed before it pushed — the exact set a
+  PR-scraping consumer could never see), it does not consult the per-workspace
+  `publishPrVerificationReport` opt-out (that is a statement about writing onto someone's PR, not
+  about reading your own evidence back), and it does not swallow its failures.
+- **The run-scoped reads take `loadScopedRun`, NOT the debug surface's workspace rule**, even
+  though a `read` key already reaches far more through `/api/v1/debug/*`. What decides it is the
+  PATH: `debug-api.md` records "two access semantics behind one name" as the reason the debug reads
+  are not under `/api/v1/runs/:id/…`, and that reason binds whoever mounts there next. The
+  excluded set (frame/module-anchored runs) has no task and no PR, so no verification story.
+- **The BYTES needed a binary response the SDK chain could not express.** An operation whose
+  success media type was neither JSON nor SSE fell through to `result: null`, which every emitter
+  renders as a method returning NOTHING — a published client that reaches the endpoint and
+  discards its body. The IR now marks `binary` alongside `stream`, each of the four transports
+  hands the bytes back in its own idiom, and an UNKNOWN media type fails generation rather than
+  falling through. The MCP facade omits it with a stated reason (a tool result has no shape for an
+  arbitrary byte stream), and the omission expectation is now derived from the spec's media types
+  rather than a pinned list.
+- **`503`, never an empty list**, when the account configured no blob backend: "this deployment
+  stores no artifacts" and "this run captured none" are different facts, and only one is about the
+  run. Same reason the artifact list 404s an unknown run rather than answering `[]`.
+- **A wiring bug this surfaced, fixed on both facades**: each container built the HTTP layer's
+  `resolveBinaryArtifactStore` from account settings while the ENGINE got the (overridable) one
+  from `CoreDependencies`, so an override reached one side of the app and not the other. The
+  container now reads it off `dependencies`.
+
+### E2: Headless key provisioning ✅
+
+`GET|POST|DELETE /api/v1/keys` at `admin` scope, delegating to the same `PublicApiKeyService` the
+session panel calls. Same class of gap as C1: a deployment whose operator is headless could drive
+every part of this API except the act of GETTING a key.
+
+The security argument is two enforced bounds, not advice:
+
+- **A minted key can never reach the rung minting requires.** `HEADLESS_MINTABLE_SCOPES` is derived
+  from `HEADLESS_KEY_MINT_SCOPE` (`admin`) rather than listed, so the mint chain is exactly one
+  link long and a rung inserted later cannot silently widen it. Refused by the contract's own
+  picklist — there is deliberately no hand-written second copy of the rule to drift.
+- **Revocation cascades.** Revoking a key revokes what it minted, on both surfaces. Without it a
+  leaked provisioning key would survive its own cleanup: the operator kills the credential they can
+  see and the ones an attacker made keep working. This needed a new `created_by_key_id` column
+  (D1 ⇄ Drizzle, with its own index) and a `revokeMintedBy` repository method issuing ONE statement
+  rather than a read-then-loop a concurrent mint could slip through.
+
+`createdByKeyId` is also provenance the app renders: a headless mint stores a null user, so without
+a branch in the key panel it would read exactly like a key predating the audit column — "nobody
+knows who made this" shown for the one case the platform knows precisely.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 

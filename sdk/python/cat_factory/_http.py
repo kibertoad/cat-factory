@@ -114,6 +114,28 @@ class Transport:
         """Perform a request whose success carries no body (a 204)."""
         self._send(method, path, body, query, timeout, "application/json")
 
+    def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: Any = None,
+        query: Mapping[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> bytes:
+        """Perform a request whose success carries BYTES rather than JSON.
+
+        Returned whole rather than as a file object: the listing endpoint that hands out these
+        ids also carries each artifact's exact ``byteSize``, so a caller decides whether to fetch
+        BEFORE issuing the request, and every artifact is bounded by the platform's own upload
+        ceiling.
+
+        ``*/*``, not the spec's declared ``application/octet-stream``: the server answers with the
+        artifact's RECORDED type (``image/png``, ...) and falls back to octet-stream only for a
+        row it does not recognise.
+        """
+        return self._send(method, path, body, query, timeout, "*/*")
+
     def stream(
         self,
         method: str,

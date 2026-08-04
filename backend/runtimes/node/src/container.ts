@@ -563,7 +563,14 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     consensusSessionRepository: repos.consensusSessionRepository,
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
-    resolveBinaryArtifactStore,
+    //
+    // Read off `dependencies`, NOT the account-composed value beside it: an override supplied to
+    // the container (a deployment swapping the backend, the conformance harness driving the
+    // public artifact reads) is applied to the engine's deps and would otherwise reach the ENGINE
+    // and not the HTTP layer — two answers to "where do this workspace's artifacts live", which
+    // is a split nothing above this line could see.
+    resolveBinaryArtifactStore:
+      dependencies.resolveBinaryArtifactStore ?? resolveBinaryArtifactStore,
     // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
     // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
     // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`

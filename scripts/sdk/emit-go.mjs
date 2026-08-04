@@ -435,9 +435,11 @@ function emitMethod(operation) {
 
   const returns = operation.stream
     ? '(*EventStream, error)'
-    : operation.result
-      ? `(*${goType(operation.result)}, error)`
-      : 'error'
+    : operation.binary
+      ? '([]byte, error)'
+      : operation.result
+        ? `(*${goType(operation.result)}, error)`
+        : 'error'
 
   const requestLiteral =
     '\treq := requestSpec{\n' +
@@ -449,11 +451,13 @@ function emitMethod(operation) {
 
   const call = operation.stream
     ? '\treturn s.client.stream(ctx, req)\n'
-    : operation.result
-      ? `\tvar out ${goType(operation.result)}\n` +
-        '\tif err := s.client.request(ctx, req, &out); err != nil {\n\t\treturn nil, err\n\t}\n' +
-        '\treturn &out, nil\n'
-      : '\treturn s.client.requestNoContent(ctx, req)\n'
+    : operation.binary
+      ? '\treturn s.client.requestBytes(ctx, req)\n'
+      : operation.result
+        ? `\tvar out ${goType(operation.result)}\n` +
+          '\tif err := s.client.request(ctx, req, &out); err != nil {\n\t\treturn nil, err\n\t}\n' +
+          '\treturn &out, nil\n'
+        : '\treturn s.client.requestNoContent(ctx, req)\n'
 
   return (
     doc(name, [

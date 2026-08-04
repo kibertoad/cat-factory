@@ -2889,6 +2889,7 @@
         "neverUsed": "nunca usado",
         "createdBy": "creado por {user}",
         "createdByYou": "ti",
+        "createdByKey": "la clave de API {id}",
         "revoke": "Revocar token"
       },
       "add": {

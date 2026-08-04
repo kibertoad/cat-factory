@@ -228,6 +228,63 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicRequestGateFixSchema>
 >()
 
+// Run EVIDENCE. The verification report is the one DTO here the SDK did not gain a new shape for:
+// it is the ENGINE's own report type, served verbatim, so this pairing is what proves the wire
+// shape a consumer parses is the one the engine composes rather than a re-typed copy of it.
+expectMutuallyAssignable<
+  sdk.PublicRunArtifact,
+  v.InferOutput<typeof contracts.publicRunArtifactSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRunArtifactList,
+  v.InferOutput<typeof contracts.publicRunArtifactListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrVerificationReport,
+  v.InferOutput<typeof contracts.prVerificationReportSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportRun, v.InferOutput<typeof contracts.prReportRunSchema>>()
+expectMutuallyAssignable<sdk.PrReportStep, v.InferOutput<typeof contracts.prReportStepSchema>>()
+expectMutuallyAssignable<sdk.PrReportIssue, v.InferOutput<typeof contracts.prReportIssueSchema>>()
+expectMutuallyAssignable<sdk.PrReportCi, v.InferOutput<typeof contracts.prReportCiSchema>>()
+expectMutuallyAssignable<sdk.PrReportCheck, v.InferOutput<typeof contracts.prReportCheckSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportValidation,
+  v.InferOutput<typeof contracts.prReportValidationSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportValidationCommand,
+  v.InferOutput<typeof contracts.prReportValidationCommandSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportReproduction,
+  v.InferOutput<typeof contracts.prReportReproductionSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportTests, v.InferOutput<typeof contracts.prReportTestsSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportTestOutcome,
+  v.InferOutput<typeof contracts.prReportTestOutcomeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportTestConcern,
+  v.InferOutput<typeof contracts.prReportTestConcernSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportRequirements,
+  v.InferOutput<typeof contracts.prReportRequirementsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironments,
+  v.InferOutput<typeof contracts.prReportEnvironmentsSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportMerge, v.InferOutput<typeof contracts.prReportMergeSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudges, v.InferOutput<typeof contracts.prReportJudgesSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudge, v.InferOutput<typeof contracts.prReportJudgeSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportObservability,
+  v.InferOutput<typeof contracts.prReportObservabilitySchema>
+>()
+
 // The nested projections a `pr-review` / `visual-confirmation` decision carries. The emitter
 // inlines them rather than hoisting them into `components.schemas`, so the coverage guard below
 // cannot see them, and inlined is exactly where a mapping bug hides, since nothing else names
@@ -304,6 +361,26 @@ const ASSERTED_COMPONENTS = [
   'PublicHumanTestDecision',
   'PublicVisualConfirmDecision',
   'PublicRequestGateFix',
+  'PublicRunArtifact',
+  'PublicRunArtifactList',
+  'PrVerificationReport',
+  'PrReportRun',
+  'PrReportStep',
+  'PrReportIssue',
+  'PrReportCi',
+  'PrReportCheck',
+  'PrReportValidation',
+  'PrReportValidationCommand',
+  'PrReportReproduction',
+  'PrReportTests',
+  'PrReportTestOutcome',
+  'PrReportTestConcern',
+  'PrReportRequirements',
+  'PrReportEnvironments',
+  'PrReportMerge',
+  'PrReportJudges',
+  'PrReportJudge',
+  'PrReportObservability',
 ] as const
 
 describe('generated models conform to the Valibot contracts', () => {

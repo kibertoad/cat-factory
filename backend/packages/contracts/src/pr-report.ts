@@ -22,14 +22,24 @@ import { vcsProviderSchema } from './routes/auth.js'
 // `docs/initiatives/pr-verification-report.md` for the form/shape decisions and
 // `@cat-factory/kernel`'s `domain/pr-report.ts` for the marker-delimited splice that keeps
 // the write idempotent across re-runs and retries.
+//
+// SINCE THIS SHAPE IS ALSO SERVED AT `GET /api/v1/runs/:runId/report`, it is part of the STABLE
+// public surface: it grows by ADDITION (a new section, a new optional field, a new enum member)
+// and never by renaming, retyping or removing in place. That is a tighter rule than the one this
+// schema shipped under, and deliberately so — a consumer that was scraping the fenced block out
+// of a PR body was already depending on it, and publishing the endpoint only made that
+// dependency honest.
 // ---------------------------------------------------------------------------
 
 /**
- * The wire version of the report payload. Bumped when the JSON shape changes in a way an
- * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
- * a bump means "re-read the schema", not "a compatibility shim exists".
+ * The wire version of the report payload. Bumped when the shape gains something an external
+ * consumer would want to notice.
+ *
+ * It is NOT a compatibility switch and never gates two shapes at once: the surface is additive
+ * (see the header), so a bump means "there is more here than there was", and a consumer written
+ * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 5
+export const PR_VERIFICATION_REPORT_VERSION = 6
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -520,13 +530,34 @@ export const prReportMergeSchema = v.object({
 export type PrReportMerge = v.InferOutput<typeof prReportMergeSchema>
 
 /**
- * Where a human can inspect what every step actually did — the run's observability panel
- * (Model activity / Provided context). Built from the deployment's public app URL
- * (`appBaseUrl`); null when the deployment configured none, so the report never emits a
- * link to nowhere.
+ * Where the evidence behind this report can be inspected, one link per AUDIENCE.
+ *
+ * `runUrl` is for a person: the run's observability panel (Model activity / Provided context),
+ * built from the deployment's public app URL (`appBaseUrl`). The other two are for a machine
+ * and are built from the deployment's public BACKEND url (`apiBaseUrl`), the same config the
+ * artifact byte links use — the two coincide on a same-origin deployment and diverge the moment
+ * the SPA is served from its own host, and a link built from the wrong one is worse than none.
+ *
+ * Each is null when its base URL is unconfigured, so the report never emits a link to nowhere.
  */
 export const prReportObservabilitySchema = v.object({
   runUrl: v.nullable(v.string()),
+  /**
+   * The run's TOOL-CALL TRAJECTORY: what its agents did, in the order they did it, ordered
+   * server-side and returned whole.
+   *
+   * This is the link that makes the report auditable rather than merely informative. Every
+   * other section is a verdict somebody produced; the trajectory is the record of the work
+   * those verdicts are about, and until it was named here a reader who wanted it had to know
+   * both that the debug API exists and how to address a run on it.
+   */
+  trajectoryUrl: v.nullable(v.string()),
+  /**
+   * THIS report, served live as JSON. What the fenced block below carries is a snapshot taken
+   * when the report was last published; a consumer that wants the current one — or that is
+   * reading a run whose PR body it does not have — fetches it here.
+   */
+  reportUrl: v.nullable(v.string()),
 })
 export type PrReportObservability = v.InferOutput<typeof prReportObservabilitySchema>
 

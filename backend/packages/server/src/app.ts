@@ -102,6 +102,8 @@ import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
+import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
@@ -205,6 +207,15 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
   // budget. See backend/docs/debug-api.md.
   app.route('/', publicDebugController())
+  // The public run-EVIDENCE surface (`/api/v1/runs/:runId/report`, `…/artifacts`, and the bytes
+  // at `/api/v1/artifacts/:id/blob`): read-scoped access to the engine's own verification report
+  // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
+  // debug it. See backend/docs/public-api.md.
+  app.route('/', publicEvidenceController())
+  // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
+  // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
+  // revokes what it minted.
+  app.route('/', publicKeyController())
   // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
   // half of the push channel, so a deployment with no browser session can register the receiver
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same

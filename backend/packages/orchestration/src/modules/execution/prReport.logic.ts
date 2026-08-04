@@ -118,6 +118,13 @@ export interface PrReportInputs {
   /** Deep link into the run's observability panel; null when no public app URL is configured. */
   runUrl: string | null
   /**
+   * The two MACHINE links, built from the deployment's public backend URL: the run's tool-call
+   * trajectory and this report served live. Null when no such URL is configured, exactly as
+   * {@link PrReportInputs.runUrl} is for the app link.
+   */
+  trajectoryUrl: string | null
+  reportUrl: string | null
+  /**
    * The service's in-repo `spec/` tree, reassembled from the run's branch, for the
    * requirement → evidence join. `null`/absent when it could not be read at all (no VCS
    * wired, no repo resolved, a transport failure) — which the section reports distinctly from
@@ -544,7 +551,11 @@ export function composePrVerificationReport(
     ),
     merge: composeMerge(instance),
     judges: composeJudges(instance, truncations),
-    observability: { runUrl: inputs.runUrl },
+    observability: {
+      runUrl: inputs.runUrl,
+      trajectoryUrl: inputs.trajectoryUrl,
+      reportUrl: inputs.reportUrl,
+    },
     truncations,
   }
 }
@@ -744,7 +755,10 @@ function renderJudges(judges: PrVerificationReport['judges']): string[] {
   return out
 }
 
-function renderRun(run: PrVerificationReport['run'], runUrl: string | null): string[] {
+function renderRun(
+  run: PrVerificationReport['run'],
+  observability: PrVerificationReport['observability'],
+): string[] {
   const out = [
     '### Run',
     '',
@@ -758,7 +772,20 @@ function renderRun(run: PrVerificationReport['run'], runUrl: string | null): str
       `**Tracker issues:** ${run.issues.map((i) => `[${hostMarkdown.inline(i.title)}](${i.url})`).join(', ')}`,
     )
   }
-  if (runUrl) out.push(`**Observability:** [Model activity / Provided context](${runUrl})`)
+  if (observability.runUrl) {
+    out.push(`**Observability:** [Model activity / Provided context](${observability.runUrl})`)
+  }
+  // The two machine links are rendered in the PROSE as well as carried in the JSON block, and
+  // that is the point of the feature rather than a duplication: the reader who needs to check a
+  // claim in this report is often a person, and a trajectory nobody can find is not an audit
+  // trail. Both endpoints are key-authenticated, so a reader without a credential gets a 401 —
+  // the same honest refusal the app link beside them produces.
+  if (observability.trajectoryUrl) {
+    out.push(`**Trajectory (API):** [Every tool call, in order](${observability.trajectoryUrl})`)
+  }
+  if (observability.reportUrl) {
+    out.push(`**This report (API):** [Live JSON](${observability.reportUrl})`)
+  }
   out.push('', '| # | Step | State | Model |', '| --- | --- | --- | --- |')
   for (const step of run.steps) {
     out.push(
@@ -794,7 +821,7 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '_Maintained by cat-factory. These are captured facts from the run that produced this PR,',
     "not the agent's own claims. It is rewritten in place as the run progresses._",
     '',
-    ...renderRun(report.run, report.observability.runUrl),
+    ...renderRun(report.run, report.observability),
     ...renderCi(report.ci),
     // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same
     // question a reviewer asks first ("does it work?"), and unlike CI they are the platform's own

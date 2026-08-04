@@ -428,6 +428,8 @@ export async function buildIr(doc) {
         // A stream is not a value: the SSE operations hand back a reader, so an emitter must
         // branch on this rather than trying to decode `text/event-stream` as the result type.
         stream: success.mediaType === 'text/event-stream',
+        // Neither is a blob: the artifact download hands back raw bytes.
+        binary: success.mediaType === 'application/octet-stream',
         status: success.status,
         result:
           success.mediaType === 'application/json'
@@ -438,6 +440,7 @@ export async function buildIr(doc) {
   }
   operations.sort((a, b) => a.id.localeCompare(b.id))
 
+  assertKnownResponseMedia(spec)
   assertNoDefaultedRequestField(registry, operations)
 
   if (registry.unusedObjectNames.size > 0 || registry.unusedEnumNames.size > 0) {
@@ -467,6 +470,40 @@ export async function buildIr(doc) {
  * today, so rather than build machinery to model a type that is both — and quietly pick a side —
  * this fails loudly the day it happens, and whoever adds it decides.
  */
+/**
+ * Refuse to generate against a success media type no emitter knows how to hand back.
+ *
+ * The three the emitters branch on are JSON (decode into the result type), `text/event-stream`
+ * (hand back a reader) and `application/octet-stream` (hand back bytes). Anything else used to
+ * fall through to `result: null`, which every emitter renders as a method returning NOTHING — a
+ * published client that reaches the endpoint and silently drops its body, which is the exact
+ * failure the surface table exists to prevent one endpoint earlier.
+ *
+ * Checked over the SPEC rather than the IR, because by the time an operation is in the IR the
+ * media type it carried has already been thrown away.
+ */
+function assertKnownResponseMedia(spec) {
+  const known = new Set(['application/json', 'text/event-stream', 'application/octet-stream'])
+  const successMedia = (operation) =>
+    Object.entries(operation.responses ?? {})
+      .filter(([code]) => /^2\d\d$/.test(code))
+      .flatMap(([, response]) => Object.keys(response.content ?? {}))
+  const offenders = Object.entries(spec.paths).flatMap(([path, methods]) =>
+    Object.entries(methods).flatMap(([method, operation]) =>
+      successMedia(operation)
+        .filter((media) => !known.has(media))
+        .map((media) => `${method.toUpperCase()} ${path} -> ${media}`),
+    ),
+  )
+  if (offenders.length > 0) {
+    throw new Error(
+      `SDK IR: success response media type(s) no emitter can return: ${offenders.join(', ')}. ` +
+        'Teach every transport how to hand the body back (see the `binary` flag) rather than ' +
+        'letting the operation generate as a method that discards it.',
+    )
+  }
+}
+
 function assertNoDefaultedRequestField(registry, operations) {
   const reachable = new Set()
   const visit = (ref) => {

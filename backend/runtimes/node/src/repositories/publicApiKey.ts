@@ -4,9 +4,10 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { DrizzleDb } from '../db/client.js'
 import { publicApiKeys } from '../db/schema.js'
 
-// Postgres-backed store of the inbound public-API keys (mirror of D1 migrations 0034 + 0053 /
-// D1PublicApiKeyRepository, column-for-column, `scope` included). The secret is stored ONLY as a
-// one-way peppered hash — this repo never sees the raw key.
+// Postgres-backed store of the inbound public-API keys (mirror of D1 migrations 0034 + 0053 +
+// 0054 + 0081 / D1PublicApiKeyRepository, column-for-column, `scope` and `created_by_key_id`
+// included). The secret is stored ONLY as a one-way peppered hash — this repo never sees the raw
+// key.
 
 type Row = typeof publicApiKeys.$inferSelect
 
@@ -19,6 +20,7 @@ function rowToRecord(row: Row): PublicApiKeyRecord {
     scope: row.scope as PublicApiScope,
     secretHash: row.secret_hash,
     createdByUserId: row.created_by_user_id,
+    createdByKeyId: row.created_by_key_id,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
     revokedAt: row.revoked_at,
@@ -37,6 +39,7 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
       scope: record.scope,
       secret_hash: record.secretHash,
       created_by_user_id: record.createdByUserId,
+      created_by_key_id: record.createdByKeyId,
       created_at: record.createdAt,
       last_used_at: record.lastUsedAt,
       revoked_at: record.revokedAt,
@@ -69,6 +72,21 @@ export class DrizzlePublicApiKeyRepository implements PublicApiKeyRepository {
       .where(
         and(
           eq(publicApiKeys.id, id),
+          eq(publicApiKeys.workspace_id, workspaceId),
+          isNull(publicApiKeys.revoked_at),
+        ),
+      )
+  }
+
+  async revokeMintedBy(workspaceId: string, minterId: string, at: number): Promise<void> {
+    // One statement over the minter index, never a list-then-revoke: the set is small, but a
+    // read-then-write would let a key minted between the two reads survive the cascade.
+    await this.db
+      .update(publicApiKeys)
+      .set({ revoked_at: at })
+      .where(
+        and(
+          eq(publicApiKeys.created_by_key_id, minterId),
           eq(publicApiKeys.workspace_id, workspaceId),
           isNull(publicApiKeys.revoked_at),
         ),

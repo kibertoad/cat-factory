@@ -1835,3 +1835,118 @@ func (s *DebugService) ListToolCallsAll(ctx context.Context, runID string, query
 		}
 	}
 }
+
+// EvidenceService what a run proved: the engine's verification report and the artifacts it captured, bytes
+// included.
+type EvidenceService struct {
+	client *Client
+}
+
+// DownloadArtifact download an artifact's bytes
+// The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded
+// image content type (`nosniff`, never inline active content). Authenticated like every other
+// call: the bytes are workspace-scoped, so a report that links here on a public repository leaks
+// nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and
+// separately when the metadata row survives but its bytes are gone from the blob backend.
+// GET /api/v1/artifacts/{artifactId}/blob (operation getPublicArtifactBlob).
+func (s *EvidenceService) DownloadArtifact(ctx context.Context, artifactID string) ([]byte, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/artifacts/%s/blob", pathEscape(artifactID)),
+	}
+	return s.client.requestBytes(ctx, req)
+}
+
+// GetReport get a run's verification report
+// The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks,
+// the platform’s own run of the service’s lint/test/build commands (with the failing output), the
+// red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement
+// coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision.
+// Byte-for-byte the JSON block the pull-request body carries, composed on read — so it also
+// answers for a run that never opened a pull request. Each section states `reported` or `absent`
+// with a note, so a step that did not run never looks like a step that found nothing.
+// GET /api/v1/runs/{runId}/report (operation getPublicRunReport).
+func (s *EvidenceService) GetReport(ctx context.Context, runID string) (*PrVerificationReport, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/report", pathEscape(runID)),
+	}
+	var out PrVerificationReport
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListArtifacts list a run's captured artifacts
+// The binary artifacts the run captured (UI screenshots) plus the reference images they were
+// reviewed against — id, kind, view, content type, exact byte size and content hash. Unpaged: the
+// capture path caps how many one run may store, so the response size is bounded before the
+// request. Fetch the bytes with the blob endpoint.
+// GET /api/v1/runs/{runId}/artifacts (operation listPublicRunArtifacts).
+func (s *EvidenceService) ListArtifacts(ctx context.Context, runID string) (*PublicRunArtifactList, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/artifacts", pathEscape(runID)),
+	}
+	var out PublicRunArtifactList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// KeysService the workspace's own API keys: provision one headlessly, list them, revoke one (and what it
+// minted).
+type KeysService struct {
+	client *Client
+}
+
+// Create provision an API key
+// Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE — store
+// it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted
+// here: a key provisioned over the API can never itself provision, which keeps the chain one link
+// long. Requires an `admin`-scope key.
+// POST /api/v1/keys (operation createPublicKey).
+func (s *KeysService) Create(ctx context.Context, body CreatePublicKeyRequest) (*CreatePublicKeyResponse, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   "/api/v1/keys",
+		Body:   body,
+	}
+	var out CreatePublicKeyResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// List list the workspace's API keys
+// The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is never
+// readable back. `createdByKeyId` names the key that provisioned a key headlessly;
+// `createdByUserId` names the person who minted one in the app.
+// GET /api/v1/keys (operation listPublicKeys).
+func (s *KeysService) List(ctx context.Context) (*ListPublicKeysResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/keys",
+	}
+	var out ListPublicKeysResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Revoke revoke an API key
+// Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own
+// revocation through the credentials it left behind. Idempotent, and it may name the calling key.
+// Requires an `admin`-scope key.
+// DELETE /api/v1/keys/{keyId} (operation revokePublicKey).
+func (s *KeysService) Revoke(ctx context.Context, keyID string) error {
+	req := requestSpec{
+		Method: "DELETE",
+		Path:   fmt.Sprintf("/api/v1/keys/%s", pathEscape(keyID)),
+	}
+	return s.client.requestNoContent(ctx, req)
+}

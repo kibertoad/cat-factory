@@ -140,6 +140,24 @@ public final class Transport {
     }
 
     /**
+     * Perform a request whose success carries BYTES rather than JSON (an artifact download).
+     *
+     * <p>Returned whole rather than as a stream: the listing endpoint that hands out these ids
+     * also carries each artifact's exact {@code byteSize}, so a caller decides whether to fetch
+     * BEFORE issuing the request, and every artifact is bounded by the platform's own upload
+     * ceiling.
+     *
+     * <p>The Accept header is the wildcard rather than the spec's declared
+     * {@code application/octet-stream}: the server answers with the artifact's RECORDED type
+     * ({@code image/png} and friends) and falls back to octet-stream only for a row it does not
+     * recognise.
+     */
+    public byte[] requestBytes(
+            String method, String path, @Nullable Object body, Map<String, String> query) {
+        return sendBytes(method, path, body, query, "*/*");
+    }
+
+    /**
      * Open a server-sent event stream.
      *
      * <p>Deliberately NOT retried: a reconnect would replay the stream from its start, and the
@@ -174,11 +192,28 @@ public final class Transport {
             @Nullable Object body,
             Map<String, String> query,
             String accept) {
+        return new String(sendBytes(method, path, body, query, accept), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * The one retrying exchange every unary call goes through, reading the body as BYTES.
+     *
+     * <p>Bytes rather than a String is what lets a binary response reuse the retry, timeout and
+     * error-mapping policy verbatim instead of growing a second copy of it beside a different
+     * body handler; a JSON caller decodes UTF-8 on the way out, which is what it was doing
+     * anyway.
+     */
+    private byte[] sendBytes(
+            String method,
+            String path,
+            @Nullable Object body,
+            Map<String, String> query,
+            String accept) {
         for (int attempt = 0; ; attempt++) {
             HttpRequest request = build(method, path, body, query, accept);
             try {
-                HttpResponse<String> response =
-                        http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                HttpResponse<byte[]> response =
+                        http.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() < 400) {
                     return response.body();
                 }
@@ -191,7 +226,10 @@ public final class Transport {
                     sleep(stated.isPresent() ? stated.getAsLong() : backoffMillis(attempt));
                     continue;
                 }
-                throw toApiException(response.statusCode(), response.body(), requestId(response));
+                throw toApiException(
+                        response.statusCode(),
+                        new String(response.body(), StandardCharsets.UTF_8),
+                        requestId(response));
             } catch (HttpTimeoutException cause) {
                 if (attempt < maxRetries && IDEMPOTENT.contains(method)) {
                     sleep(backoffMillis(attempt));

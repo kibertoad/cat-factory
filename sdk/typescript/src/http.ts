@@ -146,6 +146,23 @@ export class Transport {
   }
 
   /**
+   * Perform a request whose success carries BYTES rather than JSON (an artifact download).
+   *
+   * Returned whole rather than as a stream: the listing endpoint that hands out these ids also
+   * carries each artifact's exact `byteSize`, so a caller decides whether to fetch BEFORE
+   * issuing the request, and every artifact is bounded by the platform's own upload ceiling.
+   * A reader would buy nothing here and would push lifetime management onto every caller.
+   */
+  async bytes(spec: RequestSpec): Promise<Uint8Array> {
+    // `*/*`, not the spec's declared `application/octet-stream`: the server answers with the
+    // artifact's RECORDED type (`image/png`, …) and falls back to octet-stream only for a row it
+    // does not recognise. Naming one of those would be an Accept header that disagrees with what
+    // the endpoint sends, which is the one thing this transport's header precedence forbids.
+    const response = await this.send(spec, '*/*')
+    return new Uint8Array(await response.arrayBuffer())
+  }
+
+  /**
    * Open a server-sent event stream. Deliberately NOT retried: a reconnect would replay the
    * stream from its start, and the caller — who knows which events it has already acted on —
    * is the only party that can decide whether that is safe.

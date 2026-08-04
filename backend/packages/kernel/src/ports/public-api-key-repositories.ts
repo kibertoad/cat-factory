@@ -31,6 +31,16 @@ export interface PublicApiKeyRecord {
    * admin action), so this is provenance, never an authorization input.
    */
   createdByUserId: string | null
+  /**
+   * The KEY that minted this one, for a key provisioned headlessly through `POST /api/v1/keys`;
+   * `null` for one a person minted in the app (and for every key predating the column).
+   *
+   * Unlike {@link PublicApiKeyRecord.createdByUserId} this is also a LIFECYCLE link, not only
+   * provenance: revoking a key revokes everything it minted, which is what keeps a leaked
+   * provisioning key from outliving its own revocation through the keys it left behind. It is
+   * still never an authorization input — what a key may do is its own `scope`, nothing else.
+   */
+  createdByKeyId: string | null
   createdAt: number
   /** When the key last authenticated a call (null = never used). */
   lastUsedAt: number | null
@@ -58,4 +68,15 @@ export interface PublicApiKeyRepository {
   markUsed(id: string, at: number): Promise<void>
   /** Revoke a key (stamp `revokedAt`), scoped to its workspace. */
   revoke(workspaceId: string, id: string, at: number): Promise<void>
+  /**
+   * Revoke every LIVE key that `minterId` minted (one statement, never a read-then-loop), scoped
+   * to the minter's workspace. Idempotent, and a no-op for the ordinary key that minted none.
+   *
+   * A separate method rather than a flag on {@link PublicApiKeyRepository.revoke} because the two
+   * are different statements about the world: revoking a key is an operator's decision about that
+   * credential, and cascading is the invariant that a minted key never outlives its minter. A
+   * caller that had to remember the second call is a caller that eventually forgets it, so
+   * `PublicApiKeyService.revoke` issues both and nothing else may revoke.
+   */
+  revokeMintedBy(workspaceId: string, minterId: string, at: number): Promise<void>
 }
