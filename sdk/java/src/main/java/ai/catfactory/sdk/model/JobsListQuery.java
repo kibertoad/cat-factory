@@ -8,10 +8,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Query parameters for {@code initiatives().list()}.
+ * Query parameters for {@code jobs().list()}.
  * Every parameter is optional; a null one is not sent at all.
  */
-public record InitiativesListQuery(
+public record JobsListQuery(
     /** Null means "not sent". */
     @Nullable Integer limit,
 
@@ -19,18 +19,18 @@ public record InitiativesListQuery(
     @Nullable String cursor,
 
     /** Null means "not sent". */
-    @Nullable InitiativeAcceptedStatus status,
+    @Nullable PublicJobStatus status,
 
     /** Null means "not sent". */
     @Nullable Integer since
 ) {
 
     /** An empty parameter set. */
-    public static InitiativesListQuery none() {
+    public static JobsListQuery none() {
         return builder().build();
     }
 
-    /** A new builder for {@link InitiativesListQuery}. */
+    /** A new builder for {@link JobsListQuery}. */
     public static Builder builder() {
         return new Builder();
     }
@@ -53,11 +53,11 @@ public record InitiativesListQuery(
         return out;
     }
 
-    /** Fluent builder for {@link InitiativesListQuery}. */
+    /** Fluent builder for {@link JobsListQuery}. */
     public static final class Builder {
         private @Nullable Integer limit;
         private @Nullable String cursor;
-        private @Nullable InitiativeAcceptedStatus status;
+        private @Nullable PublicJobStatus status;
         private @Nullable Integer since;
 
         /** Set {@code limit}. */
@@ -73,7 +73,7 @@ public record InitiativesListQuery(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable InitiativeAcceptedStatus status) {
+        public Builder status(@Nullable PublicJobStatus status) {
             this.status = status;
             return this;
         }
@@ -84,9 +84,9 @@ public record InitiativesListQuery(
             return this;
         }
 
-        /** Build the {@link InitiativesListQuery}. */
-        public InitiativesListQuery build() {
-            return new InitiativesListQuery(limit, cursor, status, since);
+        /** Build the {@link JobsListQuery}. */
+        public JobsListQuery build() {
+            return new JobsListQuery(limit, cursor, status, since);
         }
     }
 }

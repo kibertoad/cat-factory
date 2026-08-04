@@ -8,24 +8,24 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code InitiativeAcceptedLinks} wire model.
+ * The {@code PublicJobAcceptedLinks} wire model.
  * @param events the {@code events} field.
  * @param self the {@code self} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record InitiativeAcceptedLinks(
+public record PublicJobAcceptedLinks(
     @JsonProperty("events") String events,
 
     @JsonProperty("self") String self
 ) {
 
-    /** A new builder for {@link InitiativeAcceptedLinks}. */
+    /** A new builder for {@link PublicJobAcceptedLinks}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link InitiativeAcceptedLinks}.
+     * Fluent builder for {@link PublicJobAcceptedLinks}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -46,9 +46,9 @@ public record InitiativeAcceptedLinks(
             return this;
         }
 
-        /** Build the {@link InitiativeAcceptedLinks}. */
-        public InitiativeAcceptedLinks build() {
-            return new InitiativeAcceptedLinks(events, self);
+        /** Build the {@link PublicJobAcceptedLinks}. */
+        public PublicJobAcceptedLinks build() {
+            return new PublicJobAcceptedLinks(events, self);
         }
     }
 }

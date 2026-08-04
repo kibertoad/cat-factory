@@ -14,7 +14,7 @@ import ai.catfactory.sdk.Transport;
  * reachable from the client anyone actually constructs.
  */
 public abstract class Resources {
-    private final InitiativesClient initiatives;
+    private final JobsClient jobs;
     private final ServicesClient services;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
@@ -24,7 +24,7 @@ public abstract class Resources {
     private final DebugClient debug;
 
     protected Resources(Transport transport) {
-        this.initiatives = new InitiativesClient(transport);
+        this.jobs = new JobsClient(transport);
         this.services = new ServicesClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
@@ -34,9 +34,9 @@ public abstract class Resources {
         this.debug = new DebugClient(transport);
     }
 
-    /** Headless initiative-breakdown runs: start one against a brief, poll or stream it. */
-    public InitiativesClient initiatives() {
-        return initiatives;
+    /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
+    public JobsClient jobs() {
+        return jobs;
     }
 
     /** The workspace's board services — the frames tasks are created under. */

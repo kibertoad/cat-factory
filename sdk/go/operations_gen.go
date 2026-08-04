@@ -216,19 +216,19 @@ func (q *DebugListSearchQueriesQuery) values() map[string]string {
 	return out
 }
 
-// InitiativesListQuery holds the query parameters for InitiativesService.List.
-type InitiativesListQuery struct {
+// JobsListQuery holds the query parameters for JobsService.List.
+type JobsListQuery struct {
 	// Limit zero value means "not sent".
 	Limit *int
 	// Cursor zero value means "not sent".
 	Cursor *string
 	// Status zero value means "not sent".
-	Status *InitiativeAcceptedStatus
+	Status *PublicJobStatus
 	// Since zero value means "not sent".
 	Since *int
 }
 
-func (q *InitiativesListQuery) values() map[string]string {
+func (q *JobsListQuery) values() map[string]string {
 	out := map[string]string{}
 	if q == nil {
 		return out
@@ -310,17 +310,16 @@ type ListPublicJobsResponseItem = PublicJob
 // over.
 type PublicTaskListItem = PublicTask
 
-// InitiativesService headless initiative-breakdown runs: start one against a brief, poll or stream it.
-type InitiativesService struct {
+// JobsService headless jobs (a public, inline pipeline run against a brief): start, poll or stream one.
+type JobsService struct {
 	client *Client
 }
 
-// Cancel cancel an initiative job
-// Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished
-// job is returned as-is. Use this to abandon a run parked on a decision you do not intend to
-// answer.
+// Cancel cancel a job
+// Stop a headless job run, freeing its concurrency slot. Idempotent — an already-finished job is
+// returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.
 // POST /api/v1/jobs/{id}/cancel (operation cancelPublicJob).
-func (s *InitiativesService) Cancel(ctx context.Context, id string) (*PublicJob, error) {
+func (s *JobsService) Cancel(ctx context.Context, id string) (*PublicJob, error) {
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/jobs/%s/cancel", pathEscape(id)),
@@ -332,27 +331,27 @@ func (s *InitiativesService) Cancel(ctx context.Context, id string) (*PublicJob,
 	return &out, nil
 }
 
-// Create start an initiative-breakdown run
+// Create start a headless job
 // Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll
 // or stream. Nothing is pushed to GitHub.
-// POST /api/v1/initiatives (operation createInitiativeJob).
-func (s *InitiativesService) Create(ctx context.Context, body CreateInitiativeJob) (*InitiativeAccepted, error) {
+// POST /api/v1/jobs (operation createPublicJob).
+func (s *JobsService) Create(ctx context.Context, body CreatePublicJob) (*PublicJobAccepted, error) {
 	req := requestSpec{
 		Method: "POST",
-		Path:   "/api/v1/initiatives",
+		Path:   "/api/v1/jobs",
 		Body:   body,
 	}
-	var out InitiativeAccepted
+	var out PublicJobAccepted
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// Get get an initiative job
-// Poll a headless initiative run started by this key: its status and, once finished, its result.
+// Get get a job
+// Poll a headless job started through this surface: its status and, once finished, its result.
 // GET /api/v1/jobs/{id} (operation getPublicJob).
-func (s *InitiativesService) Get(ctx context.Context, id string) (*PublicJob, error) {
+func (s *JobsService) Get(ctx context.Context, id string) (*PublicJob, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/jobs/%s", pathEscape(id)),
@@ -364,12 +363,12 @@ func (s *InitiativesService) Get(ctx context.Context, id string) (*PublicJob, er
 	return &out, nil
 }
 
-// List list the workspace's initiative jobs
-// List the headless initiative runs THIS surface created, newest first and keyset-paginated.
-// Scoped to internal-anchored runs exactly like the single-job read, so an external key can never
-// enumerate the workspace’s ordinary board runs.
+// List list the workspace's jobs
+// List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to
+// internal-anchored runs exactly like the single-job read, so an external key can never enumerate
+// the workspace’s ordinary board runs.
 // GET /api/v1/jobs (operation listPublicJobs).
-func (s *InitiativesService) List(ctx context.Context, query *InitiativesListQuery) (*ListPublicJobsResponse, error) {
+func (s *JobsService) List(ctx context.Context, query *JobsListQuery) (*ListPublicJobsResponse, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   "/api/v1/jobs",
@@ -386,9 +385,9 @@ func (s *InitiativesService) List(ctx context.Context, query *InitiativesListQue
 // Follows nextCursor until the server reports no further page. Yields (item, nil) per item and,
 // on a failure mid-iteration, one final (zero, err) — so a partial walk is never mistaken for a
 // complete one.
-func (s *InitiativesService) ListAll(ctx context.Context, query *InitiativesListQuery) iter.Seq2[ListPublicJobsResponseItem, error] {
+func (s *JobsService) ListAll(ctx context.Context, query *JobsListQuery) iter.Seq2[ListPublicJobsResponseItem, error] {
 	return func(yield func(ListPublicJobsResponseItem, error) bool) {
-		var page InitiativesListQuery
+		var page JobsListQuery
 		if query != nil {
 			page = *query
 		}
@@ -417,11 +416,11 @@ func (s *InitiativesService) ListAll(ctx context.Context, query *InitiativesList
 	}
 }
 
-// Stream stream an initiative job (SSE)
-// Server-sent events for a headless initiative run: `progress` frames until a terminal
+// Stream stream a job (SSE)
+// Server-sent events for a headless job run: `progress` frames until a terminal
 // `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.
 // GET /api/v1/jobs/{id}/events (operation streamPublicJobEvents).
-func (s *InitiativesService) Stream(ctx context.Context, id string) (*EventStream, error) {
+func (s *JobsService) Stream(ctx context.Context, id string) (*EventStream, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/jobs/%s/events", pathEscape(id)),
@@ -485,8 +484,7 @@ func (s *TasksService) Delete(ctx context.Context, taskID string) error {
 }
 
 // Get get a task's status
-// Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one
-// exists).
+// Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).
 // GET /api/v1/tasks/{taskId} (operation getPublicTask).
 func (s *TasksService) Get(ctx context.Context, taskID string) (*PublicTask, error) {
 	req := requestSpec{
@@ -585,8 +583,9 @@ func (s *TasksService) Retry(ctx context.Context, taskID string) (*PublicTask, e
 }
 
 // Start start (run) a task
-// Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task
-// on an individual-usage model cannot be started through the API (no headless personal-credential
+// Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A
+// pipeline that can park on a human decision requires a `decide`-scope key. A task on an
+// individual-usage model cannot be started through the API (no headless personal-credential
 // unlock).
 // POST /api/v1/tasks/{taskId}/start (operation startPublicTask).
 func (s *TasksService) Start(ctx context.Context, taskID string, body StartPublicTask) (*PublicTask, error) {

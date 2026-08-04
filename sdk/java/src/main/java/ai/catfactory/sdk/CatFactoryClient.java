@@ -98,7 +98,7 @@ public final class CatFactoryClient extends Resources {
          * Retries for a RETRIABLE failure. Default 2.
          *
          * <p>A non-idempotent request is never retried automatically, so raising this does not
-         * make {@code initiatives().create()} replayable.
+         * make {@code jobs().create()} replayable.
          */
         public Builder maxRetries(int maxRetries) {
             this.maxRetries = maxRetries;

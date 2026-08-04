@@ -134,7 +134,7 @@ func main() {
 		// A required-but-NULLABLE field: the server always sends it, and it is null here.
 		// Recording it explicitly is what proves the four SDKs agree that "the server said null"
 		// and "the server said nothing" are different facts.
-		observations["createdExecutionIdIsNull"] = task.ExecutionID == nil
+		observations["createdRunIdIsNull"] = task.RunID == nil
 		observations["createdPullRequestUrlIsNull"] = task.PullRequestURL == nil
 		return nil
 	})
@@ -274,7 +274,7 @@ func main() {
 			return err
 		}
 		observations["startedStatus"] = string(task.Status)
-		observations["startedHasExecutionId"] = task.ExecutionID != nil
+		observations["startedHasRunId"] = task.RunID != nil
 		return nil
 	})
 

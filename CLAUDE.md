@@ -36,12 +36,36 @@ model: the `RunDispatcher` controller extractions, `FetchGitHubClient` → `revi
 number may only change in your PR when a split made it smaller. If you believe a split is impossible,
 STOP and say so rather than bumping silently.
 
-## Backwards compatibility is NOT a goal
+## Compatibility: the public API is STABLE; everything internal is not
 
-Pre-1.0, no external consumers. Do NOT add migrations, shims, dual-read/dual-write paths, deprecation
-windows, or "legacy" fallbacks to preserve old data or old wire shapes. When a change makes existing
-rows, tokens, config, or request/response shapes obsolete, it is fine for them to break: prefer the clean
-shape and let stale state be re-created. Flag the break in the changeset.
+### The public API does not break, full stop
+
+The externally consumed surface is: `/api/v1` (paths, request/response shapes, error `code` values
+and `details.reason` vocabularies, SSE event names, scope semantics), the four SDK clients under
+`sdk/`, and the outbound webhook delivery contract. External integrations and published SDK
+releases build on it, so a change there is held to a different bar than the rest of the repo
+(design record: [ADR 0032](./backend/docs/adr/0032-public-api-stability.md)):
+
+- **Additive changes are the normal mode**: a new endpoint, a new optional field, a new enum
+  value, a new error code. The SDKs tolerate unknown values by design, so additions ship freely;
+  bump the OpenAPI `info.version` minor.
+- **Anything else needs an INCREMENTAL MIGRATION PATH plus a VERSION CHANGE, in that order.** The
+  old shape keeps working while the new one is served beside it (a new field beside the one it
+  replaces, a new `/api/v2` prefix for a path or semantics change), the version records the step
+  (OpenAPI `info.version` major, SDK majors), and the changeset plus
+  [`backend/docs/public-api.md`](./backend/docs/public-api.md) document what moves and by when.
+  Removing the old half is a second, LATER change, made only after consumers have had a release
+  window to move. Never rename, retype, remove, or re-scope in place.
+- **Narrowing what a scope or key may do is a break too**, not a bug-fix: a live integration built
+  on the old admission loses capability. It takes the same migration path.
+
+### Internals: backwards compatibility is NOT a goal
+
+Pre-1.0 for everything the public surface does not cover: internal wire shapes, persisted rows,
+tokens, config. Do NOT add migrations, shims, dual-read/dual-write paths, deprecation windows, or
+"legacy" fallbacks to preserve old data or old INTERNAL wire shapes. When a change makes existing
+rows, tokens, config, or internal request/response shapes obsolete, it is fine for them to break:
+prefer the clean shape and let stale state be re-created. Flag the break in the changeset.
 
 **But a break must ARRIVE as one.** Retiring a member of a CLOSED vocabulary that is also PERSISTED
 (`BinaryModality`, a step's stored enum, a reason code on a saved row) does not remove the old value

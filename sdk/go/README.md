@@ -34,7 +34,7 @@ Every method takes a `context.Context` first and honours its cancellation.
 
 ## Resource services
 
-`Initiatives`, `Services`, `Tasks`, `Pipelines`, `Notifications`, `Usage`, `Decisions`, `Debug`:
+`Jobs`, `Services`, `Tasks`, `Pipelines`, `Notifications`, `Usage`, `Decisions`, `Debug`:
 one per tag of the published OpenAPI surface. Every call is scoped to the key's workspace.
 
 ## Watching a run
