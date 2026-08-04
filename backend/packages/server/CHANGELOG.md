@@ -1,10 +1,156 @@
 # @cat-factory/server
 
+## 0.212.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/orchestration@0.201.0
+  - @cat-factory/integrations@0.124.0
+  - @cat-factory/agents@0.110.2
+  - @cat-factory/prompt-fragments@0.15.58
+  - @cat-factory/spend@0.14.9
+
+## 0.211.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/spend@0.14.8
+  - @cat-factory/prompt-fragments@0.15.57
+
+## 0.210.0
+
+### Minor Changes
+
+- 2619d79: MCP maturation slice 1: every declared tool server is either served or STATED.
+
+  A dispatch now checks the running harness's MCP TRANSPORTS, not just whether it speaks MCP, so an
+  `http` server on a Codex run (whose client is stdio-only) is dropped under a new
+  `transport_unsupported` reason instead of being advertised in the prompt and then silently skipped by
+  the harness's TOML writer. Boot validation and the capability-credential checklist now enumerate
+  `AgentKindRegistry.kindsWithCapabilities()` (every kind declaring a capability on its own
+  registration, plus every kind named by `assignSkills` / `assignToolServers`), so a server attached to
+  a built-in such as `coder` reaches the same refusals and the same operator checklist as a registered
+  kind's own. New checks: a transport/harness combination no run could serve, an `allowedTools` entry
+  that is not a single tool name (the harness joins the list with commas), and a per-dispatch server
+  budget, both dimensions of which warn at boot and drop the excess under `over_budget` at dispatch.
+  The harness exempts `mcp__*` calls from the no-edit progress bound and bounds them with their own
+  `JOB_MAX_CONSECUTIVE_MCP_CALLS` streak, plus a `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` backstop shared
+  by every no-edit-exempt family (each per-family streak resets on a call outside its family, so
+  interleaving two of them was bounded only by the job's wall-clock ceiling).
+
+  OPERATORS UPGRADING: capabilities attached by `assignSkills` / `assignToolServers` were previously
+  not boot-validated at all, so a declaration that is now an ERROR (a cleartext off-loopback endpoint,
+  a reserved credential key, an unregistered id, a malformed server id or tool name) turns a
+  deployment that used to start into one that refuses to. That is the intent of the change, and each
+  message names the kind and the declaration to fix.
+
+  INTERNAL BREAK: `UnavailableToolServer['reason']` gains `transport_unsupported` and `over_budget`, so
+  a deployment rendering that union exhaustively must map them. Runner image bumped to 1.89.0.
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/agents@0.110.0
+  - @cat-factory/orchestration@0.199.0
+  - @cat-factory/integrations@0.123.5
+  - @cat-factory/prompt-fragments@0.15.56
+  - @cat-factory/spend@0.14.7
+
+## 0.209.1
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+  - @cat-factory/orchestration@0.198.0
+  - @cat-factory/agents@0.109.2
+  - @cat-factory/integrations@0.123.4
+  - @cat-factory/prompt-fragments@0.15.55
+  - @cat-factory/spend@0.14.6
+
 ## 0.209.0
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -27,7 +173,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -3299,7 +3445,7 @@
 
 ### Patch Changes
 
-- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a Kargo project, whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
+- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a provider-side project whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
 - Updated dependencies [200fb4d]
   - @cat-factory/kernel@0.165.1
   - @cat-factory/agents@0.72.2
@@ -12175,8 +12321,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that

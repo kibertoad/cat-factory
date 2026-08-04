@@ -10,9 +10,10 @@ import type { Logger } from '@cat-factory/kernel'
 /** Hard ceiling on a single OTLP POST, so a hung collector can't tie up the caller. */
 const SEND_TIMEOUT_MS = 10_000
 
-/** An OTLP `AnyValue` in the JSON encoding (string / int / double / string list). */
+/** An OTLP `AnyValue` in the JSON encoding (string / bool / int / double / string list). */
 export type AnyValue =
   | { stringValue: string }
+  | { boolValue: boolean }
   | { intValue: string }
   | { doubleValue: number }
   | { arrayValue: { values: AnyValue[] } }
@@ -31,6 +32,7 @@ function anyValue(value: AttributeValue): AnyValue {
   if (typeof value === 'number') {
     return Number.isInteger(value) ? { intValue: String(value) } : { doubleValue: value }
   }
+  if (typeof value === 'boolean') return { boolValue: value }
   return { stringValue: value }
 }
 

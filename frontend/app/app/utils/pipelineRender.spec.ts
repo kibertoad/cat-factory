@@ -79,7 +79,7 @@ describe('dedicatedParkView', () => {
     expect(dedicatedParkView(step({}), run())).toBeNull()
   })
 
-  // The PRE-TOKEN INPUT GATE parks whatever step 0 happens to be and leaves nothing
+  // The PRE-DISPATCH INPUT GATE parks whatever step 0 happens to be and leaves nothing
   // kind-specific on the step, so it is recognised off the RUN. The generic approve resolver
   // refuses it server-side: approving it would mark the run's first working step done and skip
   // the work the run exists to do.

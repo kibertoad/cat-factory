@@ -6,7 +6,8 @@
 // sanitized) preset inputs on the entity. Nothing is planned here: the user then runs the preset's
 // planning pipeline on the block from the inspector.
 //
-// The preset form is rendered GENERICALLY from `descriptor.fields` (InitiativePresetFields) — zero
+// The preset form is rendered GENERICALLY from `descriptor.fields` by the shared
+// `DescriptorFields` renderer (the same one a custom task type's per-case form uses): zero
 // per-preset frontend code. A preset with a repo-detection probe prefills its form from the frame's
 // repo on selection (best-effort; failures fall back to descriptor defaults and never block create).
 //
@@ -20,9 +21,9 @@ import {
   validateInitiativePresetInputs,
 } from '@cat-factory/contracts'
 import type { InitiativePresetInputs, InitiativePresetInputValue } from '~/types/domain'
-import { defaultPresetInputs } from '~/utils/initiative'
+import { defaultDescriptorValues } from '~/utils/descriptorFields'
 import { GENERIC_PRESET_ID } from '~/stores/initiative'
-import InitiativePresetFields from '~/components/board/InitiativePresetFields.vue'
+import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import type { PendingContext } from '~/composables/useContextLinking'
 
@@ -62,7 +63,7 @@ let probeSeq = 0
 /** Seed the form to the selected preset's descriptor defaults, then fire its detection probe. */
 function applyPreset(): void {
   const descriptor = selectedPreset.value
-  inputs.value = descriptor ? defaultPresetInputs(descriptor) : {}
+  inputs.value = descriptor ? defaultDescriptorValues(descriptor.fields) : {}
   void runProbe()
 }
 
@@ -227,10 +228,11 @@ async function create() {
         </UFormField>
 
         <!-- The preset's descriptor-driven form (renders nothing for the fieldless generic preset). -->
-        <InitiativePresetFields
+        <DescriptorFields
           v-if="selectedPreset"
           v-model="inputs"
-          :descriptor="selectedPreset"
+          :fields="selectedPreset.fields"
+          testid-prefix="initiative-preset-field"
         />
 
         <!-- Attached requirements / issues, staged here and linked once the block exists. The

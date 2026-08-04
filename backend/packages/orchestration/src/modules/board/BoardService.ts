@@ -682,9 +682,13 @@ export class BoardService {
       // The kind of work, chosen on the create form; defaults to a feature task.
       taskType,
     }
-    // Small per-type form fields (bug severity / repro, spike timebox, …), when given.
-    if (input.taskTypeFields && Object.keys(input.taskTypeFields).length) {
-      block.taskTypeFields = input.taskTypeFields
+    // Small per-type form fields (bug severity / repro, spike timebox, …), when given. A registered
+    // custom type's `custom` bag is CHECKED against its descriptor here rather than trusted from the
+    // form, so every door (SPA, internal API, public API) enforces one rule; see
+    // `taskTypeCreationDefaults.ts` for what passes through unchecked and why.
+    const submittedFields = this.taskTypeDefaults.validatedFields(taskType, input.taskTypeFields)
+    if (submittedFields && Object.keys(submittedFields).length) {
+      block.taskTypeFields = submittedFields
     }
     // A REVIEW task targets an EXISTING pull request, so its reference is checked against the
     // provider BEFORE the block is written: a PR the provider positively reports as absent fails

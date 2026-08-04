@@ -1,5 +1,39 @@
 # @cat-factory/caching
 
+## 0.14.11
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/kernel@0.234.0
+
+## 0.14.10
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+
+## 0.14.9
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/kernel@0.232.0
+
+## 0.14.8
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/kernel@0.231.0
+
 ## 0.14.7
 
 ### Patch Changes

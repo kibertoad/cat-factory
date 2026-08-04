@@ -2129,6 +2129,8 @@ class NotificationPayload:
     #: May be absent entirely.
     pipeline_name: str | None = None
     #: May be absent entirely.
+    platform_alert_failure_kinds: list[str] | None = None
+    #: May be absent entirely.
     platform_alert_transition: float | None = None
     #: May be absent entirely.
     platform_alerts: list[NotificationPayloadPlatformAlert] | None = None
@@ -2161,7 +2163,7 @@ class NotificationPayload:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayload":
         """Decode a `NotificationPayload` from its JSON object."""
-        known = {"assessment", "changeClass", "driftAffected", "findingCount", "forkCount", "initiativeReason", "mergeTrackRecordId", "mergedRepos", "onCallAssessment", "pipelineName", "platformAlertTransition", "platformAlerts", "platformFailedTotal", "platformFailingRuns", "platformWindow", "prUrl", "releaseSignals", "revertUrl", "sliceCount", "targetUserId", "unmergedRepos", "unreachableAreas"}
+        known = {"assessment", "changeClass", "driftAffected", "findingCount", "forkCount", "initiativeReason", "mergeTrackRecordId", "mergedRepos", "onCallAssessment", "pipelineName", "platformAlertFailureKinds", "platformAlertTransition", "platformAlerts", "platformFailedTotal", "platformFailingRuns", "platformWindow", "prUrl", "releaseSignals", "revertUrl", "sliceCount", "targetUserId", "unmergedRepos", "unreachableAreas"}
         return cls(
             assessment=None if data.get("assessment") is None else NotificationPayloadAssessment.from_dict(data.get("assessment")),
             change_class=None if data.get("changeClass") is None else _enum(NotificationPayloadChangeClass, data.get("changeClass")),
@@ -2173,6 +2175,7 @@ class NotificationPayload:
             merged_repos=None if data.get("mergedRepos") is None else [item for item in data.get("mergedRepos") or []],
             on_call_assessment=None if data.get("onCallAssessment") is None else NotificationPayloadOnCallAssessment.from_dict(data.get("onCallAssessment")),
             pipeline_name=data.get("pipelineName"),
+            platform_alert_failure_kinds=None if data.get("platformAlertFailureKinds") is None else [item for item in data.get("platformAlertFailureKinds") or []],
             platform_alert_transition=data.get("platformAlertTransition"),
             platform_alerts=None if data.get("platformAlerts") is None else [_enum(NotificationPayloadPlatformAlert, item) for item in data.get("platformAlerts") or []],
             platform_failed_total=data.get("platformFailedTotal"),
@@ -2211,6 +2214,8 @@ class NotificationPayload:
             out["onCallAssessment"] = _encode(self.on_call_assessment)
         if self.pipeline_name is not None:
             out["pipelineName"] = self.pipeline_name
+        if self.platform_alert_failure_kinds is not None:
+            out["platformAlertFailureKinds"] = [_encode(item) for item in self.platform_alert_failure_kinds]
         if self.platform_alert_transition is not None:
             out["platformAlertTransition"] = self.platform_alert_transition
         if self.platform_alerts is not None:
@@ -2428,6 +2433,7 @@ class NotificationPayloadPlatformAlert(StrEnum):
     BACKLOG_HIGH = "backlog_high"
     THROUGHPUT_STALLED = "throughput_stalled"
     FAILURE_KIND_DOMINANT = "failure_kind_dominant"
+    FAILURE_KIND_RATE_HIGH = "failure_kind_rate_high"
     SWEEP_DEGRADED = "sweep_degraded"
 
 

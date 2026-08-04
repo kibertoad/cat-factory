@@ -253,7 +253,7 @@ With that scoping, the pipeline properties are:
   (`narrowMergeClassRule`), so a role entry can never widen what the base rules allow, and a run
   with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
   rules rather than being guessed onto a tier. Full model:
-  [`role-scoped-merge-policy.md`](../../docs/initiatives/role-scoped-merge-policy.md).
+  [ADR 0037](./adr/0037-role-scoped-merge-policy.md).
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint
@@ -316,7 +316,7 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **The sandboxed run mode (`dryRunRoles`) against someone who has repo write.** It refuses both of
   the PLATFORM's merge exits; it cannot stop a human merging the PR by hand on the host, and a PR is
   deliberately still opened. It is a real control in one specific shape: the engine falls back to
-  the DEPLOYMENT credential for an initiator with no stored PAT, so a non-engineer who cannot merge
+  the DEPLOYMENT credential for an initiator with no stored PAT, so an initiator who cannot merge
   on GitHub can still cause a merge by tapping the review card, and the mode closes that escalation.
   Against anyone holding write access on the host it is advisory. Branch protection, the first item
   on the hardening checklist below, is the mechanism; this is scoping on top of it.

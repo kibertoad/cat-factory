@@ -296,6 +296,7 @@ export {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
   alertsHaveRunEvidence,
   evaluatePlatformHealth,
+  platformAlertFailureKinds,
   platformAlertReasons,
   platformHealthCardContent,
   resolveAccountAlertConfig,

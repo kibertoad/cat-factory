@@ -23,9 +23,11 @@ import {
   defaultStepResolverRegistry,
   describeCustomTaskType,
   noopLogger,
+  sanitizeDescriptorFields,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
+  validateDescriptorFields,
 } from '@cat-factory/kernel'
 import {
   EXAMPLE_AGENT_KINDS,
@@ -601,6 +603,7 @@ describe('the org:introduce-api reusable operation', () => {
       'entity',
       'operations',
       'resourceStyle',
+      'actionName',
       'authRequirement',
       'notes',
     ])
@@ -609,6 +612,53 @@ describe('the org:introduce-api reusable operation', () => {
       'operations',
       'authRequirement',
     ])
+    // The shared descriptor-form vocabulary the operation draws on: a closed set collected as a
+    // multi-select, and a field that appears only for the style that has a verb to name.
+    expect(operation?.fields?.find((f) => f.key === 'operations')?.type).toBe('checkbox-group')
+    expect(operation?.fields?.find((f) => f.key === 'actionName')?.showWhen).toEqual({
+      key: 'resourceStyle',
+      equals: 'action',
+    })
+  })
+
+  it('accepts a filled form and refuses one that contradicts the descriptor', () => {
+    // The same pure rule the create controller runs, exercised against a REAL descriptor: an
+    // operation's declared options and required fields are the contract, not form-side decoration.
+    const fields = taskTypeRegistry.get(INTRODUCE_API_TASK_TYPE)?.fields ?? []
+    expect(
+      validateDescriptorFields(fields, {
+        entity: 'Order',
+        operations: ['create', 'list'],
+        authRequirement: 'service',
+      }),
+    ).toEqual([])
+    expect(validateDescriptorFields(fields, { entity: 'Order', operations: [] })).toEqual([
+      'Field "operations" is required.',
+      'Field "authRequirement" is required.',
+    ])
+    expect(
+      validateDescriptorFields(fields, {
+        entity: 'Order',
+        operations: ['create', 'archive'],
+        authRequirement: 'service',
+      }),
+    ).toEqual(['Field "operations" has an option "archive" outside its choices.'])
+    // `actionName` is hidden unless the action style is picked, and a hidden field is neither
+    // required nor frozen: the sanitized bag drops the stale answer.
+    expect(
+      sanitizeDescriptorFields(fields, {
+        entity: 'Order',
+        operations: ['create'],
+        authRequirement: 'service',
+        resourceStyle: 'collection',
+        actionName: 'refund',
+      }),
+    ).toEqual({
+      entity: 'Order',
+      operations: ['create'],
+      authRequirement: 'service',
+      resourceStyle: 'collection',
+    })
   })
 
   it('registers its standing-context fragments into the universal pool, each with a brief', () => {
@@ -649,13 +699,15 @@ describe('the org:introduce-api reusable operation', () => {
     // form come back out as the labelled brief every agent in the pipeline reads.
     const context = describeCustomTaskType(
       INTRODUCE_API_TASK_TYPE,
-      { entity: 'Order', authRequirement: 'service', operations: 'create, read, list' },
+      { entity: 'Order', authRequirement: 'service', operations: ['create', 'read', 'list'] },
       taskTypeRegistry.get(INTRODUCE_API_TASK_TYPE),
     )
     expect(context?.label).toBe('Introduce API')
     expect(context?.fields).toEqual([
       { key: 'entity', label: 'Entity or capability to expose', value: 'Order' },
-      { key: 'operations', label: 'Operations', value: 'create, read, list' },
+      // The multi-select renders its option CAPTIONS, joined: what the model reads is the form's
+      // own vocabulary, not the enum values the row happens to store.
+      { key: 'operations', label: 'Operations', value: 'Create, Read one, List' },
       {
         key: 'authRequirement',
         label: 'Auth requirement',

@@ -368,7 +368,7 @@ async function save() {
               </div>
             </section>
 
-            <!-- The pre-token input gate: the structural check of a task's own wording, run
+            <!-- The pre-dispatch input gate: the structural check of a task's own wording, run
                  before a run's first agent step is dispatched. -->
             <section class="space-y-2">
               <h3 class="text-sm font-semibold text-slate-200">

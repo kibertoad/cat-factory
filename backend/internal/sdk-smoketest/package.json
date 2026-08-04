@@ -2,7 +2,7 @@
   "name": "@cat-factory/sdk-smoketest",
   "version": "0.0.0",
   "private": true,
-  "description": "Cross-SDK smoketest harness: boots a real Node backend (real Postgres, fake agents), mints public-API keys, then drives the SAME scenario through all four SDK clients (TypeScript, Python, Go, Java) and compares their observation reports field by field. Not published.",
+  "description": "Cross-SDK smoketest harness: boots a real Node backend (real Postgres, fake agents), mints public-API keys, then drives the SAME scenario through all four SDK clients (TypeScript, Python, Go, Java) and compares their observation reports field by field, plus a phase that spawns the published MCP server and drives it over stdio. Not published.",
   "type": "module",
   "scripts": {
     "smoketest": "node --experimental-strip-types src/run.ts",
@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@cat-factory/e2e": "workspace:*"
+    "@cat-factory/e2e": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

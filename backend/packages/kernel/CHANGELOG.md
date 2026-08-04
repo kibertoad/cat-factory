@@ -1,10 +1,221 @@
 # @cat-factory/kernel
 
+## 0.234.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+
+## 0.233.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+- eb4ca17: Make role-scoped merge policy authorable in the product. `classRulesByRole` and `dryRunRoles` have
+  been writable over `/workspaces/:ws/risk-policies` since the feature landed, and a dry run has been
+  requestable on the start endpoint, but neither had an in-app control: an operator configured the
+  whole capability through the API.
+
+  Workspace settings now edits both on each merge preset, directly under the base class rules they
+  narrow. The editor offers a role only the rules that would actually narrow the class it is on,
+  because composition is narrow-only and a looser role rule is discarded by the engine; a rule a
+  later base edit overtook stays visible and clearable, flagged as no longer doing anything. A
+  cleared rule is stored as an OMISSION and a role whose last rule is cleared drops out of the map,
+  so `{}` stays the identity the wire contract says it is. A role held to dry runs says on its own
+  row that the class rules below it can no longer add anything, since the sandbox already outranks
+  them. The merge-preset preview (the picker a task chooses its policy from) names both layers, so
+  picking a policy shows what it means for whoever is reading it.
+
+  The run controls with a menu to hang it on (the inspector's Run menu and the focus view's picker)
+  carry the dry-run request. Requesting one is an override of the live default and so is
+  `advanced`-tier; a sandbox the task's preset FORCES on the caller's role is stated in both tiers and
+  replaces the control, because there is nothing left to choose. Only an explicit request is sent:
+  re-sending a forced sandbox would file the run's mode under "the initiator asked for this" and cost
+  the run the advisory that explains a sandbox nobody chose. A live run's execution panel badges the
+  mode, since a sandboxed run otherwise looks exactly like one that has not reached its merge yet.
+
+  The board's one-tap starts (a task card's Start, and dropping a pipeline onto a task) have no menu
+  and so offer no request, but they state a forced sandbox before it happens: the card's button, and
+  a toast on the drop. Being sandboxed is not a setting the user can see anywhere else on those
+  surfaces, and a silent one is learned from a run that stops at the merge.
+
+  `narrowMergeClassRule` moves from `@cat-factory/kernel` to `@cat-factory/contracts` (it is no longer
+  re-exported from kernel), joined there by `dryRunForcedForRole` and `isDryRun`. All three are rules
+  the SPA and the engine must agree about: an authoring surface that offered a rule the engine
+  discards, or that read an absent role as a tier, would be reporting a policy that does not exist.
+  None of the three is re-exported from its old home, so each has exactly one import path: two paths
+  onto one rule is the shape that lets a second hand-written copy exist.
+
+### Patch Changes
+
+- Updated dependencies [eb4ca17]
+  - @cat-factory/contracts@0.231.0
+
+## 0.232.0
+
+### Minor Changes
+
+- 2619d79: MCP maturation slice 1: every declared tool server is either served or STATED.
+
+  A dispatch now checks the running harness's MCP TRANSPORTS, not just whether it speaks MCP, so an
+  `http` server on a Codex run (whose client is stdio-only) is dropped under a new
+  `transport_unsupported` reason instead of being advertised in the prompt and then silently skipped by
+  the harness's TOML writer. Boot validation and the capability-credential checklist now enumerate
+  `AgentKindRegistry.kindsWithCapabilities()` (every kind declaring a capability on its own
+  registration, plus every kind named by `assignSkills` / `assignToolServers`), so a server attached to
+  a built-in such as `coder` reaches the same refusals and the same operator checklist as a registered
+  kind's own. New checks: a transport/harness combination no run could serve, an `allowedTools` entry
+  that is not a single tool name (the harness joins the list with commas), and a per-dispatch server
+  budget, both dimensions of which warn at boot and drop the excess under `over_budget` at dispatch.
+  The harness exempts `mcp__*` calls from the no-edit progress bound and bounds them with their own
+  `JOB_MAX_CONSECUTIVE_MCP_CALLS` streak, plus a `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` backstop shared
+  by every no-edit-exempt family (each per-family streak resets on a call outside its family, so
+  interleaving two of them was bounded only by the job's wall-clock ceiling).
+
+  OPERATORS UPGRADING: capabilities attached by `assignSkills` / `assignToolServers` were previously
+  not boot-validated at all, so a declaration that is now an ERROR (a cleartext off-loopback endpoint,
+  a reserved credential key, an unregistered id, a malformed server id or tool name) turns a
+  deployment that used to start into one that refuses to. That is the intent of the change, and each
+  message names the kind and the declaration to fix.
+
+  INTERNAL BREAK: `UnavailableToolServer['reason']` gains `transport_unsupported` and `over_budget`, so
+  a deployment rendering that union exhaustively must map them. Runner image bumped to 1.89.0.
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+  - @cat-factory/contracts@0.230.1
+
+## 0.231.0
+
+### Minor Changes
+
+- e7e4404: Reusable operations, slice 2: one descriptor-driven form vocabulary behind both surfaces that have
+  one, and a custom task type's collected values are now checked against what it declares.
+
+  An initiative preset and a custom task type had grown the same feature twice, and the task type was
+  the poorer copy: four input types against eight, no defaults, no conditional visibility, no shared
+  validation, and two near-identical Vue renderers. So a form an org could express as a preset was
+  unexpressible as an operation, and nothing but the create form enforced a `required` marker or an
+  option list. `contracts/src/form-fields.ts` is now the union both draw on (the field shape, the
+  filled-value bag, and the pure visibility / validation / sanitization / prose-rendering rules), with
+  each surface declaring only which input types it admits. `password` is excluded for a task type by
+  construction rather than by convention: a collected value is folded into prompts, projected onto the
+  board snapshot and captured in telemetry, so a secret belongs in the capability-credential store.
+
+  `taskTypeFields.custom` widens from `string | number` to the shared bag (adding booleans and
+  multi-select `string[]`), and the prompt fold renders the new shapes through the same renderer the
+  form review uses, so a multi-select reads as its option captions rather than its stored enum values.
+  Rows are read back through an unvalidated JSON parse, so nothing existing breaks and there is nothing
+  to migrate. Two INTERNAL breaks ride along, in the bounds the shared bag carries that the old
+  untyped record did not: a bag KEY is now capped at 80 characters and a string VALUE at 2000, so a
+  value longer than that (only reachable through a bespoke `formPanel`, since a declared `maxLength`
+  cannot exceed the same bound) is refused on the way in.
+
+  `BoardService.addTask` now validates a registered type's bag against its descriptor and freezes only
+  the declared, currently-visible answers, so one rule covers the SPA, the internal API and (from the
+  public-API slice) a headless caller. An ABSENT bag is checked against an empty one, because a
+  required field is unanswered whether the caller sent `custom: {}` or no `custom` key at all: a check
+  the caller can opt out of by sending nothing is not a check. **Behaviour change for a deployment
+  that registers an operation with required fields**: any path creating such a task without its
+  parameters (an initiative item's `spawn`, a script) now gets a 422 where it previously created a
+  task whose operation brief was empty. Three cases still deliberately pass through unchecked: a
+  built-in type (schema-typed fields, already validated), a type this process does not register (a
+  supported row, since task types are node-local by design and degrading data must not brick
+  creation), and a descriptor declaring a bespoke `formPanel`, which owns its own bag.
+
+  The richer vocabulary brings new ways for a descriptor to break itself, so boot validation now
+  refuses a create form that structurally cannot be filled: a duplicate field key, an optionless
+  `select`/`checkbox-group`, or a `showWhen` gating a field on a key the type does not declare (which
+  would hide that field forever). Each is fully known from the registration and silent at run time,
+  unlike a `defaultFragmentIds` id, which stays a warning because a tenant-tier fragment is invisible
+  at boot. Both surfaces are held to that bar by one checker, so an initiative preset's create form is
+  validated at boot for the first time (all three facades pass the registry).
+
+  Behaviour change worth reviewing: a custom task type's `select` field renders as a dropdown rather
+  than a button row, since it is now the shared renderer, and a form with many options needed that
+  anyway. The path-invalid message moved from `initiative.create.pathInvalid` to `common.pathInvalid`,
+  carrying each locale's existing translation.
+
+  One unfilled value is now dropped rather than frozen, on both surfaces. Validation short-circuits on
+  a value that says nothing, so a `false` on a text field, a blank string or an empty multi-select
+  reached the freeze having passed no type check; sanitization now drops them, which stops a
+  wrong-typed answer reaching agents as the operation's own brief (`notes: false` rendered as
+  `Notes: No`). The one exception is an explicit `false` on a `checkbox`, which is the opt-OUT of a
+  default-ON toggle and the one unfilled value that is an answer.
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+
 ## 0.230.0
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -27,7 +238,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -3328,7 +3539,7 @@ initiative-planner (gate) → initiative-committer`, and the analysis is folded 
 
 ### Patch Changes
 
-- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a Kargo project, whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
+- 200fb4d: Surface the resolved repo's `owner`/`name` on `RunRepoContext`. The run-repo seam already resolves a block's repo per-frame (on both the deployer and env-self-test paths) but only exposed `repoId` (an opaque provider id), `baseBranch`, and `provider` — it dropped the GitHub `owner`/`name` it had in hand. Code environment adapters need the repo identity to resolve a per-SERVICE target (e.g. a provider-side project whose name IS the repo name) instead of a single static default. `RunRepoContext` now carries optional `owner`/`name` (populated by both real resolvers from the resolved `RepoTarget` / coords; optional for back-compat with older callers and test fakes).
 
 ## 0.165.0
 
@@ -5159,11 +5370,10 @@ pl_spike` is the task-type default, so a spike no longer dispatches a coder.
 
 ### Patch Changes
 
-- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+- 6c4bcef: chore(environments): use neutral illustrative naming in shared custom-deployment-provider code and UI
 
-  "Kargo" is one specific proprietary deployment provider and should not appear as the
-  canonical example in the framework's shared code or UI. Replaced every illustrative
-  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  Shared framework code and UI should carry neutral, self-contained examples. Replaced
+  every illustrative reference (comments, the `manifestId` placeholder/help text, config-file examples) with
   neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
   Behaviour is unchanged.
 
@@ -8954,8 +9164,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that
@@ -9684,7 +9894,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the

@@ -4,6 +4,7 @@ import {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
   alertsHaveRunEvidence,
   evaluatePlatformHealth,
+  platformAlertFailureKinds,
   platformAlertReasons,
   platformHealthCardContent,
   resolveAccountAlertConfig,
@@ -229,6 +230,136 @@ describe('evaluatePlatformHealth: failure_kind_dominant', () => {
   })
 })
 
+describe('evaluatePlatformHealth: failure_kind_rate_high', () => {
+  /**
+   * A busy window whose 10 failures spread across three kinds, 2 of them evictions: 20% evicted,
+   * and no kind anywhere near dominance, so the per-kind condition is the only thing that can
+   * see the evictions at all.
+   */
+  const MIXED = {
+    outcomes: { total: 30, done: 20, failed: 10, successRate: 2 / 3 },
+    failures: [
+      { kind: 'agent', count: 5 },
+      { kind: 'job_failed', count: 3 },
+      { kind: 'evicted', count: 2 },
+    ],
+  }
+
+  it('fires for a kind over its own ceiling, far below dominance', () => {
+    // The whole point of the condition: 20% evictions never approaches the 80% dominant share,
+    // and is still the container substrate failing one run in five.
+    const alerts = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [{ kind: 'evicted', maxShare: 0.1 }],
+    })
+    expect(alerts).toContainEqual({
+      reason: 'failure_kind_rate_high',
+      kind: 'evicted',
+      value: 0.2,
+      threshold: 0.1,
+    })
+    // And it is its OWN condition, not a re-spelling of the dominant one, which stays quiet.
+    expect(platformAlertReasons(alerts)).not.toContain('failure_kind_dominant')
+  })
+
+  it('stays quiet for a kind under its ceiling, and for one that never occurred', () => {
+    const alerts = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [
+        { kind: 'evicted', maxShare: 0.5 },
+        // A kind with no slice in the taxonomy never happened, which is the healthy answer.
+        { kind: 'timeout', maxShare: 0.01 },
+      ],
+    })
+    expect(alerts).toEqual([])
+  })
+
+  it('honours the per-rule minimum count, which a low ceiling needs and minRuns cannot give', () => {
+    // 1 eviction out of 2 failures across 6 terminal runs: past `minRuns`, past a 10% ceiling,
+    // and exactly the blip a per-kind rule must not page on.
+    const oneEviction = {
+      outcomes: { total: 6, done: 4, failed: 2, successRate: 2 / 3 },
+      failures: [
+        { kind: 'agent', count: 1 },
+        { kind: 'evicted', count: 1 },
+      ],
+    }
+    const rule = { kind: 'evicted', maxShare: 0.1, minCount: 3 }
+    expect(
+      evaluatePlatformHealth(snapshot(oneEviction), { ...T, failureKindRules: [rule] }),
+    ).toEqual([])
+    // Same window, same ceiling, without the guard: it fires. The guard is what is doing the work.
+    expect(
+      platformAlertReasons(
+        evaluatePlatformHealth(snapshot(oneEviction), {
+          ...T,
+          failureKindRules: [{ kind: 'evicted', maxShare: 0.1 }],
+        }),
+      ),
+    ).toContain('failure_kind_rate_high')
+  })
+
+  it('fires AT the configured share, not only above it', () => {
+    // The share an operator types is the TRIGGER POINT, matching `failure_kind_dominant` and
+    // `failure_rate_high`. Pinned because every operator-facing string describing this rule
+    // ("reaches", "at or over") is only true of `>=`, and a later `>` would leave them lying
+    // about the one number the operator picked.
+    const exactly = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [{ kind: 'evicted', maxShare: 0.2 }],
+    })
+    expect(platformAlertFailureKinds(exactly)).toEqual(['evicted'])
+    // And a hair above the observed share stays quiet, so the boundary is where it says it is.
+    const justOver = evaluatePlatformHealth(snapshot(MIXED), {
+      ...T,
+      failureKindRules: [{ kind: 'evicted', maxShare: 0.2001 }],
+    })
+    expect(justOver).toEqual([])
+  })
+
+  it('respects the shared minimum-run sample, like every other failure condition', () => {
+    const alerts = evaluatePlatformHealth(
+      snapshot({
+        outcomes: { total: 1, done: 0, failed: 1, successRate: 0 },
+        failures: [{ kind: 'evicted', count: 1 }],
+      }),
+      { ...T, failureKindRules: [{ kind: 'evicted', maxShare: 0.1 }] },
+    )
+    expect(alerts).toEqual([])
+  })
+
+  it('fires one alert per crossed rule, deduped to a single reason and named by kind', () => {
+    const alerts = evaluatePlatformHealth(
+      snapshot({
+        outcomes: { total: 30, done: 20, failed: 10, successRate: 2 / 3 },
+        failures: [
+          { kind: 'evicted', count: 5 },
+          { kind: 'timeout', count: 5 },
+        ],
+      }),
+      {
+        ...T,
+        failureKindRules: [
+          { kind: 'timeout', maxShare: 0.2 },
+          { kind: 'evicted', maxShare: 0.2 },
+        ],
+      },
+    )
+    // Two conditions fired, but the card's reason identity carries the code ONCE: repeating it
+    // per rule would churn the identity while naming none of the kinds that actually changed.
+    expect(platformAlertReasons(alerts)).toEqual(['failure_kind_rate_high'])
+    // The kinds are the rest of that identity, sorted, and are what a swap of kind changes.
+    expect(platformAlertFailureKinds(alerts)).toEqual(['evicted', 'timeout'])
+  })
+
+  it('has no per-kind condition at all with the shipped defaults', () => {
+    // The default is an empty rule list, so an operator who configured nothing sees byte-for-byte
+    // the prior behaviour rather than a threshold the platform guessed at.
+    expect(DEFAULT_PLATFORM_ALERT_THRESHOLDS.failureKindRules).toEqual([])
+    expect(platformAlertFailureKinds(evaluatePlatformHealth(snapshot(MIXED), T))).toEqual([])
+  })
+})
+
 describe('evaluatePlatformHealth: sweep_degraded', () => {
   it('fires once a sweeper has failed the threshold number of consecutive passes', () => {
     const alerts = evaluatePlatformHealth(snapshot({}), T, { sweep: 'retention', consecutive: 3 })
@@ -256,11 +387,23 @@ describe('platformHealthCardContent covers every reason', () => {
     for (const reason of [
       'throughput_stalled',
       'failure_kind_dominant',
+      'failure_kind_rate_high',
       'sweep_degraded',
     ] as const) {
       const { body } = platformHealthCardContent([reason], '1h')
       expect(body).not.toContain('a health threshold was crossed')
     }
+  })
+
+  it('names the kinds a per-kind rule fired for, rather than "a failure kind"', () => {
+    // The kinds are part of the dedup identity, so they are stable for the length of an
+    // incident and can be CONTENT — unlike the shares behind them, which move every sweep. And
+    // naming them is the point: "evicted" says which system to go and look at.
+    const { body } = platformHealthCardContent(['failure_kind_rate_high'], '1h', [
+      'evicted',
+      'timeout',
+    ])
+    expect(body).toContain('evicted and timeout failures at or over the rate set for them')
   })
 })
 
@@ -299,6 +442,32 @@ describe('resolveAccountAlertConfig', () => {
     expect(resolved.thresholds.minStalledPriorRuns).toBe(0)
   })
 
+  it('lets a stored rule LIST replace the deployment rules, empty included', () => {
+    const withRules = {
+      ...deployment,
+      thresholds: {
+        ...DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+        failureKindRules: [{ kind: 'evicted', maxShare: 0.1 }],
+      },
+    }
+    // Absent still inherits, like every scalar.
+    expect(resolveAccountAlertConfig(withRules, {}).thresholds.failureKindRules).toEqual([
+      { kind: 'evicted', maxShare: 0.1 },
+    ])
+    // A stored list REPLACES rather than merges: an account that disagrees with a deployment
+    // rule must be able to drop it, and quietly reinstating one is the worse pager mistake.
+    expect(
+      resolveAccountAlertConfig(withRules, {
+        thresholds: { failureKindRules: [{ kind: 'timeout', maxShare: 0.3 }] },
+      }).thresholds.failureKindRules,
+    ).toEqual([{ kind: 'timeout', maxShare: 0.3 }])
+    // And EMPTY is a real setting ("no per-kind rules here"), not an absence.
+    expect(
+      resolveAccountAlertConfig(withRules, { thresholds: { failureKindRules: [] } }).thresholds
+        .failureKindRules,
+    ).toEqual([])
+  })
+
   it('lets an account mute itself but never enable alerting the deployment never started', () => {
     expect(resolveAccountAlertConfig(deployment, { enabled: false }).enabled).toBe(false)
     // The env switch decides whether the sweep runs at all, so a stored `true` cannot start a
@@ -313,6 +482,7 @@ describe('alertsHaveRunEvidence', () => {
   it('is true only for the conditions a failing run can be shown for', () => {
     expect(alertsHaveRunEvidence(['failure_rate_high'])).toBe(true)
     expect(alertsHaveRunEvidence(['failure_kind_dominant'])).toBe(true)
+    expect(alertsHaveRunEvidence(['failure_kind_rate_high'])).toBe(true)
     expect(alertsHaveRunEvidence(['backlog_high', 'failure_rate_high'])).toBe(true)
   })
 

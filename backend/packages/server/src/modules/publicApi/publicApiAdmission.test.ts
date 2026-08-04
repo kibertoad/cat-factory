@@ -279,7 +279,7 @@ describe('public-API admission', () => {
 })
 
 describe('publicRunParkSurfaces', () => {
-  // The regression this pins: the PRE-TOKEN INPUT GATE parks on the shape of the TASK, so
+  // The regression this pins: the PRE-DISPATCH INPUT GATE parks on the shape of the TASK, so
   // `parkSurfacesOf` (which reads the step chain) cannot see it. A `write` key could start a
   // title-only task under a pipeline that parks nowhere and get a run that stopped before its
   // first dispatch with nothing able to answer it and only cancel as a way out.

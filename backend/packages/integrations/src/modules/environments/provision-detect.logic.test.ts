@@ -33,14 +33,14 @@ describe('detectCustomManifest', () => {
     })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       defaultPath: 'preview.yaml',
       currentPath: 'services/api/other.yaml',
     })
     expect(rec.detected).toBe(true)
     expect(rec.provisioning).toMatchObject({
       type: 'custom',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       manifestPath: 'services/api/other.yaml',
     })
     expect(rec.notes[0]!.confidence).toBe('high')
@@ -50,7 +50,7 @@ describe('detectCustomManifest', () => {
     const reader = makeReader({ 'services/api/deploy/preview.yaml': 'kind: X' })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       defaultPath: 'deploy/preview.yaml',
     })
     expect(rec.detected).toBe(true)
@@ -60,7 +60,7 @@ describe('detectCustomManifest', () => {
   it('resolves the exact default path at the repo root for a non-monorepo service', async () => {
     const reader = makeReader({ 'deploy/preview.yaml': 'kind: X' })
     const rec = await detectCustomManifest(reader, {
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       defaultPath: 'deploy/preview.yaml',
     })
     expect(rec.detected).toBe(true)
@@ -70,28 +70,28 @@ describe('detectCustomManifest', () => {
   it('finds a bare-filename default one level deep from the service root', async () => {
     const reader = makeReader({
       'services/api/README.md': '# api',
-      'services/api/deploy/kargo.yaml': 'kind: X',
+      'services/api/deploy/acme-envs.yaml': 'kind: X',
     })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
-      defaultPath: 'kargo.yaml',
+      manifestId: 'acme-envs',
+      defaultPath: 'acme-envs.yaml',
     })
     expect(rec.detected).toBe(true)
-    expect(rec.provisioning.manifestPath).toBe('services/api/deploy/kargo.yaml')
+    expect(rec.provisioning.manifestPath).toBe('services/api/deploy/acme-envs.yaml')
   })
 
   it('does not descend when the default carries a path (only the exact location is checked)', async () => {
     // The default has a directory component, so the one-level-deep search does NOT apply — a
     // file at a different depth must not be matched; we fall back to the default location.
-    const reader = makeReader({ 'services/api/sub/config/kargo.yaml': 'kind: X' })
+    const reader = makeReader({ 'services/api/sub/config/acme-envs.yaml': 'kind: X' })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
-      defaultPath: 'config/kargo.yaml',
+      manifestId: 'acme-envs',
+      defaultPath: 'config/acme-envs.yaml',
     })
     expect(rec.detected).toBe(false)
-    expect(rec.provisioning.manifestPath).toBe('services/api/config/kargo.yaml')
+    expect(rec.provisioning.manifestPath).toBe('services/api/config/acme-envs.yaml')
     expect(rec.notes[0]!.confidence).toBe('low')
   })
 
@@ -99,7 +99,7 @@ describe('detectCustomManifest', () => {
     const reader = makeReader({ 'services/api/README.md': '# api' })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       defaultPath: 'deploy/preview.yaml',
     })
     expect(rec.detected).toBe(false)
@@ -112,12 +112,12 @@ describe('detectCustomManifest', () => {
     const reader = makeReader({ 'services/api/README.md': '# api' })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
       defaultPath: 'deploy/preview.yaml',
-      currentPath: 'services/api/config/prod-kargo.yaml',
+      currentPath: 'services/api/config/prod-acme-envs.yaml',
     })
     expect(rec.detected).toBe(false)
-    expect(rec.provisioning.manifestPath).toBe('services/api/config/prod-kargo.yaml')
+    expect(rec.provisioning.manifestPath).toBe('services/api/config/prod-acme-envs.yaml')
     expect(rec.notes[0]!.confidence).toBe('low')
   })
 
@@ -125,10 +125,10 @@ describe('detectCustomManifest', () => {
     const reader = makeReader({ 'services/api/README.md': '# api' })
     const rec = await detectCustomManifest(reader, {
       directory: 'services/api',
-      manifestId: 'kargo',
+      manifestId: 'acme-envs',
     })
     expect(rec.detected).toBe(false)
-    expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'kargo' })
+    expect(rec.provisioning).toMatchObject({ type: 'custom', manifestId: 'acme-envs' })
     expect(rec.provisioning.manifestPath).toBeUndefined()
   })
 
@@ -137,7 +137,7 @@ describe('detectCustomManifest', () => {
     await expect(
       detectCustomManifest(reader, {
         directory: 'services/api',
-        manifestId: 'kargo',
+        manifestId: 'acme-envs',
         defaultPath: 'deploy/preview.yaml',
       }),
     ).rejects.toThrow(RepoReadError)

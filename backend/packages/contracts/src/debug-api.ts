@@ -1,5 +1,6 @@
 import * as v from 'valibot'
-import { agentFailureSchema, executionStatusSchema, runDiagnosticsSchema } from './execution.js'
+import { agentFailureSchema, executionStatusSchema } from './execution.js'
+import { runDiagnosticsSchema } from './run-provenance.js'
 import {
   agentSearchQuerySchema,
   agentToolCallSchema,

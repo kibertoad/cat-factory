@@ -1,5 +1,81 @@
 # @cat-factory/integrations
 
+## 0.124.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+
+## 0.123.6
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/contracts@0.231.0
+
+## 0.123.5
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+
+## 0.123.4
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/contracts@0.230.0
+  - @cat-factory/kernel@0.231.0
+
 ## 0.123.3
 
 ### Patch Changes
@@ -1671,7 +1747,7 @@
 
 ### Patch Changes
 
-- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. a Kargo PREnv that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
+- 323b6cf: Surface the provider's failure reason on a poll-time environment failure. `EnvironmentProvisioningService.refreshStatus` built its status patch without `lastError`, so when a reconcile flipped an env to `failed` (a provider reporting the verdict on `provisioned.error` rather than throwing — e.g. an ephemeral environment that fails to check out its branch), the reason was dropped: the env-detail surface and the environment self-test showed a generic "provisioning failed" / "status: failed" instead of the real cause. `refreshStatus` now persists `lastError` (from `provisioned.error`, cleared once not failed — mirroring the create path) and records the same reason on the failure-transition provisioning-log entry.
 
 ## 0.101.2
 
@@ -3140,11 +3216,10 @@
 
 ### Patch Changes
 
-- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+- 6c4bcef: chore(environments): use neutral illustrative naming in shared custom-deployment-provider code and UI
 
-  "Kargo" is one specific proprietary deployment provider and should not appear as the
-  canonical example in the framework's shared code or UI. Replaced every illustrative
-  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  Shared framework code and UI should carry neutral, self-contained examples. Replaced
+  every illustrative reference (comments, the `manifestId` placeholder/help text, config-file examples) with
   neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
   Behaviour is unchanged.
 
@@ -6394,8 +6469,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that

@@ -48,11 +48,24 @@ export interface RunCaseOptions {
   relaxGuard?: boolean
 }
 
-/** Effectively-unbounded guard limits, used when `relaxGuard` is set. */
-const RELAXED_GUARD: ProgressGuardLimits = {
+/**
+ * Effectively-unbounded guard limits, used when `relaxGuard` is set.
+ *
+ * EVERY knob, including the ones a Pi smoketest cannot reach today (Pi has no MCP client): the point
+ * of this constant is that the guard never ends a captured run, so a knob missing here is a run cut
+ * short by a bound nobody chose. The non-action backstop is the live one, since a Pi loop reads and
+ * searches constantly with no action call between.
+ *
+ * Typed `Required<…>` rather than the interface itself, whose streak knobs are optional so a caller
+ * can omit them and take the defaults. Omitting one HERE is the bug, so this is the one place that
+ * must not compile without it.
+ */
+const RELAXED_GUARD: Required<ProgressGuardLimits> = {
   maxToolCallsWithoutEdit: Number.MAX_SAFE_INTEGER,
   maxConsecutiveErrors: Number.MAX_SAFE_INTEGER,
   maxConsecutiveWebCalls: Number.MAX_SAFE_INTEGER,
+  maxConsecutiveMcpCalls: Number.MAX_SAFE_INTEGER,
+  maxConsecutiveNonActionCalls: Number.MAX_SAFE_INTEGER,
 }
 
 /** The full captured run for one case (the result + the raw events for artifacts). */

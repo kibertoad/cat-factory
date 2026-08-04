@@ -489,7 +489,7 @@ export class UsageResource {
   }
 }
 
-/** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
+/** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
 export class DecisionsResource {
   readonly #transport: Transport
 
@@ -594,7 +594,7 @@ export class DecisionsResource {
 
   /**
    * Resolve a run parked on the task's input check
-   * Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.
+   * Settle a run the pre-dispatch input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/input-gate/resolve` — operation `resolvePublicRunInputGate`.
    */
   resolveInputGate(runId: string, body: PublicResolveInputGate, options: RequestOptions = {}): Promise<PublicDecisionList> {
@@ -886,7 +886,7 @@ export abstract class CatFactoryResources {
   readonly notifications: NotificationsResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
-  /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
+  /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource

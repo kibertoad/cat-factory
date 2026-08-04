@@ -1,7 +1,7 @@
 # @cat-factory/observability-otel
 
-Opt-in [OpenTelemetry](https://opentelemetry.io) (OTLP) trace + metrics publisher for the
-Agent Architecture Board.
+Opt-in [OpenTelemetry](https://opentelemetry.io) (OTLP) trace + metrics + logs publisher for
+the Agent Architecture Board.
 
 It implements the runtime-neutral `LlmTraceSink` port from `@cat-factory/kernel`, so when
 wired into a facade every LLM call: container-agent calls (through the LLM proxy) **and**
@@ -14,6 +14,11 @@ Jaeger, an OpenTelemetry Collector, …) as:
 - **metrics**: a `gen_ai.client.token.usage` counter (input/output) and a
   `gen_ai.client.operation.duration` histogram: following the OpenTelemetry GenAI
   semantic conventions.
+
+Two further exporters ship beside it, each its own opt-in: the deployment-level
+[platform-operator metrics](#platform-operator-metrics-deployment-health), and the
+[log export](#log-export-the-third-signal) that carries the platform's own structured log
+lines to the same endpoint.
 
 ## Span hierarchy
 
@@ -250,3 +255,103 @@ exporter serves both facades and is tested once.
 `OTEL_PLATFORM_METRICS_INTERVAL_MS` (default 60s) sets the sweep cadence (the Worker is
 cron-driven). The runtime-neutral `sweepPlatformMetrics` driver + `distinctAccountIds`
 account enumeration live in `@cat-factory/orchestration`.
+
+## Log export (the third signal)
+
+The two exporters above answer "what did this run do" and "how is the deployment doing". The
+**`OtelLogExporter`** (`createOtelLogExporter`, the `.` entry) carries the platform's own
+**structured log lines** to `{endpoint}/v1/logs`, so an operator reads logs beside the traces
+and metrics they already correlate with, in one backend, instead of tailing a Worker and
+grepping a container's stdout.
+
+It implements the kernel **`LogSink`** port, and `@cat-factory/server`'s logging adapter
+(`observability/logger.ts`, the one place a logging library is named) copies every emitted line
+to whichever sink a facade installed. Nothing in the domain changes: packages keep logging
+through the one `Logger` port and never learn a second destination exists.
+
+```ts
+import { createOtelLogExporter } from '@cat-factory/observability-otel'
+import { setLogSink } from '@cat-factory/server'
+
+setLogSink(createOtelLogExporter({ endpoint, headers, serviceName, maxBatchSize, logger }))
+```
+
+**What a record carries.** The message is the OTLP `body`; the level maps onto the base
+`SeverityNumber` of its range (`debug` 5, `info` 9, `warn` 13, `error` 17), so a backend's
+`severity >= WARN` filter means what an operator reading `LOG_LEVEL` expects. The line's fields
+become attributes under **the names they already have** (`workspaceId`, `executionId`, `jobId`,
+`scope`, …) rather than being renamed into the `cat_factory.*` namespace the spans use: one key
+works against stdout and the collector, which is worth more than symmetry with a signal whose
+attribute names this package chose in the first place. `child`-bound fields are folded in, so a
+line keeps the correlation the emitting scope gave it.
+
+**Logs and traces meet structurally.** A line naming an `executionId` is stamped with the SAME
+derived trace id that run's spans carry, so a backend links them without either side matching an
+attribute, and the record marks that trace SAMPLED so a backend knows the id it is pointed at is
+one it should have. A line with no run claims no trace (and no flags), rather than pointing at
+one nobody will emit (the same rule the standalone inline call follows above).
+
+That sharing is a **call** to the same `deriveTraceId` the spans go through, never a second copy
+of the derivation, and the test asserts a log record's trace id against a **span's**. Both matter:
+the two signals agreeing is the whole feature, nothing else enforces it, and a re-derivation plus
+a test comparing one log record to another would let the span side drift with every test green.
+
+**Draining is the facade's job, and the two runtimes differ only there:**
+
+| Runtime           | When the buffer is drained                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| Node / local      | An interval (`OTEL_LOGS_FLUSH_INTERVAL_MS`, default 5s), plus a final flush on shutdown bounded to 5s |
+| Cloudflare Worker | The end of every invocation, as a `waitUntil` after the response                                      |
+
+A Worker's module state is per ISOLATE and an isolate is discarded whenever the runtime decides,
+so a buffered line has no later tick guaranteed to reach it: the same reasoning (and the same
+per-invocation cost, stated rather than assumed) as the operational-metrics flush beside it. A
+full batch also sends on its own, so a burst does not wait for the next tick.
+
+**What it does with what it cannot deliver**, each of which was a way to make observability the
+new failure class:
+
+- **A failed POST is logged and dropped**, never thrown: `record` only buffers and `flush`
+  resolves even when the delivery failed.
+- **The exporter refuses to export its own failure reports.** They are logged through a logger
+  bound with `otelLogExport: true` and records carrying that field are dropped, or a collector
+  outage becomes an ever-growing batch of lines about a collector outage. The warning still
+  reaches the local writer, which is where an operator whose collector is down can read it.
+- **The buffer is bounded** (`maxBatchSize` × 8) and drops the OLDEST beyond it, because during
+  an outage the newest lines are the ones being looked at. **The drop count rides the next
+  batch out** as its own record: a silently short stream reads exactly like a quiet one.
+- **An oversized field is capped at 8 KiB and says how much it cut.** A collector rejects an
+  oversized batch whole, so one field carrying captured command output would otherwise drop
+  every line beside it.
+- **A field that cannot be serialised degrades to a note naming the problem**, never taking the
+  line with it. Absent and empty stay distinct: a `null`/`undefined` field is omitted rather
+  than exported as `""`.
+- **A field that cannot even be READ degrades the same way, per field.** `LogFields` is
+  `Record<string, unknown>`, so a value can throw on access (an accessor property, a Proxy trap).
+  This runs on the DRAIN path, past the try/catch the logging adapter wraps `record` in, so the
+  mapping owes its own guards: an unreadable value is reported under its own key (the key's
+  presence is what says the emitter had something there) and its neighbours are unaffected.
+- **The send chain is terminated**, so `flush` cannot reject however the drain path fails. Sends
+  are serialised behind one promise tail, and an escaped rejection there is not one lost batch:
+  every later send would inherit it, the exporter would go permanently silent, and on Node the
+  flush interval's un-awaited call would become an unhandled rejection that the process failure
+  guards answer by exiting. Observability may not take the deployment down.
+
+**Opt-in on top of the base exporter** (it adds an egress POST per batch of lines): off unless
+`OTEL_ENABLED=true` + an endpoint AND `OTEL_LOGS=true`. `OTEL_LOGS_MAX_BATCH_SIZE` (default 128)
+sets the lines per POST and, with the multiplier above, the buffer bound; on Node
+`OTEL_LOGS_FLUSH_INTERVAL_MS` (default 5s) sets the cadence (the Worker flushes per invocation).
+
+**`LOG_LEVEL` governs both destinations.** The export sits behind the same threshold as the
+local writer, so an operator has one dial rather than two that can disagree; there is
+deliberately no separate export level.
+
+**Two things are NOT exported, and both are stated here rather than left to be discovered:**
+
+- **Lines emitted before config is resolved** (the `LOG_LEVEL` read, the process guards, config
+  validation, migrations) reach the local writer only. The endpoint IS config, and buffering
+  against one that may never arrive would be a leak on exactly the boots that fail.
+- **Nothing is scrubbed here.** A field carrying command output, a URL or model text goes
+  through `redactSecrets` at its emit site (`backend/docs/logging.md`); this exporter carries
+  what the local writer already got, and adding a second scrub would state a guarantee the
+  stdout stream does not have.

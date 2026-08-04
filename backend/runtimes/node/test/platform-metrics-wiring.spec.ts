@@ -53,6 +53,7 @@ function otelConfig(overrides: Partial<OtelConfig['platformMetrics']> = {}): Ote
     enabled: true,
     endpoint: ENDPOINT,
     platformMetrics: { enabled: true, intervalMs: 60_000, window: '1h', ...overrides },
+    logs: { enabled: false, flushIntervalMs: 5_000, maxBatchSize: 128 },
   }
 }
 
@@ -124,6 +125,7 @@ describe('Node facade: platform-metrics OTLP sweep wiring', () => {
             enabled: false,
             endpoint: undefined,
             platformMetrics: { enabled: true, intervalMs: 60_000, window: '1h' },
+            logs: { enabled: false, flushIntervalMs: 5_000, maxBatchSize: 128 },
           },
           platformObservability: observability,
           workspaceRepository,
