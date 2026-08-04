@@ -12,7 +12,8 @@ import { shouldPersistActivity } from './job.logic.js'
 
 /**
  * Persist the attribution a DISPATCH knows and the poll site cannot re-derive: the resolved
- * model, plus (for a subscription-harness job) the leased pool row and the run's initiator.
+ * model, plus (for a subscription-harness job) the leased pool row and the run's initiator,
+ * plus the agent kind the job actually ran AS.
  *
  * An async container job settles on the durable poll path, which rebuilds the job handle from
  * the step alone — so anything not recorded here is lost by the time the usage lands. Dropping
@@ -20,11 +21,30 @@ import { shouldPersistActivity } from './job.logic.js'
  * the other two silently skips the pooled-token usage feedback (usage-aware rotation) and leaves
  * the quota-cycle counters with no target. Each field is written only when the handle carries it,
  * so a re-dispatch that resolves less never erases what an earlier one knew.
+ *
+ * `dispatchedKind` is a REQUIRED parameter rather than something read off the step, because
+ * `step.agentKind` is routinely not what ran: a gate escalates to its helper, a Tester hands off
+ * to the fixer, a two-phase coder proposes forks first. Every telemetry row that job produces is
+ * tagged with the dispatched kind, so a consumer grouping by kind (the external trace's step
+ * spans) has nothing to attach to unless the run records it. Being a parameter is the point: a
+ * new dispatch site cannot compile without answering the question, which is the same reason this
+ * function exists at all.
  */
-export function recordDispatchAttribution(step: PipelineStep, handle: AgentJobHandle): void {
+export function recordDispatchAttribution(
+  step: PipelineStep,
+  handle: AgentJobHandle,
+  dispatchedKind: string,
+): void {
   if (handle.model) step.model = handle.model
   if (handle.subscriptionTokenId) step.subscriptionTokenId = handle.subscriptionTokenId
   if (handle.initiatedByUserId) step.initiatedByUserId = handle.initiatedByUserId
+  // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
+  // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
+  const dispatches = step.dispatches ?? []
+  const existing = dispatches.find((d) => d.agentKind === dispatchedKind)
+  step.dispatches = existing
+    ? dispatches.map((d) => (d === existing ? { ...d, count: d.count + 1 } : d))
+    : [...dispatches, { agentKind: dispatchedKind, count: 1 }]
 }
 
 export function applyContainerRunning(

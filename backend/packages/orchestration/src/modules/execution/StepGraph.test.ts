@@ -81,3 +81,44 @@ describe('StepGraph.resetStepForRerun', () => {
     expect(s.state).toBe('pending')
   })
 })
+
+// Two facts have to OUTLIVE a reset, because a reset is exactly what destroys the evidence that
+// a step ran before: the external trace hangs every attempt's telemetry under one parent derived
+// from (run, agent kind), so a parent rebuilt from the surviving attempt alone would start after
+// its own earliest child and would report a cycle as a single round.
+describe('StepGraph — cross-attempt step facts', () => {
+  it('stamps firstStartedAt and counts the attempt on a fresh start', () => {
+    const graph = new StepGraph({ now: () => 1_000 })
+    const s = step({ state: 'pending', startedAt: null })
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts]).toEqual([1_000, 1_000, 1])
+  })
+
+  it('does not re-count a step resuming from a human pause', () => {
+    // startStep also runs when a parked step re-enters `working`. Counting that would inflate
+    // every approval into an extra round.
+    const graph = new StepGraph({ now: () => 5_000 })
+    const s = step({ startedAt: 1_000, firstStartedAt: 1_000, attempts: 1, pausedAt: 2_000 })
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts, s.pausedAt]).toEqual([1_000, 1_000, 1, null])
+  })
+
+  it('keeps firstStartedAt, attempts and dispatches across a re-run reset', () => {
+    const graph = new StepGraph({ now: () => 9_000 })
+    const s = step({
+      startedAt: 1_000,
+      firstStartedAt: 1_000,
+      finishedAt: 2_000,
+      attempts: 1,
+      dispatches: [{ agentKind: 'coder', count: 1 }],
+    })
+    graph.resetStepForRerun(s)
+    // The in-flight timings are cleared, as a reset must; the record of the earlier attempt is not.
+    expect([s.startedAt, s.finishedAt]).toEqual([null, null])
+    expect(s.firstStartedAt).toBe(1_000)
+    expect(s.dispatches).toEqual([{ agentKind: 'coder', count: 1 }])
+
+    graph.startStep(s)
+    expect([s.startedAt, s.firstStartedAt, s.attempts]).toEqual([9_000, 1_000, 2])
+  })
+})
