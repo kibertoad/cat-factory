@@ -118,7 +118,7 @@ export function composeValidation(
       // would be a fabricated fact about somebody's setup (a runner image older than the feature
       // reports nothing either).
       note:
-        'The platform ran no pre-PR validation on this tree — this service configures no check ' +
+        'The platform ran no pre-PR validation on this tree: this service configures no check ' +
         'commands (a runner image predating the feature also reports none).',
       attempts: 0,
       commands: [],
@@ -172,21 +172,31 @@ export function renderValidation(validation: PrReportValidation): string[] {
       ` · attempt ${validation.attempts}` +
       (validation.maxAttempts != null ? ` of ${validation.maxAttempts}` : ''),
     '',
-    '_The platform ran these commands itself, in the checkout that opened this pull request._',
+    // Only a GREEN attempt may claim to be the tree this PR came from: a failing attempt is
+    // exactly the one that does NOT open a pull request, so on a red section the report is being
+    // published onto a PR some earlier dispatch opened. Claiming otherwise there would be the
+    // report asserting the one thing it exists to stop an agent asserting.
+    validation.passed
+      ? '_The platform ran these commands itself, in the checkout that opened this pull request._'
+      : '_The platform ran these commands itself, in the checkout it validated. A failing attempt' +
+          ' does not open a pull request, so this is not the tree this one was opened from._',
     '',
     '| Check | Command | Result |',
     '| --- | --- | --- |',
   )
   for (const command of validation.commands) {
+    // `codeCell`, never a hand-written `` `${cell(x)}` ``: a check command is configuration a
+    // human wrote and a linter invocation carrying a backtick is ordinary, which would close the
+    // span and spill the rest of the row into the table as prose.
     out.push(
-      `| ${hostMarkdown.cell(command.label)} | \`${hostMarkdown.cell(command.command)}\` |` +
+      `| ${hostMarkdown.cell(command.label)} | ${hostMarkdown.codeCell(command.command)} |` +
         ` ${commandResult(command)} |`,
     )
   }
   const failing = validation.commands.filter((c) => !c.passed)
   for (const command of failing) {
     if (!command.outputTail) continue
-    out.push('', `**\`${hostMarkdown.inline(command.label)}\` output**`, '')
+    out.push('', `**${hostMarkdown.inlineCode(command.label)} output**`, '')
     out.push(hostMarkdown.outputBlock(command.outputTail))
   }
   if (validation.commands.length) {
@@ -250,16 +260,26 @@ export function composeReproduction(
   )
   const report = step?.reproduction
   if (!step || !report) {
-    const declares = instance.steps.some(
+    const declaring = instance.steps.filter(
       (s: PipelineStep) => s.agentKind === REPRO_DECLARATION_KIND,
     )
+    // A SKIPPED declaring step is its own cause, and it has to be checked before the one below:
+    // estimate gating leaves the step IN `instance.steps` (that is what makes the persisted
+    // `skipped` flag survive a durable replay), so it satisfies "this pipeline declares one" while
+    // being the opposite situation. Reported as the deliberate choice it is, because the operator
+    // fix is a threshold on the pipeline, not a look at the reproduction step's own output.
+    const skipped = declaring.length > 0 && declaring.every((s: PipelineStep) => s.skipped)
     return {
       status: 'absent',
-      note: declares
-        ? 'This run recorded no reproduction proof: the proof phase was not enabled for this ' +
-          'task, or the reproduction step named no runnable command to verify.'
-        : 'No reproduction step in this pipeline — nothing declared a reproducing check, so this ' +
-          'change is not demonstrated against the pre-fix tree.',
+      note: skipped
+        ? 'The reproduction step was skipped: this task scored below the threshold its pipeline ' +
+          'gates that step on, so no reproducing check was written and this change is not ' +
+          'demonstrated against the pre-fix tree.'
+        : declaring.length > 0
+          ? 'This run recorded no reproduction proof: the proof phase was not enabled for this ' +
+            'task, or the reproduction step named no runnable command to verify.'
+          : 'No reproduction step in this pipeline. Nothing declared a reproducing check, so this ' +
+            'change is not demonstrated against the pre-fix tree.',
       testPaths: [],
       attempts: 0,
     }
@@ -277,6 +297,9 @@ export function composeReproduction(
     reason: scrub(report.reason),
     alternativeVerification: scrub(report.alternativeVerification),
     observation: scrub(report.note),
+    // `||`, not the `??` its validation twin uses, and the difference is in the two schemas: a
+    // reproduction report's `at` falls back to 0 when the harness recorded none, so 0 IS the
+    // absence here, while the validation report leaves the field optional and says so.
     at: report.at || null,
   }
 }
@@ -284,12 +307,12 @@ export function composeReproduction(
 /** The verdict headline: what was proven, in the terms a reviewer decides on. */
 function reproductionHeadline(verdict: PrReportReproduction['verdict']): string {
   if (verdict === 'reproduced') {
-    return '✅ **reproduced** — the declared check FAILED on the pre-fix tree and PASSES on this one'
+    return '✅ **reproduced**: the declared check FAILED on the pre-fix tree and PASSES on this one'
   }
   if (verdict === 'declared_infeasible') {
-    return '📋 **declared infeasible** — the agent stated the bug cannot be reproduced in a test'
+    return '📋 **declared infeasible**: the agent stated the bug cannot be reproduced in a test'
   }
-  return '⚠️ **inconclusive** — the check did not demonstrate the defect across the fix'
+  return '⚠️ **inconclusive**: the check did not demonstrate the defect across the fix'
 }
 
 /** One tree's row: what it exited with, and whether it even got as far as running. */
@@ -327,10 +350,12 @@ export function renderReproduction(repro: PrReportReproduction): string[] {
     return [...out, '']
   }
 
-  if (repro.command) out.push(`**Command:** \`${hostMarkdown.cell(repro.command)}\``)
+  // Both of these are MODEL-authored (the `repro-test` kind declares them), so the code span has
+  // to be sized to what they carry rather than assumed to be three ticks' worth.
+  if (repro.command) out.push(`**Command:** ${hostMarkdown.inlineCode(repro.command)}`)
   if (repro.testPaths.length) {
     out.push(
-      `**Reproduction files:** ${repro.testPaths.map((p) => `\`${hostMarkdown.cell(p)}\``).join(', ')}`,
+      `**Reproduction files:** ${repro.testPaths.map((p) => hostMarkdown.inlineCode(p)).join(', ')}`,
     )
   }
   if (repro.omittedTestPaths) {

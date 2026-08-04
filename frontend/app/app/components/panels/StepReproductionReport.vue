@@ -7,7 +7,8 @@ import { REPRODUCTION_STATUS_KEYS, REPRODUCTION_TREE_KEYS } from '~/utils/reprod
 // executor-harness ran it against the pre-fix tree and against the final tree, with both captured
 // outputs. The verdict is computed from the two exit codes by the harness — never self-reported by
 // the model, which is the entire point (the `repro-test` kind's own `outcome` has always been the
-// agent's CLAIM, and this is what checks it). See docs/initiatives/bugfix-reproduction-proof.md.
+// agent's CLAIM, and this is what checks it). See
+// backend/docs/adr/0033-bugfix-reproduction-proof.md.
 //
 // Two callers, one renderer, exactly as `StepEffortReport` has: the generic step-detail panel drops
 // it in as a `card` (its own heading + border, among the other detail sections) and

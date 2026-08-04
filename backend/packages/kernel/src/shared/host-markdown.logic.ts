@@ -130,20 +130,22 @@ function fenceAt(line: string): { char: string; length: number; info: boolean } 
  * Walk `lines`, tracking fenced-code state, and hand each line to `visit` together with
  * whether it sits INSIDE a fenced block. Returns the fence still open at the end, if any.
  *
- * One shared walker so the two things that care about fences — leaving code untouched, and
- * closing what the text left open — can never disagree about where a block starts and ends.
+ * One shared walker so the three things that care about fences (leaving code untouched, closing
+ * what the text left open, and dropping a block a hard cut landed inside) can never disagree
+ * about where a block starts and ends. `at` is the index of the line that OPENED the fence still
+ * standing, which is the only thing a caller cutting text back needs and the walker alone knows.
  */
 function walkFences(
   lines: readonly string[],
   visit: (line: string, insideFence: boolean) => void,
-): { char: string; length: number } | null {
-  let open: { char: string; length: number } | null = null
-  for (const line of lines) {
+): { char: string; length: number; at: number } | null {
+  let open: { char: string; length: number; at: number } | null = null
+  for (const [index, line] of lines.entries()) {
     const fence = fenceAt(line)
     // The fence line itself belongs to the code block, so it is never rewritten.
     visit(line, open !== null || fence !== null)
     if (!fence) continue
-    if (!open) open = { char: fence.char, length: fence.length }
+    if (!open) open = { char: fence.char, length: fence.length, at: index }
     else if (fence.char === open.char && fence.length >= open.length && !fence.info) open = null
   }
   return open
@@ -160,6 +162,25 @@ function walkFences(
 export function balanceFences(text: string): string {
   const open = walkFences(text.split('\n'), () => {})
   return open ? `${text}\n${open.char.repeat(open.length)}` : text
+}
+
+/**
+ * Drop the trailing fenced block that `text` leaves OPEN, back to the line that opened it.
+ *
+ * The sibling of {@link balanceFences}, for the one caller that cannot use it: a hard cut against
+ * a byte budget. Closing the fence there would ADD characters to text that is already over the
+ * limit, and the fence is sized to the longest backtick run in the block, so the amount added is
+ * not knowable in advance. Removing is the disposition that fits by construction.
+ *
+ * It is also the better half to keep. Captured output is bounded from the END (see
+ * {@link boundOutput}), so the fragment a cut leaves behind is the head of a log whose failure was
+ * reported at its tail: the part nobody opened the report for. The caller's own truncation note is
+ * what states the cut.
+ */
+export function dropOpenFence(text: string): string {
+  const lines = text.split('\n')
+  const open = walkFences(lines, () => {})
+  return open ? lines.slice(0, open.at).join('\n').trimEnd() : text
 }
 
 /** Cut `value` to `max` characters, marking the cut. Prefers a line boundary when one is near. */
@@ -209,6 +230,51 @@ export function cell(value: string): string {
  */
 export function inline(value: string, max: number = MAX_CELL_CHARS): string {
   return inertLine(truncate(value.replace(/\s+/g, ' '), max))
+}
+
+/**
+ * Wrap already-flattened text in a code span whose delimiter the text cannot break out of.
+ *
+ * The inline twin of {@link outputBlock}, and it exists for the same reason: a hand-written
+ * `` `${cell(value)}` `` looks safe and is not, because {@link cell} escapes pipes, newlines and
+ * the auto-link triggers but NOT backticks. A value carrying one closes the span early, and the
+ * rest of it lands in the document as prose, where a `#`/`@`/closing keyword the caller believed
+ * was inert (the escapes deliberately skip code spans, since the host does not auto-link there)
+ * is suddenly live. Sizing the delimiter one tick past the longest run inside is CommonMark's
+ * rule for exactly this.
+ *
+ * The space padding is CommonMark's too: a span whose content begins or ends with a backtick
+ * needs one space on each side, and the renderer strips a single leading+trailing space back off.
+ */
+function codeSpan(text: string): string {
+  if (!text) return ''
+  const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((m) => m[0].length))
+  const ticks = '`'.repeat(longestRun + 1)
+  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : ''
+  return `${ticks}${pad}${text}${pad}${ticks}`
+}
+
+/**
+ * Render untrusted text as a CODE SPAN in a markdown table cell (a command, a path, a stored id).
+ *
+ * Pipes are escaped because the GFM table parser splits the row BEFORE inline parsing, so a `\|`
+ * reaches the span as a literal `|`. Newlines fold to spaces rather than `cell`'s `<br>`, which
+ * inside a code span would render as the four characters it is.
+ */
+export function codeCell(value: string, max: number = MAX_CELL_CHARS): string {
+  return codeSpan(truncate(value.replace(/\s+/g, ' '), max).replaceAll('|', '\\|'))
+}
+
+/**
+ * Render untrusted text as a CODE SPAN outside a table (a label in a heading, a command on its
+ * own line).
+ *
+ * Deliberately does NOT escape pipes: outside a table row nothing splits on them, and a backslash
+ * escape is not honoured inside a code span, so `\|` would reach the reader as `\|`. That is the
+ * same split as {@link cell} versus {@link inline}, for the same reason.
+ */
+export function inlineCode(value: string, max: number = MAX_CELL_CHARS): string {
+  return codeSpan(truncate(value.replace(/\s+/g, ' '), max))
 }
 
 /**

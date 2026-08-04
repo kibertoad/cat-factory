@@ -156,6 +156,18 @@ correct.
 - **`agent.ts` in the harness is at 1,494 of its 1,500-line budget.** The next slice touching it
   should extract the single-repo coding flow (`buildSingleRepoCodingSpec` + `runSingleRepoCoding`)
   rather than raise the ratchet, which is never an option.
+- **`repro-test` is estimate-GATABLE but no built-in preset gates it.** The step is the most
+  expensive thing a small bugfix pays for (a `container-coding` dispatch: a real checkout, a commit
+  and a push) and the least likely to earn its keep on a one-line change, which is the range
+  gating exists to collapse into one preset. It qualifies for `BUILTIN_GATABLE_KINDS` under that
+  set's own test rather than by convenience: its absence THINS a run where `merger`'s BREAKS one,
+  because the only thing reading the declaration structurally is the proof, which resolves to "no
+  spec" and does not run. Shipping it gated would have changed what every existing bugfix run
+  costs and dropped the evidence on whichever tasks a model scored low, so that is the pipeline
+  author's call and `pipelineShape.test.ts` pins the ungated default. A skipped step is its OWN
+  `absent` cause in the report (checked BEFORE the un-opted-in one, since gating leaves the step in
+  `instance.steps` carrying `skipped` and it would otherwise satisfy "this pipeline declares one"),
+  because the operator fix is a threshold rather than a look at the step's output.
 
 ### Deliberately out of scope (follow-ups)
 

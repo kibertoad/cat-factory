@@ -49,7 +49,7 @@ const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescrip
       agentKind: 'coder',
       label: 'Reproduction proof',
       description:
-        'Run the reproduction test the run declared against BOTH the pre-fix tree and the finished one, and publish the two results on the pull request: only failing-then-passing proves the fix. `auto` runs it whenever the pipeline produced a reproduction declaration; `always` pins that behaviour for this task; `off` never runs it. A failed proof never fails the run — it is reported as unproven.',
+        'Run the reproduction test the run declared against BOTH the pre-fix tree and the finished one, and publish the two results on the pull request: only failing-then-passing proves the fix. `auto` runs it whenever the pipeline produced a reproduction declaration; `always` pins that behaviour for this task; `off` never runs it. A failed proof never fails the run, it is reported as unproven.',
       type: 'select',
       options: [
         { value: 'auto', label: 'Auto (whenever the run declared a reproduction)' },

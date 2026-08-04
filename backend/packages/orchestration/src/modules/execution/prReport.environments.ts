@@ -560,11 +560,11 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
     for (const shot of evidence.screenshots) {
       // The id stays in the cell whether or not a link was built: it is what an operator greps the
       // store for, and a deployment with no public backend URL has no link to offer. The URL is
-      // ours (built from configured base + a stored id), so it needs no host-markdown escaping —
-      // the LABEL is the untrusted half.
-      const artifact = shot.url
-        ? `[\`${hostMarkdown.cell(shot.artifactId)}\`](${shot.url})`
-        : `\`${hostMarkdown.cell(shot.artifactId)}\``
+      // ours (built from configured base + a stored id), so it needs no host-markdown escaping;
+      // the LABEL is the untrusted half, and it goes through `codeCell` so its own delimiter is
+      // sized to it rather than assumed.
+      const id = hostMarkdown.codeCell(shot.artifactId)
+      const artifact = shot.url ? `[${id}](${shot.url})` : id
       out.push(
         `| ${hostMarkdown.cell(shot.view)} | ${artifact} | ${shot.hasReference ? 'paired' : '—'} |`,
       )

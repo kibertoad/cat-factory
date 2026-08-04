@@ -281,3 +281,70 @@ describe('renderReproduction', () => {
     expect(rendered).toContain('incomplete reproduction')
   })
 })
+
+describe('what the validation section CLAIMS about the tree it ran on', () => {
+  function rendered(passed: boolean): string {
+    const { caps: c } = caps()
+    return renderValidation(
+      composeValidation(
+        instance([
+          step({
+            agentKind: 'coder',
+            validation: {
+              ...VALIDATION,
+              passed,
+              outcomes: [{ ...VALIDATION.outcomes[0]!, passed, exitCode: passed ? 0 : 1 }],
+            },
+          }),
+        ]),
+        c,
+      ),
+    ).join('\n')
+  }
+
+  it('claims the PR’s own tree only when the checks actually passed', () => {
+    expect(rendered(true)).toContain('in the checkout that opened this pull request')
+  })
+
+  it('says the opposite when they did not, because a red attempt opens no PR', () => {
+    // The report publishes onto an EXISTING pull request, so a red section means some earlier
+    // dispatch opened it. Claiming this tree did would be the report asserting exactly the kind
+    // of unchecked thing it exists to stop an agent asserting.
+    const red = rendered(false)
+    expect(red).toContain('in the checkout it validated')
+    expect(red).toContain('not the tree this one was opened from')
+    expect(red).not.toContain('in the checkout that opened this pull request')
+  })
+})
+
+describe('an estimate-SKIPPED reproduction step', () => {
+  // `repro-test` is gatable (see `BUILTIN_GATABLE_KINDS`), so a pipeline may skip it on a task
+  // that scored below its threshold. Gating leaves the step in `instance.steps` carrying
+  // `skipped`, which is what makes this reachable at all, and what would otherwise let it read as
+  // the un-opted-in case.
+  function note(steps: PipelineStep[]): string {
+    const { caps: c } = caps()
+    return composeReproduction(instance(steps), c).note ?? ''
+  }
+
+  it('names the skip rather than blaming the phase being off', () => {
+    const skipped = note([
+      step({ agentKind: 'repro-test', skipped: true } as Partial<PipelineStep> & {
+        agentKind: string
+      }),
+      step({ agentKind: 'coder' }),
+    ])
+
+    // Two different operator fixes: a gating threshold on the pipeline, versus looking at what
+    // the reproduction step itself produced.
+    expect(skipped).toContain('was skipped')
+    expect(skipped).toContain('below the threshold')
+    expect(skipped).not.toContain('not enabled for this task')
+  })
+
+  it('still reports the un-opted-in cause when the step RAN and recorded nothing', () => {
+    expect(note([step({ agentKind: 'repro-test' }), step({ agentKind: 'coder' })])).toContain(
+      'not enabled for this task',
+    )
+  })
+})

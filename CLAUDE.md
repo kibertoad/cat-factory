@@ -1070,7 +1070,11 @@ run) and **the producer's own `note` is rendered VERBATIM** by every reader, nev
 run whose base already carried this step's own work. The verdict reaches a human on three surfaces off the
 one `step.reproduction` (the PR report section, the result-window shell's trailing section, and the
 step-detail card) and **both SPA surfaces are required**, because the proof is recorded on whichever step
-OPENED the PR, which is the view-less `coder` in every built-in pipeline. Doc:
+OPENED the PR, which is the view-less `coder` in every built-in pipeline. **`repro-test` is GATABLE but
+shipped UNGATED**: it is the priciest thing a one-line bugfix pays for, but gating it by default would
+change what every existing run costs and drop the evidence wherever a model scored a task low, so it is
+the pipeline author's opt-in and a skipped step is its own `absent` cause in the report (checked FIRST,
+since gating leaves the step in `instance.steps`). Doc:
 [ADR 0033](./backend/docs/adr/0033-bugfix-reproduction-proof.md).
 
 **Pipeline PR descriptions**: the agent writes its reviewer briefing to `.cat-pr-description.md`

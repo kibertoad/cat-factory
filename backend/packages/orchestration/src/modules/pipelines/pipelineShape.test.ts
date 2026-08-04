@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { seedPipelines } from '@cat-factory/kernel'
+import { BUILTIN_GATABLE_KINDS } from '@cat-factory/contracts'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import {
   assertPipelineLaunchable,
@@ -107,6 +108,22 @@ describe('validatePipelineShape', () => {
       // reproduction proof reads — after the coder there would be no pre-fix tree left to prove
       // anything against.
       expect(repro, `${id} must reproduce before it fixes`).toBeLessThan(coder)
+    }
+  })
+
+  it('the reproduction step is gatable but no built-in preset gates it', () => {
+    // The step is the most expensive thing a small bugfix pays for, so an author may gate it off
+    // a task estimate. That is deliberately OPT-IN: shipping a preset that gates it would change
+    // what every existing bugfix run costs AND silently drop the evidence on whichever tasks the
+    // model happened to score low, which is a decision for whoever owns the pipeline.
+    expect(BUILTIN_GATABLE_KINDS.has('repro-test')).toBe(true)
+    for (const pipeline of seedPipelines()) {
+      const index = pipeline.agentKinds.indexOf('repro-test')
+      if (index < 0) continue
+      expect(
+        pipeline.gating?.[index] ?? null,
+        `${pipeline.id} must ship the reproduction step ungated`,
+      ).toBeNull()
     }
   })
 

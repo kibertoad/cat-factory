@@ -796,3 +796,44 @@ describe('requirement regressions', () => {
     )
   })
 })
+
+describe('the section budget backstop', () => {
+  /**
+   * A validation report whose captured logs are far past anything the composer would retain, so
+   * the rendered section blows {@link hostMarkdown.MAX_SECTION_CHARS} even after the JSON block
+   * is dropped. Pathological by construction: the point is that the LAST-resort cut stays
+   * well-formed, because that is the one path no realistic run exercises and therefore the one
+   * nobody would notice was broken.
+   */
+  function oversizedValidation(): PipelineStep {
+    return step({
+      agentKind: 'coder',
+      validation: {
+        passed: false,
+        attempts: 1,
+        maxAttempts: 3,
+        at: 1_700_000_000_000,
+        outcomes: Array.from({ length: 40 }, (_, i) => ({
+          label: `check-${i}`,
+          command: `pnpm check-${i}`,
+          exitCode: 1,
+          passed: false,
+          outputTail: 'F'.repeat(2_000),
+        })),
+      },
+    } as Partial<PipelineStep> & { agentKind: string })
+  }
+
+  it('cuts to the budget without leaving a captured log’s fence hanging open', () => {
+    const report = composePrVerificationReport(instance([oversizedValidation()]), INPUTS)
+    const section = renderPrVerificationReport(report)
+
+    expect(section.length).toBeLessThanOrEqual(hostMarkdown.MAX_SECTION_CHARS)
+    // The whole reason this matters: an unclosed fence swallows the truncation note, every
+    // section below it and the managed region's own `:end` marker into a code block. The cut
+    // therefore drops the block it landed inside rather than closing it, which would ADD
+    // characters to text already over the limit.
+    expect(hostMarkdown.balanceFences(section)).toBe(section)
+    expect(section).toContain('report truncated to fit')
+  })
+})
