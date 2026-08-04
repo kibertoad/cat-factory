@@ -1703,7 +1703,9 @@
         "merge_failed": "I punteggi rientravano nelle soglie {preset}, ma l'unione automatica non e' riuscita a completarsi (ad esempio protezione del branch o un conflitto), quindi la PR e' in attesa che un umano la unisca.",
         "merge_partial": "Alcune delle pull request dell'attivita' sono state unite, ma una successiva non e' riuscita, quindi la modifica e' in attesa che un umano completi o annulli l'unione multi-repository.",
         "class_auto_merge": "Questo preset unisce sempre automaticamente questa categoria di modifica, quindi i punteggi non sono stati confrontati.",
-        "class_requires_review": "Questo preset invia sempre questa categoria di modifica a una persona, indipendentemente dai punteggi."
+        "class_requires_review": "Questo preset invia sempre questa categoria di modifica a una persona, indipendentemente dai punteggi.",
+        "role_requires_review": "Questa impostazione sottopone a revisione umana le esecuzioni avviate da un {role} per questo tipo di modifica, qualunque siano i punteggi. Un collega di livello superiore può unire questa PR così com’è.",
+        "dry_run": "Questa era una prova, quindi la pull request è rimasta aperta per una persona e i punteggi non sono stati confrontati. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "scores": "Punteggi",
       "axis": {
@@ -1862,6 +1864,33 @@
         "failedSummary": "{failed} controlli su {total} fallivano ancora dopo {attempts} tentativi su {maxAttempts}, quindi non è stata aperta alcuna richiesta di modifica.",
         "exitCode": "codice di uscita {code}",
         "timedOut": "tempo scaduto"
+      },
+      "reproduction": {
+        "heading": "Prova di riproduzione",
+        "status": {
+          "reproduced": "Riprodotto",
+          "inconclusive": "Non dimostrato",
+          "declared_infeasible": "Non riproducibile"
+        },
+        "verdict": {
+          "reproduced": "Il controllo dichiarato è fallito sull’albero precedente alla correzione e passa su questo.",
+          "inconclusive": "Il controllo non ha dimostrato il difetto ai due lati della correzione, quindi la correzione non è comprovata.",
+          "declared_infeasible": "L’agente ha dichiarato che questo bug non è riproducibile in un test e ha indicato che cosa ha verificato al suo posto."
+        },
+        "tree": {
+          "base": "Albero precedente alla correzione",
+          "final": "Albero finale"
+        },
+        "command": "Comando",
+        "reason": "Perché non è riproducibile",
+        "alternative": "Verificato al suo posto",
+        "passed": "superato",
+        "exitCode": "codice di uscita {code}",
+        "timedOut": "tempo scaduto",
+        "setupFailed": "preparazione fallita",
+        "notRun": "non eseguito",
+        "attempts": "Tentativo {attempts} di {maxAttempts}",
+        "omittedTestPaths": "{count} file di test dichiarato è stato scartato prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta. | {count} file di test dichiarati sono stati scartati prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta."
       }
     },
     "inspector": {
@@ -5123,7 +5152,8 @@
         "binary_output_service_invalid": "Impossibile risolvere il servizio per gli output binari",
         "binary_output_generator_invalid": "Impossibile risolvere il generatore per gli output binari",
         "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio",
-        "ticket_already_linked": "Questo ticket ha già un'attività"
+        "ticket_already_linked": "Questo ticket ha già un'attività",
+        "dry_run_not_mergeable": "Una prova non può essere unita"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5156,7 +5186,8 @@
         "binary_output_service_invalid": "Un passaggio che genera output binari seleziona un servizio fondamentale che il catalogo di questo workspace non riesce a risolvere: l'identificatore è sconosciuto, oppure il servizio di archiviazione scelto non ha la capacità asset-storage. Correggi la selezione del passaggio o registra il servizio, poi riavvia.",
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un'integrazione generativa che questa installazione non registra, oppure nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare. Le integrazioni generative si registrano nel codice dell'installazione, non in questo workspace: registrala o correggi la selezione del passaggio, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
-        "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket."
+        "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
+        "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -6292,6 +6323,12 @@
       "minor": "Note minori",
       "major": "Rilavorazione sostanziale",
       "classHistory": "{merged} uniti in questa categoria, {autoShare} in automatico"
+    },
+    "role": {
+      "admin": "amministratore",
+      "member": "membro",
+      "viewer": "osservatore",
+      "unattributed": "un avvio automatico"
     }
   },
   "vcs": {
@@ -6393,7 +6430,10 @@
       "finishedRun": "Un'esecuzione conclusa con successo",
       "integrationsManage": "L'autorizzazione a gestire le integrazioni",
       "settingsManage": "L'autorizzazione a gestire le impostazioni dello workspace",
-      "library": "La libreria dei frammenti di contesto abilitata su questo deployment"
+      "library": "La libreria dei frammenti di contesto abilitata su questo deployment",
+      "failedRun": "Un’esecuzione fallita",
+      "infrastructure": "Un backend di esecuzione collegato a questo workspace",
+      "advancedTier": "La modalità interfaccia avanzata"
     },
     "overlay": {
       "next": "Avanti",
@@ -6405,7 +6445,9 @@
       "announcement": "Passaggio {current} di {total}. {title}. {body}",
       "abridged": "1 passaggio è stato saltato: quel controllo non fa parte di questa board. | {count} passaggi sono stati saltati: quei controlli non fanno parte di questa board.",
       "searching": "Ricerca del controllo evidenziato...",
-      "clickHint": "Clicca sul controllo evidenziato per continuare"
+      "clickHint": "Clicca sul controllo evidenziato per continuare",
+      "nextUp": "Prossimo",
+      "takeNext": "Fai questo"
     },
     "tours": {
       "boardBasics": {
@@ -6528,7 +6570,7 @@
           },
           "finish": {
             "title": "Questo è il ciclo",
-            "body": "Pianifica un'attività, scegli una pipeline, avviala, seguila. Quando un'esecuzione ha bisogno di te si ferma e lo dice, ed è quello che copre il tour successivo."
+            "body": "Pianifica un’attività, scegli una pipeline, avviala, seguila. I tour successivi a questo leggono un’esecuzione reale, quindi si sbloccano appena ne avvii davvero una."
           }
         }
       },
@@ -6683,7 +6725,100 @@
             "body": "Alcune voci appartengono a te e non alla board, come un token di accesso personale o un piano, e servono solo per le esecuzioni che avvii tu. L'hub segnala quale è quale, e La mia configurazione raccoglie quelle tue."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Leggere un errore",
+        "description": "Un’esecuzione si è fermata con un errore. Scopri cosa si è rotto e cosa farci.",
+        "steps": {
+          "intro": {
+            "title": "Le esecuzioni falliscono, ed è normale",
+            "body": "Un’esecuzione fallita non è un vicolo cieco. La board conserva l’errore, la causa è spesso una riga, e la maggior parte delle cause si risolve con un’impostazione, non riscrivendo l’attività."
+          },
+          "banner": {
+            "title": "Cosa è andato storto",
+            "body": "La card sostituisce la barra di avanzamento con questo avviso. Nomina la causa, i dettagli contengono l’output grezzo, e alcune cause offrono un pulsante diretto all’impostazione che le risolve."
+          },
+          "retry": {
+            "title": "Eseguirla di nuovo",
+            "body": "Riprova rilancia il lavoro. Gli errori precedenti restano sull’attività, sotto «Errori precedenti», così puoi confrontare i tentativi invece di perdere la traccia."
+          },
+          "finish": {
+            "title": "Un errore è informazione",
+            "body": "Correggi la causa, riprova, confronta. Se lo stesso errore continua a tornare, i dettagli sono ciò da portare a chi può ampliare un permesso o collegare quello che manca."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Dove avvengono le esecuzioni",
+        "description": "Le macchine su cui girano gli agenti, gli ambienti in cui testano e le credenziali che possono usare.",
+        "steps": {
+          "intro": {
+            "title": "Gli agenti hanno bisogno di un posto dove girare",
+            "body": "Ogni passo in container gira su un backend di esecuzione, i test si avviano in un ambiente e alcune capacità richiedono una credenziale. Tutti e tre si configurano in un’unica finestra."
+          },
+          "open": {
+            "title": "Apri Infrastruttura",
+            "body": "Tutto ciò che riguarda dove e come vengono eseguite le esecuzioni sta qui."
+          },
+          "tabs": {
+            "title": "Una scheda per argomento",
+            "body": "Container degli agenti è dove il lavoro viene eseguito. Ambienti di test è ciò da cui un servizio viene avviato. L’elenco delle credenziali mostra quali chiavi le capacità usate dai tuoi agenti riescono davvero a risolvere, e quali mancano ancora."
+          },
+          "finish": {
+            "title": "Gli errori riportano qui",
+            "body": "Quando un’esecuzione fallisce durante il provisioning, questa è la finestra che il suo avviso ti chiede di aprire. Meglio saperlo prima che dopo."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Revisione a più voci",
+        "description": "Fai revisionare lo stesso lavoro da più modelli invece di uno, sulle attività che lo meritano.",
+        "steps": {
+          "intro": {
+            "title": "Un revisore, o più di uno",
+            "body": "Un passo di revisione normalmente esegue un agente. Può invece eseguire un panel di più modelli e confrontare quello che dicono, cosa che intercetta quello che un revisore solo si perde sul lavoro più pesante."
+          },
+          "open": {
+            "title": "Apri Configurazione modelli",
+            "body": "I panel sono fatti di modelli, quindi si configurano accanto a loro."
+          },
+          "groups": {
+            "title": "Definire un panel",
+            "body": "Un gruppo nomina i modelli del panel e quanto impegnativa deve essere un’attività perché venga usato. Un passo poi seleziona un gruppo invece di nominare i modelli uno per uno."
+          },
+          "finish": {
+            "title": "Il costo segue lo sforzo",
+            "body": "Un panel costa tante chiamate al modello quanti sono i suoi membri, ed è per questo che un gruppo può essere limitato alle attività la cui stima supera la sua soglia. Il lavoro piccolo mantiene un solo revisore."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "I servizi che hai già",
+        "description": "Di’ agli agenti quali sistemi condivisi esistono e come sono le loro API.",
+        "steps": {
+          "intro": {
+            "title": "Non ricostruire quello che hai",
+            "body": "Gli agenti progettano alla cieca se non sanno cosa la tua organizzazione ha già in funzione. Questo catalogo nomina quei sistemi e porta i loro contratti API."
+          },
+          "open": {
+            "title": "Apri Servizi fondamentali",
+            "body": "Il catalogo delle capacità condivise disponibile per ogni board di questo workspace."
+          },
+          "catalog": {
+            "title": "Registra, carica o sincronizza",
+            "body": "Aggiungi un servizio a mano, carica i suoi documenti API, oppure collega un repository e lascia che si sincronizzino. I progetti fanno poi riferimento a ciò che è registrato qui invece di inventarsi un’interfaccia."
+          },
+          "finish": {
+            "title": "I passi di progettazione leggono questo",
+            "body": "Un progetto che dichiara quali di questi usa riceve i loro contratti completi al passo successivo. Uno che non dichiara nulla non riceve nulla: tenere questo aggiornato è ciò che lo fa funzionare."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Nuovo tour disponibile",
+      "start": "Mostrami",
+      "dismiss": "Chiudi"
     }
   },
   "externalTools": {

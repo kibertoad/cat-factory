@@ -286,6 +286,179 @@ export function isLaunchOffer(tour: TutorialTour): boolean {
   return tour.offeredAtLaunch !== false
 }
 
+/** The ids a catalogue resolution says can be started right now. */
+export function readyTourIds(catalogue: readonly TutorialCatalogueEntry[]): Set<string> {
+  return new Set(
+    catalogue.filter((entry) => entry.availability === 'ready').map((entry) => entry.tour.id),
+  )
+}
+
+/**
+ * The tour that just became takeable, for the contextual offer, or null when nothing did.
+ *
+ * The catalogue made every walkthrough reachable; this is what reaches the user who needs one
+ * WITHOUT going looking. The trigger is deliberately not a per-surface hook ("when a run parks,
+ * mention `answer-park`"): every tour already declares, as its `requires`, the exact predicate
+ * that means "you can take this now". So one rule over the resolved catalogue covers the whole
+ * catalog and inherits `navRequirementDrift` unchanged, where a hand-wired trigger per surface
+ * would be a second copy of each requirement to keep in step.
+ *
+ * Three rules, and the first is the one that is easy to get wrong:
+ *
+ *  - It fires on a TRANSITION into `ready`, never on the standing state, which is why the caller
+ *    must SEED `previouslyReady` from a resolution taken once the board is up AND may only offer
+ *    where the world itself moved (see {@link resolveNudge}, which owns both halves). Fired on
+ *    the standing state it would nudge about everything already available on every board load,
+ *    which is the launch prompt with none of its manners. The transition rule also means the
+ *    permission-gated platform tours (ready from the first render on any board) naturally never
+ *    reach it, and only the board-state tours — a run parked, a run failed, a PR ready to
+ *    merge — can.
+ *  - Only the launch-offer arc, for the reason `offeredAtLaunch` exists: a tour declared as
+ *    reference material someone comes and gets is not one to interrupt them with. Reusing that
+ *    declaration rather than inventing a second opt-out keeps a consumer deployment's tour
+ *    behaving here exactly as it does in the prompt.
+ *  - Never twice for the same tour (`wasNudged`) and never one already completed. A contextual
+ *    offer that returns is a nag, and this one is unusually well placed to become one: the gates
+ *    it reads flip several times per run.
+ *
+ * And nothing at all for a user who DECLINED. "No thanks" was an answer about guided tours, not
+ * about the startup timing of the question, so a mechanism that goes on offering them anyway is
+ * overriding the one explicit preference this feature collects. They keep the catalogue, which is
+ * where someone who changed their mind goes; `resetProgress` is the way back to being asked.
+ */
+export function newlyAvailableTour(input: {
+  catalogue: readonly TutorialCatalogueEntry[]
+  previouslyReady: ReadonlySet<string>
+  declined: boolean
+  isCompleted: (tourId: string) => boolean
+  wasNudged: (tourId: string) => boolean
+}): TutorialTour | null {
+  if (input.declined) return null
+  const candidate = input.catalogue.find(
+    (entry) =>
+      entry.availability === 'ready' &&
+      isLaunchOffer(entry.tour) &&
+      !input.previouslyReady.has(entry.tour.id) &&
+      !input.isCompleted(entry.tour.id) &&
+      !input.wasNudged(entry.tour.id),
+  )
+  return candidate?.tour ?? null
+}
+
+/**
+ * The gates that describe the WORLD: facts about this board that a person or a run changed.
+ *
+ * Everything else `NavGates` carries is a fact about the DEPLOYMENT or the VIEWER (a permission, a
+ * wired integration, the interface tier), and the difference is what {@link resolveNudge} turns on.
+ */
+const BOARD_STATE_GATES = [
+  'boardHasService',
+  'boardHasTask',
+  'boardHasRun',
+  'boardHasOpenDecision',
+  'boardHasPendingApproval',
+  'boardHasFinishedRun',
+  'boardHasFailedRun',
+] as const satisfies readonly (keyof NavGates)[]
+
+/**
+ * A comparable stamp of the board-state gates, so "did the world move" is one `!==`.
+ *
+ * A string of bits rather than a Set of what is true: the question is only whether this differs
+ * from the last look, and a stamp makes that answerable without caring which bit moved.
+ */
+export function boardStateFingerprint(gates: NavGates): string {
+  return BOARD_STATE_GATES.map((gate) => (gates[gate] ? '1' : '0')).join('')
+}
+
+/**
+ * One step of the contextual offer's state machine: the baseline to carry forward, and the tour
+ * to offer (if any) from this resolution of the catalogue.
+ *
+ * Pure, and separate from {@link newlyAvailableTour}, because the BASELINE is the part that was
+ * wrong when this shipped and the part a reactive wrapper cannot be trusted with. A transition
+ * rule is only as good as what it is measured against, and this one was measured against an app
+ * that had not finished starting: every gate reads a store something fills asynchronously, so a
+ * baseline taken too early records "nothing is takeable" and the app's own startup then reads as a
+ * transition. That turns the mechanism into exactly the every-board-load greeting it exists to
+ * prevent ("here is a new walkthrough", about a run that finished a fortnight ago).
+ *
+ * Two guards, because the first alone was not enough and the second is the general form of why:
+ *
+ *  - `boardReady` gates any baseline at all on the workspace snapshot having been fanned out, so
+ *    board state is in place before anything is recorded as the standing state. It also DISCARDS
+ *    the baseline when the board goes away, so switching boards re-seeds against the new one
+ *    rather than reporting everything it happens to satisfy as having just changed.
+ *  - `boardState` (a {@link boardStateFingerprint}) is what an offer actually requires to have
+ *    MOVED. Readiness widening is not the same as the world changing: a permission resolving, or
+ *    a capability probe answering, makes tours takeable that were "blocked" only because the app
+ *    did not know yet, and the app finding out about itself is not a moment to interrupt anyone
+ *    about. Those resolutions advance the baseline SILENTLY. This is the guard that generalises:
+ *    it needs no list of which stores load late, because none of them describe the world.
+ *
+ * So an offer needs both halves — a tour that just became takeable, and a world that just moved —
+ * and the baseline advances on every resolution either way, so a tour flickering
+ * ready → blocked → ready (which live run gates do) cannot re-offer itself.
+ */
+export function resolveNudge(input: {
+  boardReady: boolean
+  catalogue: readonly TutorialCatalogueEntry[]
+  boardState: string
+  previous: { ready: ReadonlySet<string>; boardState: string } | null
+  declined: boolean
+  isCompleted: (tourId: string) => boolean
+  wasNudged: (tourId: string) => boolean
+}): { baseline: { ready: Set<string>; boardState: string } | null; offer: TutorialTour | null } {
+  if (!input.boardReady) return { baseline: null, offer: null }
+  const baseline = { ready: readyTourIds(input.catalogue), boardState: input.boardState }
+  if (input.previous === null) return { baseline, offer: null }
+  if (input.previous.boardState === input.boardState) return { baseline, offer: null }
+  return {
+    baseline,
+    offer: newlyAvailableTour({ ...input, previouslyReady: input.previous.ready }),
+  }
+}
+
+/**
+ * The tour to hand the user off to when they finish `justFinishedId`, or null when there is
+ * nothing left to offer.
+ *
+ * The catalog is a COURSE, not a list: each delivery-loop tour produces the state the next
+ * one requires, so finishing one is the single most reliable moment at which another became
+ * takeable. Without a handoff the walkthrough that the user's own last action unlocked is
+ * reachable only from the catalogue, and the launch prompt cannot bring it up either: starting
+ * any tour writes `decision: 'accepted'`, which is what stops the prompt auto-opening for good.
+ * So the finish card is the ONLY place the product can still say "and now this one".
+ *
+ * Two rules make it an offer rather than a list:
+ *
+ *  - Launch-offer tours come FIRST, whatever their `order` (see {@link TutorialTour.offeredAtLaunch}).
+ *    The delivery loop is the arc someone taking a tour is on; a deployment's catalogue-only
+ *    tour with a low `order` must not jump in front of it. Ordering alone is not that
+ *    guarantee — it only happens to be true of the built-ins' numbering.
+ *  - It offers exactly one, and only a READY one. A list is what the catalogue is for, and a
+ *    blocked tour named here would ask the user to go and do something at the moment they
+ *    finished doing something.
+ *
+ * Absence is a legitimate answer, unlike in the catalogue: this is an offer, so having nothing
+ * to suggest means the card keeps its plain Done. The caller still shows the way to the
+ * catalogue, so the card never dead-ends.
+ *
+ * `ready` is deliberately read LIVE by the caller rather than from the tour's held script,
+ * which is the one place the "resolve once and HOLD" rule must not apply: completing
+ * `first-task` is exactly what makes `run-task` ready, so a candidate list frozen at tour
+ * start would be empty precisely when this exists to be useful.
+ */
+export function nextTourAfter(
+  ready: readonly TutorialTour[],
+  input: { justFinishedId: string; isCompleted: (tourId: string) => boolean },
+): TutorialTour | null {
+  const fresh = sortTours(ready).filter(
+    (tour) => tour.id !== input.justFinishedId && !input.isCompleted(tour.id),
+  )
+  return fresh.find(isLaunchOffer) ?? fresh[0] ?? null
+}
+
 /**
  * Where a tour stands for this user: the state the catalogue badges and the action label
  * derive from. Camel-cased because the values ARE the i18n leaf keys

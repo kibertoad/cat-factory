@@ -1,4 +1,10 @@
-import type { MergeClassRules, RequirementConcernLevel, StepGating } from '@cat-factory/kernel'
+import type {
+  ClassRulesByRole,
+  MergeClassRules,
+  RequirementConcernLevel,
+  StepGating,
+  WorkspaceRole,
+} from '@cat-factory/kernel'
 
 /**
  * The effective risk/merge policy for one run, as {@link RunMergePolicy.resolve} resolves it
@@ -37,4 +43,17 @@ export interface ResolvedRunRiskPolicy {
    * score ceilings, which is the historical behaviour.
    */
   classRules?: MergeClassRules
+  /**
+   * Per-ROLE narrowing of {@link classRules}, applied against the role the run pinned at start
+   * ({@link ExecutionInstance.initiatedByRole}). Narrow-only, so absent — on the built-in fallback
+   * and on any preset authored before this existed — leaves every role on the base rules.
+   */
+  classRulesByRole?: ClassRulesByRole
+  /**
+   * The roles whose runs this preset forces into dry-run mode. Read at START (that is when a run's
+   * mode is settled and pinned), never at merge time: a run that was admitted as live must not
+   * become un-mergeable because the preset was edited while it worked, and a run admitted as a dry
+   * run must stay sandboxed even if the role is un-listed mid-flight.
+   */
+  dryRunRoles?: readonly WorkspaceRole[]
 }

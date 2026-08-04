@@ -16,12 +16,15 @@ export const CODER_FORK_DECISION_CONFIG_ID = 'coder.forkDecision'
  * The bugfix reproduction-proof tri-state (auto / always / off), read by the engine's
  * `resolveReproductionTriState`.
  *
- * Deliberately NOT yet contributed as a task-facing descriptor: the verification phase itself is
- * Phase B of `docs/initiatives/bugfix-reproduction-proof.md` and the PR-report section is Phase
- * C, so a control rendered today would promise behaviour that does not exist — and `always`
- * would be indistinguishable from `auto` until the tracker-issue gating (D2) lands. The id and
- * the accepted wire values ship now so the descriptor is a pure addition later; a value set by
- * hand or by a deployment is already honoured.
+ * Contributed as a task-facing descriptor only now that the whole feature is user-visible: the
+ * verification phase runs in the harness (Phase B) and its verdict is published on the pull
+ * request and in the step panel (Phases C/D). Offering the control earlier would have promised
+ * behaviour that did not exist.
+ *
+ * `always` still resolves identically to `auto` — the divergence arrives with the tracker-issue
+ * gating (the initiative's D2), which is why the two options say what each MEANS rather than
+ * pretending to differ today: `auto` is the honest default, and `always` is the value a caller
+ * pins so the behaviour does not change under it when that gating lands.
  */
 export const CODER_REPRODUCTION_PROOF_CONFIG_ID = 'coder.reproductionProof'
 
@@ -37,6 +40,20 @@ const BUILTIN_CONFIG_CONTRIBUTIONS: Partial<Record<AgentKind, AgentConfigDescrip
       options: [
         { value: 'auto', label: 'Auto (gate on risk policy)' },
         { value: 'always', label: 'Always propose' },
+        { value: 'off', label: 'Off' },
+      ],
+      default: 'auto',
+    },
+    {
+      id: CODER_REPRODUCTION_PROOF_CONFIG_ID,
+      agentKind: 'coder',
+      label: 'Reproduction proof',
+      description:
+        'Run the reproduction test the run declared against BOTH the pre-fix tree and the finished one, and publish the two results on the pull request: only failing-then-passing proves the fix. `auto` runs it whenever the pipeline produced a reproduction declaration; `always` pins that behaviour for this task; `off` never runs it. A failed proof never fails the run, it is reported as unproven.',
+      type: 'select',
+      options: [
+        { value: 'auto', label: 'Auto (whenever the run declared a reproduction)' },
+        { value: 'always', label: 'Always, when a reproduction is declared' },
         { value: 'off', label: 'Off' },
       ],
       default: 'auto',

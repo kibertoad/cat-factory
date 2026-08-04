@@ -19,6 +19,7 @@ const NO_GATES: NavGates = {
   boardHasOpenDecision: false,
   boardHasPendingApproval: false,
   boardHasFinishedRun: false,
+  boardHasFailedRun: false,
 }
 
 describe('app modular registry', () => {

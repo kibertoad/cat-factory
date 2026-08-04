@@ -66,6 +66,20 @@ export const BUILTIN_GATABLE_KINDS: ReadonlySet<string> = new Set<string>([
   'tester-api',
   'tester-ui',
   'playwright',
+  // The bugfix reproduction test. It is the most expensive thing a small bugfix pays for (a
+  // `container-coding` dispatch: a real checkout, a commit and a push) and the least likely to
+  // earn its keep on a one-line change, which is exactly the range estimate gating exists to
+  // collapse into one preset.
+  //
+  // It qualifies under this set's own test rather than by convenience: its absence THINS a run
+  // where `merger`'s BREAKS one. Nothing reads the declaration structurally except the
+  // reproduction proof, which resolves to "no spec" and simply does not run, and the PR report
+  // then names the skip as its own cause (see `composeReproduction`). What a reader loses is the
+  // evidence, and the report says so out loud instead of implying the phase was off.
+  //
+  // Shipped GATABLE but ungated: no built-in preset carries `gating` on it, so the default cost
+  // is unchanged and an author who wants a trivial bugfix to skip the reproduction opts in.
+  'repro-test',
   // Documentation of work already done.
   'documenter',
   'business-documenter',

@@ -324,3 +324,158 @@ describe('MergeResolver replay safety', () => {
     )
   })
 })
+
+// ---------------------------------------------------------------------------
+// Role-scoped class rules + the sandboxed run mode. Both narrow the SAME decision the cases
+// above make, so what these lock is the precedence: a role may only push toward review, and a
+// dry run outranks every reason the policy could otherwise report.
+// ---------------------------------------------------------------------------
+
+/** The run, as started by `role` and (optionally) sandboxed. */
+const runBy = (role?: string, mode?: string): ExecutionInstance =>
+  ({ ...INSTANCE, initiatedByRole: role, mode }) as unknown as ExecutionInstance
+
+describe('MergeResolver: role-scoped class rules', () => {
+  it('auto-merges when the role leaves the widened class alone', () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { docs: 'always' },
+        classRulesByRole: { member: { source: 'never' } },
+      },
+      changeClass: 'docs',
+    })
+    return resolver.resolveMergerStep('ws', runBy('member'), assessment()).then((decision) => {
+      expect(decision).toMatchObject({ outcome: 'auto_merged', reason: 'class_auto_merge' })
+      expect(decision?.thresholds.roleRule).toBeUndefined()
+      expect(decision?.thresholds.initiatorRole).toBe('member')
+      expect(finalizeMerge).toHaveBeenCalledOnce()
+    })
+  })
+
+  it('routes to review as `role_requires_review` when the initiator’s role forbids the class', async () => {
+    const { resolver, finalizeMerge, raise } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { source: 'always' },
+        classRulesByRole: { member: { source: 'never' } },
+      },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ outcome: 'awaiting_review', reason: 'role_requires_review' })
+    // Distinguishable from a class-level refusal: the banner has to be able to say a teammate on
+    // a higher tier can merge this as it stands.
+    expect(decision?.thresholds.roleRule).toBe('never')
+    expect(decision?.thresholds.classRule).toBe('always')
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(raise).toHaveBeenCalledOnce()
+  })
+
+  it('keeps `class_requires_review` when the BASE rule is what forbids the class', async () => {
+    const { resolver } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { schema: 'never' },
+        classRulesByRole: { member: { schema: 'never' } },
+      },
+      changeClass: 'schema',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    // The role restated the base rule rather than narrowing it, so blaming the role would send
+    // someone hunting for a teammate who could merge it — nobody can.
+    expect(decision).toMatchObject({ reason: 'class_requires_review' })
+    expect(decision?.thresholds.roleRule).toBeUndefined()
+  })
+
+  it('NEVER lets a role entry widen what the preset withholds', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { source: 'never' },
+        classRulesByRole: { member: { source: 'always' } },
+      },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ outcome: 'awaiting_review', reason: 'class_requires_review' })
+    expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('leaves an UNATTRIBUTED run on the base rules', async () => {
+    // A schedule fire has no role to scope by, so it must behave exactly as it did before role
+    // scoping existed rather than being guessed onto a tier.
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { docs: 'always' },
+        classRulesByRole: { member: { docs: 'never' }, admin: { docs: 'never' } },
+      },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy(undefined), assessment())
+    expect(decision).toMatchObject({ outcome: 'auto_merged', reason: 'class_auto_merge' })
+    expect(decision?.thresholds.initiatorRole).toBeUndefined()
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+  })
+})
+
+describe('MergeResolver: dry run', () => {
+  it('never merges a dry run, however good the assessment', async () => {
+    const { resolver, finalizeMerge, update, raise } = makeResolver()
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      runBy('member', 'dry_run'),
+      assessment(),
+    )
+    expect(decision).toMatchObject({ outcome: 'awaiting_review', reason: 'dry_run' })
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(update).toHaveBeenCalledWith('ws', 'task_login', { status: 'pr_ready', progress: 1 })
+    expect(raise).toHaveBeenCalledOnce()
+  })
+
+  it('outranks a class rule that would otherwise auto-merge', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, classRules: { docs: 'always' } },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      runBy('member', 'dry_run'),
+      assessment(),
+    )
+    expect(decision).toMatchObject({ reason: 'dry_run' })
+    expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('reports `dry_run` rather than a score/policy reason that had no part in the outcome', async () => {
+    // A sandboxed run's scores were never consulted, so reporting `exceeded_thresholds` (or
+    // `auto_merge_disabled`) would send someone to edit a ceiling that did not decide this.
+    const overThreshold = await makeResolver()
+      .resolver.resolveMergerStep('ws', runBy('member', 'dry_run'), assessment({ risk: 0.99 }))
+      .then((d) => d?.reason)
+    expect(overThreshold).toBe('dry_run')
+    const autoMergeOff = await makeResolver({
+      preset: { ...PRESET, autoMergeEnabled: false },
+    })
+      .resolver.resolveMergerStep('ws', runBy('member', 'dry_run'), assessment())
+      .then((d) => d?.reason)
+    expect(autoMergeOff).toBe('dry_run')
+  })
+
+  it('does not blame the thresholds in the review card it raises', async () => {
+    const { resolver, raise } = makeResolver()
+    await resolver.resolveMergerStep('ws', runBy('member', 'dry_run'), assessment())
+    const body = raise.mock.calls[0]?.[1]?.body as string
+    expect(body).toContain('dry run')
+    expect(body).not.toContain('outside the task')
+  })
+
+  it('leaves a run with NO recorded mode merging exactly as before', async () => {
+    // Every run that predates the mode reads as live; a sandbox must never be inferred.
+    const { resolver, finalizeMerge } = makeResolver()
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ outcome: 'auto_merged', reason: 'within_thresholds' })
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+  })
+})

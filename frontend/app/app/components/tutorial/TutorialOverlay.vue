@@ -4,6 +4,7 @@ import {
   computeCoachMarkLayout,
   DEFAULT_TARGET_WAIT_MS,
   needsReveal,
+  nextTourAfter,
   TARGET_IDLE_INTERVAL_MS,
   TARGET_TRACK_INTERVAL_MS,
 } from '~/utils/tutorial'
@@ -41,6 +42,7 @@ import type { TutorialAdvanceCause, TutorialDirection } from './TutorialOverlay.
 const { t } = useI18n()
 const tutorial = useTutorialStore()
 const { tours } = useTutorialTours()
+const { launch } = useTutorialLaunch()
 const { fitView, viewport } = useBoardFlow()
 // Reduced motion is honoured in BOTH directions here: the CSS below drops the ring's transition
 // and the searching spinner behind `motion-safe:`, and this drives the JS half — an instant
@@ -48,6 +50,25 @@ const { fitView, viewport } = useBoardFlow()
 // for and is exactly what the preference is about.
 const reducedMotion = usePreferredReducedMotion()
 const motionMs = computed(() => (reducedMotion.value === 'reduce' ? 0 : 250))
+
+// ---------------------------------------------------------------------------------------
+// PER-RUN state: everything below belongs to ONE pass through ONE script, so it is declared
+// here, ahead of the script itself, and reset by the same watcher that re-resolves it. It
+// used to be declared further down and rebuilt by the component UNMOUNTING between tours,
+// which the finish card's handoff broke: that completes one tour and starts the next within a
+// single tick, so `touring` never goes false for a render and nothing unmounts.
+// ---------------------------------------------------------------------------------------
+/** Which way `skipMissingStep` travels — see `resolveSkip`. */
+const direction = ref<TutorialDirection>('forward')
+/** Steps this run gave up on, so the final card can be honest about an abridged tour. */
+const skippedStepIds = ref<Set<string>>(new Set())
+/**
+ * The step index whose anchor has already been brought into view. A reveal is attempted at
+ * most ONCE per step: `fitView` and `scrollIntoView` are animations that take longer than a
+ * tracking tick, so re-deciding each tick would re-issue the move against a viewport still
+ * mid-flight and fight the user the moment they panned away deliberately.
+ */
+const revealedForStep = ref<number | null>(null)
 
 /**
  * The running tour's script, resolved ONCE from the slot when the tour starts and then HELD
@@ -70,6 +91,15 @@ watch(
     // Read untracked (a watch callback registers no dependencies), which is what pins the
     // script: only starting a DIFFERENT tour re-resolves it.
     tour.value = id ? (tours.value.find((x) => x.id === id) ?? null) : null
+    // Per-RUN state belongs to the script, so it resets with it. This used to be safe by
+    // accident: the overlay is mounted only while `tutorial.touring`, so it unmounted between
+    // tours and every ref below was rebuilt. The finish card's handoff completes one tour and
+    // starts the next in ONE tick, so `touring` never goes false for a render and nothing
+    // unmounts — leaving the finished tour's skips to be counted against the new one, which
+    // would open a fresh walkthrough already claiming the user had missed part of it.
+    skippedStepIds.value = new Set()
+    revealedForStep.value = null
+    direction.value = 'forward'
   },
   { immediate: true },
 )
@@ -105,13 +135,6 @@ const targetRect = ref<TutorialRect | null>(null)
  * document query several times a second for the whole length of the tour.
  */
 const anchorEl = ref<HTMLElement | null>(null)
-/**
- * The step index whose anchor has already been brought into view. A reveal is attempted at
- * most ONCE per step: `fitView` and `scrollIntoView` are animations that take longer than a
- * tracking tick, so re-deciding each tick would re-issue the move against a viewport still
- * mid-flight and fight the user the moment they panned away deliberately.
- */
-const revealedForStep = ref<number | null>(null)
 const cardEl = ref<HTMLElement | null>(null)
 const layout = ref<CoachMarkLayout>({ top: -9999, left: -9999, placement: 'center' })
 
@@ -121,10 +144,6 @@ const layout = ref<CoachMarkLayout>({ top: -9999, left: -9999, placement: 'cente
  * invocations let a resize drag burn a "4000 ms" budget in a fraction of that time.
  */
 const searchDeadline = ref(0)
-/** Which way `skipMissingStep` travels — see `resolveSkip`. */
-const direction = ref<TutorialDirection>('forward')
-/** Steps this run gave up on, so the final card can be honest about an abridged tour. */
-const skippedStepIds = ref<Set<string>>(new Set())
 
 /** A targeted step whose anchor hasn't been found yet (renders the waiting note). */
 const searching = computed(() => step.value?.target !== undefined && targetRect.value === null)
@@ -133,6 +152,41 @@ const unexpectedSkips = computed(() =>
   unexpectedlySkippedSteps(skippedStepIds.value, tour.value?.steps ?? []),
 )
 const abridged = computed(() => unexpectedSkips.value.length > 0)
+
+/**
+ * The walkthrough to hand off to on the finish card, or null when there is nothing left.
+ *
+ * Read LIVE from the gated slot, which is the deliberate exception to the held-script rule
+ * above: the delivery loop is a chain in which each tour produces the state the next one
+ * requires, so the completion the user is about to record is itself what makes the next tour
+ * takeable. A candidate resolved when the tour STARTED would be empty exactly when this
+ * matters. Nothing about the running script is read from it, so the hazard the hold exists to
+ * prevent (a step swapped underneath a stationary cursor) cannot arise here.
+ *
+ * `justFinishedId` is the tour's OWN id rather than `tutorial.activeTourId`, so that the
+ * suggestion is stable across the completion that clears the cursor.
+ */
+const nextTour = computed<TutorialTour | null>(() =>
+  tour.value
+    ? nextTourAfter(tours.value, {
+        justFinishedId: tour.value.id,
+        isCompleted: (id) => tutorial.isCompleted(id),
+      })
+    : null,
+)
+
+/**
+ * Finish this tour and go straight into the one offered beside Done.
+ *
+ * Two calls rather than `launch()` alone: the completion has to be recorded first, or the tour
+ * the user just finished keeps its "not started" badge in the catalogue. `launch` (not
+ * `startTour`) so a suggested tour the user had broken off earlier RESUMES, exactly as it would
+ * from the catalogue — the precedence lives in one place for every surface that offers a tour.
+ */
+function takeNextTour(tourId: string) {
+  tutorial.completeTour()
+  launch(tourId)
+}
 
 /**
  * The browser viewport. Named apart from Vue Flow's `viewport` (the board CAMERA) above —
@@ -523,6 +577,33 @@ onUnmounted(() => {
             )
           }}
         </p>
+        <!-- The handoff. The catalog is a chain — each delivery-loop tour produces the state
+             the next one needs — and this is the last moment the product can say so: starting
+             any tour saves `decision: 'accepted'`, which stops the launch prompt returning, so
+             without this the walkthrough the user's own last action just unlocked is reachable
+             only by going and finding the catalogue. One tour, not a list; absent when there is
+             nothing ready, where the plain Done below is the honest ending. -->
+        <div
+          v-if="isLast && nextTour"
+          class="mt-3 rounded-lg border border-slate-700/70 bg-slate-800/40 p-2.5"
+          data-testid="tutorial-next-tour"
+        >
+          <p class="text-[11px] tracking-wide text-slate-400 uppercase">
+            {{ t('tutorial.overlay.nextUp') }}
+          </p>
+          <p class="mt-0.5 text-sm font-medium text-slate-100">{{ t(nextTour.titleKey) }}</p>
+          <p class="mt-0.5 text-xs text-slate-400">{{ t(nextTour.descriptionKey) }}</p>
+          <UButton
+            size="xs"
+            color="primary"
+            variant="soft"
+            class="mt-2"
+            data-testid="tutorial-next-tour-start"
+            @click="takeNextTour(nextTour.id)"
+          >
+            {{ t('tutorial.overlay.takeNext') }}
+          </UButton>
+        </div>
         <div class="mt-3 flex items-center justify-between gap-2">
           <UButton
             size="xs"

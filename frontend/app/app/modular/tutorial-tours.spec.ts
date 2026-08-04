@@ -29,6 +29,7 @@ const ALL_GATES: NavGates = {
   boardHasOpenDecision: true,
   boardHasPendingApproval: true,
   boardHasFinishedRun: true,
+  boardHasFailedRun: true,
 }
 
 /**
@@ -44,6 +45,7 @@ const FRESH_BOARD: NavGates = {
   boardHasOpenDecision: false,
   boardHasPendingApproval: false,
   boardHasFinishedRun: false,
+  boardHasFailedRun: false,
 }
 
 /** Resolve a dot-path against the en catalog; undefined when any hop is missing. */
@@ -295,10 +297,10 @@ describe('the built-in tutorial tour catalog', () => {
     // rather than spelled out a second time here.
     const pairs = navAnchoredSteps()
     // Guard the guard, twice over. A pairing that matched nothing would pass vacuously, and
-    // there is one per tour that opens a sidebar surface: `add-service` plus the four platform
-    // tours. And a gate field that is not a boolean would silently never vary across the
+    // there is one per tour that opens a sidebar surface: `add-service` plus every platform
+    // tour. And a gate field that is not a boolean would silently never vary across the
     // matrix, leaving whatever it gates unexercised.
-    expect(pairs.length).toBeGreaterThanOrEqual(5)
+    expect(pairs.length).toBeGreaterThanOrEqual(8)
     expect(Object.values(ALL_GATES).every((value) => typeof value === 'boolean')).toBe(true)
 
     const drifted = pairs.flatMap((pair) => {
@@ -344,6 +346,9 @@ describe('tour availability across the catalog', () => {
       'design-pipeline',
       'agent-standards',
       'connect-systems',
+      'prepare-infrastructure',
+      'panel-reviews',
+      'share-services',
     ])
   })
 
@@ -383,9 +388,20 @@ describe('tour availability across the catalog', () => {
       'first-task',
       'run-task',
       'answer-park',
+      // Work going WRONG is part of the arc, not an appendix to it: a first run fails often, and
+      // this is the tour the contextual offer raises when one does.
+      'diagnose-failure',
       'review-merge',
     ]
-    const CATALOGUE_ONLY = ['wire-models', 'design-pipeline', 'agent-standards', 'connect-systems']
+    const CATALOGUE_ONLY = [
+      'wire-models',
+      'design-pipeline',
+      'agent-standards',
+      'connect-systems',
+      'prepare-infrastructure',
+      'panel-reviews',
+      'share-services',
+    ]
     expect(TUTORIAL_TOURS.filter(isLaunchOffer).map((t) => t.id)).toEqual(LAUNCH_ARC)
     expect(TUTORIAL_TOURS.filter((t) => !isLaunchOffer(t)).map((t) => t.id)).toEqual(CATALOGUE_ONLY)
     // Un-offered is not un-runnable: it thins the offer, never the library.
@@ -433,6 +449,41 @@ describe('tour availability across the catalog', () => {
 
     const finished: NavGates = { ...withTask, boardHasRun: true, boardHasFinishedRun: true }
     expect(ready(finished)).toContain('review-merge')
+  })
+
+  it('offers the failure tour on the state the success tour refuses', () => {
+    // The two are disjoint on purpose, and this is the pairing that used to have no second half:
+    // a board whose only run FAILED was offered a walkthrough of reading a successful result
+    // (blocked, so invisible in the prompt) and nothing whatsoever about the banner on screen.
+    const failed: NavGates = { ...FRESH_BOARD, boardHasRun: true, boardHasFailedRun: true }
+    expect(ready(failed)).toContain('diagnose-failure')
+    expect(ready(failed)).not.toContain('review-merge')
+    expect(entry(failed, 'review-merge')?.unmet.map((r) => r.id)).toEqual(['finished-run'])
+
+    const succeeded: NavGates = { ...FRESH_BOARD, boardHasRun: true, boardHasFinishedRun: true }
+    expect(ready(succeeded)).toContain('review-merge')
+    expect(entry(succeeded, 'diagnose-failure')?.unmet.map((r) => r.id)).toEqual(['failed-run'])
+  })
+
+  it('holds the interface tier as a requirement of the tours whose surface hides in basic', () => {
+    // Two different reasons, one requirement. `share-services` clicks a nav entry marked
+    // `advanced: true` (which `navRequirementDrift` also enforces); `panel-reviews` clicks a
+    // BASIC entry whose consensus section renders only in advanced mode or once a group exists,
+    // one level below anything the nav guard can see. Basic is the shipped default, so without
+    // this both would be offered to nearly every user and find nothing.
+    const basic: NavGates = { ...ALL_GATES, advancedMode: false }
+    expect(ready(basic)).not.toContain('share-services')
+    expect(ready(basic)).not.toContain('panel-reviews')
+    expect(entry(basic, 'share-services')?.unmet.map((r) => r.id)).toEqual(['advanced-tier'])
+    expect(entry(basic, 'panel-reviews')?.unmet.map((r) => r.id)).toEqual(['advanced-tier'])
+  })
+
+  it('names the missing execution backend for the infrastructure tour', () => {
+    const noInfra: NavGates = { ...ALL_GATES, infrastructureAvailable: false }
+    expect(ready(noInfra)).not.toContain('prepare-infrastructure')
+    expect(entry(noInfra, 'prepare-infrastructure')?.unmet.map((r) => r.id)).toEqual([
+      'infrastructure',
+    ])
   })
 
   it('names every unmet requirement, not just the first', () => {

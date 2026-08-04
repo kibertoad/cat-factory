@@ -566,7 +566,8 @@
         "binary_output_service_invalid": "Service des sorties binaires introuvable",
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
         "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
-        "ticket_already_linked": "Ce ticket a déjà une tâche"
+        "ticket_already_linked": "Ce ticket a déjà une tâche",
+        "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -599,7 +600,8 @@
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
         "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
-        "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket."
+        "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
+        "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1243,7 +1245,9 @@
         "merge_failed": "Les scores étaient dans les seuils de {preset}, mais la fusion automatique n'a pas pu aboutir (par exemple protection de branche ou conflit), la PR attend donc une fusion par une personne.",
         "merge_partial": "Certaines des pull requests de la tâche ont été fusionnées, mais une suivante n'a pas pu l'être, le changement attend donc qu'une personne termine ou annule la fusion multi-dépôt.",
         "class_auto_merge": "Ce préréglage fusionne toujours automatiquement cette catégorie de changement : les scores n’ont donc pas été comparés.",
-        "class_requires_review": "Ce préréglage envoie toujours cette catégorie de changement à un humain, quels que soient les scores."
+        "class_requires_review": "Ce préréglage envoie toujours cette catégorie de changement à un humain, quels que soient les scores.",
+        "role_requires_review": "Ce préréglage soumet les exécutions lancées par un {role} à une revue humaine pour ce type de modification, quels que soient les scores. Un collègue d'un niveau supérieur peut fusionner cette PR telle quelle.",
+        "dry_run": "Il s'agissait d'une exécution à blanc : la pull request est restée ouverte pour une personne et les scores n'ont pas été comparés. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "scores": "Scores",
       "axis": {
@@ -1402,6 +1406,33 @@
         "failedSummary": "{failed} vérifications sur {total} échouaient encore après {attempts} tentatives sur {maxAttempts}, aucune demande de tirage n'a donc été ouverte.",
         "exitCode": "code de sortie {code}",
         "timedOut": "délai dépassé"
+      },
+      "reproduction": {
+        "heading": "Preuve de reproduction",
+        "status": {
+          "reproduced": "Reproduit",
+          "inconclusive": "Non démontré",
+          "declared_infeasible": "Non reproductible"
+        },
+        "verdict": {
+          "reproduced": "La vérification déclarée a échoué sur l’arbre d’avant le correctif et réussit sur celui-ci.",
+          "inconclusive": "La vérification n’a pas démontré le défaut de part et d’autre du correctif, le correctif n’est donc pas étayé.",
+          "declared_infeasible": "L’agent a déclaré que ce bogue ne peut pas être reproduit dans un test et a indiqué ce qu’il a vérifié à la place."
+        },
+        "tree": {
+          "base": "Arbre d’avant le correctif",
+          "final": "Arbre final"
+        },
+        "command": "Commande",
+        "reason": "Pourquoi c’est irreproductible",
+        "alternative": "Vérifié à la place",
+        "passed": "réussi",
+        "exitCode": "code de sortie {code}",
+        "timedOut": "délai dépassé",
+        "setupFailed": "échec de la préparation",
+        "notRun": "non exécuté",
+        "attempts": "Tentative {attempts} sur {maxAttempts}",
+        "omittedTestPaths": "{count} fichier de test déclaré a été écarté avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète. | {count} fichiers de test déclarés ont été écartés avant l’exécution de la preuve, l’arbre d’avant le correctif a donc été reconstruit à partir d’une reproduction incomplète."
       }
     },
     "inspector": {
@@ -6280,6 +6311,12 @@
       "minor": "Remarques mineures",
       "major": "Reprise importante",
       "classHistory": "{merged} fusionnés dans cette catégorie, dont {autoShare} automatiquement"
+    },
+    "role": {
+      "admin": "administrateur",
+      "member": "membre",
+      "viewer": "lecteur",
+      "unattributed": "un démarrage automatique"
     }
   },
   "vcs": {
@@ -6381,7 +6418,10 @@
       "finishedRun": "Une exécution terminée avec succès",
       "integrationsManage": "L'autorisation de gérer les intégrations",
       "settingsManage": "L'autorisation de gérer les paramètres de l'espace de travail",
-      "library": "La bibliothèque de fragments de contexte activée sur ce déploiement"
+      "library": "La bibliothèque de fragments de contexte activée sur ce déploiement",
+      "failedRun": "Une exécution en échec",
+      "infrastructure": "Un backend d’exécution connecté à cet espace de travail",
+      "advancedTier": "Le mode d’interface avancé"
     },
     "overlay": {
       "next": "Suivant",
@@ -6393,7 +6433,9 @@
       "announcement": "Étape {current} sur {total}. {title}. {body}",
       "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
-      "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer"
+      "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer",
+      "nextUp": "Ensuite",
+      "takeNext": "Faire celle-ci"
     },
     "tours": {
       "boardBasics": {
@@ -6516,7 +6558,7 @@
           },
           "finish": {
             "title": "Voilà la boucle",
-            "body": "Planifier une tâche, choisir un pipeline, la lancer, la suivre. Quand une exécution a besoin de vous, elle s'arrête et le dit, ce que couvre la visite suivante."
+            "body": "Planifier une tâche, choisir un pipeline, la lancer, la suivre. Les visites suivantes lisent une exécution réelle : elles se débloquent dès que vous en avez lancé une pour de vrai."
           }
         }
       },
@@ -6671,7 +6713,100 @@
             "body": "Certaines entrées vous appartiennent plutôt qu'au tableau, comme un jeton d'accès personnel ou un abonnement, et ne servent qu'aux exécutions que vous lancez. Le hub indique lesquelles, et Ma configuration rassemble les vôtres."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Lire un échec",
+        "description": "Une exécution s’est arrêtée sur une erreur. Comprenez ce qui a cassé, et quoi y faire.",
+        "steps": {
+          "intro": {
+            "title": "Les exécutions échouent, c’est normal",
+            "body": "Une exécution en échec n’est pas une impasse. Le tableau conserve l’erreur, la cause tient souvent en une ligne, et la plupart des causes se corrigent par un réglage plutôt qu’en réécrivant la tâche."
+          },
+          "banner": {
+            "title": "Ce qui s’est mal passé",
+            "body": "La carte remplace sa barre de progression par ce bandeau. Il nomme la cause, les détails contiennent la sortie brute, et certaines causes proposent un bouton menant droit au réglage qui les corrige."
+          },
+          "retry": {
+            "title": "Relancer",
+            "body": "Réessayer relance le travail. Les erreurs précédentes restent sur la tâche, sous « Erreurs précédentes », pour comparer les tentatives au lieu de perdre la trace."
+          },
+          "finish": {
+            "title": "Un échec est une information",
+            "body": "Corriger la cause, réessayer, comparer. Si la même erreur revient sans cesse, les détails sont ce qu’il faut apporter à la personne qui peut élargir une autorisation ou brancher ce qui manque."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Où les exécutions ont lieu",
+        "description": "Les machines où tournent les agents, les environnements où ils testent, et les identifiants qu’ils peuvent utiliser.",
+        "steps": {
+          "intro": {
+            "title": "Les agents ont besoin d’un endroit pour tourner",
+            "body": "Chaque étape en conteneur tourne sur un backend d’exécution, les tests se lèvent dans un environnement, et certaines capacités demandent un identifiant. Les trois se configurent dans une seule fenêtre."
+          },
+          "open": {
+            "title": "Ouvrir Infrastructure",
+            "body": "Tout ce qui concerne où et comment les exécutions se déroulent est ici."
+          },
+          "tabs": {
+            "title": "Un onglet par sujet",
+            "body": "Conteneurs d’agents, c’est là que le travail s’exécute. Environnements de test, c’est à partir de quoi un service est levé. La liste des identifiants montre quelles clés les capacités utilisées par vos agents peuvent réellement résoudre, et lesquelles manquent encore."
+          },
+          "finish": {
+            "title": "Les échecs renvoient ici",
+            "body": "Quand une exécution échoue au provisionnement, c’est la fenêtre que son bandeau vous demande d’ouvrir. Mieux vaut le savoir avant que cela arrive qu’après."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Relecture par comité",
+        "description": "Faites relire le même travail par plusieurs modèles au lieu d’un seul, sur les tâches qui le justifient.",
+        "steps": {
+          "intro": {
+            "title": "Un relecteur, ou plusieurs",
+            "body": "Une étape de relecture exécute normalement un agent. Elle peut à la place exécuter un comité de plusieurs modèles et comparer ce qu’ils disent, ce qui rattrape ce qu’un relecteur unique laisse passer sur les travaux lourds."
+          },
+          "open": {
+            "title": "Ouvrir Configuration des modèles",
+            "body": "Les comités sont faits de modèles : ils se configurent juste à côté."
+          },
+          "groups": {
+            "title": "Définir un comité",
+            "body": "Un groupe nomme les modèles du comité et le niveau d’exigence qu’une tâche doit atteindre pour qu’il serve. Une étape choisit ensuite un groupe au lieu de nommer les modèles un par un."
+          },
+          "finish": {
+            "title": "Le coût suit l’effort",
+            "body": "Un comité coûte autant d’appels de modèle qu’il a de membres, d’où la possibilité de limiter un groupe aux tâches dont l’estimation dépasse son seuil. Le petit travail garde un seul relecteur."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Les services que vous avez déjà",
+        "description": "Dites aux agents quels systèmes partagés existent, et à quoi ressemblent leurs API.",
+        "steps": {
+          "intro": {
+            "title": "Ne reconstruisez pas ce que vous avez",
+            "body": "Les agents conçoivent à l’aveugle s’ils ignorent ce que votre organisation fait déjà tourner. Ce catalogue nomme ces systèmes et porte leurs contrats d’API."
+          },
+          "open": {
+            "title": "Ouvrir Services fondamentaux",
+            "body": "Le catalogue des capacités partagées disponible pour tous les tableaux de cet espace de travail."
+          },
+          "catalog": {
+            "title": "Enregistrer, déposer ou synchroniser",
+            "body": "Ajoutez un service à la main, déposez ses documents d’API, ou reliez un dépôt et laissez-les se synchroniser. Les conceptions référencent alors ce qui est enregistré ici au lieu d’inventer une interface."
+          },
+          "finish": {
+            "title": "Les étapes de conception lisent ceci",
+            "body": "Une conception qui déclare lesquels elle utilise reçoit leurs contrats complets à l’étape suivante. Celle qui ne déclare rien ne reçoit rien : tenir ceci à jour est ce qui fait que cela marche."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Nouvelle visite disponible",
+      "start": "Montrez-moi",
+      "dismiss": "Masquer"
     }
   },
   "externalTools": {

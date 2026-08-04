@@ -666,6 +666,7 @@ export type {
 } from './merge-track-record-repositories.js'
 export type { SharedStackRepository, SharedStackSeeder } from './shared-stack-repositories.js'
 export type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
+export type { TutorialProgressRepository } from './tutorial-progress-repositories.js'
 export type { UserSettingsRepository } from './user-settings-repositories.js'
 export type {
   SandboxPromptVersionRepository,
