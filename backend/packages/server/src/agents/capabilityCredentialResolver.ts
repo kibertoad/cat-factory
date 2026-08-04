@@ -162,6 +162,38 @@ export interface ToolSecretChain {
   environmentFallback?: boolean
 }
 
+/**
+ * The two fields a {@link ToolSecretChain} contributes to a facade's `ServerContainer`.
+ *
+ * Structurally typed rather than a `Pick<ServerContainer, …>` so this module keeps no dependency on
+ * the HTTP layer; the result is assignable to the container either way.
+ */
+export interface ToolSecretContainerFields {
+  /** The composed chain the tool-server PROBE resolves through. */
+  toolSecretResolver: ToolSecretResolver
+  /** What sits behind the store, when it can be described. Omitted when it cannot. */
+  toolSecretEnvironmentFallback?: boolean
+}
+
+/**
+ * Project a composed chain onto the container fields every facade surfaces.
+ *
+ * ONE function for both facades, for the reason `buildToolSecretChain` itself exists: the resolver
+ * and the DESCRIPTION of what sits behind it have to travel together, and each facade assembling
+ * the pair by hand is exactly the shape that lets the runtimes drift about it. The conditional
+ * spread is the part worth centralising: `undefined` must be ABSENT rather than present-and-
+ * undefined, because the credential checklist renders three states off that distinction and a
+ * facade that spread the key unconditionally would turn "cannot be described" into a rendered guess.
+ */
+export function toolSecretContainerFields(chain: ToolSecretChain): ToolSecretContainerFields {
+  return {
+    toolSecretResolver: chain.resolver,
+    ...(chain.environmentFallback === undefined
+      ? {}
+      : { toolSecretEnvironmentFallback: chain.environmentFallback }),
+  }
+}
+
 export interface ToolSecretChainInput {
   /**
    * A deployment's own resolver, from its facade's `createToolSecretResolver`. Present ⇒ it

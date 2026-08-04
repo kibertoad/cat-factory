@@ -3083,6 +3083,48 @@
         "removeFailed": "Could not remove the registry entry"
       }
     },
+    "toolServers": {
+      "heading": "Tool servers (MCP)",
+      "intro": "The MCP servers this deployment registers for its agents. Testing one resolves this board's credentials and speaks the protocol to the server, so the result is what a run would get.",
+      "transport": {
+        "stdio": "In the container",
+        "http": "Remote"
+      },
+      "declaredBy": "Given to: {kinds}",
+      "declaredByNone": "No agent gets this server, so no run will ever start it.",
+      "servableHarnesses": "Works on: {harnesses}",
+      "servableHarnessesNone": "No agent CLI can serve this transport, so this server never applies to any run.",
+      "allowedTools": "Narrowed to: {tools}",
+      "credentials": "Credentials: {keys}",
+      "test": "Test",
+      "notProbeable": {
+        "stdio": "Runs inside the agent's container, so it cannot be tested from here.",
+        "containerLocal": "Listens beside the agent in its own container, which is not reachable from here.",
+        "urlNotAllowed": "The address is not one a tool server may be reached at (https, or plain http on localhost)."
+      },
+      "status": {
+        "ok": "Answered",
+        "credentialsMissing": "No credential",
+        "credentialRefused": "Credential refused",
+        "unreachable": "No answer",
+        "httpError": "Rejected the request",
+        "protocolError": "Not an MCP server",
+        "notProbeable": "Cannot be tested from here"
+      },
+      "okDetail": "{name} {version}, protocol {protocol}, {count} tools.",
+      "toolsIncomplete": "The server has more tools than one test reads, so this count is a minimum.",
+      "unmatchedTools": "This server exposes no tool called {tools}, so the agent is told about a tool it cannot call.",
+      "allowedToolsUnchecked": "The tool list was too long to read in full, so the narrowed names could not be checked.",
+      "unresolvedCredentials": "Nothing resolved for {keys}. Fill it in below, or set it in the deployment's environment.",
+      "refusedCredentials": "{keys} names a variable the platform's own configuration owns, so it is never resolved. Change the declaration in the deployment's code.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "toast": {
+        "loadFailed": "Could not load the tool servers",
+        "probeFailed": "Could not test the tool server"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Capability credentials",
       "intro": "The secrets this deployment's tool servers and generative integrations ask for by name. Values are stored for this board only, sealed at rest, and handed straight to the agent's process: they never reach a prompt or a log. Values are write-only, so a stored one is replaced by typing a new one and never read back.",

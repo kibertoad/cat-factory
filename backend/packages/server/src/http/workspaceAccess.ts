@@ -127,3 +127,34 @@ export function requireWorkspacePermission<E extends AppEnv>(
     return next()
   }
 }
+
+/**
+ * The same controller-level gate, applied to READS as well.
+ *
+ * {@link requireWorkspacePermission} lets GET/HEAD through by design: on almost every admin
+ * controller the permission guards MUTATION and the configuration itself is viewer-readable. A few
+ * controllers invert that, because their READ is the sensitive half — the capability-credential
+ * checklist and the tool-server inventory both project the credential KEY NAMES this deployment's
+ * capabilities want, which is exactly what the workspace snapshot withholds from a viewer ("no
+ * business learning which environment variables the deployment sets"). Moving the value into a
+ * sealed row did not change that judgement, and neither did adding a second surface over the same
+ * registry.
+ *
+ * A separate function rather than an option, so the choice is legible at the mount and a controller
+ * cannot acquire it by a default changing underneath it. `OPTIONS` still passes: a CORS preflight
+ * carries no credentials to judge, and refusing it breaks the browser before the real request that
+ * this gate is here to refuse.
+ *
+ * The failure this exists to prevent is not hypothetical. Both call sites documented the read as
+ * gated (in the controller, in the SPA's tab gate, in the store's 403 handling) while the mount let
+ * every member's GET through, because "gated on `secrets.manage`" reads as covering the controller
+ * and covered only its writes.
+ */
+export function requireWorkspacePermissionIncludingReads<E extends AppEnv>(
+  permission: WorkspacePermission,
+): MiddlewareHandler<E> {
+  return (c, next) => {
+    if (c.req.method !== 'OPTIONS') requirePermission(c, permission)
+    return next()
+  }
+}

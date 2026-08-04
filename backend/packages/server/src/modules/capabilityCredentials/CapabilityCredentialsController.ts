@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { CapabilityCredentialsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { requireWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 import {
@@ -70,10 +70,15 @@ async function viewFor(
  * own generative-integration projection deliberately omits ("a workspace viewer has no business
  * learning which environment variables the deployment sets"). Moving the value into a row does
  * not change that judgement.
+ *
+ * Which is why the mount is `requireWorkspacePermissionIncludingReads` and not the usual
+ * `requireWorkspacePermission`: that one passes GET/HEAD straight through, so for a release this
+ * controller documented a gated read (here, in the SPA's tab gate, and in the store's 403 branch)
+ * while every member's GET was answered in full.
  */
 export function capabilityCredentialsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('secrets.manage'))
+  app.use('*', requireWorkspacePermissionIncludingReads('secrets.manage'))
 
   buildHonoRoute(app, getCapabilityCredentialsContract, async (c) => {
     const svc = requireCapabilityCredentials(c)

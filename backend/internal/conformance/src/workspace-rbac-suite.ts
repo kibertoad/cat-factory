@@ -390,6 +390,11 @@ function registerRbacMemberManagementTests(
       { perm: 'secrets.manage', method: 'DELETE', path: w('/api-keys/none') },
       { perm: 'secrets.manage', method: 'DELETE', path: w('/public-api-keys/none') },
       { perm: 'secrets.manage', method: 'DELETE', path: w('/services/none/test-secrets') },
+      { perm: 'secrets.manage', method: 'DELETE', path: w('/capability-credentials/none') },
+      // The tool-server PROBE. Gated for two reasons, either of which would be enough: the result
+      // names the deployment's credential keys, and the request itself SPENDS an outbound call
+      // against a third party under the deployment's own credential.
+      { perm: 'secrets.manage', method: 'POST', path: w('/tool-servers/none/test') },
     ]
 
     // A plain member is refused every one (403). Fold the route into the asserted value so a
@@ -445,6 +450,43 @@ function registerRbacMemberManagementTests(
 
     // The admin clears the gate on the preflight itself (200 wired / 503 unwired — never 403).
     expect((await app.call('GET', path, undefined, ha)).status).not.toBe(403)
+  })
+
+  it('admin-tier enforcement: the capability-credential and tool-server READS are gated too (MCP maturation slice 4)', async () => {
+    // The other exception to the table's premise, and the opposite shape from the preflight above:
+    // these two controllers mount `requireWorkspacePermissionIncludingReads`, so the whole
+    // controller answers to `secrets.manage` rather than one handler gating itself.
+    //
+    // They must, because on these two the READ is the sensitive half. Both project the credential
+    // KEY NAMES this deployment's capabilities want — which is precisely what the workspace
+    // snapshot withholds from a viewer — and the tool-server inventory adds the endpoints those
+    // credentials are sent to. Asserted explicitly because the ordinary mount passes GET through by
+    // design: for a release both surfaces DOCUMENTED a gated read (in the controller, in the SPA's
+    // tab gate, in the store's 403 branch) while every member's GET was answered in full, and
+    // nothing failed.
+    const app = harness.makeApp()
+    const { adminA, c, wsId } = await scenario(app)
+    const ha = bearer(await app.session({ id: adminA }))
+    await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+    const hc = bearer(await app.session({ id: c }))
+    const reads = [`/workspaces/${wsId}/capability-credentials`, `/workspaces/${wsId}/tool-servers`]
+
+    for (const path of reads) {
+      // A plain member holds `workspace.read` and clears the viewer floor (a GET), so a 403 here is
+      // the controller gate and nothing else.
+      expect({ path, status: (await app.call('GET', path, undefined, hc)).status }).toEqual({
+        path,
+        status: 403,
+      })
+      // The admin resolves PAST the gate: 200 where the module is wired, 503 where it is not, never
+      // a 403 — which is what proves the refusal above is the gate rejecting the member rather than
+      // a route that always rejects.
+      expect({
+        path,
+        forbidden: (await app.call('GET', path, undefined, ha)).status === 403,
+      }).toEqual({ path, forbidden: false })
+    }
   })
 }
 

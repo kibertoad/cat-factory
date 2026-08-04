@@ -85,10 +85,12 @@ const SOURCES: Record<string, [string, string[]]> = {
     ['resolveRegisteredToolSecretResolver', 'registeredToolSecretEnvironmentFallback'],
   ],
   // …carried across the assembly boundary, resolver and description TOGETHER, so the credential
-  // checklist describes the chain the dispatch path actually got…
+  // checklist describes the chain the dispatch path actually got, and the CONTAINER carries the
+  // resolver as well, because the tool-server probe has to resolve through the same chain a
+  // dispatch does or its verdict is about some other tenant's credential…
   'src/infrastructure/container-assembly.ts': [
     assemblySource,
-    ['toolSecretChain.resolver', 'toolSecretEnvironmentFallback'],
+    ['toolSecretChain.resolver', 'toolSecretEnvironmentFallback', 'toolSecretResolver:'],
   ],
   // …and taken by the executor as a REQUIRED dependency. This link is the one the type system now
   // pins by itself: the field carried a bare Worker-vars default until it was made required, and

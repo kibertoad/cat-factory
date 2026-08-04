@@ -2835,6 +2835,48 @@
         "removeFailed": "No se pudo eliminar la entrada del registro"
       }
     },
+    "toolServers": {
+      "heading": "Servidores de herramientas (MCP)",
+      "intro": "Los servidores MCP que esta instalación registra para sus agentes. Al probar uno se resuelven las credenciales de este tablero y se habla el protocolo con el servidor, así que el resultado es el que obtendría una ejecución.",
+      "transport": {
+        "stdio": "En el contenedor",
+        "http": "Remoto"
+      },
+      "declaredBy": "Asignado a: {kinds}",
+      "declaredByNone": "Ningún agente recibe este servidor, así que ninguna ejecución lo iniciará.",
+      "servableHarnesses": "Funciona con: {harnesses}",
+      "servableHarnessesNone": "Ninguna CLI de agente puede servir este transporte, así que este servidor nunca se aplica a una ejecución.",
+      "allowedTools": "Limitado a: {tools}",
+      "credentials": "Credenciales: {keys}",
+      "test": "Probar",
+      "notProbeable": {
+        "stdio": "Se ejecuta dentro del contenedor del agente, así que no puede probarse desde aquí.",
+        "containerLocal": "Escucha junto al agente en su propio contenedor, que no es accesible desde aquí.",
+        "urlNotAllowed": "Esta dirección no es válida para un servidor de herramientas (https, o http simple solo en localhost)."
+      },
+      "status": {
+        "ok": "Respondió",
+        "credentialsMissing": "Sin credencial",
+        "credentialRefused": "Credencial rechazada",
+        "unreachable": "Sin respuesta",
+        "httpError": "Rechazó la solicitud",
+        "protocolError": "No es un servidor MCP",
+        "notProbeable": "No se puede probar desde aquí"
+      },
+      "okDetail": "{name} {version}, protocolo {protocol}, {count} herramientas.",
+      "toolsIncomplete": "El servidor tiene más herramientas de las que lee una prueba, así que este número es un mínimo.",
+      "unmatchedTools": "Este servidor no expone ninguna herramienta llamada {tools}, así que al agente se le anuncia una herramienta que no puede invocar.",
+      "allowedToolsUnchecked": "La lista de herramientas era demasiado larga para leerla completa, así que no se pudieron comprobar los nombres limitados.",
+      "unresolvedCredentials": "No se resolvió nada para {keys}. Rellénalo abajo o defínelo en el entorno de la instalación.",
+      "refusedCredentials": "{keys} nombra una variable que pertenece a la configuración de la propia plataforma, así que nunca se resuelve. Cambia la declaración en el código de la instalación.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Ver detalles",
+      "hideDetails": "Ocultar detalles",
+      "toast": {
+        "loadFailed": "No se pudieron cargar los servidores de herramientas",
+        "probeFailed": "No se pudo probar el servidor de herramientas"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Credenciales de capacidades",
       "intro": "Los secretos que los servidores de herramientas y las integraciones generativas de esta instalación piden por nombre. Los valores se guardan solo para este tablero, cifrados en reposo, y se entregan directamente al proceso del agente: nunca llegan a un prompt ni a un registro. Los valores son de solo escritura, así que uno guardado se sustituye escribiendo otro y nunca se vuelve a leer.",

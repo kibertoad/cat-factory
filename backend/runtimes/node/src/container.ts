@@ -9,6 +9,7 @@ import {
   type InlineLlmCallRecorder,
   type PlatformAlertSink,
   type SubscriptionVendor,
+  type ToolSecretResolver,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
@@ -395,10 +396,14 @@ interface NodeServerContainerBundle {
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
   /**
-   * Whether the composed capability-credential chain reads this node's environment behind the
-   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
+   * resolver the tool-server probe resolves through, plus whether this node's environment answers
+   * behind the per-workspace store. The description is ABSENT (not undefined) when a deployment
+   * replaced the chain with its own resolver, because the checklist renders three states off that
+   * distinction.
    */
-  toolSecretEnvironmentFallback: boolean | undefined
+  toolSecretEnvironmentFallback?: boolean
+  toolSecretResolver: ToolSecretResolver
   validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
@@ -447,6 +452,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     testSecretsService,
     capabilityCredentialsService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     subscriptions,
     personalSubscriptions,
@@ -592,11 +598,13 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
-    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
-    // describes the real chain instead of asserting the default beside it. Undefined when a
-    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
-    // what that consults.
+    // The composed capability-credential chain: the resolver the tool-server probe resolves through,
+    // and what sits BEHIND the store, so the credential checklist describes the real chain instead of
+    // asserting the default beside it. Both arrive already projected by
+    // `toolSecretContainerFields`, so the description stays ABSENT rather than undefined when a
+    // deployment supplied its own resolver and nothing here can describe what that consults.
     ...(toolSecretEnvironmentFallback === undefined ? {} : { toolSecretEnvironmentFallback }),
+    toolSecretResolver,
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
@@ -710,10 +718,14 @@ interface NodeContainerFinalizeBundle {
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
   /**
-   * Whether the composed capability-credential chain reads this node's environment behind the
-   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
+   * resolver the tool-server probe resolves through, plus whether this node's environment answers
+   * behind the per-workspace store. The description is ABSENT (not undefined) when a deployment
+   * replaced the chain with its own resolver, because the checklist renders three states off that
+   * distinction.
    */
-  toolSecretEnvironmentFallback: boolean | undefined
+  toolSecretEnvironmentFallback?: boolean
+  toolSecretResolver: ToolSecretResolver
   validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
@@ -777,6 +789,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     testSecretsService,
     capabilityCredentialsService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     publicApiKeys,
     userSecrets,
@@ -938,6 +951,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     testSecretsService,
     capabilityCredentialsService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     subscriptions,
     personalSubscriptions,

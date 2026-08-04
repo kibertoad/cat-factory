@@ -43,8 +43,10 @@ const SOURCES: Record<string, string[]> = {
     'toolSecretChain.resolver',
     'toolSecretEnvironmentFallback',
   ],
-  // …carried onto the container the credential controller resolves from.
-  '../src/container.ts': ['toolSecretEnvironmentFallback'],
+  // …carried onto the container the credential controller resolves from, resolver INCLUDED: the
+  // tool-server probe resolves through the same chain a dispatch does, so a lost link there would
+  // silently report every board's servers against this node's own environment.
+  '../src/container.ts': ['toolSecretEnvironmentFallback', 'toolSecretResolver'],
   // The executor taking the composed chain as a REQUIRED dependency. This link is the one the
   // type system now pins by itself: the field carried a bare environment default until it was
   // made required, and that default failed OPEN, so dropping the link here resolved every tenant

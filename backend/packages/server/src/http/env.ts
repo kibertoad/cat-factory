@@ -11,6 +11,7 @@ import type {
   ResolveRunRepoContext,
   Logger,
   SealedSecretInventory,
+  ToolSecretResolver,
   UserRepoAccessRepository,
   VcsIdentityRegistry,
   VcsProviderRegistry,
@@ -158,6 +159,21 @@ export interface ServerContainer extends Core {
    * place that cannot explain it.
    */
   toolSecretEnvironmentFallback?: boolean
+  /**
+   * The composed capability-credential chain itself — the SAME `ToolSecretResolver` the container
+   * executor dispatches with, from `buildToolSecretChain`.
+   *
+   * Surfaced on the container because the TOOL-SERVER PROBE has to resolve a credential the way a
+   * dispatch does or it answers about the wrong thing: a probe that read the deployment's
+   * environment directly would report one tenant's working server as every tenant's, and a probe
+   * that sent no credential at all would report a rotated token as a dead endpoint. It is the one
+   * read path that needs the resolver; every other consumer is an executor, which is handed it.
+   *
+   * Absent ⇒ this facade composed no chain, which the probe reports as `credentials_missing` for a
+   * server declaring a required credential. That is the same disposition the dispatch path gives the
+   * same state, rather than a probe that silently succeeds against an unauthenticated endpoint.
+   */
+  toolSecretResolver?: ToolSecretResolver
   /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config
