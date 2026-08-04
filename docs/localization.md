@@ -31,15 +31,21 @@ is left**.
   `useI18n().locales`, so a locale added to the config surfaces in the UI with no
   component change, and a downstream deployment layer can add or override a catalog by
   dropping its own `i18n/locales/*.json`.
-- **Two CI gates, and neither is a full key-parity check.** `i18n:check`
+- **Three CI gates, and none is a full key-parity check.** `i18n:check`
   (vue-i18n-extract) hard-fails on a key used in code but absent from a catalog, and it
   only sees keys written as static `t('literal')` calls. `i18n-locale-parity.mjs --since
-  origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
+origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
   same change in the other nine catalogs. Pre-existing lag on keys a PR does not touch
   passes both, deliberately: it keeps the gates from fighting the incremental policy.
-  Standing lag is therefore tracked by hand, under **Remaining** below.
-- **Plural selectors are overridden only for `pl` and `uk`** (the Slavic one/few/many
-  rule in `i18n.config.ts`). The other seven run on vue-i18n's default selector.
+  Standing lag is therefore tracked by hand, under **Remaining** below. The third,
+  `i18n/plural-forms.spec.ts`, covers what the first two structurally cannot see: an
+  entry in a selector-overridden locale carrying the wrong NUMBER of plural forms.
+- **Plural selectors are overridden for `pl`, `uk` and `he`** (`i18n/plural-rules.ts`):
+  Polish and Ukrainian one/few/many, Hebrew one/two/other. The other seven run on
+  vue-i18n's default selector, which is correct for their catalogs. Each overridden
+  locale's entries carry that locale's CLDR forms, optionally behind the leading zero
+  form `en` also uses; the shapes and the gate that enforces them are in
+  [`frontend/app/README.md`](../frontend/app/README.md#internationalization-i18n-authoring).
 
 ## Progress
 
@@ -233,11 +239,13 @@ For each phase (see `CLAUDE.md` → Internationalization for the full rules):
   `local-composeDesc`), and three of its `testEnvBackend` descriptions drop the
   "Best for …" second sentence that `en` carries. Picking one term is a translation
   decision, not a mechanical fix.
-- **Plural rules are only overridden for `pl` and `uk`.** `he` in particular has a
-  four-form CLDR rule (one/two/many/other) and is running on vue-i18n's default 2-form
-  selector, so a Hebrew count message reads as an approximation rather than a wrong
-  form. Adding a selector to `i18n.config.ts` means re-authoring the affected `he`
-  entries at the same time.
+- ~~**Plural rules are only overridden for `pl` and `uk`.**~~ Resolved: `he` has its own
+  selector and all 84 of its plural entries were re-authored with the dual. Note the CLDR
+  rule for Hebrew is **three** forms (one/two/other), not the four (one/two/many/other)
+  this entry used to claim: the `many` bucket for round tens was retired from CLDR because
+  modern Hebrew does not inflect for it, and current ICU agrees
+  (`Intl.PluralRules('he').resolvedOptions().pluralCategories`). Authoring a fourth form
+  would have produced a duplicate of `other` in every entry.
 - **Pre-existing typecheck breakage on `main` (now resolved):** PR #372 had left
   `nuxt typecheck` reporting ~150 errors in untouched `app/composables/api/*.ts`
   files (HTTP-client typings). As of phase 3, a clean `main` checkout typechecks
