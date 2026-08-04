@@ -3635,7 +3635,8 @@
       "connectSourceNamed": "{source} verbinden",
       "empty": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit Agents es beim Umsetzen dieser Aufgabe sehen.",
       "emptyInitiative": "Hängen Sie eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Entwerfen dieser Initiative lesen.",
-      "attached": "Dokument angehängt"
+      "attached": "Dokument angehängt",
+      "uploadedHint": "Über die API hochgeladen, daher gibt es keine Quellseite zum Öffnen."
     },
     "templates": {
       "title": "Dokumentvorlagen & Beispiele",

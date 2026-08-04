@@ -117,7 +117,11 @@ export class D1DocumentRepository implements DocumentRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
-    const [a, b] = urlMatchCandidates(url)
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
+    const [a, b] = candidates
     const row = await this.db
       .prepare(
         'SELECT * FROM documents WHERE workspace_id = ? AND url IN (?, ?) AND deleted_at IS NULL ORDER BY synced_at DESC LIMIT 1',

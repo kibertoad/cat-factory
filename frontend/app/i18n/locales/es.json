@@ -4001,7 +4001,8 @@
       "connectSourceNamed": "Conectar {source}",
       "empty": "Adjunta un requisito, RFC o PRD para que los agentes lo vean mientras implementan esta tarea.",
       "emptyInitiative": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al redactar esta iniciativa.",
-      "attached": "Documento adjuntado"
+      "attached": "Documento adjuntado",
+      "uploadedHint": "Subido a través de la API, por lo que no hay página de origen que abrir."
     },
     "templates": {
       "title": "Plantillas y ejemplos de documentos",

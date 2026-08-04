@@ -4126,7 +4126,8 @@
       "connectSourceNamed": "Connect {source}",
       "empty": "Attach a requirement, RFC or PRD so agents see it while implementing this task.",
       "emptyInitiative": "Attach a requirement, RFC or PRD so the planning agents read it while shaping this initiative.",
-      "attached": "Document attached"
+      "attached": "Document attached",
+      "uploadedHint": "Uploaded through the API, so there is no source page to open."
     },
     "templates": {
       "title": "Document templates & examples",

@@ -2,6 +2,7 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Block } from '~/types/domain'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
+import DocumentOriginLink from '~/components/documents/DocumentOriginLink.vue'
 import InspectorSection from '~/components/panels/inspector/InspectorSection.vue'
 
 // Documents (from any source) attached to a task OR an initiative as agent
@@ -129,21 +130,19 @@ async function attach(item: PendingContext) {
     />
 
     <div v-if="linked.length" class="space-y-1">
-      <a
+      <DocumentOriginLink
         v-for="doc in linked"
         :key="`${doc.source}:${doc.externalId}`"
-        :href="doc.url"
-        :title="doc.url"
-        target="_blank"
-        rel="noopener"
-        class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60"
+        :url="doc.url"
+        class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
+        :class="{ 'hover:bg-slate-800/60': !!doc.url }"
       >
         <UIcon
-          :name="documents.descriptorFor(doc.source)?.icon ?? 'i-lucide-file-text'"
+          :name="documents.descriptorForOrigin(doc.source)?.icon ?? 'i-lucide-file-text'"
           class="h-3.5 w-3.5 shrink-0 text-indigo-400"
         />
         <span class="truncate">{{ doc.title }}</span>
-      </a>
+      </DocumentOriginLink>
     </div>
     <p v-else class="text-[11px] text-slate-500">
       {{ emptyHint }}

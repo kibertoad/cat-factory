@@ -72,6 +72,7 @@ function makeService(body: { value: string }) {
     get: async () => ({ id: 'ws_1' }),
   } as unknown as WorkspaceRepository
   let now = 1000
+  let minted = 0
   const clock: Clock = { now: () => now }
   const service = new DocumentImportService({
     registry,
@@ -79,6 +80,7 @@ function makeService(body: { value: string }) {
     connectionService,
     workspaceRepository,
     clock,
+    idGenerator: { next: (prefix) => `${prefix ?? 'id'}_${++minted}` },
   })
   return {
     service,

@@ -4,7 +4,7 @@ import type {
   DocumentBoardPlan,
   DocumentLinkRole,
   SourceDocument,
-  DocumentSourceKind,
+  DocumentOrigin,
   PlanFrame,
 } from '@cat-factory/kernel'
 import { assertFound, ValidationError } from '@cat-factory/kernel'
@@ -117,11 +117,15 @@ export class DocumentLinkService {
     }
   }
 
-  /** Attach an imported document to a board block as extra agent context. */
+  // Everything below addresses a document by its stored `(source, externalId)` key and asks
+  // nothing of a provider, so it takes the WIDE `DocumentOrigin`: an uploaded spec is attachable,
+  // and usable as a doc-kind template, on exactly the same terms as an imported page.
+
+  /** Attach an imported (or uploaded) document to a board block as extra agent context. */
   async linkToBlock(
     workspaceId: string,
     blockId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
   ): Promise<SourceDocument> {
     const block: Block = assertFound(
@@ -147,7 +151,7 @@ export class DocumentLinkService {
    */
   async linkForKind(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     role: DocumentLinkRole,
     docKind: DocKind,
@@ -167,7 +171,7 @@ export class DocumentLinkService {
   /** Clear a document's workspace+`DocKind` role tag (built-in template resumes / exemplar drops). */
   async unlinkForKind(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
   ): Promise<void> {
     await this.deps.documentRepository.clearRole(workspaceId, source, externalId)

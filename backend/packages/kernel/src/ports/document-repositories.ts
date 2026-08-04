@@ -1,4 +1,9 @@
-import type { DocKind, DocumentLinkRole, DocumentSourceKind } from '../domain/types.js'
+import type {
+  DocKind,
+  DocumentLinkRole,
+  DocumentOrigin,
+  DocumentSourceKind,
+} from '../domain/types.js'
 import type { DocumentCredentials } from './document-source.js'
 
 // Persistence ports for the document-source integration. The worker implements
@@ -40,12 +45,17 @@ export interface DocumentConnectionRepository {
  * A page projected locally for a workspace. The cached `body` (normalized
  * Markdown) backs both the planner and the agent context injection;
  * `linkedBlockId` records the board block this page is attached to, if any.
+ *
+ * Keyed by the WIDE {@link DocumentOrigin}, not the connectable
+ * {@link DocumentSourceKind}: a row can also hold a body handed to the platform directly
+ * (`upload`), which has no provider to re-fetch it from and no page to link back to.
  */
 export interface DocumentRecord {
   workspaceId: string
-  source: DocumentSourceKind
+  source: DocumentOrigin
   externalId: string
   title: string
+  /** Canonical URL on the source, or EMPTY for an `upload` (see `sourceDocumentSchema.url`). */
   url: string
   excerpt: string
   body: string
@@ -70,7 +80,7 @@ export interface DocumentRepository {
   upsert(record: DocumentRecord): Promise<void>
   get(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
   ): Promise<DocumentRecord | null>
   /** Every live document imported into the workspace, across sources. */
@@ -86,7 +96,7 @@ export interface DocumentRepository {
   /** Attach a document to a board block (or detach with null). */
   linkBlock(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     blockId: string | null,
   ): Promise<void>
@@ -112,13 +122,13 @@ export interface DocumentRepository {
   /** Tag a document with a workspace+`DocKind` role (sets `role`/`docKind`, leaving `linkedBlockId` alone). */
   setRole(
     workspaceId: string,
-    source: DocumentSourceKind,
+    source: DocumentOrigin,
     externalId: string,
     role: DocumentLinkRole,
     docKind: DocKind,
   ): Promise<void>
   /** Clear a single document's role tag (falls back to the built-in template / drops the exemplar). */
-  clearRole(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<void>
+  clearRole(workspaceId: string, source: DocumentOrigin, externalId: string): Promise<void>
   /**
    * Clear the role tag on EVERY document matching (`role`, `docKind`) — used to enforce the
    * singular `template`: the write path clears the prior template for a kind before setting the new one.

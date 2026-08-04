@@ -4001,7 +4001,8 @@
       "connectSourceNamed": "Połącz {source}",
       "empty": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci widzieli je podczas realizacji tego zadania.",
       "emptyInitiative": "Dołącz wymaganie, dokument RFC lub PRD, aby agenci planowania przeczytali je podczas tworzenia planu tej inicjatywy.",
-      "attached": "Dokument dołączony"
+      "attached": "Dokument dołączony",
+      "uploadedHint": "Przesłano przez API, więc nie ma strony źródłowej do otwarcia."
     },
     "templates": {
       "title": "Szablony i przykłady dokumentów",

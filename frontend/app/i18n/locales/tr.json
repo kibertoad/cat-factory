@@ -4013,7 +4013,8 @@
       "connectSourceNamed": "{source} bağla",
       "empty": "Agentların bu görevi uygularken görebilmesi için bir gereksinim, RFC veya PRD ekle.",
       "emptyInitiative": "Planlama ajanlarının bu girişimin planını hazırlarken okuyabilmesi için bir gereksinim, RFC veya PRD ekle.",
-      "attached": "Belge eklendi"
+      "attached": "Belge eklendi",
+      "uploadedHint": "API üzerinden yüklendiği için açılacak bir kaynak sayfa yok."
     },
     "templates": {
       "title": "Belge şablonları ve örnekleri",

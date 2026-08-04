@@ -405,6 +405,7 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
   })
 
   registerDocumentSourceTests(harness)
+  registerDocumentPersistenceTests(harness)
 }
 
 /**
@@ -553,7 +554,21 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       )
       expect(explicit(afterDelete.body.connections)).toEqual([])
     })
+  })
+}
 
+/**
+ * Document + task PERSISTENCE probes: the workspace+DocKind role links, an `upload`-origin
+ * document, the interactive document-interview session, and the batched issue reads.
+ *
+ * Split from the HTTP lifecycle tests above purely to keep each function within the per-function
+ * line budget, on the same rule that split this file from the suite. Every test is unchanged.
+ * What they have in common: each drives a repository directly, because the write path needs a
+ * live source (or an LLM) the dev-open HTTP path cannot reach, so the probe is the only place a
+ * facade that maps a column differently fails a shared test.
+ */
+function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
+  describe('document + task persistence', () => {
     it('persists workspace+DocKind template (singular) and exemplar (multi) role links', async () => {
       // WS1 items 2–4: the role-tagged document links a workspace attaches to a DocKind. The
       // link WRITE path needs an imported document row (import needs a live source the dev-open
@@ -629,6 +644,48 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       // Unlinking clears the tag — the built-in template resumes for the kind.
       await repo.clearRole(ws, 'github', 'docs/templates/rfc-b.md')
       expect(await repo.getRoleLink(ws, 'template', 'rfc')).toBeNull()
+    })
+
+    it('persists an `upload`-origin document, with no source URL, identically', async () => {
+      // A document handed to the platform through `POST /api/v1/services/:id/tasks` rather than
+      // fetched from a connected source. It is the first row whose `source` names no provider and
+      // whose `url` is empty, and both facades have to agree about that: a repo that coerced the
+      // empty url to null (or refused the unknown origin) would take the attached spec off the
+      // agent's context on ONE runtime only, which reads as a healthy run against a missing spec.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+
+      await repo.upsert({
+        workspaceId: ws,
+        source: 'upload',
+        externalId: 'doc_upload_1',
+        title: 'Checkout PRD',
+        url: '',
+        excerpt: 'Support split payments.',
+        body: '# Checkout PRD\n\nSupport split payments.',
+        contentHash: 'abc123',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 2_000,
+        deletedAt: null,
+      })
+
+      const stored = await repo.get(ws, 'upload', 'doc_upload_1')
+      expect(stored?.url).toBe('')
+      expect(stored?.body).toBe('# Checkout PRD\n\nSupport split payments.')
+
+      // It attaches to a block like any other document, which is how it reaches the agent.
+      await repo.linkBlock(ws, 'upload', 'doc_upload_1', 'task_1')
+      expect((await repo.listByBlock(ws, 'task_1')).map((d) => d.externalId)).toEqual([
+        'doc_upload_1',
+      ])
+
+      // And its empty url must never be matched by a URL lookup, which resolves links a task's
+      // DESCRIPTION names: one uploaded document answering for another would be silent.
+      expect(await repo.getByUrl(ws, '')).toBeNull()
     })
 
     it('persists an interactive document-interview session identically (WS5)', async () => {

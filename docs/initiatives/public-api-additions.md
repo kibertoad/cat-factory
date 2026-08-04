@@ -1,6 +1,6 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** investigation complete; A0 landed, the start-path scope question settled by
+**Status:** investigation complete; A0, D1 and D2 landed, the start-path scope question settled by
 [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md), A1–C2 not started · **Owner:**
 core · **Started:** 2026-08-02
 
@@ -258,6 +258,56 @@ writes as one slice is what turns this on, and it belongs to the mothership trac
   endpoint too, and a per-task issue lookup there is a banned N+1: it needs a batched
   `TaskRepository` block→issue method mirrored D1 ⇄ Drizzle with a conformance assertion. Worth
   doing as its own slice if a consumer asks; not worth smuggling in behind a create.
+
+### D2: Requirements documents on task creation ✅
+
+The other half of D1, and the same class of gap: an input the app has and the API did not.
+`POST /api/v1/services/:serviceId/tasks` now takes an optional ordered `documents` list, each entry
+either a page NAMED in a connected document source (imported and attached, as D1 does for a ticket)
+or an `upload` CARRYING the text.
+
+Worth reading before extending it, because the shape was not obvious:
+
+- **The gap was never "documents are missing", it was SIZE.** `description` caps at 2,000
+  characters because it is a task's own framing, echoed into every prompt; the `POST /jobs` brief
+  takes 50,000 but drives inline pipelines that never touch a repository. So a headless caller
+  holding a PRD had no way to get it in front of a run that opens a pull request. That is why the
+  `upload` variant is the load-bearing half rather than a convenience: naming a Confluence page
+  only helps a caller whose spec is already on a wiki.
+- **`upload` is a `DocumentOrigin`, NOT a `DocumentSourceKind`, and the split is the design.**
+  Everything a provider does (connect, search, import a ref, `probeVersion` a stored copy against
+  the live page) is defined only for a connectable source, and there is no `upload` provider to
+  ask. Keeping the narrow union on those surfaces is what makes the absence a compile error rather
+  than an `undefined` at whichever call site reaches for the missing provider first; the wide union
+  covers only the stored row and its block/role links, where the origin is a label. A future
+  origin with no provider (a pasted-in artifact, a generated brief) copies this rather than
+  widening `DocumentSourceKind`.
+- **The readability refusal MOVED, it was not added.** The platform already refuses a context
+  document that renders to nothing, on the first step that resolves context, which is deep inside a
+  run the caller has started and paid for. `ingest` refuses the same condition at the boundary,
+  where the body is in hand and the caller can fix it. The run-time refusal stays: it is the one
+  that covers a page whose SOURCE went empty after import.
+- **An uploaded document has no URL, and every reader had to be taught the difference between
+  "no origin" and "a broken one".** `originSuffix` / `originHeaderLine` (kernel) are what the
+  prompt index, the inline injection and the `.cat-context/` file header all render through, so
+  none of them can emit `Title ()` or a bare `Source:` line. The SPA does the same by rendering a
+  non-anchor row.
+- **A `201` means the task carries every document named**, so an attachment that fails after the
+  block exists takes the task back off the board, exactly as a lost ticket claim does. The
+  documents themselves stay (a projected document is what a plain import produces anyway), so a
+  retry re-imports rather than accumulating half-written state. The attach runs BEFORE the ticket
+  claim on purpose: a block removed after a successful claim would leave the ticket pointing at a
+  task nobody can open, which then refuses every future filing of it.
+- **The corpus bound was deliberately NOT duplicated.** The contract caps one document
+  (100,000 characters) and the list (10 entries); the ~256 KB materialised-context budget is
+  enforced where it always was, at the first dispatch, because it also sizes in linked tracker
+  issues this endpoint cannot see. A second, partial "too much context" rule here would disagree
+  with it and read as an all-clear.
+
+Same mothership caveat as D1, and for the same reason: `documentRepository.upsert` / `linkBlock`
+are `pending` on the persistence allow-list, so naming `documents` on a node with no main database
+answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
+is one slice of the mothership tracker, not this one.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 

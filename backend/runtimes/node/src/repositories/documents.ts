@@ -237,13 +237,17 @@ export class DrizzleDocumentRepository implements DocumentRepository {
   }
 
   async getByUrl(workspaceId: string, url: string): Promise<DocumentRecord | null> {
+    // A needle that normalises to nothing is not a URL, and must never be matched (see
+    // `urlMatchCandidates`).
+    const candidates = urlMatchCandidates(url)
+    if (!candidates) return null
     const rows = await this.db
       .select()
       .from(documents)
       .where(
         and(
           eq(documents.workspace_id, workspaceId),
-          inArray(documents.url, urlMatchCandidates(url)),
+          inArray(documents.url, candidates),
           isNull(documents.deleted_at),
         ),
       )

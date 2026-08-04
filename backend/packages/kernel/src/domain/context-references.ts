@@ -40,6 +40,28 @@ export interface ContextReferenceRef {
 }
 
 /**
+ * ` (https://…)` for a document that came from a page, and NOTHING for one that did not.
+ *
+ * Not every context document has an origin to point at: an `upload` is a body handed to the
+ * platform directly, so it stores an empty `url`. Interpolating that yields `Title ()` in the
+ * prompt index and a bare `Source:` header on the materialised file, both of which read as a link
+ * that broke rather than as a document that never had one, and an agent told a source is missing
+ * may go looking for it. Rendering nothing is the honest form, and it lives here so the prompt
+ * renderer and the file materialiser cannot disagree about it (the refusal messages above already
+ * make the same distinction, in {@link describeRef}).
+ */
+export function originSuffix(url: string): string {
+  const trimmed = url.trim()
+  return trimmed ? ` (${trimmed})` : ''
+}
+
+/** The materialised context file's `Source:` header line, or nothing. See {@link originSuffix}. */
+export function originHeaderLine(url: string): string {
+  const trimmed = url.trim()
+  return trimmed ? `Source: ${trimmed}\n` : ''
+}
+
+/**
  * `"Payments RFC" (https://…)`, or just the title when the reference carries no URL. Both halves
  * are source-authored text landing on a persisted failure record and a rendered surface, and a
  * document URL can legitimately carry a signed/`?token=` query, so it is scrubbed here — at the

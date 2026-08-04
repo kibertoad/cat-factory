@@ -1,4 +1,4 @@
-import type { BlockType, DocumentSourceKind } from '@cat-factory/kernel'
+import type { BlockType, DocumentOrigin, DocumentSourceKind } from '@cat-factory/kernel'
 import type { DocumentBoardPlan, PlanFrame, PlanModule, PlanTask } from '@cat-factory/kernel'
 import type { DocumentSourceProvider, DocumentSourceRegistry } from '@cat-factory/kernel'
 import { buildExcerpt, markdownToText, MapSourceRegistry } from '@cat-factory/kernel'
@@ -54,7 +54,7 @@ function extractHeadings(markdown: string): Heading[] {
  * and as the safety net when an LLM response can't be parsed.
  */
 export function planFromHeadings(
-  source: DocumentSourceKind,
+  source: DocumentOrigin,
   externalId: string,
   title: string,
   body: string,
@@ -114,7 +114,7 @@ function coerceTask(value: unknown): PlanTask | null {
  * caller can fall back to the heading parser.
  */
 export function coercePlan(
-  source: DocumentSourceKind,
+  source: DocumentOrigin,
   externalId: string,
   parsed: unknown,
 ): DocumentBoardPlan | null {

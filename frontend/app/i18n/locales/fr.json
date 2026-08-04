@@ -4001,7 +4001,8 @@
       "connectSourceNamed": "Connecter {source}",
       "empty": "Joignez une exigence, un RFC ou un PRD pour que les agents le voient pendant l'implémentation de cette tâche.",
       "emptyInitiative": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification le lisent en rédigeant cette initiative.",
-      "attached": "Document joint"
+      "attached": "Document joint",
+      "uploadedHint": "Envoyé via l'API : aucune page source à ouvrir."
     },
     "templates": {
       "title": "Modèles et exemples de documents",

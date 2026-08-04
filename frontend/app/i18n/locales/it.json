@@ -3635,7 +3635,8 @@
       "connectSourceNamed": "Collega {source}",
       "empty": "Allega un requisito, un RFC o un PRD così gli agenti lo vedono durante l'implementazione di questa attività.",
       "emptyInitiative": "Allega un requisito, un RFC o un PRD così gli agenti di pianificazione lo leggono mentre redigono questa iniziativa.",
-      "attached": "Documento allegato"
+      "attached": "Documento allegato",
+      "uploadedHint": "Caricato tramite l'API, quindi non c'è una pagina di origine da aprire."
     },
     "templates": {
       "title": "Modelli ed esempi di documenti",

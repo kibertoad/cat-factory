@@ -4013,7 +4013,8 @@
       "connectSourceNamed": "{source} を接続",
       "empty": "要件、RFC、PRD を添付すると、このタスクの実装中にエージェントが参照できます。",
       "emptyInitiative": "要件、RFC、PRD を添付すると、このイニシアチブの計画作成中に計画エージェントが参照できます。",
-      "attached": "ドキュメントを添付しました"
+      "attached": "ドキュメントを添付しました",
+      "uploadedHint": "API 経由でアップロードされたため、開けるソースページはありません。"
     },
     "templates": {
       "title": "ドキュメントのテンプレートと例",

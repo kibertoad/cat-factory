@@ -491,6 +491,8 @@ export {
   type ContextReferenceRef,
   hasReadableContent,
   contextExcerptFor,
+  originSuffix,
+  originHeaderLine,
   assertContextDocumentsReadable,
   assertContextReferencesFit,
 } from './domain/context-references.js'

@@ -5,7 +5,12 @@
 import HandlebarsRuntime from 'handlebars/runtime.js'
 import type { AgentKind } from '@cat-factory/kernel'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { CONTEXT_BUDGET, estimateTokens, renderTaskContext } from '@cat-factory/kernel'
+import {
+  CONTEXT_BUDGET,
+  estimateTokens,
+  originSuffix,
+  renderTaskContext,
+} from '@cat-factory/kernel'
 import { PLATFORM_DELIVERY_CONTRACT } from './delivery-contract.js'
 import { FINAL_ANSWER_IN_REPLY, STANDARDS_FOOTER } from './shared.js'
 import * as templateSpecs from './standard-templates.generated.js'
@@ -453,7 +458,8 @@ export function renderLinkedContext(
   // needs instead of paying for every body in the prompt.
   if (opts.materialized) {
     const items: string[] = []
-    for (const doc of contextDocs ?? []) items.push(`- ${doc.title} — ${doc.summary} (${doc.url})`)
+    for (const doc of contextDocs ?? [])
+      items.push(`- ${doc.title} — ${doc.summary}${originSuffix(doc.url)}`)
     for (const task of contextTasks ?? [])
       items.push(`- [${task.key}] ${task.title} (${task.status}) — ${task.summary} (${task.url})`)
     const capped = items.slice(0, CONTEXT_BUDGET.maxItems)
@@ -496,7 +502,7 @@ export function renderLinkedContext(
       }
       const slice = clampToTokens(doc.body || doc.excerpt, remaining)
       spent += estimateTokens(slice)
-      lines.push(`### ${doc.title} (${doc.url})`, slice)
+      lines.push(`### ${doc.title}${originSuffix(doc.url)}`, slice)
     }
     if (unseated.length) {
       // The notice is BOUNDED, or it becomes the overrun it exists to report: a task with thirty
@@ -508,7 +514,7 @@ export function renderLinkedContext(
         '',
         `${unseated.length} further linked document${unseated.length === 1 ? '' : 's'} did not fit ` +
           `this prompt's context budget and ${unseated.length === 1 ? 'is' : 'are'} NOT included ` +
-          `above: ${named.map((d) => `${d.title} (${d.url})`).join(', ')}` +
+          `above: ${named.map((d) => `${d.title}${originSuffix(d.url)}`).join(', ')}` +
           `${rest > 0 ? `, and ${rest} more` : ''}. Treat what you were given as incomplete, and ` +
           `say so in your output if the missing text would change your conclusion.`,
       )

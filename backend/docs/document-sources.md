@@ -19,6 +19,33 @@ Adding a third source is just another provider: implement
 `DocumentSourceProvider` (a `kind`, a `descriptor`, `normalizeConnection`,
 `parseRef`, `fetchDocument`) and register it in `selectDocumentsDeps`.
 
+## A stored document need not come from a source
+
+Two vocabularies, and which one a surface takes says what it can do with the row:
+
+- **`DocumentSourceKind`** is what can be CONNECTED (the providers listed above). Connect, search,
+  import a ref and `probeVersion` are defined only for these, because each is a call to a provider.
+- **`DocumentOrigin`** is what a stored row may CARRY: any of the above, plus **`upload`**, a body
+  handed to the platform directly rather than fetched. `POST /api/v1/services/:id/tasks` mints these
+  when a headless caller attaches a spec it is holding (see
+  [`public-api.md`](./public-api.md#attaching-requirements-documents)). Downstream it is an
+  ordinary document: it lists with the rest, links to a block, can be tagged as a doc-kind
+  template, and is read by the same context path. The app has no upload UI, and the context
+  picker is keyed by source, so the SPA can detach one but not attach it to a SECOND task;
+  that is a UI gap, not a model one, and the `POST /documents/link` route already serves it.
+
+Keeping the narrow union on the provider surfaces is what makes the missing `upload` provider a
+COMPILE error (an exhaustive `Record<DocumentSourceKind, DocumentSourceDescriptor>` still has to
+name every member) rather than an `undefined` at whichever call site reaches for it first. Narrow a
+wide origin with `isConnectableSource` (`@cat-factory/contracts`), the predicate derived from the
+source picklist, never with an optional lookup.
+
+An `upload` has **no origin URL**, and empty is how it says so. Every renderer goes through kernel's
+`originSuffix` / `originHeaderLine`, so the prompt index, the inline injection and the materialised
+`.cat-context/` file omit the origin entirely rather than emitting `Title ()` or a bare `Source:`
+line, which read as a link that broke rather than as a document that never had one. The SPA does the
+same by rendering a non-anchor row.
+
 This integration is **always on**: tenants connect their own sources
 interactively through the app, so there is no enable flag to forget. The one
 thing it requires is a master key to encrypt the per-workspace credentials at
