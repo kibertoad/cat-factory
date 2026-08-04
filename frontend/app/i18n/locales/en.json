@@ -624,6 +624,7 @@
         "binary_output_generator_invalid": "Binary output generator can't be resolved",
         "foundational_service_not_inherited": "This board registered that service",
         "input_gate_not_parked": "Nothing to answer",
+        "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task"
       },
       "description": {
@@ -661,6 +662,7 @@
         "binary_output_generator_invalid": "A step that generates binary outputs selects a generative integration this deployment doesn't register, or none of the selected integrations produces a content type the step must deliver. Generative integrations are registered in the deployment's code, not in this workspace: register it or fix the step's selection, then start again.",
         "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead.",
         "input_gate_not_parked": "This run is not waiting on its input check any more. Someone may have answered it already, or the run has moved on.",
+        "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first."
       },
       "action": {
@@ -4728,6 +4730,8 @@
     "blockedBody": "The run stopped before its first agent step, so nothing has been spent. Fill in what is missing on the task, then re-check.",
     "waivedTitle": "Started despite an incomplete task",
     "waivedBody": "Someone chose to run this task with the gaps below still open. They are kept here as part of the run's record.",
+    "advisoryTitle": "Some gaps were noted, and the run continued",
+    "advisoryBody": "The task's input check found these while starting the run. None of them stops the work, so nothing was parked; filling them in makes the next run easier to get right.",
     "severity": {
       "blocking": "Blocking",
       "advisory": "Advisory"

@@ -175,6 +175,10 @@ const dedicatedPark = computed(() =>
  * The PRE-TOKEN INPUT GATE's verdict when it is what holds this step. Answered INLINE here
  * (unlike the other dedicated parks, which redirect to a window): its remedy is to edit the
  * task, so there is no second modal to send anyone to.
+ *
+ * Only the PARK, hence the literal `blocked` tone at the call site: this overlay exists to
+ * answer one step's park, and an advisory finding is about the run rather than this step. It is
+ * reported once, on the run panel, instead of on every step overlay opened under it.
  */
 const inputGateVerdict = computed(() =>
   dedicatedPark.value === 'input-gate' ? (instance.value?.inputGate ?? null) : null,
@@ -447,6 +451,7 @@ async function copyOutput() {
               <InputGateNotice
                 v-if="inputGateVerdict && instance"
                 :gate="inputGateVerdict"
+                tone="blocked"
                 :execution-id="instance.id"
                 compact
               />

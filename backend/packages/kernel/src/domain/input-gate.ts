@@ -16,6 +16,7 @@
 //     imitation of it would park real work.
 
 import type {
+  BlockLevel,
   InputGateIssue,
   InputGateIssueCode,
   InputGateMode,
@@ -50,6 +51,12 @@ export interface InputGateInput {
   /** The task's description, as authored. */
   description: string
   /**
+   * The block's level. The gate judges a TASK's authored input, so anything else is
+   * `not_applicable`: see {@link describesAuthoredTaskInput}. Required rather than optional,
+   * because a caller that forgets it would silently judge a frame's description as a task's.
+   */
+  level: BlockLevel
+  /**
    * The task's type (`bug`, `spike`, `review`, a deployment's namespaced id, …). An UNKNOWN
    * type gets the description checks and nothing else: per-type checks encode what a specific
    * type needs, and a deployment's own type is not something this file can have an opinion
@@ -70,6 +77,29 @@ export interface InputGateInput {
       }
     | null
     | undefined
+}
+
+/**
+ * The gate's input, read off a board block. The ONE mapping, because the gate is evaluated at
+ * three points that must agree byte-for-byte about the same block: the engine's pre-dispatch
+ * check, a `recheck` after a human edits the task, and the public API's pre-start admission. A
+ * per-call-site object literal is how one of them silently stops passing `level` and starts
+ * judging an initiative anchor as if it were a task.
+ */
+export function inputGateInputOf(block: {
+  title: string
+  description: string
+  level: BlockLevel
+  taskType?: string | null | undefined
+  taskTypeFields?: InputGateInput['taskTypeFields']
+}): InputGateInput {
+  return {
+    title: block.title,
+    description: block.description,
+    level: block.level,
+    taskType: block.taskType,
+    taskTypeFields: block.taskTypeFields,
+  }
 }
 
 /** The gate's verdict: its disposition plus every finding, blocking and advisory alike. */
@@ -128,6 +158,30 @@ const PLACEHOLDER_DESCRIPTIONS = new Set([
  * the description checks alone, which is the right default for something somebody authored.
  */
 const PLATFORM_AUTHORED_TASK_TYPES = new Set(['recurring'])
+
+/**
+ * Whether this block's description is the authored statement of work the gate is entitled to
+ * judge. Two ways it is not, and they are separate mechanisms rather than one list:
+ *
+ *  - **The block is not a TASK.** A run can be started against a frame, a module, an epic or an
+ *    INITIATIVE ANCHOR, and each of those blocks stands for an entity whose real input lives
+ *    elsewhere: the initiative's goal and committed plan, the service's spec, the module's
+ *    contents. The description on such a block is a caption, not a brief, and a run against one
+ *    (an initiative's planning pipeline is the everyday case) reads the entity rather than the
+ *    caption. Judging it would park exactly the runs with no task to go and fix.
+ *  - **The task type is platform-authored** ({@link PLATFORM_AUTHORED_TASK_TYPES}).
+ *
+ * Deliberately NOT here: a task the platform CREATED but whose description is still a real
+ * statement of work (an initiative-spawned item, a task imported from a tracker ticket). Those
+ * carry a brief someone or something wrote, they sit on the board as ordinary task cards, and a
+ * human can edit them, so the gate judges them like any other task. What such a run needs is a
+ * way to ANSWER the park without a browser, which is the public decision surface's job, not a
+ * blanket exemption here.
+ */
+function describesAuthoredTaskInput(input: InputGateInput): boolean {
+  if (input.level !== 'task') return false
+  return !(input.taskType && PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType))
+}
 
 /** Word count below which a description specifies nothing actionable (advisory only). */
 const THIN_DESCRIPTION_WORDS = 5
@@ -241,19 +295,20 @@ function typeFindings(input: InputGateInput): InputGateIssueCode[] {
  * Evaluate a task's input under a workspace's mode.
  *
  * `off` returns `status: 'off'` with NO findings: the check did not run, and an empty finding
- * list under a `passed` status would claim it did. A PLATFORM-authored task (see
- * {@link PLATFORM_AUTHORED_TASK_TYPES}) returns `not_applicable` for the same reason, one step
- * further: the check ran and found there was nothing here it is entitled to judge. `advisory` runs every check and floors each
- * finding to `advisory`, so it can report what `standard` would have parked on without parking
- * anything. The mode only ever SOFTENS: there is no mode that promotes an advisory finding to
- * blocking, because the advisory set is advisory on the merits, not by configuration.
+ * list under a `passed` status would claim it did. A block whose description is not authored task
+ * input (see {@link describesAuthoredTaskInput}) returns `not_applicable` for the same reason, one
+ * step further: the check ran and found there was nothing here it is entitled to judge.
+ * `advisory` runs every check and floors each finding to `advisory`, so it can report what
+ * `standard` would have parked on without parking anything. The mode only ever SOFTENS: there is
+ * no mode that promotes an advisory finding to blocking, because the advisory set is advisory on
+ * the merits, not by configuration.
  */
 export function evaluateInputGate(input: InputGateInput, mode: InputGateMode): InputGateVerdict {
   if (mode === 'off') return { status: 'off', mode, issues: [] }
-  // A platform-authored task has no authored description to judge. Reported as its own status
-  // rather than as `off` (which would blame a setting) or `passed` (which would claim the input
-  // was checked and found sound).
-  if (input.taskType && PLATFORM_AUTHORED_TASK_TYPES.has(input.taskType)) {
+  // Nothing here the gate is entitled to judge. Reported as its own status rather than as `off`
+  // (which would blame a setting) or `passed` (which would claim the input was checked and found
+  // sound).
+  if (!describesAuthoredTaskInput(input)) {
     return { status: 'not_applicable', mode, issues: [] }
   }
 

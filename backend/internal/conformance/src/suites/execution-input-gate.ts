@@ -197,6 +197,32 @@ export function defineInputGateConformance(harness: ConformanceHarness): void {
       })
     })
 
+    it('does not judge a run against a block that is not a TASK', async () => {
+      // A run can be started against a frame, a module or an initiative anchor, and such a block
+      // stands for an entity whose real input lives elsewhere (the initiative's goal and plan,
+      // the service's spec). Its description is a caption, so judging it parked exactly the runs
+      // with no task card anyone could go and fix. Asserted on the SERVICE FRAME because it is
+      // the level every harness seeds; the rule is the same for all four non-task levels.
+      const app = harness.makeApp({ confidence: 1 })
+      const { workspace } = await app.createWorkspace()
+      const wsId = workspace.id
+      await app.call('PATCH', `/workspaces/${wsId}/blocks/blk_auth`, { description: '' })
+      const start = await app.call<ExecutionInstance>(
+        'POST',
+        `/workspaces/${wsId}/blocks/blk_auth/executions`,
+        { pipelineId: 'pl_simple' },
+      )
+      expect(start.status).toBe(201)
+
+      const exec = (await app.drive(wsId)).find((e) => e.blockId === 'blk_auth')!
+      expect(exec.status).toBe('done')
+      expect(exec.inputGate).toMatchObject({
+        status: 'not_applicable',
+        mode: 'standard',
+        issues: [],
+      })
+    })
+
     it('advisory mode records the findings and runs anyway', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createWorkspace()

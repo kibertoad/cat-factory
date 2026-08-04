@@ -502,6 +502,7 @@ export {
   type InputGateInput,
   type InputGateVerdict,
   evaluateInputGate,
+  inputGateInputOf,
   hasBlockingInputIssues,
   describeInputGateIssues,
 } from './domain/input-gate.js'

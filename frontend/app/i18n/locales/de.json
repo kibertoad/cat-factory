@@ -5133,6 +5133,7 @@
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
         "input_gate_not_parked": "Nichts zu beantworten",
+        "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe"
       },
       "description": {
@@ -5167,6 +5168,7 @@
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
         "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
+        "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf."
       },
       "action": {
@@ -5409,6 +5411,8 @@
     "blockedBody": "Der Lauf wurde vor dem ersten Agentenschritt gestoppt, es wurde also nichts verbraucht. Ergänze das Fehlende an der Aufgabe und prüfe erneut.",
     "waivedTitle": "Trotz unvollständiger Aufgabe gestartet",
     "waivedBody": "Jemand hat entschieden, diese Aufgabe mit den unten offenen Lücken auszuführen. Sie bleiben als Teil der Laufhistorie erhalten.",
+    "advisoryTitle": "Einige Lücken wurden notiert, der Lauf lief weiter",
+    "advisoryBody": "Die Eingabeprüfung der Aufgabe hat diese Punkte beim Start gefunden. Keiner davon stoppt die Arbeit, daher wurde nichts angehalten. Wer sie ergänzt, erleichtert den nächsten Lauf.",
     "severity": {
       "blocking": "Blockierend",
       "advisory": "Hinweis"

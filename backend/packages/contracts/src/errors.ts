@@ -178,6 +178,16 @@ export const CONFLICT_REASONS = [
   // The remedy is "nothing to do here": the SPA refreshes the run rather than re-offering a
   // decision that has already been taken.
   'input_gate_not_parked',
+  // The OPPOSITE fact, and deliberately its own reason rather than a second use of the one above.
+  // The run IS parked on the input gate and the caller tried to answer it through the GENERIC
+  // approval rail. The gate parks whatever step 0 happens to be, so a generic approve would mark
+  // the run's first working step done and skip the work the run exists to do.
+  //
+  // One reason for both states would have to describe them with one string, and the two need
+  // opposite responses: "already answered, refresh" against "still waiting, answer it over there".
+  // Copy that fits the first tells whoever is looking at a live park that there is nothing to
+  // answer, which is the very thing they are staring at the remedy for.
+  'input_gate_parked',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

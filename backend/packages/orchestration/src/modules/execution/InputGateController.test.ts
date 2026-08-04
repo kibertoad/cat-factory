@@ -34,6 +34,9 @@ function block(over: Partial<Block> = {}): Block {
     id: 'blk_1',
     title: 'Add retries to the webhook sender',
     description: 'Retry three times with exponential backoff whenever the receiver answers 5xx.',
+    // The gate only judges a TASK's authored input, so the level is load-bearing here rather
+    // than fixture noise: a frame or an initiative anchor evaluates to `not_applicable`.
+    level: 'task',
     ...over,
   } as unknown as Block
 }
@@ -177,6 +180,25 @@ describe('InputGateController.evaluate', () => {
     const result = await gate.evaluate('ws', inst, inst.steps[2]!, block({ description: '' }))
     expect(result).toBeNull()
     expect(inst.inputGate).toBeUndefined()
+  })
+
+  it('records `not_applicable` for a run against an INITIATIVE anchor, and dispatches', async () => {
+    // An initiative's planning pipeline runs against the anchor block, whose description is a
+    // caption rather than a brief (the initiative's goal and plan are the run's real input).
+    // Parking it stalled the whole planning flow, which nothing on the board could then release.
+    const inst = instance()
+    const result = await gate.evaluate(
+      'ws',
+      inst,
+      inst.steps[0]!,
+      block({ level: 'initiative', description: '' }),
+    )
+    expect(result).toBeNull()
+    expect(inst.inputGate?.status).toBe('not_applicable')
+    expect(harness.stateMachine.parkStepOnDecision).not.toHaveBeenCalled()
+    // Still RECORDED: `not_applicable` and an absent verdict are different facts, and the record
+    // is what keeps the check idempotent under a durable replay.
+    expect(harness.stateMachine.casPersist).toHaveBeenCalled()
   })
 })
 

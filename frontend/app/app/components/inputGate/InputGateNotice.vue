@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { InputGateIssue, InputGateIssueCode, RunInputGate } from '@cat-factory/contracts'
+import type { InputGateTone } from '~/utils/inputGate'
 import { useInputGateStore } from '~/stores/inputGate'
 
 // The PRE-TOKEN INPUT GATE's notice: what the structural check found in the task's authored
@@ -13,8 +14,15 @@ import { useInputGateStore } from '~/stores/inputGate'
 // not localize, and its `describeInputGateIssues` summary is a detail line for logs.
 
 const props = defineProps<{
-  /** The run's verdict. Rendered only when it is actually parked (`blocked`) or waived. */
+  /** The run's verdict. Which verdicts earn a notice is `inputGateNoticeFor`'s decision. */
   gate: RunInputGate
+  /**
+   * How to present it (see {@link InputGateTone}). Passed in rather than re-derived from
+   * `gate.status`, because the advisory tone is NOT a status: it is a `passed` verdict that
+   * happens to carry findings, and a component deriving its own tone would have to repeat that
+   * rule and would go on rendering advisories as if the run had been cleared with nothing found.
+   */
+  tone: InputGateTone
   /** The run this verdict belongs to, for the resolve calls. */
   executionId: string
   /** Compact form drops the explanatory paragraph (used inside the step-detail rail). */
@@ -68,7 +76,16 @@ const issues = computed<InputGateIssue[]>(() =>
   ),
 )
 
-const blocking = computed(() => props.gate.status === 'blocked')
+/** Only a parked verdict has anything to answer; the other two tones are a record. */
+const blocking = computed(() => props.tone === 'blocked')
+
+/** Title + body keys per tone, as literals so the typed-message-key check can see them. */
+const TONE_COPY: Record<InputGateTone, { title: string; body: string }> = {
+  blocked: { title: 'inputGate.blockedTitle', body: 'inputGate.blockedBody' },
+  waived: { title: 'inputGate.waivedTitle', body: 'inputGate.waivedBody' },
+  advisory: { title: 'inputGate.advisoryTitle', body: 'inputGate.advisoryBody' },
+}
+const copy = computed(() => TONE_COPY[props.tone])
 
 /** A finding's translated title, falling back to the generic line for a retired code. */
 function issueTitle(code: InputGateIssueCode): string {
@@ -95,6 +112,7 @@ async function resolve(choice: 'recheck' | 'proceed') {
         ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'
         : 'border-default bg-elevated/40'
     "
+    :data-tone="tone"
     data-testid="input-gate-notice"
   >
     <div class="flex items-start gap-2">
@@ -104,12 +122,8 @@ async function resolve(choice: 'recheck' | 'proceed') {
         :class="blocking ? 'text-amber-600 dark:text-amber-400' : 'text-muted'"
       />
       <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium">
-          {{ blocking ? t('inputGate.blockedTitle') : t('inputGate.waivedTitle') }}
-        </p>
-        <p v-if="!compact" class="text-muted mt-0.5 text-xs">
-          {{ blocking ? t('inputGate.blockedBody') : t('inputGate.waivedBody') }}
-        </p>
+        <p class="text-sm font-medium">{{ t(copy.title) }}</p>
+        <p v-if="!compact" class="text-muted mt-0.5 text-xs">{{ t(copy.body) }}</p>
 
         <ul class="mt-2 space-y-1.5">
           <li v-for="issue in issues" :key="issue.code" class="flex items-start gap-2 text-xs">

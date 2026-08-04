@@ -148,13 +148,19 @@ export function isCompanionKind(kind: string): boolean {
  */
 export function dedicatedParkView(
   step: PipelineStep,
-  instance?: ExecutionInstance | null,
+  instance: ExecutionInstance | null | undefined,
 ): 'follow-ups' | 'fork-decision' | 'input-gate' | null {
   // The PRE-TOKEN INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
   // STEP to recognise it by: its verdict is a fact about the RUN. Checked first, and off the
   // instance: approving it generically would mark the run's first working step done and skip
-  // the work the run exists to do. The instance is optional only so a caller with a step and no
-  // run in hand still type-checks; every real park surface passes it.
+  // the work the run exists to do.
+  //
+  // `instance` is REQUIRED, and nullable rather than optional on purpose. Every park surface has
+  // the run in hand, and an optional parameter is how one of them silently stops passing it: the
+  // function would go on returning `null` for a gate-parked step, which each caller reads as
+  // "the generic approve rail applies" — the exact 409-blinking rail this exists to prevent.
+  // It still ACCEPTS an absent run (a store lookup that has not resolved), because that is a real
+  // state a caller has to be able to express; what it does not accept is not being asked.
   if (instance?.inputGate?.status === 'blocked' && step.approval?.status === 'pending') {
     return 'input-gate'
   }

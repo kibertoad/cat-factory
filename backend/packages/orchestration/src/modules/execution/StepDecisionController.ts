@@ -105,7 +105,10 @@ export class StepDecisionController {
       throw new ConflictError(
         "Resolve this run's input check through its notice (fix the task and re-check, or " +
           'proceed anyway), not the approval gate',
-        'input_gate_not_parked',
+        // `input_gate_parked`, NOT `input_gate_not_parked`: the gate IS holding this run, and the
+        // caller reached for the wrong surface. The sibling reason means the opposite and its copy
+        // would tell somebody staring at a live park that there is nothing left to answer.
+        'input_gate_parked',
       )
     }
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {

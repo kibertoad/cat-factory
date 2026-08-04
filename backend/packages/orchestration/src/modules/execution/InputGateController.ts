@@ -14,9 +14,11 @@ import type {
 import {
   assertFound,
   ConflictError,
+  describeError,
   describeInputGateIssues,
   evaluateInputGate,
   hasBlockingInputIssues,
+  inputGateInputOf,
   noopLogger,
 } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
@@ -97,15 +99,7 @@ export class InputGateController {
     if (instance.inputGate || instance.currentStep !== 0) return null
 
     const mode = await this.resolveMode(workspaceId)
-    const verdict = evaluateInputGate(
-      {
-        title: block.title,
-        description: block.description,
-        taskType: block.taskType,
-        taskTypeFields: block.taskTypeFields,
-      },
-      mode,
-    )
+    const verdict = evaluateInputGate(inputGateInputOf(block), mode)
     const record: RunInputGate = {
       status: verdict.status,
       mode: verdict.mode,
@@ -194,15 +188,7 @@ export class InputGateController {
     )
     const rechecked =
       choice === 'recheck'
-        ? evaluateInputGate(
-            {
-              title: block.title,
-              description: block.description,
-              taskType: block.taskType,
-              taskTypeFields: block.taskTypeFields,
-            },
-            current.inputGate.mode,
-          )
+        ? evaluateInputGate(inputGateInputOf(block), current.inputGate.mode)
         : null
     const stillBlocked = rechecked ? hasBlockingInputIssues(rechecked.issues) : false
 
@@ -272,7 +258,7 @@ export class InputGateController {
     } catch (error) {
       this.log.warn('input gate: workspace settings unreadable, skipping the check', {
         workspaceId,
-        err: String(error),
+        ...describeError(error),
       })
       return 'off'
     }

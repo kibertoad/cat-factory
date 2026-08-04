@@ -12,6 +12,7 @@ import {
 const task = (over: Partial<InputGateInput> = {}): InputGateInput => ({
   title: 'Add a retry to the webhook sender',
   description: 'The webhook sender should retry three times with exponential backoff on 5xx.',
+  level: 'task',
   ...over,
 })
 
@@ -145,7 +146,7 @@ describe('evaluateInputGate: per-type targets', () => {
   })
 })
 
-describe('evaluateInputGate: platform-authored tasks', () => {
+describe('evaluateInputGate: blocks whose description is not authored task input', () => {
   it('does not judge a recurring schedule block, whose input is the schedule', () => {
     // Its description is blank because nobody authored one and nobody ever will; parking it
     // would stall every scheduled run on a field with no owner.
@@ -153,8 +154,27 @@ describe('evaluateInputGate: platform-authored tasks', () => {
     expect(verdict).toEqual({ status: 'not_applicable', mode: 'standard', issues: [] })
   })
 
+  it.each(['frame', 'module', 'epic', 'initiative'] as const)(
+    'does not judge a %s block, which stands for an entity rather than a brief',
+    (level) => {
+      // An initiative's planning pipeline runs against its ANCHOR block, whose description is a
+      // caption; the run's real input is the initiative's goal and committed plan. Judging the
+      // caption parked every initiative run on a field the flow never fills in.
+      const verdict = evaluateInputGate(task({ level, description: '' }), 'standard')
+      expect(verdict).toEqual({ status: 'not_applicable', mode: 'standard', issues: [] })
+    },
+  )
+
+  it('still judges a task the platform SPAWNED, whose description is a real brief', () => {
+    // An initiative-spawned item and a ticket-imported task are ordinary board tasks a human can
+    // edit, so they get the same check as any other. What they need is an answer path without a
+    // browser, which is the public decision surface, not an exemption here.
+    expect(codes(task({ level: 'task', description: 'TBD' }))).toEqual(['description_placeholder'])
+  })
+
   it('keeps `not_applicable` distinct from `off`, which is a setting somebody chose', () => {
     expect(evaluateInputGate(task({ taskType: 'recurring' }), 'off').status).toBe('off')
+    expect(evaluateInputGate(task({ level: 'initiative' }), 'off').status).toBe('off')
   })
 })
 
