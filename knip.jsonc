@@ -117,6 +117,14 @@
       "entry": ["src/index.ts", "test/**/*.test.ts", "smoketest/main.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts", "smoketest/**/*.ts"],
     },
+    // The MCP facade over that same surface. `src/bin.ts` has to be named explicitly: it is the
+    // package's `bin`, but the manifest points at the BUILT `dist/bin.js`, so knip cannot map it
+    // back to a source file and the stdio executable would read as an unused file. Same reason
+    // the client above lists its smoketest entry by hand.
+    "sdk/mcp": {
+      "entry": ["src/index.ts", "src/bin.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+    },
     "backend/internal/*": {
       "entry": ["src/**/*.ts", "tests/**/*.ts", "test/**/*.ts"],
       "project": ["src/**/*.ts"],

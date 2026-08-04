@@ -43,7 +43,8 @@ export interface CatFactoryMcpServer {
  * only exists on the path a test would then not be exercising.
  */
 export function createCatFactoryMcpServer(options: CatFactoryMcpOptions): CatFactoryMcpServer {
-  const { exposed, filteredGroups } = selectTools(CAT_FACTORY_TOOLS, options)
+  const selection = selectTools(CAT_FACTORY_TOOLS, options)
+  const { exposed } = selection
   const client = new CatFactoryClient({
     baseUrl: options.baseUrl,
     apiKey: options.apiKey,
@@ -60,7 +61,7 @@ export function createCatFactoryMcpServer(options: CatFactoryMcpOptions): CatFac
     { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
     {
       capabilities: { tools: {} },
-      instructions: buildInstructions(exposed, filteredGroups, options),
+      instructions: buildInstructions(selection),
     },
   )
 

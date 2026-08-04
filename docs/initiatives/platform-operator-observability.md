@@ -143,17 +143,29 @@ So the alerts got their own family on the same endpoint, beside `types` and `run
 `buildNotificationWebhookSupport` as its two siblings, so a facade cannot wire the management
 surface and leave the alerts undelivered. Empty means NONE, like `runEvents`.
 
-Four things about it are worth carrying forward:
+Five things about it are worth carrying forward:
 
 - **The edge carries the numbers the card deliberately omits.** The card's payload is its dedup
   identity, so a fluctuating value in it would re-toast the inbox every sweep; the delivery is an
   edge, stored nowhere, fired only on a change, so it carries each condition's observed value and
   the threshold it crossed. The sweep therefore keeps the WHOLE verdict and derives the reason set
   from it, rather than the other way round.
-- **The card supplies the incident identity, and the dedupe key needs both halves.** The key is
-  `<cardId>:<event>:<reasons>`. The card id alone would collapse an escalation (one condition
-  becoming two re-raises the same card) onto the page it escalated from; the reason set alone would
-  collapse two separate incidents that trip the same condition.
+- **The card supplies the incident identity; a transition ordinal supplies the rest of the dedupe
+  key.** The key is `<cardId>:<event>:<transition>[:<reasons>]`. The card id alone would collapse an
+  escalation (one condition becoming two re-raises the same card) onto the page it escalated from.
+  The reason SET does not fix that on its own, which is the part worth carrying forward: a set
+  RECURS within one incident, so `{A}` → `{A,B}` → `{A}` is three transitions over two distinct
+  sets and a receiver keyed on the set drops the page saying it had subsided. A timestamp fails the
+  other way: sweepers are only guarded against overlap within a process, so two nodes can observe
+  one transition and would page twice. The ordinal is counted on the card itself
+  (`payload.platformAlertTransition`), so both sweepers derive the same value from the same row: a
+  genuine duplicate collapses, two genuine transitions stay apart, and the sweep still keeps all its
+  state in the one card row rather than gaining a second store.
+- **`occurredAt` is the sweep's observation of the transition, and cannot come off the card.**
+  `raise` PRESERVES an open card's `createdAt` (so the card keeps its escalating "overdue" red), so
+  reading the edge's time from it would report every escalation as having happened when the incident
+  opened. The pass supplies it instead, one value shared by every edge it emits, which is also the
+  honest grain: an account-level verdict fanned out to its workspaces is one observation.
 - **The resolved edge follows the card, which leaves one honest hole.** A human dismissing the card
   mid-incident leaves the sweep nothing to clear, so a later recovery emits no `resolved`. Closing
   that would mean a second store of alert state beside the card, which is a table to keep in step

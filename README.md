@@ -175,9 +175,10 @@ deploy both halves on their end.
 languages. Models and operations are GENERATED from the published OpenAPI spec (which is itself
 generated from the Valibot contracts), so they cannot drift from the deployment they talk to;
 transports are hand-written. Beside them, `sdk/mcp` is a **Model Context Protocol facade** over the
-same surface: the 38 operations projected as MCP tools from that same spec, over the TypeScript
-client, so an MCP host can drive a workspace directly. Design notes, the Java/Kotlin story and the
-release process: [`sdk/README.md`](./sdk/README.md).
+same surface: the published operations projected as MCP tools from that same spec, over the
+TypeScript client, so an MCP host can drive a workspace directly (the two SSE endpoints aside, a
+tool call having no channel to stream over). Design notes, the Java/Kotlin story and the release
+process: [`sdk/README.md`](./sdk/README.md).
 
 | Path                                 | Package                                   | Registry                                    |
 | ------------------------------------ | ----------------------------------------- | ------------------------------------------- |

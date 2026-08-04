@@ -107,7 +107,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Start a headless job\n\nStart a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.\n\nCalls `POST /api/v1/jobs` (operation `createPublicJob`).',
     inputSchema: {"type":"object","properties":{"body":{"type":"object","properties":{"input":{"type":"string","minLength":1,"maxLength":50000},"pipelineId":{"type":"string","minLength":1},"title":{"type":"string","maxLength":200}},"required":["input","pipelineId"],"description":"The request body."}},"additionalProperties":false,"required":["body"]},
-    invoke: (client, args) => client.jobs.create(args.body as never),
+    invoke: (client, args) => client.jobs.create(args.body as Parameters<CatFactoryClient['jobs']['create']>[0]),
   },
   {
     name: 'jobs_get',
@@ -147,7 +147,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Create a task under a service\n\nCreate a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint.\n\nCalls `POST /api/v1/services/{serviceId}/tasks` (operation `createPublicTask`).',
     inputSchema: {"type":"object","properties":{"serviceId":{"type":"string","description":"Path parameter `serviceId`."},"body":{"type":"object","properties":{"description":{"type":"string","maxLength":2000},"taskType":{"type":"string","description":"Usually one of: feature, bug, document, spike, review, ralph. Other values are accepted where the deployment defines them."},"title":{"type":"string","minLength":1,"maxLength":200}},"required":["title"],"description":"The request body."}},"additionalProperties":false,"required":["serviceId","body"]},
-    invoke: (client, args) => client.tasks.create(str(args, 'serviceId'), args.body as never),
+    invoke: (client, args) => client.tasks.create(str(args, 'serviceId'), args.body as Parameters<CatFactoryClient['tasks']['create']>[1]),
   },
   {
     name: 'tasks_delete',
@@ -207,7 +207,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Start (run) a task\n\nStart a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).\n\nCalls `POST /api/v1/tasks/{taskId}/start` (operation `startPublicTask`).',
     inputSchema: {"type":"object","properties":{"taskId":{"type":"string","description":"Path parameter `taskId`."},"body":{"type":"object","properties":{"pipelineId":{"type":"string","minLength":1,"maxLength":120}},"description":"The request body."}},"additionalProperties":false,"required":["taskId","body"]},
-    invoke: (client, args) => client.tasks.start(str(args, 'taskId'), args.body as never),
+    invoke: (client, args) => client.tasks.start(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['start']>[1]),
   },
   {
     name: 'tasks_stop',
@@ -227,7 +227,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Edit a task\'s title/description\n\nEdit a task’s human-authored fields (title/description) before it runs. Both fields are optional.\n\nCalls `PATCH /api/v1/tasks/{taskId}` (operation `updatePublicTask`).',
     inputSchema: {"type":"object","properties":{"taskId":{"type":"string","description":"Path parameter `taskId`."},"body":{"type":"object","properties":{"description":{"type":"string","maxLength":2000},"title":{"type":"string","minLength":1,"maxLength":200}},"description":"The request body."}},"additionalProperties":false,"required":["taskId","body"]},
-    invoke: (client, args) => client.tasks.update(str(args, 'taskId'), args.body as never),
+    invoke: (client, args) => client.tasks.update(str(args, 'taskId'), args.body as Parameters<CatFactoryClient['tasks']['update']>[1]),
   },
   {
     name: 'pipelines_list',
@@ -287,7 +287,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Choose an implementation approach\n\nPick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/fork/choose` (operation `choosePublicRunFork`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"custom":{"anyOf":[{"type":"string"},{"type":"null"}]},"forkId":{"anyOf":[{"type":"string"},{"type":"null"}]},"note":{"anyOf":[{"type":"string"},{"type":"null"}]}},"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    invoke: (client, args) => client.decisions.chooseFork(str(args, 'runId'), args.body as never),
+    invoke: (client, args) => client.decisions.chooseFork(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['chooseFork']>[1]),
   },
   {
     name: 'decisions_incorporate',
@@ -297,7 +297,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Incorporate the answers\n\nFold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/incorporate` (operation `incorporatePublicRunRequirements`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"feedback":{"type":"string","maxLength":4000}},"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    invoke: (client, args) => client.decisions.incorporate(str(args, 'runId'), args.body as never),
+    invoke: (client, args) => client.decisions.incorporate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporate']>[1]),
   },
   {
     name: 'decisions_list',
@@ -327,7 +327,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Answer a review finding\n\nRecord an answer to one reviewer finding. Returns the run\'s updated decision list. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}/reply` (operation `replyPublicRunFinding`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"itemId":{"type":"string","description":"Path parameter `itemId`."},"body":{"type":"object","properties":{"reply":{"type":"string","minLength":1,"maxLength":4000}},"required":["reply"],"description":"The request body."}},"additionalProperties":false,"required":["runId","itemId","body"]},
-    invoke: (client, args) => client.decisions.replyToFinding(str(args, 'runId'), str(args, 'itemId'), args.body as never),
+    invoke: (client, args) => client.decisions.replyToFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToFinding']>[2]),
   },
   {
     name: 'decisions_re_review',
@@ -347,7 +347,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Resolve a review at its iteration cap\n\nPick how a review that exhausted its reviewer-pass budget proceeds: one more round, proceed with the last incorporated document, or stop and reset the task. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/resolve-exceeded` (operation `resolvePublicRunRequirementsExceeded`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["extra-round","proceed","stop-reset"]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    invoke: (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as never),
+    invoke: (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveExceeded']>[1]),
   },
   {
     name: 'decisions_resolve_judge',
@@ -357,7 +357,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Resolve a parked judge verdict\n\nSettle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/judge/resolve` (operation `resolvePublicRunJudge`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["proceed","bounce","stop"]},"feedback":{"anyOf":[{"type":"string"},{"type":"null"}]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    invoke: (client, args) => client.decisions.resolveJudge(str(args, 'runId'), args.body as never),
+    invoke: (client, args) => client.decisions.resolveJudge(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveJudge']>[1]),
   },
   {
     name: 'decisions_set_finding_status',
@@ -367,7 +367,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Dismiss or reopen a finding\n\nDismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a `decide`-scope key.\n\nCalls `PATCH /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}` (operation `setPublicRunFindingStatus`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"itemId":{"type":"string","description":"Path parameter `itemId`."},"body":{"type":"object","properties":{"status":{"type":"string","enum":["dismissed","open"]}},"required":["status"],"description":"The request body."}},"additionalProperties":false,"required":["runId","itemId","body"]},
-    invoke: (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as never),
+    invoke: (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setFindingStatus']>[2]),
   },
   {
     name: 'debug_get_agent_context',

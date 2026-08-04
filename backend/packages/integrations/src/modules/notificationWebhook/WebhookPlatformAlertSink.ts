@@ -107,19 +107,27 @@ export class WebhookPlatformAlertSink implements PlatformAlertSink {
 }
 
 /**
- * `<cardId>:<event>:<reasons>` — the receiver's dedupe key.
+ * `<cardId>:<event>:<transition>[:<reasons>]`: the receiver's dedupe key, identifying exactly
+ * one TRANSITION.
  *
- * It has two jobs that pull in opposite directions, which is why neither half alone would do.
- * The CARD id is the platform's record of the open alert: it is reused while an incident is open
- * and minted afresh for the next one, so it collapses the retries of one delivery without
- * collapsing two separate incidents that happen to trip the same condition. The REASON SET is
- * what changes within one incident (one condition escalating to two re-raises the same card), so
- * without it an escalation would land on the id of the alert it escalated from and a deduping
- * receiver would drop the page that says it got worse.
+ * The two ids compose because each survives a case the other collapses. The CARD id is the
+ * platform's record of the open alert, reused while an incident lasts and minted afresh for the
+ * next, so it keeps two separate incidents that trip the same condition apart. The TRANSITION
+ * ordinal counts the edges within one incident, which is what the alternatives get wrong: the
+ * reason set RECURS ({A} escalating to {A,B} and subsiding to {A} is three transitions over two
+ * sets, so a receiver would drop the page saying it had subsided), while a TIMESTAMP over-
+ * separates, because sweepers are only guarded against overlap within one process and two nodes
+ * observing one transition would page twice. The ordinal is derived from the card both of them
+ * read, so it is identical for a genuine duplicate and distinct for a genuine transition.
  *
- * The resolved edge carries no reasons, so the pair is already unique.
+ * The REASON SET is then redundant for uniqueness and kept anyway: it is what makes the key
+ * legible in a receiver's own logs. The resolved edge carries none and drops that segment.
+ *
+ * What the key must NOT separate is the retries of one delivery, and it cannot: those re-POST an
+ * already-composed body, so every part here is fixed for the whole retry budget.
  */
 function deliveryIdFor(event: PlatformAlertEvent): string {
+  const base = `${event.cardId}:${event.event}:${event.transition}`
   const reasons = event.conditions.map((condition) => condition.reason).join(',')
-  return reasons ? `${event.cardId}:${event.event}:${reasons}` : `${event.cardId}:${event.event}`
+  return reasons ? `${base}:${reasons}` : base
 }

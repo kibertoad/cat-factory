@@ -207,10 +207,14 @@ export type PlatformAlertWebhookCondition = v.InferOutput<
  * signature headers. `event` is what a receiver switches on: a notification delivery carries
  * `notification`, a run delivery carries `run`, this one carries `alert`.
  *
- * `deliveryId` is `<cardId>:<event>:<reasons>` — stable across the retries of one delivery and
- * distinct for each transition of one incident, so a receiver dedupes on it. The card id is the
- * platform's own record of the open alert, which is what makes the id survive a re-delivery while
- * still changing when the incident escalates from one condition to two.
+ * `deliveryId` is `<cardId>:<event>:<transition>[:<reasons>]`: stable across the retries of one
+ * delivery and distinct for each transition of one incident, so a receiver dedupes on it. The
+ * card id is the platform's own record of the open alert, so it keeps two separate incidents
+ * apart; the transition ordinal keeps two edges of ONE incident apart, including the case the
+ * reason set alone would collapse (a condition set that escalates and later subsides back to
+ * what it was is three transitions over two distinct sets). Do NOT substitute `occurredAt` for
+ * the ordinal: two of the deployment's sweepers can observe one transition and would stamp
+ * different times for it, which the ordinal is derived specifically to avoid.
  *
  * Three properties of this feed are worth stating plainly, because an on-call integration is
  * built differently depending on them:
@@ -251,7 +255,11 @@ export const platformAlertWebhookDeliverySchema = v.object({
      * `platform_health.resolved`, where the absence of conditions IS the content.
      */
     conditions: v.array(platformAlertWebhookConditionSchema),
-    /** Epoch-ms the transition was observed. */
+    /**
+     * Epoch-ms the sweep observed this transition (not when the incident opened: an escalation
+     * carries the moment it got worse). Every delivery of one account-level transition shares
+     * the value, so it groups the per-workspace fan-out alongside `accountId`.
+     */
     occurredAt: v.number(),
     /**
      * A bounded sample of the runs behind a failure-driven alert, in THIS workspace only. Empty

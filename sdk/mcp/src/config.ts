@@ -32,7 +32,7 @@ export interface CatFactoryMcpOptions {
   maxResultChars?: number
   /** Per-request deadline in ms, passed to the SDK; `0` disables it. */
   timeoutMs?: number
-  /** Retries for a retriable failure, passed to the SDK. */
+  /** Retries for a retriable failure, passed to the SDK. Only idempotent requests are retried. */
   maxRetries?: number
   /**
    * Swap the HTTP implementation (a proxy agent, a test double), passed straight to the SDK.
@@ -52,6 +52,7 @@ export const ENV_VARS = {
   readOnly: 'CAT_FACTORY_MCP_READ_ONLY',
   maxResultChars: 'CAT_FACTORY_MCP_MAX_RESULT_CHARS',
   timeoutMs: 'CAT_FACTORY_MCP_TIMEOUT_MS',
+  maxRetries: 'CAT_FACTORY_MCP_MAX_RETRIES',
 } as const
 
 /**
@@ -71,17 +72,20 @@ export function optionsFromEnv(env: Record<string, string | undefined>): CatFact
     ?.split(',')
     .map((group) => group.trim())
     .filter(Boolean)
+  // Read each ceiling ONCE. Every one of these is optional and must stay ABSENT rather than
+  // become `undefined`, because the server spreads them onto the SDK's own options and an
+  // explicit `undefined` is not the same as not passing the field.
+  const maxResultChars = numeric(env[ENV_VARS.maxResultChars], ENV_VARS.maxResultChars)
+  const timeoutMs = numeric(env[ENV_VARS.timeoutMs], ENV_VARS.timeoutMs)
+  const maxRetries = numeric(env[ENV_VARS.maxRetries], ENV_VARS.maxRetries)
   return {
     baseUrl,
     apiKey,
     ...(groups && groups.length > 0 ? { groups } : {}),
     ...(isTruthy(env[ENV_VARS.readOnly]) ? { readOnly: true } : {}),
-    ...(numeric(env[ENV_VARS.maxResultChars], ENV_VARS.maxResultChars) !== undefined
-      ? { maxResultChars: numeric(env[ENV_VARS.maxResultChars], ENV_VARS.maxResultChars) }
-      : {}),
-    ...(numeric(env[ENV_VARS.timeoutMs], ENV_VARS.timeoutMs) !== undefined
-      ? { timeoutMs: numeric(env[ENV_VARS.timeoutMs], ENV_VARS.timeoutMs) }
-      : {}),
+    ...(maxResultChars !== undefined ? { maxResultChars } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(maxRetries !== undefined ? { maxRetries } : {}),
   }
 }
 
@@ -106,16 +110,28 @@ function numeric(value: string | undefined, name: string): number | undefined {
 }
 
 /**
- * The tools a set of options exposes, and what was filtered out.
+ * What a server exposes, and what it withheld.
  *
- * The filtered list is returned rather than discarded because the server states it in its
- * instructions: a model that can see `tasks_*` but not `debug_*` should be told that the debug
- * tools were switched off HERE, or it will report the deployment as not supporting them.
+ * The withheld halves are carried rather than discarded because the server states them in its
+ * instructions: a model that can see `tasks_*` but not `debug_*` should be told the debug tools
+ * were switched off HERE, or it will report the deployment as not supporting them. That is why
+ * this is ONE value rather than a tool list plus a second look at the options. The instructions
+ * are written from what the selection actually did, so a filter cannot be applied and left
+ * unmentioned.
  */
+export interface ToolSelection {
+  exposed: CatFactoryTool[]
+  /** Groups the operator switched off. Empty when no group filter was applied. */
+  filteredGroups: string[]
+  /** Whether the write tools were withheld by `readOnly`. */
+  writeToolsHidden: boolean
+}
+
+/** The tools a set of options exposes, and what was filtered out. */
 export function selectTools(
   tools: readonly CatFactoryTool[],
   options: CatFactoryMcpOptions,
-): { exposed: CatFactoryTool[]; filteredGroups: string[]; writeToolsHidden: boolean } {
+): ToolSelection {
   const known = new Set(Object.keys(CAT_FACTORY_TOOL_GROUPS))
   const requested = options.groups?.length ? new Set(options.groups) : null
   if (requested) {

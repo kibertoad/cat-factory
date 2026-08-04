@@ -740,7 +740,7 @@ function runPeriodicBackstops(
   if (loadConfig(env).platformAlerts.enabled) {
     tick.run(
       { name: 'platform-health', failureMessage: 'platform health sweep failed' },
-      sweepPlatformHealth(buildContainer(env), logger).then(({ raised, cleared }) => {
+      sweepPlatformHealth(buildContainer(env), clock.now(), logger).then(({ raised, cleared }) => {
         if (raised > 0 || cleared > 0)
           logger.info('platform health sweep', { cron: 'platform-health', raised, cleared })
       }),

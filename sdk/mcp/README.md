@@ -38,6 +38,7 @@ workspace, and the key is what actually decides what a model can do here.
 | `CAT_FACTORY_MCP_READ_ONLY`        | `true` ⇒ expose only the tools that change nothing.             |
 | `CAT_FACTORY_MCP_MAX_RESULT_CHARS` | Ceiling on one tool result. Default 100,000.                    |
 | `CAT_FACTORY_MCP_TIMEOUT_MS`       | Per-request deadline passed to the SDK. `0` disables it.        |
+| `CAT_FACTORY_MCP_MAX_RETRIES`      | Retries for a retriable failure, passed to the SDK.             |
 
 Missing credentials, an unknown group name and a non-numeric ceiling all **fail at startup**. A
 server that comes up and then fails every call is reported by the host as connected, and the model
@@ -78,8 +79,9 @@ Concretely:
 
 ## The tool surface
 
-36 tools across eight groups, named `<group>_<method>` to match the SDK call (`client.tasks.create()`
-⇄ `tasks_create`):
+One tool per exposed operation, named `<group>_<method>` to match the SDK call
+(`client.tasks.create()` ⇄ `tasks_create`). The server reports the live count on startup and lists
+the tools themselves over the protocol, which is the only place it cannot go stale:
 
 | Group             | What it covers                                                            |
 | ----------------- | ------------------------------------------------------------------------- |
@@ -92,7 +94,7 @@ Concretely:
 | `decisions_*`     | A parked run's human decisions.                                           |
 | `debug_*`         | A run's recorded telemetry: LLM calls, agent context, infra logs.         |
 
-**Two of the API's 38 operations are deliberately absent**, and the server says so in its
+**The API's two SSE operations are deliberately absent**, and the server says so in its
 instructions rather than leaving a model to conclude the platform cannot do it:
 `GET /api/v1/jobs/{id}/events` and `GET /api/v1/tasks/{taskId}/events` are SSE streams, and a tool
 call returns one result over no streaming channel. Poll `jobs_get` / `tasks_get_run`, or consume the

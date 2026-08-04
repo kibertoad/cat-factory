@@ -23,6 +23,16 @@ because the deployment recovered. These edges come from the sweep's own verdict,
 condition's observed value and threshold (which the card deliberately omits, since its payload is
 its dedup identity).
 
+Each delivery is identified by `<cardId>:<event>:<transition>[:<reasons>]`, where the transition
+ordinal is counted on the card row itself. Neither simpler key works: a condition set recurs within
+one incident (`{A}` → `{A,B}` → `{A}`), so keying on the set drops the page saying it subsided,
+while keying on a timestamp pages twice whenever two of the deployment's sweepers observe one
+transition. `occurredAt` is the sweep's own observation of the transition rather than anything read
+off the card, whose `createdAt` is preserved across a re-raise and so names when the incident
+opened.
+
 Internal break: `NotificationWebhookRecord` gains a required `alertEvents` field, and the
 `notification_webhooks` table gains an `alert_events` column on both runtimes. Existing rows
-default to `[]`, so every registered endpoint keeps its current behaviour byte-for-byte.
+default to `[]`, so every registered endpoint keeps its current behaviour byte-for-byte. A
+`platform_health` notification payload also gains `platformAlertTransition`; a card written before
+this ships has none and its next transition simply starts the count over.

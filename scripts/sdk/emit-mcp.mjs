@@ -215,11 +215,21 @@ function inputSchema(operation, ir) {
   return schema
 }
 
-/** The SDK call this tool forwards to, as a TS expression over `client` and `args`. */
+/**
+ * The SDK call this tool forwards to, as a TS expression over `client` and `args`.
+ *
+ * The body arrives as `unknown` (the host sends whatever the model composed, and the JSON Schema
+ * is what constrains it), so reaching the SDK's typed parameter needs an assertion. It is spelled
+ * as a lookup INTO the SDK's own signature rather than as `never`: `never` satisfies any
+ * parameter type at all, so it would keep compiling if the SDK's body parameter became something
+ * this facade no longer supplies, whereas this says exactly what is being claimed and is derived
+ * from the one declaration rather than restating it.
+ */
 function invocation(operation) {
+  const bodyType = `Parameters<CatFactoryClient[${lit(operation.group)}][${lit(operation.method)}]>[${operation.pathParams.length}]`
   const args = [
     ...operation.pathParams.map((param) => `str(args, ${lit(param.wireName)})`),
-    operation.body ? `args.body as never` : null,
+    operation.body ? `args.body as ${bodyType}` : null,
     operation.queryParams.length > 0
       ? `pick(args, QUERY_${snake(toolName(operation)).toUpperCase()})`
       : null,

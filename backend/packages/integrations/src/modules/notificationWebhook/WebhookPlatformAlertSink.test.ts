@@ -45,6 +45,7 @@ function event(overrides: Partial<PlatformAlertEvent> = {}): PlatformAlertEvent 
   return {
     event: 'platform_health.firing',
     cardId: 'ntf_1',
+    transition: 1,
     accountId: 'acc_1',
     window: '1h',
     conditions: [{ reason: 'failure_rate_high', value: 0.42, threshold: 0.25 }],
@@ -187,14 +188,16 @@ describe('WebhookPlatformAlertSink', () => {
     expect(body.event).toBe('platform_health.resolved')
     // The absence of conditions IS the content of this edge.
     expect(body.alert.conditions).toEqual([])
-    expect(body.deliveryId).toBe('ntf_1:platform_health.resolved')
+    expect(body.deliveryId).toBe('ntf_1:platform_health.resolved:1')
   })
 
   describe('the dedupe key', () => {
-    it('repeats for a re-delivery of one transition', async () => {
-      // Same incident, same firing set, re-delivered (the sweep re-ran after a delivery failure,
-      // or both facades' sweeps overlapped). A receiver comparing `deliveryId` collapses it;
-      // hashing the body would not, since `sentAt` is re-stamped.
+    it('repeats for a re-delivery of one transition, even from a second sweeper', async () => {
+      // Same incident, same transition, delivered twice: the case that decides the key's shape.
+      // Sweepers are only guarded against overlap WITHIN a process, so two nodes of one
+      // deployment can observe a transition together and will stamp DIFFERENT `occurredAt`s for
+      // it. Both derive the ordinal from the same open card, so the key still collapses them.
+      // Hashing the body would not, since `sentAt` is re-stamped too.
       let tick = 1_700_000_000_000
       const { impl, calls } = fetchStub([200])
       const s = new WebhookPlatformAlertSink({
@@ -222,6 +225,7 @@ describe('WebhookPlatformAlertSink', () => {
       await s.platformHealthChanged(
         'ws1',
         event({
+          transition: 2,
           conditions: [
             { reason: 'backlog_high', value: 900, threshold: 500 },
             { reason: 'failure_rate_high', value: 0.42, threshold: 0.25 },
@@ -229,6 +233,30 @@ describe('WebhookPlatformAlertSink', () => {
         }),
       )
       expect(bodyOf(calls, 1).deliveryId).not.toBe(bodyOf(calls, 0).deliveryId)
+    })
+
+    it('changes when an incident SUBSIDES to a condition set it already reported', async () => {
+      // The case a key built on the reason set alone gets wrong, and the reason the transition
+      // ordinal exists. {A} -> {A,B} -> {A} is three transitions over two distinct sets, so the
+      // third edge repeats the first one's set on the same still-open card. Keyed on the set, a
+      // deduping receiver would drop it and go on paging that the incident was still escalated.
+      const { sink: s, calls } = sink(webhook())
+      const escalated = {
+        transition: 2,
+        conditions: [
+          { reason: 'backlog_high', value: 900, threshold: 500 },
+          { reason: 'failure_rate_high', value: 0.42, threshold: 0.25 },
+        ],
+      }
+      await s.platformHealthChanged('ws1', event())
+      await s.platformHealthChanged('ws1', event(escalated))
+      await s.platformHealthChanged('ws1', event({ transition: 3 }))
+
+      const ids = calls.map((_, i) => bodyOf(calls, i).deliveryId)
+      expect(new Set(ids).size).toBe(3)
+      // Specifically: the subsided edge is not mistaken for the one that opened the incident,
+      // even though the two are identical in card, event and conditions.
+      expect(ids[2]).not.toBe(ids[0])
     })
 
     it('changes when a NEW incident trips the same condition again', async () => {

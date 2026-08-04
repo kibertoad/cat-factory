@@ -1,9 +1,5 @@
-import type { CatFactoryMcpOptions } from './config.ts'
-import {
-  CAT_FACTORY_OMITTED_OPERATIONS,
-  CAT_FACTORY_TOOL_GROUPS,
-  type CatFactoryTool,
-} from './tools.generated.ts'
+import type { ToolSelection } from './config.ts'
+import { CAT_FACTORY_OMITTED_OPERATIONS, CAT_FACTORY_TOOL_GROUPS } from './tools.generated.ts'
 
 // The server's `instructions`: the one piece of prose a model reads before it reads any tool.
 //
@@ -13,12 +9,15 @@ import {
 // one, and the model then tells its user the platform cannot do it). And which of the things it
 // can see cost real money or real time — because on this surface, some do.
 
-/** The server's instructions for the given selection of tools. */
-export function buildInstructions(
-  exposed: readonly CatFactoryTool[],
-  filteredGroups: readonly string[],
-  options: CatFactoryMcpOptions,
-): string {
+/**
+ * The server's instructions for a tool selection.
+ *
+ * Takes the SELECTION rather than the options it came from: what a model needs told is what was
+ * actually withheld, and reading that back off the options would be a second derivation of it,
+ * free to disagree with the first.
+ */
+export function buildInstructions(selection: ToolSelection): string {
+  const { exposed, filteredGroups, writeToolsHidden } = selection
   const groups = [...new Set(exposed.map((tool) => tool.group))]
   const sections: string[] = [
     "cat-factory runs coding agents against a team's real repositories: a board of services and " +
@@ -36,7 +35,7 @@ export function buildInstructions(
     'Results are JSON. Lists are keyset-paginated: pass the `cursor` a page returns to get the ' +
       'next one, and stop when it comes back null (an empty page with a cursor is normal).',
   ]
-  if (options.readOnly) {
+  if (writeToolsHidden) {
     sections.push(
       'This server was started READ-ONLY: only the tools that change nothing are exposed. The ' +
         'deployment supports creating and running tasks; you cannot do it from here.',

@@ -30,10 +30,23 @@ describe('optionsFromEnv', () => {
       [ENV_VARS.groups]: 'tasks, debug',
       [ENV_VARS.readOnly]: 'true',
       [ENV_VARS.maxResultChars]: '5000',
+      [ENV_VARS.timeoutMs]: '30000',
+      [ENV_VARS.maxRetries]: '2',
     })
     expect(options.groups).toEqual(['tasks', 'debug'])
     expect(options.readOnly).toBe(true)
     expect(options.maxResultChars).toBe(5_000)
+    expect(options.timeoutMs).toBe(30_000)
+    expect(options.maxRetries).toBe(2)
+  })
+
+  it('leaves an unset knob ABSENT rather than explicitly undefined', () => {
+    // These are spread onto the SDK's own options, where a present-but-undefined field is not the
+    // same as an omitted one: it would override the SDK's default with nothing.
+    const options = optionsFromEnv(BASE)
+    expect('timeoutMs' in options).toBe(false)
+    expect('maxRetries' in options).toBe(false)
+    expect('maxResultChars' in options).toBe(false)
   })
 
   it('throws on a mistyped ceiling rather than reverting to the default', () => {
@@ -44,6 +57,9 @@ describe('optionsFromEnv', () => {
     )
     expect(() => optionsFromEnv({ ...BASE, [ENV_VARS.timeoutMs]: '-1' })).toThrow(
       ENV_VARS.timeoutMs,
+    )
+    expect(() => optionsFromEnv({ ...BASE, [ENV_VARS.maxRetries]: 'many' })).toThrow(
+      ENV_VARS.maxRetries,
     )
   })
 })

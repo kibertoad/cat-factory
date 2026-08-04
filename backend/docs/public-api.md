@@ -523,14 +523,14 @@ respectively.
 
 // Platform-health alert (carries `event` + `alert`)
 {
-  "deliveryId": "ntf_77:platform_health.firing:failure_rate_high",  // <cardId>:<event>:<reasons>
+  "deliveryId": "ntf_77:platform_health.firing:2:failure_rate_high",  // <cardId>:<event>:<transition>[:<reasons>]
   "sentAt": 1722600000000,
   "workspaceId": "ws_1",
   "event": "platform_health.firing",
   "alert": {
     "accountId": "acc_1",                 // health is aggregated per ACCOUNT - group on this
     "window": "1h",
-    "occurredAt": 1722600000000,
+    "occurredAt": 1722600000000,          // when the sweep observed THIS transition, not when the incident opened
     "conditions": [
       { "reason": "failure_rate_high", "value": 0.8, "threshold": 0.5 }
     ],
@@ -564,6 +564,14 @@ built differently depending on them:
   the length of an incident and does not repeat itself, so silence means "nothing changed", never
   "recovered". One condition escalating to two is a change and pages again (with a new
   `deliveryId`); the same conditions still firing is not.
+- **Dedupe an alert on `deliveryId` alone, not on the conditions and not on `occurredAt`.** The id
+  carries a transition ordinal that counts the edges within one incident, because neither obvious
+  substitute works: a condition set RECURS (escalating from `{A}` to `{A,B}` and subsiding to
+  `{A}` is three transitions over two distinct sets, and keying on the set would drop the page
+  saying it had subsided), while `occurredAt` over-separates, since the deployment may run several
+  sweepers and two of them observing one transition stamp different times for it. The ordinal is
+  derived from the platform's own record of the incident, so it is identical for a duplicate
+  delivery and distinct for a real transition.
 - **One account-level condition fans out per subscribed workspace.** Health is aggregated per
   account while endpoints are registered per workspace, so a receiver watching several workspaces of
   one account gets one delivery each. Group on `alert.accountId`.

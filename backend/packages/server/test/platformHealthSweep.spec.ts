@@ -54,6 +54,23 @@ const UNHEALTHY: PlatformObservability = {
   outcomes: { ...HEALTHY.outcomes, done: 2, failed: 8, successRate: 0.2 },
 }
 
+/** {@link UNHEALTHY} plus a slow tail, so the firing set ESCALATES to two conditions. */
+const UNHEALTHY_ESCALATED: PlatformObservability = {
+  ...UNHEALTHY,
+  durations: { ...UNHEALTHY.durations, p99Ms: DEFAULT_PLATFORM_ALERT_THRESHOLDS.maxP99DurationMs },
+}
+
+/** `createdAt` on a card the fake starts with open, distinct from anything a pass mints. */
+const SEEDED_CARD_CREATED_AT = 100
+/** Base `createdAt` for a card a pass mints fresh. */
+const MINTED_CARD_CREATED_AT = 1_000
+/** `resolvedAt` the fake stamps when a card is cleared. */
+const CLEARED_AT = 2_000
+
+/** Distinct sweep-pass observation times, so an edge's `occurredAt` names the pass it came from. */
+const PASS_1_AT = 5_000
+const PASS_2_AT = 6_000
+
 interface RaiseCall {
   workspaceId: string
   reasons: unknown
@@ -92,6 +109,23 @@ function makeContainer(opts: {
   const listByTypeCalls: string[][] = []
   const alerts: { workspaceId: string; event: PlatformAlertEvent }[] = []
   let cardSeq = 0
+  // The open `platform_health` card per workspace, modelled STATEFULLY because the sweep's whole
+  // dedup story rides on how the real `NotificationService` treats one: a block-less card
+  // de-dupes on (workspace, type), so a re-raise REUSES the open row's id and PRESERVES its
+  // `createdAt` rather than minting either afresh. A fake that mints both per call is strictly
+  // more permissive than production, and it hides the two things most worth pinning here: that
+  // an escalation keeps the incident's id, and that the outbound edge must therefore not read
+  // its transition time off the card.
+  const open = new Map<string, { id: string; createdAt: number; payload?: unknown }>()
+  for (const ws of opts.workspaces) {
+    if (opts.openCardWorkspaces && !opts.openCardWorkspaces.includes(ws.id)) continue
+    open.set(ws.id, {
+      id: `ntf_seed_${ws.id}`,
+      createdAt: SEEDED_CARD_CREATED_AT,
+      ...(opts.openCardReasons ? { payload: { platformAlerts: opts.openCardReasons } } : {}),
+    })
+  }
+  const summaries = { ...opts.summaries }
   const container = {
     config: {
       platformAlerts: {
@@ -113,7 +147,7 @@ function makeContainer(opts: {
       opts.hasObservability === false
         ? undefined
         : {
-            summarize: async (accountId: string) => opts.summaries[accountId] ?? HEALTHY,
+            summarize: async (accountId: string) => summaries[accountId] ?? HEALTHY,
             failingRuns: async () => opts.failingRuns ?? [],
           },
     notifications:
@@ -123,12 +157,11 @@ function makeContainer(opts: {
             service: {
               listOpenByType: async (workspaceIds: string[]) => {
                 listByTypeCalls.push(workspaceIds)
-                const held = opts.openCardWorkspaces ?? workspaceIds
-                const card = opts.openCardReasons
-                  ? { payload: { platformAlerts: opts.openCardReasons } }
-                  : {}
                 return new Map(
-                  workspaceIds.filter((id) => held.includes(id)).map((id) => [id, card]),
+                  workspaceIds.flatMap((id) => {
+                    const card = open.get(id)
+                    return card ? [[id, card] as const] : []
+                  }),
                 )
               },
               raise: async (workspaceId: string, input: { payload?: Record<string, unknown> }) => {
@@ -137,15 +170,26 @@ function makeContainer(opts: {
                   reasons: input.payload?.platformAlerts,
                   payload: input.payload,
                 })
-                cardSeq += 1
-                return { id: `ntf_${cardSeq}`, createdAt: 1_000 + cardSeq }
+                // Real `raise` semantics: reuse the open row's id AND its `createdAt`, minting
+                // both only when nothing is open for this (workspace, type).
+                const existing = open.get(workspaceId)
+                if (!existing) cardSeq += 1
+                const card = {
+                  id: existing?.id ?? `ntf_${cardSeq}`,
+                  createdAt: existing?.createdAt ?? MINTED_CARD_CREATED_AT + cardSeq,
+                  payload: input.payload,
+                }
+                open.set(workspaceId, card)
+                return card
               },
               clearByType: async (workspaceId: string) => {
                 clears.push(workspaceId)
-                cardSeq += 1
-                // A non-null "cleared" card: the sweep reads its id as the resolved edge's
-                // incident identity, and null would mean there was nothing open to clear.
-                return { id: `ntf_${cardSeq}`, createdAt: 500, resolvedAt: 2_000 + cardSeq }
+                const existing = open.get(workspaceId)
+                // Null when nothing was open, meaning "no recovery happened here", which stops
+                // the sweep announcing a resolved edge for a workspace that never fired.
+                if (!existing) return null
+                open.delete(workspaceId)
+                return { ...existing, resolvedAt: CLEARED_AT }
               },
             },
           },
@@ -159,7 +203,11 @@ function makeContainer(opts: {
             },
           },
   } as unknown as ServerContainer
-  return { container, raises, clears, listByTypeCalls, alerts }
+  /** Re-point an account's projection, so a test can drive successive passes over changing health. */
+  const setSummary = (accountId: string, summary: PlatformObservability) => {
+    summaries[accountId] = summary
+  }
+  return { container, raises, clears, listByTypeCalls, alerts, setSummary }
 }
 
 describe('sweepPlatformHealth', () => {
@@ -168,7 +216,7 @@ describe('sweepPlatformHealth', () => {
       workspaces: [workspace('ws-1', 'acc-1'), workspace('ws-2', 'acc-1')],
       summaries: { 'acc-1': UNHEALTHY },
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 2, cleared: 0 })
     expect(raises.map((r) => r.workspaceId).sort()).toEqual(['ws-1', 'ws-2'])
     expect(raises[0]!.reasons).toEqual(['failure_rate_high'])
@@ -180,7 +228,7 @@ describe('sweepPlatformHealth', () => {
       workspaces: [workspace('ws-1', 'acc-1')],
       summaries: { 'acc-1': HEALTHY },
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 0, cleared: 1 })
     expect(raises).toEqual([])
     expect(clears).toEqual(['ws-1'])
@@ -192,7 +240,7 @@ describe('sweepPlatformHealth', () => {
       summaries: { 'acc-1': HEALTHY },
       openCardWorkspaces: ['ws-2'], // only ws-2 has an open card to clear
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     // ws-1 has no card → never probed; only ws-2 is cleared.
     expect(result).toEqual({ raised: 0, cleared: 1 })
     expect(clears).toEqual(['ws-2'])
@@ -222,7 +270,7 @@ describe('sweepPlatformHealth', () => {
       summarizeCalls += 1
       return inner(accountId)
     }
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(summarizeCalls).toBe(2) // once per account, not per workspace
     expect(result).toEqual({ raised: 2, cleared: 1 })
   })
@@ -238,7 +286,7 @@ describe('sweepPlatformHealth', () => {
         summaries: { 'acc-1': UNHEALTHY },
         ...opts,
       })
-      const result = await sweepPlatformHealth(container)
+      const result = await sweepPlatformHealth(container, PASS_1_AT)
       expect(result).toEqual({ raised: 0, cleared: 0 })
       expect(raises).toEqual([])
       expect(clears).toEqual([])
@@ -253,7 +301,7 @@ describe('sweepPlatformHealth', () => {
       summaries: { 'acc-1': UNHEALTHY },
       openCardReasons: ['failure_rate_high'],
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 0, cleared: 0 })
     expect(raises).toEqual([])
     expect(clears).toEqual([])
@@ -270,7 +318,7 @@ describe('sweepPlatformHealth', () => {
       },
       openCardReasons: ['failure_rate_high'],
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 1, cleared: 0 })
     expect(raises[0]!.reasons).toEqual(['backlog_high', 'failure_rate_high'])
   })
@@ -298,7 +346,7 @@ describe('sweepPlatformHealth', () => {
         },
       ],
     })
-    await sweepPlatformHealth(container)
+    await sweepPlatformHealth(container, PASS_1_AT)
     const first = raises.find((r) => r.workspaceId === 'ws-1')!
     expect(first.payload?.platformFailingRuns).toEqual([
       { executionId: 'run-a', blockId: 'blk-a', failureKind: 'agent', createdAt: 5 },
@@ -331,7 +379,7 @@ describe('sweepPlatformHealth', () => {
         },
       ],
     })
-    await sweepPlatformHealth(container)
+    await sweepPlatformHealth(container, PASS_1_AT)
     expect(raises[0]!.reasons).toEqual(['backlog_high'])
     expect(raises[0]!.payload?.platformFailingRuns).toBeUndefined()
     expect(raises[0]!.payload?.platformFailedTotal).toBeUndefined()
@@ -344,7 +392,7 @@ describe('sweepPlatformHealth', () => {
       summaries: { 'acc-1': UNHEALTHY }, // 80% failure rate
       accountSettings: { thresholds: { maxFailureRate: 0.9 } },
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 0, cleared: 1 })
     expect(raises).toEqual([])
   })
@@ -357,7 +405,7 @@ describe('sweepPlatformHealth', () => {
       summaries: { 'acc-1': UNHEALTHY },
       accountSettings: { enabled: false },
     })
-    const result = await sweepPlatformHealth(container)
+    const result = await sweepPlatformHealth(container, PASS_1_AT)
     expect(result).toEqual({ raised: 0, cleared: 0 })
     expect(raises).toEqual([])
     expect(clears).toEqual([])
@@ -379,7 +427,7 @@ describe('sweepPlatformHealth', () => {
       return inner(accountId)
     }
     const logger = createRecordingLogger()
-    const result = await sweepPlatformHealth(container, logger)
+    const result = await sweepPlatformHealth(container, PASS_1_AT, logger)
     expect(result).toEqual({ raised: 1, cleared: 0 })
     expect(raises.map((r) => r.workspaceId)).toEqual(['ws-2'])
     expect(logger.lines.filter((l) => l.level === 'warn')).toHaveLength(1)
@@ -401,7 +449,7 @@ describe('sweepPlatformHealth', () => {
           },
         ],
       })
-      await sweepPlatformHealth(container)
+      await sweepPlatformHealth(container, PASS_1_AT)
 
       // One edge per workspace: health is evaluated per ACCOUNT but endpoints are registered per
       // workspace, so the account id is what lets a receiver collapse the fan-out.
@@ -410,7 +458,12 @@ describe('sweepPlatformHealth', () => {
       expect(first.event).toBe('platform_health.firing')
       expect(first.accountId).toBe('acc-1')
       expect(first.window).toBe('1h')
-      expect(first.cardId).toBe('ntf_1')
+      // The edge's incident identity is the card the sweep just wrote, whether that card was
+      // already open (as here) or freshly minted.
+      expect(first.cardId).toBe('ntf_seed_ws-1')
+      // The transition time is the PASS's, never the card's `createdAt`. See the escalation
+      // test below for why the two must not be conflated.
+      expect(first.occurredAt).toBe(PASS_1_AT)
       // The card carries reasons only (its payload is its dedup identity); the edge carries the
       // observed value and the threshold it crossed, which is what a pager routes on.
       expect(first.conditions).toEqual([
@@ -430,12 +483,76 @@ describe('sweepPlatformHealth', () => {
       expect(second.failedTotal).toBeNull()
     })
 
+    it('keeps the incident id but MOVES the transition time when an alert escalates', async () => {
+      // Two passes over one open incident, which is the case the design turns on and the one a
+      // single-pass test cannot see. The card is the incident's identity, so `raise` reuses its
+      // id AND preserves its `createdAt` when the firing set grows from one condition to two.
+      // That makes `createdAt` the moment the incident OPENED, not the moment it got worse,
+      // so the edge must take its `occurredAt` from the pass instead, or an escalation would
+      // report a transition time from before the escalation happened and a receiver ordering
+      // edges (or aging the incident) would be reading the wrong number with no way to tell.
+      const { container, alerts, setSummary } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        openCardWorkspaces: [], // start clean, so the first pass mints the incident
+      })
+
+      await sweepPlatformHealth(container, PASS_1_AT)
+      setSummary('acc-1', UNHEALTHY_ESCALATED)
+      await sweepPlatformHealth(container, PASS_2_AT)
+
+      expect(alerts).toHaveLength(2)
+      const [firing, escalated] = alerts.map((a) => a.event)
+      // One incident, so one id across both edges: a receiver correlates them by it.
+      expect(escalated!.cardId).toBe(firing!.cardId)
+      expect(firing!.conditions.map((c) => c.reason)).toEqual(['failure_rate_high'])
+      expect(escalated!.conditions.map((c) => c.reason)).toEqual([
+        'duration_p99_high',
+        'failure_rate_high',
+      ])
+      // The two edges are distinguishable in TIME...
+      expect(firing!.occurredAt).toBe(PASS_1_AT)
+      expect(escalated!.occurredAt).toBe(PASS_2_AT)
+      // ...and neither reports the card's own `createdAt`, which is what both would have said.
+      expect(escalated!.occurredAt).not.toBe(MINTED_CARD_CREATED_AT + 1)
+      // The transition ORDINAL is what the receiver's dedupe key uses, since `occurredAt` is a
+      // per-process clock read and two nodes can observe one transition (see below).
+      expect(firing!.transition).toBe(1)
+      expect(escalated!.transition).toBe(2)
+    })
+
+    it('gives two sweepers racing on one transition the SAME ordinal', async () => {
+      // `preventOverrun` only stops a sweeper stacking its OWN passes; nothing elects a leader
+      // across a multi-node deployment, so two nodes can observe one transition. They read the
+      // same open card, so the ordinal they derive from it agrees and a receiver collapses their
+      // two deliveries into one page. A clock read would differ per process and page twice.
+      const { container, alerts } = makeContainer({
+        workspaces: [workspace('ws-1', 'acc-1')],
+        summaries: { 'acc-1': UNHEALTHY },
+        openCardWorkspaces: [],
+      })
+
+      // Both passes see the same prior state, because neither has committed when the other reads
+      // modelled here by running them concurrently against the one shared fake.
+      await Promise.all([
+        sweepPlatformHealth(container, PASS_1_AT),
+        sweepPlatformHealth(container, PASS_2_AT),
+      ])
+
+      expect(alerts).toHaveLength(2)
+      const [a, b] = alerts.map((entry) => entry.event)
+      expect(a!.cardId).toBe(b!.cardId)
+      expect(a!.transition).toBe(b!.transition)
+      // ...which is exactly the disagreement the ordinal exists to survive.
+      expect(a!.occurredAt).not.toBe(b!.occurredAt)
+    })
+
     it('announces a resolved edge when the account recovers', async () => {
       const { container, alerts } = makeContainer({
         workspaces: [workspace('ws-1', 'acc-1')],
         summaries: { 'acc-1': HEALTHY },
       })
-      await sweepPlatformHealth(container)
+      await sweepPlatformHealth(container, PASS_1_AT)
       expect(alerts).toHaveLength(1)
       expect(alerts[0]!.event.event).toBe('platform_health.resolved')
       // The absence of conditions IS the content of this edge.
@@ -451,7 +568,7 @@ describe('sweepPlatformHealth', () => {
         summaries: { 'acc-1': UNHEALTHY },
         openCardReasons: ['failure_rate_high'],
       })
-      await sweepPlatformHealth(container)
+      await sweepPlatformHealth(container, PASS_1_AT)
       expect(raises).toEqual([])
       expect(alerts).toEqual([])
     })
@@ -466,7 +583,7 @@ describe('sweepPlatformHealth', () => {
         alertSinkThrows: true,
       })
       const logger = createRecordingLogger()
-      const result = await sweepPlatformHealth(container, logger)
+      const result = await sweepPlatformHealth(container, PASS_1_AT, logger)
       expect(result).toEqual({ raised: 2, cleared: 0 })
       expect(raises).toHaveLength(2)
       expect(alerts).toHaveLength(2)
@@ -482,7 +599,7 @@ describe('sweepPlatformHealth', () => {
         summaries: { 'acc-1': UNHEALTHY },
         hasAlertSink: false,
       })
-      expect(await sweepPlatformHealth(container)).toEqual({ raised: 1, cleared: 0 })
+      expect(await sweepPlatformHealth(container, PASS_1_AT)).toEqual({ raised: 1, cleared: 0 })
       expect(raises).toHaveLength(1)
     })
   })

@@ -79,8 +79,9 @@ export interface PlatformAlertEvent {
   /**
    * The id of the platform's own `platform_health` card for this workspace — the row the sweep
    * keeps its alert state in, and therefore this incident's identity. It is reused while an
-   * incident stays open and minted afresh for the next one, which is exactly what a receiver's
-   * dedupe key needs: stable across the retries of one delivery, distinct across incidents.
+   * incident stays open and minted afresh for the next one, which makes it the INCIDENT half of
+   * a receiver's dedupe key; {@link transition} is the TRANSITION half, since one incident emits
+   * several edges under this same id.
    */
   cardId: string
   /**
@@ -90,6 +91,23 @@ export interface PlatformAlertEvent {
    * by grouping on this id.
    */
   accountId: string
+  /**
+   * Which transition of this incident this edge is, counting from 1 at the edge that opened it.
+   * With {@link cardId} it identifies one transition exactly, and each is needed because of what
+   * the other cannot separate: the card id is reused for a whole incident, while the firing
+   * REASON SET recurs within one ({A} escalating to {A,B} and subsiding back to {A} is three
+   * transitions over two distinct sets), so a key built on the set alone would have a deduping
+   * receiver drop the page saying the incident had subsided.
+   *
+   * A timestamp cannot do this job. Sweepers are per process and only guarded against overlap
+   * WITHIN one, so a multi-node deployment can have two observe the same transition; they agree
+   * on the prior card this counts from and therefore on the ordinal, but never on a clock read.
+   * Deriving it keeps a genuine duplicate collapsible while keeping two real transitions apart.
+   *
+   * Always 1 on `platform_health.resolved`: an incident resolves once, so `cardId` alone already
+   * identifies that edge.
+   */
+  transition: number
   /** The window the aggregate was computed over (`1h` / `24h` / `7d`). */
   window: string
   /**
@@ -97,7 +115,13 @@ export interface PlatformAlertEvent {
    * comparable. EMPTY on `platform_health.resolved`, which is the whole content of that edge.
    */
   conditions: PlatformAlertCondition[]
-  /** Epoch-ms the transition was observed. */
+  /**
+   * Epoch-ms the SWEEP observed this transition, which is not any timestamp the card carries.
+   * The card's `createdAt` is preserved across a re-raise (so an escalation would report the
+   * moment the incident opened, not the moment it got worse) and its `resolvedAt` is nullable,
+   * so the producer stamps the pass instead. Every edge one pass emits shares the value: an
+   * account-level verdict fanned out to its workspaces is ONE observation.
+   */
   occurredAt: number
   /**
    * A bounded sample of the runs behind a failure-driven alert, in the DELIVERED workspace only
