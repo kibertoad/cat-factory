@@ -248,9 +248,11 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
   return {
     agentContextObservability,
     searchQueryObservability,
-    recordHarnessCalls,
-    recordToolCalls,
-    toolBodyGate,
+    // The three telemetry hooks the container executor takes, grouped so the composition root
+    // spreads them as ONE thing: they are one concern (what a job's poll records, and what it is
+    // permitted to keep), and listing them field-by-field there is the re-listing the rest of
+    // this bundle already avoids.
+    executorTelemetry: { recordHarnessCalls, recordToolCalls, toolBodyGate },
     defaultWebSearchUpstream,
     resolveWebSearchAvailability,
     packageRegistrySecretCipher,

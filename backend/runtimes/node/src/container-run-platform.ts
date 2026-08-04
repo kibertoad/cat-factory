@@ -255,7 +255,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
     resolveToolSecrets: toolSecretChain.resolver,
-    recordHarnessCalls: runServices.recordHarnessCalls,
+    ...runServices.executorTelemetry,
     recordSubscriptionQuotaUsage: (target, usage) =>
       runServices.subscriptionQuotaProvider.recordUsage(target, usage),
   })

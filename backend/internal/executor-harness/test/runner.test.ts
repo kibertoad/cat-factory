@@ -112,8 +112,8 @@ describe('JobRegistry', () => {
     // First poll drains the two spans emitted so far...
     const first = registry.get('exec-1')
     expect(first?.spans).toEqual([
-      { tool: 'read', startedAt: 1, endedAt: 2, ok: true },
-      { tool: 'edit_file', startedAt: 2, endedAt: 5, ok: true },
+      span({ tool: 'read', startedAt: 1, endedAt: 2 }),
+      span({ tool: 'edit_file', startedAt: 2, endedAt: 5 }),
     ])
     // ...and clears the buffer, so an immediate re-poll carries none.
     expect(registry.get('exec-1')?.spans).toBeUndefined()
@@ -121,7 +121,7 @@ describe('JobRegistry', () => {
     // A later span shows up on the next poll only.
     await tick(60)
     expect(registry.get('exec-1')?.spans).toEqual([
-      { tool: 'run_command', startedAt: 6, endedAt: 9, ok: false },
+      span({ tool: 'run_command', startedAt: 6, endedAt: 9, ok: false }),
     ])
   })
 
