@@ -1,5 +1,13 @@
-import { ASSET_STORAGE_CAPABILITY, normalizeMediaType } from '@cat-factory/contracts'
-import type { BinaryModality, RegisteredBinaryGenerator } from '@cat-factory/contracts'
+import {
+  ASSET_STORAGE_CAPABILITY,
+  binaryModalityOverlaps,
+  normalizeMediaType,
+} from '@cat-factory/contracts'
+import type {
+  BinaryModality,
+  BinaryModalityOverlap,
+  RegisteredBinaryGenerator,
+} from '@cat-factory/contracts'
 import type {
   BinaryOutputArtifact,
   BinaryOutputConfig,
@@ -412,6 +420,22 @@ export type BinaryOutputPickIssue =
    * comes to look exactly like "this is fine".
    */
   | 'media_type_unverifiable'
+  /**
+   * Two or more selected integrations produce the SAME content type, so the content type no
+   * longer decides which one the agent calls.
+   *
+   * ADVISORY, like `media_type_unverifiable` and unlike everything above it: the step saves, it
+   * starts, and selecting two producers of one kind is the whole reason the selection is a list.
+   * What it costs is a decision nobody has written down, and the agent resolves an unstated
+   * choice by picking one and picking it consistently, which is invisible in the artifacts,
+   * since every one of them has the right modality, the right format and a clean storage verdict.
+   *
+   * It is raised HERE as well as in the agent's brief because this is the surface where it can be
+   * acted on: the person selecting two integrations is the one who knows why, and the step's
+   * prompt is a field they already have open. The brief catches the step whose author did not
+   * think to write it; this catches the author.
+   */
+  | 'generator_overlap'
 
 /** What the builder found wrong with one step's selection, and which ids to name. */
 export interface BinaryOutputPickState {
@@ -426,6 +450,12 @@ export interface BinaryOutputPickState {
   uncoveredMediaTypes: readonly string[]
   /** The declared formats that could not be judged, kept apart from the refusal above. */
   unverifiableMediaTypes: readonly string[]
+  /**
+   * The content types more than one selected integration produces, with the ids that share each.
+   * Computed through the SAME `binaryModalityOverlaps` the agent's brief renders from, so the
+   * picker and the brief cannot describe one selection two ways.
+   */
+  generatorOverlaps: readonly BinaryModalityOverlap[]
 }
 
 /**
@@ -453,12 +483,14 @@ function generatorPickIssues(
   uncovered: BinaryModality[]
   uncoveredMediaTypes: string[]
   unverifiableMediaTypes: string[]
+  overlaps: BinaryModalityOverlap[]
 } {
   const none = {
     unknownGeneratorIds: [],
     uncovered: [],
     uncoveredMediaTypes: [],
     unverifiableMediaTypes: [],
+    overlaps: [],
   }
   if (unavailable) return { issues: ['generators_unavailable'], ...none }
   const byId = new Map(generators.map((g) => [g.id, g]))
@@ -471,17 +503,24 @@ function generatorPickIssues(
   const covered = new Set(selected.flatMap((g) => g.modalities))
   const uncovered = (config?.modalities ?? []).filter((m) => !covered.has(m))
   const format = formatCoverage(config?.mediaTypes ?? [], selected)
+  // Judged against what RESOLVED, like every rule above it, and against the SELECTION rather than
+  // the step's declared content types: the case that most often puts two producers of one kind on
+  // one step is the one where neither is the deliverable (an image generated to feed a mesh API),
+  // and gating on `modalities` would go silent on exactly that step.
+  const overlaps = binaryModalityOverlaps(selected)
   const issues: BinaryOutputPickIssue[] = []
   if (unknownGeneratorIds.length) issues.push('unknown_generator')
   if (uncovered.length) issues.push('modality_uncovered')
   if (format.uncovered.length) issues.push('media_type_uncovered')
   if (format.unverifiable.length) issues.push('media_type_unverifiable')
+  if (overlaps.length) issues.push('generator_overlap')
   return {
     issues,
     unknownGeneratorIds,
     uncovered,
     uncoveredMediaTypes: format.uncovered,
     unverifiableMediaTypes: format.unverifiable,
+    overlaps,
   }
 }
 
@@ -572,6 +611,7 @@ export function binaryOutputPickIssues(
       uncoveredModalities: generative.uncovered,
       uncoveredMediaTypes: generative.uncoveredMediaTypes,
       unverifiableMediaTypes: generative.unverifiableMediaTypes,
+      generatorOverlaps: generative.overlaps,
     }
   }
 
@@ -595,5 +635,6 @@ export function binaryOutputPickIssues(
     uncoveredModalities: generative.uncovered,
     uncoveredMediaTypes: generative.uncoveredMediaTypes,
     unverifiableMediaTypes: generative.unverifiableMediaTypes,
+    generatorOverlaps: generative.overlaps,
   }
 }

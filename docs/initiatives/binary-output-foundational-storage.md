@@ -495,6 +495,84 @@ not reach a step that selected only B") is that misfiling showing through. This 
 rule, not a ruling about this one field: reach for the step's prompt before reaching for a
 definition field whenever the fact is about a COMBINATION.
 
+### …and nothing about the CHOICE between two producers of one content type
+
+The rule above generalises, and the generalisation was asked for by the deployment that first
+registered two image APIs on one registry. A modality DECIDES which generator may serve a step, and
+it stops deciding at the second producer of one kind: a step declaring `modalities: ['image']` is
+admitted holding either, both selections are correct as far as `binaryGeneratorSelectionIssues` can
+see, and exactly one is right for any given step. Asking a general image API for a 32px inventory
+icon does not fail. It succeeds, it charges, and it returns a smooth render shrunk to 32px, on a
+file whose modality, format and storage verdict all check out.
+
+**A discriminator on the definition (a `style`, a `resolutionRange`, an `intendedUse`) is refused,
+on three grounds.** The first two are the `consumes` argument one level up: an axis on which two
+producers of one modality can differ has no natural end (resolution, pixel grid, realism,
+animation, tileability, character consistency, licence terms), and each member added is a migration
+for every definition that exists; and the fact it would encode ("sprites come from the pixel-art
+API, key art comes from the general one") is a sentence about one project's art pipeline, false for
+a project that renders sprites at 4 MP and downsamples, so putting it on a vendor definition files
+a fact about a decision under one of the things being decided between.
+
+The third is the one that is specific to this axis and is why it is refused rather than merely
+discouraged: **`modalities` and `mediaTypes` can carry an admission rule because each PARTITIONS the
+deliverable.** A file is an image or it is not; it is a GLB or it is not; so `covered` / `uncovered`
+is computable and a refusal is a fact. Style does not partition anything. A stylised 128px portrait
+is genuinely both things, so there is no predicate to compute, and a field with a rule and no
+predicate does not fail to help: it REFUSES correctly-configured steps, adjudicated by a picklist
+neither definition's author was thinking about. `consumes` was harmless-but-useless; this would be
+harmful.
+
+**What discriminates instead, in order.** `generatorIds` is the real discriminator and it is the
+step author's: a step that should only ever use the pixel-art API selects only that one, and none
+of this arises. `binaryOutput.mediaTypes` discriminates where the vendors differ, which is the
+second job that field turned out to do: a step needing an animated sprite (`image/gif`) or a
+photographic JPEG can say so and be refused for holding the wrong integration, and it bites exactly
+when the format IS the requirement. The residual case is the step that legitimately holds both and
+needs a PNG from one of them, where the choice is about the KIND of picture, and there the step's
+own prompt is the only thing that can carry it.
+
+**The platform's contribution is to make the choice VISIBLE, and to compute nothing else.**
+`binaryModalityOverlaps` (`@cat-factory/contracts`, beside the vocabulary itself, so kernel and the
+SPA share ONE implementation rather than the SPA keeping a second hand-written copy the way it must
+for `binaryFormatCoverage`) reports which content types more than one selected integration
+produces. Four rules bind what is done with it:
+
+- **It states the fact and RANKS NOTHING.** "Prefer the narrower modality set" and "prefer the one
+  declaring the format exclusively" were both tried and both are right by accident: narrowness is
+  not correctness (a specialist pixel-art API and a specialist photo API are equally narrow and
+  answer different questions), and the platform has no cost model, no quality model and no view of
+  what the step is for. A confident wrong preference is worse than none, because it displaces the
+  per-integration descriptions the reader would otherwise have gone to.
+- **It refuses nothing.** No new `BinaryGeneratorSelectionIssue`. Holding two image integrations is
+  not a misconfiguration; it is the case that motivates a selection being a list.
+- **It is computed from the SELECTION, never the registry and never the step's requirements.** A
+  step is unaffected by integrations it did not select, so the registry would over-report; and the
+  step that most needs the paragraph is routinely the one where neither shared content type is the
+  deliverable (concept art generated to feed a mesh API's image path, on a step declaring
+  `3d-model`), so gating on `modalities` would go silent on exactly it.
+- **A registration-time diagnostic was considered and is refused.** Overlap is what a mature
+  registry looks like: any deployment with a cheap vendor and a good one, or an incumbent and its
+  replacement mid-migration, has it permanently and correctly. Boot validation exists to fail a
+  deployment on things that are WRONG, and a warning firing forever on a correct configuration is
+  one operators learn to scroll past. It would also fire at the wrong party, since the only action
+  available at registration is to unregister something, which is precisely the wrong lesson.
+
+It lands on **both** surfaces, from that one function, because they inform different parties at
+different moments. The brief (`renderBinaryGeneratorSection`) states it to the AGENT, after the
+per-integration entries so that "read each one's notes above" is literally true, and silently when
+there is no overlap, because a paragraph riding every brief is one agents stop reading. The picker
+states it to the HUMAN, advisory-styled beside `media_type_unverifiable` rather than among the
+refusals, because that is the party who both knows why two were selected and has the step's prompt
+open to write it down. The brief catches the step whose author did not think to write it; the
+picker catches the author.
+
+The brief's paragraph also asks for the declaration block's `generator` field, which is otherwise
+optional. Optional is right in general (most steps hold one producer per content type, so the
+answer is not in doubt), and the moment two are held it is the ONLY record of a choice nothing
+downstream can check. `BinaryOutputReport.vue` already renders it per row, so the loop closes: the
+brief makes the agent notice it is deciding, and the report shows afterwards what it decided.
+
 ## The SPA surfaces
 
 Both landed together. What each is, and the one design question the downstream proposal that

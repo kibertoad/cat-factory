@@ -490,6 +490,45 @@ describe('binaryOutputPickIssues, generative half', () => {
     expect(pick.uncoveredModalities).toEqual([])
   })
 
+  it('flags an OVERLAP as ADVISORY, where the content type stops deciding', () => {
+    // The step saves and starts: two producers of one content type is the reason the selection is
+    // a list. What it costs is a decision nobody wrote down, and this is the surface where the
+    // person who knows the answer has the step's prompt already open.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'flux'] },
+      catalog,
+      true,
+      [...generators, { id: 'flux', modalities: ['image' as const] }],
+    )
+    expect(pick.issues).toEqual(['generator_overlap'])
+    expect(pick.generatorOverlaps).toEqual([{ modality: 'image', generatorIds: ['retro', 'flux'] }])
+  })
+
+  it('says nothing about an overlap while one integration produces each content type', () => {
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'studio'] },
+      catalog,
+      true,
+      generators,
+    )
+    expect(pick.issues).not.toContain('generator_overlap')
+    expect(pick.generatorOverlaps).toEqual([])
+  })
+
+  it('claims no overlap about a set nobody could read', () => {
+    // Same rule every other generative judgement here follows: an unreachable mothership answers
+    // the same empty list a deployment registering nothing does, and only one of them is a fact.
+    const pick = binaryOutputPickIssues(
+      { storageServiceId: 'files', generatorIds: ['retro', 'flux'] },
+      catalog,
+      true,
+      [],
+      true,
+    )
+    expect(pick.issues).toEqual(['generators_unavailable'])
+    expect(pick.generatorOverlaps).toEqual([])
+  })
+
   it('still judges an EMPTY set, which is a real answer about the deployment', () => {
     // The distinction the flag exists for: same empty list, opposite fact, opposite message.
     const pick = binaryOutputPickIssues(

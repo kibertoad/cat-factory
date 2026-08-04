@@ -4267,6 +4267,7 @@
       "binaryOutputMediaTypeUnverifiable": "אף אינטגרציה שנבחרה אינה מצהירה על {formats}, אבל אחת מהן אינה מצהירה על פורמטים כלל, ולכן לא ניתן היה לבדוק זאת. השלב יתחיל בכל מקרה; ודאו ב-API של האינטגרציה שהיא יכולה להפיק את זה.",
       "binaryOutputMediaTypeUnusable": "לא נשמר, כי אלה אינם סוגי מדיה: {entries}. כתבו כל אחד בצורה type/subtype.",
       "binaryOutputGeneratorMissing": "ההתקנה הזו אינה רושמת את האינטגרציות הגנרטיביות האלה: {ids}. הן נרשמות בקוד ההתקנה, לא במרחב העבודה הזה.",
+      "binaryOutputGeneratorOverlap": "יותר מאינטגרציה אחת שנבחרה מפיקה את אותו סוג תוכן ({overlaps}). אין בכך שום פסול, אבל סוג התוכן כבר לא קובע באיזו מהן הסוכן ישתמש: ציינו בהנחיות של השלב הזה באיזו להשתמש ולשם מה, אחרת הוא יבחר אחת וימשיך איתה.",
       "binaryOutputModalityUncovered": "אף אינטגרציה שנבחרה אינה מייצרת {modalities}, שהשלב הזה אמור לספק.",
       "binaryOutputModalityRetired": "{modality} (כבר לא נתמך — בחרו מחדש את סוגי התוכן של השלב)",
       "binaryOutputModality": {

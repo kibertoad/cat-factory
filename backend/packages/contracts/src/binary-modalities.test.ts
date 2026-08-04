@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  binaryModalityOverlaps,
   binaryModalitySchema,
   isBinaryModality,
   mediaTypeSchema,
@@ -93,5 +94,58 @@ describe('binaryOutputConfigSchema.mediaTypes', () => {
   it('refuses a parameterised or malformed format at the boundary', () => {
     expect(v.safeParse(mediaTypeSchema, 'model/gltf-binary; q=1').success).toBe(false)
     expect(v.safeParse(mediaTypeSchema, 'gltf').success).toBe(false)
+  })
+})
+
+describe('binaryModalityOverlaps', () => {
+  const flux = { id: 'flux', modalities: ['image'] as const }
+  const retro = { id: 'retro-diffusion', modalities: ['image'] as const }
+  const meshy = { id: 'meshy', modalities: ['3d-model'] as const }
+
+  it('says nothing while one integration produces each content type', () => {
+    // The common case, and the reason the callers render nothing on an empty result: a warning
+    // that fires on every correct selection is one nobody reads.
+    expect(binaryModalityOverlaps([retro, meshy])).toEqual([])
+    expect(binaryModalityOverlaps([])).toEqual([])
+    expect(binaryModalityOverlaps([retro])).toEqual([])
+  })
+
+  it('names the shared content type and every id that produces it', () => {
+    expect(binaryModalityOverlaps([flux, retro, meshy])).toEqual([
+      { modality: 'image', generatorIds: ['flux', 'retro-diffusion'] },
+    ])
+  })
+
+  it('reports each shared content type separately, in first-appearance order', () => {
+    const overlaps = binaryModalityOverlaps([
+      { id: 'a', modalities: ['audio', 'image'] },
+      { id: 'b', modalities: ['image'] },
+      { id: 'c', modalities: ['audio'] },
+    ])
+    expect(overlaps).toEqual([
+      { modality: 'audio', generatorIds: ['a', 'c'] },
+      { modality: 'image', generatorIds: ['a', 'b'] },
+    ])
+  })
+
+  it('counts one integration ONCE, however often it is named', () => {
+    // A step that listed an id twice holds one producer, not two, and telling it otherwise would
+    // put a paragraph about a choice into a brief where no choice exists. The same rule inside a
+    // single definition: a modality declared twice is still one producer of it.
+    expect(binaryModalityOverlaps([retro, retro])).toEqual([])
+    expect(binaryModalityOverlaps([{ id: 'a', modalities: ['image', 'image'] }])).toEqual([])
+  })
+
+  it('ranks nothing: the ids come back in the order they were given', () => {
+    // Deliberate: the platform has no cost, quality or intent model, so any ordering it invented
+    // would read as a recommendation it has no basis for.
+    expect(binaryModalityOverlaps([retro, flux])[0]?.generatorIds).toEqual([
+      'retro-diffusion',
+      'flux',
+    ])
+    expect(binaryModalityOverlaps([flux, retro])[0]?.generatorIds).toEqual([
+      'flux',
+      'retro-diffusion',
+    ])
   })
 })

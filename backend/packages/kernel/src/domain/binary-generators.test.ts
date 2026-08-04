@@ -384,6 +384,74 @@ describe('renderBinaryGeneratorSection', () => {
     expect(section).toContain('No available integration produces video')
   })
 
+  it('names an OVERLAP, because the per-content-type routing rule stops deciding there', () => {
+    // Two producers of one kind is not a misconfiguration, it is the case that motivates
+    // selecting two. What it costs is a decision nobody stated, and an agent resolves an unstated
+    // choice by picking one and picking it consistently, invisibly, since every artifact has the
+    // right modality, the right format and a clean storage verdict.
+    const flux = generator({
+      id: 'flux',
+      name: 'FLUX',
+      summary: 'General image generation.',
+      modalities: ['image'],
+      mediaTypes: ['image/jpeg'],
+    })
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'flux'] },
+        [generator(), flux],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(section).toContain('`retro-diffusion` and `flux` both produce images.')
+    expect(section).toContain('They are not interchangeable.')
+    expect(section).toContain('`generator` field')
+    // Stated, never RANKED: the platform has no cost model, no quality model and no view of what
+    // the step is for, and a confident wrong preference displaces the notes above it.
+    expect(section).not.toMatch(/prefer|instead of `/i)
+    // After the per-integration entries, so "the notes above" is literally true.
+    expect(section.indexOf('They are not interchangeable.')).toBeGreaterThan(
+      section.indexOf('Good for sprites and tiles'),
+    )
+  })
+
+  it('says nothing about an overlap that does not exist, and none about a repeated id', () => {
+    // A paragraph riding every brief is one agents stop reading, and a step that happened to name
+    // one integration twice holds one producer, not two.
+    const quiet = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'studio-music'] },
+        [generator(), music],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    const repeated = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'retro-diffusion'] },
+        [generator()],
+      ),
+      requestedModalities: [],
+    }).join('\n')
+    expect(quiet).not.toContain('not interchangeable')
+    expect(repeated).not.toContain('not interchangeable')
+  })
+
+  it('names the overlap even when NEITHER shared content type is the deliverable', () => {
+    // The step that most needs this is the one generating concept art to feed a mesh API's image
+    // path: it declares `3d-model` and holds two image producers. Gating the paragraph on the
+    // step's requirements would go silent on exactly that step.
+    const flux = generator({ id: 'flux', name: 'FLUX', modalities: ['image'] })
+    const meshy = generator({ id: 'meshy', name: 'Meshy', modalities: ['3d-model'] })
+    const section = renderBinaryGeneratorSection({
+      selection: resolveBinaryGeneratorSelection(
+        { storageServiceId: 'asset-store', generatorIds: ['retro-diffusion', 'flux', 'meshy'] },
+        [generator(), flux, meshy],
+      ),
+      requestedModalities: ['3d-model'],
+    }).join('\n')
+    expect(section).toContain('`retro-diffusion` and `flux` both produce images.')
+  })
+
   it('states an EMPTY selection as its own case, not as silence', () => {
     const section = renderBinaryGeneratorSection({
       selection: { selected: [], unresolvedIds: [] },

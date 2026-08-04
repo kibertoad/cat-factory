@@ -989,6 +989,15 @@ groups by so an image generator is never asked for music. **A new member must cl
 cleared.** A deliverable is described on three axes: the KIND (`modalities`, which decides which
 generator may serve the step), the FORMAT (`mediaTypes`, because providers differ), and everything
 else (the PROMPT); a member is earned only when neither lower axis can carry the distinction.
+**A modality stops deciding at the SECOND producer of it, and no definition field may take over.**
+Two image APIs on one step are both admissible and exactly one is right, so a discriminator with an
+admission rule (`style`, `resolutionRange`, `intendedUse`) would refuse correctly-configured steps:
+those axes do not PARTITION the deliverable the way `modalities` and `mediaTypes` do, so there is no
+`covered`/`uncovered` to compute. The choice belongs to `generatorIds`, then to the step's own
+prompt (the `consumes` ruling one level up: a fact about a COMBINATION or a CHOICE is never a fact
+about one definition). The platform's whole contribution is `binaryModalityOverlaps`, which STATES
+which content types have two producers and RANKS NOTHING, to the agent in its brief and to the human
+in the picker, refusing nothing and warning at no registry.
 `image` does not split into sprite/background (a prompt) or PNG/JPEG (a format); an asset and a
 scene are the same modality AND the same format (GLB, FBX, USDZ and `.blend` each carry either), so
 the modality is the only axis left. Hence `modalitiesOfMediaType` answers a LIST (both 3D members

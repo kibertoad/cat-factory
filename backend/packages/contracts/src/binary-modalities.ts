@@ -84,6 +84,57 @@ export function isBinaryModality(value: string): value is BinaryModality {
 
 const BINARY_MODALITY_SET: ReadonlySet<string> = new Set(binaryModalitySchema.options)
 
+/** A content type that more than one of a step's selected integrations produces. */
+export interface BinaryModalityOverlap {
+  /** The content type they share. */
+  modality: BinaryModality
+  /** The ids that produce it, in the order they were given. Always two or more. */
+  generatorIds: string[]
+}
+
+/**
+ * The content types more than one of these integrations produces.
+ *
+ * A modality DECIDES which generator may serve a step, and it stops deciding at the second
+ * producer of one kind: from there the choice is per artifact and it is not one the platform can
+ * make. So this computes only the FACT that a choice exists, and deliberately ranks nothing.
+ * Narrowness is not correctness (a specialist pixel-art API and a specialist photo API are
+ * equally narrow and answer different questions), and the platform has no cost model, no quality
+ * model and no view of what the step is for. A confident wrong preference is worse than none,
+ * because it displaces the per-integration notes whoever is deciding would otherwise have read.
+ *
+ * Shared rather than copied. Kernel states the overlap to the AGENT in its brief and the SPA
+ * states it to the HUMAN in the step picker, and the two must not be able to disagree about which
+ * integrations overlap. Unlike `binaryFormatCoverage`, whose rule needs kernel's view type, this
+ * one reads nothing but the modality vocabulary, so it lives beside the vocabulary and both sides
+ * import it instead of it becoming a second hand-kept copy.
+ *
+ * Order is derived from the input, so a brief re-rendered per dispatch is byte-identical:
+ * modalities come out in first-appearance order and ids in the order they were given. An id
+ * repeated in the input contributes ONCE, or a step that happened to name one integration twice
+ * would be told it holds two producers of a kind it holds one of.
+ */
+export function binaryModalityOverlaps(
+  generators: readonly { id: string; modalities: readonly BinaryModality[] }[],
+): BinaryModalityOverlap[] {
+  const byModality = new Map<BinaryModality, string[]>()
+  const seen = new Set<string>()
+  for (const generator of generators) {
+    if (seen.has(generator.id)) continue
+    seen.add(generator.id)
+    // Deduplicated per generator for the same reason ids are deduplicated across them: a
+    // definition listing one modality twice is not two producers of it.
+    for (const modality of new Set(generator.modalities)) {
+      const ids = byModality.get(modality)
+      if (ids) ids.push(generator.id)
+      else byModality.set(modality, [generator.id])
+    }
+  }
+  return [...byModality]
+    .filter(([, generatorIds]) => generatorIds.length > 1)
+    .map(([modality, generatorIds]) => ({ modality, generatorIds }))
+}
+
 /** The 3D containers, which say the content is 3D and DELIBERATELY nothing more. */
 const THREE_D: BinaryModality[] = ['3d-model', '3d-scene']
 

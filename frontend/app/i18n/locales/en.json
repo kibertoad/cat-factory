@@ -4383,6 +4383,7 @@
       "binaryOutputMediaTypeUnverifiable": "No selected integration declares {formats}, but one of them declares no formats at all, so this could not be checked. The step still starts; confirm from the integration's API that it can emit this.",
       "binaryOutputMediaTypeUnusable": "Not saved, because these are not media types: {entries}. Write each one as type/subtype.",
       "binaryOutputGeneratorMissing": "This deployment does not register these generative integrations: {ids}. They are registered in the deployment's code, not in this workspace.",
+      "binaryOutputGeneratorOverlap": "More than one selected integration produces the same content type ({overlaps}). Nothing is wrong with that, but the content type no longer decides which one the agent calls: say in this step's prompt which to use for what, or it will pick one and keep picking it.",
       "binaryOutputModalityUncovered": "No selected integration produces {modalities}, which this step is set to deliver.",
       "binaryOutputModalityRetired": "{modality} (no longer offered — re-pick this step's content types)",
       "@binaryOutputModalityRetired": "A content type saved on a step that this build no longer defines. {modality} is a raw machine value (e.g. 3d) and must not be translated. Appears inside the binaryOutputModalityUncovered sentence, so keep it a short noun phrase, not a sentence.",

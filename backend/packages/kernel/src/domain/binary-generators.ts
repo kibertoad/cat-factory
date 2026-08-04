@@ -1,3 +1,4 @@
+import { binaryModalityOverlaps } from '@cat-factory/contracts'
 import type { BinaryModality, BinaryOutputConfig } from '@cat-factory/contracts'
 import type { BinaryGeneratorView } from './binary-generator-registry.js'
 import {
@@ -283,10 +284,11 @@ export function describeBinaryGeneratorSelectionIssues(
  *
  * Every rule here exists because the alternative is an agent guessing. It names the content types
  * per integration so a step holding both an image and a music generator cannot ask one for the
- * other's output; it names the credential's ENVIRONMENT VARIABLE and says what an unset one means
- * (the platform could not provide it — do not call, report), because the agent is the only party
- * that can see whether the value arrived; and it states an unresolved id rather than dropping it,
- * because a selection that silently shrinks reads as a step nobody configured.
+ * other's output; it names the OVERLAP where that per-content-type rule stops deciding
+ * ({@link overlapLines}); it names the credential's ENVIRONMENT VARIABLE and says what an unset
+ * one means (the platform could not provide it: do not call, report), because the agent is the
+ * only party that can see whether the value arrived; and it states an unresolved id rather than
+ * dropping it, because a selection that silently shrinks reads as a step nobody configured.
  */
 export function renderBinaryGeneratorSection(input: {
   selection: ResolvedBinaryGeneratorSelection
@@ -325,6 +327,7 @@ export function renderBinaryGeneratorSection(input: {
       if (generator.guidance?.trim()) lines.push('', generator.guidance.trim())
       lines.push('', ...credentialLines(generator), ...contractLines(generator), '')
     }
+    lines.push(...overlapLines(selected))
   }
   if (unresolvedIds.length > 0) {
     lines.push(
@@ -336,6 +339,57 @@ export function renderBinaryGeneratorSection(input: {
     ...requirementLines(input.requestedModalities, input.requestedMediaTypes ?? [], selected),
   )
   return lines
+}
+
+/**
+ * The content types more than one selected integration produces, and what to do about it.
+ *
+ * The section's routing rule ("never ask one for a kind of output it does not produce") is stated
+ * per CONTENT TYPE, and it is complete only while the content type determines the integration.
+ * Hand an agent two image APIs and it under-determines in silence: every artifact is an image,
+ * both produce images, and nothing has said that a choice is being made. What follows is not a
+ * random error, which is what makes it worth a paragraph. The agent picks one and keeps picking
+ * it, for every artifact of the run, and the result is the wrong kind of correct at the price of
+ * the right one, on a file whose modality, format and storage verdict all check out.
+ *
+ * So this states the fact and refuses to state a preference. The platform has no cost model, no
+ * quality model and no view of what the step is for, and a confident wrong preference is worse
+ * than none because it displaces the per-integration notes the agent would otherwise have read.
+ * It is computed from the RESOLVED selection alone and never the registry, because a step is not
+ * affected by integrations it did not select, and never from the step's REQUIREMENTS, because the
+ * case that motivates selecting two producers is routinely the one where neither is the
+ * deliverable (concept art generated to feed a mesh API's image path).
+ *
+ * It renders after the per-integration entries so that "the notes above" is literally true: those
+ * descriptions are what the choice is actually made from, and this paragraph's only job is to
+ * make the agent notice that it is deciding. Silent with no overlap, because a paragraph that
+ * rides every brief is one agents stop reading.
+ *
+ * It also asks for the `generator` field the declaration block treats as optional. Optional is
+ * right in general: most steps hold one producer per content type and the answer is not in doubt.
+ * The moment two are held it becomes the ONLY record of a choice nothing downstream can check,
+ * and without it nobody can tell afterwards that forty sprites came from the wrong one.
+ */
+function overlapLines(selected: BinaryGeneratorView[]): string[] {
+  const overlaps = binaryModalityOverlaps(selected)
+  if (overlaps.length === 0) return []
+  return [
+    'More than one of these integrations produces the same kind of output, so the content type does not tell you which to call:',
+    '',
+    ...overlaps.map(
+      (overlap) =>
+        `- ${joinIds(overlap.generatorIds)} ${overlap.generatorIds.length === 2 ? 'both' : 'all'} produce ${describeModality(overlap.modality)}.`,
+    ),
+    '',
+    "They are not interchangeable. Read each one's notes above and choose per artifact; where this step's own instructions say which to use, those decide. Record the integration you used in each entry's `generator` field, so the choice is on the record.",
+    '',
+  ]
+}
+
+/** `` `a` and `b` ``; `` `a`, `b` and `c` ``. Total for any length, including the empty list. */
+function joinIds(ids: readonly string[]): string {
+  const quoted = ids.map((id) => `\`${id}\``)
+  return [quoted.slice(0, -1).join(', '), ...quoted.slice(-1)].filter(Boolean).join(' and ')
 }
 
 /**
