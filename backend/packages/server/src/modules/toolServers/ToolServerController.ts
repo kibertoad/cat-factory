@@ -28,7 +28,13 @@ import { probeToolServer } from './probeToolServer.js'
  */
 export function toolServerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermissionIncludingReads('secrets.manage'))
+  // Mounted on this controller's OWN patterns rather than `'*'`, and both are needed (Hono's `*`
+  // does not match the bare prefix). A `'*'` mount becomes `ALL /workspaces/:workspaceId/*` on the
+  // shared app and would refuse every SIBLING controller's route registered after this one — which
+  // is survivable for a writes-only gate and fatal for one that gates reads.
+  const gate = requireWorkspacePermissionIncludingReads('secrets.manage')
+  app.use('/tool-servers', gate)
+  app.use('/tool-servers/*', gate)
 
   buildHonoRoute(app, listToolServersContract, (c) => {
     const container = c.get('container')

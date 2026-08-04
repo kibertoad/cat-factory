@@ -425,4 +425,40 @@ describe('toolServerController', () => {
       unresolvedCredentials: ['ACME_TRACKER_TOKEN'],
     })
   })
+
+  it('refuses its OWN routes to a member without secrets.manage, and no sibling controller’s', async () => {
+    // The regression this pins is a Hono scoping trap, not an authorization judgement.
+    // `app.route('/workspaces/:workspaceId', sub)` re-registers each of `sub`'s entries under that
+    // prefix, so a `sub.use('*', gate)` becomes `ALL /workspaces/:workspaceId/*` on the SHARED app
+    // and matches every sibling controller's routes as well. Hono runs whichever matching entry was
+    // registered first, so the blast radius depends on the order in `app.ts`.
+    //
+    // For a writes-only gate that stayed invisible: the siblings it could reach are admin-tier
+    // anyway. Gating READS made it an outage — `GET /workspaces/:ws/github/repos`, which a plain
+    // member may read, started answering 403. Hence the mount on `/tool-servers` + `/tool-servers/*`
+    // (both, because Hono's `*` does not match the bare prefix), asserted here against the WORST
+    // ordering: this controller registered first, the sibling after it.
+    const app = new Hono<AppEnv>()
+    app.onError(handleError)
+    app.use('*', async (c, next) => {
+      c.set('container', {
+        agentKindRegistry: new AgentKindRegistry(),
+      } as unknown as ServerContainer)
+      // A plain member: signed in, sees the board, holds none of the admin permissions. Both are
+      // needed — `requirePermission` treats "no user AND no access" as dev-open and allows all.
+      c.set('user', { id: 'u_1' } as never)
+      c.set('workspaceAccess', { allowed: true, role: 'member', permissions: new Set() } as never)
+      await next()
+    })
+    app.route('/workspaces/:workspaceId', toolServerController())
+    const sibling = new Hono<AppEnv>()
+    sibling.get('/github/repos', (c) => c.json({ repos: [] }, 200))
+    app.route('/workspaces/:workspaceId', sibling)
+
+    expect((await app.request('/workspaces/ws_1/tool-servers')).status).toBe(403)
+    expect(
+      (await app.request('/workspaces/ws_1/tool-servers/issues/test', { method: 'POST' })).status,
+    ).toBe(403)
+    expect((await app.request('/workspaces/ws_1/github/repos')).status).toBe(200)
+  })
 })

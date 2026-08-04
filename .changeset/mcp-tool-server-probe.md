@@ -49,6 +49,9 @@ tool server's row can finally say which token type and scopes a key wants. And t
 documented as `secrets.manage`-gated in three places while its mount let every member's GET through:
 `requireWorkspacePermission` passes GET/HEAD by design, so both surfaces now mount the
 explicitly-named `requireWorkspacePermissionIncludingReads`, with a cross-runtime RBAC assertion each.
+Both mount it on their OWN path patterns rather than `'*'`: a `'*'` mount inside a routed Hono
+sub-app lands on `/workspaces/:workspaceId/*` and can refuse a sibling controller's routes, which is
+survivable while only writes are gated and an outage once reads are.
 
 `ServerContainer` gains `toolSecretResolver`, the composed credential chain itself, beside the
 `toolSecretEnvironmentFallback` description it already carried; a facade that wires the chain now

@@ -324,6 +324,20 @@ Recorded so the next iteration does not re-propose them.
   and the version REPORTED is always the one the server chose. That is why it is not pinned against
   the SDK's `LATEST_PROTOCOL_VERSION`: the pin would cost the backend a direct dependency on the SDK
   to protect against a drift with no consequence.
+- **A `'*'` middleware mount in a routed Hono sub-app is NOT scoped to that controller, and CI is
+  what said so.** `app.route('/workspaces/:workspaceId', sub)` re-registers each of `sub`'s entries
+  under the prefix, so `sub.use('*', gate)` becomes `ALL /workspaces/:workspaceId/*` on the shared
+  app and matches every SIBLING controller's routes too; Hono then runs whichever matching entry was
+  registered first, which makes the blast radius depend on the order in `app.ts`. Every existing
+  admin controller mounts that way and it has stayed invisible because the gate lets GET through and
+  the siblings it can reach are all admin-tier. Gating READS turned it into an outage on the first
+  real run: `GET /workspaces/:ws/github/repos`, which a plain member may read, answered 403, and the
+  branch-protection RBAC test caught it. Both `IncludingReads` mounts now name their own patterns
+  (`/thing` AND `/thing/*` — Hono's `*` does not match the bare prefix), pinned by a controller test
+  that mounts a sibling route in the WORST order and asserts it stays open. **The pre-existing `'*'`
+  mounts are left alone deliberately**: they are latent rather than live, and un-leaking ~15
+  controllers would loosen authorization across the whole workspace surface, which needs its own
+  change and its own conformance work rather than a drive-by in this slice.
 - **The tab is earned by EITHER surface now.** A tool server that declares no credential has no
   checklist row, and gating the "Capability credentials" tab on the checklist alone would have left
   exactly the server an operator most wants to test unreachable, while a credential belonging to a

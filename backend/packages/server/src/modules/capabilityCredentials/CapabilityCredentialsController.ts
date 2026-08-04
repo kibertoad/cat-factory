@@ -78,7 +78,14 @@ async function viewFor(
  */
 export function capabilityCredentialsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermissionIncludingReads('secrets.manage'))
+  // Mounted on this controller's OWN patterns rather than `'*'`, and both are needed (Hono's `*`
+  // does not match the bare prefix). A `'*'` mount becomes `ALL /workspaces/:workspaceId/*` on the
+  // shared app, so it would refuse a SIBLING controller's routes too: harmless while the gate let
+  // GETs through, and an outage for every member-readable GET registered after this one once it
+  // stopped.
+  const gate = requireWorkspacePermissionIncludingReads('secrets.manage')
+  app.use('/capability-credentials', gate)
+  app.use('/capability-credentials/*', gate)
 
   buildHonoRoute(app, getCapabilityCredentialsContract, async (c) => {
     const svc = requireCapabilityCredentials(c)
