@@ -1,5 +1,99 @@
 # @cat-factory/local-server
 
+## 0.100.1
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+  - @cat-factory/orchestration@0.190.0
+  - @cat-factory/server@0.202.0
+  - @cat-factory/agents@0.106.6
+  - @cat-factory/kernel@0.221.1
+  - @cat-factory/gitlab@0.15.12
+  - @cat-factory/integrations@0.120.1
+  - @cat-factory/node-server@0.158.1
+  - @cat-factory/executor-harness@1.88.0
+
+## 0.100.0
+
+### Minor Changes
+
+- f63145d: A deployment can now declare its capability-credential chain store-ONLY, and the operator surface
+  describes the chain that was actually composed instead of asserting a default beside it.
+
+  `capabilityCredentialEnvironmentFallback: false` on any facade (`start` / `startLocal` /
+  `createWorker`) composes the per-workspace sealed store with no environment resolver behind it. That
+  is the multi-tenant shape: with the fallback on, a workspace that has typed nothing silently
+  authenticates its runs as whoever set the deployment's variable and bills that vendor account, which
+  is the single-tenant answer the store exists to replace. The default is unchanged, because whether a
+  hosted deployment should ship store-only is a product call.
+
+  The chain is now composed once, at each facade's composition root, by `buildToolSecretChain`, which
+  returns the resolver together with what it consults. The credential checklist reads that rather than
+  hard-coding "the environment may still answer", so a blank row means the same thing on the surface
+  and in the dispatch path. Both executor builders take that composed chain as a REQUIRED dependency:
+  the only default they could have carried is the deployment environment alone, which silently drops
+  the per-workspace store, and a default is only safe where the safe answer is the convenient one.
+
+  Compatibility breaks, none of which affect a deployment using the documented facade seams:
+
+  - `environmentFallback` on the capability-credentials view is optional rather than always present,
+    and absent is a real answer: a deployment that supplied its own `ToolSecretResolver` replaced the
+    chain, so whether it reads the environment is not knowable here, and both guesses fail silently in
+    opposite directions.
+  - The Worker's process-wide `registerToolSecretResolverFactory` is replaced by
+    `registerToolSecretPolicy({ createResolver?, environmentFallback? })`.
+  - `resolveToolSecrets` is required on `WorkerExecutorDeps` and `NodeContainerExecutorDeps`. Only a
+    deployment assembling an executor without its facade's composition root passed neither; it now
+    calls `buildToolSecretChain` itself, which is also what gets it the description the credential
+    checklist renders.
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+  - @cat-factory/server@0.201.0
+  - @cat-factory/node-server@0.158.0
+  - @cat-factory/orchestration@0.189.0
+  - @cat-factory/integrations@0.120.0
+  - @cat-factory/kernel@0.221.0
+  - @cat-factory/agents@0.106.5
+  - @cat-factory/gitlab@0.15.11
+  - @cat-factory/executor-harness@1.88.0
+
+## 0.99.2
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+  - @cat-factory/integrations@0.119.0
+  - @cat-factory/server@0.200.0
+  - @cat-factory/kernel@0.220.0
+  - @cat-factory/node-server@0.157.1
+  - @cat-factory/agents@0.106.4
+  - @cat-factory/gitlab@0.15.10
+  - @cat-factory/orchestration@0.188.3
+  - @cat-factory/executor-harness@1.88.0
+
+## 0.99.1
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+  - @cat-factory/kernel@0.219.0
+  - @cat-factory/server@0.199.0
+  - @cat-factory/node-server@0.157.0
+  - @cat-factory/agents@0.106.3
+  - @cat-factory/gitlab@0.15.9
+  - @cat-factory/integrations@0.118.1
+  - @cat-factory/orchestration@0.188.2
+  - @cat-factory/executor-harness@1.88.0
+
 ## 0.99.0
 
 ### Minor Changes

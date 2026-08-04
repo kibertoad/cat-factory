@@ -1,5 +1,174 @@
 # @cat-factory/node-server
 
+## 0.158.1
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+  - @cat-factory/orchestration@0.190.0
+  - @cat-factory/server@0.202.0
+  - @cat-factory/agents@0.106.6
+  - @cat-factory/kernel@0.221.1
+  - @cat-factory/consensus@0.13.33
+  - @cat-factory/eks@0.1.207
+  - @cat-factory/gates@0.8.53
+  - @cat-factory/gitlab@0.15.12
+  - @cat-factory/integrations@0.120.1
+  - @cat-factory/observability-otel@0.5.7
+  - @cat-factory/prompt-fragments@0.15.44
+  - @cat-factory/spend@0.13.9
+  - @cat-factory/provider-bedrock@0.7.358
+  - @cat-factory/provider-cloudflare@0.7.359
+  - @cat-factory/caching@0.13.7
+  - @cat-factory/observability-langfuse@0.9.50
+  - @cat-factory/provider-s3@0.2.278
+
+## 0.158.0
+
+### Minor Changes
+
+- f63145d: A deployment can now declare its capability-credential chain store-ONLY, and the operator surface
+  describes the chain that was actually composed instead of asserting a default beside it.
+
+  `capabilityCredentialEnvironmentFallback: false` on any facade (`start` / `startLocal` /
+  `createWorker`) composes the per-workspace sealed store with no environment resolver behind it. That
+  is the multi-tenant shape: with the fallback on, a workspace that has typed nothing silently
+  authenticates its runs as whoever set the deployment's variable and bills that vendor account, which
+  is the single-tenant answer the store exists to replace. The default is unchanged, because whether a
+  hosted deployment should ship store-only is a product call.
+
+  The chain is now composed once, at each facade's composition root, by `buildToolSecretChain`, which
+  returns the resolver together with what it consults. The credential checklist reads that rather than
+  hard-coding "the environment may still answer", so a blank row means the same thing on the surface
+  and in the dispatch path. Both executor builders take that composed chain as a REQUIRED dependency:
+  the only default they could have carried is the deployment environment alone, which silently drops
+  the per-workspace store, and a default is only safe where the safe answer is the convenient one.
+
+  Compatibility breaks, none of which affect a deployment using the documented facade seams:
+
+  - `environmentFallback` on the capability-credentials view is optional rather than always present,
+    and absent is a real answer: a deployment that supplied its own `ToolSecretResolver` replaced the
+    chain, so whether it reads the environment is not knowable here, and both guesses fail silently in
+    opposite directions.
+  - The Worker's process-wide `registerToolSecretResolverFactory` is replaced by
+    `registerToolSecretPolicy({ createResolver?, environmentFallback? })`.
+  - `resolveToolSecrets` is required on `WorkerExecutorDeps` and `NodeContainerExecutorDeps`. Only a
+    deployment assembling an executor without its facade's composition root passed neither; it now
+    calls `buildToolSecretChain` itself, which is also what gets it the description the credential
+    checklist renders.
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+  - @cat-factory/server@0.201.0
+  - @cat-factory/orchestration@0.189.0
+  - @cat-factory/integrations@0.120.0
+  - @cat-factory/kernel@0.221.0
+  - @cat-factory/agents@0.106.5
+  - @cat-factory/consensus@0.13.32
+  - @cat-factory/eks@0.1.206
+  - @cat-factory/gates@0.8.52
+  - @cat-factory/gitlab@0.15.11
+  - @cat-factory/observability-otel@0.5.6
+  - @cat-factory/prompt-fragments@0.15.43
+  - @cat-factory/spend@0.13.8
+  - @cat-factory/caching@0.13.6
+  - @cat-factory/observability-langfuse@0.9.49
+  - @cat-factory/provider-bedrock@0.7.357
+  - @cat-factory/provider-cloudflare@0.7.358
+  - @cat-factory/provider-s3@0.2.277
+
+## 0.157.1
+
+### Patch Changes
+
+- 7f86f07: The capability-credential row is rev-guarded, closing two holes the per-key write opened. The row
+  is ONE sealed blob holding the whole set, so a per-key save is read-modify-write over it; blind,
+  two operators saving DIFFERENT keys would silently destroy each other's, with the loser's save
+  still returning success. `put`/`remove` now ride a `compareAndSwap`/`deleteIfRev` pair (a new
+  `rev` column on `capability_credentials`, both runtimes), reloading and re-applying on the
+  winner's snapshot, 409 only on a pathologically hot row. The whole-set PUT stays a blind write:
+  replacing whatever is stored is its semantics, and it bumps the stored rev in SQL so a concurrent
+  per-key save's guard still trips.
+
+  Also: a per-key save now stamps `updatedAt` on the touched key ONLY. "Last set" is a per-key fact
+  the checklist renders per row, and the previous write re-stamped the whole set, falsifying every
+  neighbour's date whenever any one key was saved.
+
+- Updated dependencies [7f86f07]
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+  - @cat-factory/integrations@0.119.0
+  - @cat-factory/server@0.200.0
+  - @cat-factory/kernel@0.220.0
+  - @cat-factory/agents@0.106.4
+  - @cat-factory/consensus@0.13.31
+  - @cat-factory/eks@0.1.205
+  - @cat-factory/gates@0.8.51
+  - @cat-factory/gitlab@0.15.10
+  - @cat-factory/observability-otel@0.5.5
+  - @cat-factory/orchestration@0.188.3
+  - @cat-factory/prompt-fragments@0.15.42
+  - @cat-factory/spend@0.13.7
+  - @cat-factory/caching@0.13.5
+  - @cat-factory/observability-langfuse@0.9.48
+  - @cat-factory/provider-bedrock@0.7.356
+  - @cat-factory/provider-cloudflare@0.7.357
+  - @cat-factory/provider-s3@0.2.276
+
+## 0.157.0
+
+### Minor Changes
+
+- 87161e8: Make AWS Bedrock a selectable per-model route, resolved by a preference walk instead of a hard-coded if-chain.
+
+  `BEDROCK_MODELS` was already a per-model allow-list and nothing consumed it but a throw-on-mismatch guard, so Bedrock was reachable only by repointing the whole deployment's routing default. That left the account model policy's `trustedProviders: ['bedrock']` half-wired: its entire purpose is to let an otherwise-blocked family through on a residency-guaranteed route, and no user could select one. A catalog entry now declares a `bedrock` flavour and becomes selectable exactly when the account's allow-list carries its model, so a single task can be pinned to Bedrock.
+
+  **The allow-list is parsed once, by `bedrockAllowListFromEnv`, and that one value feeds both consumers.** The resolver THROWS on an id outside its list while the catalog decides what the picker offers; parsed separately, a trailing space or a re-ordered var makes the picker advertise a route that fails at dispatch. `BEDROCK_REGION` with no `BEDROCK_MODELS` deliberately contributes NO flavour: the resolver runs unconstrained, but Bedrock grants are per account and per Region, so with nothing enumerated the platform would be guessing, and a guess here surfaces models AWS rejects at call time. Bedrock stays reachable as a routing default there, exactly as before. On the Worker, which does not bundle the provider package, the capability is further gated on a registered registry that can actually serve `bedrock` (`bedrockModelsCapability`): the env vars alone don't prove the `registerModelRegistry` mix-in happened, and set-but-unregistered logs a warning naming the missing call instead of offering picker rows whose dispatch fails.
+
+  **The catalog declares the UNPREFIXED base id and the deployment's own entry is what runs.** The id an account calls carries a geo/global inference prefix (`us.` / `eu.` / `global.` / …) that differs per Region, so any prefix baked into the catalog would be wrong for every deployment but one. `resolveBedrockModelId` matches an allow-list entry that IS the base or ends in `.<base>` and uses it verbatim. Two consequences are load-bearing: the prefix set is never enumerated (a prefix AWS adds later just works), and where an operator lists two profiles for one model the FIRST wins, so ordering the env var is how they choose between a regional and a global one. That also means `bedrockModels` is a `Set` whose ITERATION ORDER matters, built from the env string once.
+
+  **Bedrock lags the vendors' own APIs, and the catalog says so structurally rather than in a comment.** `gpt-5.5` and `gpt-oss-120b` carry a `bedrock` flavour because Bedrock serves that same generation. Opus 4.8 is a NEW `claude-opus-4-8` entry instead of a flavour on `claude-opus`, because it is a different model rather than another route to the same one: folding it in would silently run 4.8 for a block pinned to Opus 5, and nothing downstream could tell. Llama and Nova are deliberately left unenabled: their concrete Bedrock ids could not be verified against a live account, and a base id that never matches an allow-list entry is a permanently unselectable row in everyone's picker.
+
+  `effectiveVariant` is now a walk over `DEFAULT_PROVIDER_PREFERENCE` (`direct > bedrock > openrouter > cloudflare > subscription`), with each route supplying its `declared`/`usable`/`build` arms through an exhaustive `Record<ModelFlavor, …>`, so **a route added to the wire vocabulary fails to compile until every arm is handled**. This replaces two hand-ordered if-chains that had to be kept in step by eye. The tuple is pinned to the contracts picklist by `satisfies` in one direction and by a test in the other, because a flavour contracts gained but the tuple lacked would never be TRIED and no typecheck can see that: the resolver walks the tuple, not the union.
+
+  **A best-effort build must still produce a ref.** A Bedrock-only entry has no other route, so returning nothing when the allow-list misses would make the resolver THROW for every deployment that has not configured Bedrock, which is most of them, and the throw would take out the whole `/models` catalog. It falls back to the base id, flagged `available: false`, which is what tells the picker it cannot run.
+
+  **A Bedrock ref's context window cannot be keyed on the ref.** `contextWindowFor` keys on `${provider}:${model}` and a Bedrock ref carries the operator's prefixed id, so the window is stored per catalog base id and found through the same suffix match resolution uses. Missed, the LLM proxy silently stops capping requested output for every Bedrock model, which surfaces as a provider-side rejection of the whole request rather than as a misconfiguration.
+
+  `providerCachePolicy('bedrock')` stays `none`, so the picker reports no prompt caching. Bedrock does support Anthropic-style cache breakpoints, but the hint is model-specific and we do not send it; claiming caching we have not implemented would be worse than reporting none.
+
+  **Spend gets a bare `bedrock` rate, priced high on purpose.** Making the route selectable without it would have metered every Bedrock call at `defaultPrice`, roughly a thirtieth of an Opus-tier run's real cost: an undercount in the budget safeguard introduced by this change. It cannot be per-model yet: `priceFor` matches `provider:model` exactly and a Bedrock ref carries the operator's Region prefix, so a per-model key would silently never match. Teaching `priceFor` the same prefix-tolerant match `contextWindowFor` now uses is the follow-up, and it is also what would stop a cheap Bedrock model being metered at the frontier rate.
+
+  **Behaviour change for deployments that already set both Bedrock vars**: a model whose only other routes are the gateway or the Cloudflare floor now resolves to Bedrock, which is the point of the feature (a first-party route beats an aggregator that resells it). A configured direct key still wins.
+
+  Slicing note: the initiative called for the subscription-first reorder FIRST, and scoping it against the code inverted that. `ModelRouter.resolveEffectiveRef` reads a truthy `ref.harness` as proof of entitlement, and `resolveBlockModel` is built at boot from capabilities that assert every vendor, so promoting `subscription` in the tuple alone would dispatch subscription runs for workspaces holding no token; separately, the ~10 inline call sites degrade through `inlineModelRef`, which sees a ref and not a model id, so a dual-mode pin would fall back to the routing default rather than the model's own base (a GLM-pinned reviewer silently running Qwen). Both need resolution to be given facts it does not have today, which is a slice of its own rather than a preliminary commit. The default order therefore keeps `subscription` last for now, with the reasoning recorded beside the tuple, in `model-support.md` §4, and in the initiative's redirect note.
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+  - @cat-factory/kernel@0.219.0
+  - @cat-factory/server@0.199.0
+  - @cat-factory/spend@0.13.6
+  - @cat-factory/provider-bedrock@0.7.355
+  - @cat-factory/agents@0.106.3
+  - @cat-factory/consensus@0.13.30
+  - @cat-factory/eks@0.1.204
+  - @cat-factory/gates@0.8.50
+  - @cat-factory/gitlab@0.15.9
+  - @cat-factory/integrations@0.118.1
+  - @cat-factory/observability-otel@0.5.4
+  - @cat-factory/orchestration@0.188.2
+  - @cat-factory/prompt-fragments@0.15.41
+  - @cat-factory/caching@0.13.4
+  - @cat-factory/observability-langfuse@0.9.47
+  - @cat-factory/provider-cloudflare@0.7.356
+  - @cat-factory/provider-s3@0.2.275
+
 ## 0.156.0
 
 ### Minor Changes

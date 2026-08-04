@@ -2873,6 +2873,41 @@
         "removeFailed": "Kayıt defteri girdisi kaldırılamadı"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Yetenek kimlik bilgileri",
+      "intro": "Bu kurulumdaki araç sunucularının ve üretken entegrasyonların adıyla istediği sırlar. Değerler yalnızca bu pano için saklanır, beklerken şifrelenir ve doğrudan ajanın sürecine verilir: ne bir isteme ne de bir günlüğe düşer. Değerler yalnızca yazılabilir, dolayısıyla saklanan bir değer yenisi yazılarak değiştirilir ve hiçbir zaman geri okunmaz.",
+      "credentialNoun": "{key} kimlik bilgisi",
+      "required": "Zorunlu",
+      "optional": "İsteğe bağlı",
+      "stored": "Saklanıyor",
+      "storedAt": "Son ayarlanma: {date}",
+      "notStoredWithFallback": "Bu pano için hiçbir şey saklanmıyor. Bu kurulum anahtarı kendi ortamından da okuyor, dolayısıyla yetenek hâlâ çalışıyor olabilir.",
+      "notStored": "Bu pano için hiçbir şey saklanmıyor ve bu kurulumun ortam yedeği yok, dolayısıyla yetenek kimlik doğrulaması yapamaz.",
+      "notStoredUnknownFallback": "Bu pano için hiçbir şey saklanmıyor. Bu kurulumun kimlik bilgisi zinciri burada tanımlanamıyor, dolayısıyla anahtarın başka bir yerden karşılanıp karşılanmadığı bilinmiyor.",
+      "setValue": "Değer",
+      "replaceValue": "Saklanan değeri değiştir",
+      "save": "Kaydet",
+      "remove": "Kimlik bilgisini kaldır",
+      "noneDeclared": "Bu kurulumda kayıtlı yeteneklerin hiçbiri kimlik bilgisi istemiyor.",
+      "subject": {
+        "toolServer": "Araç sunucusu",
+        "binaryGenerator": "Üretken entegrasyon"
+      },
+      "incomplete": {
+        "title": "Bu liste eksik olabilir",
+        "body": "Üretken entegrasyonlar okunamadı, bu yüzden aşağıda bunlardan birinin istediği bir kimlik bilgisi eksik olabilir. Hiçbir şeyin istemediği saklanan anahtarlar, liste yeniden okunabilene kadar gizli kalır."
+      },
+      "orphaned": {
+        "heading": "Saklanıyor ama istenmiyor",
+        "body": "Bu kurulumun kaydettiği hiçbir şey bu anahtarları istemiyor; kaldırılmış bir entegrasyonun ya da adı değişmiş bir değişkenin geride bıraktığı tam olarak budur. Siz kaldırana kadar şifreli kalırlar."
+      },
+      "toast": {
+        "loadFailed": "Yetenek kimlik bilgileri yüklenemedi",
+        "saved": "{key} kaydedildi",
+        "saveFailed": "Kimlik bilgisi kaydedilemedi",
+        "removeFailed": "Kimlik bilgisi kaldırılamadı"
+      }
+    },
     "apiTokens": {
       "title": "API erişim belirteçleri",
       "intro": "Harici sistemlerin cat-factory API'sine sunduğu belirteçler oluşturun. Her belirteç, /api/v1 uç noktalarında bu çalışma alanı olarak kimlik doğrular. Gizli anahtar yalnızca oluşturulduğunda bir kez gösterilir ve kurtarılamaz, bu yüzden onu hemen saklayın.",
@@ -3227,6 +3262,15 @@
       "confirmRemove": {
         "title": "Bu runner kaldırılsın mı?",
         "body": "\"{name}\" kaldırılacak. Bu işlem geri alınamaz."
+      },
+      "blocked": "Bu çalıştırıcının URL adresi bu kurulumda izinli değil, bu nedenle modelleri seçicide gizlendi.",
+      "urlReason": {
+        "invalid_url": "Bu geçerli bir URL değil.",
+        "scheme_not_allowed": "Çalıştırıcı URL adresi http:// veya https:// ile başlamalıdır.",
+        "credentials_not_allowed": "Çalıştırıcı URL adresi kullanıcı adı veya şifre içeremez.",
+        "query_or_fragment_not_allowed": "Yalnızca temel URL adresini girin; \"?\" sorgusu ve \"#\" parçası olmadan.",
+        "host_not_loopback": "Bu kurulum yalnızca kendi makinesindeki (localhost) çalıştırıcılara erişir. Yerel ağ çalıştırıcılarına izin vermesi için bir operatöre başvurun.",
+        "host_not_local": "Çalıştırıcı kendi makinenizde veya yerel ağınızda olmalıdır. Genel ana makinelere izin verilmez."
       }
     },
     "modelPolicy": {

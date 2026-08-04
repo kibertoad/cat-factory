@@ -27,7 +27,11 @@ export type ProviderConnectionKind = 'environment' | 'runner-pool'
  * pointer could open the window but never land the user on the tab it meant. Every tab
  * `InfrastructureWindow.vue` can render must have a name here.
  */
-export type InfrastructureTab = ProviderConnectionKind | 'shared-stacks' | 'package-registries'
+export type InfrastructureTab =
+  | ProviderConnectionKind
+  | 'shared-stacks'
+  | 'package-registries'
+  | 'capability-credentials'
 
 /** A workspace's provider binding, as exposed to clients (never secret values). */
 export interface ProviderConnection {

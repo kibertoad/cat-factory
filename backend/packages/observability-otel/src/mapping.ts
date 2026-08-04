@@ -442,6 +442,8 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
   'cache.hit': 'cat_factory.platform.cache_hits',
   'cache.miss': 'cat_factory.platform.cache_misses',
+  'auth.throttle.limited': 'cat_factory.platform.auth_throttle_limited',
+  'auth.throttle.store_unavailable': 'cat_factory.platform.auth_throttle_store_unavailable',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -465,6 +467,8 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'notification.delivery_failed': '{failure}',
   'cache.hit': '{read}',
   'cache.miss': '{read}',
+  'auth.throttle.limited': '{refusal}',
+  'auth.throttle.store_unavailable': '{failure}',
 }
 
 /**

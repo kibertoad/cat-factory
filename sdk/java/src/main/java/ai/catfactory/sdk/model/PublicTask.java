@@ -10,9 +10,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicTask} wire model.
  * @param description the {@code description} field.
- * @param executionId Always present; {@code null} when the server has no value for it.
  * @param progress the {@code progress} field.
  * @param pullRequestUrl Always present; {@code null} when the server has no value for it.
+ * @param runId Always present; {@code null} when the server has no value for it.
  * @param serviceId the {@code serviceId} field.
  * @param status the {@code status} field.
  * @param taskId the {@code taskId} field.
@@ -23,13 +23,13 @@ import org.jspecify.annotations.Nullable;
 public record PublicTask(
     @JsonProperty("description") String description,
 
-    /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("executionId") @Nullable String executionId,
-
     @JsonProperty("progress") Double progress,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("pullRequestUrl") @Nullable String pullRequestUrl,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("runId") @Nullable String runId,
 
     @JsonProperty("serviceId") String serviceId,
 
@@ -55,9 +55,9 @@ public record PublicTask(
      */
     public static final class Builder {
         private @Nullable String description;
-        private @Nullable String executionId;
         private @Nullable Double progress;
         private @Nullable String pullRequestUrl;
+        private @Nullable String runId;
         private @Nullable String serviceId;
         private @Nullable TaskStatus status;
         private @Nullable String taskId;
@@ -70,12 +70,6 @@ public record PublicTask(
             return this;
         }
 
-        /** Set {@code executionId}. */
-        public Builder executionId(@Nullable String executionId) {
-            this.executionId = executionId;
-            return this;
-        }
-
         /** Set {@code progress}. */
         public Builder progress(@Nullable Double progress) {
             this.progress = progress;
@@ -85,6 +79,12 @@ public record PublicTask(
         /** Set {@code pullRequestUrl}. */
         public Builder pullRequestUrl(@Nullable String pullRequestUrl) {
             this.pullRequestUrl = pullRequestUrl;
+            return this;
+        }
+
+        /** Set {@code runId}. */
+        public Builder runId(@Nullable String runId) {
+            this.runId = runId;
             return this;
         }
 
@@ -120,7 +120,7 @@ public record PublicTask(
 
         /** Build the {@link PublicTask}. */
         public PublicTask build() {
-            return new PublicTask(description, executionId, progress, pullRequestUrl, serviceId, status, taskId, taskType, title);
+            return new PublicTask(description, progress, pullRequestUrl, runId, serviceId, status, taskId, taskType, title);
         }
     }
 }

@@ -33,6 +33,8 @@ import type {
   ModelPresetRepository,
   ObservabilityConnectionRepository,
   PackageRegistryConnectionRepository,
+  AuthAttemptRepository,
+  MachineNodeRepository,
   PasswordResetTokenRepository,
   PipelineRepository,
   PipelineScheduleRepository,
@@ -83,7 +85,9 @@ import { DrizzleReportsRepository } from './drizzle/reports.js'
 import {
   DrizzleAccountInvitationRepository,
   DrizzleAccountRepository,
+  DrizzleAuthAttemptRepository,
   DrizzleEmailConnectionRepository,
+  DrizzleMachineNodeRepository,
   DrizzleMembershipRepository,
   DrizzlePasswordResetTokenRepository,
   DrizzleUserRepository,
@@ -149,6 +153,8 @@ export interface CoreRepositories {
   userRepository: UserRepository
   invitationRepository: AccountInvitationRepository
   passwordResetTokenRepository: PasswordResetTokenRepository
+  machineNodeRepository: MachineNodeRepository
+  authAttemptRepository: AuthAttemptRepository
   emailConnectionRepository: EmailConnectionRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
@@ -205,6 +211,8 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     userRepository: new DrizzleUserRepository(db),
     invitationRepository: new DrizzleAccountInvitationRepository(db),
     passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
+    machineNodeRepository: new DrizzleMachineNodeRepository(db),
+    authAttemptRepository: new DrizzleAuthAttemptRepository(db),
     emailConnectionRepository: new DrizzleEmailConnectionRepository(db),
     blockRepository: new DrizzleBlockRepository(db),
     pipelineRepository: new DrizzlePipelineRepository(db),

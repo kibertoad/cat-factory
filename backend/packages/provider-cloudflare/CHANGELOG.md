@@ -1,5 +1,37 @@
 # @cat-factory/provider-cloudflare
 
+## 0.7.359
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/agents@0.106.6
+  - @cat-factory/kernel@0.221.1
+
+## 0.7.358
+
+### Patch Changes
+
+- Updated dependencies [3b88f66]
+  - @cat-factory/kernel@0.221.0
+  - @cat-factory/agents@0.106.5
+
+## 0.7.357
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+  - @cat-factory/kernel@0.220.0
+  - @cat-factory/agents@0.106.4
+
+## 0.7.356
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/kernel@0.219.0
+  - @cat-factory/agents@0.106.3
+
 ## 0.7.355
 
 ### Patch Changes

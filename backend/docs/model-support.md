@@ -128,8 +128,14 @@ Several shapes of entry fall out of this:
   set of model ids the user has _enabled_, so usability is model-granular), not a `keyEnv`.
   At run time the LLM proxy + inline provider resolve the **run initiator's** endpoint (base
   URL + optional bearer key) and skip the DB key lease, mirroring the personal-subscription
-  initiator model. The base URL is constrained to a loopback/LAN allow-list
-  (`localRunnerUrlError`) since it's forwarded server-side. `parseLocalModelId` turns the
+  initiator model. The base URL is forwarded server-side, so it is constrained to a
+  loopback-only allow-list (`localRunnerUrlError`); private-LAN hosts (RFC1918 / ULA /
+  mDNS `.local`) need the operator opt-in `LOCAL_MODELS_ALLOW_LAN=true`, which
+  single-tenant local mode defaults on. On a shared deployment the LAN grant is an
+  internal-network SSRF surface, which is why it is not the baseline. The policy is
+  enforced at the write boundary, on the test probe, and on every redirect hop of every
+  run-time forward (`LocalModelEndpointService.fetchRunner`), so a row persisted under a
+  wider policy is refused loudly after the operator narrows it. `parseLocalModelId` turns the
   dynamic id into a `ModelRef` so `resolveModelRef`/`resolveBlockModel` resolve it even at
   config time (when per-user capabilities aren't known).
 

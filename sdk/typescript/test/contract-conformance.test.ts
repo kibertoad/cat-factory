@@ -51,12 +51,12 @@ function expectMutuallyAssignable<A extends B, B extends C, C = A>(): void {
 expectMutuallyAssignable<sdk.ErrorResponse, v.InferOutput<typeof contracts.errorResponseSchema>>()
 expectMutuallyAssignable<sdk.PublicJob, v.InferOutput<typeof contracts.publicJobSchema>>()
 expectMutuallyAssignable<
-  sdk.InitiativeAccepted,
-  v.InferOutput<typeof contracts.initiativeAcceptedSchema>
+  sdk.PublicJobAccepted,
+  v.InferOutput<typeof contracts.publicJobAcceptedSchema>
 >()
 expectMutuallyAssignable<
-  sdk.CreateInitiativeJob,
-  v.InferOutput<typeof contracts.createInitiativeJobSchema>
+  sdk.CreatePublicJob,
+  v.InferOutput<typeof contracts.createPublicJobSchema>
 >()
 expectMutuallyAssignable<sdk.PublicService, v.InferOutput<typeof contracts.publicServiceSchema>>()
 expectMutuallyAssignable<
@@ -136,8 +136,8 @@ expectMutuallyAssignable<
 const ASSERTED_COMPONENTS = [
   'ErrorResponse',
   'PublicJob',
-  'InitiativeAccepted',
-  'CreateInitiativeJob',
+  'PublicJobAccepted',
+  'CreatePublicJob',
   'PublicService',
   'PublicServiceList',
   'PublicTask',

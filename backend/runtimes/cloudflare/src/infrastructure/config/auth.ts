@@ -105,6 +105,12 @@ export function loadAuthConfig(env: Env): AuthConfig {
     passwordEnabled,
     // Open (un-gated) signup is a local-mode convenience; the Worker stays invite/domain-gated.
     openSignup: env.AUTH_OPEN_SIGNUP?.trim() === 'true',
+    // Always on here: a Worker only ever runs behind the Cloudflare edge, which injects
+    // (and overwrites) cf-connecting-ip, so the header IS the socket truth on this facade.
+    // One hop, and this facade reads the edge header directly rather than an x-forwarded-for
+    // chain, so the count is only here to satisfy the shared shape.
+    trustProxyHeaders: true,
+    trustedProxyHops: 1,
     ...(googleEnabled
       ? {
           google: {

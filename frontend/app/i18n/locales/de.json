@@ -591,6 +591,41 @@
         "removeFailed": "Der Registry-Eintrag konnte nicht entfernt werden"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Zugangsdaten für Fähigkeiten",
+      "intro": "Die Secrets, die die Tool-Server und generativen Integrationen dieser Installation namentlich anfordern. Werte gelten nur für dieses Board, werden verschlüsselt gespeichert und direkt an den Prozess des Agenten übergeben: Sie erscheinen weder in einem Prompt noch in einem Log. Werte lassen sich nur schreiben, nie auslesen, ein gespeicherter Wert wird also durch Eingabe eines neuen ersetzt.",
+      "credentialNoun": "Zugangsdaten {key}",
+      "required": "Erforderlich",
+      "optional": "Optional",
+      "stored": "Gespeichert",
+      "storedAt": "Zuletzt gesetzt am {date}",
+      "notStoredWithFallback": "Für dieses Board ist nichts gespeichert. Diese Installation liest den Schlüssel auch aus ihrer eigenen Umgebung, die Fähigkeit funktioniert also möglicherweise trotzdem.",
+      "notStored": "Für dieses Board ist nichts gespeichert, und diese Installation hat keinen Rückfallwert aus der Umgebung. Die Fähigkeit kann sich daher nicht authentifizieren.",
+      "notStoredUnknownFallback": "Für dieses Board ist nichts gespeichert. Die Kette der Anmeldedaten dieser Installation lässt sich hier nicht beschreiben, daher ist nicht bekannt, ob der Schlüssel anderswo beantwortet wird.",
+      "setValue": "Wert",
+      "replaceValue": "Gespeicherten Wert ersetzen",
+      "save": "Speichern",
+      "remove": "Zugangsdaten entfernen",
+      "noneDeclared": "Keine der registrierten Fähigkeiten dieser Installation fordert Zugangsdaten an.",
+      "subject": {
+        "toolServer": "Tool-Server",
+        "binaryGenerator": "Generative Integration"
+      },
+      "incomplete": {
+        "title": "Diese Liste ist möglicherweise unvollständig",
+        "body": "Die generativen Integrationen konnten nicht gelesen werden, daher fehlen unten womöglich Zugangsdaten, die eine von ihnen anfordert. Gespeicherte Schlüssel, die niemand anfordert, bleiben ausgeblendet, bis die Liste wieder gelesen werden kann."
+      },
+      "orphaned": {
+        "heading": "Gespeichert, aber nicht angefordert",
+        "body": "Nichts, was diese Installation registriert hat, fordert diese Schlüssel an. Genau das hinterlässt eine abgeschaltete Integration oder eine umbenannte Variable. Sie bleiben verschlüsselt gespeichert, bis du sie entfernst."
+      },
+      "toast": {
+        "loadFailed": "Zugangsdaten für Fähigkeiten konnten nicht geladen werden",
+        "saved": "{key} gespeichert",
+        "saveFailed": "Die Zugangsdaten konnten nicht gespeichert werden",
+        "removeFailed": "Die Zugangsdaten konnten nicht entfernt werden"
+      }
+    },
     "apiTokens": {
       "title": "API-Zugriffstokens",
       "intro": "Erstelle Tokens, die externe Systeme der cat-factory-API vorlegen. Jedes Token authentifiziert sich als dieser Arbeitsbereich an den /api/v1-Endpunkten. Das Geheimnis wird nur einmal bei der Erstellung angezeigt und kann nicht wiederhergestellt werden. Speichere es daher sofort.",
@@ -945,6 +980,15 @@
       "confirmRemove": {
         "title": "Diesen Runner entfernen?",
         "body": "\"{name}\" wird entfernt. Dies kann nicht rückgängig gemacht werden."
+      },
+      "blocked": "Die URL dieses Runners ist auf dieser Installation nicht erlaubt, daher sind seine Modelle in der Auswahl ausgeblendet.",
+      "urlReason": {
+        "invalid_url": "Das ist keine gültige URL.",
+        "scheme_not_allowed": "Eine Runner-URL muss mit http:// oder https:// beginnen.",
+        "credentials_not_allowed": "Eine Runner-URL darf keinen Benutzernamen und kein Passwort enthalten.",
+        "query_or_fragment_not_allowed": "Gib nur die Basis-URL ein, ohne \"?\"-Abfrage und ohne \"#\"-Fragment.",
+        "host_not_loopback": "Diese Installation erreicht nur Runner auf ihrem eigenen Rechner (localhost). Bitte einen Betreiber, Runner im lokalen Netzwerk zu erlauben.",
+        "host_not_local": "Ein Runner muss auf deinem eigenen Rechner oder in deinem lokalen Netzwerk laufen. Öffentliche Hosts sind nicht erlaubt."
       }
     },
     "modelPolicy": {

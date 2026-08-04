@@ -591,6 +591,41 @@
         "removeFailed": "Impossibile rimuovere la voce del registry"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Credenziali delle capacità",
+      "intro": "I segreti che i server di strumenti e le integrazioni generative di questo deployment richiedono per nome. I valori vengono salvati solo per questa board, cifrati a riposo, e consegnati direttamente al processo dell'agente: non finiscono mai in un prompt né in un log. I valori sono di sola scrittura, quindi uno salvato si sostituisce digitandone uno nuovo e non viene mai riletto.",
+      "credentialNoun": "credenziale {key}",
+      "required": "Obbligatoria",
+      "optional": "Facoltativa",
+      "stored": "Salvata",
+      "storedAt": "Impostata l'ultima volta il {date}",
+      "notStoredWithFallback": "Per questa board non è salvato nulla. Questo deployment legge la chiave anche dal proprio ambiente, quindi la capacità potrebbe funzionare comunque.",
+      "notStored": "Per questa board non è salvato nulla e questo deployment non ha un ripiego sull'ambiente, quindi la capacità non può autenticarsi.",
+      "notStoredUnknownFallback": "Per questa board non è salvato nulla. La catena di credenziali di questo deployment non può essere descritta qui, quindi non si sa se la chiave venga fornita altrove.",
+      "setValue": "Valore",
+      "replaceValue": "Sostituisci il valore salvato",
+      "save": "Salva",
+      "remove": "Rimuovi credenziale",
+      "noneDeclared": "Nessuna delle capacità registrate in questo deployment richiede credenziali.",
+      "subject": {
+        "toolServer": "Server di strumenti",
+        "binaryGenerator": "Integrazione generativa"
+      },
+      "incomplete": {
+        "title": "Questo elenco potrebbe essere incompleto",
+        "body": "Non è stato possibile leggere le integrazioni generative, quindi qui sotto potrebbe mancare una credenziale richiesta da una di esse. Le chiavi salvate che nessuno richiede restano nascoste finché l'elenco non può essere letto di nuovo."
+      },
+      "orphaned": {
+        "heading": "Salvate ma non richieste",
+        "body": "Nulla di ciò che questo deployment ha registrato richiede queste chiavi: è quello che lascia dietro di sé un'integrazione dismessa o una variabile rinominata. Restano cifrate finché non le rimuovi."
+      },
+      "toast": {
+        "loadFailed": "Impossibile caricare le credenziali delle capacità",
+        "saved": "{key} salvata",
+        "saveFailed": "Impossibile salvare la credenziale",
+        "removeFailed": "Impossibile rimuovere la credenziale"
+      }
+    },
     "apiTokens": {
       "title": "Token di accesso API",
       "intro": "Crea token che i sistemi esterni presentano all'API di cat-factory. Ogni token si autentica come questo spazio di lavoro sugli endpoint /api/v1. Il segreto viene mostrato una sola volta, al momento della creazione, e non può essere recuperato, quindi conservalo subito.",
@@ -945,6 +980,15 @@
       "confirmRemove": {
         "title": "Rimuovere questo runner?",
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
+      },
+      "blocked": "L'URL di questo runner non è consentito su questo deployment, quindi i suoi modelli sono nascosti nel selettore.",
+      "urlReason": {
+        "invalid_url": "Questo URL non è valido.",
+        "scheme_not_allowed": "L'URL di un runner deve iniziare con http:// o https://.",
+        "credentials_not_allowed": "L'URL di un runner non può contenere nome utente o password.",
+        "query_or_fragment_not_allowed": "Inserisci solo l'URL di base, senza query \"?\" né frammento \"#\".",
+        "host_not_loopback": "Questo deployment raggiunge solo runner sulla propria macchina (localhost). Chiedi a un operatore di consentire i runner della rete locale.",
+        "host_not_local": "Un runner deve essere sulla tua macchina o nella tua rete locale. Gli host pubblici non sono consentiti."
       }
     },
     "modelPolicy": {

@@ -1,5 +1,138 @@
 # @cat-factory/kernel
 
+## 0.221.1
+
+### Patch Changes
+
+- 1106c93: BREAKING (public API, the last permitted break): the final pre-stability polish of `/api/v1`,
+  adopted together with the stability commitment (ADR 0032). From this release the public API does
+  not change without an incremental migration path and a version change.
+
+  - `POST /api/v1/initiatives` moved to `POST /api/v1/jobs`, unifying the headless job lifecycle
+    under one resource root. The SDK group `initiatives` is now `jobs`; the wire schemas renamed to
+    `CreatePublicJob` / `PublicJobAccepted`.
+  - `publicTask.executionId` renamed to `publicTask.runId`, matching `publicRun.runId` and
+    `/api/v1/runs/:runId/...`.
+  - `POST /api/v1/tasks/:taskId/start` now requires a `decide`-scope key when the resolved pipeline
+    can park on a human decision, the same rule `POST /api/v1/jobs` applies. Existing `write` keys
+    that started such pipelines get `403 pipeline_requires_decide_scope`.
+
+  **Check your integrations against this last one before upgrading.** A pipeline parks in three ways,
+  and the third is easy to miss: an approval gate on an enabled step, an inline review/brainstorm
+  kind, or an unbounded human-wait gate (`human-review`). That third case means the shipped
+  **Adaptive build** preset (`pl_full`) now needs a `decide` key, because it carries a risk-gated
+  `human-review` step. The unconditional presets (`Standard build`, `Simple build`) never park and
+  remain startable with a plain `write` key, as do the pipelines a workspace authored without gates
+  or review kinds.
+
+  Mint a `decide`-scope key for any integration that starts parking pipelines. The scope only widens
+  what a key may set in motion; it grants no destructive capability (that is `admin`).
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+
+## 0.221.0
+
+### Minor Changes
+
+- 3b88f66: Prove the test environment lifecycle on the pull request
+
+  The PR verification report already listed which ephemeral environments a run stood up, but it
+  could not show that anything was actually exercised against one, and its teardown verdict was
+  unreachable in practice: the per-step environment projection stops being refreshed when the run
+  settles, and the TTL sweep that reclaims the environment fires afterwards, so a report published
+  by the step hook said "still live" forever about environments the platform had destroyed on
+  schedule.
+
+  The section is now the three-leg proof a reviewer needs: the environment came UP at a recorded
+  time, evidence was CAPTURED from it while it was live, and it was TORN DOWN again. The dates come
+  from the provisioning event log (the only store that records them), the middle leg from the
+  tester's own report plus the screenshots it stored, and the verdict over the three is COMPUTED in
+  code with every missing or contradictory leg named, never read off an agent's claim that it tested
+  against a preview. The report links back to the captured evidence through a new `test-evidence`
+  run deep link.
+
+  Three distinctions are load-bearing. An empty timeline has four causes and they are not
+  interchangeable, so it carries a machine-readable `gap` naming which: no log wired, a read that
+  failed, a read too large to be complete, or a run that stood nothing up. Only the first is a
+  statement about how the deployment is configured. The teardown verdict is decided by environment
+  IDENTITY rather than by comparing a count of teardown rows to a count of ready frames, which is
+  the form that survives a run replacing an environment mid-flight (the superseded one's teardown
+  would otherwise balance the books while its replacement is still standing). And a tester that ran
+  against local dependencies is kept apart from one that did not say where it ran: its artifacts are
+  reported either way, but only a declared ephemeral run counts as evidence about the environment.
+
+  The teardown leg is closed out of band: `EnvironmentTeardownService` notifies a best-effort hook
+  from the one place that records a teardown attempt, wired to a new
+  `ExecutionService.refreshVerificationReport`, so reclaiming an environment republishes the report
+  that describes it. It fires on a FAILED attempt too, since a settled run has no step settlement
+  left and an environment the provider refuses to reclaim has to reach the PR as an operator's job.
+
+  Breaking: the report's JSON payload is version 4. `environments` gains `timeline`, `evidence`,
+  `proof` and `gaps`, and its `teardown` picklist gains `failed`. The rendered section is retitled
+  "Test environment lifecycle". External consumers pinned to version 3 must re-read the schema.
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+
+## 0.220.0
+
+### Minor Changes
+
+- 7f86f07: The capability-credential row is rev-guarded, closing two holes the per-key write opened. The row
+  is ONE sealed blob holding the whole set, so a per-key save is read-modify-write over it; blind,
+  two operators saving DIFFERENT keys would silently destroy each other's, with the loser's save
+  still returning success. `put`/`remove` now ride a `compareAndSwap`/`deleteIfRev` pair (a new
+  `rev` column on `capability_credentials`, both runtimes), reloading and re-applying on the
+  winner's snapshot, 409 only on a pathologically hot row. The whole-set PUT stays a blind write:
+  replacing whatever is stored is its semantics, and it bumps the stored rev in SQL so a concurrent
+  per-key save's guard still trips.
+
+  Also: a per-key save now stamps `updatedAt` on the touched key ONLY. "Last set" is a per-key fact
+  the checklist renders per row, and the previous write re-stamped the whole set, falsifying every
+  neighbour's date whenever any one key was saved.
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+
+## 0.219.0
+
+### Minor Changes
+
+- 87161e8: Make AWS Bedrock a selectable per-model route, resolved by a preference walk instead of a hard-coded if-chain.
+
+  `BEDROCK_MODELS` was already a per-model allow-list and nothing consumed it but a throw-on-mismatch guard, so Bedrock was reachable only by repointing the whole deployment's routing default. That left the account model policy's `trustedProviders: ['bedrock']` half-wired: its entire purpose is to let an otherwise-blocked family through on a residency-guaranteed route, and no user could select one. A catalog entry now declares a `bedrock` flavour and becomes selectable exactly when the account's allow-list carries its model, so a single task can be pinned to Bedrock.
+
+  **The allow-list is parsed once, by `bedrockAllowListFromEnv`, and that one value feeds both consumers.** The resolver THROWS on an id outside its list while the catalog decides what the picker offers; parsed separately, a trailing space or a re-ordered var makes the picker advertise a route that fails at dispatch. `BEDROCK_REGION` with no `BEDROCK_MODELS` deliberately contributes NO flavour: the resolver runs unconstrained, but Bedrock grants are per account and per Region, so with nothing enumerated the platform would be guessing, and a guess here surfaces models AWS rejects at call time. Bedrock stays reachable as a routing default there, exactly as before. On the Worker, which does not bundle the provider package, the capability is further gated on a registered registry that can actually serve `bedrock` (`bedrockModelsCapability`): the env vars alone don't prove the `registerModelRegistry` mix-in happened, and set-but-unregistered logs a warning naming the missing call instead of offering picker rows whose dispatch fails.
+
+  **The catalog declares the UNPREFIXED base id and the deployment's own entry is what runs.** The id an account calls carries a geo/global inference prefix (`us.` / `eu.` / `global.` / …) that differs per Region, so any prefix baked into the catalog would be wrong for every deployment but one. `resolveBedrockModelId` matches an allow-list entry that IS the base or ends in `.<base>` and uses it verbatim. Two consequences are load-bearing: the prefix set is never enumerated (a prefix AWS adds later just works), and where an operator lists two profiles for one model the FIRST wins, so ordering the env var is how they choose between a regional and a global one. That also means `bedrockModels` is a `Set` whose ITERATION ORDER matters, built from the env string once.
+
+  **Bedrock lags the vendors' own APIs, and the catalog says so structurally rather than in a comment.** `gpt-5.5` and `gpt-oss-120b` carry a `bedrock` flavour because Bedrock serves that same generation. Opus 4.8 is a NEW `claude-opus-4-8` entry instead of a flavour on `claude-opus`, because it is a different model rather than another route to the same one: folding it in would silently run 4.8 for a block pinned to Opus 5, and nothing downstream could tell. Llama and Nova are deliberately left unenabled: their concrete Bedrock ids could not be verified against a live account, and a base id that never matches an allow-list entry is a permanently unselectable row in everyone's picker.
+
+  `effectiveVariant` is now a walk over `DEFAULT_PROVIDER_PREFERENCE` (`direct > bedrock > openrouter > cloudflare > subscription`), with each route supplying its `declared`/`usable`/`build` arms through an exhaustive `Record<ModelFlavor, …>`, so **a route added to the wire vocabulary fails to compile until every arm is handled**. This replaces two hand-ordered if-chains that had to be kept in step by eye. The tuple is pinned to the contracts picklist by `satisfies` in one direction and by a test in the other, because a flavour contracts gained but the tuple lacked would never be TRIED and no typecheck can see that: the resolver walks the tuple, not the union.
+
+  **A best-effort build must still produce a ref.** A Bedrock-only entry has no other route, so returning nothing when the allow-list misses would make the resolver THROW for every deployment that has not configured Bedrock, which is most of them, and the throw would take out the whole `/models` catalog. It falls back to the base id, flagged `available: false`, which is what tells the picker it cannot run.
+
+  **A Bedrock ref's context window cannot be keyed on the ref.** `contextWindowFor` keys on `${provider}:${model}` and a Bedrock ref carries the operator's prefixed id, so the window is stored per catalog base id and found through the same suffix match resolution uses. Missed, the LLM proxy silently stops capping requested output for every Bedrock model, which surfaces as a provider-side rejection of the whole request rather than as a misconfiguration.
+
+  `providerCachePolicy('bedrock')` stays `none`, so the picker reports no prompt caching. Bedrock does support Anthropic-style cache breakpoints, but the hint is model-specific and we do not send it; claiming caching we have not implemented would be worse than reporting none.
+
+  **Spend gets a bare `bedrock` rate, priced high on purpose.** Making the route selectable without it would have metered every Bedrock call at `defaultPrice`, roughly a thirtieth of an Opus-tier run's real cost: an undercount in the budget safeguard introduced by this change. It cannot be per-model yet: `priceFor` matches `provider:model` exactly and a Bedrock ref carries the operator's Region prefix, so a per-model key would silently never match. Teaching `priceFor` the same prefix-tolerant match `contextWindowFor` now uses is the follow-up, and it is also what would stop a cheap Bedrock model being metered at the frontier rate.
+
+  **Behaviour change for deployments that already set both Bedrock vars**: a model whose only other routes are the gateway or the Cloudflare floor now resolves to Bedrock, which is the point of the feature (a first-party route beats an aggregator that resells it). A configured direct key still wins.
+
+  Slicing note: the initiative called for the subscription-first reorder FIRST, and scoping it against the code inverted that. `ModelRouter.resolveEffectiveRef` reads a truthy `ref.harness` as proof of entitlement, and `resolveBlockModel` is built at boot from capabilities that assert every vendor, so promoting `subscription` in the tuple alone would dispatch subscription runs for workspaces holding no token; separately, the ~10 inline call sites degrade through `inlineModelRef`, which sees a ref and not a model id, so a dual-mode pin would fall back to the routing default rather than the model's own base (a GLM-pinned reviewer silently running Qwen). Both need resolution to be given facts it does not have today, which is a slice of its own rather than a preliminary commit. The default order therefore keeps `subscription` last for now, with the reasoning recorded beside the tuple, in `model-support.md` §4, and in the initiative's redirect note.
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+
 ## 0.218.0
 
 ### Minor Changes

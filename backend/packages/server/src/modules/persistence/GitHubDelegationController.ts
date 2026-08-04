@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { GitHubInstallation, GitHubRepo } from '@cat-factory/kernel'
-import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import { logger } from '../../observability/logger.js'
 import { UnavailableError, RateLimitedError } from '@cat-factory/kernel'
@@ -83,11 +83,7 @@ export function githubDelegationController(
     // Machine-token gate first: the endpoint's availability must not be probeable
     // without a valid token, and the shared conformance suite asserts the 403 on
     // facades that wire no GitHub App at all.
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json({ error: { code: 'forbidden', message: 'invalid machine token' } }, 403)
     }

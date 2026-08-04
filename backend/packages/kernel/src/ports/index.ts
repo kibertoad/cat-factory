@@ -523,6 +523,13 @@ export type {
   LocalModelEndpointRepository,
 } from './local-model-repositories.js'
 export type {
+  MachineNodeMint,
+  MachineNodeMintOutcome,
+  MachineNodeRecord,
+  MachineNodeRepository,
+} from './machine-node-repositories.js'
+export type { AuthAttemptRecord, AuthAttemptRepository } from './auth-attempt-repositories.js'
+export type {
   UserSecretRecord,
   UserSecretRepository,
   ResolveUserGitHubToken,

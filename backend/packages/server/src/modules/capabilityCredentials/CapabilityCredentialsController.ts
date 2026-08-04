@@ -1,6 +1,7 @@
 import {
   deleteCapabilityCredentialContract,
   getCapabilityCredentialsContract,
+  setCapabilityCredentialContract,
   setCapabilityCredentialsContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -46,10 +47,13 @@ async function viewFor(
   return buildCapabilityCredentialsView({
     declarations,
     stored,
-    // The facades all keep the deployment-environment resolver behind the store, so an unstored
-    // key may still resolve. Stated rather than assumed, because it decides whether the UI may
-    // call a blank row "missing".
-    environmentFallback: true,
+    // Read off the chain the facade actually COMPOSED, never re-asserted here. It decides whether
+    // the UI may call a blank row "missing", and the two answers send an operator in opposite
+    // directions, so the flag has to describe the real chain, including the case where a
+    // deployment replaced it with its own resolver and the answer is "not known".
+    ...(container.toolSecretEnvironmentFallback === undefined
+      ? {}
+      : { environmentFallback: container.toolSecretEnvironmentFallback }),
   })
 }
 
@@ -80,6 +84,19 @@ export function capabilityCredentialsController(): Hono<AppEnv> {
   buildHonoRoute(app, setCapabilityCredentialsContract, async (c) => {
     const svc = requireCapabilityCredentials(c)
     const stored = await svc.set(param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(await viewFor(c.get('container'), stored), 200)
+  })
+
+  // The per-KEY write the credential CHECKLIST performs. It is not a convenience over the
+  // whole-set PUT: a client that never received the values cannot re-send the set, so without
+  // this, filling in a second credential would delete the first.
+  buildHonoRoute(app, setCapabilityCredentialContract, async (c) => {
+    const svc = requireCapabilityCredentials(c)
+    const stored = await svc.put(
+      param(c, 'workspaceId'),
+      c.req.valid('param').key,
+      c.req.valid('json').value,
+    )
     return c.json(await viewFor(c.get('container'), stored), 200)
   })
 

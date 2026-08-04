@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cat-factory-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python client for the cat-factory public API (/api/v1): typed models and resource clients generated from the published OpenAPI spec, over a dependency-free urllib transport with bearer auth, bounded retries, keyset auto-pagination and an SSE reader for the run streams."
 readme = "README.md"
 license = "MIT"

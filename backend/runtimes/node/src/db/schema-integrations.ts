@@ -113,6 +113,9 @@ export const capabilityCredentials = pgTable('capability_credentials', {
   workspace_id: text('workspace_id').primaryKey(),
   credentials: text('credentials').notNull(),
   summary: text('summary').notNull().default('[]'),
+  // Optimistic-concurrency revision, bumped on every write; the per-key writes ride the
+  // rev-guarded compareAndSwap/deleteIfRev because the row is ONE blob holding the whole set.
+  rev: integer('rev').notNull().default(0),
   created_at: bigint('created_at', { mode: 'number' }).notNull(),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })

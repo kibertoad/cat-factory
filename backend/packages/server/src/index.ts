@@ -116,9 +116,15 @@ export {
 // The per-workspace capability-credential resolver and the per-KEY composition that puts it in
 // front of the environment one. See `capabilityCredentialResolver.ts` for why an environment
 // variable is a single-tenant answer, and why the fallback is a real mechanism rather than a shim.
+// `buildToolSecretChain` is the ONE composition site: a facade calls it and gets both the resolver
+// its dispatch path asks and the description its credential checklist renders, so the two cannot
+// disagree about whether an unstored key still resolves.
 export {
+  buildToolSecretChain,
   createWorkspaceToolSecretResolver,
   composeToolSecretResolvers,
+  type ToolSecretChain,
+  type ToolSecretChainInput,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
 export {
@@ -199,6 +205,8 @@ export {
   MACHINE_EVENTS_SUBSCRIBE_PATTERN,
   authorizeMachineSubscribe,
   stripBearer,
+  MACHINE_SUBSCRIBE_ERROR_CODE,
+  type MachineSubscribeRefusalStatus,
 } from './events/machineSubscribe.js'
 // Mothership-mode notification DELIVERY delegation: the mothership re-reads a laptop-raised
 // notification row and delivers it through the org's external channels (its Slack token never
@@ -249,6 +257,13 @@ export {
   resolveRequestId,
 } from './http/requestLogging.js'
 export { param } from './http/params.js'
+// Client-address resolution for the password throttle. Each facade owns WHICH header is
+// authentic on its topology; this is the shared parse/normalisation half (SEC-4).
+export {
+  forwardedClientAddress,
+  normalizeClientAddress,
+  resolveTrustedProxyHops,
+} from './http/clientAddress.js'
 export { assertCapability, assertUser, requireCapability, requireUser } from './http/guards.js'
 export { handleError } from './http/errorHandler.js'
 export {

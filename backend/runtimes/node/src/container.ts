@@ -41,6 +41,7 @@ import type { DrizzleDb } from './db/client.js'
 import { createNodeGateways } from './gateways.js'
 import { baseUrlForNode } from './modelProvider.js'
 import { LocalMachineEventRelay } from './machineEventRelay.js'
+import { makeNodeClientAddressResolver } from './clientAddress.js'
 
 import { DrizzleRepoProjectionRepository } from './repositories/github.js'
 import { DrizzleUserRepoAccessRepository } from './repositories/userRepoAccess.js'
@@ -306,6 +307,65 @@ function applyMothershipRemoteRepos(
   }
 }
 
+interface PostAssemblyContext extends PreviewModuleContext {
+  options: NodeContainerOptions
+  resolveTransport: NodeTransportDeployResult['resolveTransport']
+  githubInstallationRepository: GitHubInstallationRepository
+  bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
+  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  remoteRepos: Record<string, unknown> | undefined
+}
+
+/**
+ * The three adjustments made to the ASSEMBLED dependency object, grouped because each one can only
+ * run once `assembleNodeCoreDependencies` has returned: the preview module reads the final
+ * `environmentRegistryRepository`, the env-config repairer wraps the final `environmentProvider`
+ * (so an injected native adapter, not the default manifest provider, is what it drives), and the
+ * mothership re-sourcing replaces repos the sub-helpers built over an absent `db`.
+ *
+ * Extracted from {@link finalizeNodeContainer} to keep it inside its line budget; the two `apply*`
+ * helpers it calls stay where they are, since they are the units the comments above them document.
+ */
+function applyNodePostAssemblyWiring(
+  dependencies: CoreDependencies,
+  ctx: PostAssemblyContext,
+): void {
+  const { options, env, config, repos, resolveRepoTarget, baseDeployMint } = ctx
+  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
+  // transport is available (real in local mode / a fake pair in the conformance suite).
+  wirePreviewModule(dependencies, options, {
+    env,
+    config,
+    repos,
+    resolveRepoTarget,
+    baseDeployMint,
+  })
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...options.overrides` above), so an injected native adapter — not the default manifest
+  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
+  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
+  // inherits this through `buildNodeContainer` with no extra wiring.
+  const envConfigRepairer = selectNodeEnvConfigRepairer({
+    env,
+    config,
+    resolveTransport: ctx.resolveTransport,
+    installationRepository: ctx.githubInstallationRepository,
+    mintInstallationToken: ctx.bootstrapMintInstallationToken,
+    override: dependencies.environmentProvider,
+    environmentBackendRegistry: ctx.environmentBackendRegistry,
+  })
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
+  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
+  applyMothershipRemoteRepos(dependencies, ctx.remoteRepos)
+}
+
 export type NodeModelDepsResult = ReturnType<typeof buildNodeModelDeps>
 export type NodeTransportDeployResult = ReturnType<typeof buildNodeTransportDeploy>
 export type NodeRunServicesResult = ReturnType<typeof buildNodeRunServices>
@@ -333,6 +393,11 @@ interface NodeServerContainerBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  /**
+   * Whether the composed capability-credential chain reads this node's environment behind the
+   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   */
+  toolSecretEnvironmentFallback: boolean | undefined
   validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
@@ -374,6 +439,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     subscriptions,
     personalSubscriptions,
@@ -470,6 +536,17 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
       repoProjectionRepository,
       githubInstallationRepository,
     } as unknown as PersistenceRegistry,
+    // The machine-node roster + revocation tombstones (SEC-5): recorded on every machine-token
+    // mint, consulted by the shared machine gate on every /internal/* call, served to the owner
+    // via /auth/machine-nodes. Wired symmetrically on the Cloudflare facade.
+    machineNodeRepository: repos.machineNodeRepository,
+    // The durable cross-replica window behind the password throttle (SEC-4). Wired
+    // symmetrically on the Cloudflare facade.
+    authAttemptRepository: repos.authAttemptRepository,
+    // The client address the password throttle keys on (SEC-4): the socket peer, or the
+    // operator's declared `x-forwarded-for` hop. See `clientAddress.ts` for why this facade
+    // never reads `cf-connecting-ip`.
+    resolveClientAddress: makeNodeClientAddressResolver(config.auth),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,
@@ -507,6 +584,11 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
+    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
+    // describes the real chain instead of asserting the default beside it. Undefined when a
+    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
+    // what that consults.
+    ...(toolSecretEnvironmentFallback === undefined ? {} : { toolSecretEnvironmentFallback }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
@@ -618,6 +700,11 @@ interface NodeContainerFinalizeBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  /**
+   * Whether the composed capability-credential chain reads this node's environment behind the
+   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   */
+  toolSecretEnvironmentFallback: boolean | undefined
   validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
@@ -680,6 +767,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     publicApiKeys,
     userSecrets,
@@ -806,39 +894,21 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     resolvePresetProviderPreference,
   })
 
-  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
-  // transport is available (real in local mode / a fake pair in the conformance suite).
-  wirePreviewModule(dependencies, options, {
+  // The post-assembly adjustments (preview module, env-config repairer, mothership re-sourcing),
+  // each of which needs the FINAL dependency object — see the collaborator.
+  applyNodePostAssemblyWiring(dependencies, {
+    options,
     env,
     config,
     repos,
     resolveRepoTarget,
     baseDeployMint,
-  })
-
-  // Wire the live env-config repair agent over the FINAL environment provider (after the
-  // `...options.overrides` above), so an injected native adapter — not the default manifest
-  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
-  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
-  // inherits this through `buildNodeContainer` with no extra wiring.
-  const envConfigRepairer = selectNodeEnvConfigRepairer({
-    env,
-    config,
     resolveTransport,
-    installationRepository: githubInstallationRepository,
-    mintInstallationToken: bootstrapMintInstallationToken,
-    override: dependencies.environmentProvider,
+    githubInstallationRepository,
+    bootstrapMintInstallationToken,
     environmentBackendRegistry,
+    remoteRepos,
   })
-  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
-  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
-  if (envConfigRepairer && !dependencies.envConfigRepairer) {
-    dependencies.envConfigRepairer = envConfigRepairer
-  }
-
-  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
-  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
-  applyMothershipRemoteRepos(dependencies, remoteRepos)
 
   return projectNodeServerContainer({
     dependencies,
@@ -858,6 +928,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretEnvironmentFallback,
     validationConfigService,
     subscriptions,
     personalSubscriptions,

@@ -274,6 +274,13 @@ Everything the agent writes that reaches a parsed surface is treated as hostile:
 - Captured command output shown back to a model is fenced with a fence sized longer than any
   backtick run in the body (`fencedOutput`), so tool output cannot spill into what the model reads
   as instructions.
+- The report's **test environment lifecycle** section renders three families of hole a run does not
+  control: a service-frame id and a provider's verbatim stderr from the deployer's per-frame
+  outcomes, and the view name plus stored artifact id of every screenshot the tester captured.
+  Every one crosses `hostMarkdown.cell`, and the provider error is scrubbed with `redactSecrets`
+  first (a failing provisioner routinely echoes the request URL it was called with). The section's
+  own prose is platform-authored constants, so the note and gap lines are deliberately NOT escaped:
+  what a reader must be able to trust there is that no agent wrote them.
 - Published review findings (`createReview`, on both providers) are a rendered surface too, and one
   that is **not** yet scrubbed: a finding's body is posted to the host verbatim. The exposure is
   bounded relative to a PR body: a host auto-links `#123`/`@name` in a comment, but only a
@@ -375,11 +382,37 @@ is possible at all:
 6. **Self-hosted runner pools execute jobs with these tokens**: the pool host is inside the trust
    boundary. Run pools on infrastructure you'd trust with the installation token itself
    (`runner-pool-integration.md`, ADR 0026 for the warm-pool isolation hazard).
-7. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
+7. **Leave `LOCAL_MODELS_ALLOW_LAN` off on any shared deployment.** A user-registered local model
+   endpoint is fetched server-side, so the runner-host allow-list is what the server may be
+   pointed at. The default permits loopback only; the opt-in widens it to the whole private
+   network (RFC1918 / ULA / mDNS `.local`), which on a multi-tenant box lets any user aim
+   server-side requests at internal LAN services. Turn it on only where every user already owns
+   the network the server runs in (the single-tenant local mode default). The base URL itself is
+   constrained to an origin plus a path prefix (no query, no fragment, no dot segments) and every
+   endpoint URL is composed by the platform, because a base that could shape the request path
+   would turn the two fixed forwards into an arbitrary request against whatever listens locally.
+8. **Make your CI test what you care about.** The CI gate is exactly as strong as the checks it
    reads.
 
 ## Known gaps (honest list, with candidate fixes)
 
+- **On a hosted deployment, loopback local-model endpoints still reach the server itself.** With
+  `LOCAL_MODELS_ALLOW_LAN` off, the remaining grant is `localhost` / `127.0.0.0/8` / `[::1]`,
+  which is the intended target on a developer's own machine and pure downside on a shared one: a
+  user's real Ollama is never on the hosted server's loopback, while in a container `127.0.0.1`
+  reaches sibling processes, sidecars and the app's own port. Any signed-in user can drive it,
+  because the connectivity probe takes a base URL straight from the request body and reports the
+  upstream status, which makes it a loopback port prober. The fixed endpoint paths and the
+  composed-URL rule bound WHAT can be requested, not WHETHER. The honest fix is a third state:
+  the flag is a boolean where the vocabulary wants `off` / `loopback` / `lan`, so a hosted
+  operator could disable the feature outright instead of narrowing it. Until then, treat the
+  per-user local-runner feature as a single-tenant one.
+- **Machine-token revocation binds at the handshake, not on an open socket.** Every
+  `/internal/*` call and every subscribe handshake consults the tombstone, so a revoked node can
+  open nothing new, but a WebSocket subscription opened before revocation keeps receiving that
+  workspace's events until the socket drops. Severing it needs a revocation signal that reaches
+  whichever replica or Durable Object holds the socket; tracked as SEC-12 in
+  `docs/initiatives/security-hardening-round-2.md`.
 - **Job tokens are installation-wide on the standard dispatch path.** The repo-scoped mint exists
   (delegation path) and could be applied at engine dispatch. Until it is, item 3 above is the
   mitigation.

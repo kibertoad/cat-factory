@@ -27,6 +27,7 @@ import {
   type AccountOfWorkspace,
   type AuthConfig,
   MACHINE_EVENTS_SUBSCRIBE_PATTERN,
+  type MachineSubscribeRefusalStatus,
   authorizeMachineSubscribe,
   authorizeWsUpgrade,
   logger,
@@ -304,11 +305,12 @@ const HEARTBEAT_INTERVAL_MS = 30_000
 /**
  * Status-line reasons for a refused machine subscription. Keyed by the exact statuses
  * {@link authorizeMachineSubscribe} can return, so a new verdict status fails `tsc` here rather
- * than writing `undefined` into a raw HTTP status line. `503` is unreachable on THIS runtime (see
- * {@link MachineSubscribeDeps}) but is kept so the map stays total over the verdict union — a
- * `Partial` here would trade the compile-time guarantee for a runtime `undefined`.
+ * than writing `undefined` into a raw HTTP status line (a `Partial` here would trade the
+ * compile-time guarantee for a runtime `undefined`). `503` is reached when the machine-node
+ * roster cannot be read, which fails closed rather than serving a possibly-revoked node, and is
+ * also this listener's answer if the handshake throws for any other reason.
  */
-const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
+const MACHINE_REJECT_REASON: Record<MachineSubscribeRefusalStatus, string> = {
   403: 'Forbidden',
   404: 'Not Found',
   503: 'Service Unavailable',
@@ -333,6 +335,8 @@ const MACHINE_REJECT_REASON: Record<403 | 404 | 503, string> = {
  */
 export interface MachineSubscribeDeps {
   accountOf: AccountOfWorkspace
+  /** The machine-node roster's revocation read (SEC-5); a revoked node's subscribe is refused. */
+  isRevoked?: (nodeId: string) => Promise<boolean>
 }
 
 /**
@@ -399,13 +403,27 @@ export function attachRealtime(
         token: request.headers.authorization,
         workspaceId,
         accountOf: machineSubscribe.accountOf,
-      }).then((verdict) => {
-        if (!verdict.ok) {
-          reject(socket, verdict.status, MACHINE_REJECT_REASON[verdict.status])
-          return
-        }
-        accept(request, socket, head, workspaceId, cid)
+        isRevoked: machineSubscribe.isRevoked,
       })
+        .then((verdict) => {
+          if (!verdict.ok) {
+            reject(socket, verdict.status, MACHINE_REJECT_REASON[verdict.status])
+            return
+          }
+          accept(request, socket, head, workspaceId, cid)
+        })
+        // An upgrade has no error handler above it: an unhandled rejection here takes the
+        // whole process down (Node's default) and leaves the socket hanging open, so the
+        // handshake must settle every path itself. `authorizeMachineSubscribe` already
+        // converts a roster read failure into a 503 verdict; this is the backstop for
+        // anything a future input adds.
+        .catch((error: unknown) => {
+          logger.error('machine event subscribe: handshake failed', {
+            workspaceId,
+            err: describeError(error),
+          })
+          reject(socket, 503, MACHINE_REJECT_REASON[503])
+        })
       return
     }
 

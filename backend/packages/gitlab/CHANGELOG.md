@@ -1,5 +1,39 @@
 # @cat-factory/gitlab
 
+## 0.15.12
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+  - @cat-factory/kernel@0.221.1
+
+## 0.15.11
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+  - @cat-factory/kernel@0.221.0
+
+## 0.15.10
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+  - @cat-factory/kernel@0.220.0
+
+## 0.15.9
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+  - @cat-factory/kernel@0.219.0
+
 ## 0.15.8
 
 ### Patch Changes

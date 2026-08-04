@@ -930,7 +930,7 @@ export const pipelineSchema = v.object({
   version: v.optional(v.number()),
   /**
    * When true this pipeline may be invoked by an EXTERNAL caller through the public API
-   * (`POST /api/v1/initiatives`). Only honored for inline (no-container/no-GitHub) pipelines,
+   * (`POST /api/v1/jobs`). Only honored for inline (no-container/no-GitHub) pipelines,
    * so an external initiative run never pushes to a repo. Absent / false ⇒ not exposed to the
    * public API (still fully usable from the authenticated SPA). See the `initiative-breakdown`
    * pipeline for the first public entry.

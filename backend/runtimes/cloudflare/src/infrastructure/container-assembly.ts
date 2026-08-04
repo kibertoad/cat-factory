@@ -35,6 +35,7 @@ import {
   WebCryptoPasswordHasher,
   type PersistenceRegistry,
   type ServerContainer,
+  type ToolSecretChain,
   type WebSearchUpstream,
 } from '@cat-factory/server'
 import {
@@ -42,7 +43,7 @@ import {
   applyGateProviders,
   warnUnwiredGates,
 } from '@cat-factory/gates'
-import type { NotificationChannel, RunLifecycleSink, ToolSecretResolver } from '@cat-factory/kernel'
+import type { NotificationChannel, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -66,7 +67,10 @@ import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { CryptoIdGenerator } from './runtime'
+import { D1AuthAttemptRepository } from './repositories/D1AuthAttemptRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { D1MachineNodeRepository } from './repositories/D1MachineNodeRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
@@ -177,11 +181,15 @@ export interface WorkerContainerAssemblyInput {
   /** The container executor's dedicated, uncached account-settings reader — see {@link WorkerExecutorDeps}. */
   webSearchAccountSettings: AccountSettingsService | undefined
   /**
-   * The deployment's own capability-credential resolver, built by `createWorker`'s
-   * `createToolSecretResolver` from THIS request's `env`. Absent ⇒ the executor builds the
-   * deployment-environment default. See {@link WorkerExecutorDeps.resolveToolSecrets}.
+   * The composed capability-credential chain: the resolver the container executor dispatches with,
+   * and whether the deployment's own configured vars answer BEHIND the per-workspace store.
+   *
+   * Both halves come from one `buildToolSecretChain` call at the root, so the dispatch path and
+   * the credential checklist cannot disagree about whether an unstored key still resolves. Its
+   * `environmentFallback` is undefined when a deployment supplied its own resolver: it replaced
+   * the chain, and nothing here knows what that consults.
    */
-  executorToolSecrets: ToolSecretResolver | undefined
+  toolSecretChain: ToolSecretChain
   defaultWebSearchUpstream: WebSearchUpstream | undefined
   resolveBinaryArtifactStore: ResolveBinaryArtifactStore
   githubWebhookIngest: CfGitHubWebhookIngest
@@ -250,6 +258,105 @@ function selectWorkerDurableJobDeps(args: {
   }
 }
 
+/**
+ * The pipeline-start capability probe: what a workspace + run initiator actually has
+ * configured, under the model PRESET the run will use, which is what refuses a start with a clear
+ * cause instead of failing deep in a provider SDK.
+ *
+ * Extracted from {@link buildWorkerCoreDependencies} to keep it inside its size budget. It is a
+ * cohesive unit: every argument here exists only to answer that one question, and the closure is
+ * built once per container rather than per call.
+ */
+function selectWorkerProviderCapabilities(
+  deps: Pick<
+    WorkerContainerAssemblyInput,
+    | 'env'
+    | 'config'
+    | 'db'
+    | 'caches'
+    | 'apiKeys'
+    | 'subscriptions'
+    | 'personalSubscriptions'
+    | 'cloudflareModelsEnabled'
+    | 'localModelEndpoints'
+    | 'openRouterCatalog'
+    | 'accountSettings'
+  > & { bedrockModels: Set<string> | undefined },
+): NonNullable<CoreDependencies['resolveProviderCapabilities']> {
+  const { env, config, db } = deps
+  return (workspaceId, initiatedBy, modelPresetId) =>
+    resolveWorkspaceCapabilities(
+      {
+        apiKeys: deps.apiKeys,
+        subscriptions: deps.subscriptions,
+        personalSubscriptions: deps.personalSubscriptions,
+        cloudflareModelsEnabled: deps.cloudflareModelsEnabled,
+        ...(deps.bedrockModels ? { bedrockModels: deps.bedrockModels } : {}),
+        baseUrlFor: (provider) => baseUrlFor(provider, env),
+        localModelEndpoints: deps.localModelEndpoints,
+        openRouterCatalog: deps.openRouterCatalog,
+        accountSettings: deps.accountSettings,
+        workspaceAccountOf: (id) => new D1WorkspaceRepository({ db }).accountOf(id),
+        modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+        caches: deps.caches,
+        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db),
+      },
+      workspaceId,
+      initiatedBy,
+      modelPresetId,
+    )
+}
+
+/**
+ * The run-observability surface: the telemetry stores (TELEMETRY_DB), the deployment-level
+ * rollup readers (MAIN db), the provisioning event log and the two capture sinks with their
+ * prompt-recording switch. Grouped out of {@link buildWorkerCoreDependencies} for the
+ * per-function line budget, like {@link selectWorkerDurableJobDeps}; every entry is spread
+ * straight back into the same position in the same literal.
+ */
+function selectWorkerObservabilityDeps(args: {
+  config: AppConfig
+  db: D1Database
+  telemetryDb: WorkerContainerAssemblyInput['telemetryDb']
+  provisioningLogRepository: WorkerContainerAssemblyInput['provisioningLogRepository']
+  agentContextObservability: AgentContextObservabilityService
+  searchQueryObservability: SearchQueryObservabilityService
+}): Partial<CoreDependencies> {
+  const {
+    config,
+    db,
+    telemetryDb,
+    provisioningLogRepository,
+    agentContextObservability,
+    searchQueryObservability,
+  } = args
+  return {
+    // Telemetry lives in the dedicated TELEMETRY_DB database.
+    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
+    // The stores behind the agent-context + search-query sinks re-exposed beside them, handed
+    // in alongside for the remote debugging reader — a pure reader that wants neither capture
+    // gate.
+    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
+    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
+    // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
+    // the Reports view.
+    reportsRepository: new D1ReportsRepository({ db }),
+    // Unified provisioning event log (separate D1 binding). Threads the recorder into
+    // the env services and exposes the read service for the logs controller; undefined
+    // when PROVISIONING_DB isn't bound.
+    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
+    recordLlmPrompts: config.observability.recordPrompts,
+    // Re-exposed on the core for the agent-context read endpoint; the same instance is
+    // injected into the container executor for the write path.
+    agentContextObservability,
+    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
+    // write path (it reads it off the request container).
+    searchQueryObservability,
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -260,6 +367,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     idGenerator,
     caches,
     overrides,
+    cloudflareModelsEnabled,
     registries,
     provisioningLogRepository,
     resolveTransport,
@@ -267,7 +375,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     testSecretsService,
     validationConfigService,
     personalSubscriptions,
+    apiKeys,
     notificationWebhookSupport,
+    localModelEndpoints,
     openRouterCatalog,
     eventPublisher,
     agentContextObservability,
@@ -275,7 +385,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     accountSettings,
     executorPackageRegistries,
     webSearchAccountSettings,
-    executorToolSecrets,
+    toolSecretChain,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -329,28 +439,14 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     serviceRepository: new D1ServiceRepository({ db }),
     workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
-    // Telemetry lives in the dedicated TELEMETRY_DB database.
-    llmCallMetricRepository: new D1LlmCallMetricRepository({ db: telemetryDb }),
-    // The stores behind the agent-context + search-query sinks below, handed in alongside
-    // them for the remote debugging reader — a pure reader that wants neither capture gate.
-    agentContextSnapshotRepository: new D1AgentContextSnapshotRepository({ db: telemetryDb }),
-    agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
-    // Deployment-level rollups over `agent_runs` (MAIN db, not telemetry) for the operator dashboard.
-    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
-    // Cross-cutting usage analytics over `token_usage` + `agent_runs` (both MAIN db) for
-    // the Reports view.
-    reportsRepository: new D1ReportsRepository({ db }),
-    // Unified provisioning event log (separate D1 binding). Threads the recorder into
-    // the env services and exposes the read service for the logs controller; undefined
-    // when PROVISIONING_DB isn't bound.
-    ...(provisioningLogRepository ? { provisioningLogRepository } : {}),
-    recordLlmPrompts: config.observability.recordPrompts,
-    // Re-exposed on the core for the agent-context read endpoint; the same instance is
-    // injected into the container executor below for the write path.
-    agentContextObservability,
-    // Re-exposed on the core for the search-query read endpoint AND the search proxy's
-    // write path (it reads it off the request container).
-    searchQueryObservability,
+    ...selectWorkerObservabilityDeps({
+      config,
+      db,
+      telemetryDb,
+      provisioningLogRepository,
+      agentContextObservability,
+      searchQueryObservability,
+    }),
     idGenerator,
     clock,
     // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
@@ -372,7 +468,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           agentContextObservability,
           resolvePackageRegistries: executorPackageRegistries,
           webSearchAccountSettings,
-          ...(executorToolSecrets ? { resolveToolSecrets: executorToolSecrets } : {}),
+          resolveToolSecrets: toolSecretChain.resolver,
         }),
         env,
         config,
@@ -472,8 +568,22 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     caches,
-    // What is configured for a workspace + initiator + the run's model preset (see the factory).
-    resolveProviderCapabilities: buildWorkerProviderCapabilities(input, bedrockModels),
+    // The pipeline-start guard resolves what's configured for a workspace + initiator, under the
+    // model preset the run will use (so the guard walks each model's routes in dispatch order).
+    resolveProviderCapabilities: selectWorkerProviderCapabilities({
+      env,
+      config,
+      db,
+      caches,
+      apiKeys,
+      subscriptions,
+      personalSubscriptions,
+      cloudflareModelsEnabled,
+      bedrockModels,
+      localModelEndpoints,
+      openRouterCatalog,
+      accountSettings,
+    }),
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App token.
     runInitiatorScope: runWithInitiator,
@@ -482,40 +592,31 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
 }
 
 /**
- * The Worker's `resolveProviderCapabilities`: what a workspace (+ its account, the run initiator
- * and the run's model PRESET) actually has configured, which the pipeline-start guard gates on and
- * the model catalog is projected through.
+ * What the machine/auth boundary needs on this facade: the machine-node roster the shared gate
+ * consults on every `/internal/*` call (SEC-5), the durable password-throttle ledger (SEC-4), and
+ * the client address the throttle keys on.
  *
- * Its own factory rather than a closure inside {@link buildWorkerCoreDependencies} purely for that
- * function's line budget; the Node facade draws the same seam. `bedrockModels` is passed in because
- * the caller already derived it (one deployment-level env read) for the resolver registration.
+ * Grouped because the three are one concern and because `resolveClientAddress` is a per-FACADE
+ * decision that must not drift from the store it feeds: `cf-connecting-ip` is authentic HERE and
+ * only here, since the Cloudflare edge injects it and overwrites whatever the client sent, and a
+ * Worker is unreachable except through that edge. The Node facade deliberately does NOT read that
+ * header (a generic reverse proxy forwards it untouched), which is why the choice lives per facade
+ * rather than behind a shared trust flag.
  */
-function buildWorkerProviderCapabilities(
-  input: WorkerContainerAssemblyInput,
-  bedrockModels: Set<string> | undefined,
-): NonNullable<CoreDependencies['resolveProviderCapabilities']> {
-  const { env, config, db, caches, cloudflareModelsEnabled } = input
-  return (workspaceId, initiatedBy, modelPresetId) =>
-    resolveWorkspaceCapabilities(
-      {
-        apiKeys: input.apiKeys,
-        subscriptions: input.subscriptions,
-        personalSubscriptions: input.personalSubscriptions,
-        cloudflareModelsEnabled,
-        ...(bedrockModels ? { bedrockModels } : {}),
-        baseUrlFor: (provider) => baseUrlFor(provider, env),
-        localModelEndpoints: input.localModelEndpoints,
-        openRouterCatalog: input.openRouterCatalog,
-        accountSettings: input.accountSettings,
-        workspaceAccountOf: (ws) => new D1WorkspaceRepository({ db }).accountOf(ws),
-        modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
-        caches,
-        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db),
-      },
-      workspaceId,
-      initiatedBy,
-      modelPresetId,
-    )
+function selectWorkerMachineAuthDeps(
+  db: D1Database,
+): Pick<
+  ServerContainer,
+  'machineNodeRepository' | 'authAttemptRepository' | 'resolveClientAddress'
+> {
+  return {
+    machineNodeRepository: new D1MachineNodeRepository({ db }),
+    authAttemptRepository: new D1AuthAttemptRepository({
+      db,
+      idGenerator: new CryptoIdGenerator(),
+    }),
+    resolveClientAddress: (c) => c.req.header('cf-connecting-ip') ?? undefined,
+  }
 }
 
 export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {
@@ -524,6 +625,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     subscriptions,
     testSecretsService,
     capabilityCredentialsService,
+    toolSecretChain,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -677,6 +779,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       repoProjectionRepository: new D1RepoProjectionRepository({ db }),
       githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
     } as unknown as PersistenceRegistry,
+    // The machine/auth boundary's own wiring (SEC-4 + SEC-5), mirrored on the Node facade.
+    ...selectWorkerMachineAuthDeps(db),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,
@@ -698,6 +802,13 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
+    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
+    // describes the real chain instead of asserting the default beside it. Undefined when a
+    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
+    // what that consults.
+    ...(toolSecretChain.environmentFallback === undefined
+      ? {}
+      : { toolSecretEnvironmentFallback: toolSecretChain.environmentFallback }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,

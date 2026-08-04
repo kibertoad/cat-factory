@@ -1,5 +1,123 @@
 # @cat-factory/app
 
+## 0.210.1
+
+### Patch Changes
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+
+## 0.210.0
+
+### Minor Changes
+
+- f63145d: A deployment can now declare its capability-credential chain store-ONLY, and the operator surface
+  describes the chain that was actually composed instead of asserting a default beside it.
+
+  `capabilityCredentialEnvironmentFallback: false` on any facade (`start` / `startLocal` /
+  `createWorker`) composes the per-workspace sealed store with no environment resolver behind it. That
+  is the multi-tenant shape: with the fallback on, a workspace that has typed nothing silently
+  authenticates its runs as whoever set the deployment's variable and bills that vendor account, which
+  is the single-tenant answer the store exists to replace. The default is unchanged, because whether a
+  hosted deployment should ship store-only is a product call.
+
+  The chain is now composed once, at each facade's composition root, by `buildToolSecretChain`, which
+  returns the resolver together with what it consults. The credential checklist reads that rather than
+  hard-coding "the environment may still answer", so a blank row means the same thing on the surface
+  and in the dispatch path. Both executor builders take that composed chain as a REQUIRED dependency:
+  the only default they could have carried is the deployment environment alone, which silently drops
+  the per-workspace store, and a default is only safe where the safe answer is the convenient one.
+
+  Compatibility breaks, none of which affect a deployment using the documented facade seams:
+
+  - `environmentFallback` on the capability-credentials view is optional rather than always present,
+    and absent is a real answer: a deployment that supplied its own `ToolSecretResolver` replaced the
+    chain, so whether it reads the environment is not knowable here, and both guesses fail silently in
+    opposite directions.
+  - The Worker's process-wide `registerToolSecretResolverFactory` is replaced by
+    `registerToolSecretPolicy({ createResolver?, environmentFallback? })`.
+  - `resolveToolSecrets` is required on `WorkerExecutorDeps` and `NodeContainerExecutorDeps`. Only a
+    deployment assembling an executor without its facade's composition root passed neither; it now
+    calls `buildToolSecretChain` itself, which is also what gets it the description the credential
+    checklist renders.
+
+- 3b88f66: Prove the test environment lifecycle on the pull request
+
+  The PR verification report already listed which ephemeral environments a run stood up, but it
+  could not show that anything was actually exercised against one, and its teardown verdict was
+  unreachable in practice: the per-step environment projection stops being refreshed when the run
+  settles, and the TTL sweep that reclaims the environment fires afterwards, so a report published
+  by the step hook said "still live" forever about environments the platform had destroyed on
+  schedule.
+
+  The section is now the three-leg proof a reviewer needs: the environment came UP at a recorded
+  time, evidence was CAPTURED from it while it was live, and it was TORN DOWN again. The dates come
+  from the provisioning event log (the only store that records them), the middle leg from the
+  tester's own report plus the screenshots it stored, and the verdict over the three is COMPUTED in
+  code with every missing or contradictory leg named, never read off an agent's claim that it tested
+  against a preview. The report links back to the captured evidence through a new `test-evidence`
+  run deep link.
+
+  Three distinctions are load-bearing. An empty timeline has four causes and they are not
+  interchangeable, so it carries a machine-readable `gap` naming which: no log wired, a read that
+  failed, a read too large to be complete, or a run that stood nothing up. Only the first is a
+  statement about how the deployment is configured. The teardown verdict is decided by environment
+  IDENTITY rather than by comparing a count of teardown rows to a count of ready frames, which is
+  the form that survives a run replacing an environment mid-flight (the superseded one's teardown
+  would otherwise balance the books while its replacement is still standing). And a tester that ran
+  against local dependencies is kept apart from one that did not say where it ran: its artifacts are
+  reported either way, but only a declared ephemeral run counts as evidence about the environment.
+
+  The teardown leg is closed out of band: `EnvironmentTeardownService` notifies a best-effort hook
+  from the one place that records a teardown attempt, wired to a new
+  `ExecutionService.refreshVerificationReport`, so reclaiming an environment republishes the report
+  that describes it. It fires on a FAILED attempt too, since a settled run has no step settlement
+  left and an environment the provider refuses to reclaim has to reach the PR as an operator's job.
+
+  Breaking: the report's JSON payload is version 4. `environments` gains `timeline`, `evidence`,
+  `proof` and `gaps`, and its `teardown` picklist gains `failed`. The rendered section is retitled
+  "Test environment lifecycle". External consumers pinned to version 3 must re-read the schema.
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+
+## 0.209.0
+
+### Minor Changes
+
+- 7f86f07: Capability credentials get their operator surface: an Infrastructure-window tab rendering the
+  checklist of what this deployment's registered tool servers and generative integrations ask for,
+  joined to what this board has stored.
+
+  It is a checklist rather than a blank key-value form because which keys exist is a property of the
+  deployment's CODE: each row names who wants the value, whether it is required and when it was last
+  set, so nobody reads the deployment's source to learn what to type. The three things an empty row
+  can mean stay apart: nothing stored but the environment may still answer, a stored key nothing asks
+  for any more (removable, and withheld while the declaration read is known to be short), and a
+  declaration list that could not be read at all. `secrets.manage` hides the tab rather than disabling
+  it, and so does having nothing to show, since a build registering no capability has no credential to
+  type.
+
+  Also new: `PUT /workspaces/:ws/capability-credentials/:key`, the per-key write the checklist
+  performs. The whole-set PUT could not serve it: a client that never received the values can neither
+  re-send the set nor express "leave the others alone", so filling in a second credential through it
+  would have deleted the first. The whole-set write stays for an API caller declaring a set at once.
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+
+## 0.208.2
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+
 ## 0.208.1
 
 ### Patch Changes

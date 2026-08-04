@@ -39,13 +39,13 @@ import org.jspecify.annotations.Nullable;
 public final class Transport {
 
     /** SDK version, stamped into {@code User-Agent}. Kept in step with pom.xml by {@code check:sdk}. */
-    public static final String SDK_VERSION = "0.1.0";
+    public static final String SDK_VERSION = "0.2.0";
 
     /**
      * Methods that may be replayed after a failure.
      *
      * <p>A transport failure with no response tells us nothing about whether the server acted, so
-     * only a method idempotent BY DEFINITION is replayed. {@code POST /initiatives} and
+     * only a method idempotent BY DEFINITION is replayed. {@code POST /jobs} and
      * {@code POST /tasks/:id/start} both cost real LLM work, and a duplicate is not something the
      * SDK may decide to risk on the caller's behalf.
      */

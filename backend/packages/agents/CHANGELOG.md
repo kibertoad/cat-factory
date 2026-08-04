@@ -1,5 +1,67 @@
 # @cat-factory/agents
 
+## 0.106.6
+
+### Patch Changes
+
+- 1106c93: BREAKING (public API, the last permitted break): the final pre-stability polish of `/api/v1`,
+  adopted together with the stability commitment (ADR 0032). From this release the public API does
+  not change without an incremental migration path and a version change.
+
+  - `POST /api/v1/initiatives` moved to `POST /api/v1/jobs`, unifying the headless job lifecycle
+    under one resource root. The SDK group `initiatives` is now `jobs`; the wire schemas renamed to
+    `CreatePublicJob` / `PublicJobAccepted`.
+  - `publicTask.executionId` renamed to `publicTask.runId`, matching `publicRun.runId` and
+    `/api/v1/runs/:runId/...`.
+  - `POST /api/v1/tasks/:taskId/start` now requires a `decide`-scope key when the resolved pipeline
+    can park on a human decision, the same rule `POST /api/v1/jobs` applies. Existing `write` keys
+    that started such pipelines get `403 pipeline_requires_decide_scope`.
+
+  **Check your integrations against this last one before upgrading.** A pipeline parks in three ways,
+  and the third is easy to miss: an approval gate on an enabled step, an inline review/brainstorm
+  kind, or an unbounded human-wait gate (`human-review`). That third case means the shipped
+  **Adaptive build** preset (`pl_full`) now needs a `decide` key, because it carries a risk-gated
+  `human-review` step. The unconditional presets (`Standard build`, `Simple build`) never park and
+  remain startable with a plain `write` key, as do the pipelines a workspace authored without gates
+  or review kinds.
+
+  Mint a `decide`-scope key for any integration that starts parking pipelines. The scope only widens
+  what a key may set in motion; it grants no destructive capability (that is `admin`).
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+  - @cat-factory/kernel@0.221.1
+  - @cat-factory/prompt-fragments@0.15.44
+
+## 0.106.5
+
+### Patch Changes
+
+- Updated dependencies [f63145d]
+- Updated dependencies [3b88f66]
+  - @cat-factory/contracts@0.218.0
+  - @cat-factory/kernel@0.221.0
+  - @cat-factory/prompt-fragments@0.15.43
+
+## 0.106.4
+
+### Patch Changes
+
+- Updated dependencies [7f86f07]
+- Updated dependencies [7f86f07]
+  - @cat-factory/contracts@0.217.0
+  - @cat-factory/kernel@0.220.0
+  - @cat-factory/prompt-fragments@0.15.42
+
+## 0.106.3
+
+### Patch Changes
+
+- Updated dependencies [87161e8]
+  - @cat-factory/contracts@0.216.0
+  - @cat-factory/kernel@0.219.0
+  - @cat-factory/prompt-fragments@0.15.41
+
 ## 0.106.2
 
 ### Patch Changes

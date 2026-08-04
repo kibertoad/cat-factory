@@ -297,6 +297,39 @@ export const mintMachineTokenContract = defineApiContract({
   },
 })
 
+// The machine-node roster: every mint records the node against the minting user, and these
+// two endpoints are how that user sees and kills their nodes (SEC-5). Revocation is a
+// tombstone consulted by every `/internal/*` machine gate, so a leaked machine token stops
+// working everywhere at once instead of staying valid for its full TTL.
+export const machineNodeViewSchema = v.object({
+  nodeId: v.string(),
+  accountIds: v.array(v.string()),
+  createdAt: v.number(),
+  lastMintedAt: v.number(),
+  exp: v.number(),
+  revokedAt: v.nullable(v.number()),
+})
+export type MachineNodeView = v.InferOutput<typeof machineNodeViewSchema>
+
+export const listMachineNodesContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/machine-nodes',
+  responsesByStatusCode: {
+    200: v.object({ nodes: v.array(machineNodeViewSchema) }),
+    ...errorResponses,
+  },
+})
+
+// Owner-scoped: only the user a node was minted for may revoke it; anyone else's nodeId is a
+// 404 (the existence-non-leak policy). Idempotent: revoking an already-revoked node is 204.
+export const revokeMachineNodeContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: singleStringParam('nodeId'),
+  pathResolver: ({ nodeId }) => `/machine-nodes/${nodeId}/revoke`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
 // Local-mode ONLY: hand the local node a mothership SESSION token (captured by the SPA from
 // the mothership OAuth redirect fragment). The node forwards it to the mothership's
 // `/auth/machine-token`, caches the returned opaque machine token in its local store, and

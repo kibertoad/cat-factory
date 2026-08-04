@@ -1,7 +1,10 @@
 import { Hono } from 'hono'
-import { type MachinePayload, TOKEN_AUDIENCE, signerFor } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { RelayedRealtimeEvent } from '../../events/machineEvents.js'
-import { authorizeMachineSubscribe } from '../../events/machineSubscribe.js'
+import {
+  MACHINE_SUBSCRIBE_ERROR_CODE,
+  authorizeMachineSubscribe,
+} from '../../events/machineSubscribe.js'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
@@ -44,11 +47,7 @@ export function eventsRelayController(): Hono<AppEnv> {
 
     // Auth first (before the seam probe) — a token-less caller can't tell a mothership from a
     // non-mothership facade.
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json(
         { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },
@@ -145,6 +144,7 @@ export function eventsRelayController(): Hono<AppEnv> {
     // relay on every mothership), exactly like the publish handler above. The registry is
     // reflective (`Record<string, Record<string, fn>>`), so narrow the one method we call.
     const workspaceRepository = container.repositories?.workspaceRepository
+    const machineNodes = container.machineNodeRepository
     const auth = await authorizeMachineSubscribe({
       auth: container.config.auth,
       token: c.req.header('authorization'),
@@ -152,15 +152,14 @@ export function eventsRelayController(): Hono<AppEnv> {
       accountOf: workspaceRepository?.accountOf
         ? (id) => workspaceRepository.accountOf!(id) as Promise<string | null | undefined>
         : undefined,
+      isRevoked: machineNodes ? (nodeId) => machineNodes.isRevoked(nodeId) : undefined,
     })
     if (!auth.ok) {
-      return c.json(
-        {
-          ok: false,
-          error: { code: auth.status === 404 ? 'not_found' : 'forbidden', message: auth.message },
-        },
-        auth.status,
-      )
+      // Each verdict status keeps its own code: a node retries an `unavailable` (the roster was
+      // unreadable, so revocation could not be checked) and reconnects for a fresh id on a
+      // `forbidden`. Collapsing them onto one code would tell it to do the wrong thing.
+      const code = MACHINE_SUBSCRIBE_ERROR_CODE[auth.status]
+      return c.json({ ok: false, error: { code, message: auth.message } }, auth.status)
     }
 
     // Checked AFTER auth so the handshake shape isn't probeable without a token.

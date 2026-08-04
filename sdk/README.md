@@ -75,7 +75,7 @@ being HONEST with the caller rather than convenient:
   So the status picks the exception type and `code` is exposed verbatim as a plain string. No SDK
   narrows it to a closed enum, and none of them keeps a copy of the vocabulary; the authoritative
   list is in [the API guide](../backend/docs/public-api.md#the-error-envelope).
-- **Only idempotent requests are retried.** `POST /initiatives` and `POST /tasks/:id/start` cost
+- **Only idempotent requests are retried.** `POST /jobs` and `POST /tasks/:id/start` cost
   real LLM work, and a duplicate is not something an SDK may risk on the caller's behalf. A
   transport failure with no response says nothing about whether the server acted.
 - **Streams are never auto-reconnected.** A reconnect replays the SSE stream from its start, and

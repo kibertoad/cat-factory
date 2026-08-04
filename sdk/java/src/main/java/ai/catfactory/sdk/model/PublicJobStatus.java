@@ -8,12 +8,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code InitiativeAcceptedStatus} vocabulary.
+ * The {@code PublicJobStatus} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum InitiativeAcceptedStatus {
+public enum PublicJobStatus {
     RUNNING("running"),
     SUCCEEDED("succeeded"),
     FAILED("failed"),
@@ -30,7 +30,7 @@ public enum InitiativeAcceptedStatus {
 
     private final String wire;
 
-    InitiativeAcceptedStatus(String wire) {
+    PublicJobStatus(String wire) {
         this.wire = wire;
     }
 
@@ -42,8 +42,8 @@ public enum InitiativeAcceptedStatus {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static InitiativeAcceptedStatus fromWire(@Nullable String wire) {
-        for (InitiativeAcceptedStatus candidate : values()) {
+    public static PublicJobStatus fromWire(@Nullable String wire) {
+        for (PublicJobStatus candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }
