@@ -1,5 +1,89 @@
 # @cat-factory/orchestration
 
+## 0.191.0
+
+### Minor Changes
+
+- c8ba2cd: OTLP traces: arrange a run's spans into a `run → agent kind → generations + tool calls`
+  hierarchy instead of siblings sharing a trace id, and document the GenAI semantic-convention
+  coverage explicitly.
+
+  Parent ids are derived from the run rather than held anywhere, so a stateless per-call emission
+  names a parent it has never seen; the parents themselves are emitted when the run settles, through
+  the new optional `LlmTraceSink.recordRunSpans`. Their extent is folded from stamps the run already
+  recorded rather than read off a clock, so the terminal hook re-firing for an already-settled run
+  re-exports a byte-identical tree instead of the same span ids carrying a different duration.
+
+  A step that dispatched a helper kind (a gate's `ci-fixer`, a Tester's fixer, a two-phase coder's
+  `fork-proposer`) gets a span for that kind nested under it. Those dispatches are what the helper's
+  telemetry is tagged with, so without one every generation and tool span they produced would name a
+  parent nobody emits. The run now records what it dispatched on `PipelineStep.dispatches`, written
+  through the single `recordDispatchAttribution` funnel.
+
+  Cycles are counted rather than separated. A fixer loop, a Ralph iteration and a bounced step all
+  repeat under one span, and the events beneath it carry no attempt ordinal to split it by, so each
+  step span states `cat_factory.attempt_count` beside `step_count`. A re-run step's span now starts
+  from the new `PipelineStep.firstStartedAt`, which survives the reset that re-stamps `startedAt`;
+  without it the span began after the generations of its own earlier attempts.
+
+  Span names changed, so an existing dashboard filtering on them needs re-pointing. A generation
+  adopts the convention's `{operation} {model}` (the agent kind now names the step span above it and
+  still rides as `cat_factory.agent_kind`), a tool call becomes `execute_tool {tool}`, and a run's
+  root span is the bare `run` with its pipeline as `cat_factory.pipeline`, keeping every span name a
+  bounded class rather than workspace-authored free text.
+
+- 807e442: Let a tracker webhook dispatch a ticket as its own run.
+
+  A schedule's issue-intake config gains `dispatch`: the existing `queue` mode (a matching event
+  fires the schedule, whose `bug-intake` step drains the board oldest-first) or the new `per-ticket`
+  mode, which imports the pushed ticket, materialises it as its own task under the schedule's frame,
+  and starts the pipeline on it. Absent means `queue`, so existing schedules are unchanged.
+
+  `per-ticket` requires an on-demand schedule and refuses a `bug-intake` pipeline, because a cadence
+  tick has no triggering ticket and an intake step would pick a different one. The SPA derives the
+  mode from the pipeline rather than offering it, and locks the on-demand switch while the tracker
+  trigger is on, so neither refused combination can be expressed in the form.
+
+- 807e442: Judge a pushed tracker issue against a schedule's intake scope, and let each dispatch mode decide
+  what an unanswerable predicate means.
+
+  The push matcher reported a boolean and failed OPEN on any field a delivery did not carry, which was
+  correct for the queue mode it was written for: the fired run's vendor search re-checks every
+  predicate, so the worst case is one no-op run. Per-ticket dispatch reused it with nothing downstream
+  to re-check, where the same guess costs a real task block and a real agent run on a ticket nobody
+  triaged.
+
+  It now reports a verdict (`match` / `miss` / `unconfirmed`) and `dispatchAdmits` picks the
+  disposition per mode: `queue` still fires on an unconfirmed predicate, `per-ticket` withholds and
+  logs which predicate it could not confirm.
+
+  Board scope is evaluated for the first time. `TrackerIssueEvent` carries the vendor board in the
+  shape the intake config stores (a Jira project key, an `owner/repo` slug, a Linear team UUID), read
+  from payloads the adapters already parse, so a per-ticket schedule scoped to one project no longer
+  runs tickets from every project its connection can see. This tightens the queue mode too: a delivery
+  from a board the schedule is not scoped to no longer fires it. That only ever spent a run which
+  completed as "no matching open issues", so the change removes wasted runs rather than pickups.
+
+  The schedule form locks on-demand while the tracker trigger is on, rather than only defaulting it,
+  and both intake refusals carry a machine-readable reason mapped to translated copy.
+
+### Patch Changes
+
+- Updated dependencies [c8ba2cd]
+- Updated dependencies [807e442]
+- Updated dependencies [807e442]
+- Updated dependencies [175f78f]
+- Updated dependencies [807e442]
+  - @cat-factory/contracts@0.220.0
+  - @cat-factory/kernel@0.222.0
+  - @cat-factory/integrations@0.121.0
+  - @cat-factory/agents@0.106.7
+  - @cat-factory/prompt-fragments@0.15.45
+  - @cat-factory/sandbox@0.11.39
+  - @cat-factory/spend@0.13.10
+  - @cat-factory/workspaces@0.21.32
+  - @cat-factory/caching@0.13.8
+
 ## 0.190.0
 
 ### Minor Changes
