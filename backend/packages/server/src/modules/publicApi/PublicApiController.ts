@@ -25,15 +25,9 @@ import {
   type PublicRun,
   type PublicService,
   type PublicTask,
-  type PublicTaskTicket,
 } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import {
-  ConflictError,
-  CredentialRequiredError,
-  runBestEffort,
-  UnavailableError,
-} from '@cat-factory/kernel'
+import { CredentialRequiredError, runBestEffort, UnavailableError } from '@cat-factory/kernel'
 import { scopeSatisfies } from '@cat-factory/integrations'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -44,9 +38,9 @@ import {
   HEADLESS_ACTIONABLE_NOTIFICATION_TYPES,
   notificationActEffect,
 } from '../notifications/notificationActions.js'
-import type { AppEnv, ServerContainer } from '../../http/env.js'
-import { requireCapability } from '../../http/guards.js'
+import type { AppEnv } from '../../http/env.js'
 import { authorize } from './publicApiAuth.js'
+import { resolveTicket } from './ticketLinkage.js'
 import {
   canParkOnHuman,
   isHeadlessInlinePipeline,
@@ -640,50 +634,6 @@ function registerJobStreamRoute(app: Hono<AppEnv>): void {
   })
 }
 
-/**
- * Resolve the tracker ticket a task is being filed FROM, and hand back the attach half.
- *
- * The link, not the ticket's text, is what the rest of the platform runs on: every agent step
- * re-reads the live issue as context, the writeback path posts a run's clarification questions
- * onto that issue, a reply typed there resolves against the parked run, and the intake sweep
- * treats the issue as taken. A caller with nowhere to name its ticket has only `description`,
- * which keeps the words and throws all of that away.
- *
- * Split into resolve-then-attach because the attach needs a block id while every REFUSAL must
- * land before the block exists. The other order half-succeeds in the direction that matters: a
- * created task the caller believes carries its ticket, running on the title alone, with no error
- * to react to. This way a bad ref, an unconfigured or disabled source, an issue the tracker will
- * not serve, or a ticket already spoken for all leave the board untouched.
- */
-async function resolveTicketLinkage(
-  tasksModule: ServerContainer['tasks'],
-  workspaceId: string,
-  ticket: PublicTaskTicket,
-): Promise<{ attach: (blockId: string) => Promise<void> }> {
-  const tasks = requireCapability(tasksModule, 'Task-source integration is not configured')
-  // Fetches the issue and upserts its projection, resolving the caller's key-OR-URL `ref` to the
-  // provider's own canonical external id, so a caller holding whichever form its webhook carried
-  // never has to know how this deployment keys the issue.
-  const issue = await tasks.importService.import(workspaceId, ticket.source, ticket.ref)
-  // One task per ticket: an issue carries a single link, so re-pointing it would strip the task
-  // that already holds it of the context it was created with. Naming that task is what makes the
-  // refusal actionable for a redelivering integration: it follows the existing task rather than
-  // filing a duplicate. Same rule, same reason code as the app's own create-from-issue.
-  if (issue.linkedBlockId) {
-    throw new ConflictError(
-      `Ticket ${issue.externalId} is already linked to task ${issue.linkedBlockId}`,
-      'ticket_already_linked',
-      { taskId: issue.linkedBlockId },
-    )
-  }
-  return {
-    attach: (blockId) =>
-      tasks.linkService
-        .linkToBlock(workspaceId, blockId, ticket.source, issue.externalId)
-        .then(() => undefined),
-  }
-}
-
 function registerTaskRoutes(app: Hono<AppEnv>): void {
   // --- Basic board workloads: services + tasks -------------------------------
   // The external counterparts of the SPA's board operations, scoped to the key's workspace
@@ -705,8 +655,9 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     return c.json({ services: services.map(toPublicService) }, 200)
   })
 
-  // Create a task under a service, optionally FROM a tracker ticket (see
-  // `resolveTicketLinkage` for what the link buys and why it is resolved first).
+  // Create a task under a service, optionally FROM a tracker ticket. The ordering below IS the
+  // contract and `ticketLinkage.ts` explains each step of it; the short version is that a filing
+  // must be refused before it changes the board, and claimed after.
   buildHonoRoute(app, createPublicTaskContract, async (c) => {
     const gate = await authorize(c, 'write')
     if ('fail' in gate) {
@@ -719,9 +670,24 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     const { ticket, ...input } = c.req.valid('json')
     const { workspaceId } = gate.auth
     const container = c.get('container')
-    const linkage = ticket ? await resolveTicketLinkage(container.tasks, workspaceId, ticket) : null
+    let linkage: Awaited<ReturnType<typeof resolveTicket>> | null = null
+    if (ticket) {
+      // The container is checked FIRST because resolving a ticket is an outbound call to the
+      // workspace's tracker: a bad `serviceId` should be answered by the 404 it could have had
+      // for free, not paid for with a live third-party fetch. `addServiceTask` re-applies the
+      // same rule (it is the one that must hold at the moment of the write); this only moves the
+      // cheap, deterministic half of it in front of the expensive work.
+      await container.boardService.assertTaskContainer(workspaceId, serviceId)
+      linkage = await resolveTicket(
+        { tasks: container.tasks, boardService: container.boardService, logger: container.logger },
+        workspaceId,
+        ticket,
+      )
+    }
     const block = await container.boardService.addServiceTask(workspaceId, serviceId, input)
-    if (linkage) await linkage.attach(block.id)
+    // Rolls the block back off the board if the claim is lost, so a caller that retries on the
+    // 409 does not accumulate the duplicates the ticket link exists to prevent.
+    if (linkage) await linkage.claim(block.id)
     return c.json(toPublicTask(block, serviceId), 201)
   })
 

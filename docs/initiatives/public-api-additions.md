@@ -219,11 +219,20 @@ linkage the app's create-from-issue does. Before this a headless intake could on
 into `description`, keeping the words and losing the identity: no writeback of the run's
 clarification questions, no reply path on the ticket, no dedupe.
 
-Two decisions worth keeping:
+Three decisions worth keeping:
 
 - **The ticket resolves BEFORE the block is created.** The other order half-succeeds in the
   direction that matters, handing back a `201` for a task that carries no ticket and runs on its
   title alone.
+- **The dedupe is a CLAIM, and the loser is rolled back.** The pre-check above is the fast path,
+  not the guarantee: it has already returned by the time the block is created, so two filings of
+  one ticket both pass it, and redelivery is exactly what produces two. `TaskRepository`'s
+  `claimBlockLink` is the invariant (`… AND linked_block_id IS NULL`, evaluated under the row lock
+  the UPDATE takes), and the filing that loses removes the task it just created before raising the
+  same `409` a pre-check would have. Without the rollback the refusal is self-defeating: the
+  caller retries, and the leftover is the duplicate the whole feature exists to prevent. The
+  app's create-from-issue shares the claim but deliberately NOT the rollback: a person is looking
+  at the board and can see the leftover, where a rollback deletes a block out from under them.
 - **The linkage is NOT projected onto `publicTask`.** A `201` already means the ticket is attached
   and the `409` (`ticket_already_linked`, `details.taskId`) already names the task holding it, so
   the projection would buy only "which ticket is this task from" on a READ. That read is the list

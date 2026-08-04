@@ -393,6 +393,21 @@ describe('public API: creating a task FROM a tracker ticket', () => {
     expect(list.body.tasks.map((t) => t.taskId)).toEqual([first.body.taskId])
   })
 
+  it('refuses an unknown service WITHOUT calling the tracker', async () => {
+    // Resolving a ticket is an outbound call to the workspace's own Jira, so the deterministic
+    // half of the create's validation runs in front of it: a bad `serviceId` is answered by the
+    // 404 it could have had for free rather than after a live third-party fetch.
+    const { app, auth, jira } = await setup()
+    const refused = await app.call(
+      'POST',
+      '/api/v1/services/blk_nonexistent/tasks',
+      { title: 'Fix cat photo 404s', ticket: { source: 'jira', ref: 'PROJ-1' } },
+      auth,
+    )
+    expect(refused.status).toBe(404)
+    expect(jira.calls).toEqual([])
+  })
+
   it('leaves the board untouched when the ticket cannot be resolved', async () => {
     const { app, auth, workspaceId, serviceId } = await setup()
 

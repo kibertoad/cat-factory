@@ -321,6 +321,14 @@ Two refusals matter:
   a redelivered webhook follows the existing task rather than filing a duplicate. You need no
   bookkeeping of your own to stay idempotent.
 
+That second one holds under CONCURRENCY, which is the case a redelivery actually produces: two
+deliveries of one ticket in flight together are decided by a conditional write, not by whichever
+read happened first, so exactly one of them gets a task and the other gets the `409` naming it.
+A filing that loses is rolled back off the board rather than left behind as a task with no ticket,
+so retrying on the `409` never accumulates duplicates. The one state a retry cannot be spared is a
+store failure at the moment of the claim: that answers `5xx`, and the retry either finds the
+ticket taken (the write had landed) or files cleanly (it had not).
+
 The linkage is not projected onto the task resource: a `201` already means the ticket is attached,
 and `409` already names the task for one that was.
 

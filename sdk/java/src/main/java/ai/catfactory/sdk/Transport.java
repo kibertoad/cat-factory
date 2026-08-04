@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
 public final class Transport {
 
     /** SDK version, stamped into {@code User-Agent}. Kept in step with pom.xml by {@code check:sdk}. */
-    public static final String SDK_VERSION = "0.2.0";
+    public static final String SDK_VERSION = "0.3.0";
 
     /**
      * Methods that may be replayed after a failure.

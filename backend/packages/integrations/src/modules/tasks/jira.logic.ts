@@ -300,12 +300,36 @@ export function adfToMarkdown(node: unknown): string {
   // Older issues / some fields come back as a plain string already.
   if (typeof node === 'string') return node.trim()
   if (typeof node !== 'object') return ''
-  const out = renderNode(node as AdfNode)
-  return out
+  const renderer = createAdfRenderer()
+  const out = renderer.render(node as AdfNode)
+  const body = out
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+  // A cap that stays quiet is indistinguishable from a document that simply ended there, and this
+  // text is read by people and by models: a reader who cannot see the cut concludes the rest was
+  // considered and found empty. Both callers want the note: an issue description folded into a
+  // prompt, and a webhook comment whose commands may be past the cut.
+  return renderer.truncated() ? `${body}\n\n${ADF_TRUNCATION_NOTE}`.trim() : body
 }
+
+/** What {@link adfToMarkdown} appends when it stopped short of the end of the document. */
+export const ADF_TRUNCATION_NOTE =
+  '[truncated: this document is larger or more deeply nested than the renderer will walk]'
+
+/**
+ * How much of one document the walk will render.
+ *
+ * ADF arrives from two directions and only one of them is a document a person typed: an issue
+ * body read on the import path, and a comment body on the inbound webhook path, where the JSON is
+ * whatever the delivery carried. A recursive descent over unbounded, externally-authored
+ * structure is an unbounded stack and unbounded CPU, and on the Worker that is a request budget
+ * rather than a machine. Both caps are far above anything Jira's own editor produces (its comment
+ * field is capped near 32k characters), so a real document is unaffected and only a pathological
+ * one is stopped.
+ */
+const MAX_ADF_NODES = 20_000
+const MAX_ADF_DEPTH = 100
 
 interface AdfNode {
   type?: string
@@ -314,21 +338,102 @@ interface AdfNode {
   attrs?: Record<string, unknown>
 }
 
-/** Render a node's children, concatenated. */
-function renderChildren(node: AdfNode): string {
-  if (!Array.isArray(node.content)) return ''
-  return node.content.map((child) => renderNode(child as AdfNode)).join('')
+/**
+ * A single document's walk, with its budget held per call rather than in module state. Two
+ * renders can be in flight at once (a Worker isolate serves concurrent requests), and a shared
+ * counter would let one document's size truncate another's.
+ */
+function createAdfRenderer(): { render(node: AdfNode): string; truncated(): boolean } {
+  let remaining = MAX_ADF_NODES
+  let truncated = false
+
+  /** Spend one node of the budget, or report that the walk must stop here. */
+  const admit = (depth: number): boolean => {
+    if (depth > MAX_ADF_DEPTH || remaining <= 0) {
+      truncated = true
+      return false
+    }
+    remaining -= 1
+    return true
+  }
+
+  /** Render a node's children, concatenated. */
+  const renderChildren = (node: AdfNode, depth: number): string => {
+    if (!Array.isArray(node.content)) return ''
+    return node.content.map((child) => render(child as AdfNode, depth + 1)).join('')
+  }
+
+  /** Render one node's inline text (no block markers). */
+  const renderInline = (node: AdfNode, depth: number): string => {
+    if (!admit(depth)) return ''
+    if (node.type === 'text') return node.text ?? ''
+    if (node.type === 'hardBreak') return ' '
+    const atom = atomicText(node)
+    if (atom !== null) return atom
+    return renderInlineChildren(node, depth)
+  }
+
+  /**
+   * The inline text of a node's CHILDREN, for a container the caller has already admitted
+   * (a heading, a list item, a code block). Taking the children rather than the node keeps one
+   * node charged to the budget once, whichever arm reaches it.
+   */
+  const renderInlineChildren = (node: AdfNode, depth: number): string => {
+    if (!Array.isArray(node.content)) return ''
+    return node.content.map((child) => renderInline(child as AdfNode, depth + 1)).join('')
+  }
+
+  const render = (node: AdfNode, depth = 0): string => {
+    if (typeof node !== 'object' || node === null) return ''
+    if (!admit(depth)) return ''
+    switch (node.type) {
+      case 'text':
+        return node.text ?? ''
+      case 'hardBreak':
+        return '\n'
+      case 'mention':
+      case 'status':
+      case 'emoji':
+      case 'inlineCard':
+        return atomicText(node) ?? ''
+      case 'blockCard':
+        return `${atomicText(node) ?? ''}\n\n`
+      case 'paragraph':
+        return `${renderChildren(node, depth)}\n\n`
+      case 'heading': {
+        const level = Math.min(Math.max(Number(node.attrs?.level ?? 1) || 1, 1), 3)
+        return `${'#'.repeat(level)} ${renderInlineChildren(node, depth).trim()}\n\n`
+      }
+      case 'bulletList':
+      case 'orderedList':
+        return `${renderChildren(node, depth)}\n`
+      case 'listItem':
+        return `- ${renderInlineChildren(node, depth).trim()}\n`
+      case 'codeBlock':
+        return `\`\`\`\n${renderInlineChildren(node, depth)}\n\`\`\`\n\n`
+      case 'blockquote':
+        return renderChildren(node, depth)
+      default:
+        // 'doc', 'mediaGroup', panels, tables, unknown marks: recurse into content.
+        return renderChildren(node, depth)
+    }
+  }
+
+  return { render: (node) => render(node), truncated: () => truncated }
 }
 
 /**
  * The text of a LEAF node that carries it in `attrs` instead of in children: a mention, an
  * emoji, a status lozenge, or a smart link (a URL Jira's editor upgrades to a card).
  *
- * They need naming explicitly because the default arm below walks CONTENT, and these have none,
+ * They need naming explicitly because the default arm above walks CONTENT, and these have none,
  * so an unlisted one renders as nothing at all rather than as something degraded, dropping a
  * name, a link or a state out of the middle of a sentence with no trace that it was there.
- * Returns null for a node that is not one of them, which is how the caller tells "an atom that
- * rendered empty" from "not an atom".
+ *
+ * `null` means "not one of these types" and is what sends `renderInline` on to walk children;
+ * a recognised type whose attrs carry nothing usable answers `''` instead. Collapsing the two
+ * would be harmless today only because every type here is childless, which is a fact about
+ * today's ADF rather than about this function.
  */
 function atomicText(node: AdfNode): string | null {
   const attrs = node.attrs ?? {}
@@ -336,59 +441,24 @@ function atomicText(node: AdfNode): string | null {
   switch (node.type) {
     case 'mention':
     case 'status':
-      return text
+      return text ?? ''
     case 'emoji':
-      return text ?? (typeof attrs.shortName === 'string' ? attrs.shortName : null)
+      return text ?? (typeof attrs.shortName === 'string' ? attrs.shortName : '')
     case 'inlineCard':
     case 'blockCard':
-      return typeof attrs.url === 'string' ? attrs.url : null
+      // A smart link carries its target as either a bare `url` or an embedded JSON-LD `data`
+      // object, depending on whether Jira has resolved the card yet. Reading only the first
+      // renders the unresolved half as nothing, which is the same silent mid-sentence loss the
+      // atoms above are listed to prevent.
+      return typeof attrs.url === 'string' ? attrs.url : (smartLinkUrl(attrs.data) ?? '')
     default:
       return null
   }
 }
 
-/** Render the inline text of a node (no block markers), for headings/list items. */
-function renderInline(node: AdfNode): string {
-  if (node.type === 'text') return node.text ?? ''
-  if (node.type === 'hardBreak') return ' '
-  const atom = atomicText(node)
-  if (atom !== null) return atom
-  return Array.isArray(node.content)
-    ? node.content.map((child) => renderInline(child as AdfNode)).join('')
-    : ''
-}
-
-function renderNode(node: AdfNode): string {
-  if (typeof node !== 'object' || node === null) return ''
-  switch (node.type) {
-    case 'text':
-      return node.text ?? ''
-    case 'hardBreak':
-      return '\n'
-    case 'mention':
-    case 'status':
-    case 'emoji':
-    case 'inlineCard':
-      return atomicText(node) ?? ''
-    case 'blockCard':
-      return `${atomicText(node) ?? ''}\n\n`
-    case 'paragraph':
-      return `${renderChildren(node)}\n\n`
-    case 'heading': {
-      const level = Math.min(Math.max(Number(node.attrs?.level ?? 1) || 1, 1), 3)
-      return `${'#'.repeat(level)} ${renderInline(node).trim()}\n\n`
-    }
-    case 'bulletList':
-    case 'orderedList':
-      return `${renderChildren(node)}\n`
-    case 'listItem':
-      return `- ${renderInline(node).trim()}\n`
-    case 'codeBlock':
-      return `\`\`\`\n${renderInline(node)}\n\`\`\`\n\n`
-    case 'blockquote':
-      return renderChildren(node)
-    default:
-      // 'doc', 'mediaGroup', panels, tables, unknown marks: recurse into content.
-      return renderChildren(node)
-  }
+/** The `url` of a smart link's embedded JSON-LD payload, when it carries one. */
+function smartLinkUrl(data: unknown): string | null {
+  if (typeof data !== 'object' || data === null) return null
+  const url = (data as { url?: unknown }).url
+  return typeof url === 'string' ? url : null
 }

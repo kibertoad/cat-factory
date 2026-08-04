@@ -153,6 +153,15 @@ rich text turns on ingest of the platform's OWN comments on that vendor, so the 
 `isPlatformAuthoredComment` marker (D5, layer 1) is what stands between an ack and an ack-of-an-ack,
 not the author checks.
 
+There is a third: **a structural renderer on the webhook path walks EXTERNAL structure, so it is
+bounded.** An issue body read on the import path is whatever Jira's editor produced, but a comment
+body here is whatever the delivery carried, and a recursive descent over it is an unbounded stack
+and, on the Worker, an unbounded request budget. `adfToMarkdown` therefore renders under a node and
+depth budget and, on hitting either, appends `ADF_TRUNCATION_NOTE` rather than simply stopping: the
+text is read by people and by models, and a cut a reader cannot see reads as a document that ended.
+The caps sit far above anything the vendor's own field limits allow, so a real document is
+untouched.
+
 Every mutation goes through the SAME service methods the SPA and `PublicDecisionController` call
 (`RequirementReviewService.replyToItem` / `setItemStatus`, then
 `executionService.requirementsReview.incorporate` / `proceed` / `resolveExceeded`), so the park's
