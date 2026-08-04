@@ -13,6 +13,7 @@ import {
   inlineModelRef,
   isAsyncAgentExecutor,
   type Logger,
+  type ModelFlavor,
   type ModelProvider,
   type ModelProviderResolver,
   type ModelRef,
@@ -55,7 +56,10 @@ export interface ConsensusAgentExecutorDependencies {
   /** Static provider (tests / no pool). One of the two MUST be present. */
   modelProvider?: ModelProvider
   agentRouting: AgentRouting
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  resolveBlockModel?: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Whether a container-only subscription harness ref (`claude-code` / `codex`) can run as an
    * INLINE call in this deployment (local mode's ambient CLI). Consensus runs its participants
@@ -103,7 +107,10 @@ const STRATEGIES: Record<ConsensusStrategy, (input: StrategyInput) => Promise<St
  */
 export class ConsensusAgentExecutor implements AsyncAgentExecutor {
   private readonly deps: ConsensusAgentExecutorDependencies
-  private readonly resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  private readonly resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   private readonly now: () => number
   private readonly generate: GenerateFn
   private readonly agentKindRegistry: AgentKindRegistry
@@ -167,14 +174,22 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         blockModelId: context.block.modelId,
         modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
+        // The preset's route order, resolved once per dispatch by the engine. Read off the
+        // CONTEXT so a panel's participants run on the same providers the single-actor path
+        // would have used for the same step.
+        ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
       },
     )
   }
 
   /** A participant/synthesizer's ref: its pinned model (degraded for inline) else the base ref. */
-  private refForModelId(modelId: string | undefined, base: ModelRef): ModelRef {
+  private refForModelId(
+    modelId: string | undefined,
+    base: ModelRef,
+    providerPreference?: readonly ModelFlavor[],
+  ): ModelRef {
     if (modelId) {
-      const pinned = this.resolveBlockModel(modelId)
+      const pinned = this.resolveBlockModel(modelId, providerPreference)
       if (pinned)
         return inlineModelRef(
           pinned,
@@ -218,7 +233,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
     const goalPrompt = userPromptFor(context, this.agentKindRegistry)
 
     const participants: ResolvedParticipant[] = cfg.participants.map((p) => {
-      const ref = this.refForModelId(p.modelId, base)
+      const ref = this.refForModelId(p.modelId, base, context.providerPreference)
       return {
         id: p.id,
         role: p.role,
@@ -227,7 +242,7 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
         modelLabel: `${ref.provider}:${ref.model}`,
       }
     })
-    const synthRef = this.refForModelId(cfg.synthesizerModelId, base)
+    const synthRef = this.refForModelId(cfg.synthesizerModelId, base, context.providerPreference)
     const synthesizer = {
       model: provider.resolve(synthRef),
       modelLabel: `${synthRef.provider}:${synthRef.model}`,
@@ -336,7 +351,11 @@ export class ConsensusAgentExecutor implements AsyncAgentExecutor {
       return this.deps.standard.resolveModel?.(context) ?? Promise.resolve(undefined)
     }
     const base = await this.baseRef(context)
-    const ref = this.refForModelId(context.consensus!.synthesizerModelId, base)
+    const ref = this.refForModelId(
+      context.consensus!.synthesizerModelId,
+      base,
+      context.providerPreference,
+    )
     return `consensus:${context.consensus!.strategy}:${ref.provider}:${ref.model}`
   }
 

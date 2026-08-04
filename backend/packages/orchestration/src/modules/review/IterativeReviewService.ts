@@ -20,7 +20,6 @@ import {
   resolveServiceFrameBlock,
   ReviewContendedError,
   DEFAULT_MAX_REQUIREMENT_ITERATIONS,
-  inlineModelRef,
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -30,6 +29,7 @@ import {
   composeBespokePrompt,
 } from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import {
   type ReviewDisposition,
@@ -104,8 +104,8 @@ export interface IterativeReviewDeps {
   modelProvider?: ModelProvider
   /** Default model ref when the block pins none — the agents' routing default. */
   modelRef?: ModelRef
-  /** Resolve a block's selected model id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /**
    * Whether a container-only subscription harness ref can run as an INLINE call in this
    * deployment (local mode's ambient CLI). Keeps an ambient-eligible harness ref instead of
@@ -113,12 +113,11 @@ export interface IterativeReviewDeps {
    * reviewer/rework on a subscription model. Absent → always degrade (Node/Worker).
    */
   runsInline?: (ref: ModelRef) => boolean
-  /** Resolve the workspace's per-agent-kind default model id (consulted when the block pins none). */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
+  /**
+   * The workspace's per-kind default MODEL and the ROUTE order the preset in force states, from
+   * ONE read. Absent ⇒ block pin plus the routing default, on the deployment's default order.
+   */
+  resolvePresetRouting?: InlineBlockModelDeps['resolvePresetRouting']
   /**
    * Resolve the run/execution + initiator a reviewer pass belongs to, from the block under
    * review. Threaded into the model scope so a facade that serves an inline subscription ref
@@ -526,21 +525,8 @@ export abstract class IterativeReviewService<
    * because the reviewer is an INLINE LLM call with no provider key for the container harness
    * — the same seam the inline agent executor uses, so the two can't drift.
    */
-  protected async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
-    const fallback = this.deps.modelRef
-    const runsInline = this.deps.runsInline
-    const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
-    const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
-    if (fromBlock) return resolve(fromBlock)
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
-      workspaceId,
-      this.reviewAgentKind,
-      block.modelPresetId,
-    )
-    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) return resolve(fromDefault)
-    return fallback
+  protected modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
+    return resolveInlineBlockModelRef(this.deps, workspaceId, this.reviewAgentKind, block)
   }
 
   /** Resolve the provider + ref, throwing the kind's "no model configured" error if unavailable. */

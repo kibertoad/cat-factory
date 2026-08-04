@@ -58,6 +58,7 @@ import { assembleNodeCoreDependencies } from './container-core-deps.js'
 import {
   resolveNodeContainerFoundation,
   type NodeAppRegistriesResult,
+  type NodeContainerFoundation,
 } from './container-foundation.js'
 // Re-exported for the mothership routing-seam test + any facade that sources its own repos.
 export { pickRepoSource } from './container-foundation.js'
@@ -305,6 +306,65 @@ function applyMothershipRemoteRepos(
     dependencies.skillSourceRepository =
       remoteRepos.skillSourceRepository as CoreDependencies['skillSourceRepository']
   }
+}
+
+interface PostAssemblyContext extends PreviewModuleContext {
+  options: NodeContainerOptions
+  resolveTransport: NodeTransportDeployResult['resolveTransport']
+  githubInstallationRepository: GitHubInstallationRepository
+  bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
+  environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
+  remoteRepos: Record<string, unknown> | undefined
+}
+
+/**
+ * The three adjustments made to the ASSEMBLED dependency object, grouped because each one can only
+ * run once `assembleNodeCoreDependencies` has returned: the preview module reads the final
+ * `environmentRegistryRepository`, the env-config repairer wraps the final `environmentProvider`
+ * (so an injected native adapter, not the default manifest provider, is what it drives), and the
+ * mothership re-sourcing replaces repos the sub-helpers built over an absent `db`.
+ *
+ * Extracted from {@link finalizeNodeContainer} to keep it inside its line budget; the two `apply*`
+ * helpers it calls stay where they are, since they are the units the comments above them document.
+ */
+function applyNodePostAssemblyWiring(
+  dependencies: CoreDependencies,
+  ctx: PostAssemblyContext,
+): void {
+  const { options, env, config, repos, resolveRepoTarget, baseDeployMint } = ctx
+  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
+  // transport is available (real in local mode / a fake pair in the conformance suite).
+  wirePreviewModule(dependencies, options, {
+    env,
+    config,
+    repos,
+    resolveRepoTarget,
+    baseDeployMint,
+  })
+
+  // Wire the live env-config repair agent over the FINAL environment provider (after the
+  // `...options.overrides` above), so an injected native adapter — not the default manifest
+  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
+  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
+  // inherits this through `buildNodeContainer` with no extra wiring.
+  const envConfigRepairer = selectNodeEnvConfigRepairer({
+    env,
+    config,
+    resolveTransport: ctx.resolveTransport,
+    installationRepository: ctx.githubInstallationRepository,
+    mintInstallationToken: ctx.bootstrapMintInstallationToken,
+    override: dependencies.environmentProvider,
+    environmentBackendRegistry: ctx.environmentBackendRegistry,
+  })
+  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
+  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
+  if (envConfigRepairer && !dependencies.envConfigRepairer) {
+    dependencies.envConfigRepairer = envConfigRepairer
+  }
+
+  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
+  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
+  applyMothershipRemoteRepos(dependencies, ctx.remoteRepos)
 }
 
 export type NodeModelDepsResult = ReturnType<typeof buildNodeModelDeps>
@@ -606,6 +666,7 @@ interface NodeContainerFinalizeBundle {
   resolveWorkspaceModelDefault: Parameters<
     typeof buildNodeRealtimeDeps
   >[0]['resolveWorkspaceModelDefault']
+  resolvePresetProviderPreference: NodeContainerFoundation['resolvePresetProviderPreference']
   agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
   packageRegistrySecretCipher: NodeRunServicesResult['packageRegistrySecretCipher']
@@ -672,6 +733,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     standardAgentExecutor,
     modelProviderResolver,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
     agentKindRegistry,
     providerRegistry,
     packageRegistrySecretCipher,
@@ -838,41 +900,24 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     incidentEnrichmentDeps,
     accountSettings,
     resolveBinaryArtifactStore,
+    resolvePresetProviderPreference,
   })
 
-  // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
-  // transport is available (real in local mode / a fake pair in the conformance suite).
-  wirePreviewModule(dependencies, options, {
+  // The post-assembly adjustments (preview module, env-config repairer, mothership re-sourcing),
+  // each of which needs the FINAL dependency object — see the collaborator.
+  applyNodePostAssemblyWiring(dependencies, {
+    options,
     env,
     config,
     repos,
     resolveRepoTarget,
     baseDeployMint,
-  })
-
-  // Wire the live env-config repair agent over the FINAL environment provider (after the
-  // `...options.overrides` above), so an injected native adapter — not the default manifest
-  // provider — is what the repair dispatcher uses. Unwired on a stock deployment (the
-  // generic provider has no `describeRepairAgent`), exactly like the service guard. Local
-  // inherits this through `buildNodeContainer` with no extra wiring.
-  const envConfigRepairer = selectNodeEnvConfigRepairer({
-    env,
-    config,
     resolveTransport,
-    installationRepository: githubInstallationRepository,
-    mintInstallationToken: bootstrapMintInstallationToken,
-    override: dependencies.environmentProvider,
+    githubInstallationRepository,
+    bootstrapMintInstallationToken,
     environmentBackendRegistry,
+    remoteRepos,
   })
-  // Don't clobber an override-provided repairer (e.g. the conformance suite's fake): an
-  // explicit `overrides.envConfigRepairer` wins, exactly like `repoBootstrapper`.
-  if (envConfigRepairer && !dependencies.envConfigRepairer) {
-    dependencies.envConfigRepairer = envConfigRepairer
-  }
-
-  // Mothership mode (`db` undefined): re-source the run-path org/durable repos the sub-helpers
-  // built directly over the absent `db` from the remote registry (a no-op outside mothership mode).
-  applyMothershipRemoteRepos(dependencies, remoteRepos)
 
   return projectNodeServerContainer({
     dependencies,
@@ -929,6 +974,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     sourced,
     registries,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
   } = foundation
   const {
     environmentBackendRegistry,
@@ -1002,6 +1048,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     modelProviderResolver,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
     agentKindRegistry,
     providerRegistry,
     environmentBackendRegistry,

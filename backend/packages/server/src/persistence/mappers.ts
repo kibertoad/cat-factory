@@ -5,6 +5,7 @@ import type {
   Block,
   ExecutionInstance,
   IntakeOrigin,
+  ModelFlavor,
   NotificationType,
   IssueIntakeConfig,
   Pipeline,
@@ -19,6 +20,7 @@ import {
   blockStatusSchema,
   executionStatusSchema,
   intakeOriginSchema,
+  isModelFlavor,
   isUsableAgentFailure,
   issueIntakeConfigSchema,
   notificationTypeSchema,
@@ -801,6 +803,45 @@ export function parsePlatformAlertEvents(
   } catch {
     return []
   }
+}
+
+/**
+ * Parse a `model_presets.provider_preference` JSON column (D1 migration 0078 ⇄ the Drizzle
+ * `provider_preference` column) onto the preset's route order. Shared by both runtimes' repos so
+ * the column can't drift.
+ *
+ * Returns UNDEFINED — not an empty array — for NULL, malformed JSON, or a list that narrows to
+ * nothing, because that is the value `ModelPreset.providerPreference` uses for "the default order"
+ * and it is what a reader must see: an empty array would read as an order over no routes.
+ *
+ * A member the current build no longer knows is dropped individually (`isModelFlavor`), so
+ * retiring a route leaves the surviving entries' relative order intact instead of invalidating a
+ * whole workspace's preference. Dropping is honest here specifically because the value names a
+ * ROUTE: once it is gone there is nothing a human could re-pick it as, and the preference still
+ * says exactly what it said about every route that still exists.
+ */
+export function parseProviderPreferenceColumn(
+  value: string | null | undefined,
+): ModelFlavor[] | undefined {
+  if (!value) return undefined
+  let flavors: ModelFlavor[]
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return undefined
+    flavors = parsed.filter((entry): entry is ModelFlavor =>
+      typeof entry === 'string' ? isModelFlavor(entry) : false,
+    )
+  } catch {
+    return undefined
+  }
+  return flavors.length ? flavors : undefined
+}
+
+/** Serialize a preset's route order for the column: absent or empty ⇒ NULL (the default order). */
+export function serializeProviderPreferenceColumn(
+  preference: readonly ModelFlavor[] | undefined,
+): string | null {
+  return preference?.length ? JSON.stringify(preference) : null
 }
 
 /**
