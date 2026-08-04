@@ -121,6 +121,23 @@ describe('the generated tool table', () => {
     expect(CAT_FACTORY_TOOLS.find((t) => t.name === 'tasks_delete')!.outputSchema).toBeUndefined()
   })
 
+  it('leaves a response union asserting NOTHING but its discriminator, in prose', () => {
+    // The union is the one place where dropping the `anyOf` is not enough. Every union on this
+    // surface has object variants today, so `type: 'object'` would be accurate about the spec as it
+    // stands and would still be the assertion this mode exists to remove: the IR resolves each
+    // `oneOf` branch generically, so a future response union with a string or array variant would
+    // have its honest answer rejected by an older copy of this package. The nullable-pair rule
+    // above cannot see this, because a union rendered on the way out carries no `anyOf` at all.
+    const decisions = CAT_FACTORY_TOOLS.find((tool) => tool.name === 'decisions_list')!
+    const items = (
+      decisions.outputSchema!.properties as { decisions: { items: Record<string, unknown> } }
+    ).decisions.items
+    expect(Object.keys(items)).toEqual(['description'])
+    // What a model actually reads: the discriminator, its known members, and that the list is open.
+    expect(items.description).toContain('Discriminated by `kind`')
+    expect(items.description).toContain('may report a variant not in this list')
+  })
+
   it('describes its inputs with path ids required and the body kept in its own namespace', () => {
     const create = CAT_FACTORY_TOOLS.find((tool) => tool.name === 'tasks_create')!
     expect(create.inputSchema.required).toEqual(['serviceId', 'body'])

@@ -178,7 +178,14 @@ function namedSchema(type, ir, ctx) {
       // A closed `anyOf` is the one assertion a new variant breaks outright, and this surface adds
       // decision kinds. The discriminator and its known values are stated as prose instead, which
       // is what a model reads anyway and what no future variant can invalidate.
-      const schema = { type: 'object' }
+      //
+      // Not even `type` survives. Every union reaching a response today has object variants only,
+      // so `type: 'object'` would be honest about the spec as it stands and would be the same class
+      // of assertion as the `anyOf` it replaced: a future union with a string or array variant (the
+      // IR resolves each `oneOf` branch generically, so nothing stops one) would have its honest
+      // answer rejected by an older copy of this package. The whole point of this mode is that a
+      // schema on the way out asserts only what additivity cannot turn against it.
+      const schema = {}
       if (described) {
         schema.description = `${described} A newer deployment may report a variant not in this list.`
       }
@@ -372,13 +379,19 @@ function assertStreamsClassified(placed) {
   }
 }
 
-/** Fail on a hint entry the spec cannot honour (stale operation, or a read). */
+/** Fail on a hint entry the spec cannot honour (stale operation, an omitted one, or a read). */
 function assertHintsAddressable(placed) {
   const byId = new Map(placed.map((operation) => [operation.id, operation]))
   for (const id of Object.keys(MCP_TOOL_HINTS)) {
     const operation = byId.get(id)
     if (!operation) {
       throw new Error(`MCP: MCP_TOOL_HINTS names '${id}', which the spec no longer has.`)
+    }
+    if (MCP_OMITTED_OPERATIONS[id]) {
+      throw new Error(
+        `MCP: MCP_TOOL_HINTS names '${id}', which MCP_OMITTED_OPERATIONS withholds. A hint on a ` +
+          'tool that is never emitted is dead configuration; drop one of the two entries.',
+      )
     }
     if (operation.httpMethod === 'GET') {
       throw new Error(
@@ -447,10 +460,10 @@ export interface CatFactoryTool {
    * The shape of a successful result, absent when the operation answers with no body.
    *
    * Rendered permissively ON PURPOSE: no \`required\`, no \`enum\`, no closed \`anyOf\`, no length or
-   * range bounds. A caller's MCP client VALIDATES a result against this, and \`/api/v1\` is additive
-   * forever, so every one of those would be a way for an older copy of this package to reject a
-   * newer deployment's honest answer. What is left is the field names and their types, plus the
-   * known members of a vocabulary named in prose.
+   * range bounds, and for a union not even \`type\`. A caller's MCP client VALIDATES a result against
+   * this, and \`/api/v1\` is additive forever, so every one of those would be a way for an older copy
+   * of this package to reject a newer deployment's honest answer. What is left is the field names and
+   * their types, plus the known members of a vocabulary named in prose.
    */
   outputSchema?: {
     type: 'object'

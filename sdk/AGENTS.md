@@ -45,10 +45,10 @@ two escapes, both in `surface.mjs` and both fail-closed:
   pass over the writes. Generation fails on a stale entry or one naming a GET.
 
 **An OUTPUT schema is not an input schema with the arrow reversed.** `emit-mcp.mjs` renders responses
-permissively on purpose (no `required`, no `enum`, no closed `anyOf`, no bounds): a caller's own MCP
-client VALIDATES a result against the declared schema, and `/api/v1` is additive forever, so every
-one of those would be a way for an older copy of the package to reject a newer deployment's honest
-answer. That is the same "an unknown value never raises" invariant the four clients hold to, arrived
+permissively on purpose (no `required`, no `enum`, no closed `anyOf`, no bounds, and for a union not
+even `type`): a caller's own MCP client VALIDATES a result against the declared schema, and
+`/api/v1` is additive forever, so every one of those would be a way for an older copy of the package
+to reject a newer deployment's honest answer. That is the same "an unknown value never raises" invariant the four clients hold to, arrived
 at from the other side.
 
 **Four cross-cutting invariants** every emitter and runtime honours, each a rule about being

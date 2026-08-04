@@ -54,7 +54,14 @@ export function renderResult(
   options: { maxChars?: number; toolName: string; structured?: boolean },
 ): ToolResult {
   if (value === undefined) {
-    return text('The request succeeded. This endpoint returns no content.')
+    // A tool that declares an output schema may not answer successfully with no structured content:
+    // the caller's own client raises a PROTOCOL error for that, which is not shown to the model at
+    // all. So an empty body from an operation the spec says answers with one takes the same
+    // deployment-disagrees-with-the-schema route as a non-object below, rather than the honest
+    // "returns no content" that belongs to a `204` operation (which declares no schema).
+    return options.structured
+      ? text(schemaMismatch(options.toolName, 'answered with no body at all'), true)
+      : text('The request succeeded. This endpoint returns no content.')
   }
   const maxChars = options.maxChars ?? DEFAULT_MAX_RESULT_CHARS
   const json = JSON.stringify(value)
@@ -66,9 +73,8 @@ export function renderResult(
     // than dropped to text, because it means the deployment answered with something the published
     // schema does not describe, and a caller silently getting the text form would never find out.
     return text(
-      `${options.toolName} returned a ${describeJson(value)} where its published output schema ` +
-        'describes an object. This is a mismatch between the deployment and this server; the ' +
-        `response was: ${json}`,
+      schemaMismatch(options.toolName, `returned a ${describeJson(value)}`) +
+        ` The response was: ${json}`,
       true,
     )
   }
@@ -94,6 +100,22 @@ function overCap(toolName: string, length: number, maxChars: number): string {
     'reading the surviving half summarises it as though it were whole. Narrow the request and ' +
     'call again (list endpoints take `limit` and `cursor`, and the debug text reads take ' +
     '`offset`), or raise CAT_FACTORY_MCP_MAX_RESULT_CHARS on this server.'
+  )
+}
+
+/**
+ * The message for a response the published output schema does not describe.
+ *
+ * One wording for both shapes of the same fault, because the fix is the same one either way: this
+ * package and the deployment it is pointed at disagree about what an operation answers with, and
+ * only an upgrade of one of them settles it. Reported as a failed CALL rather than left to the
+ * caller's client, whose protocol-level refusal never reaches the model.
+ */
+function schemaMismatch(toolName: string, what: string): string {
+  return (
+    `${toolName} ${what}, where its published output schema describes an object. This is a ` +
+    'mismatch between the deployment and this server, not something the arguments caused: check ' +
+    'that the two are on compatible versions.'
   )
 }
 

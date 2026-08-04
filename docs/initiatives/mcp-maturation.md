@@ -83,23 +83,8 @@ dump and never uses the word MCP).
       or a separate budget); this is the phase's one image bump, so the harness-side test backfill
       rides it: the `toolServersSection` prompt contract, `harnesses` narrowing, Codex
       `config.toml` end to end, and the Codex+http case above.
-- [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped, with
-      two decisions the slice had to make on the way: - **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a
-      successful result with no `structuredContent` for a tool that declares a schema, and
-      VALIDATES the content it gets. `/api/v1` is additive forever, so every assertion that
-      validation could turn against a newer deployment is dropped on the way out: no `required`, no
-      `enum`, no closed `anyOf`, no bounds. The known members of a vocabulary go in the field's
-      description, where a new member cannot invalidate them. `emit-mcp.mjs` carries this as an
-      `INPUT`/`OUTPUT` mode rather than a second renderer. - **The result cap became a REFUSAL rather than a truncation**, forced by the same obligation:
-      half an object cannot satisfy the schema it was cut out of. It is also the better trade on its
-      own terms, since the old `[TRUNCATED]` note spent the whole cap delivering "this is not valid
-      JSON, narrow instead of reading on".
-
-      What the phase COSTS, for whoever revisits it: the declared output schemas add roughly 31 KB to
-              every `tools/list`, against about 20 KB before, and the text block still accompanies
-              `structuredContent` as the protocol recommends. Dropping the declarations (keeping
-              `structuredContent`) is the cheap reversal if real transcripts show the tool-list read
-              dominating; the compact-JSON change offsets part of it on the result side.
+- [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped. Two
+      decisions it had to make on the way, and the cost it leaves behind, are below.
 
 - [ ] **3. Hosted MCP endpoint.** Mount the existing server behind
       `StreamableHTTPServerTransport` on BOTH facades, behind the public-API key auth and scope
@@ -232,6 +217,30 @@ Recorded so the next iteration does not re-propose them.
 - **Slice 3 is public surface from day one.** Paths, auth semantics and filtering behaviour on
   the hosted endpoint fall under the ADR 0032 stability contract immediately; there is no
   internal-first soft launch for an endpoint whose whole point is external callers.
+
+## Slice 2's two decisions, and what they cost
+
+- **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a successful
+  result with no `structuredContent` for a tool that declares a schema, and VALIDATES the content it
+  gets. `/api/v1` is additive forever, so every assertion that validation could turn against a newer
+  deployment is dropped on the way out: no `required`, no `enum`, no closed `anyOf`, no bounds, and
+  for a union not even `type` (every union on the surface has object variants today, so
+  `type: 'object'` would be accurate about the spec as it stands and would still be the assertion a
+  future string-or-array variant is rejected by). The known members of a vocabulary go in the field's
+  description, where a new member cannot invalidate them. `emit-mcp.mjs` carries this as an
+  `INPUT`/`OUTPUT` mode rather than a second renderer.
+- **The result cap became a REFUSAL rather than a truncation**, forced by the same obligation: half an
+  object cannot satisfy the schema it was cut out of. It is also the better trade on its own terms,
+  since the old `[TRUNCATED]` note spent the whole cap delivering "this is not valid JSON, narrow
+  instead of reading on".
+- **What it costs, for whoever revisits it:** the declared output schemas are about 41 KB of JSON
+  across the table, taking `tools/list` from roughly 20 KB to roughly 31 KB on the wire, and the text
+  block still accompanies `structuredContent` as the protocol recommends. The compact-JSON change
+  offsets part of it on the result side. Two levers if real transcripts show the tool-list read
+  dominating, cheapest first: the notification `payload` object is inlined by three tools at ~3.9 KB
+  each (29% of the total) and a model cannot act on thirty mutually exclusive payload shapes anyway,
+  so rendering it as `{}` reclaims ~12 KB on its own; `debug_get_run` is the single largest entry at
+  ~5.9 KB. Dropping the declarations entirely (keeping `structuredContent`) is the full reversal.
 
 ## Gotchas slice 2 surfaced
 

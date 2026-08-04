@@ -32,7 +32,10 @@ const port = Number(process.env.SDK_SMOKETEST_PORT ?? 8899)
 // than a developer's laptop — and must fail rather than quietly shrink the matrix.
 const requireAll = process.env.CI === 'true' || process.env.SDK_SMOKETEST_REQUIRE_ALL === 'true'
 
-const selected = only && only !== MCP_PHASE ? RUNNERS.filter((r) => r.name === only) : RUNNERS
+// `--only=mcp` names a phase rather than an SDK, so it filters the SDK list down to NOTHING and the
+// MCP half carries the run on its own. Special-casing it into the "everything" branch instead would
+// have `--only=mcp` compile Java to prove something about a Node binary.
+const selected = only ? RUNNERS.filter((r) => r.name === only) : RUNNERS
 const runMcp = !only || only === MCP_PHASE
 if (selected.length === 0 && !runMcp) {
   console.error(
@@ -112,31 +115,35 @@ try {
   await rm(workDir, { recursive: true, force: true })
 }
 
-console.log('')
-console.log('=== cross-SDK parity ===')
-
+// A heading with nothing under it reads as a section that passed. With `--only=mcp` no SDK was
+// selected at all, so the cross-SDK half is not reported rather than reported empty.
 const problems = reports.length >= 1 ? compareReports(reports) : []
-for (const problem of problems) {
-  console.error(`  ${problem.kind.toUpperCase()}: ${problem.detail}`)
-}
-if (problems.length === 0 && reports.length > 0) {
-  const keyCount = Object.keys(reports[0]?.observations ?? {}).length
-  console.log(`  ${reports.length} SDK(s) agreed on all ${keyCount} observations.`)
-}
+if (selected.length > 0) {
+  console.log('')
+  console.log('=== cross-SDK parity ===')
 
-if (skipped.length > 0) {
-  const line = `  SKIPPED (toolchain absent): ${skipped.join(', ')}`
-  if (requireAll) console.error(line)
-  else console.warn(line)
-}
-if (errored.length > 0) {
-  console.error(`  ERRORED: ${errored.join(', ')}`)
-}
+  for (const problem of problems) {
+    console.error(`  ${problem.kind.toUpperCase()}: ${problem.detail}`)
+  }
+  if (problems.length === 0 && reports.length > 0) {
+    const keyCount = Object.keys(reports[0]?.observations ?? {}).length
+    console.log(`  ${reports.length} SDK(s) agreed on all ${keyCount} observations.`)
+  }
 
-// A comparison across ONE report is not a parity check. Say so rather than reporting the
-// vacuous pass that "0 disagreements" would otherwise look like.
-if (reports.length < 2 && !only) {
-  console.error('  NOTE: fewer than two SDKs reported, so nothing was actually compared.')
+  if (skipped.length > 0) {
+    const line = `  SKIPPED (toolchain absent): ${skipped.join(', ')}`
+    if (requireAll) console.error(line)
+    else console.warn(line)
+  }
+  if (errored.length > 0) {
+    console.error(`  ERRORED: ${errored.join(', ')}`)
+  }
+
+  // A comparison across ONE report is not a parity check. Say so rather than reporting the
+  // vacuous pass that "0 disagreements" would otherwise look like.
+  if (reports.length < 2 && !only) {
+    console.error('  NOTE: fewer than two SDKs reported, so nothing was actually compared.')
+  }
 }
 
 if (runMcp) {

@@ -143,7 +143,9 @@ Concretely:
   emitted version carries no `required`, no `enum`, no closed `anyOf` and no length or range bounds.
   Each of those would be a way for an older copy of this package to reject a newer deployment's
   honest answer. The known members of a vocabulary are stated in the field's description instead,
-  where a new member cannot invalidate them.
+  where a new member cannot invalidate them, and a UNION asserts nothing at all beyond its
+  discriminator in prose: not even `type`, since the variants a union gains later need not be
+  objects.
 - **Argument validation stops at the door.** Required path ids are checked so a request can be
   built at all; the body goes to the deployment, whose 422 names the field and is far more useful
   to a model than anything this layer could say.

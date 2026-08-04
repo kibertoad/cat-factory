@@ -8,9 +8,9 @@ generator already had the data for.
 The tool table now declares an `outputSchema` for every operation that answers with a JSON object and
 returns `structuredContent` beside the text, so a host or agent framework can consume a result without
 re-parsing prose. Those schemas are rendered deliberately loosely (no `required`, no `enum`, no closed
-`anyOf`, no bounds): a caller's MCP client validates against them and `/api/v1` is additive forever,
-so anything stricter would let an older copy of this package reject a newer deployment's honest
-answer. `destructiveHint` / `idempotentHint` are now set on the operations whose consequence is real
+`anyOf`, no bounds, and for a union not even `type`): a caller's MCP client validates against them and
+`/api/v1` is additive forever, so anything stricter would let an older copy of this package reject a
+newer deployment's honest answer. `destructiveHint` / `idempotentHint` are now set on the operations whose consequence is real
 money or a merged pull request, and left unset elsewhere so the protocol's cautious defaults stand.
 
 Two behaviour changes to know about:

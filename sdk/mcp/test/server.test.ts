@@ -289,4 +289,21 @@ describe('the MCP facade end to end', () => {
     expect(instructions).toContain('15-30 seconds')
     expect(instructions).toContain('terminal')
   })
+
+  it('does not promise cheap tools on a server that serves only spending ones', async () => {
+    // Prose assembled from data has to read as English for every filter combination, and an
+    // allow-list naming just the spending tools is the one that breaks the closing sentence: there
+    // is no "everything else" on this server, and a model told there is learns that the instructions
+    // are not about the server in front of it.
+    const spendingOnly = await connect({ ...OPTIONS, tools: ['tasks_start'] }, () => json({}))
+    const confirm = (spendingOnly.client.getInstructions() ?? '')
+      .split('\n\n')
+      .find((section) => section.startsWith('Confirm with the user'))!
+    expect(confirm).toContain('`tasks_start`')
+    expect(confirm).not.toContain('Everything else')
+
+    // ...and it is still there when there IS something else.
+    const mixed = await connect({ ...OPTIONS, tools: ['tasks_start', 'tasks_get'] }, () => json({}))
+    expect(mixed.client.getInstructions() ?? '').toContain('Everything else here is cheap.')
+  })
 })

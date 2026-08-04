@@ -116,6 +116,10 @@ function costlyTools(exposed: ToolSelection['exposed']): string | null {
   if (exposes('tasks_delete')) {
     lines.push('A deleted task does not come back.')
   }
-  lines.push('Everything else here is cheap.')
+  // Only where there IS something else. A filter can narrow this server down to the spending tools
+  // alone (an allow-list naming just `tasks_start` is the realistic one), and a closing sentence
+  // about everything else would then be describing tools the model cannot see, which teaches it
+  // that this prose is not about the server in front of it.
+  if (exposed.length > costly.length) lines.push('Everything else here is cheap.')
   return lines.join(' ')
 }

@@ -39,10 +39,10 @@ export interface CatFactoryTool {
    * The shape of a successful result, absent when the operation answers with no body.
    *
    * Rendered permissively ON PURPOSE: no `required`, no `enum`, no closed `anyOf`, no length or
-   * range bounds. A caller's MCP client VALIDATES a result against this, and `/api/v1` is additive
-   * forever, so every one of those would be a way for an older copy of this package to reject a
-   * newer deployment's honest answer. What is left is the field names and their types, plus the
-   * known members of a vocabulary named in prose.
+   * range bounds, and for a union not even `type`. A caller's MCP client VALIDATES a result against
+   * this, and `/api/v1` is additive forever, so every one of those would be a way for an older copy
+   * of this package to reject a newer deployment's honest answer. What is left is the field names and
+   * their types, plus the known members of a vocabulary named in prose.
    */
   outputSchema?: {
     type: 'object'
@@ -329,7 +329,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Choose an implementation approach\n\nPick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/fork/choose` (operation `choosePublicRunFork`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"custom":{"anyOf":[{"type":"string"},{"type":"null"}]},"forkId":{"anyOf":[{"type":"string"},{"type":"null"}]},"note":{"anyOf":[{"type":"string"},{"type":"null"}]}},"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.chooseFork(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['chooseFork']>[1]),
   },
   {
@@ -340,7 +340,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Incorporate the answers\n\nFold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/incorporate` (operation `incorporatePublicRunRequirements`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"feedback":{"type":"string","maxLength":4000}},"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.incorporate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['incorporate']>[1]),
   },
   {
@@ -351,7 +351,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: true,
     description: 'List a run\'s parked decisions\n\nRead what a run is currently asking a human: requirement-review findings (with the stable item ids a reply addresses) and any implementation-fork choice. `parked` is true while the run is blocked awaiting one of them.\n\nCalls `GET /api/v1/runs/{runId}/decisions` (operation `listPublicRunDecisions`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."}},"additionalProperties":false,"required":["runId"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.list(str(args, 'runId')),
   },
   {
@@ -362,7 +362,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Proceed with the current requirements\n\nSettle the requirements phase and advance the parked run (used when nothing is outstanding). Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/proceed` (operation `proceedPublicRunRequirements`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."}},"additionalProperties":false,"required":["runId"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.proceed(str(args, 'runId')),
   },
   {
@@ -373,7 +373,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Answer a review finding\n\nRecord an answer to one reviewer finding. Returns the run\'s updated decision list. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}/reply` (operation `replyPublicRunFinding`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"itemId":{"type":"string","description":"Path parameter `itemId`."},"body":{"type":"object","properties":{"reply":{"type":"string","minLength":1,"maxLength":4000}},"required":["reply"],"description":"The request body."}},"additionalProperties":false,"required":["runId","itemId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.replyToFinding(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['replyToFinding']>[2]),
   },
   {
@@ -384,7 +384,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Re-review the incorporated document\n\nRun one more reviewer pass over the incorporated document. On convergence the parked run advances. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/re-review` (operation `reReviewPublicRunRequirements`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."}},"additionalProperties":false,"required":["runId"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.reReview(str(args, 'runId')),
   },
   {
@@ -395,7 +395,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Resolve a review at its iteration cap\n\nPick how a review that exhausted its reviewer-pass budget proceeds: one more round, proceed with the last incorporated document, or stop and reset the task. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/requirements/resolve-exceeded` (operation `resolvePublicRunRequirementsExceeded`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["extra-round","proceed","stop-reset"]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveExceeded']>[1]),
   },
   {
@@ -406,6 +406,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Resolve a run parked on the task\'s input check\n\nSettle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/input-gate/resolve` (operation `resolvePublicRunInputGate`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["recheck","proceed"]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.resolveInputGate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveInputGate']>[1]),
   },
   {
@@ -416,7 +417,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Resolve a parked judge verdict\n\nSettle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/judge/resolve` (operation `resolvePublicRunJudge`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["proceed","bounce","stop"]},"feedback":{"anyOf":[{"type":"string"},{"type":"null"}]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.resolveJudge(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveJudge']>[1]),
   },
   {
@@ -427,7 +428,7 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     readOnly: false,
     description: 'Dismiss or reopen a finding\n\nDismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a `decide`-scope key.\n\nCalls `PATCH /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}` (operation `setPublicRunFindingStatus`).',
     inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"itemId":{"type":"string","description":"Path parameter `itemId`."},"body":{"type":"object","properties":{"status":{"type":"string","enum":["dismissed","open"]}},"required":["status"],"description":"The request body."}},"additionalProperties":false,"required":["runId","itemId","body"]},
-    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"type":"object","description":"Discriminated by `kind` (requirements-review | fork | judge). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
+    outputSchema: {"type":"object","properties":{"decisions":{"type":"array","items":{"description":"Discriminated by `kind` (requirements-review | fork | judge | input-gate). A newer deployment may report a variant not in this list."}},"parked":{"type":"boolean"},"runId":{"type":"string"},"status":{"type":"string","description":"One of: running, blocked, paused, done, failed. A newer deployment may report a member not in this list."},"taskId":{"type":"string"}}},
     invoke: (client, args) => client.decisions.setFindingStatus(str(args, 'runId'), str(args, 'itemId'), args.body as Parameters<CatFactoryClient['decisions']['setFindingStatus']>[2]),
   },
   {
