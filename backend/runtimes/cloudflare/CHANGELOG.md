@@ -1,5 +1,51 @@
 # @cat-factory/worker
 
+## 0.141.1
+
+### Patch Changes
+
+- 1106c93: BREAKING (public API, the last permitted break): the final pre-stability polish of `/api/v1`,
+  adopted together with the stability commitment (ADR 0032). From this release the public API does
+  not change without an incremental migration path and a version change.
+
+  - `POST /api/v1/initiatives` moved to `POST /api/v1/jobs`, unifying the headless job lifecycle
+    under one resource root. The SDK group `initiatives` is now `jobs`; the wire schemas renamed to
+    `CreatePublicJob` / `PublicJobAccepted`.
+  - `publicTask.executionId` renamed to `publicTask.runId`, matching `publicRun.runId` and
+    `/api/v1/runs/:runId/...`.
+  - `POST /api/v1/tasks/:taskId/start` now requires a `decide`-scope key when the resolved pipeline
+    can park on a human decision, the same rule `POST /api/v1/jobs` applies. Existing `write` keys
+    that started such pipelines get `403 pipeline_requires_decide_scope`.
+
+  **Check your integrations against this last one before upgrading.** A pipeline parks in three ways,
+  and the third is easy to miss: an approval gate on an enabled step, an inline review/brainstorm
+  kind, or an unbounded human-wait gate (`human-review`). That third case means the shipped
+  **Adaptive build** preset (`pl_full`) now needs a `decide` key, because it carries a risk-gated
+  `human-review` step. The unconditional presets (`Standard build`, `Simple build`) never park and
+  remain startable with a plain `write` key, as do the pipelines a workspace authored without gates
+  or review kinds.
+
+  Mint a `decide`-scope key for any integration that starts parking pipelines. The scope only widens
+  what a key may set in motion; it grants no destructive capability (that is `admin`).
+
+- Updated dependencies [1106c93]
+  - @cat-factory/contracts@0.219.0
+  - @cat-factory/orchestration@0.190.0
+  - @cat-factory/server@0.202.0
+  - @cat-factory/agents@0.106.6
+  - @cat-factory/kernel@0.221.1
+  - @cat-factory/consensus@0.13.33
+  - @cat-factory/eks@0.1.207
+  - @cat-factory/gates@0.8.53
+  - @cat-factory/gitlab@0.15.12
+  - @cat-factory/integrations@0.120.1
+  - @cat-factory/observability-otel@0.5.7
+  - @cat-factory/prompt-fragments@0.15.44
+  - @cat-factory/spend@0.13.9
+  - @cat-factory/provider-cloudflare@0.7.359
+  - @cat-factory/caching@0.13.7
+  - @cat-factory/observability-langfuse@0.9.50
+
 ## 0.141.0
 
 ### Minor Changes
