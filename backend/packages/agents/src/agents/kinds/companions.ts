@@ -1,6 +1,14 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { DEFAULT_COMPANION_THRESHOLD } from '@cat-factory/contracts'
+import type { AgentKindRegistry } from './registry.js'
 
+// The BUILT-IN companion catalog. The lookups live on the app-owned `AgentKindRegistry`
+// (which pre-loads this list in its constructor), so a deployment registers its own
+// producer/reviewer rework pair through the same seam the built-ins arrive by — see
+// `registry.registerCompanion`. Nothing here is a module-global `Map` any more, so module
+// identity stops mattering for a separately-published extension package and a test builds a
+// fresh registry instead of clearing shared state.
+//
 // Companion agents review the output of the immediately-preceding producer step,
 // rate its overall quality (0..1) and — below the step's threshold — loop the
 // producer back for automatic rework before a human is asked, failing the run once
@@ -79,30 +87,49 @@ export const COMPANIONS: CompanionDefinition[] = [
   },
 ]
 
-const BY_KIND = new Map<string, CompanionDefinition>(COMPANIONS.map((c) => [c.kind, c]))
+/**
+ * The built-in catalog, indexed. A frozen CONSTANT, not a registration surface: the mutable
+ * half moved to `AgentKindRegistry` (see the header), and this is what answers for a caller
+ * that legitimately has no registry to consult. Same shape as `BUILTIN_GATABLE_KINDS`.
+ */
+const BUILTIN_BY_KIND: ReadonlyMap<string, CompanionDefinition> = new Map(
+  COMPANIONS.map((c) => [c.kind, c]),
+)
 
-/** Whether `kind` is a companion agent (driven by the engine's companion review loop). */
-export function isCompanionKind(kind: AgentKind): boolean {
-  return BY_KIND.has(kind)
-}
+// The registry-aware lookups. Each mirrors `isGatableKind`: the REGISTRY answers when it is
+// present, and the built-in catalog answers otherwise. `registry` is optional for the same
+// reason it is there — a caller validating a built-in catalog (the kernel seed test, a pure
+// shape check) genuinely has none, while every boundary that could meet a deployment's own
+// companion (pipeline save, run start, dispatch, prompt assembly) passes one. A site that
+// omits it silently sees built-ins only, which is why the ones that must not are threaded.
 
 /** The companion definition for `kind`, or undefined if it is not a companion. */
-export function companionFor(kind: AgentKind): CompanionDefinition | undefined {
-  return BY_KIND.get(kind)
+export function companionFor(
+  kind: AgentKind,
+  registry?: AgentKindRegistry,
+): CompanionDefinition | undefined {
+  return registry?.companionFor(kind) ?? BUILTIN_BY_KIND.get(kind)
 }
 
-/** The producer kinds a companion may be attached to (empty if not a companion). */
-export function companionTargets(kind: AgentKind): AgentKind[] {
-  return BY_KIND.get(kind)?.targets ?? []
+/** Whether `kind` is a companion agent (driven by the engine's companion review loop). */
+export function isCompanionKind(kind: AgentKind, registry?: AgentKindRegistry): boolean {
+  return companionFor(kind, registry) !== undefined
+}
+
+/** The producer kinds a companion may be attached to (empty if it is not a companion). */
+export function companionTargets(kind: AgentKind, registry?: AgentKindRegistry): AgentKind[] {
+  return companionFor(kind, registry)?.targets ?? []
 }
 
 /**
- * Whether `kind` is a companion that reviews in a CONTAINER (cloning the producer's PR
- * branch and reading the real repository) rather than inline. The single source of truth
- * the executor uses to route the companion through the container path, the engine uses to
- * keep it off the inline companion path, and the prompt uses to tell it to read the
- * checkout. False for non-companions and inline companions.
+ * Whether `kind` reviews in a CONTAINER (cloning the producer's PR branch to read the real
+ * repository) rather than inline. The single source of truth the executor uses to route the
+ * companion through the container path, the engine uses to keep it off the inline companion
+ * path, and the prompt uses to tell it to read the checkout.
  */
-export function isContainerBackedCompanion(kind: AgentKind): boolean {
-  return BY_KIND.get(kind)?.surface === 'container-explore'
+export function isContainerBackedCompanion(
+  kind: AgentKind,
+  registry?: AgentKindRegistry,
+): boolean {
+  return companionFor(kind, registry)?.surface === 'container-explore'
 }

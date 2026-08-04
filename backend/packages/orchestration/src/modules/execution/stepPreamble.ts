@@ -148,7 +148,7 @@ export async function runStepPreamble(
   // own gate because either reason is sufficient and they need not agree: a companion with no
   // gate of its own still cascades.
   const gatedOut = step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)
-  if (gatedOut || producerWasSkipped(instance.steps, instance.currentStep)) {
+  if (gatedOut || producerWasSkipped(instance.steps, instance.currentStep, deps.agentKindRegistry)) {
     return {
       kind: 'stop',
       result: await deps.skipGatedStep(workspaceId, instance, step, isFinalStep),

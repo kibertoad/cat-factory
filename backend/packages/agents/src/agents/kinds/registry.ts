@@ -11,6 +11,8 @@ import { normalizeSkillRefs, normalizeToolRefs } from './capabilities.js'
 import type { AgentPresentation } from '@cat-factory/contracts'
 import type { AgentTrait, AgentTraitDefinition } from './traits.js'
 import { STANDARD_TRAIT_DEFINITIONS } from './traits.js'
+import type { CompanionDefinition } from './companions.js'
+import { COMPANIONS } from './companions.js'
 import type { AgentTuning } from './tuning.js'
 import type { AgentKindVariantDefinition } from './variants.js'
 import type { StructuredOutput } from './structured-output.js'
@@ -243,11 +245,23 @@ export class AgentKindRegistry {
   // same reason those do, but they are deliberately NOT kinds: a variant never appears in
   // `all()`, never answers `get()`, and never changes a behavioural answer. See ./variants.
   private readonly variantDefinitions = new Map<string, AgentKindVariantDefinition>()
+  // COMPANION pairings (companion kind → what it reviews), pre-loaded with the built-in catalog
+  // below. Here rather than in a module `Map` for the reason traits and capabilities are: a
+  // companion is a relationship BETWEEN agent kinds, so the whole vocabulary stays on one
+  // injectable seam a deployment can extend and a test can build fresh.
+  //
+  // This is also what a custom REWORK PAIR needs. Before it, a deployment wanting "my producer,
+  // reviewed and looped back below a bar" had to reach for a judge, which is a different machine:
+  // a judge scores against a rubric and disposes, where a companion loops its PRODUCER back for
+  // automatic rework on the budget the engine already tracks. Registering the pair is now the
+  // supported way to say that.
+  private readonly companions = new Map<AgentKind, CompanionDefinition>()
 
   constructor() {
     for (const definition of STANDARD_TRAIT_DEFINITIONS) {
       this.traitDefinitions.set(definition.id, definition)
     }
+    for (const companion of COMPANIONS) this.companions.set(companion.kind, companion)
   }
 
   /** Register a custom agent kind. A later registration of the same id replaces the earlier one. */
@@ -454,6 +468,59 @@ export class AgentKindRegistry {
   /** Give an EXISTING kind extra tool servers — the {@link assignSkills} analogue. */
   assignToolServers(kind: AgentKind, refs: Iterable<AgentKindToolRef>): void {
     this.assignedToolServers.set(kind, [...(this.assignedToolServers.get(kind) ?? []), ...refs])
+  }
+
+  /**
+   * Register a COMPANION: a kind that reviews the output of the step immediately before it,
+   * rates it, and below the step's threshold loops that producer back for automatic rework
+   * before any human is asked.
+   *
+   * The companion kind and its `targets` are ordinary agent kinds, registered through
+   * {@link register} like any other; this only records the PAIRING. A later registration of the
+   * same companion kind replaces the earlier one, matching every other seam here.
+   *
+   * Two things a registration must respect, both enforced elsewhere rather than here because
+   * they are properties of a PIPELINE, not of the pair: a companion step must sit immediately
+   * after a step whose kind is in its `targets` (`assertValidCompanionPlacement`), and a
+   * `container-explore` companion needs the producer to have pushed a branch to read.
+   */
+  registerCompanion(definition: CompanionDefinition): void {
+    this.companions.set(definition.kind, definition)
+  }
+
+  /** Register several companions at once. */
+  registerCompanions(definitions: Iterable<CompanionDefinition>): void {
+    for (const definition of definitions) this.registerCompanion(definition)
+  }
+
+  /** The companion definition for `kind`, or undefined if it is not a companion. */
+  companionFor(kind: AgentKind): CompanionDefinition | undefined {
+    return this.companions.get(kind)
+  }
+
+  /** Whether `kind` is a companion (driven by the engine's companion review loop). */
+  isCompanionKind(kind: AgentKind): boolean {
+    return this.companions.has(kind)
+  }
+
+  /** The producer kinds a companion may be attached to (empty if `kind` is not a companion). */
+  companionTargets(kind: AgentKind): AgentKind[] {
+    return this.companions.get(kind)?.targets ?? []
+  }
+
+  /**
+   * Whether `kind` reviews in a CONTAINER (cloning the producer's PR branch and reading the real
+   * repository) rather than inline. The single answer the executor uses to route the companion
+   * through the container path, the engine uses to keep it off the inline companion path, and the
+   * prompt uses to tell it to read the checkout. False for non-companions and inline companions.
+   */
+  isContainerBackedCompanion(kind: AgentKind): boolean {
+    return this.companions.get(kind)?.surface === 'container-explore'
+  }
+
+  /** Every registered companion (built-ins first, then registration order). */
+  allCompanions(): CompanionDefinition[] {
+    return [...this.companions.values()]
   }
 
   /**

@@ -7,7 +7,7 @@ import {
 } from './prompts/acceptance.js'
 import { isStandardsContextFile } from './runtime/fragments.js'
 import { companionSystemPrompt } from './prompts/companion.js'
-import { companionTargets, isCompanionKind } from './kinds/companions.js'
+import { companionTargets } from './kinds/companions.js'
 import { READ_ONLY_GUARDRAIL, isReadOnlyAgentKind } from './kinds/read-only.js'
 import { SPIKE_AGENT_KIND, spikeContextSection } from './kinds/spike.js'
 import { businessLogicSystemPrompt } from './prompts/business-logic.js'
@@ -190,7 +190,7 @@ function applySurfaceDirectives(
 export function baseSystemPromptFor(kind: AgentKind, registry: AgentKindRegistry): string {
   // Companion kinds (reviewer, architect-companion, spec-companion, …) win over every
   // built-in track: they grade a prior step's output and return a JSON rating.
-  const companion = companionSystemPrompt(kind)
+  const companion = companionSystemPrompt(kind, registry)
   if (companion) return companion
   const phase = phaseForKind(kind)
   if (phase) return standardSystemPrompt(phase)
@@ -382,7 +382,7 @@ function buildBaseUserPrompt(
   if (taskParams) lines.push(taskParams)
   // A companion grades a specific preceding producer; name it explicitly so the
   // model rates the right output rather than guessing among the prior-agent sections.
-  const companionTarget = companionTargetSection(context)
+  const companionTarget = companionTargetSection(context, registry)
   if (companionTarget) lines.push(companionTarget)
   const linked = linkedContextSection(context, opts)
   if (linked) lines.push(linked)
@@ -428,9 +428,12 @@ function buildBaseUserPrompt(
  * producer is adjacent, ambiguous when other steps sit in between. Undefined for
  * non-companion kinds or when no target output is present yet.
  */
-function companionTargetSection(context: AgentRunContext): string | undefined {
-  if (!isCompanionKind(context.agentKind)) return undefined
-  const targets = companionTargets(context.agentKind)
+function companionTargetSection(
+  context: AgentRunContext,
+  registry: AgentKindRegistry,
+): string | undefined {
+  const targets = companionTargets(context.agentKind, registry)
+  if (targets.length === 0) return undefined
   for (let i = context.priorOutputs.length - 1; i >= 0; i--) {
     const produced = context.priorOutputs[i]!
     if (targets.includes(produced.agentKind)) {

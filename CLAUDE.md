@@ -675,6 +675,16 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
   precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
   Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Companions**: a REWORK PAIR. A companion grades the immediately-preceding producer's output and,
+  below the step's threshold, loops THAT producer back for automatic rework on a bounded budget
+  before any human is asked. **Adding one is `AgentKindRegistry.registerCompanion`**, beside the
+  kind's own registration: a companion is a relationship BETWEEN kinds, so it lives on the kind
+  registry rather than a sixth. Traps: the pairing is registered SEPARATELY from the kind, so every
+  read goes through the registry (a projection off the kind's own definition misses all of them);
+  the free lookups take the registry OPTIONALLY and fall back to the built-ins (`isGatableKind`'s
+  shape), so a site that omits it silently sees built-ins only; and adjacency is an invariant
+  (`assertValidCompanionPlacement`) because the engine grades the immediate predecessor. Choose it
+  over a JUDGE when the remedy is the producer running again rather than a verdict being disposed.
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.

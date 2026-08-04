@@ -322,9 +322,13 @@ export const COMPANION_ARCHETYPES: AgentArchetype[] = [
 ]
 
 /**
- * Producer agent kind → its companion agent kind. Mirrors the backend `COMPANIONS` registry
- * (`@cat-factory/agents`). The builder shows an "add companion" toggle on a producer step
- * found here, and inserts/removes the companion immediately after it.
+ * Producer agent kind → its companion agent kind, for the BUILT-IN pairs. Mirrors the backend
+ * `COMPANIONS` catalog (`@cat-factory/agents`). The builder shows an "add companion" toggle on
+ * a producer step found here, and inserts/removes the companion immediately after it.
+ *
+ * A DEPLOYMENT's own pair does not live here: it arrives on the snapshot as a custom agent
+ * kind carrying `companionTargets`, and is projected into {@link customCompanionTargets} by the
+ * agents store. Both are consulted below, built-ins first.
  */
 export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
   coder: 'reviewer',
@@ -335,18 +339,54 @@ export const COMPANION_FOR_PRODUCER: Record<string, AgentKind> = {
 
 const COMPANION_KINDS: ReadonlySet<string> = new Set(COMPANION_ARCHETYPES.map((a) => a.kind))
 
-/** The companion kind that depends on a producer kind, or undefined if it has none. */
+/**
+ * Reactive read-model of the deployment's CUSTOM companion pairings (companion kind → the
+ * producer kinds it reviews), kept in sync by the agents store from the snapshot's
+ * `customAgentKinds[].companionTargets`.
+ *
+ * A `shallowRef` for the same reason {@link customAgentKindMeta} is one: the pure lookups below
+ * must resolve a registered companion, and re-render when the catalog changes, without importing
+ * the store (circular) or mutating the frozen built-in map. Empty until the store first
+ * populates it, so a custom companion degrades to "not a companion" — an ordinary palette block
+ * — exactly as before registration.
+ */
+const customCompanionTargets = shallowRef<Record<string, readonly AgentKind[]>>({})
+
+/** Replace the custom companion projection (called only by the agents store). */
+export function setCustomCompanionTargets(map: Record<string, readonly AgentKind[]>): void {
+  customCompanionTargets.value = map
+}
+
+/** Test-only: clear the custom companion projection so a spec starts from built-ins only. */
+export function __resetCustomCompanionTargetsForTest(): void {
+  customCompanionTargets.value = {}
+}
+
+/**
+ * The companion kind that depends on a producer kind, or undefined if it has none.
+ *
+ * Built-ins win. A deployment cannot re-point `coder` at its own reviewer by registering one,
+ * for the same reason `agentKindMeta`'s precedence puts built-ins first and the backend registry
+ * never shadows a built-in kind: the shipped pairing is the one the engine's own pipelines rely
+ * on, and a silent re-point would change what every stock pipeline does.
+ */
 export function companionForProducer(kind: string): AgentKind | undefined {
-  return COMPANION_FOR_PRODUCER[kind]
+  const builtin = COMPANION_FOR_PRODUCER[kind]
+  if (builtin) return builtin
+  for (const [companion, targets] of Object.entries(customCompanionTargets.value)) {
+    if (targets.includes(kind)) return companion
+  }
+  return undefined
 }
 
 /**
  * Whether a kind is a dependent producer-companion (reviewer / architect-companion /
- * spec-companion) — rendered as a toggle on its producer, not a standalone palette block.
- * Distinct from `pipelineRender`'s `isCompanionKind`, which also counts the Tester's `fixer`.
+ * spec-companion, or a deployment's own) — rendered as a toggle on its producer, not a
+ * standalone palette block. Distinct from `pipelineRender`'s `isCompanionKind`, which also
+ * counts the Tester's `fixer`.
  */
 export function isProducerCompanion(kind: string): boolean {
-  return COMPANION_KINDS.has(kind)
+  return COMPANION_KINDS.has(kind) || kind in customCompanionTargets.value
 }
 
 /**

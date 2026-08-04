@@ -327,7 +327,7 @@ export class ExecutionService {
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
     this.clock = clock
-    this.stepGraph = new StepGraph(clock)
+    this.stepGraph = new StepGraph(clock, agentKindRegistry)
     // The task's merge POLICY (which preset governs a run) + the EVIDENCE behind it (settling the
     // run's merge track record when a human merges or declines), extracted as one collaborator so
     // neither concern re-accretes onto the engine.
@@ -376,6 +376,7 @@ export class ExecutionService {
     })
     this.companionController = new CompanionController({
       contextBuilder: this.contextBuilder,
+      agentKindRegistry,
       spend: spendService,
       idGenerator,
       previewStepModel: (ctx) => this.runDispatcher.previewStepModel(ctx),
@@ -491,6 +492,7 @@ export class ExecutionService {
     // instance. The engine methods they reach into are passed BOUND, as with the gate windows.
     this.runActions = buildRunActionControllers({
       admission: this.admission,
+      agentKindRegistry: this.agentKindRegistry,
       blockRepository: this.blockRepository,
       clock: this.clock,
       contextBuilder: this.contextBuilder,

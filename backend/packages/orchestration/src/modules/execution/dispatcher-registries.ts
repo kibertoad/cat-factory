@@ -369,7 +369,8 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
       kind: 'inline-companion',
       order: 160,
       canHandle: ({ step }) =>
-        isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind),
+        isCompanionKind(step.agentKind, d.agentKindRegistry) &&
+        !isContainerBackedCompanion(step.agentKind, d.agentKindRegistry),
       handle: ({ workspaceId, instance, step, block, isFinalStep, options }) =>
         d.companionController.evaluate(workspaceId, instance, step, block, isFinalStep, options),
     },
@@ -434,7 +435,8 @@ export function buildStepCompletionInterceptors(
       kind: 'companion-verdict',
       order: 100,
       canIntercept: ({ step }) =>
-        isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind),
+        isCompanionKind(step.agentKind, d.agentKindRegistry) &&
+        isContainerBackedCompanion(step.agentKind, d.agentKindRegistry),
       intercept: async ({ workspaceId, instance, step, isFinalStep, result }) => {
         const companionBlock = await d.blockRepository.get(workspaceId, instance.blockId)
         if (!companionBlock) return null
