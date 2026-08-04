@@ -180,7 +180,10 @@ export class LangfuseTraceSink implements LlmTraceSink {
         metadata: {
           agentKind: context.agentKind,
           // The ordinal a trajectory orders by: a tool loop routinely fires several calls inside
-          // one millisecond, so start time alone cannot sequence them.
+          // one millisecond, so start time alone cannot sequence them. The dispatch rides with
+          // it because `seq` restarts at zero on each one, so a re-run's spans would otherwise
+          // be indistinguishable from the first round's.
+          ...(context.jobId ? { jobId: context.jobId } : {}),
           ...(span.seq !== undefined ? { seq: span.seq } : {}),
           ...(span.argsDropped ? { argsDroppedChars: span.argsDropped } : {}),
           ...(span.resultDropped ? { resultDroppedChars: span.resultDropped } : {}),

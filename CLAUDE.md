@@ -905,10 +905,11 @@ The full model, and the authority for anything recording an LLM call:
   spent it by whoever OWNS the boundary.
 - **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
   add a query.
-- **The tool-call TRAJECTORY is one sink per invocation, ordered by `(jobId, seq)`** and never by a
-  timestamp several calls share; a harness image that numbers nothing has its trajectory skipped
-  rather than collapsed onto colliding ids, and `bodies` marks a withheld arg list so it never reads
-  as a tool that took none.
+- **The tool-call TRAJECTORY is one sink per invocation, ordered SERVER-SIDE by `(startedAt, seq)`**
+  and never by the drain stamp several calls share nor by the job id, a string that sorts dispatches
+  by agent-kind spelling; a harness image that numbers nothing has its trajectory skipped rather
+  than collapsed onto colliding ids, and `bodies` marks a withheld arg list so it never reads as a
+  tool that took none.
 - **Bodies are double-gated** (`LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, via
   kernel's `createStoreAgentContextGate`), on every path that captures a model body, external trace
   fan-out included; a read that throws fails closed.

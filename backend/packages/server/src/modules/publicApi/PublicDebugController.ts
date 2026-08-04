@@ -83,6 +83,23 @@ function readCursor(raw: string | undefined): { cursor?: DebugCursor } | { inval
 const invalidCursor = <E extends AppEnv>(c: Context<E>) =>
   c.json({ error: { code: 'invalid_cursor', message: 'Malformed cursor' } }, 400)
 
+/**
+ * A cursor paired with `order=trajectory`: the ordered read is a bounded prefix and issues no
+ * cursor, so there is nothing the position could have come from. REFUSED rather than ignored,
+ * for the same reason a malformed cursor is: a caller that thinks it is paging and is silently
+ * being re-served the same prefix has an infinite loop with no error to act on.
+ */
+const cursorNotPageable = <E extends AppEnv>(c: Context<E>) =>
+  c.json(
+    {
+      error: {
+        code: 'invalid_cursor',
+        message: 'Trajectory order returns a bounded prefix and cannot be resumed with a cursor',
+      },
+    },
+    400,
+  )
+
 /** Encode a service page's next position back onto the wire (null ⇒ that was the last page). */
 function nextCursorOf<T>(page: DebugPage<T>): string | null {
   return page.nextCursor ? encodeCursor(page.nextCursor.createdAt, page.nextCursor.id) : null
@@ -255,9 +272,11 @@ export function publicDebugController(): Hono<AppEnv> {
     return c.json({ queries: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
 
-  // The tool calls the run's agents made: the trajectory. Rows come back whole (both bodies are
-  // capped at capture, so the page size is computable before the request) with `bodies` saying
-  // whether they were retained at all.
+  // The tool calls the run's agents made. Rows come back whole (both bodies are capped at
+  // capture, so the page size is computable before the request) with `bodies` saying whether
+  // they were retained at all. Two orders: the keyset page every sibling list serves, and the
+  // TRAJECTORY — what the agent did, in the order it did it, which is the read this sink
+  // exists for and the one a client cannot correctly derive from the rows itself.
   buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) {
@@ -273,11 +292,13 @@ export function publicDebugController(): Hono<AppEnv> {
     const query = c.req.valid('query')
     const cursor = readCursor(query.cursor)
     if ('invalid' in cursor) return invalidCursor(c)
+    if (query.order === 'trajectory' && cursor.cursor) return cursorNotPageable(c)
     if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
     const page = await debug.listToolCalls(workspaceId, runId, {
       limit: query.limit ?? DEFAULT_SMALL_ROW_PAGE,
       ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
       ...(query.jobId ? { jobId: query.jobId } : {}),
+      ...(query.order ? { order: query.order } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })

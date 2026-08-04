@@ -49,6 +49,7 @@ export const ATTR = {
   tokenType: 'gen_ai.token.type',
   agentName: 'gen_ai.agent.name',
   toolName: 'gen_ai.tool.name',
+  toolCallJobId: 'cat_factory.tool_call.job_id',
   toolCallSeq: 'cat_factory.tool_call.seq',
   toolArgsDropped: 'cat_factory.tool_call.arguments_dropped_chars',
   toolResultDropped: 'cat_factory.tool_call.result_dropped_chars',
@@ -583,6 +584,12 @@ export function mapToolSpan(context: LlmToolSpanContext, span: LlmToolSpan): Map
   // The call's ordinal within its dispatch. Carried because a backend that renders spans by
   // start time cannot order a tool loop: several calls routinely share one millisecond, and a
   // trajectory read in the wrong order is worse than one read as an unordered set.
+  //
+  // The DISPATCH rides with it, and has to: `seq` restarts at zero on every dispatch, so a run
+  // whose step ran twice (a re-run, a gate's fixer rounds) otherwise exports two `seq: 0` spans
+  // that no query can tell apart. With the job id present, ordering within a dispatch is exact
+  // and grouping across them is possible.
+  if (context.jobId) attributes[ATTR.toolCallJobId] = context.jobId
   if (span.seq !== undefined) attributes[ATTR.toolCallSeq] = span.seq
   // What the harness's capture cap dropped, so a truncated argument is legible AS truncated.
   if (span.argsDropped) attributes[ATTR.toolArgsDropped] = span.argsDropped

@@ -25,13 +25,18 @@ CREATE TABLE agent_tool_calls (
   result_dropped INTEGER NOT NULL DEFAULT 0,
   created_at     INTEGER NOT NULL
 );
--- The trajectory read: one run's calls in the order the agent made them. `(job_id, seq)` and
--- not `created_at`, because a tool loop routinely fires several calls inside one millisecond
--- and a dispatch numbers its own calls from zero.
+-- The trajectory read: one run's calls in the order the agent made them. `started_at` and not
+-- `created_at`, which is stamped once per DRAIN so a whole poll window shares it; `seq` breaks
+-- the ties, because a tool loop routinely fires several calls inside one millisecond. NOT
+-- `job_id`, which is a string (`<executionId>-<agentKind>[-<epoch>]`) and would order a run's
+-- dispatches by agent-kind spelling.
 CREATE INDEX idx_agent_tool_calls_trajectory
-  ON agent_tool_calls (workspace_id, execution_id, job_id, seq);
--- The keyset page the debug fan-out lists share.
+  ON agent_tool_calls (workspace_id, execution_id, started_at, seq);
+-- The keyset page the debug fan-out lists share, with `job_id` leading so the one-dispatch
+-- drill-down is served by the same index rather than a scan of the run.
 CREATE INDEX idx_agent_tool_calls_execution
   ON agent_tool_calls (workspace_id, execution_id, created_at);
+CREATE INDEX idx_agent_tool_calls_job
+  ON agent_tool_calls (workspace_id, execution_id, job_id, created_at);
 -- The retention prune's access path (a global range delete, not workspace-scoped).
 CREATE INDEX idx_agent_tool_calls_created ON agent_tool_calls (created_at);

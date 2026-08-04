@@ -456,6 +456,11 @@ export interface ListDebugSearchQueriesResponse {
   queries: DebugSearchQuery[]
 }
 
+export type ListDebugToolCallsOrder = 'recent' | 'trajectory'
+
+/** Every `ListDebugToolCallsOrder` value, for exhaustive handling and runtime validation. */
+export const LIST_DEBUG_TOOL_CALLS_ORDER_VALUES = ['recent', 'trajectory'] as const
+
 export interface ListDebugToolCallsResponse {
   /** Always present; `null` when the server has no value for it. */
   nextCursor: string | null

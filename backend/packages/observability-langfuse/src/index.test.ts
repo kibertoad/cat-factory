@@ -190,40 +190,45 @@ describe('LangfuseTraceSink', () => {
     const captured = captureIngestion(CLOUD)
     const sink = new LangfuseTraceSink({ publicKey: 'pk', secretKey: 'sk' })
 
-    await sink.recordToolSpans({ workspaceId: 'ws1', executionId: 'exec1', agentKind: 'coder' }, [
-      {
-        tool: 'run_command',
-        seq: 2,
-        startedAt: 1,
-        endedAt: 2,
-        ok: true,
-        bodies: 'stored',
-        args: '{"command":"pnpm build"}',
-        result: 'built',
-        argsDropped: 0,
-        resultDropped: 120,
-      },
-      // Withheld by the body gate: the span still lands, with no input/output slot at all rather
-      // than an empty one that would read as a call which carried nothing.
-      {
-        tool: 'read',
-        seq: 3,
-        startedAt: 3,
-        endedAt: 4,
-        ok: true,
-        bodies: 'withheld',
-        args: '',
-        result: '',
-        argsDropped: 0,
-        resultDropped: 0,
-      },
-    ])
+    await sink.recordToolSpans(
+      { workspaceId: 'ws1', executionId: 'exec1', agentKind: 'coder', jobId: 'exec1-coder-2' },
+      [
+        {
+          tool: 'run_command',
+          seq: 2,
+          startedAt: 1,
+          endedAt: 2,
+          ok: true,
+          bodies: 'stored',
+          args: '{"command":"pnpm build"}',
+          result: 'built',
+          argsDropped: 0,
+          resultDropped: 120,
+        },
+        // Withheld by the body gate: the span still lands, with no input/output slot at all rather
+        // than an empty one that would read as a call which carried nothing.
+        {
+          tool: 'read',
+          seq: 3,
+          startedAt: 3,
+          endedAt: 4,
+          ok: true,
+          bodies: 'withheld',
+          args: '',
+          result: '',
+          argsDropped: 0,
+          resultDropped: 0,
+        },
+      ],
+    )
 
     const batch = captured().batch
     expect(batch[0]!.body).toMatchObject({
       input: '{"command":"pnpm build"}',
       output: 'built',
-      metadata: { seq: 2, resultDroppedChars: 120 },
+      // The dispatch rides beside the ordinal: `seq` restarts at zero on each one, so without it
+      // a re-run's spans are indistinguishable from the first round's.
+      metadata: { jobId: 'exec1-coder-2', seq: 2, resultDroppedChars: 120 },
     })
     expect(batch[1]!.body).not.toHaveProperty('input')
     expect(batch[1]!.body).not.toHaveProperty('output')

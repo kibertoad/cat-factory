@@ -30,6 +30,7 @@ from .models import (
     ListDebugLogsResponse,
     ListDebugRunsResponse,
     ListDebugSearchQueriesResponse,
+    ListDebugToolCallsOrder,
     ListDebugToolCallsResponse,
     ListPublicJobsResponse,
     LlmCallOutcome,
@@ -840,7 +841,7 @@ class DebugResource:
                 raise _repeated_cursor()
             page_cursor = page.next_cursor
 
-    def list_tool_calls(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, timeout: float | None = None) -> ListDebugToolCallsResponse:
+    def list_tool_calls(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> ListDebugToolCallsResponse:
         """List a run's tool calls
         The tool calls the run’s agents made, in the order they made them — which command,
         against what, and what came back. The half of “how did this diff come about” that
@@ -852,12 +853,12 @@ class DebugResource:
         raw = self._transport.request(
             "GET",
             f"/api/v1/debug/runs/{_quote(run_id)}/tool-calls",
-            query={"limit": limit, "cursor": cursor, "jobId": job_id},
+            query={"limit": limit, "cursor": cursor, "jobId": job_id, "order": order},
             timeout=timeout,
         )
         return ListDebugToolCallsResponse.from_dict(raw)
 
-    def list_tool_calls_all(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, timeout: float | None = None) -> Iterator[Any]:
+    def list_tool_calls_all(self, run_id: str, *, limit: int | None = None, cursor: str | None = None, job_id: str | None = None, order: ListDebugToolCallsOrder | None = None, timeout: float | None = None) -> Iterator[Any]:
         """Every `toolCalls` across every page of `list_tool_calls()`, as they arrive.
         Follows `next_cursor` until the server reports no further page. A page may
         legitimately come back empty while `next_cursor` is still set, so this pages until
@@ -866,7 +867,7 @@ class DebugResource:
         """
         page_cursor = cursor
         while True:
-            page = self.list_tool_calls(run_id, limit=limit, job_id=job_id, cursor=page_cursor, timeout=timeout)
+            page = self.list_tool_calls(run_id, limit=limit, job_id=job_id, order=order, cursor=page_cursor, timeout=timeout)
             yield from page.tool_calls
             if not page.next_cursor:
                 return

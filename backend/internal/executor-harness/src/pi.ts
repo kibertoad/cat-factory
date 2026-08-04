@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { killChildProcess, spawnDetached } from './process.js'
 import { pathExists } from './fs-utils.js'
-import { redactSecrets } from './redact.js'
+import { redactSecrets, secretsToRedact } from './redact.js'
 import { HarnessFailure } from './failure.js'
 import { log } from './logger.js'
 import type { EffortReport } from './effort.js'
@@ -886,12 +886,6 @@ export function runPi(opts: {
    */
   onSpan?: (span: ToolSpan) => void
   /**
-   * Credential values to scrub out of captured tool bodies, on top of the harness's own
-   * shape-based scrubber. A tool's arguments and output routinely echo what was handed to the
-   * child process, and these bodies travel to a store and to external trace sinks.
-   */
-  spanSecrets?: readonly string[]
-  /**
    * Called with every parsed Pi `--mode json` event, in stream order — the raw
    * observability seam over the run. Used by offline tooling (the smoketest
    * harness) to capture the full prompt/response/tool-call transcript for
@@ -954,7 +948,14 @@ export function runPi(opts: {
     // Pairs each tool call's start with its result, numbers the pairs and captures the two
     // bodies (scrubbed + capped). A call whose start Pi never emitted still gets an entry,
     // timed from the previous call's end — see `ToolCallTracker`.
-    const tools = new ToolCallTracker(opts.spanSecrets ?? [])
+    //
+    // The known-secret list is DERIVED from the token this function itself hands the child
+    // (`PI_PROXY_TOKEN` / `SEARXNG_API_KEY`) rather than taken as a parameter: the bodies
+    // travel to a store and to external trace sinks, and a caller that forgets to pass the
+    // list produces bodies scrubbed of credential SHAPES only, with no signal that the
+    // narrower rule ever ran. Deriving it here means the one place that knows the child's
+    // credentials is the place that scrubs them.
+    const tools = new ToolCallTracker(secretsToRedact(opts.sessionToken))
 
     // SIGTERM first, then SIGKILL if Pi ignores it. Shared by the watchdog abort
     // and the no-progress guard; the `close` handler turns it into a rejection.

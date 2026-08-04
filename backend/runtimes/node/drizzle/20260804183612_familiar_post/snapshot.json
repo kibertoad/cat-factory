@@ -1,6 +1,6 @@
 {
   "dialect": "postgres",
-  "id": "1e3f058c-9648-42ed-9070-a1d6e4ec0173",
+  "id": "0c6ba21f-baa2-4a18-b3a9-4b92f631ca06",
   "prevIds": [
     "1c3e0a1c-9136-43e0-8605-d427931a2ce4"
   ],
@@ -15774,7 +15774,7 @@
           "opclass": null
         },
         {
-          "value": "job_id",
+          "value": "started_at",
           "isExpression": false,
           "asc": true,
           "nullsFirst": false,
@@ -15829,6 +15829,48 @@
       "method": "btree",
       "concurrently": false,
       "name": "idx_agent_tool_calls_execution",
+      "entityType": "indexes",
+      "schema": "telemetry",
+      "table": "agent_tool_calls"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "workspace_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "execution_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "job_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_agent_tool_calls_job",
       "entityType": "indexes",
       "schema": "telemetry",
       "table": "agent_tool_calls"

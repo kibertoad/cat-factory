@@ -46,6 +46,21 @@ export interface AgentToolCallRecorder {
   record(calls: RecordAgentToolCallInput[]): Promise<void>
 }
 
+/**
+ * A bounded query over one run's tool calls in TRAJECTORY order.
+ *
+ * Deliberately carries no cursor: the ordered read answers "what did this run do", which is a
+ * question about a bounded prefix, and a resumable keyset over the same rows is what
+ * {@link AgentToolCallPageQuery} is for. Keeping the two in separate types means a cursor
+ * paired with an ordering it cannot resume is not a representable state.
+ */
+export interface AgentToolCallTrajectoryQuery {
+  executionId: string
+  limit: number
+  /** Restrict to one dispatch, so "what did the third ci-fixer round do, in order" composes. */
+  jobId?: string
+}
+
 /** A bounded, keyset-paginated query over one run's tool calls. */
 export interface AgentToolCallPageQuery {
   executionId: string
@@ -79,16 +94,29 @@ export interface AgentToolCallRepository {
    */
   recordMany(calls: AgentToolCall[]): Promise<void>
   /**
-   * A run's tool calls in TRAJECTORY order: oldest first, `(jobId, seq)` ascending.
+   * A run's tool calls in TRAJECTORY order: oldest first, `(startedAt, seq, id)` ascending.
    *
    * The one read in this port that does not order by the `(createdAt, id)` keyset every
-   * other telemetry list uses, because a trajectory's meaning IS its order and a
-   * millisecond-resolution timestamp cannot carry it: a tool loop routinely fires several
-   * calls inside one millisecond, and `seq` is the only thing that separates them. Bounded
-   * by `limit`, applied to the OLDEST end, so a truncated read is a prefix of the run
-   * rather than a middle slice with no beginning.
+   * other telemetry list uses. `createdAt` cannot carry a trajectory: it is stamped once per
+   * DRAIN, so a whole poll window's calls share it. `startedAt` is stamped per CALL by the
+   * harness, `seq` separates the calls that share a millisecond (a tool loop routinely fires
+   * several inside one), and `id` makes the order total.
+   *
+   * NOT `(jobId, seq)`, though a dispatch is exactly what `seq` is scoped to: a job id is a
+   * STRING (`<executionId>-<agentKind>`, plus `-<epoch>` past the first dispatch), so sorting
+   * by it sorts a run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+   * A trajectory read in an order the run never ran in is worse than an unordered set, because
+   * it invites a reader to draw causal conclusions from it. Ordering by when each call actually
+   * STARTED gets the dispatches in the order they happened for free, and leaves `seq` doing the
+   * one job no timestamp can.
+   *
+   * Bounded by `limit`, applied to the OLDEST end, so a truncated read is a genuine prefix of
+   * the run rather than a middle slice with no beginning.
    */
-  listByExecution(workspaceId: string, executionId: string, limit: number): Promise<AgentToolCall[]>
+  listByExecution(
+    workspaceId: string,
+    query: AgentToolCallTrajectoryQuery,
+  ): Promise<AgentToolCall[]>
   /**
    * One BOUNDED page, newest first on the `(createdAt, id)` keyset — the shape the debug
    * fan-out lists share, so a caller paging every sink of a run pages them alike. Bodies

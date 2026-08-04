@@ -170,6 +170,7 @@ export type {
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
+  AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
 } from './agent-tool-calls.js'

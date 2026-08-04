@@ -8,9 +8,10 @@ import { describe, expect, it } from 'vitest'
 // This suite drives the SAME append → read → prune assertions through whichever real repository a
 // runtime hands it, so a column mapped differently fails a test instead of shipping.
 //
-// The assertion this sink needs most is the ORDER one: a trajectory's meaning IS its sequence, and
-// the sequence lives in `(jobId, seq)` rather than in a timestamp, because a tool loop routinely
-// fires several calls inside one millisecond and each dispatch numbers its own from zero.
+// The assertion this sink needs most is the ORDER one: a trajectory's meaning IS its sequence, so
+// two stores disagreeing about it would render one run as two different runs. The sequence lives
+// in `(startedAt, seq)` — the drain stamp `createdAt` is shared by a whole poll window, and the
+// job id is a STRING whose sort order has nothing to do with when the dispatch ran.
 
 function call(overrides: Partial<AgentToolCall> & Pick<AgentToolCall, 'id'>): AgentToolCall {
   return {
@@ -50,48 +51,76 @@ export function defineAgentToolCallSuite(
       return { ws: `ws-${tag}`, e1: `e1-${tag}`, e2: `e2-${tag}` }
     }
 
-    it('reads a run back in TRAJECTORY order, not timestamp order', async () => {
+    it('reads a run back in TRAJECTORY order, not drain order', async () => {
       const repo = makeRepo()
       const { ws, e1 } = ids()
-      // Every call in one millisecond, inserted out of order, across two dispatches — the exact
-      // shape a `created_at` ordering renders as an arbitrary permutation.
+      // Every call drained in ONE poll window, so every row shares a `created_at` — the exact
+      // shape a `created_at` ordering renders as an arbitrary permutation. Within a dispatch the
+      // two calls also share a `started_at` millisecond, which only `seq` separates.
       await repo.recordMany([
         call({
-          id: `${ws}-b1`,
+          id: `${ws}-c1`,
           workspaceId: ws,
           executionId: e1,
-          jobId: 'job-b',
+          jobId: `${e1}-coder`,
           seq: 1,
+          startedAt: 1_000,
           createdAt: 7,
         }),
         call({
-          id: `${ws}-a1`,
+          id: `${ws}-f0`,
           workspaceId: ws,
           executionId: e1,
-          jobId: 'job-a',
-          seq: 1,
-          createdAt: 7,
-        }),
-        call({
-          id: `${ws}-a0`,
-          workspaceId: ws,
-          executionId: e1,
-          jobId: 'job-a',
+          jobId: `${e1}-ci-fixer`,
           seq: 0,
+          startedAt: 2_000,
           createdAt: 7,
         }),
         call({
-          id: `${ws}-b0`,
+          id: `${ws}-c0`,
           workspaceId: ws,
           executionId: e1,
-          jobId: 'job-b',
+          jobId: `${e1}-coder`,
           seq: 0,
+          startedAt: 1_000,
           createdAt: 7,
         }),
       ])
 
-      const trajectory = await repo.listByExecution(ws, e1, 50)
-      expect(trajectory.map((c) => c.id)).toEqual([`${ws}-a0`, `${ws}-a1`, `${ws}-b0`, `${ws}-b1`])
+      // The dispatches come back in the order they RAN. A `job_id` ordering would put the
+      // ci-fixer round first, because `<exec>-ci-fixer` sorts before `<exec>-coder`: a
+      // trajectory read in an order the run never ran in invites causal conclusions from it.
+      const trajectory = await repo.listByExecution(ws, { executionId: e1, limit: 50 })
+      expect(trajectory.map((c) => c.id)).toEqual([`${ws}-c0`, `${ws}-c1`, `${ws}-f0`])
+    })
+
+    it('orders a step re-run by WHEN it ran, not by the spelling of its epoch', async () => {
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      // `stepJobId` suffixes a re-dispatch with its epoch, so the tenth round's job id ends
+      // `-10` and sorts before the second's `-2` as a string. Only the clock gets this right.
+      await repo.recordMany([
+        call({
+          id: `${ws}-e2`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: `${e1}-coder-2`,
+          seq: 0,
+          startedAt: 2_000,
+        }),
+        call({
+          id: `${ws}-e10`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: `${e1}-coder-10`,
+          seq: 0,
+          startedAt: 10_000,
+        }),
+      ])
+
+      expect(
+        (await repo.listByExecution(ws, { executionId: e1, limit: 10 })).map((c) => c.id),
+      ).toEqual([`${ws}-e2`, `${ws}-e10`])
     })
 
     it('bounds the trajectory read at its OLDEST end, so a truncated read is a prefix', async () => {
@@ -103,10 +132,9 @@ export function defineAgentToolCallSuite(
         call({ id: `${ws}-2`, workspaceId: ws, executionId: e1, seq: 2 }),
       ])
       // A middle slice with no beginning would be unreadable as a trajectory.
-      expect((await repo.listByExecution(ws, e1, 2)).map((c) => c.id)).toEqual([
-        `${ws}-0`,
-        `${ws}-1`,
-      ])
+      expect(
+        (await repo.listByExecution(ws, { executionId: e1, limit: 2 })).map((c) => c.id),
+      ).toEqual([`${ws}-0`, `${ws}-1`])
     })
 
     it('round-trips the bodies, the dropped counts and the withheld state', async () => {
@@ -138,10 +166,12 @@ export function defineAgentToolCallSuite(
           bodies: 'withheld',
           args: '',
           result: '',
+          startedAt: 500,
+          endedAt: 600,
         }),
       ])
 
-      const [stored, withheld] = await repo.listByExecution(ws, e1, 10)
+      const [stored, withheld] = await repo.listByExecution(ws, { executionId: e1, limit: 10 })
       expect(stored).toMatchObject({
         agentKind: 'ci-fixer',
         tool: 'run_command',
@@ -196,6 +226,45 @@ export function defineAgentToolCallSuite(
       expect(page.map((c) => c.id)).toEqual([`${ws}-r2`])
     })
 
+    it('narrows the TRAJECTORY to one dispatch too', async () => {
+      // "What did the third ci-fixer round actually do, in order" is the question the ordered
+      // read and the dispatch filter only answer together.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        call({
+          id: `${ws}-r1a`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'round-1',
+          seq: 0,
+          startedAt: 10,
+        }),
+        call({
+          id: `${ws}-r2b`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'round-2',
+          seq: 1,
+          startedAt: 30,
+        }),
+        call({
+          id: `${ws}-r2a`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'round-2',
+          seq: 0,
+          startedAt: 20,
+        }),
+      ])
+      const round2 = await repo.listByExecution(ws, {
+        executionId: e1,
+        limit: 10,
+        jobId: 'round-2',
+      })
+      expect(round2.map((c) => c.id)).toEqual([`${ws}-r2a`, `${ws}-r2b`])
+    })
+
     it('batch-appends calls, ignoring ids it already stored', async () => {
       // Two producers re-offer the same call: the durable poll path replays, and the
       // mothership-mode ingest retries a chunk whose ack was lost. A repeat must be inert rather
@@ -212,7 +281,7 @@ export function defineAgentToolCallSuite(
         call({ id: `${ws}-3`, workspaceId: ws, executionId: e1, seq: 2 }),
       ])
 
-      const after = await repo.listByExecution(ws, e1, 10)
+      const after = await repo.listByExecution(ws, { executionId: e1, limit: 10 })
       expect(after.map((c) => c.id)).toEqual([`${ws}-1`, `${ws}-2`, `${ws}-3`])
       expect(after[0]!.tool).toBe('bash')
 
@@ -228,7 +297,9 @@ export function defineAgentToolCallSuite(
       ])
       const removed = await repo.deleteOlderThan(10)
       expect(removed).toBeGreaterThanOrEqual(1)
-      expect((await repo.listByExecution(ws, e1, 10)).map((c) => c.id)).toEqual([`${ws}-new`])
+      expect(
+        (await repo.listByExecution(ws, { executionId: e1, limit: 10 })).map((c) => c.id),
+      ).toEqual([`${ws}-new`])
     })
   })
 }

@@ -21,6 +21,7 @@ import type {
   DebugLlmCall,
   DebugRunOverview,
   DebugRunSummary,
+  ToolCallOrder,
 } from '@cat-factory/contracts'
 import {
   deriveSignals,
@@ -350,21 +351,34 @@ export class RunDebugService {
   }
 
   /**
-   * One bounded page of the run's tool-call trajectory.
+   * The run's tool calls, in one of two orders.
    *
-   * Paged on the `(createdAt, id)` keyset like every other fan-out list here, NOT in trajectory
-   * order: the two are different reads. This one answers "show me the most recent activity" and
-   * has to page a long run; the trajectory ORDER (`(jobId, seq)`) rides on the rows themselves,
-   * so a caller reconstructing a run's sequence sorts the pages it collected rather than asking
-   * the store for an ordering no cursor can resume from.
+   * `recent` is the keyset page every other fan-out list here serves: newest first on
+   * `(createdAt, id)`, resumable, for sweeping a long run. `trajectory` is the ORDERED read the
+   * sink exists for — oldest first by when each call actually started — and it answers a
+   * question about a bounded PREFIX, so it returns no cursor: an operator asking "what did this
+   * run do" wants the beginning, and a resumable walk of the same rows is what `recent` is.
+   *
+   * The ordering is computed HERE rather than left to the caller. A consumer holding a page of
+   * rows can see `jobId` and `seq` on each, and sorting by them is wrong in a way that looks
+   * right: `seq` restarts at zero on every dispatch, and a job id sorts a run's dispatches by
+   * agent-kind spelling and its re-runs `-10` before `-2`.
    */
   async listToolCalls(
     workspaceId: string,
     runId: string,
-    opts: { limit: number; cursor?: DebugCursor; jobId?: string },
+    opts: { limit: number; cursor?: DebugCursor; jobId?: string; order?: ToolCallOrder },
   ): Promise<DebugPage<AgentToolCall>> {
     const repo = this.deps.agentToolCallRepository
     if (!repo) return { items: [], nextCursor: null }
+    if (opts.order === 'trajectory') {
+      const items = await repo.listByExecution(workspaceId, {
+        executionId: runId,
+        limit: opts.limit,
+        ...(opts.jobId ? { jobId: opts.jobId } : {}),
+      })
+      return { items, nextCursor: null }
+    }
     const rows = await repo.listPage(workspaceId, {
       executionId: runId,
       limit: opts.limit + 1,

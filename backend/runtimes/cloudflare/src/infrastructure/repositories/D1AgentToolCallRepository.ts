@@ -2,6 +2,7 @@ import type {
   AgentToolCall,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallTrajectoryQuery,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -107,19 +108,27 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
 
   async listByExecution(
     workspaceId: string,
-    executionId: string,
-    limit: number,
+    query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
-    // Trajectory order: oldest first, by dispatch then ordinal. The `limit` takes the OLDEST
-    // end, so a truncated read is a prefix of the run rather than a middle slice.
+    // Trajectory order: oldest first by the call's own start, `seq` separating the calls that
+    // share a millisecond and `id` making the order total. NOT by `job_id`, which is a string
+    // that sorts a run's dispatches alphabetically. The `limit` takes the OLDEST end, so a
+    // truncated read is a prefix of the run rather than a middle slice.
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: unknown[] = [workspaceId, query.executionId]
+    if (query.jobId) {
+      clauses.push('job_id = ?')
+      binds.push(query.jobId)
+    }
+    binds.push(query.limit)
     const { results } = await this.db
       .prepare(
         `SELECT * FROM agent_tool_calls
-         WHERE workspace_id = ? AND execution_id = ?
-         ORDER BY job_id ASC, seq ASC
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY started_at ASC, seq ASC, id ASC
          LIMIT ?`,
       )
-      .bind(workspaceId, executionId, limit)
+      .bind(...binds)
       .all<ToolCallRow>()
     return (results ?? []).map(rowToCall)
   }

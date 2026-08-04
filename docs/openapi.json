@@ -4851,6 +4851,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "enum": [
+                "recent",
+                "trajectory"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {

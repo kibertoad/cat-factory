@@ -107,15 +107,28 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
 | `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
-| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?jobId=`, `?limit=`, `?cursor=`                                        |
+| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?limit=`, `?cursor=`                             |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
 
 The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
 the size rule because a tool call's `args`/`result` are capped at CAPTURE time rather than stored
-unbounded and windowed at read time. It is also the one whose rows carry their own ORDER: page it
-on the shared `(createdAt, id)` keyset like the rest, then sort what you collected by
-`(jobId, seq)` to read the trajectory, because a tool loop fires several calls per millisecond and
-each dispatch numbers its own from zero.
+unbounded and windowed at read time: a page is at most `limit x 2 x MAX_TOOL_BODY_CHARS`.
+
+It is also the one served in two ORDERS, chosen with `?order=`:
+
+- `recent` (the default) is the newest-first `(createdAt, id)` keyset every list here shares, with
+  a cursor to walk a long run.
+- `trajectory` is what the sink exists for: the run's calls oldest-first, in the order the agents
+  actually made them. It is a bounded PREFIX of the run, so it returns `nextCursor: null`, and
+  supplying a cursor with it is a `400` rather than a silent fall back to the other order.
+
+Do NOT re-sort a page yourself to get the trajectory. It looks derivable from the rows and is not:
+`seq` restarts at zero on every dispatch, and `jobId` is a string, so ordering by it sorts a run's
+dispatches by agent-kind spelling and its re-runs `-10` before `-2`. The server orders by when
+each call actually STARTED, with `seq` separating the calls that share a millisecond.
+
+Both orders take `?jobId=` to narrow to ONE dispatch, which is how "what did the third ci-fixer
+round actually do, in order" is asked.
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that

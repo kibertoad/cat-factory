@@ -17,6 +17,7 @@ import type {
   AgentToolCall,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallTrajectoryQuery,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
   LlmCallBodyWindow,
@@ -1161,23 +1162,24 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
 
   async listByExecution(
     workspaceId: string,
-    executionId: string,
-    limit: number,
+    query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
-    // Trajectory order: oldest first, by dispatch then ordinal — `created_at` cannot carry it,
-    // since a whole poll window's calls share one stamp. The limit takes the OLDEST end, so a
-    // truncated read is a prefix of the run rather than a middle slice with no beginning.
+    // Trajectory order: oldest first by the call's own start — `created_at` cannot carry it,
+    // since a whole poll window's calls share one stamp, and `job_id` is a string that would
+    // sort a run's dispatches alphabetically. `seq` separates the calls sharing a millisecond
+    // and `id` makes the order total. The limit takes the OLDEST end, so a truncated read is a
+    // prefix of the run rather than a middle slice with no beginning.
+    const filters = [
+      eq(agentToolCalls.workspace_id, workspaceId),
+      eq(agentToolCalls.execution_id, query.executionId),
+    ]
+    if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
     const rows = await this.db
       .select()
       .from(agentToolCalls)
-      .where(
-        and(
-          eq(agentToolCalls.workspace_id, workspaceId),
-          eq(agentToolCalls.execution_id, executionId),
-        ),
-      )
-      .orderBy(asc(agentToolCalls.job_id), asc(agentToolCalls.seq))
-      .limit(limit)
+      .where(and(...filters))
+      .orderBy(asc(agentToolCalls.started_at), asc(agentToolCalls.seq), asc(agentToolCalls.id))
+      .limit(query.limit)
     return rows.map(rowToAgentToolCall)
   }
 

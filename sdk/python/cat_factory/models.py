@@ -1877,6 +1877,20 @@ class ListDebugSearchQueriesResponse:
         return out
 
 
+class ListDebugToolCallsOrder(StrEnum):
+    """The `ListDebugToolCallsOrder` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    RECENT = "recent"
+    TRAJECTORY = "trajectory"
+
+
 @dataclass(frozen=True, slots=True)
 class ListDebugToolCallsResponse:
     """`ListDebugToolCallsResponse`, as carried on the wire."""

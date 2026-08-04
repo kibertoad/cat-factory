@@ -63,8 +63,36 @@ describe('ToolCallObservabilityService', () => {
     await service.record([call])
 
     // Same id both times — the store's first-write-wins is what makes the replay a no-op.
-    expect(rows.map((r) => r.id)).toEqual(['job_7-tc-3', 'job_7-tc-3'])
+    expect(rows.map((r) => r.id)).toEqual(['job_7-tc-000003', 'job_7-tc-000003'])
     expect(rows[0]?.createdAt).toBe(5_000)
+  })
+
+  it('pads the ordinal so the debug page’s id tiebreak agrees with the call order', async () => {
+    // A whole poll window is stamped at ONE `createdAt`, so `(createdAt, id)` ties are the
+    // common case here and the id decides. Unpadded, call 19 would sort before call 2 and the
+    // page would contradict the `seq` printed on its own rows.
+    const { rows, repo } = fakeRepo()
+    const service = new ToolCallObservabilityService({ agentToolCallRepository: repo, clock })
+    const base = {
+      workspaceId: 'ws',
+      executionId: 'exec',
+      agentKind: 'coder',
+      jobId: 'job',
+      tool: 'bash',
+      startedAt: 1,
+      endedAt: 2,
+      ok: true,
+      bodies: 'stored' as const,
+      args: '',
+      result: '',
+      argsDropped: 0,
+      resultDropped: 0,
+    }
+    await service.record([2, 19].map((seq) => ({ ...base, seq })))
+
+    const ids = rows.map((r) => r.id)
+    expect(ids).toEqual(['job-tc-000002', 'job-tc-000019'])
+    expect([...ids].sort()).toEqual(ids)
   })
 
   it('never upgrades a withheld body, whatever text arrives with it', async () => {

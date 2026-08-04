@@ -145,15 +145,22 @@ only place the loop is visible, and the container is gone the moment the job set
 therefore pairs each call's start with its result, NUMBERS the pair, and captures both bodies;
 the backend drains a window's worth on its existing job poll and sends it to two places.
 
-- **`seq` is the ordering, and the identity.** A tool loop routinely fires several calls inside
-  one millisecond, so a timestamp cannot sequence them; the ordinal is scoped to the DISPATCH,
-  because a run's step can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph
-  iteration) and each starts numbering at zero. The trajectory read therefore orders by
-  `(jobId, seq)` — the one telemetry read that is not on the `(createdAt, id)` keyset — and each
-  row's id derives from the same pair, so a replayed poll re-records instead of duplicating.
+- **`seq` orders a dispatch, and identifies a row.** A tool loop routinely fires several calls
+  inside one millisecond, so no timestamp can sequence them. The ordinal is scoped to the
+  DISPATCH, because a run's step can dispatch more than once (a re-run, a gate's fixer rounds, a
+  Ralph iteration) and each starts numbering at zero. Each row's id derives from `(jobId, seq)`,
+  zero-padded so the debug page's `(createdAt, id)` tiebreak agrees with the call order, and that
+  derivation is what makes a replayed poll re-record instead of duplicate.
   A harness image too old to number its calls has its trajectory SKIPPED with a log line naming
   the job, because the only stateless substitute (the position in the batch) restarts every poll
   window and would silently drop four calls in five.
+- **The trajectory ORDER is `(startedAt, seq)`**, the one telemetry read not on the
+  `(createdAt, id)` keyset — `createdAt` is stamped once per DRAIN, so a whole poll window shares
+  it. It is deliberately NOT `(jobId, seq)`: a job id is a string (`<executionId>-<agentKind>`,
+  plus `-<epoch>` past the first dispatch), so ordering by it sorts a run's dispatches by
+  agent-kind spelling and its re-runs `-10` before `-2`. Ordering by when each call actually
+  started gets the dispatches in the order they ran for free. The SERVER computes this
+  (`?order=trajectory`); a client sorting rows itself gets it wrong in a way that looks right.
 - **Both bodies are bounded and scrubbed at CAPTURE**, and each row states what the cap dropped:
   a build log is routinely megabytes, and a reader has to be able to tell a short command from
   the head of a long one. That cap is also what keeps the poll response small, and it is why the

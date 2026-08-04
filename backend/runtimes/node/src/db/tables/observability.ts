@@ -140,8 +140,9 @@ export const agentToolCalls = telemetry.table(
     workspace_id: text('workspace_id').notNull(),
     execution_id: text('execution_id').notNull(),
     agent_kind: text('agent_kind').notNull(),
-    // The dispatch the call was made in. A run's step can dispatch more than once and each
-    // dispatch numbers its own calls from zero, so the trajectory orders by `(job_id, seq)`.
+    // The dispatch the call was made in: the drill-down filter, and the scope `seq` is
+    // numbered within. It is deliberately NOT the trajectory's sort key — a job id is a
+    // string, so ordering by it sorts a run's dispatches by agent-kind spelling.
     job_id: text('job_id').notNull(),
     seq: integer('seq').notNull(),
     tool: text('tool').notNull(),
@@ -156,8 +157,14 @@ export const agentToolCalls = telemetry.table(
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
-    index('idx_agent_tool_calls_trajectory').on(t.workspace_id, t.execution_id, t.job_id, t.seq),
+    index('idx_agent_tool_calls_trajectory').on(
+      t.workspace_id,
+      t.execution_id,
+      t.started_at,
+      t.seq,
+    ),
     index('idx_agent_tool_calls_execution').on(t.workspace_id, t.execution_id, t.created_at),
+    index('idx_agent_tool_calls_job').on(t.workspace_id, t.execution_id, t.job_id, t.created_at),
     index('idx_agent_tool_calls_created').on(t.created_at),
   ],
 )

@@ -17,6 +17,7 @@ CREATE TABLE "telemetry"."agent_tool_calls" (
 	"created_at" bigint NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX "idx_agent_tool_calls_trajectory" ON "telemetry"."agent_tool_calls" ("workspace_id","execution_id","job_id","seq");--> statement-breakpoint
+CREATE INDEX "idx_agent_tool_calls_trajectory" ON "telemetry"."agent_tool_calls" ("workspace_id","execution_id","started_at","seq");--> statement-breakpoint
 CREATE INDEX "idx_agent_tool_calls_execution" ON "telemetry"."agent_tool_calls" ("workspace_id","execution_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_agent_tool_calls_job" ON "telemetry"."agent_tool_calls" ("workspace_id","execution_id","job_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_agent_tool_calls_created" ON "telemetry"."agent_tool_calls" ("created_at");

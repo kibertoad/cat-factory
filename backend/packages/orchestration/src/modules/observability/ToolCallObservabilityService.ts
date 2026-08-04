@@ -3,6 +3,7 @@ import type {
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
+  AgentToolCallTrajectoryQuery,
   Clock,
   LlmToolSpan,
   Logger,
@@ -13,14 +14,31 @@ import { noopLogger } from '@cat-factory/kernel'
 /**
  * Backstop cap (characters) the service applies to a stored `args`/`result`.
  *
- * The harness caps at capture time already, and that cap is the one that keeps the drain
- * buffer and the poll response small. This one exists because the producer is an IMAGE a
- * workspace pins independently of the backend: a pool running a build with a laxer cap (or
- * none) must not be able to push a row the store rejects for exceeding a per-value limit,
- * which would lose the whole batch rather than one body's tail. Sized well above the
- * harness cap so it is inert in the normal case.
+ * The harness caps at capture time already (2 KiB of arguments, 4 KiB of result), and that
+ * cap is the one that keeps the drain buffer and the poll response small. This one exists
+ * because the producer is an IMAGE a workspace pins independently of the backend: a pool
+ * running a build with a laxer cap (or none) must not be able to push a row the store rejects
+ * for exceeding a per-value limit, which would lose the whole batch rather than one body's
+ * tail.
+ *
+ * It is ALSO what makes the debug list's response size computable before the request, since
+ * those rows come back whole: a page is at most `limit x 2 x this`. So it is sized as a
+ * generous multiple of the harness's own caps rather than an arbitrary large number — 2x the
+ * result cap leaves a lax image plenty of room while keeping a full 100-row page under 2 MB.
  */
-export const MAX_TOOL_BODY_CHARS = 16 * 1024
+export const MAX_TOOL_BODY_CHARS = 8 * 1024
+
+/**
+ * Width the ordinal is zero-padded to inside a row id.
+ *
+ * The id is `<jobId>-tc-<seq>`, and the debug page's keyset breaks a tie on `(createdAt, id)`
+ * — a tie that is the COMMON case here, since a whole poll window is stamped at one instant.
+ * Unpadded, that tiebreak is a string compare, which puts call 19 before call 2 and hands a
+ * reader a page whose order contradicts the `seq` printed on its own rows. Padding makes the
+ * lexical order agree with the numeric one for any job that fits, and six digits is far past
+ * what a job's inactivity and duration ceilings allow it to reach.
+ */
+const SEQ_ID_WIDTH = 6
 
 /** Clamp one body, reporting what it dropped rather than silently shortening. */
 function clamp(text: string, alreadyDropped: number): { text: string; dropped: number } {
@@ -75,13 +93,12 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
     await this.repository.recordMany(calls.map((call) => this.toRow(call, createdAt)))
   }
 
-  /** A run's trajectory, oldest first — the drill-down read. */
+  /** A run's trajectory, oldest first — the ordered read. */
   listByExecution(
     workspaceId: string,
-    executionId: string,
-    limit: number,
+    query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
-    return this.repository.listByExecution(workspaceId, executionId, limit)
+    return this.repository.listByExecution(workspaceId, query)
   }
 
   /** One bounded page of a run's trajectory, newest first on the `(createdAt, id)` keyset. */
@@ -95,7 +112,7 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
     const result = stored ? clamp(call.result, call.resultDropped) : { text: '', dropped: 0 }
     return {
       ...call,
-      id: `${call.jobId}-tc-${call.seq}`,
+      id: `${call.jobId}-tc-${String(call.seq).padStart(SEQ_ID_WIDTH, '0')}`,
       args: args.text,
       argsDropped: args.dropped,
       result: result.text,

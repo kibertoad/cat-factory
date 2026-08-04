@@ -609,6 +609,20 @@ type ListDebugSearchQueriesResponse struct {
 	Queries    []DebugSearchQuery `json:"queries"`
 }
 
+// ListDebugToolCallsOrder is the `ListDebugToolCallsOrder` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type ListDebugToolCallsOrder string
+
+const (
+	ListDebugToolCallsOrderRecent     ListDebugToolCallsOrder = "recent"
+	ListDebugToolCallsOrderTrajectory ListDebugToolCallsOrder = "trajectory"
+)
+
+// ListDebugToolCallsOrderValues lists every ListDebugToolCallsOrder this SDK release knows.
+var ListDebugToolCallsOrderValues = []ListDebugToolCallsOrder{ListDebugToolCallsOrderRecent, ListDebugToolCallsOrderTrajectory}
+
 // ListDebugToolCallsResponse is the `ListDebugToolCallsResponse` wire model.
 type ListDebugToolCallsResponse struct {
 	// NextCursor always present; nil when the server has no value for it.

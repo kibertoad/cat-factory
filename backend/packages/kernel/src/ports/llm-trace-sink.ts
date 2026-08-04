@@ -75,9 +75,13 @@ export interface LlmGenerationEvent {
  * It carries the tool's ARGUMENTS and RESULT, capped and secret-scrubbed by the harness
  * at capture time, because a span saying only that `bash` ran for 300ms is not evidence
  * of anything: what an operator (or an auditor reading a merged PR) needs is which
- * command. The caps are what keeps the harness's drain buffer bounded, and the bodies are
- * built only when the deployment's prompt recording is on, so a prompts-off deployment
- * never pays to assemble text nothing will retain.
+ * command. The caps are what keeps the harness's drain buffer bounded.
+ *
+ * The harness captures a body whenever the job asks for spans at all; whether one is KEPT
+ * is decided entirely backend-side, at the drain, against the deployment's prompt-recording
+ * switch and the workspace's opt-out. Deciding it in the container instead would mean
+ * shipping a workspace's settings into the image and letting an image one release behind
+ * its backend answer with stale ones.
  */
 export interface LlmToolSpan {
   /** The tool name (`edit_file`, `run_command`, `todo`, …). */
@@ -89,8 +93,11 @@ export interface LlmToolSpan {
    * poll re-records rather than duplicates.
    *
    * Optional because a runner pool runs whatever image its workspace pinned: an older
-   * harness streams spans with no ordinal, and the reader supplies the batch position
-   * rather than refusing the span.
+   * harness streams spans with no ordinal. Such a batch still reaches the TRACE sinks,
+   * ordered by timestamp alone as it always was, but its trajectory is not persisted — the
+   * only stateless substitute (the span's position in the batch) restarts every poll window,
+   * so it would mint the job's first-call id over and over and first-write-wins would drop
+   * most of the run. See `makeToolCallRecorder`, which skips such a batch and names the job.
    */
   seq?: number
   /** Epoch ms the tool call started. */

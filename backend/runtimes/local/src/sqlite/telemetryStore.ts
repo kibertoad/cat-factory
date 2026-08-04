@@ -13,6 +13,7 @@ import {
   type AgentToolCall,
   type AgentToolCallPageQuery,
   type AgentToolCallRepository,
+  type AgentToolCallTrajectoryQuery,
   type LlmCallBodyWindow,
   type LlmCallMetric,
   type LlmCallMetricPage,
@@ -339,9 +340,11 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_trajectory
-  ON agent_tool_calls (workspace_id, execution_id, job_id, seq);
+  ON agent_tool_calls (workspace_id, execution_id, started_at, seq);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_execution
   ON agent_tool_calls (workspace_id, execution_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_job
+  ON agent_tool_calls (workspace_id, execution_id, job_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_agent_tool_calls_created
   ON agent_tool_calls (created_at);
 
@@ -1047,17 +1050,26 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
 
   async listByExecution(
     workspaceId: string,
-    executionId: string,
-    limit: number,
+    query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
+    const clauses = ['workspace_id = ?', 'execution_id = ?']
+    const binds: (string | number)[] = [workspaceId, query.executionId]
+    if (query.jobId) {
+      clauses.push('job_id = ?')
+      binds.push(query.jobId)
+    }
+    binds.push(query.limit)
     const rows = this.db
       .prepare(
+        // Trajectory order, mirroring the D1 repo: the call's own start, `seq` breaking a
+        // shared millisecond, `id` making it total. A job id is a string and would sort a
+        // run's dispatches alphabetically.
         `SELECT * FROM agent_tool_calls
-         WHERE workspace_id = ? AND execution_id = ?
-         ORDER BY job_id ASC, seq ASC
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY started_at ASC, seq ASC, id ASC
          LIMIT ?`,
       )
-      .all(workspaceId, executionId, limit) as unknown as ToolCallRow[]
+      .all(...binds) as unknown as ToolCallRow[]
     return rows.map(rowToToolCall)
   }
 
