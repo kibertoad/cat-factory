@@ -485,7 +485,7 @@ export class WebhookResource {
 
   /**
    * Read the workspace's outbound webhook
-   * The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never returned — `hasSecret` reports only whether one is set.
+   * The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ "webhook": null }` when none is registered. The signing secret is never returned; `hasSecret` reports only whether one is set.
    * `GET /api/v1/notification-webhook` — operation `getPublicNotificationWebhook`.
    */
   get(options: RequestOptions = {}): Promise<PublicNotificationWebhook> {
@@ -498,7 +498,7 @@ export class WebhookResource {
 
   /**
    * Register or update the outbound webhook
-   * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. An omitted field keeps its stored value, so a caller can subscribe to run events without re-sending the URL or secret. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
+   * Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. Every omitted field keeps its stored value, so subscribing to run events is a one-field call that re-sends neither the URL nor the secret. `url` is required only on the first call, when there is nothing registered to keep; omitting it otherwise leaves the endpoint alone. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.
    * `PUT /api/v1/notification-webhook` — operation `putPublicNotificationWebhook`.
    */
   set(body: PutNotificationWebhook, options: RequestOptions = {}): Promise<NotificationWebhook> {

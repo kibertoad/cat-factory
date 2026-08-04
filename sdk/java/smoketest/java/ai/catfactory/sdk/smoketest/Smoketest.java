@@ -28,6 +28,7 @@ import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
 import ai.catfactory.sdk.model.CreatePublicTask;
 import ai.catfactory.sdk.model.NotificationWebhook;
+import ai.catfactory.sdk.model.NotificationWebhookAlertEvent;
 import ai.catfactory.sdk.model.NotificationWebhookRunEvent;
 import ai.catfactory.sdk.model.PublicNotificationWebhook;
 import ai.catfactory.sdk.model.PutNotificationWebhook;
@@ -216,6 +217,13 @@ public final class Smoketest {
                 events.add(event.wireValue());
             }
             observations.put("webhookSavedRunEvents", String.join(",", events));
+            // Omitting a field must send NO field, not an empty one: a `url: ""` here would blank
+            // the endpoint on a call that only meant to add an alert subscription, and still
+            // answer 200.
+            NotificationWebhook edited = client.webhook().set(PutNotificationWebhook.builder()
+                    .alertEvents(List.of(NotificationWebhookAlertEvent.PLATFORM_HEALTH_FIRING))
+                    .build());
+            observations.put("webhookUrlSurvivesOmittedUpdate", edited.url().equals(saved.url()));
             PublicNotificationWebhook read = client.webhook().get();
             observations.put(
                     "webhookReadMatchesSaved",

@@ -94,6 +94,11 @@ const EXPECTED: Record<string, unknown> = {
   // Write-only: the projection says a secret is SET and never says what it is.
   webhookSavedHasSecret: true,
   webhookSavedRunEvents: 'run.completed',
+  // Keep-on-omit is where an OPTIONAL field is most exposed to a client that serializes "absent"
+  // as a zero value: a `url` sent as `""` instead of left out would blank the workspace's endpoint
+  // on a call that meant to add a subscription, and the 200 would look identical. Each client
+  // sends a body naming only `alertEvents` and must get the registered url back unchanged.
+  webhookUrlSurvivesOmittedUpdate: true,
   webhookReadMatchesSaved: true,
   webhookNullAfterDelete: true,
   startedHasExecutionId: true,

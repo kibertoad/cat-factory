@@ -225,9 +225,12 @@ func main() {
 			return err
 		}
 		observations["webhookInitiallyNull"] = before.Webhook == nil
+		// `URL` is a pointer because omitting it is meaningful (keep the registered endpoint),
+		// which is the same reason `Secret` is one.
+		url := "https://hooks.example.com/cat-factory-smoketest"
 		secret := "smoketest-signing-secret"
 		saved, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
-			URL:       "https://hooks.example.com/cat-factory-smoketest",
+			URL:       &url,
 			Secret:    &secret,
 			RunEvents: []catfactory.NotificationWebhookRunEvent{catfactory.NotificationWebhookRunEventRunCompleted},
 		})
@@ -242,6 +245,16 @@ func main() {
 			events = append(events, string(event))
 		}
 		observations["webhookSavedRunEvents"] = strings.Join(events, ",")
+		// Omitting a field must send NO field, not an empty one: a `url: ""` here would blank the
+		// endpoint on a call that only meant to add an alert subscription, and still answer 200.
+		// Go is the client where that is a live risk, since a non-pointer string cannot express it.
+		edited, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
+			AlertEvents: []catfactory.NotificationWebhookAlertEvent{catfactory.NotificationWebhookAlertEventPlatformHealthFiring},
+		})
+		if err != nil {
+			return err
+		}
+		observations["webhookUrlSurvivesOmittedUpdate"] = edited.URL == saved.URL
 		read, err := client.Webhook.Get(ctx)
 		if err != nil {
 			return err

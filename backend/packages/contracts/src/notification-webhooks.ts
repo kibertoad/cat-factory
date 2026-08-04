@@ -80,17 +80,32 @@ export const notificationWebhookSchema = v.object({
 export type NotificationWebhook = v.InferOutput<typeof notificationWebhookSchema>
 
 /**
- * Register or update the workspace's notification webhook. `secret` is write-only: omit it to keep
- * the stored one, pass a new value to rotate it. An `https:` URL is required — deliveries carry a
- * signed payload describing internal work, and plaintext HTTP would leak it on the wire.
+ * Register or update the workspace's notification webhook. EVERY field is keep-on-omit: what the
+ * body leaves out retains its stored value, so subscribing an existing endpoint to a new event
+ * family is a one-field write.
+ *
+ * That uniformity is the point, and `url` is optional for it. A mandatory re-send would make the
+ * common edit carry a value the caller did not intend to change, and a caller re-sending a URL it
+ * cached before someone else rotated the endpoint would silently redirect the workspace's
+ * deliveries back to the old receiver while appearing to only add a subscription. The first `PUT`
+ * on a workspace with nothing registered still needs one, and the service refuses with
+ * `reason: 'webhook_url_required'` rather than storing a half-endpoint.
+ *
+ * When supplied it must be `https:`: deliveries carry a signed payload describing internal work,
+ * and plaintext HTTP would leak it on the wire.
+ *
+ * `secret` is write-only: omit it to keep the stored one, pass a new value to rotate it.
  */
 export const putNotificationWebhookSchema = v.object({
-  url: v.pipe(
-    v.string(),
-    v.trim(),
-    v.url(),
-    v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
-    v.maxLength(2000),
+  /** Omit ⇒ keep the registered endpoint (required only when registering the first one). */
+  url: v.optional(
+    v.pipe(
+      v.string(),
+      v.trim(),
+      v.url(),
+      v.startsWith('https://', 'The webhook endpoint must be an https:// URL'),
+      v.maxLength(2000),
+    ),
   ),
   /** Omit ⇒ deliver the default parking types. */
   types: v.optional(v.array(notificationTypeSchema)),

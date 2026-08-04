@@ -236,6 +236,15 @@ Three decisions worth keeping:
 - **The secret stays write-only on this surface too.** An `admin` key can ROTATE the signing secret
   and can never read the stored one, which is what stops a leaked key from becoming the ability to
   forge deliveries a receiver would verify.
+- **`PUT`'s `url` became optional so keep-on-omit is uniform.** Publishing the endpoint is what
+  forced the question: three separate places in the first draft described the rule as covering every
+  field, because that is the mental model a partial `PUT` creates, while the schema required `url`.
+  Rather than trim the docs to the accident, the schema moved. A mandatory re-send made the routine
+  edit carry a value the caller never meant to change, and a client re-sending a URL cached before
+  someone else rotated the receiver would redirect every future delivery while looking like it only
+  added a subscription. The first `PUT` on an empty workspace still needs one
+  (`reason: 'webhook_url_required'`). Worth doing BEFORE 1.4.0 shipped: relaxing a required field
+  stays legal afterwards, but the false doc would have been baked into four published SDKs.
 
 ### D1: Ticket context on task creation ✅
 

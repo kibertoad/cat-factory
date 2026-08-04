@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param runEvents May be absent entirely.
  * @param secret May be absent entirely. Length 16..200.
  * @param types May be absent entirely.
- * @param url Length 0..2000.
+ * @param url May be absent entirely. Length 0..2000.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PutNotificationWebhook(
@@ -35,8 +35,8 @@ public record PutNotificationWebhook(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("types") @Nullable List<NotificationType> types,
 
-    /** Length 0..2000. */
-    @JsonProperty("url") String url
+    /** May be absent entirely. Length 0..2000. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("url") @Nullable String url
 ) {
 
     /** A new builder for {@link PutNotificationWebhook}. */

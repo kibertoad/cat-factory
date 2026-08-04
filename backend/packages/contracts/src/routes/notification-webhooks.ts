@@ -12,7 +12,7 @@ import { errorResponses } from './_shared.js'
 //  1. Session-authed, mounted under `/workspaces/:workspaceId` (so paths are relative), like the
 //     tracker/Slack settings. These are writes to an integration's configuration, so they sit
 //     behind the `integrations.manage` workspace permission like every other admin controller.
-//  2. `/api/v1/notification-webhook` — absolute paths, authenticated in-controller by an
+//  2. `/api/v1/notification-webhook`, on absolute paths, authenticated in-controller by an
 //     `admin`-scope public-API key. Same three verbs against the same service.
 //
 // The endpoint they configure is consumed by `WebhookNotificationChannel` and the run-lifecycle /
@@ -22,8 +22,8 @@ import { errorResponses } from './_shared.js'
 // the caller it was built for. A deployment whose operator is headless has no browser session, so
 // the receiver that run-lifecycle push exists to feed could only be registered by a human clicking
 // through an app the feature deliberately does not need. Both surfaces are thin delegates over
-// `NotificationWebhookService` — same URL guard, same write-only secret, same one-row-per-workspace
-// rule — so neither can admit an endpoint the other would reject.
+// `NotificationWebhookService` (same URL guard, same write-only secret, same
+// one-row-per-workspace rule), so neither can admit an endpoint the other would reject.
 
 /** The workspace's registered webhook, or null when none is set. Never returns the secret. */
 export const getNotificationWebhookContract = defineApiContract({

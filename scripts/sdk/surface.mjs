@@ -129,7 +129,7 @@ export const MCP_TOOL_HINTS = {
   // task twice leaves the board in the same state, and the first call is still irreversible.
   deletePublicTask: { destructive: true, idempotent: true },
   // The outbound webhook, same pair and for a subtler reason: neither call spends anything, and
-  // both overwrite state whose previous value cannot be recovered through this API — the endpoint
+  // both overwrite state whose previous value cannot be recovered through this API: the endpoint
   // someone else's integration is registered at, and a signing secret that is never readable back.
   // What is lost is invisible from here, since the receiver that stops hearing from this workspace
   // is somewhere else entirely.
