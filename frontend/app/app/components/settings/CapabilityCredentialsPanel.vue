@@ -16,6 +16,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import type { CapabilityCredentialStatus } from '~/types/capabilityCredentials'
 import SecretInput from '~/components/common/SecretInput.vue'
+import ToolServerChecklist from '~/components/settings/ToolServerChecklist.vue'
 
 const { t, d } = useI18n()
 const store = useCapabilityCredentialsStore()
@@ -63,6 +64,19 @@ onMounted(async () => {
   }
 })
 
+// The tool-server inventory that renders above the checklist. Its own read (and its own failure
+// report, for the same reason): the two surfaces answer different questions off different endpoints,
+// so one failing must not blank the other. Both resolve the same 403, so this is only reached by a
+// caller the backend has already admitted.
+const toolServers = useToolServersStore()
+onMounted(async () => {
+  try {
+    await toolServers.load()
+  } catch (e) {
+    present(e, 'settings.toolServers.toast.loadFailed')
+  }
+})
+
 async function saveKey(key: string) {
   const value = (drafts[key] ?? '').trim()
   if (!value) return
@@ -99,6 +113,11 @@ async function removeKey(key: string) {
 
 <template>
   <div class="space-y-4" data-testid="capability-credentials-panel">
+    <!-- The servers FIRST, because they are what the keys below authenticate: a bare list of
+         variable names does not tell an operator which of them matters, and the Test button is the
+         only thing on either surface that can say whether the value they typed works. -->
+    <ToolServerChecklist />
+
     <p class="text-sm text-slate-400">
       {{ t('settings.capabilityCredentials.intro') }}
     </p>

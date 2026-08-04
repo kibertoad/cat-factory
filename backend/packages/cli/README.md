@@ -194,12 +194,17 @@ cd local && npm install && npm run db:up && npm start     # serves :8787
 cd ../frontend && npm install && npm run dev              # Nuxt dev on :3000
 ```
 
-You still need to:
+Expect the first `npm start` to sit there a while: before it serves anything, the backend pulls
+the executor-harness image your agent jobs will run in, matched to the version it was built
+against. Later starts reuse it. The generated `.env` leaves `LOCAL_HARNESS_IMAGE` commented out
+so you stay on that matched pin; set it (or pass `--harness-image` at scaffold time) only when
+you want to lock a specific version or run your own build.
 
-- **Pull the executor image** the agent jobs run as: `docker pull ghcr.io/kibertoad/cat-factory-executor:latest`.
-- **Configure at least one model provider** in `local/.env` (the simplest is Cloudflare Workers
-  AI over REST: `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`; or a direct vendor key like
-  `ANTHROPIC_API_KEY`). Without one, no model is selectable and pipelines can't start.
+The last thing to add is a **model provider**, without which the board comes up but no model is
+selectable, so no pipeline can start. The quickest is Cloudflare Workers AI over REST
+(`CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN`); any direct vendor key works too, such as
+`ANTHROPIC_API_KEY`. Put it in `local/.env` before you start, or sign in and add it through the
+UI, whichever you prefer.
 
 The generated `README.md` repeats these steps with your chosen values, and links to the full
 [local-mode docs](../../../deploy/local/README.md) (container-runtime matrix, repo linking, the

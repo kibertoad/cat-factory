@@ -388,7 +388,11 @@ function registerJobRoutes(app: Hono<AppEnv>): void {
     const container = c.get('container')
     const { pipelineId, input, title } = c.req.valid('json')
 
-    const pipeline = await container.pipelineService.get(auth.workspaceId, pipelineId)
+    // `resolveForRun`, not the stored row: what this admits must be what `start` runs, and `start`
+    // ADOPTS a catalog built-in the board was never seeded with. `pl_initiative` is public AND
+    // parking, so reading the row alone both refused a legitimate job on a board older than that
+    // pipeline and, worse, would have let the parking check below run against nothing.
+    const pipeline = await container.pipelineService.resolveForRun(auth.workspaceId, pipelineId)
     if (!pipeline || !pipeline.public) {
       return c.json(
         { error: { code: 'pipeline_not_public', message: 'Unknown or non-public pipeline' } },
@@ -832,14 +836,18 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
     // at all, so a plain `write` key (one deliberately NOT granted `decide`) could create
     // exactly the parked run the scope ladder says it must not oversee. Board runs stay
     // visible in the SPA, so a human can still answer them there; the rule is about what the
-    // KEY may set in motion, not about recoverability. An unknown pipeline id skips the check
-    // and fails inside `start` as before.
+    // KEY may set in motion, not about recoverability.
     //
-    // Read by id through the SAME `pipelineRepository.get` that `ExecutionService.start`
-    // resolves the run's pipeline with, so what is ADMITTED and what is RUN cannot be two
-    // different rows. It also keeps a per-start read off the whole catalog, which the
-    // list-then-filter form paid for on every board start.
-    const boardPipeline = await container.pipelineService.get(auth.workspaceId, pipelineId)
+    // Resolved through the SAME question `ExecutionService.start` answers (`resolveForRun`), which
+    // includes a catalog built-in this board has never adopted, so what is ADMITTED and what is RUN
+    // cannot be two different definitions. Reading the stored row instead was a live hole rather
+    // than a nicety: an un-adopted pipeline answered `null`, this check was skipped for want of
+    // anything to inspect, and `start` then adopted and ran it, so a `write`-only key could park a
+    // run after all. An id NOTHING defines still resolves to null and still fails inside `start`.
+    const boardPipeline = await container.pipelineService.resolveForRun(
+      auth.workspaceId,
+      pipelineId,
+    )
     // Same rule as `POST /jobs` (see `unanswerableParkRefusal`), with THIS task's own input.
     const taskParkRefusal = boardPipeline
       ? await unanswerableParkRefusal(

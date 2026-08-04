@@ -457,6 +457,22 @@ export class AgentKindRegistry {
   }
 
   /**
+   * Every tool server registered BY ID, whether or not a kind references it.
+   *
+   * The complement of walking {@link kindsWithCapabilities}, and the only way to see a registration
+   * attached to NOTHING. That state is invisible to every other check: boot validation reaches a
+   * definition through the kind that declares it, so an orphan registration passes every rule while
+   * its credentials sit in the operator's checklist as keys no dispatch will ever ask for. The
+   * operability surface reports it with an empty `declaredBy` rather than filtering it out.
+   *
+   * Inline definitions are deliberately absent — those belong to one kind by construction and are
+   * reachable only through it. Registration order, which is stable but not meaningful.
+   */
+  allToolServers(): McpServerDefinition[] {
+    return [...this.toolServerDefinitions.values()]
+  }
+
+  /**
    * Give an EXISTING kind extra skills — additive, so a deployment attaches its house playbook to
    * a built-in kind (`coder`, `pr-reviewer`) without redefining it. Deduplicated with the kind's
    * own declarations at resolution time.

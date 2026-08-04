@@ -37,6 +37,7 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
 import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
 import { previewController } from './modules/preview/PreviewController.js'
@@ -330,6 +331,7 @@ function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): voi
   app.route('/workspaces/:workspaceId', releaseHealthController())
   app.route('/workspaces/:workspaceId', testSecretsController())
   app.route('/workspaces/:workspaceId', capabilityCredentialsController())
+  app.route('/workspaces/:workspaceId', toolServerController())
   app.route('/workspaces/:workspaceId', validationConfigController())
   app.route('/workspaces/:workspaceId', packageRegistriesController())
   // Browsable frontend preview (local/node); 503 on the Worker (frontendPreview unsupported).

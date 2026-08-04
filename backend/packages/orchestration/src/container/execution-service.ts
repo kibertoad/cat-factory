@@ -71,6 +71,10 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // `resolveCoreRuntime` supplies the empty default, so the engine and the board service (which
     // seeds a type's default fragments) read the SAME registry instance.
     taskTypeRegistry: runtime.taskTypeRegistry,
+    // Same rule, and load-bearing for the same reason: run resolution ADOPTS a catalog built-in the
+    // workspace was never seeded with, and it must read the instance `PipelineService` seeds and
+    // reseeds from, or a deployment's own registered pipeline is adoptable by one of them only.
+    pipelineRegistry: runtime.pipelineRegistry,
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,
     judgeAssessor,

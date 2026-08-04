@@ -40,6 +40,16 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `docs/initiatives/headless-clarification-loop.md`,
   `docs/initiatives/public-api-additions.md` and
   `backend/docs/adr/0030-public-api-surface.md`.
+- `modules/toolServers/`: the tool-server (MCP) **operability** surface, `secrets.manage`-gated
+  read included. `declaredToolServers.ts` projects every registration non-secretly (unioning the
+  walk over `kindsWithCapabilities()` with `allToolServers()`, so a registration attached to NO
+  kind is reported with an empty `declaredBy` instead of being invisible); `probeToolServer.ts`
+  resolves the credentials through the container's `toolSecretResolver` — the SAME composed chain a
+  dispatch uses, reserved-key floor and all — and reconciles `allowedTools` against what the server
+  really exposes; `mcpProbe.ts` is a hand-rolled Streamable-HTTP client (three POSTs over `fetch`,
+  no MCP SDK, so nothing Node-reaching enters a module every facade bundles). A `stdio` server and a
+  loopback url are REFUSED by name rather than probed, because the backend is not the run container.
+  See `backend/docs/custom-agents.md` → Tool servers.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
   shared body-limit + signature-rejection logging. Each verifies over the RAW body before parsing,
@@ -101,7 +111,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   deployment shape someone is actively debugging would be the only one with no ids.
 - `http/`: request helpers, the shared **auth + per-workspace RBAC gate** (`authGate.ts` +
   `workspaceAccess.ts`: `loadWorkspaceAccess`, the viewer write floor, and
-  `requireWorkspacePermission`; the admin-tier controller middleware) and `optionalJsonBody`
+  `requireWorkspacePermission`; the admin-tier controller middleware, plus
+  `requireWorkspacePermissionIncludingReads` for the two controllers whose READ is the sensitive
+  half — the capability-credential checklist and the tool-server inventory both project the
+  credential KEY NAMES this deployment's capabilities want) and `optionalJsonBody`
   (mount it before a contract route whose body is ALL-optional: a declared `requestBodySchema`
   otherwise makes the transport require a body, which breaks body-less callers of a route that
   merely gained an optional field); `config/` (the runtime-neutral env parsers both facades

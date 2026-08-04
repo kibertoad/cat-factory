@@ -212,6 +212,19 @@ export interface PipelineRepository {
   listByWorkspace(workspaceId: string): Promise<Pipeline[]>
   get(workspaceId: string, id: string): Promise<Pipeline | null>
   insert(workspaceId: string, pipeline: Pipeline): Promise<void>
+  /**
+   * Insert a pipeline unless the workspace already holds that id, in which case do nothing:
+   * FIRST WRITE WINS, targeted on the composite `(workspace_id, id)` key.
+   *
+   * The shape adoption needs. Materialising a catalog built-in a workspace was never seeded with
+   * (`PipelineService.reseed`'s absent branch, and the run path's adopt-on-start) races with
+   * itself: two tasks of the same reusable operation, started at once on a board that never
+   * adopted its pipeline, both resolve "no row" and both insert. Both write the SAME catalog
+   * definition, so losing the race is not a conflict to report, it is the other writer having
+   * already done the work. Deliberately conflict-TARGETED rather than a blanket ignore, so a
+   * genuine constraint violation still surfaces on both runtimes (the `INSERT OR IGNORE` trap).
+   */
+  insertIfAbsent(workspaceId: string, pipeline: Pipeline): Promise<void>
   /** Overwrite an existing pipeline in place (preserving its catalog order). */
   update(workspaceId: string, pipeline: Pipeline): Promise<void>
   delete(workspaceId: string, id: string): Promise<void>
