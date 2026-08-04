@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { TrackerWebhookDelivery } from '@cat-factory/kernel'
+import type { TrackerCommentEvent, TrackerWebhookDelivery } from '@cat-factory/kernel'
 import { githubIssuesWebhookAdapter, jiraWebhookAdapter, linearWebhookAdapter } from './adapters.js'
+import { markdownToAdf } from '../../tracker/jira.create.logic.js'
+import {
+  isPlatformAuthoredComment,
+  parseReviewReplyCommands,
+  PLATFORM_COMMENT_MARKER,
+} from '../../writeback/reviewReplies.logic.js'
 
 const SECRET = 'a-webhook-secret'
 
@@ -262,9 +268,56 @@ describe('jiraWebhookAdapter.parse', () => {
     expect(event).toMatchObject({ kind: 'issue', board: null })
   })
 
-  it('ignores an ADF comment body it cannot read as text', () => {
-    // Guessing at ADF traversal here would be a second, drifting copy of the import path's
-    // normalisation; a reply is a plain-text command line.
+  it('reads an ADF comment body, keeping the line structure the reply grammar needs', () => {
+    // Jira Cloud v3 sends ADF, so this is the SHAPE a real reply arrives in, read through the
+    // import path's own `adfToMarkdown` rather than a second traversal. Every command has to
+    // survive as the first token of its own line: rendering the document as one blob would fold
+    // two commands into one and match neither.
+    const event = jiraWebhookAdapter.parse(
+      raw({
+        webhookEvent: 'comment_created',
+        issue: { key: 'ENG-1' },
+        comment: {
+          id: '1',
+          body: {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: '@cat-factory answer rri_1 Use the v2 endpoint' }],
+              },
+              {
+                type: 'paragraph',
+                content: [{ type: 'text', text: '@cat-factory dismiss rri_2' }],
+              },
+            ],
+          },
+          author: { accountId: 'a1', displayName: 'Ada' },
+        },
+      }),
+    )
+    expect(event).toMatchObject({ kind: 'comment', externalId: 'ENG-1', commentId: '1' })
+    expect(parseReviewReplyCommands((event as TrackerCommentEvent).body)).toEqual([
+      { verb: 'answer', itemId: 'rri_1', text: 'Use the v2 endpoint', line: expect.any(String) },
+      { verb: 'dismiss', itemId: 'rri_2', line: expect.any(String) },
+    ])
+  })
+
+  it('still reads a plain-string body (an older site / a v2 client)', () => {
+    const event = jiraWebhookAdapter.parse(
+      raw({
+        webhookEvent: 'comment_created',
+        issue: { key: 'ENG-1' },
+        comment: { id: '1', body: '@cat-factory proceed', author: {} },
+      }),
+    )
+    expect(event).toMatchObject({ kind: 'comment', body: '@cat-factory proceed' })
+  })
+
+  it('ignores a comment whose ADF renders to nothing', () => {
+    // An empty document carries no command, so there is nothing to claim or acknowledge: the
+    // same disposition as an unparseable delivery, reached honestly rather than by failing to read.
     expect(
       jiraWebhookAdapter.parse(
         raw({
@@ -274,6 +327,25 @@ describe('jiraWebhookAdapter.parse', () => {
         }),
       ),
     ).toBeNull()
+  })
+
+  it('leaves the platform`s OWN ADF acknowledgement recognisable as ours', () => {
+    // Reading ADF turns on ingest of the comments the platform itself posts to Jira (it writes
+    // through `markdownToAdf`), and a Jira connection is not flagged as a bot. So the structural
+    // marker guard (not the author checks) is what stands between an ack and an ack-of-an-ack
+    // loop, and it has to survive the markdown → ADF → markdown round trip.
+    const event = jiraWebhookAdapter.parse(
+      raw({
+        webhookEvent: 'comment_created',
+        issue: { key: 'ENG-1' },
+        comment: {
+          id: '9',
+          body: markdownToAdf(`${PLATFORM_COMMENT_MARKER}Recorded your answer to rri_1.`),
+          author: { accountId: 'bot', displayName: 'cat-factory' },
+        },
+      }),
+    )
+    expect(isPlatformAuthoredComment((event as TrackerCommentEvent).body)).toBe(true)
   })
 })
 

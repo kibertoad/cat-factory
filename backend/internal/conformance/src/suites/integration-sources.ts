@@ -736,5 +736,60 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       // Full records come back (not just keys), so the caller renders bodies without re-reading.
       expect(resolved.find((t) => t.externalId === 'PROJ-1')?.description).toBe('Body of PROJ-1')
     })
+
+    it('admits exactly one block per issue under CONCURRENT claims (claimBlockLink)', async () => {
+      // "One task per ticket" is an invariant on `linked_block_id`, and the writers race for real:
+      // a redelivering tracker webhook is precisely two filings of one issue in flight at once.
+      // A read-then-`linkBlock` cannot hold the invariant (at READ COMMITTED both readers see it
+      // free), and the failure is invisible on a SEQUENTIAL test, which is why this one drives
+      // the claims CONCURRENTLY, and why it lives here rather than in either facade's own suite:
+      // SQLite serializes writers, so the racy code is accidentally safe on D1 and loses data
+      // only on Postgres.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.taskRepository()
+      await repo.upsert({
+        workspaceId: ws,
+        source: 'jira',
+        externalId: 'PROJ-9',
+        title: 'Issue PROJ-9',
+        url: 'https://tracker/PROJ-9',
+        status: 'open',
+        type: 'Story',
+        assignee: null,
+        priority: null,
+        labels: [],
+        description: 'Body',
+        comments: [],
+        excerpt: '',
+        linkedBlockId: null,
+        syncedAt: 1_000,
+        deletedAt: null,
+      })
+
+      const outcomes = await Promise.all([
+        repo.claimBlockLink(ws, 'jira', 'PROJ-9', 'task_a'),
+        repo.claimBlockLink(ws, 'jira', 'PROJ-9', 'task_b'),
+      ])
+      expect(outcomes.filter(Boolean)).toHaveLength(1)
+
+      // The winner is what the row actually holds, so the loser's 409 can name it truthfully.
+      const winner = outcomes[0] ? 'task_a' : 'task_b'
+      expect((await repo.get(ws, 'jira', 'PROJ-9'))?.linkedBlockId).toBe(winner)
+
+      // A late third filing loses against the settled row rather than re-pointing it.
+      expect(await repo.claimBlockLink(ws, 'jira', 'PROJ-9', 'task_c')).toBe(false)
+      expect((await repo.get(ws, 'jira', 'PROJ-9'))?.linkedBlockId).toBe(winner)
+
+      // Re-claiming with the block that already holds it WINS: a caller retrying after a lost
+      // response settles idempotently instead of refusing against its own earlier write.
+      expect(await repo.claimBlockLink(ws, 'jira', 'PROJ-9', winner)).toBe(true)
+
+      // And the unconditional `linkBlock` is still the deliberate re-point (the manual link
+      // action, the recurring intake's per-fire move): the claim narrows nothing for it.
+      await repo.linkBlock(ws, 'jira', 'PROJ-9', 'task_c')
+      expect((await repo.get(ws, 'jira', 'PROJ-9'))?.linkedBlockId).toBe('task_c')
+    })
   })
 }
