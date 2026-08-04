@@ -32,6 +32,8 @@ import {
 } from '@cat-factory/server'
 import { GITLAB_PUBLIC_API_BASE } from '@cat-factory/gitlab'
 import {
+  parseLogExportBatchSize,
+  parseLogExportFlushIntervalMs,
   parseOtlpHeaders,
   parsePlatformMetricsIntervalMs,
   parsePlatformMetricsWindow,
@@ -659,6 +661,13 @@ function buildOtelConfig(env: NodeJS.ProcessEnv): AppConfig['otel'] {
       enabled: otelEnabled && env.OTEL_PLATFORM_METRICS?.trim() === 'true',
       intervalMs: parsePlatformMetricsIntervalMs(env.OTEL_PLATFORM_METRICS_INTERVAL_MS),
       window: parsePlatformMetricsWindow(env.OTEL_PLATFORM_METRICS_WINDOW),
+    },
+    logs: {
+      // A further opt-in again (adds an egress POST per batch of lines). The LOG exporter is
+      // the fetch transport on both runtimes, unlike the SDK-based trace sink above.
+      enabled: otelEnabled && env.OTEL_LOGS?.trim() === 'true',
+      flushIntervalMs: parseLogExportFlushIntervalMs(env.OTEL_LOGS_FLUSH_INTERVAL_MS),
+      maxBatchSize: parseLogExportBatchSize(env.OTEL_LOGS_MAX_BATCH_SIZE),
     },
   }
 }

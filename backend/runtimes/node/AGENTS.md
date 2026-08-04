@@ -48,6 +48,10 @@ transport, and Node model provisioning.
   a parked run).
 - `gateways.ts`, `modelProvider.ts`, `realtime.ts`, `config.ts`, `retention.ts`: Node gateway
   - model + transport wiring and the retention sweep.
+- `platformMetrics.ts` + `logExport.ts`: the opt-in OTLP pushes. Both are the FETCH exporter on
+  both runtimes, so the Worker runs the same code on its cron / per-invocation flush; what is
+  Node-specific here is only the timer and the shutdown flush (`logExport` detaches the sink LAST,
+  after every other stop, so the shutdown's own lines get out).
 
 ## Real-time & multi-node
 

@@ -15,6 +15,10 @@ export {
 // Process-level failure guards (unhandled rejection / uncaught exception), shared with the
 // local facade so both Node-hosted deployments crash-report the same way.
 export { installProcessFailureGuards } from './processGuards.js'
+// The opt-in OTLP log export, re-exported for the local facade's MOTHERSHIP boot: it never
+// calls `start()`, so without this it would be the one Node-hosted deployment shape whose logs
+// stop at stdout while every other one exports them.
+export { startOtelLogExport, type LogExportHandle } from './logExport.js'
 // The shared periodic-sweep helper (run-once-first, non-overlapping, unref'd, best-effort),
 // re-exported so the local facade's mothership boot — which never calls `start()`, and so gets
 // none of the sweepers wired there — prunes its local telemetry store on the same shape.

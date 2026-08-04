@@ -258,6 +258,10 @@ patterns: [`backend/docs/logging.md`](./backend/docs/logging.md).
   threshold is checked in the adapter, not on the pino instance, because pino children snapshot their
   parent's level at creation.
 - **Assert the evidence in tests** with kernel's `createRecordingLogger()`.
+- **A SECOND destination is a kernel `LogSink` installed with `setLogSink`** (today the opt-in
+  OTLP log export), never a second logger. It gets the `child`-bound fields folded in and sits
+  behind the same level gate; `record` may not throw or block and `flush` may not reject, and
+  DRAINING is the facade's job (Node timer + shutdown flush ⇄ Worker per-invocation `waitUntil`).
 
 ## Operational EVENTS are counted, not just logged
 

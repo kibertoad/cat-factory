@@ -279,6 +279,33 @@ threads), whose per-level `write` hands the already-serialised object to the mat
 method, so a Worker line and a Node line parse identically and only the console routing differs.
 Cloudflare captures it via `wrangler tail` / Logpush; a Node process writes it to stdout.
 
+## Shipping lines somewhere: the `LogSink` seam
+
+A deployment can send every emitted line to a second destination as well as to the local writer.
+The seam is the kernel **`LogSink`** port (`ports/logging.ts`), installed on the adapter with
+`setLogSink(sink)` and today implemented by the opt-in OTLP log exporter
+([`@cat-factory/observability-otel`](../packages/observability-otel/README.md#log-export-the-third-signal),
+`OTEL_LOGS=true` on top of a configured exporter). Nothing in the domain changes: packages keep
+logging through the one `Logger` port, and the fan-out lives in `observability/logger.ts`, which
+is exactly what "adding a second destination is a change there and nowhere else" meant.
+
+Four rules bind a new sink, each of them a way the seam could otherwise become a failure class:
+
+- **`record` may not throw and may not block.** It runs inside `logger.warn(…)`, often on a path
+  already handling a failure. Buffer and return; do the I/O in `flush`. The adapter wraps the
+  call anyway (silently: the only channel available to report a broken log sink is the log sink),
+  but a sink that relies on that wrapper is one bad deploy from losing every line.
+- **`flush` may not reject**, for the same reason every other best-effort path resolves.
+- **A sink gets the MERGED field bag**, `child`-bound fields folded in, because the correlation
+  ids are the half a line is joined to a run by and a sink cannot reconstruct them.
+- **The level gate applies first**, so `LOG_LEVEL` governs both destinations. One dial, not two
+  that can disagree about what a deployment is emitting.
+
+Draining is the FACADE's job, not the sink's: Node flushes on an interval and once more on
+shutdown (after every other stop, so the shutdown's own lines get out), the Worker flushes at the
+end of each invocation, because its buffer is per isolate and an isolate is discarded without
+notice. A sink that started its own timer would be making a promise workerd cannot keep.
+
 ## Logging is half of it: count the event too
 
 A log line answers "what happened to THIS run". It cannot answer "is this happening more than it

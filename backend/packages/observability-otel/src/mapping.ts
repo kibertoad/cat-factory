@@ -4,6 +4,8 @@ import type {
   LlmStepSpan,
   LlmToolSpan,
   LlmToolSpanContext,
+  LogLevel,
+  LogRecord,
   OperationalCounter,
   OperationalCounterSample,
   OperationalGauge,
@@ -93,8 +95,13 @@ const EVENT_ATTR = {
   completion: 'gen_ai.completion',
 } as const
 
-/** A neutral attribute value both transports understand (string / number / string list). */
-export type AttributeValue = string | number | string[]
+/**
+ * A neutral attribute value both transports understand (string / number / boolean / string
+ * list). Booleans arrive only from LOG fields, which are free-form where a span's attributes
+ * are ours to choose; they are carried as a native OTLP `boolValue` rather than stringified,
+ * because a backend filters `ok = false` and `ok = "false"` differently.
+ */
+export type AttributeValue = string | number | boolean | string[]
 export type AttributeMap = Record<string, AttributeValue>
 
 interface MappedEvent {
@@ -784,4 +791,135 @@ export function mapOperationalGauges(samples: OperationalGaugeSample[]): MappedG
     unit: JOB_UNIT,
     points,
   }))
+}
+
+// ---- LOG RECORDS ----------------------------------------------------------
+//
+// The third OTLP signal this package publishes (`/v1/logs`), beside the per-call traces and
+// the metrics above. Its input is the kernel `LogRecord`, one emitted `Logger` line with its
+// `child`-bound correlation fields already folded in, so this mapping is the one place that
+// decides how a platform log line becomes an OTLP log record: severity, body, attributes, and
+// the trace it belongs to.
+
+/**
+ * OTLP `SeverityNumber` per level. The platform's vocabulary is four levels (kernel's
+ * `LogLevel`), each landing on the BASE number of its OTLP range (DEBUG=5, INFO=9, WARN=13,
+ * ERROR=17) rather than a mid-range value, so a backend's `severity >= WARN` filter means
+ * exactly what an operator reading `LOG_LEVEL` expects. Exhaustive over the union, so adding
+ * a level fails the build here rather than exporting an unmapped line as severity 0.
+ */
+export const LOG_SEVERITY_NUMBER: Record<LogLevel, number> = {
+  debug: 5,
+  info: 9,
+  warn: 13,
+  error: 17,
+}
+
+/** The matching `SeverityText`, upper-cased per the OTLP convention. */
+export const LOG_SEVERITY_TEXT: Record<LogLevel, string> = {
+  debug: 'DEBUG',
+  info: 'INFO',
+  warn: 'WARN',
+  error: 'ERROR',
+}
+
+/**
+ * Ceiling on one stringified attribute value. A log field can carry captured command output
+ * or model text, and a collector rejects an oversized batch WHOLE, so one 2 MB field would drop
+ * every line beside it. Truncation states what it cut (see the "every cap records what it
+ * dropped" rule) rather than silently shortening.
+ */
+const MAX_ATTRIBUTE_CHARS = 8192
+
+/** The field name a log record's own truncation note lands under. */
+const TRUNCATION_SUFFIX = (dropped: number) => `…[truncated ${dropped} chars]`
+
+function cap(value: string): string {
+  return value.length <= MAX_ATTRIBUTE_CHARS
+    ? value
+    : value.slice(0, MAX_ATTRIBUTE_CHARS) + TRUNCATION_SUFFIX(value.length - MAX_ATTRIBUTE_CHARS)
+}
+
+/**
+ * Coerce one arbitrary log-field value into a neutral attribute value, or `undefined` to omit
+ * the attribute entirely.
+ *
+ * `LogFields` is `Record<string, unknown>`: a call site may pass anything, including a value
+ * that cannot be serialised. Nothing here may throw (this runs on the emit path of a line that
+ * is often already reporting a failure), so an unserialisable value degrades to a note
+ * naming the problem rather than taking the line down with it.
+ *
+ * `null`/`undefined` are OMITTED rather than sent as an empty string: an absent attribute and
+ * one holding `""` are different facts, and only the absence states "the emitter had nothing".
+ */
+export function logAttributeValue(value: unknown): AttributeValue | undefined {
+  if (value === null || value === undefined) return undefined
+  if (typeof value === 'string') return cap(value)
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : cap(String(value))
+  if (typeof value === 'bigint') return cap(value.toString())
+  if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
+    return value.map((v) => cap(v))
+  }
+  try {
+    const json = JSON.stringify(value)
+    return json === undefined ? cap(String(value)) : cap(json)
+  } catch (error) {
+    // A cycle, a BigInt inside an object, a throwing `toJSON`: the same class the pino
+    // browser writer guards against, for the same reason: a field bag we cannot render must
+    // not remove the line, which is the only evidence that the code path ran at all.
+    return `[unserializable: ${error instanceof Error ? error.message : String(error)}]`
+  }
+}
+
+/** Map a whole field bag, dropping the keys whose value carries nothing. */
+export function logAttributes(fields: Record<string, unknown>): AttributeMap {
+  const attributes: AttributeMap = {}
+  for (const [key, raw] of Object.entries(fields)) {
+    const value = logAttributeValue(raw)
+    if (value !== undefined) attributes[key] = value
+  }
+  return attributes
+}
+
+/** A transport-neutral OTLP log record. */
+export interface MappedLogRecord {
+  /** Epoch ms the line was emitted at. */
+  timeMs: number
+  severityNumber: number
+  severityText: string
+  /** The line's fixed message; everything variable is an attribute. */
+  body: string
+  attributes: AttributeMap
+  /**
+   * The trace this line belongs to, when it named a run. Set to the SAME derived id the run's
+   * spans carry, so a backend joins logs to the trace structurally rather than by matching an
+   * attribute; absent for a line with no run (most boot, sweep and request lines).
+   */
+  traceId?: string
+}
+
+/**
+ * Map one emitted line to a neutral OTLP log record.
+ *
+ * Fields are exported under the names they already carry on the local writer (`workspaceId`,
+ * `executionId`, `jobId`, `scope`, …) rather than being renamed into the `cat_factory.*`
+ * namespace the spans use. An operator greps stdout and queries the collector with the same
+ * key, which is worth more than symmetry with a signal whose attribute names this package
+ * chose in the first place. The one thing the two signals DO share is the trace id, and it is
+ * shared structurally: a line carrying an `executionId` is stamped with the run's derived
+ * trace id, so a run's logs and its spans meet in the backend without either naming the other.
+ */
+export function mapLogRecord(record: LogRecord): MappedLogRecord {
+  const executionId = record.fields.executionId
+  return {
+    timeMs: record.timeMs,
+    severityNumber: LOG_SEVERITY_NUMBER[record.level],
+    severityText: LOG_SEVERITY_TEXT[record.level],
+    body: cap(record.msg),
+    attributes: logAttributes(record.fields),
+    ...(typeof executionId === 'string' && executionId
+      ? { traceId: hashHex(executionId, 16) }
+      : {}),
+  }
 }
