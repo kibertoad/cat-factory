@@ -127,9 +127,6 @@ export function companionTargets(kind: AgentKind, registry?: AgentKindRegistry):
  * companion through the container path, the engine uses to keep it off the inline companion
  * path, and the prompt uses to tell it to read the checkout.
  */
-export function isContainerBackedCompanion(
-  kind: AgentKind,
-  registry?: AgentKindRegistry,
-): boolean {
+export function isContainerBackedCompanion(kind: AgentKind, registry?: AgentKindRegistry): boolean {
   return companionFor(kind, registry)?.surface === 'container-explore'
 }

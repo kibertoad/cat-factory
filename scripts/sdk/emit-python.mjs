@@ -291,7 +291,12 @@ function emitObject(type) {
     '    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is\n' +
     '    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can\n' +
     '    #: still reach a newly added field instead of having to upgrade first.\n' +
-    '    extra: dict[str, Any] = field(default_factory=dict)\n' +
+    // `_dc_field`, never a bare `field`: a wire property may legitimately be NAMED `field`
+    // (`PublicInputGateDecisionIssue.field` is), and a dataclass attribute of that name
+    // SHADOWS the import inside the class body — so the next line would call the attribute's
+    // `None` default instead of `dataclasses.field` and the module would fail to import. The
+    // underscore prefix also keeps the alias out of the module's public surface.
+    '    extra: dict[str, Any] = _dc_field(default_factory=dict)\n' +
     '\n' +
     '    @classmethod\n' +
     `    def from_dict(cls, data: Mapping[str, Any]) -> "${type.name}":\n` +
@@ -372,7 +377,7 @@ release older than the deployment it talks to degrades to "less typed", never to
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as _dc_field
 from enum import Enum, StrEnum
 from typing import Any, TypeAlias
 

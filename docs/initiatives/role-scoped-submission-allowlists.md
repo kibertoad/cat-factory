@@ -46,15 +46,15 @@ existing settings and refused at the same two exits `dry_run` is.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                     | Status  | PR  |
-| --- | --------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | `submissionClassesByRoleSchema` + `submissionAllowedForRole` in contracts, with unit tests                | ⬜ todo |     |
-| 2   | Persistence: `submission_classes_by_role` column (D1 migration ⇄ Drizzle + `db:generate`), both repos     | ⬜ todo |     |
-| 3   | `RiskPolicyService` + `catalog.ts` defaults (EMPTY on every built-in, so the default is unchanged)        | ⬜ todo |     |
-| 4   | `MergeResolver`: the auto-merge refusal + its recorded reason on the decision                             | ⬜ todo |     |
-| 5   | `StepDecisionController.assertSubmissionAllowed`, beside `assertNotDryRun`, with its own conflict reason  | ⬜ todo |     |
-| 6   | SPA preset editor (per-role class allowlist) + the refusal copy, i18n across all locales                  | ⬜ todo |     |
-| 7   | Cross-runtime conformance: allowed lands, disallowed is refused at BOTH exits, `unknown` still lands      | ⬜ todo |     |
+| #   | Slice                                                                                                    | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | `submissionClassesByRoleSchema` + `submissionAllowedForRole` in contracts, with unit tests               | ⬜ todo |     |
+| 2   | Persistence: `submission_classes_by_role` column (D1 migration ⇄ Drizzle + `db:generate`), both repos    | ⬜ todo |     |
+| 3   | `RiskPolicyService` + `catalog.ts` defaults (EMPTY on every built-in, so the default is unchanged)       | ⬜ todo |     |
+| 4   | `MergeResolver`: the auto-merge refusal + its recorded reason on the decision                            | ⬜ todo |     |
+| 5   | `StepDecisionController.assertSubmissionAllowed`, beside `assertNotDryRun`, with its own conflict reason | ⬜ todo |     |
+| 6   | SPA preset editor (per-role class allowlist) + the refusal copy, i18n across all locales                 | ⬜ todo |     |
+| 7   | Cross-runtime conformance: allowed lands, disallowed is refused at BOTH exits, `unknown` still lands     | ⬜ todo |     |
 
 ## Conventions & gotchas
 

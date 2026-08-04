@@ -52,14 +52,14 @@ credentials, and its people sign in with it. Optionally, group claims map onto w
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                  | Status  | PR  |
-| --- | -------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | OIDC config (discovery URL, client id/secret, scopes) + a cached discovery/JWKS fetch                    | ⬜ todo |     |
-| 2   | `/auth/oidc/login` + `/auth/oidc/callback`: PKCE, signed `state`, ID-token verification against JWKS     | ⬜ todo |     |
+| #   | Slice                                                                                                     | Status  | PR  |
+| --- | --------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | OIDC config (discovery URL, client id/secret, scopes) + a cached discovery/JWKS fetch                     | ⬜ todo |     |
+| 2   | `/auth/oidc/login` + `/auth/oidc/callback`: PKCE, signed `state`, ID-token verification against JWKS      | ⬜ todo |     |
 | 3   | Identity linking through `user_identities` (`provider: 'oidc'`, subject = `iss#sub`) + first-login create | ⬜ todo |     |
-| 4   | SPA sign-in button + the "which methods are configured" projection it reads                             | ⬜ todo |     |
-| 5   | Group-claim → workspace-role mapping (opt-in), applied on each sign-in                                  | ⬜ todo |     |
-| 6   | Offboarding: revoke live sessions when a sign-in is refused or a role is withdrawn                      | ⬜ todo |     |
+| 4   | SPA sign-in button + the "which methods are configured" projection it reads                               | ⬜ todo |     |
+| 5   | Group-claim → workspace-role mapping (opt-in), applied on each sign-in                                    | ⬜ todo |     |
+| 6   | Offboarding: revoke live sessions when a sign-in is refused or a role is withdrawn                        | ⬜ todo |     |
 
 ## Conventions & gotchas
 
