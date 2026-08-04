@@ -38,7 +38,7 @@ export type {
   ExecutionInstance,
   ExecutionStatus,
   IntakeOrigin,
-  // The pre-token input gate's wire vocabulary (see `domain/input-gate.ts` for its check).
+  // The pre-dispatch input gate's wire vocabulary (see `domain/input-gate.ts` for its check).
   InputGateIssue,
   InputGateIssueCode,
   InputGateMode,

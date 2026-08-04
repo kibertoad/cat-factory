@@ -98,7 +98,7 @@ export async function addServiceFromRepo(
 /**
  * Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls).
  *
- * The default DESCRIPTION is not decoration: the pre-token input gate parks a run whose task
+ * The default DESCRIPTION is not decoration: the pre-dispatch input gate parks a run whose task
  * states nothing to act on, so a title-only fixture would park every spec that starts a run
  * before its first step. A spec that wants to exercise the gate passes `description: ''`.
  */
@@ -113,7 +113,7 @@ export async function createTask(
     taskType?: string
     /** The sparse per-type fields bag (e.g. `{ custom: { severity: 'sev1' } }`). */
     taskTypeFields?: Record<string, unknown>
-    /** Override the default description (pass `''` to drive the pre-token input gate). */
+    /** Override the default description (pass `''` to drive the pre-dispatch input gate). */
     description?: string
   } = {},
 ): Promise<Block> {

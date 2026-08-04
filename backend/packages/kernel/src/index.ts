@@ -520,7 +520,7 @@ export {
   readManagedSection,
 } from './domain/pr-report.js'
 
-// The PRE-TOKEN INPUT GATE's pure check: is there anything in a task's authored input an agent
+// The PRE-DISPATCH INPUT GATE's pure check: is there anything in a task's authored input an agent
 // could act on? Runs before a run's first dispatch, so an unactionable task parks having spent
 // no tokens. See `domain/input-gate.ts`.
 export {

@@ -134,7 +134,7 @@ export const GROUP_DOCS = {
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
+    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate.",
   debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
 }
 

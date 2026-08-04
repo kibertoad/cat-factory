@@ -34,7 +34,7 @@ is left**.
 - **Two CI gates, and neither is a full key-parity check.** `i18n:check`
   (vue-i18n-extract) hard-fails on a key used in code but absent from a catalog, and it
   only sees keys written as static `t('literal')` calls. `i18n-locale-parity.mjs --since
-  origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
+origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
   same change in the other nine catalogs. Pre-existing lag on keys a PR does not touch
   passes both, deliberately: it keeps the gates from fighting the incremental policy.
   Standing lag is therefore tracked by hand, under **Remaining** below.

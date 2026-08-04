@@ -7014,8 +7014,8 @@ initiativePresetRegistry } })` on the Worker, or the `initiativePresetRegistry` 
 - cc74273: Add an optional `backendRegistries` seam to `startLocal()`, threaded into `buildLocalContainer`
   on both the Postgres and mothership boot paths (mirroring the existing `agentKindRegistry` seam).
 
-  This lets a deployment that registers a custom environment/runner backend by reference (e.g. a
-  Kargo ephemeral-environment provider) call `startLocal()` — and inherit its boot preflights
+  This lets a deployment that registers a custom environment/runner backend by reference (e.g. an
+  in-house ephemeral-environment provider) call `startLocal()` — and inherit its boot preflights
   (harness-image refresh, container-runtime probe, PAT/auth warnings) — instead of re-implementing
   the boot path with `start()` + `buildLocalContainer` by hand, which silently forgoes those
   preflights (notably the recommended-executor-image pull at boot). Absent → unchanged (the
@@ -10830,7 +10830,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
@@ -11957,7 +11957,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
   network-reachable bind.
 
 - f066c59: Make the **native environment-adapter** path first-class, so a deployment can inject a
-  hand-written `EnvironmentProvider` (e.g. a Kargo adapter) instead of the generic
+  hand-written `EnvironmentProvider` (e.g. a native ephemeral-environment adapter) instead of the generic
   manifest-driven `HttpEnvironmentProvider` — with per-workspace config and the supported
   local-mode entry point.
 
@@ -11966,7 +11966,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
     `HttpEnvironmentProvider` ignores it; a native adapter reads + validates it off the
     per-call `manifest`. Because an injected provider is a deployment-wide singleton, the
     per-workspace connection's manifest is its only per-workspace config carrier — so a
-    single deployment can now target a different native project (Kargo project, link key,
+    single deployment can now target a different native project (provider project, link key,
     status map, …) per workspace. It rides inside the existing `manifest_json` JSON column on
     both runtimes — no migration, automatic D1 ⇄ Drizzle parity. **Not** covered by the
     manifest URL/SSRF checks (which only guard `baseUrl`/`tokenUrl`); an adapter that reads a
@@ -11980,7 +11980,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
     exposed (overriding it would discard local mode's differentiators).
   - New `backend/docs/native-environment-adapter.md` documents the injection contract, the
     env-port-vs-runner-port boundary, teardown/TTL idempotency, the `@cat-factory/kernel`
-    adapter dependency, and a reference `KargoEnvironmentProvider` sketch.
+    adapter dependency, and a reference native-adapter sketch.
 
   No backwards-incompatible changes: every addition is optional and defaults to today's
   behaviour.

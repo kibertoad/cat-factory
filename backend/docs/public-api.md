@@ -414,7 +414,7 @@ interactive user. A pipeline can be startable on a board task without being eith
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
 
 The external counterpart of the SPA's requirements-review, fork and judge windows, plus the
-pre-token input gate's notice. Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
+pre-dispatch input gate's notice. Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
 possibly started by a human in the SPA). Reading needs `read`; **answering needs `decide`**.
 
 Every action returns the run's **whole decision list**, re-read after the action:

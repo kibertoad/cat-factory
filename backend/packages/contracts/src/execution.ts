@@ -1285,7 +1285,7 @@ export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
  * pull request, so the human sees a real diff on a real branch, but nothing merges — neither the
  * `merger` step's auto-merge nor the manual merge endpoint.
  *
- * The PR is deliberately still opened. The deliverable a non-engineer needs to SEE is the diff,
+ * The PR is deliberately still opened. The deliverable a non-developer initiator needs to SEE is the diff,
  * and withholding the push would leave them reading prose about work they cannot inspect; what
  * makes the mode a sandbox is that the change cannot reach the default branch, not that it stays
  * invisible.
@@ -1470,7 +1470,7 @@ export const executionInstanceSchema = v.object({
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**
-   * The PRE-TOKEN INPUT GATE's verdict on the task this run implements (see
+   * The PRE-DISPATCH INPUT GATE's verdict on the task this run implements (see
    * {@link runInputGateSchema}): the structural check of the authored input that runs before
    * the first agent step is dispatched, so a task nobody could act on parks having spent no
    * tokens at all.

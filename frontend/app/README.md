@@ -158,7 +158,7 @@ hoc where it can be avoided:
     and the deployment-wide operator + reports rollups).
 
   Sole-route items stay in basic when the delivery loop runs on them: the pipeline builder,
-  add-from-repo, the fragment library, the infrastructure/PREnv windows, and the workspace /
+  add-from-repo, the fragment library, the infrastructure/ephemeral-env windows, and the workspace /
   model configuration a run actually reads. `nav-contributions.spec.ts` pins the advanced set
   against a table naming each item's kind and reason, so promoting one forces that claim to be
   written down rather than assumed.
