@@ -47,6 +47,7 @@ import {
 import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
 import type { Env } from './env'
+import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
@@ -445,7 +446,9 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
     // anything", which is the assurance it exists to give.
     auditRecorder: new AuditService({
-      auditEventRepository: new D1AuditEventRepository({ db }),
+      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+      // with live transactional state for the 10 GB per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
       idGenerator,
       clock,
       logger,

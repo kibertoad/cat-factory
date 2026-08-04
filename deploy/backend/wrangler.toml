@@ -57,6 +57,24 @@ database_name = "cat_factory_sandbox"
 database_id = "3f228c93-535e-4d30-a221-e73615cf0ad2"
 migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 
+# REQUIRED: dedicated D1 database for the account audit log (who did what, when, for
+# privileged account actions). Separate from the main DB not for write churn (audit is
+# low-volume) but for RETENTION: it is the one table retained for years while growing with run
+# volume, and D1 caps each database at 10 GB, so a years-deep trail must not compete with live
+# transactional state for that budget. Its schema ships with the worker package under
+# audit-migrations/.
+#
+# ACTION REQUIRED BEFORE THE NEXT DEPLOY: provision it once and paste the id below.
+#   wrangler d1 create cat_factory_audit
+#   wrangler d1 migrations apply cat_factory_audit --remote
+# Until then the readiness probe reports `audit: AUDIT_DB is not bound` and every privileged
+# action goes unrecorded (the request itself still succeeds — the audit write is best-effort).
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "cat_factory_audit"
+database_id = "REPLACE_WITH_cat_factory_audit_DATABASE_ID"
+migrations_dir = "node_modules/@cat-factory/worker/audit-migrations"
+
 # OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
 # + migrations dir, shipped with the library). Omit this binding to run with the
 # provisioning-log feature OFF (env/runner/container attempts aren't recorded). To enable:

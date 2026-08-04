@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "799a7edd-1719-4b82-a293-b78bf4f9fd3b",
+  "id": "982eb264-4f29-410c-886a-36646dc4d3ec",
   "prevIds": [
     "0c6ba21f-baa2-4a18-b3a9-4b92f631ca06"
   ],
@@ -12,6 +12,10 @@
     },
     {
       "name": "telemetry",
+      "entityType": "schemas"
+    },
+    {
+      "name": "audit",
       "entityType": "schemas"
     },
     {
@@ -356,12 +360,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "audit_events",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "auth_attempts",
       "entityType": "tables",
       "schema": "public"
@@ -527,6 +525,12 @@
       "name": "platform_run_days",
       "entityType": "tables",
       "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "audit_events",
+      "entityType": "tables",
+      "schema": "audit"
     },
     {
       "isRlsEnabled": false,
@@ -9087,149 +9091,6 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "account_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "workspace_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_kind",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_user_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "actor_api_key_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "action",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "target_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "target_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "summary",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
       "table": "auth_attempts"
     },
     {
@@ -12611,6 +12472,149 @@
       "entityType": "columns",
       "schema": "public",
       "table": "platform_run_days"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "account_id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "workspace_id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "actor_kind",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "actor_user_id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "actor_api_key_id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "action",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_type",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "target_id",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "summary",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "at",
+      "entityType": "columns",
+      "schema": "audit",
+      "table": "audit_events"
     },
     {
       "type": "text",
@@ -17708,41 +17712,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "account_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "at",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "id",
-          "isExpression": false,
-          "asc": false,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "idx_audit_events_account_at",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "audit_events"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "key",
           "isExpression": false,
           "asc": true,
@@ -18781,6 +18750,41 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "platform_run_days"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "at",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "id",
+          "isExpression": false,
+          "asc": false,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "idx_audit_events_account_at",
+      "entityType": "indexes",
+      "schema": "audit",
+      "table": "audit_events"
     },
     {
       "nameExplicit": true,
@@ -20183,16 +20187,6 @@
         "id"
       ],
       "nameExplicit": false,
-      "name": "audit_events_pkey",
-      "schema": "public",
-      "table": "audit_events",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
       "name": "auth_attempts_pkey",
       "schema": "public",
       "table": "auth_attempts",
@@ -20376,6 +20370,16 @@
       "name": "platform_rollup_state_pkey",
       "schema": "public",
       "table": "platform_rollup_state",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "audit_events_pkey",
+      "schema": "audit",
+      "table": "audit_events",
       "entityType": "pks"
     },
     {

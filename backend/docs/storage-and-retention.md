@@ -32,6 +32,53 @@ agent; composed prompts, folded-in fragment bodies, and the full content of the 
 injected into the container). Both are pruned to the same window
 (`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days).
 
+## The audit log lives in its own store too, for the OPPOSITE reason
+
+The account audit log (`audit_events`) is also kept out of the main DB, but none of the telemetry
+reasoning applies to it and repeating that reasoning would get the design wrong:
+
+- **Cloudflare:** a separate, required `AUDIT_DB` D1 database (its own `[[d1_databases]]` binding
+  - `migrations_dir = audit-migrations`). Provision it once with
+    `wrangler d1 create cat_factory_audit`. The readiness probe reports `audit` so an unbound
+    binding is found before the trail is needed rather than after.
+- **Node:** an `audit` Postgres schema (`pgSchema('audit')` in `db/tables/audit.ts`), served by
+  the same connection/pool; the generated migration creates it.
+
+**Audit is LOW-volume and LONG-retention** — the mirror image of telemetry's high-volume,
+three-day profile. Admin actions run to single digits per account per month. What makes it a
+storage question at all is the run-lifecycle slice: once run start/stop/retry are audited, this
+becomes **the only table in the platform that grows monotonically with run volume AND wants a
+multi-year window**. Everything else is one or the other (`token_usage` grows with runs but prunes
+at ~395 days; the telemetry sinks grow far faster but prune at 3). On a store with a hard 10 GB
+per-database ceiling, that combination is what would put a years-deep trail in competition with
+live transactional state.
+
+Measured cost, so the arithmetic is not guesswork: **~508 B/row** on Postgres (264 heap + 244
+index — the index costs as much as the data, because the keyset carries `id` as its tie-break).
+That is ~2.5× the ~0.2 KB/row the rest of this document assumes. At ~3 rows per run:
+
+| runs/day | rows/year | size/year |
+| -------- | --------- | --------- |
+| 100      | 110k      | ~55 MB    |
+| 1,000    | 1.1M      | ~550 MB   |
+| 10,000   | 11M       | ~5.5 GB   |
+
+Two things the separation does **not** buy, both worth stating so nobody relies on them:
+
+- **It does not survive a reset.** `db-reset.mjs` drops every app-owned schema together, `audit`
+  included, deliberately: a ledger that outlived its data is the desync that script exists to
+  prevent.
+- **It is not blast-radius isolation** in the sandbox sense. What it does buy besides capacity is
+  **governance**: audit retention cannot be swept by a knob named for something else, because
+  nothing else lives in the store to share one.
+
+It also makes one correctness property structural rather than remembered: `audit_events` carries a
+`workspace_id` but must **never** be reached by the workspace-delete cascade, since a board being
+deleted is itself worth having a record of. Both facades' cascade-completeness guards exclude it by
+schema/database rather than by an entry in a list someone could add.
+
+**Retention for it is not wired yet** (its own initiative slice), so the table is unbounded today.
+
 ## How the retention sweep is wired
 
 `sweepRetention` (`src/infrastructure/workflows/retention.ts`) prunes each

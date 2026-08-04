@@ -56,6 +56,9 @@ export * from './tables/settings.js'
 export * from './tables/prompt-fragments.js'
 // The telemetry sinks + the platform-operator projections (see `tables/observability.ts`).
 export * from './tables/observability.js'
+// The account audit log, in its own `audit` schema (see `tables/audit.ts` for why it is a
+// separate store rather than a table in `public`: retention, not write profile).
+export * from './tables/audit.js'
 
 // ADR 0026 D6.1 — the non-secret fingerprint of the deployment's master ENCRYPTION_KEY,
 // a per-DEPLOYMENT SINGLETON addressed by a fixed `id` ('key'). Seeded once on first boot

@@ -137,6 +137,13 @@ export const ENV_HELP = {
       'Add a `[[d1_databases]]` entry with `binding = "TELEMETRY_DB"` to your wrangler.toml and create the database with `wrangler d1 create`.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.storageRetention),
   },
+  AUDIT_DB: {
+    summary:
+      'The dedicated audit-log D1 database (who did what, when, for privileged account actions) — kept separate from the transactional data because it is the one table that grows with run volume AND is retained for years, and D1 caps each database at 10 GB.',
+    remedy:
+      'Add a `[[d1_databases]]` entry with `binding = "AUDIT_DB"` to your wrangler.toml and create the database with `wrangler d1 create`.',
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.storageRetention),
+  },
   AGENT_MODELS: {
     summary:
       'Optional per-kind model routing override, supplied as a JSON object mapping an agent kind to `{ "provider", "model" }`.',

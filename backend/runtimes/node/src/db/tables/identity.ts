@@ -264,33 +264,3 @@ export const machineNodes = pgTable(
     index('idx_machine_nodes_expiry').on(t.expires_at),
   ],
 )
-
-// The account audit log: an append-only record of who did what, when, for the privileged and
-// destructive actions an account admin is answerable for. Nothing in the platform UPDATEs or
-// DELETEs a row here (the retention sweep is a later slice and is the only writer that ever
-// will) — append-only is what makes the log worth reading.
-//
-// `actor_kind` + the two nullable actor columns are a discriminated principal rather than a
-// nullable user id: `system` (the engine acted) and an unresolved user are different facts, and
-// a log rendering them identically misattributes a human action to automation.
-// Mirrors the D1 `audit_events` table (migrations/0081_audit_events.sql); keep in step.
-export const auditEvents = pgTable(
-  'audit_events',
-  {
-    id: text('id').primaryKey(),
-    account_id: text('account_id').notNull(),
-    workspace_id: text('workspace_id'),
-    actor_kind: text('actor_kind').notNull(),
-    actor_user_id: text('actor_user_id'),
-    actor_api_key_id: text('actor_api_key_id'),
-    action: text('action').notNull(),
-    target_type: text('target_type').notNull(),
-    target_id: text('target_id').notNull(),
-    summary: text('summary').notNull(),
-    at: bigint('at', { mode: 'number' }).notNull(),
-  },
-  // The viewer's ONLY read is one account's newest-first page. `id` breaks the `at` tie so two
-  // events recorded in the same millisecond cannot straddle a page boundary and be served
-  // twice or skipped.
-  (t) => [index('idx_audit_events_account_at').on(t.account_id, t.at.desc(), t.id.desc())],
-)

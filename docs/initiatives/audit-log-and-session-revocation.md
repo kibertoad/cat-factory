@@ -109,15 +109,36 @@ revocation via a per-user session-generation check.
 
 ## What slices 1–2 settled (carry these forward)
 
-- **The MAIN store, not the telemetry store**, and the reasoning is worth keeping because the
-  instinct runs the other way (an append-only log looks telemetry-shaped). Volume is admin
-  actions, single digits per account per month, against telemetry's row per LLM CALL. Retention is
-  the opposite requirement: `LLM_CALL_METRICS_RETENTION_DAYS` defaults to **3**. And in mothership
-  mode the `telemetry` bucket is written AND read on the laptop, which would scatter the trail
-  across nodes and leave it readable and deletable by the person it audits. `gate_outcomes` is the
-  precedent. **The boundary to watch**: if a later slice wants per-step or per-LLM-call audit
-  granularity, that IS a telemetry-shaped sink and belongs in a separate one, not in this table
-  grown sideways.
+- **Its OWN store, and NOT the telemetry one.** These are two separate decisions and conflating
+  them gets the design wrong in opposite directions.
+
+  _Not telemetry_: the profile is the mirror image. Volume is admin actions, single digits per
+  account per month, against telemetry's row per LLM CALL, and retention is the opposite
+  requirement (`LLM_CALL_METRICS_RETENTION_DAYS` defaults to **3**). Decisively, the `telemetry`
+  mothership bucket is written AND read on the LAPTOP, which would scatter the trail across nodes
+  and leave it readable and deletable by the person it audits.
+
+  _But still its own store_ (a required `AUDIT_DB` D1 database; an `audit` Postgres schema on
+  Node), for RETENTION rather than write profile. After the run-lifecycle slice this is the only
+  table in the platform that grows monotonically with run volume AND wants a multi-year window
+  (`token_usage` grows with runs but prunes at ~395 days; the telemetry sinks grow far faster but
+  prune at 3), and D1's ceiling is 10 GB PER DATABASE. Measured **~508 B/row** on Postgres (264
+  heap + 244 index, the index as expensive as the data because the keyset carries `id` as its
+  tie-break): 1,000 runs/day ≈ 550 MB/year, 10,000 ≈ 5.5 GB/year. Full arithmetic in
+  [`storage-and-retention.md`](../../backend/docs/storage-and-retention.md).
+
+  Two things the split does NOT buy, so nobody relies on them: it does not survive `db:reset`
+  (which drops every app-owned schema together on purpose), and it is not sandbox-style
+  blast-radius isolation. What it does buy besides capacity is **governance**: audit retention
+  cannot be swept by a knob named for something else, because nothing else lives there.
+
+  **The boundary to watch**: if a later slice wants per-step or per-LLM-call audit granularity,
+  that IS a telemetry-shaped sink and belongs in its own, not in this table grown sideways.
+
+- **`audit_events` carries a `workspace_id` and must NEVER cascade on board delete.** A board being
+  deleted is itself worth having a record of, so a log a later delete can erase is not an audit
+  log. The separate schema/database makes both facades' cascade-completeness guards exclude it
+  structurally rather than by an entry in a list someone could add to.
 - **`system` is asserted, never defaulted.** Where no acting user resolves, record NOTHING. The one
   path that gets there is `AUTH_DEV_OPEN`, where the whole authorization model is bypassed anyway;
   an unaudited write with auth off is a property of running with auth off, whereas an event blaming

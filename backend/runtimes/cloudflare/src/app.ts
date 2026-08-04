@@ -209,6 +209,12 @@ export function createApp(options: CreateAppOptions = {}): Hono<AppEnv> {
     checks.telemetry = env.TELEMETRY_DB
       ? await probe(() => env.TELEMETRY_DB!.prepare('SELECT 1').first())
       : { ok: false, error: 'TELEMETRY_DB is not bound' }
+    // AUDIT_DB is REQUIRED for the same reason, and reported here for a sharper one: an
+    // unbound audit database does not break any request, it just silently records nothing,
+    // so readiness is the only place a deployment finds out before it needs the trail.
+    checks.audit = env.AUDIT_DB
+      ? await probe(() => env.AUDIT_DB!.prepare('SELECT 1').first())
+      : { ok: false, error: 'AUDIT_DB is not bound' }
     const ready = Object.values(checks).every((check) => check.ok)
     return c.json({ status: ready ? 'ready' : 'not_ready', checks }, ready ? 200 : 503)
   })

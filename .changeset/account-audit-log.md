@@ -22,14 +22,25 @@ create / revoke / accept, and the workspace roster's add / role change / remove 
 
 Three decisions worth knowing, because each has a wrong-looking alternative that reads as correct:
 
-**It is in the MAIN store, not the telemetry store.** An audit log looks append-heavy and therefore
-telemetry-shaped, but the volume is admin actions (single digits per account per month, against
-telemetry's row-per-LLM-call) and the retention requirement is the opposite: `llm_call_metrics` is
-pruned to three days by default. Two other things would break outright. In mothership mode the
-`telemetry` bucket is written AND read on the laptop, which would scatter the trail across nodes and
-leave it readable and deletable by the person it audits; and the viewer reads by account, which the
-main store already scopes through the same `workspaces` sub-select every other rollup uses.
-`gate_outcomes` is the precedent followed here.
+**It gets its OWN store, and not for the reason telemetry has one.** An audit log looks append-heavy
+and therefore telemetry-shaped, but it is the mirror image: low-volume (admin actions, single digits
+per account per month, against telemetry's row-per-LLM-call) and long-retention where telemetry
+prunes at three days. What makes it a storage question is the run-lifecycle slice, after which this
+becomes the only table in the platform that grows monotonically with run volume AND wants a
+multi-year window; on a store with a hard 10 GB per-database ceiling that would put a years-deep
+trail in competition with live transactional state. Measured at ~508 B/row on Postgres (the index
+costing as much as the data, since the keyset carries `id` as its tie-break), so 1,000 runs/day is
+~550 MB/year. It is a required `AUDIT_DB` D1 database on Cloudflare and an `audit` Postgres schema on
+Node. It is emphatically NOT in the telemetry store: that bucket is written and read on the LAPTOP in
+mothership mode, which would scatter the trail across nodes and leave it readable and deletable by
+the person it audits.
+
+**OPERATOR ACTION on Cloudflare**: `AUDIT_DB` is required, so a deployment must provision it before
+its next deploy (`wrangler d1 create cat_factory_audit`, then paste the id into `wrangler.toml` and
+apply `audit-migrations`). Until it is bound the readiness probe reports
+`audit: AUDIT_DB is not bound` and privileged actions go unrecorded; requests themselves still
+succeed, because the audit write is best-effort by design. Per-PR preview environments provision and
+tear it down automatically.
 
 **The actor is a discriminated principal, and `system` is asserted rather than defaulted.** `user`,
 `apiKey` and `system` are three kinds, not a nullable user id, because "the engine did it" and "we
