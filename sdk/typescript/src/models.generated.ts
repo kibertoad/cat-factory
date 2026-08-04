@@ -991,7 +991,7 @@ export interface PutNotificationWebhook {
   secret?: string
   types?: NotificationType[]
   /** Length 0..2000. */
-  url: string
+  url?: string
 }
 
 export interface RunError {

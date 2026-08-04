@@ -4140,7 +4140,6 @@ class PublicUsageRowBilling(StrEnum):
 class PutNotificationWebhook:
     """`PutNotificationWebhook`, as carried on the wire."""
 
-    url: str
     #: May be absent entirely.
     alert_events: list[NotificationWebhookAlertEvent] | None = None
     #: May be absent entirely.
@@ -4151,6 +4150,8 @@ class PutNotificationWebhook:
     secret: str | None = None
     #: May be absent entirely.
     types: list[NotificationType] | None = None
+    #: May be absent entirely.
+    url: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
     #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
@@ -4160,21 +4161,20 @@ class PutNotificationWebhook:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PutNotificationWebhook":
         """Decode a `PutNotificationWebhook` from its JSON object."""
-        known = {"url", "alertEvents", "enabled", "runEvents", "secret", "types"}
+        known = {"alertEvents", "enabled", "runEvents", "secret", "types", "url"}
         return cls(
-            url=data.get("url"),
             alert_events=None if data.get("alertEvents") is None else [_enum(NotificationWebhookAlertEvent, item) for item in data.get("alertEvents") or []],
             enabled=data.get("enabled"),
             run_events=None if data.get("runEvents") is None else [_enum(NotificationWebhookRunEvent, item) for item in data.get("runEvents") or []],
             secret=data.get("secret"),
             types=None if data.get("types") is None else [_enum(NotificationType, item) for item in data.get("types") or []],
+            url=data.get("url"),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Encode back to the JSON object shape the API expects."""
         out: dict[str, Any] = dict(self.extra)
-        out["url"] = self.url
         if self.alert_events is not None:
             out["alertEvents"] = [_encode(item) for item in self.alert_events]
         if self.enabled is not None:
@@ -4185,6 +4185,8 @@ class PutNotificationWebhook:
             out["secret"] = self.secret
         if self.types is not None:
             out["types"] = [_encode(item) for item in self.types]
+        if self.url is not None:
+            out["url"] = self.url
         return out
 
 

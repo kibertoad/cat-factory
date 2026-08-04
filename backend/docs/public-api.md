@@ -540,11 +540,24 @@ curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: appl
 | `DELETE /api/v1/notification-webhook` | `admin` | Unregister. Idempotent, `204`.                                 |
 
 `GET` returns the config with `hasSecret: true|false`; the secret itself is **write-only**, sealed
-at rest, never readable back — an `admin` key can rotate the signing secret but never learn the
-stored one, so a leaked key cannot be used to forge deliveries your receiver would verify. Omitting
-`secret` on a later `PUT` keeps the stored one, supplying it rotates. Every other field follows the
-same keep-on-omit rule, so subscribing to a new event family is a one-field `PUT`. `DELETE`
+at rest, never readable back. An `admin` key can rotate the signing secret but never learn the
+stored one, so a leaked key cannot be used to forge deliveries your receiver would verify. `DELETE`
 unregisters (idempotent, `204`).
+
+**`PUT` is keep-on-omit in every field**, `url` included: a body states what changes and leaves the
+rest alone, so subscribing an existing endpoint to a new family is a one-field call.
+
+```sh
+curl -s -X PUT -H "Authorization: Bearer cf_live_pak_…" -H 'content-type: application/json' \
+  -d '{"alertEvents": ["platform_health.firing"]}' "$BASE/api/v1/notification-webhook"
+```
+
+`url` is required only on the **first** `PUT`, when there is nothing registered to keep; a body that
+names none against an empty workspace is refused with `details.reason: "webhook_url_required"`. The
+uniformity is a safety property, not a convenience: a mandatory re-send would make every routine
+edit carry an endpoint the caller did not mean to change, and a client re-sending a `url` it cached
+before someone else rotated the receiver would quietly redirect every future delivery back to the
+old one while appearing to add a subscription.
 
 Three filters, and the first has the **opposite** empty semantics to the other two. All three are
 deliberate:

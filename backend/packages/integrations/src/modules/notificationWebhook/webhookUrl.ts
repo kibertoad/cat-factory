@@ -17,7 +17,9 @@ import { assertSafePublicUrl } from '../shared/url-guard.js'
  * Validate a notification-webhook endpoint. Strict by default — `https` only, no private/internal
  * or cloud-metadata host — widened only by the deployment's own
  * `NOTIFICATION_WEBHOOK_ALLOW_URL_HOSTS` / `_ALLOW_HTTP_URLS` slice, which a developer running a
- * receiver on `localhost` genuinely needs. Throws `ValidationError` (a 400 at the controller).
+ * receiver on `localhost` genuinely needs. Throws `ValidationError`, which `handleError` maps to a
+ * 422. That is deliberately NOT the 400 a plaintext `http://` endpoint gets: the wire schema
+ * refuses that one before any handler runs, so the two layers stay distinguishable on the wire.
  */
 export function assertSafeNotificationWebhookUrl(url: string, policy?: UrlSafetyPolicy): void {
   assertSafePublicUrl(url, {

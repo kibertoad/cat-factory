@@ -1658,7 +1658,8 @@ type PutNotificationWebhook struct {
 	Secret *string `json:"secret,omitempty"`
 	// Types may be absent entirely.
 	Types []NotificationType `json:"types,omitempty"`
-	URL   string             `json:"url"`
+	// URL may be absent entirely.
+	URL *string `json:"url,omitempty"`
 }
 
 // RunError is the `RunError` wire model.

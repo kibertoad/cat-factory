@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
 // Cross-runtime conformance for the PUBLIC management surface of the outbound notification webhook
-// (`/api/v1/notification-webhook`) — the enrolment half of the push channel, so a deployment driven
+// (`/api/v1/notification-webhook`), the enrolment half of the push channel, so a deployment driven
 // entirely by API keys can register the receiver its notifications, run-lifecycle events and health
 // alerts are delivered to.
 //
@@ -33,7 +33,7 @@ async function mintKey(
 }
 
 export function definePublicWebhookConformance(harness: ConformanceHarness): void {
-  describe('public API — outbound webhook management', () => {
+  describe('public API: outbound webhook management', () => {
     it('registers, reads back, edits and removes the endpoint through the key alone', async () => {
       const app = harness.makeApp()
       // Public-API keys are ACCOUNT-scoped, so the mint route refuses an account-less board.
@@ -71,16 +71,18 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       const read = await app.call<PublicNotificationWebhook>('GET', ENDPOINT, undefined, auth)
       expect(read.body.webhook).toEqual(registered.body)
 
-      // An omitted field KEEPS its stored value, so subscribing to a new family is a one-field
-      // write. A facade that re-defaulted here would silently unsign every later delivery.
+      // An omitted field KEEPS its stored value, in EVERY field including the url, so subscribing
+      // to a new family is a genuinely one-field write. A facade that re-defaulted here would
+      // silently unsign every later delivery, or point the workspace at nothing at all.
       const edited = await app.call<NotificationWebhook>(
         'PUT',
         ENDPOINT,
-        { url: 'https://hooks.example.com/cat-factory', alertEvents: ['platform_health.firing'] },
+        { alertEvents: ['platform_health.firing'] },
         auth,
       )
       expect(edited.status).toBe(200)
       expect(edited.body).toMatchObject({
+        url: 'https://hooks.example.com/cat-factory',
         alertEvents: ['platform_health.firing'],
         runEvents: ['run.completed', 'run.failed'],
         hasSecret: true,
@@ -135,6 +137,18 @@ export function definePublicWebhookConformance(harness: ConformanceHarness): voi
       expect(plaintext.status).toBe(400)
       const internal = await app.call('PUT', ENDPOINT, { url: 'https://127.0.0.1/hook' }, adminAuth)
       expect(internal.status).toBe(422)
+
+      // Keep-on-omit needs something to keep. Against an empty workspace the refusal carries a
+      // machine-readable reason, so a client can tell "register one first" from the SSRF guard
+      // rejecting an endpoint it did supply: both are 422, and only `reason` separates them.
+      const nothingToKeep = await app.call<{ error: { details?: { reason?: string } } }>(
+        'PUT',
+        ENDPOINT,
+        { runEvents: ['run.completed'] },
+        adminAuth,
+      )
+      expect(nothingToKeep.status).toBe(422)
+      expect(nothingToKeep.body.error.details?.reason).toBe('webhook_url_required')
       const nothingStored = await app.call<PublicNotificationWebhook>(
         'GET',
         ENDPOINT,

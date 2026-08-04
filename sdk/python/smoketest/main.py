@@ -32,6 +32,7 @@ from cat_factory import (  # noqa: E402
 )
 from cat_factory.models import (  # noqa: E402
     CreatePublicTask,
+    NotificationWebhookAlertEvent,
     NotificationWebhookRunEvent,
     PutNotificationWebhook,
     StartPublicTask,
@@ -166,6 +167,14 @@ def round_trip_webhook() -> None:
     # The secret is write-only: what comes back is the boolean, never the value.
     observations["webhookSavedHasSecret"] = saved.has_secret
     observations["webhookSavedRunEvents"] = ",".join(str(event) for event in saved.run_events)
+    # Omitting a field must send NO field, not an empty one: a ``url: ""`` here would blank the
+    # endpoint on a call that only meant to add an alert subscription, and still answer 200.
+    edited = client.webhook.set(
+        PutNotificationWebhook(
+            alert_events=[NotificationWebhookAlertEvent.PLATFORM_HEALTH_FIRING]
+        )
+    )
+    observations["webhookUrlSurvivesOmittedUpdate"] = edited.url == saved.url
     read = client.webhook.get()
     observations["webhookReadMatchesSaved"] = (
         read.webhook is not None and read.webhook.url == saved.url
