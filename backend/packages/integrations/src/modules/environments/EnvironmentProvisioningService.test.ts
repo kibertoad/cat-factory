@@ -184,14 +184,14 @@ describe('EnvironmentProvisioningService — provision context', () => {
     const registry = fakeRegistry()
     const service = makeService(recordingProvider(READY), registry)
     await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    // The provider's arbitrary `fields` (here a Kargo-style ref) round-trip encrypted.
+    // The provider's arbitrary `fields` (here a provider-native ref) round-trip encrypted.
     expect(registry.records[0]!.provisionFieldsCipher).toBe(`enc:${JSON.stringify(READY.fields)}`)
   })
 })
 
 describe('EnvironmentProvisioningService — refreshStatus', () => {
   const FAILED_REASON =
-    'invalid prenv config: file or ref not found: 404 No commit found for the ref cat-factory/env-test/x'
+    'invalid environment config: file or ref not found: 404 No commit found for the ref cat-factory/env-test/x'
 
   /** Provisions `provisioning`, then reports `failed` (with a reason) on the next status poll. */
   function comesUpFailed(): EnvironmentProvider {
@@ -299,7 +299,7 @@ describe('EnvironmentProvisioningService — repo-config pre-flight gate', () =>
   it('throws ValidationError BEFORE calling provider.provision when validation fails', async () => {
     const provider = gatedProvider({
       ok: false,
-      issues: [{ severity: 'error', message: 'no jobs', path: '.kargo.yml' }],
+      issues: [{ severity: 'error', message: 'no jobs', path: '.acme-envs.yml' }],
     })
     const service = makeGatedService(provider, fakeRegistry(), gateResolver())
 
@@ -618,7 +618,7 @@ describe('EnvironmentProvisioningService — supersedeForBlock (infraless flip)'
 })
 
 describe('EnvironmentProvisioningService — returned URL policy', () => {
-  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://prenv.kargo.internal' }
+  const internalEnv: ProvisionedEnvironment = { ...READY, url: 'https://box.envs.internal' }
 
   it('rejects an internal returned URL under the strict default', async () => {
     const service = makeService(recordingProvider(internalEnv), fakeRegistry())
@@ -634,7 +634,7 @@ describe('EnvironmentProvisioningService — returned URL policy', () => {
       allowHosts: ['.internal'],
     })
     const handle = await service.provision({ workspaceId: 'ws1', blockId: 'blk1' })
-    expect(handle.url).toBe('https://prenv.kargo.internal')
+    expect(handle.url).toBe('https://box.envs.internal')
     expect(registry.records).toHaveLength(1)
   })
 })

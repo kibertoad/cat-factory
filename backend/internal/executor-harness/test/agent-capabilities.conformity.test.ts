@@ -1,25 +1,46 @@
-import { MCP_SERVER_ID_PATTERN, isAllowedMcpHttpUrl } from '@cat-factory/kernel'
+import {
+  MCP_SERVER_ID_PATTERN,
+  MCP_TOOL_NAME_PATTERN,
+  isAllowedMcpHttpUrl,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
   MCP_SERVER_ID_PATTERN as HARNESS_MCP_SERVER_ID_PATTERN,
+  MCP_TOOL_NAME_PATTERN as HARNESS_MCP_TOOL_NAME_PATTERN,
   isAllowedMcpHttpUrl as harnessIsAllowedMcpHttpUrl,
 } from '../src/agent-capabilities.js'
 
-// The tool-server id pattern and the HTTP-transport rule exist TWICE: once in kernel (where the
-// backend refuses a bad registration at boot) and once here (where the harness refuses a bad job
-// body at the container boundary). The image is built from `src/` plus typescript alone, so the
-// harness can carry no runtime dependency on a workspace package — hence a copy, exactly as
-// `src/host-markdown.ts` copies kernel's `hostMarkdown`.
+// The tool-server id pattern, the tool-name pattern and the HTTP-transport rule exist TWICE: once
+// in kernel (where the backend refuses a bad registration at boot) and once here (where the harness
+// refuses a bad job body at the container boundary). The image is built from `src/` plus typescript
+// alone, so the harness can carry no runtime dependency on a workspace package — hence a copy,
+// exactly as `src/host-markdown.ts` copies kernel's `hostMarkdown`.
 //
 // A copy of a REFUSAL rule is only acceptable if it cannot drift: a harness that accepted an id
-// kernel rejects would write a malformed Codex TOML key, and one that accepted a cleartext URL
-// kernel rejects would put a resolved credential on the wire. So both are pinned here — the
-// pattern by source equality, the URL rule over the corpus of shapes that decide it.
+// kernel rejects would write a malformed Codex TOML key, one that accepted a cleartext URL kernel
+// rejects would put a resolved credential on the wire, and a disagreement about tool names splits
+// an `--allowedTools` argument into patterns that match nothing. So all three are pinned here — the
+// patterns by source equality, the URL rule over the corpus of shapes that decide it.
 
 describe('harness MCP server id pattern conforms to kernel', () => {
   it('is the same pattern, not merely a compatible one', () => {
     expect(HARNESS_MCP_SERVER_ID_PATTERN.source).toBe(MCP_SERVER_ID_PATTERN.source)
     expect(HARNESS_MCP_SERVER_ID_PATTERN.flags).toBe(MCP_SERVER_ID_PATTERN.flags)
+  })
+})
+
+describe('harness MCP tool-name pattern conforms to kernel', () => {
+  it('is the same pattern, not merely a compatible one', () => {
+    expect(HARNESS_MCP_TOOL_NAME_PATTERN.source).toBe(MCP_TOOL_NAME_PATTERN.source)
+    expect(HARNESS_MCP_TOOL_NAME_PATTERN.flags).toBe(MCP_TOOL_NAME_PATTERN.flags)
+  })
+
+  it('refuses the comma on both sides', () => {
+    // The property the pair exists for, asserted directly so a conforming-but-wrong copy (both
+    // drifting together) still fails: the runner joins the list into one argument with commas.
+    expect(HARNESS_MCP_TOOL_NAME_PATTERN.test('search_issues,get_issue')).toBe(false)
+    expect(MCP_TOOL_NAME_PATTERN.test('search_issues,get_issue')).toBe(false)
+    expect(HARNESS_MCP_TOOL_NAME_PATTERN.test('search_issues')).toBe(true)
   })
 })
 

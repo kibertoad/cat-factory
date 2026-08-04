@@ -1,11 +1,13 @@
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { INLINE_ENGINE_SYSTEM_PROMPTS } from '@cat-factory/agents'
+import { INLINE_ENGINE_SYSTEM_PROMPTS, runsInContainer } from '@cat-factory/agents'
 import type {
   AgentKind,
   BinaryGeneratorRegistry,
   FoundationalServiceRegistry,
   GateRegistry,
   InitiativePresetRegistry,
+  McpSecretRef,
+  McpServerDefinition,
   PipelineRegistry,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
@@ -14,11 +16,16 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  MCP_SUPPORTED_HARNESSES,
+  TOOL_SERVER_BUDGET,
   describeFoundationalProblem,
   isAllowedMcpHttpUrl,
   isValidMcpServerId,
+  isValidMcpToolName,
+  mcpServableHarnesses,
   seedPipelines,
   stubGateContext,
+  toolServerDeclaredBytes,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
 import { universalFragments } from '@cat-factory/prompt-fragments'
@@ -221,8 +228,8 @@ export function collectRegistrationProblems(
   //     to the same fillability bar by the same checker.
   problems.push(...checkInitiativePresetForms(opts))
 
-  // 6. Agent capabilities: the skills + tool servers each kind declares.
-  problems.push(...checkAgentCapabilities(agentKinds, registry))
+  // 6. Agent capabilities: the skills + tool servers declared for each kind.
+  problems.push(...checkAgentCapabilities(registry))
 
   // 7. Agent-kind VARIANTS: their base kind must exist and they must actually change the prompt.
   problems.push(...checkAgentKindVariants(opts, registeredKindIds))
@@ -461,15 +468,21 @@ function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): Reg
  * REACHABLE and COHERENT. Every check here covers something that otherwise fails invisibly at run
  * time — the agent just quietly works without the playbook or the tool it was supposed to have,
  * which is why boot is the right place to be loud. Split per capability; see each helper.
+ *
+ * Enumerated through `kindsWithCapabilities()` rather than `all()`, so the checks reach capabilities
+ * attached BY ASSIGNMENT to a kind that is not a registry entry. That is the recommended path and
+ * the heavily-used one (`assignToolServers('coder', …)`, `ci-fixer`, `tester-api`, `merger`,
+ * `conflict-resolver`), and walking `all()` skipped every one of them: a cleartext endpoint or a
+ * reserved credential key declared that way booted clean, and only the dispatch-time floors caught
+ * it, which is a floor holding rather than the "refused at declaration" layer doing its job.
  */
-function checkAgentCapabilities(
-  agentKinds: ReturnType<AgentKindRegistry['all']>,
-  registry: AgentKindRegistry,
-): RegistrationProblem[] {
-  return agentKinds.flatMap((def) => [
-    ...checkKindSkills(def.kind, registry),
-    ...checkKindToolServers(def.kind, registry),
-  ])
+function checkAgentCapabilities(registry: AgentKindRegistry): RegistrationProblem[] {
+  return registry
+    .kindsWithCapabilities()
+    .flatMap((kind) => [
+      ...checkKindSkills(kind, registry),
+      ...checkKindToolServers(kind, registry),
+    ])
 }
 
 /**
@@ -481,6 +494,11 @@ function checkAgentCapabilities(
  *   declaration can never take effect — and a non-optional `{ catalogSkillId }` there is worse
  *   than inert, since it fails EVERY dispatch of that kind on a deployment with no skill library
  *   while never being able to reach the model.
+ *
+ * The container question goes through `runsInContainer`, never `registry.requiresContainer`, and
+ * that is load-bearing now that assigned capabilities are checked: `requiresContainer` answers false
+ * for a kind it has no registration for, so every built-in (`coder` above all) would be warned about
+ * as an inline kind the moment a deployment assigned it a playbook.
  */
 function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -496,7 +514,7 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
     })
   }
   const declared = skills.bundled.length + skills.catalog.length
-  if (declared && !registry.requiresContainer(kind)) {
+  if (declared && !runsInContainer(kind, registry)) {
     problems.push({
       severity: 'warn',
       code: 'skills_without_container',
@@ -511,21 +529,20 @@ function checkKindSkills(kind: AgentKind, registry: AgentKindRegistry): Registra
 }
 
 /**
- * A kind's declared TOOL SERVERS:
+ * A kind's declared TOOL SERVERS: the whole-list checks (unregistered ids, the per-dispatch budget,
+ * the container surface), with each definition's own checks in
+ * {@link checkToolServerDefinition}. "Declared for" includes assigned servers, see
+ * {@link checkAgentCapabilities}.
  *
  * - an unregistered id is an ERROR, like an unregistered skill;
- * - a malformed MCP server id is an ERROR, because it becomes both a tool-name fragment and a
- *   Codex TOML table key, so the CLI fails on it far from the registration that caused it;
- * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
- *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
- *   it here only moves the failure to a place with no registration to point at;
- * - a credential naming a PLATFORM CONFIGURATION VARIABLE is an ERROR, and it is the sharpest of
- *   these: a definition names both the key it wants and the endpoint that key is sent to, so
- *   `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` is a registration that boots clean and
- *   ships the deployment's master sealing key to a third party. The generative-integration half
- *   of the same rule is enforced by its credential SCHEMA (there is no schema here — a tool
- *   server is a TypeScript registration), and dispatch refuses both again for the mothership
- *   case;
+ * - past EITHER dimension of the per-dispatch budget is a WARNING, because the dispatch drops the
+ *   excess under `over_budget` rather than failing: the run still works, with fewer tools than the
+ *   deployment believes it wired, and boot is the only place the DECLARATIONS past the line can be
+ *   named. A warning also keeps the accretion case honest, a kind going over budget through
+ *   `assignToolServers` calls in several packages none of which is individually wrong. Both
+ *   dimensions are checked because the dispatch enforces both, and a byte-driven drop is the one
+ *   that surprises: a handful of servers with fat `env`/`args`/`headers` blocks is under the count
+ *   and over the payload;
  * - tool servers on a NON-container kind is a WARNING: an inline LLM call has no CLI to wire them
  *   into, so they can never take effect. A warning rather than an error because a deployment may
  *   deliberately declare them ahead of moving the kind onto a container surface.
@@ -543,75 +560,9 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
         `declare the server inline.`,
     })
   }
-  for (const server of tools.servers) {
-    if (!isValidMcpServerId(server.id)) {
-      problems.push({
-        severity: 'error',
-        code: 'invalid_tool_server_id',
-        message:
-          `Tool server "${server.id}" (on agent kind "${kind}") has an invalid id. It ` +
-          `becomes part of the tool names the CLI exposes (mcp__<id>__<tool>) and a Codex ` +
-          `config key, so it must match [a-z0-9][a-z0-9_-]*.`,
-      })
-    }
-    for (const secret of server.secretKeys ?? []) {
-      if (isReservedPlatformEnvKey(secret.key)) {
-        problems.push({
-          severity: 'error',
-          code: 'reserved_credential_key',
-          message:
-            `Tool server "${server.id}" (on agent kind "${kind}") declares credential ` +
-            `${reservedEnvKeyMessage(secret.key)}`,
-        })
-      }
-      // The injection name is NOT held to the reserved floor (it reads nothing), so it carries its
-      // own rule: a value set as `PATH` or `npm_config_registry` reconfigures the server's process
-      // instead of authenticating a call. Dispatch drops one too, for the mothership case.
-      if (secret.envName !== undefined && !isEnvVariableName(secret.envName)) {
-        problems.push({
-          severity: 'error',
-          code: 'invalid_credential_env_name',
-          message:
-            `Tool server "${server.id}" (on agent kind "${kind}") declares credential envName ` +
-            `"${secret.envName}", which is not a valid environment variable name. It becomes a ` +
-            `variable of the server's process, and the harness drops anything else.`,
-        })
-      }
-      if (secret.envName !== undefined && isToolchainEnvName(secret.envName)) {
-        problems.push({
-          severity: 'error',
-          code: 'toolchain_credential_env_name',
-          message:
-            `Tool server "${server.id}" (on agent kind "${kind}") declares credential ` +
-            `${toolchainEnvNameMessage(secret.envName)}`,
-        })
-      }
-      // An `http` server sends its value as a HEADER, so an injection name would be read by
-      // nothing. A warning rather than an error: the declaration still works, it just says
-      // something that cannot take effect, and failing boot over it would be out of proportion.
-      if (secret.envName !== undefined && server.transport.kind === 'http' && secret.header) {
-        problems.push({
-          severity: 'warn',
-          code: 'unused_credential_env_name',
-          message:
-            `Tool server "${server.id}" (on agent kind "${kind}") declares credential envName ` +
-            `"${secret.envName}" on a key that names a header. An http server's value is sent as ` +
-            `that header, so the injection name is never used.`,
-        })
-      }
-    }
-    if (server.transport.kind === 'http' && !isAllowedMcpHttpUrl(server.transport.url)) {
-      problems.push({
-        severity: 'error',
-        code: 'insecure_tool_server_url',
-        message:
-          `Tool server "${server.id}" (on agent kind "${kind}") has url ` +
-          `"${server.transport.url}". An HTTP tool server carries its resolved credential in a ` +
-          `request header, so the url must be https (plain http is accepted only on loopback).`,
-      })
-    }
-  }
-  if (tools.servers.length && !registry.requiresContainer(kind)) {
+  for (const server of tools.servers) problems.push(...checkToolServerDefinition(kind, server))
+  problems.push(...checkToolServerBudget(kind, tools.servers))
+  if (tools.servers.length && !runsInContainer(kind, registry)) {
     problems.push({
       severity: 'warn',
       code: 'tool_servers_without_container',
@@ -620,6 +571,186 @@ function checkKindToolServers(kind: AgentKind, registry: AgentKindRegistry): Reg
         `inline LLM step has no agent CLI to wire them into, so they will never be available. ` +
         `Give the kind a container surface (agent.surface: 'container-explore' / ` +
         `'container-coding') or drop the tool servers.`,
+    })
+  }
+  return problems
+}
+
+/**
+ * The per-dispatch budget, BOTH dimensions, as warnings: the dispatch drops the excess under
+ * `over_budget` and the run works with fewer tools, so a registration fault belongs at boot rather
+ * than in a refusal that takes the deployment down.
+ *
+ * The byte check measures {@link toolServerDeclaredBytes}, which is a FLOOR (a resolved credential
+ * only adds to it), so a declaration already past the budget here is certainly past it at dispatch.
+ * What boot deliberately does NOT claim is WHICH servers a run will lose: the dispatch keeps every
+ * server that still fits, so once bytes are what bind the survivors are not a prefix of the
+ * declaration. The count and the budget are what the author acts on, and the run itself names each
+ * server it dropped.
+ */
+function checkToolServerBudget(
+  kind: AgentKind,
+  servers: readonly McpServerDefinition[],
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  if (servers.length > TOOL_SERVER_BUDGET.maxServers) {
+    problems.push({
+      severity: 'warn',
+      code: 'too_many_tool_servers',
+      message:
+        `Agent kind "${kind}" has ${servers.length} tool servers declared for it, past the ` +
+        `per-dispatch budget of ${TOOL_SERVER_BUDGET.maxServers}. A dispatch wires the first ` +
+        `${TOOL_SERVER_BUDGET.maxServers} in declaration order and states the rest to the agent as ` +
+        `unavailable (over_budget). Drop some, or split the work across kinds.`,
+    })
+  }
+  const bytes = servers.reduce((total, server) => total + toolServerDeclaredBytes(server), 0)
+  if (bytes > TOOL_SERVER_BUDGET.maxTotalBytes) {
+    problems.push({
+      severity: 'warn',
+      code: 'tool_servers_over_byte_budget',
+      message:
+        `Agent kind "${kind}" declares tool servers whose transport config alone measures ${bytes} ` +
+        `bytes, past the per-dispatch budget of ${TOOL_SERVER_BUDGET.maxTotalBytes}. A dispatch ` +
+        `wires servers until that budget is spent and states the rest to the agent as unavailable ` +
+        `(over_budget); resolved credentials only add to this figure, and which servers lose out ` +
+        `depends on their sizes. Trim the env/args/headers blocks, or split the work across kinds.`,
+    })
+  }
+  return problems
+}
+
+/**
+ * ONE tool server definition:
+ *
+ * - a malformed MCP server id is an ERROR, because it becomes both a tool-name fragment and a
+ *   Codex TOML table key, so the CLI fails on it far from the registration that caused it;
+ * - an `allowedTools` entry that is not a valid tool NAME is an ERROR, the comma case above all:
+ *   the harness joins the whole list into one `--allowedTools` argument with commas, so an entry
+ *   carrying one splits into two patterns and the second matches nothing, while the prompt goes on
+ *   advertising the name verbatim. That is the "told about a tool it cannot call" failure the
+ *   unavailability vocabulary exists to prevent;
+ * - a definition NO harness could ever serve is a WARNING, and it is the only check here a run
+ *   structurally cannot report: an `http` server narrowed to `harnesses: ['codex']` (whose client
+ *   is stdio-only), or anything narrowed to `['pi']` (which has no MCP client), is never dropped
+ *   FOR A REASON on any run. It simply never applies, so no prompt and no log line ever mentions
+ *   it. A warning rather than an error because the declaration is inert rather than dangerous;
+ * - a cleartext `http://` endpoint off loopback is an ERROR: a resolved credential rides that
+ *   request as a header, and the harness refuses the same URL at the job boundary — so allowing
+ *   it here only moves the failure to a place with no registration to point at.
+ */
+function checkToolServerDefinition(
+  kind: AgentKind,
+  server: McpServerDefinition,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const on = `(on agent kind "${kind}")`
+  if (!isValidMcpServerId(server.id)) {
+    problems.push({
+      severity: 'error',
+      code: 'invalid_tool_server_id',
+      message:
+        `Tool server "${server.id}" ${on} has an invalid id. It becomes part of the tool names ` +
+        `the CLI exposes (mcp__<id>__<tool>) and a Codex config key, so it must match ` +
+        `[a-z0-9][a-z0-9_-]*.`,
+    })
+  }
+  for (const tool of server.allowedTools ?? []) {
+    if (isValidMcpToolName(tool)) continue
+    problems.push({
+      severity: 'error',
+      code: 'invalid_tool_server_tool_name',
+      message:
+        `Tool server "${server.id}" ${on} restricts allowedTools to "${tool}", which is not a ` +
+        `single tool name (letters, digits, "_", "." and "-"). The harness joins the list into ` +
+        `one --allowedTools argument with commas, so an entry with a comma or whitespace becomes ` +
+        `patterns that match nothing while the prompt still advertises the name. List each tool ` +
+        `as its own entry.`,
+    })
+  }
+  const servable = mcpServableHarnesses(server)
+  if (servable.length === 0) {
+    problems.push({
+      severity: 'warn',
+      code: 'tool_server_unservable',
+      message:
+        `Tool server "${server.id}" ${on} declares transport "${server.transport.kind}" for ` +
+        `harnesses [${(server.harnesses ?? MCP_SUPPORTED_HARNESSES).join(', ')}], and no harness ` +
+        `can serve that combination, so the server never applies to any run and no prompt or log ` +
+        `line will say why. Codex's MCP client is stdio-only and Pi has none at all. Widen the ` +
+        `harnesses, change the transport, or drop the declaration.`,
+    })
+  }
+  if (server.transport.kind === 'http' && !isAllowedMcpHttpUrl(server.transport.url)) {
+    problems.push({
+      severity: 'error',
+      code: 'insecure_tool_server_url',
+      message:
+        `Tool server "${server.id}" ${on} has url "${server.transport.url}". An HTTP tool server ` +
+        `carries its resolved credential in a request header, so the url must be https (plain ` +
+        `http is accepted only on loopback).`,
+    })
+  }
+  for (const secret of server.secretKeys ?? []) {
+    problems.push(...checkToolServerSecret(kind, server, secret))
+  }
+  return problems
+}
+
+/**
+ * ONE credential a tool server declares. The reserved-key check is the sharpest rule in this file:
+ * a definition names both the key it wants and the endpoint that key is sent to, so
+ * `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` is a registration that boots clean and ships
+ * the deployment's master sealing key to a third party. The generative-integration half of the same
+ * rule is enforced by its credential SCHEMA (there is no schema here — a tool server is a TypeScript
+ * registration), and dispatch refuses both again for the mothership case.
+ */
+function checkToolServerSecret(
+  kind: AgentKind,
+  server: McpServerDefinition,
+  secret: McpSecretRef,
+): RegistrationProblem[] {
+  const problems: RegistrationProblem[] = []
+  const on = `(on agent kind "${kind}")`
+  if (isReservedPlatformEnvKey(secret.key)) {
+    problems.push({
+      severity: 'error',
+      code: 'reserved_credential_key',
+      message: `Tool server "${server.id}" ${on} declares credential ${reservedEnvKeyMessage(secret.key)}`,
+    })
+  }
+  if (secret.envName === undefined) return problems
+  // The injection name is NOT held to the reserved floor (it reads nothing), so it carries its own
+  // rule: a value set as `PATH` or `npm_config_registry` reconfigures the server's process instead
+  // of authenticating a call. Dispatch drops one too, for the mothership case.
+  if (!isEnvVariableName(secret.envName)) {
+    problems.push({
+      severity: 'error',
+      code: 'invalid_credential_env_name',
+      message:
+        `Tool server "${server.id}" ${on} declares credential envName "${secret.envName}", which ` +
+        `is not a valid environment variable name. It becomes a variable of the server's process, ` +
+        `and the harness drops anything else.`,
+    })
+  }
+  if (isToolchainEnvName(secret.envName)) {
+    problems.push({
+      severity: 'error',
+      code: 'toolchain_credential_env_name',
+      message: `Tool server "${server.id}" ${on} declares credential ${toolchainEnvNameMessage(secret.envName)}`,
+    })
+  }
+  // An `http` server sends its value as a HEADER, so an injection name would be read by nothing.
+  // A warning rather than an error: the declaration still works, it just says something that cannot
+  // take effect, and failing boot over it would be out of proportion.
+  if (server.transport.kind === 'http' && secret.header) {
+    problems.push({
+      severity: 'warn',
+      code: 'unused_credential_env_name',
+      message:
+        `Tool server "${server.id}" ${on} declares credential envName "${secret.envName}" on a ` +
+        `key that names a header. An http server's value is sent as that header, so the injection ` +
+        `name is never used.`,
     })
   }
   return problems

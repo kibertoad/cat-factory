@@ -1,4 +1,4 @@
--- The PRE-TOKEN INPUT GATE's per-workspace mode: the deterministic structural check of a task's
+-- The PRE-DISPATCH INPUT GATE's per-workspace mode: the deterministic structural check of a task's
 -- authored input, run before a run's first agent step is dispatched so a task nobody could act on
 -- parks having spent no tokens.
 --

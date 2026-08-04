@@ -26,7 +26,7 @@ import {
 //
 // These resources are the external counterpart of that loop. Four decision kinds are exposed
 // today: the requirements review (findings + the iteration loop), the implementation-fork choice,
-// a parked judge verdict, and the pre-token input gate. Each is deliberately a SMALL projection of
+// a parked judge verdict, and the pre-dispatch input gate. Each is deliberately a SMALL projection of
 // the internal entity, following the `publicTask` / `publicService` pattern: a caller sees the
 // findings and their stable ids, never the engine's step/approval internals, the recommendation
 // machinery, or the reviewer's model plumbing.
@@ -144,7 +144,7 @@ export const publicJudgeDecisionSchema = v.object({
 export type PublicJudgeDecision = v.InferOutput<typeof publicJudgeDecisionSchema>
 
 /**
- * A run parked on the PRE-TOKEN INPUT GATE as exposed externally: the task states nothing an
+ * A run parked on the PRE-DISPATCH INPUT GATE as exposed externally: the task states nothing an
  * agent could act on, and the run stopped before its first dispatch having spent nothing.
  *
  * This one is exposed for a reason the other three do not have. The gate parks on the shape of
@@ -259,7 +259,7 @@ export const publicResolveJudgeSchema = resolveJudgeSchema
 export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSchema>
 
 /**
- * Resolve a run parked on the PRE-TOKEN INPUT GATE from a headless caller. Identical to the
+ * Resolve a run parked on the PRE-DISPATCH INPUT GATE from a headless caller. Identical to the
  * SPA's {@link resolveInputGateSchema} — both surfaces drive the SAME service method, so there
  * is nothing to narrow: `recheck` re-evaluates the task as it now stands (which is what actually
  * clears the park, so an integration fixes the task over `PATCH /api/v1/tasks/:taskId` first),

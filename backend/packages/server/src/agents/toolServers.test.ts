@@ -1,4 +1,5 @@
 import type { AgentRunContext, McpServerDefinition, ToolSecretResolver } from '@cat-factory/kernel'
+import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
 import { createEnvToolSecretResolver, resolveToolServers } from './toolServers.js'
@@ -208,6 +209,198 @@ describe('resolveToolServers', () => {
       resolveToolSecrets: broken,
     })
     expect(result.unavailableToolServers[0]?.reason).toBe('missing_secret')
+  })
+})
+
+// Which TRANSPORTS the running harness can reach, which is a different question from which
+// harnesses the definition allows — and the one the dispatch used not to ask.
+describe('transport support', () => {
+  it('drops an http server on a CODEX run, whose MCP client is stdio-only', async () => {
+    // The defect this closes: harness membership passed (Codex speaks MCP and the definition named
+    // no allow-list), so the server was advertised in the prompt under "prefer them over guessing"
+    // — and then skipped by the harness's stdio-only TOML writer. The agent planned around a tool
+    // that was never wired, with nothing anywhere saying so.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(HTTP),
+      harness: 'codex',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ DOCS_TOKEN: 'abc' }),
+    })
+    expect(result.toolServers).toEqual([])
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers).toEqual([
+      { id: 'docs', label: 'docs', reason: 'transport_unsupported' },
+    ])
+  })
+
+  it('keeps the same http server on a claude-code run', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(HTTP),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ DOCS_TOKEN: 'abc' }),
+    })
+    expect(result.mcpServers.map((s) => s.id)).toEqual(['docs'])
+  })
+
+  it('keeps a stdio server on codex, and reports each declared server on its own terms', async () => {
+    // A mixed declaration is the realistic case, and it must not be all-or-nothing: the stdio
+    // server is wired and the http one is stated, in one dispatch.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(STDIO, HTTP),
+      harness: 'codex',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ ISSUE_TOKEN: 'tok', DOCS_TOKEN: 'abc' }),
+    })
+    expect(result.mcpServers.map((s) => s.id)).toEqual(['issues'])
+    expect(result.unavailableToolServers.map((s) => s.reason)).toEqual(['transport_unsupported'])
+  })
+
+  it('reports `harness_unsupported`, not a transport reason, when the harness speaks no MCP', async () => {
+    // The two need different fixes (a `harnesses` list vs the choice of runtime), so a Pi run must
+    // not be described as a transport problem.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(HTTP),
+      harness: 'pi',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ DOCS_TOKEN: 'abc' }),
+    })
+    expect(result.unavailableToolServers[0]?.reason).toBe('harness_unsupported')
+  })
+})
+
+// `allowedTools` decides two things that must not disagree: what the prompt advertises and what the
+// CLI is actually narrowed to. Registration refuses a bad entry, so these are the same
+// belt-and-braces the reserved-key and envName floors get at this layer.
+describe('allowedTools at the dispatch boundary', () => {
+  const withTools = (allowedTools: string[]): McpServerDefinition => ({
+    id: 'issues',
+    transport: { kind: 'stdio', command: 'npx' },
+    allowedTools,
+  })
+
+  it('drops an entry that is not a single tool name from BOTH channels at once', async () => {
+    // The harness drops the comma-packed entry at the job boundary, so leaving it here would put a
+    // tool name in the prompt that the allow-list never granted: the exact failure the whole
+    // unavailability vocabulary exists to prevent.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(withTools(['search_issues,get_issue', 'list_issues'])),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.toolServers[0]?.tools).toEqual(['list_issues'])
+    expect(result.mcpServers[0]?.allowedTools).toEqual(['list_issues'])
+  })
+
+  it('falls back to NO restriction when nothing in the list survives, as the harness does', async () => {
+    // Same answer as an absent field (every tool the server exposes). The alternative sends a list
+    // whose only entries are the CLI's own built-in tools, i.e. a run narrowed to no MCP tools.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(withTools(['a,b', 'search issues'])),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.toolServers[0]?.tools).toBeUndefined()
+    expect(result.mcpServers[0]?.allowedTools).toBeUndefined()
+  })
+})
+
+// The per-dispatch budget. A kind accretes tool servers through `assignToolServers` calls in several
+// packages, none of them individually wrong, and the job body is one HTTP payload.
+describe('the tool-server budget', () => {
+  const many = (count: number): McpServerDefinition[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `srv${i}`,
+      transport: { kind: 'stdio' as const, command: 'npx', args: [`server-${i}`] },
+    }))
+
+  it('wires up to the cap and STATES the rest rather than dropping them silently', async () => {
+    const servers = many(TOOL_SERVER_BUDGET.maxServers + 3)
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(...servers),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.mcpServers).toHaveLength(TOOL_SERVER_BUDGET.maxServers)
+    // Declaration order, so the cap is a plain prefix: the kind's own servers come before anything
+    // a deployment assigned onto it.
+    expect(result.mcpServers.map((s) => s.id)).toEqual(
+      servers.slice(0, TOOL_SERVER_BUDGET.maxServers).map((s) => s.id),
+    )
+    expect(result.unavailableToolServers).toEqual(
+      servers.slice(TOOL_SERVER_BUDGET.maxServers).map((s) => ({
+        id: s.id,
+        label: s.id,
+        reason: 'over_budget',
+      })),
+    )
+    // The prompt-facing projection stays in step with what the job body carries: an agent told
+    // about a server the body omits is exactly the failure this whole area exists to prevent.
+    expect(result.toolServers.map((s) => s.id)).toEqual(result.mcpServers.map((s) => s.id))
+  })
+
+  it('does not resolve credentials for a server the COUNT cap has already lost', async () => {
+    // The resolver is a port a facade may back with a per-workspace store or a remote read, so a
+    // round trip (and a materialised secret) for a server this dispatch cannot wire is pure waste.
+    // The count is decidable before resolution; only the byte cap needs the resolved spec.
+    const asked: string[] = []
+    const recording: ToolSecretResolver = {
+      resolve: async ({ subject, keys }) => {
+        asked.push(subject.id)
+        return Object.fromEntries(keys.map((k) => [k.key, 'tok']))
+      },
+    }
+    const servers = many(TOOL_SERVER_BUDGET.maxServers + 3).map((s) => ({
+      ...s,
+      secretKeys: [{ key: `${s.id.toUpperCase()}_TOKEN` }],
+    }))
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(...servers),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: recording,
+    })
+    expect(asked).toEqual(servers.slice(0, TOOL_SERVER_BUDGET.maxServers).map((s) => s.id))
+    expect(result.unavailableToolServers.map((s) => s.reason)).toEqual([
+      'over_budget',
+      'over_budget',
+      'over_budget',
+    ])
+  })
+
+  it('caps on BYTES too, so a few fat declarations cannot bloat the body', async () => {
+    const fat = (i: number): McpServerDefinition => ({
+      id: `fat${i}`,
+      transport: { kind: 'stdio', command: 'npx', env: { BLOB: 'x'.repeat(12_000) } },
+    })
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(fat(0), fat(1), fat(2), fat(3)),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.mcpServers.length).toBeLessThan(4)
+    expect(result.unavailableToolServers.every((s) => s.reason === 'over_budget')).toBe(true)
+    const bytes = new TextEncoder().encode(JSON.stringify(result.mcpServers)).length
+    expect(bytes).toBeLessThanOrEqual(TOOL_SERVER_BUDGET.maxTotalBytes)
+  })
+
+  it('leaves a normal declaration untouched', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(...many(TOOL_SERVER_BUDGET.maxServers)),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.unavailableToolServers).toEqual([])
   })
 })
 

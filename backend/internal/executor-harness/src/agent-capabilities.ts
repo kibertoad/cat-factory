@@ -179,6 +179,20 @@ function sanitizeServerId(value: unknown): string | undefined {
 }
 
 /**
+ * A tool name an `allowedTools` entry may name. Kept byte-identical to kernel's
+ * `MCP_TOOL_NAME_PATTERN` for the same reason {@link MCP_SERVER_ID_PATTERN} is a copy, and pinned
+ * against it by `test/agent-capabilities.conformity.test.ts`.
+ *
+ * The comma is the reason the rule exists on THIS side of the boundary too:
+ * {@link claudeAllowedToolPatterns} builds the list that the runner joins into one
+ * `--allowedTools` argument with commas, so an entry carrying one splits into two patterns of which
+ * the second matches no tool the CLI has. Dropped rather than passed through, because the entries
+ * that survive are what narrows the session: a bad one would silently take the run's whole MCP
+ * surface with it.
+ */
+export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+/**
  * Whether an HTTP tool server's URL may be started. Mirrors kernel's `isAllowedMcpHttpUrl` (see
  * {@link MCP_SERVER_ID_PATTERN} for why it is a copy, and the conformity suite that pins it):
  * `https` anywhere, plain `http` only on loopback, since the headers carry a resolved credential.
@@ -219,13 +233,25 @@ function parseStringArray(value: unknown): string[] | undefined {
   return out.length ? out : undefined
 }
 
+/**
+ * The `allowedTools` list: string entries that are single tool NAMES (see
+ * {@link MCP_TOOL_NAME_PATTERN}). Undefined when nothing survives, which is the same answer as an
+ * absent field (every tool the server exposes) and the right one: the alternative is a list whose
+ * only surviving entries are the platform's own built-in tool names, i.e. a run narrowed to no MCP
+ * tools at all. The backend refuses these at registration; this is the boundary check.
+ */
+function parseAllowedTools(value: unknown): string[] | undefined {
+  const names = parseStringArray(value)?.filter((name) => MCP_TOOL_NAME_PATTERN.test(name))
+  return names?.length ? names : undefined
+}
+
 /** Validate one `mcpServers` entry, or undefined when malformed for its transport. */
 function parseMcpServerSpec(value: unknown): McpServerSpec | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const o = value as Record<string, unknown>
   const id = sanitizeServerId(o.id)
   if (!id) return undefined
-  const allowedTools = parseStringArray(o.allowedTools)
+  const allowedTools = parseAllowedTools(o.allowedTools)
   const secretKeys = parseStringArray(o.secretKeys)
   if (o.transport === 'http') {
     // https anywhere, plain http only on loopback: the CLI would happily be pointed at a
@@ -370,9 +396,13 @@ function tomlString(value: string): string {
 
 /**
  * The `[mcp_servers.<id>]` TOML block Codex reads from its `CODEX_HOME/config.toml`. Codex's MCP
- * client is stdio-only, so an `http` server is skipped here — the backend states such a server as
- * unavailable when it declares `harnesses: ['claude-code']`, and a deployment that wires an HTTP
- * server for Codex gets a no-op rather than a malformed config.
+ * client is stdio-only, so an `http` server is skipped here.
+ *
+ * The skip is now a BACKSTOP rather than the decision: the backend knows which transports each
+ * harness reaches (`MCP_HARNESS_TRANSPORTS`) and drops an `http` server from a Codex dispatch under
+ * its own `transport_unsupported` reason, so the prompt states the gap instead of advertising a tool
+ * this writer then silently omitted. It stays because a body that reached the container by any other
+ * route must still produce a valid config rather than a malformed one.
  */
 export function codexMcpConfigToml(servers: McpServerSpec[]): string {
   const blocks: string[] = []

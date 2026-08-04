@@ -320,7 +320,7 @@ function buildEnvTestError(e: unknown): EnvTestError {
     }
   }
   // The handler resolved but its live connection probe failed. The provider's OWN message is the
-  // actionable part ("Kargo project 'X' was not found"), so wrap it in localized prose rather than
+  // actionable part ("project 'X' was not found"), so wrap it in localized prose rather than
   // replacing it with a generic sentence — and offer the same jump, since the fix is in the
   // handler's connection config.
   if (reason === 'env_test_connection_failed' && parsed?.message) {
