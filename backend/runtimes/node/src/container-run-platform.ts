@@ -327,7 +327,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     baseDeployMint,
     deployDeps,
     standardAgentExecutor,
-    // Surfaced so the credential checklist can state what sits behind the store — see
+    // Surfaced so the credential checklist can state what sits behind the store. See
     // `ServerContainer.toolSecretEnvironmentFallback`. Undefined when a deployment replaced the
     // chain with its own resolver, which is the honest answer rather than a default.
     toolSecretEnvironmentFallback: toolSecretChain.environmentFallback,

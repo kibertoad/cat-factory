@@ -457,7 +457,7 @@ export interface NodeContainerOptions {
    *
    * A MULTI-TENANT deployment sets it false. With the fallback on, a workspace that has typed
    * nothing silently authenticates its runs as whoever set the variable, and the vendor bill lands
-   * in that account — which is the single-tenant answer this store exists to replace. Off, an
+   * in that account, which is the single-tenant answer this store exists to replace. Off, an
    * unstored key resolves to nothing, the capability reports itself unavailable to its agent, and
    * the credential checklist stops telling the operator that a blank row may still resolve.
    *

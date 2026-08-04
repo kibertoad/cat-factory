@@ -1206,6 +1206,12 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   that supplied its own resolver reports ABSENT, because that resolver replaced the chain and may read
   Vault, the environment, or both. Guessing either way is the same mistake mirrored: `true` leaves a
   credential nothing will resolve, `false` sends an operator hunting for a value that already answers.
+  **The absent line states only that the chain is undescribable HERE and never WHY**, because a facade
+  that wired the store and dropped the flag lands on the same value, and copy blaming a custom resolver
+  makes that wiring bug read as a deliberate configuration. **The chain itself is a REQUIRED dependency
+  of both executor builders**, since the one default they could carry (the deployment environment alone)
+  silently drops the per-workspace store, which is the leak the store exists to prevent: a default is
+  only safe where the safe answer is the convenient one.
   Doc: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`

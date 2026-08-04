@@ -21,7 +21,7 @@ import type { Env } from './env'
 // registers directly.
 //
 // ONE SLOT holding the whole policy, last write wins, where model registries are a LIST: a
-// container has exactly one chain, and its two halves are not independent — a deployment's own
+// container has exactly one chain, and its two halves are not independent: a deployment's own
 // resolver REPLACES the chain, which leaves no fallback of ours to keep or drop. Two registrations
 // are a mistake worth overwriting loudly rather than silently merging into an order nobody chose.
 //

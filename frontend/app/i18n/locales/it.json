@@ -578,7 +578,7 @@
       "storedAt": "Impostata l'ultima volta il {date}",
       "notStoredWithFallback": "Per questa board non è salvato nulla. Questo deployment legge la chiave anche dal proprio ambiente, quindi la capacità potrebbe funzionare comunque.",
       "notStored": "Per questa board non è salvato nulla e questo deployment non ha un ripiego sull'ambiente, quindi la capacità non può autenticarsi.",
-      "notStoredUnknownFallback": "Per questa board non è salvato nulla. Questo deployment fornisce un proprio resolver di credenziali, quindi qui non si sa se la chiave venga fornita altrove.",
+      "notStoredUnknownFallback": "Per questa board non è salvato nulla. La catena di credenziali di questo deployment non può essere descritta qui, quindi non si sa se la chiave venga fornita altrove.",
       "setValue": "Valore",
       "replaceValue": "Sostituisci il valore salvato",
       "save": "Salva",

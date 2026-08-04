@@ -108,6 +108,39 @@ export function composeToolSecretResolvers(
 const emptyToolSecretResolver: ToolSecretResolver = { resolve: async () => ({}) }
 
 /**
+ * Which composition-time misconfigurations this process has already reported.
+ *
+ * {@link buildToolSecretChain} runs once per CONTAINER BUILD, which on the Worker is once per
+ * request, per cron tick and per queue message. What it reports is a standing fact about the
+ * DEPLOYMENT rather than an event, so repeating it per invocation buries the one line that names
+ * it. Reported once per process (per isolate on the Worker), which is the cadence
+ * `validateRegistrationsOnce` already sets for the sibling registration checks: still visible in a
+ * fresh log, never a flood.
+ *
+ * Not a counter: a configuration mistake has no rate to watch, and a bounded dimension for it
+ * would be the deployment's own wiring, which is one value.
+ */
+const reportedChainProblems = new Set<string>()
+
+/** True the FIRST time this process is asked about `problem`, false forever after. */
+function shouldReportChainProblem(problem: string): boolean {
+  if (reportedChainProblems.has(problem)) return false
+  reportedChainProblems.add(problem)
+  return true
+}
+
+/**
+ * Forget which composition-time misconfigurations have been reported.
+ *
+ * For tests that exercise the reports: they share one process, so the once-per-process guard above
+ * would otherwise let the first case run silence every case after it. Deliberately NOT exported
+ * from the package index, since a deployment has no business re-arming a boot warning.
+ */
+export function resetToolSecretChainReports(): void {
+  reportedChainProblems.clear()
+}
+
+/**
  * A composed capability-credential chain, and the description of what it CONSULTS.
  *
  * The two travel together because the operator surface has to describe the real chain rather than
@@ -123,7 +156,7 @@ export interface ToolSecretChain {
    * Whether the deployment ENVIRONMENT answers behind the workspace store.
    *
    * Undefined when a deployment supplied its own resolver: it replaced the chain, and nothing here
-   * knows whether what it put there reads the environment. That is a third state on purpose — see
+   * knows whether what it put there reads the environment. That is a third state on purpose. See
    * `capabilityCredentialsViewSchema.environmentFallback`.
    */
   environmentFallback?: boolean
@@ -163,7 +196,26 @@ export interface ToolSecretChainInput {
  */
 export function buildToolSecretChain(input: ToolSecretChainInput): ToolSecretChain {
   const logger = input.logger ?? noopLogger
-  if (input.custom) return { resolver: input.custom }
+  if (input.custom) {
+    // A deployment that set BOTH has made a declaration this composition cannot honour: its own
+    // resolver replaced the chain, so there is no fallback of ours left to keep or drop. Said out
+    // loud rather than dropped, the same rule that governs a capability an agent asked for and the
+    // harness could not serve. The operator otherwise reads a store-only deployment off their own
+    // configuration while the resolver they wrote answers whatever it answers.
+    if (
+      input.environmentFallback !== undefined &&
+      shouldReportChainProblem('custom-resolver-ignores-fallback')
+    ) {
+      logger.warn(
+        'capabilityCredentialEnvironmentFallback is ignored: this deployment supplied its own ' +
+          'ToolSecretResolver, which REPLACES the platform chain rather than sitting behind it, ' +
+          'so whether the environment answers is decided inside that resolver. Drop the option, ' +
+          'or fold the behaviour it asks for into the resolver.',
+        { environmentFallback: input.environmentFallback },
+      )
+    }
+    return { resolver: input.custom }
+  }
 
   const environmentFallback = input.environmentFallback !== false
   const resolvers: ToolSecretResolver[] = []
@@ -177,11 +229,13 @@ export function buildToolSecretChain(input: ToolSecretChainInput): ToolSecretCha
     // and every capability that declares one reports itself unavailable to its agent. Said out
     // loud at composition, because the run-path symptom names the capability rather than the
     // deployment's own configuration.
-    logger.error(
-      'capability credentials resolve to nothing: the deployment declared a store-only chain but ' +
-        'has no credential store (needs ENCRYPTION_KEY). Every declared tool-server and ' +
-        'generative-integration credential will be reported unavailable to its agent.',
-    )
+    if (shouldReportChainProblem('store-only-without-store')) {
+      logger.error(
+        'capability credentials resolve to nothing: the deployment declared a store-only chain ' +
+          'but has no credential store (needs ENCRYPTION_KEY). Every declared tool-server and ' +
+          'generative-integration credential will be reported unavailable to its agent.',
+      )
+    }
     return { resolver: emptyToolSecretResolver, environmentFallback }
   }
   return { resolver: composeToolSecretResolvers(resolvers, logger), environmentFallback }

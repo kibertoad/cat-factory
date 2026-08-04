@@ -49,7 +49,7 @@ async function viewFor(
     stored,
     // Read off the chain the facade actually COMPOSED, never re-asserted here. It decides whether
     // the UI may call a blank row "missing", and the two answers send an operator in opposite
-    // directions — so the flag has to describe the real chain, including the case where a
+    // directions, so the flag has to describe the real chain, including the case where a
     // deployment replaced it with its own resolver and the answer is "not known".
     ...(container.toolSecretEnvironmentFallback === undefined
       ? {}

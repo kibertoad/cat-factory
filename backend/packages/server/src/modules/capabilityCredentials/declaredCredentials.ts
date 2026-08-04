@@ -121,7 +121,7 @@ export function buildCapabilityCredentialsView(input: {
   declarations: DeclaredCapabilityCredentials
   stored: CapabilityCredentialRef[]
   /**
-   * What the facade's COMPOSED chain does behind the store — passed through rather than decided
+   * What the facade's COMPOSED chain does behind the store, passed through rather than decided
    * here, and undefined when a deployment's own resolver replaced the chain. See
    * `buildToolSecretChain`.
    */

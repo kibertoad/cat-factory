@@ -90,8 +90,15 @@ const SOURCES: Record<string, [string, string[]]> = {
     assemblySource,
     ['toolSecretChain.resolver', 'toolSecretEnvironmentFallback'],
   ],
-  // …and preferred by the executor over the platform's own resolver chain.
-  'src/infrastructure/container-executor-deps.ts': [executorSource, ['deps.resolveToolSecrets']],
+  // …and taken by the executor as a REQUIRED dependency. This link is the one the type system now
+  // pins by itself: the field carried a bare Worker-vars default until it was made required, and
+  // that default failed OPEN, so dropping the link here resolved every tenant off the deployment's
+  // own configured vars rather than the per-workspace store. Pinned anyway, because what a guard
+  // has to survive is someone restoring the convenience default.
+  'src/infrastructure/container-executor-deps.ts': [
+    executorSource,
+    ['deps.resolveToolSecrets', 'resolveToolSecrets: ToolSecretResolver'],
+  ],
 }
 
 describe('the tool-secret resolver seam reaches the container executor', () => {

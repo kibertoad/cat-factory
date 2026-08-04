@@ -150,7 +150,7 @@ which reconfigure the run instead of authenticating a call.
    Each write also stamps `updatedAt` on the touched key only: "last set" is a per-key fact the
    checklist renders, so re-stamping the set would falsify every neighbour's date.
 
-### Two decisions slice 4 forced
+### Three decisions slice 4 forced
 
 9. **The composition returns the DESCRIPTION with the resolver, so nothing can re-assert it.**
    `buildToolSecretChain` (`@cat-factory/server`) is the single site all three facades compose
@@ -160,7 +160,8 @@ which reconfigure the run instead of authenticating a call.
    controller asserted `true` beside a chain it never saw. Consequence worth stating: the facades
    now build the chain at the composition ROOT and pass it down, so the executor builders take a
    resolver rather than the store, and the Worker stopped building a second
-   `CapabilityCredentialsService` for the executor alone.
+   `CapabilityCredentialsService` for the executor alone. What that consequence then forced is
+   decision 11.
 10. **`environmentFallback` is a TRI-STATE, because a deployment's own resolver is undescribable.**
     The seam's documented meaning is that `createToolSecretResolver` REPLACES the chain, so a
     deployment may have wired Vault, or the environment, or both, and neither boolean is a claim
@@ -172,6 +173,18 @@ which reconfigure the run instead of authenticating a call.
     which reads richer and is not: the only extra fact it carries, "the store is not consulted at
     all", is unreachable, since the controller already 503s when the store is unwired, and for a
     custom resolver the list would be the same guess in a longer shape.
+11. **The executor takes the chain as a REQUIRED dependency, because the only default it could
+    carry failed OPEN.** Moving composition to the root left both executor builders with a bare
+    deployment-environment default "for a caller assembling this executor without that root".
+    That default is the leak the store exists to prevent, reachable by dropping ONE optional field
+    in a facade whose every neighbouring link is optional: the per-workspace store stops being
+    consulted, every tenant resolves off the deployment's own vars, and nothing throws or logs
+    because env-only is a perfectly valid chain. It also contradicted the decision one paragraph
+    up, where store-only-with-no-store refuses LOUDLY rather than quietly re-adding the
+    environment. Making the field required moves that whole class of regression to a compile
+    error, and the standalone caller loses nothing: `buildToolSecretChain` is exported, and calling
+    it is what gets them the description the checklist renders as well as the resolver. General
+    form: **a default is only safe where the safe answer is the convenient one.**
 
 ## Gotchas the pilot surfaced
 
@@ -191,6 +204,19 @@ which reconfigure the run instead of authenticating a call.
   than silently re-adding the environment (which would ignore the declaration) or throwing (the
   Worker composes per entry point, so that would take out every request). The operator surface
   already states the other half: the controller 503s naming `ENCRYPTION_KEY`.
+- **A composition-time report is said ONCE PER PROCESS, because this runs per container build.**
+  On the Worker that is per request, per cron tick and per queue message, so a line repeated per
+  invocation buries the one line that names the problem. The guard is a module-level set keyed by
+  problem (per isolate on the Worker), the cadence `validateRegistrationsOnce` already sets for the
+  sibling registration checks. Not a counter: a configuration mistake has no rate to watch. The
+  same guard covers the WARN for a deployment that set `capabilityCredentialEnvironmentFallback`
+  beside its own resolver, which is a declaration the composition cannot honour and so is stated
+  rather than dropped.
+- **The tri-state's ABSENT copy names no CAUSE, and that is not squeamishness.** Two things land
+  on absent: a deployment's own resolver (the deliberate one) and a facade that wired the store and
+  dropped the flag (a refactor hazard). Copy that blames the custom resolver makes the second read
+  as the first, sending an operator to inspect a resolver nobody wrote. So the line states that the
+  chain cannot be described HERE and stops, which is true of both.
 - **The declaration list is NOT filtered to the capabilities a workspace's pipelines use.** Which
   kinds a workspace runs changes with every pipeline edit, so filtering makes the checklist flicker
   and hides the key an operator needs to set BEFORE adding the step that wants it.

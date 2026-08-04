@@ -2719,7 +2719,7 @@
       "storedAt": "Défini le {date}",
       "notStoredWithFallback": "Rien n'est enregistré pour ce tableau. Ce déploiement lit aussi la clé dans son propre environnement, la capacité fonctionne donc peut-être encore.",
       "notStored": "Rien n'est enregistré pour ce tableau et ce déploiement n'a pas de valeur de repli dans l'environnement : la capacité ne peut pas s'authentifier.",
-      "notStoredUnknownFallback": "Rien n'est enregistré pour ce tableau. Ce déploiement fournit son propre résolveur d'identifiants : on ne sait pas ici si la clé est fournie ailleurs.",
+      "notStoredUnknownFallback": "Rien n'est enregistré pour ce tableau. La chaîne d'identifiants de ce déploiement ne peut pas être décrite ici : on ne sait donc pas si la clé est fournie ailleurs.",
       "setValue": "Valeur",
       "replaceValue": "Remplacer la valeur enregistrée",
       "save": "Enregistrer",

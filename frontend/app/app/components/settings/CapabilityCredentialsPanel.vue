@@ -164,9 +164,13 @@ async function removeKey(key: string) {
            Three states, and the backend reports them off the chain it actually composed: with the
            fallback the deployment's own environment may still answer, and calling that "missing"
            would send an operator hunting for a value that is already resolving; without it, blank
-           really does mean the capability cannot authenticate. The third is a deployment that
-           supplied its OWN resolver, which replaced the chain — neither claim is ours to make, so
-           this says what is known and stops there. -->
+           really does mean the capability cannot authenticate.
+
+           The third is that the chain cannot be described, and this copy says exactly that and
+           stops. It must not name a cause: a deployment's own resolver replacing the chain is the
+           usual one, but a facade that wired the store and dropped the flag lands here too, and
+           blaming a custom resolver would make that wiring bug read as a deliberate configuration
+           and send the operator to the one place that cannot explain it. -->
       <p v-else-if="view?.environmentFallback === true" class="text-[11px] text-slate-500">
         {{ t('settings.capabilityCredentials.notStoredWithFallback') }}
       </p>

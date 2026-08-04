@@ -35,7 +35,7 @@ const SOURCES: Record<string, string[]> = {
   // `start()` forwarding them onto the options object it builds the container from.
   '../src/server.ts': ['createToolSecretResolver', 'capabilityCredentialEnvironmentFallback'],
   // The composition root composing the chain ONCE from both, and surfacing its description beside
-  // the resolver — the checklist has to describe the chain the dispatch path actually got, and an
+  // the resolver: the checklist has to describe the chain the dispatch path actually got, and an
   // executor cannot say what it was handed.
   '../src/container-run-platform.ts': [
     'options.createToolSecretResolver',
@@ -45,8 +45,12 @@ const SOURCES: Record<string, string[]> = {
   ],
   // …carried onto the container the credential controller resolves from.
   '../src/container.ts': ['toolSecretEnvironmentFallback'],
-  // The executor preferring an injected resolver over the bare environment default.
-  '../src/container-executor-deps.ts': ['resolveToolSecrets ??'],
+  // The executor taking the composed chain as a REQUIRED dependency. This link is the one the
+  // type system now pins by itself: the field carried a bare environment default until it was
+  // made required, and that default failed OPEN, so dropping the link here resolved every tenant
+  // off this node's own environment rather than the per-workspace store. Pinned anyway, because
+  // what a guard has to survive is someone restoring the convenience default.
+  '../src/container-executor-deps.ts': ['resolveToolSecrets: ToolSecretResolver'],
   // The local facade's own options, declared and forwarded on both of its boot paths.
   '../../local/src/server.ts': [
     'createToolSecretResolver',

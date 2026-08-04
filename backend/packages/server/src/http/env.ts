@@ -138,15 +138,20 @@ export interface ServerContainer extends Core {
   capabilityCredentials?: CapabilityCredentialsService
   /**
    * Whether the capability-credential chain this facade COMPOSED reads the deployment environment
-   * behind the store above — the fact the credential checklist describes, not a default it
+   * behind the store above: the fact the credential checklist describes, not a default it
    * re-asserts. Projected from `buildToolSecretChain`, so the surface and the dispatch path read
    * one composition.
    *
    * Undefined is a real answer and the reason this is a tri-state: a deployment that supplied its
-   * own `ToolSecretResolver` replaced the chain, and nothing here knows what it consults. It is
-   * also what a facade that wired nothing leaves behind, which renders identically (the checklist
-   * claims neither "may still resolve" nor "missing"); the wiring itself is pinned per facade by
-   * the `tool-secret-seam.coverage.*` guards, since every link in that chain is optional.
+   * own `ToolSecretResolver` replaced the chain, and nothing here knows what it consults.
+   *
+   * TWO causes land on undefined and the surface must not pick between them, which is why the copy
+   * it renders states only that the chain cannot be described HERE and never why. The other cause
+   * is a facade that wired the store and dropped this flag, a refactor hazard rather than a
+   * deployment choice (every link in that chain is optional, which is what the
+   * `tool-secret-seam.coverage.*` guards pin per facade). Naming the custom resolver as the reason
+   * would make the wiring bug read as a deliberate configuration and send the operator to the one
+   * place that cannot explain it.
    */
   toolSecretEnvironmentFallback?: boolean
   /**

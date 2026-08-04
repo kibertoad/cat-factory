@@ -47,7 +47,6 @@ import {
   noRunnerBackendAvailableError,
   type MintInstallationToken,
   type WebSearchUpstream,
-  createEnvToolSecretResolver,
   operationalMetrics,
 } from '@cat-factory/server'
 import { type AppConfig } from './config'
@@ -116,16 +115,25 @@ export interface WorkerExecutorDeps {
    */
   webSearchAccountSettings: AccountSettingsService | undefined
   /**
-   * Resolve the credentials a registered capability declared — a tool server's (MCP) and a
-   * generative binary integration's alike. Absent ⇒ the deployment-environment default over the
-   * Worker's own configured vars.
+   * Resolve the credentials a registered capability declared: a tool server's (MCP) and a
+   * generative binary integration's alike. The whole composed CHAIN, from the composition root's
+   * `buildToolSecretChain` (the per-workspace sealed store in front of the Worker's configured
+   * vars, or a deployment's own resolver, which replaces it).
    *
    * Passed in for the same reason `resolvePackageRegistries` is: it is the composition root's to
    * decide, and a deployment holding PER-WORKSPACE credentials replaces it wholesale
    * (`createWorker({ createToolSecretResolver })`). Until it existed, `ToolSecretResolver` was a
-   * port with exactly one reachable implementation — the one this module hard-coded.
+   * port with exactly one reachable implementation, the one this module hard-coded.
+   *
+   * REQUIRED, and deliberately so: it once carried a bare deployment-environment default for a
+   * caller assembling this executor without that root, and the default failed OPEN. A dropped
+   * link in the facade plumbing (every neighbour here is optional) would have silently stopped
+   * consulting the per-workspace store and resolved every tenant off the deployment's own vars,
+   * which is the exact leak the store exists to prevent, with nothing thrown and nothing logged.
+   * A standalone caller composes one `buildToolSecretChain` call instead and gets the honest
+   * chain plus the description the credential checklist renders.
    */
-  resolveToolSecrets?: ToolSecretResolver
+  resolveToolSecrets: ToolSecretResolver
 }
 
 /**
@@ -499,12 +507,10 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
-    // integration) declared. The composition root passes the composed chain (the platform's own
-    // per-workspace sealed store in front of the Worker's configured vars, or a deployment's own
-    // resolver); absent, this falls back to the configured vars alone.
-    resolveToolSecrets:
-      deps.resolveToolSecrets ??
-      createEnvToolSecretResolver(env as unknown as Record<string, unknown>),
+    // integration) declared. The composition root composed the whole chain and passes it whole:
+    // there is no default here to fall back to, because the only one available (the configured
+    // vars alone) would drop the per-workspace store without saying so.
+    resolveToolSecrets: deps.resolveToolSecrets,
     logger,
     githubApiBase: config.github.apiBase,
     // Forward container tool spans to the external trace sink(s) (Langfuse and/or OTLP)

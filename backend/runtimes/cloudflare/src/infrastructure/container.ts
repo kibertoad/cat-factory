@@ -1424,7 +1424,7 @@ export function buildContainer(
   // (`ExecutionWorkflow`), the queue consumers and every cron sweeper each build their own
   // container from a bare `buildContainer(env)`. Container agents are dispatched by the durable
   // driver, so an option carried on `createApp` alone would be accepted and then never asked
-  // anything. A deployment's own resolver (built from THIS entry point's `env` — a Worker binding,
+  // anything. A deployment's own resolver (built from THIS entry point's `env`: a Worker binding,
   // D1 or a Secrets Store, is only reachable that way) REPLACES the chain; absent, the platform's
   // per-workspace store answers first and the Worker's configured vars answer behind it.
   const toolSecretChain = buildToolSecretChain({

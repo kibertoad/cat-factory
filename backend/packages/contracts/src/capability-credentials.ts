@@ -192,7 +192,7 @@ export const capabilityCredentialsViewSchema = v.object({
    * Three states, not two, because a deployment that supplied its OWN `ToolSecretResolver`
    * replaced the whole chain, and the platform cannot describe what it put there: that resolver
    * may read Vault, or the environment, or both. Absent is that answer. Rendering a guess either
-   * way is the same mistake in opposite directions — `true` sends an operator away from a
+   * way is the same mistake in opposite directions: `true` sends an operator away from a
    * credential nothing will resolve, `false` sends them hunting for a value that already answers.
    */
   environmentFallback: v.optional(v.boolean()),

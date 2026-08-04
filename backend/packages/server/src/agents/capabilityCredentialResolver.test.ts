@@ -1,10 +1,11 @@
 import type { ToolSecretResolver } from '@cat-factory/kernel'
 import { createRecordingLogger } from '@cat-factory/kernel'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildToolSecretChain,
   composeToolSecretResolvers,
   createWorkspaceToolSecretResolver,
+  resetToolSecretChainReports,
 } from './capabilityCredentialResolver.js'
 import { createEnvToolSecretResolver } from './toolServers.js'
 
@@ -109,6 +110,10 @@ describe('the composed capability-credential chain', () => {
     resolveValues: async () => [{ key: 'VENDOR_KEY', value: 'tenant' }],
   } as never
 
+  // The composition reports each misconfiguration once per PROCESS, and these specs share one, so
+  // without this the first case to hit a report silences every case after it.
+  beforeEach(resetToolSecretChainReports)
+
   it('puts the store in front of the environment, and says the fallback is there', async () => {
     const chain = buildToolSecretChain({
       credentials,
@@ -146,7 +151,7 @@ describe('the composed capability-credential chain', () => {
 
   it('refuses LOUDLY when store-only was declared and there is no store', async () => {
     // Nothing can resolve, and the run-path symptom names the capability rather than the
-    // deployment's own configuration — so the composition is where it gets said.
+    // deployment's own configuration, so the composition is where it gets said.
     const logger = createRecordingLogger()
     const chain = buildToolSecretChain({
       env: { VENDOR_KEY: 'deployment' },
@@ -154,6 +159,45 @@ describe('the composed capability-credential chain', () => {
       logger,
     })
     expect(await ask(chain.resolver, 'ws_a', ['VENDOR_KEY'])).toEqual({})
+    expect(logger.lines.filter((line) => line.level === 'error')).toHaveLength(1)
+  })
+
+  it('says so when a deployment’s own resolver makes its fallback declaration moot', () => {
+    // Both were set, and the custom resolver replaces the chain, so the declaration cannot be
+    // honoured. Dropping it silently leaves an operator reading a store-only deployment off their
+    // own configuration while the resolver they wrote answers whatever it answers.
+    const logger = createRecordingLogger()
+    const own: ToolSecretResolver = { resolve: async () => ({}) }
+    const chain = buildToolSecretChain({
+      custom: own,
+      credentials,
+      env: {},
+      environmentFallback: false,
+      logger,
+    })
+    expect(chain.resolver).toBe(own)
+    expect(chain.environmentFallback).toBeUndefined()
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(1)
+  })
+
+  it('stays quiet when a custom resolver arrives with no fallback declaration to ignore', () => {
+    // The ordinary `createToolSecretResolver` deployment. Nothing was asked for that cannot be
+    // honoured, so there is nothing to report.
+    const logger = createRecordingLogger()
+    const own: ToolSecretResolver = { resolve: async () => ({}) }
+    buildToolSecretChain({ custom: own, credentials, env: {}, logger })
+    expect(logger.lines.filter((line) => line.level === 'warn')).toHaveLength(0)
+  })
+
+  it('reports a misconfiguration ONCE per process, not once per container build', () => {
+    // This runs per container build, which on the Worker is per request, per cron tick and per
+    // queue message. A standing fact about the deployment repeated per invocation buries the one
+    // line that names it.
+    const logger = createRecordingLogger()
+    const input = { env: {}, environmentFallback: false, logger } as const
+    buildToolSecretChain(input)
+    buildToolSecretChain(input)
+    buildToolSecretChain(input)
     expect(logger.lines.filter((line) => line.level === 'error')).toHaveLength(1)
   })
 })

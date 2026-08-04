@@ -57,7 +57,6 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
-  createEnvToolSecretResolver,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -241,22 +240,27 @@ export interface NodeContainerExecutorDeps {
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   resolveTestSecrets?: (workspaceId: string, blockId: string) => Promise<TestSecretEntry[]>
   /**
-   * Resolve the credentials a registered capability declared — a tool server's (MCP) and a
-   * generative binary integration's alike. Absent ⇒ the deployment-environment default over
-   * {@link NodeContainerExecutorDeps.env}.
+   * Resolve the credentials a registered capability declared: a tool server's (MCP) and a
+   * generative binary integration's alike. The whole composed CHAIN, from the composition root's
+   * `buildToolSecretChain` (the per-workspace store in front of {@link
+   * NodeContainerExecutorDeps.env}, or a deployment's own resolver, which replaces it).
    *
    * It sits beside {@link resolveTestSecrets} rather than being built here because it is the same
    * KIND of thing: a deployment concern the composition root owns. It was the one credential seam
    * with no such field, which made `ToolSecretResolver` a port with exactly one reachable
-   * implementation — an indirection buying nothing a direct `env[key]` would not have bought.
+   * implementation, an indirection buying nothing a direct `env[key]` would not have bought. It is
+   * built at the root rather than here because the credential CHECKLIST has to describe what was
+   * composed, and this builder returns an executor with no way to say.
    *
-   * The composition root supplies the whole CHAIN (`buildToolSecretChain`: the per-workspace store
-   * in front of the environment, or a deployment's own resolver). It is built there rather than
-   * here because the credential CHECKLIST has to describe what was composed, and this builder
-   * returns an executor with no way to say. The bare env default below is the standalone shape,
-   * for a caller assembling this executor without that root.
+   * REQUIRED, and deliberately so: it once carried a bare deployment-environment default for a
+   * caller assembling this executor without that root, and the default failed OPEN. A dropped link
+   * in the facade plumbing (every neighbour here is optional) would have silently stopped
+   * consulting the per-workspace store and resolved every tenant off this node's own environment,
+   * which is the exact leak the store exists to prevent, with nothing thrown and nothing logged. A
+   * standalone caller composes one `buildToolSecretChain` call instead and gets the honest chain
+   * plus the description the credential checklist renders.
    */
-  resolveToolSecrets?: ToolSecretResolver
+  resolveToolSecrets: ToolSecretResolver
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
@@ -429,11 +433,10 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // band — injected as container env vars by the harness, never in the prompt/telemetry).
     ...(resolveTestSecrets ? { resolveTestSecrets } : {}),
     // Resolve the credentials a registered capability (a TOOL SERVER, a generative binary
-    // integration) declared. The composition root passes the composed chain (the per-workspace
-    // store in front of this node's environment, or a deployment's own resolver); absent, this
-    // falls back to the environment alone. Reads the injected `env` rather than `process.env`
-    // directly, so a caller that supplies one (tests, an embedded boot) is not silently bypassed.
-    resolveToolSecrets: resolveToolSecrets ?? createEnvToolSecretResolver(env),
+    // integration) declared. The composition root composed the whole chain and passes it whole:
+    // there is no default here to fall back to, because the only one available (this node's
+    // environment alone) would drop the per-workspace store without saying so.
+    resolveToolSecrets,
     logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab

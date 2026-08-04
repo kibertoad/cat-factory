@@ -2860,7 +2860,7 @@
       "storedAt": "Son ayarlanma: {date}",
       "notStoredWithFallback": "Bu pano için hiçbir şey saklanmıyor. Bu kurulum anahtarı kendi ortamından da okuyor, dolayısıyla yetenek hâlâ çalışıyor olabilir.",
       "notStored": "Bu pano için hiçbir şey saklanmıyor ve bu kurulumun ortam yedeği yok, dolayısıyla yetenek kimlik doğrulaması yapamaz.",
-      "notStoredUnknownFallback": "Bu pano için hiçbir şey saklanmıyor. Bu kurulum kendi kimlik bilgisi çözümleyicisini sağlıyor, dolayısıyla anahtarın başka bir yerden karşılanıp karşılanmadığı burada bilinmiyor.",
+      "notStoredUnknownFallback": "Bu pano için hiçbir şey saklanmıyor. Bu kurulumun kimlik bilgisi zinciri burada tanımlanamıyor, dolayısıyla anahtarın başka bir yerden karşılanıp karşılanmadığı bilinmiyor.",
       "setValue": "Değer",
       "replaceValue": "Saklanan değeri değiştir",
       "save": "Kaydet",
