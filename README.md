@@ -21,6 +21,7 @@ judges, tool servers and runner infrastructure without forking.
 
 ## Table of contents
 
+- [Quickstart](#quickstart)
 - [What it is](#what-it-is)
 - [What it supports](#what-it-supports)
 - [How it works](#how-it-works)
@@ -28,6 +29,57 @@ judges, tool servers and runner infrastructure without forking.
 - [Feature guide](#feature-guide)
 - [Documentation index](#documentation-index)
 - [Deployment](#deployment)
+
+## Quickstart
+
+One command scaffolds a **local-mode deployment** on your own machine: a Node
+backend and the frontend SPA, both depending on the published libraries, so the
+generated project stands alone outside this repo.
+
+```sh
+npx @cat-factory/cli init
+```
+
+It walks you through the choices that matter: the project name, whether agents
+run in a prewarmed Docker pool or on your own installed `claude`/`codex` CLI,
+and which source-control provider to connect. Along the way it generates the
+three crypto secrets the server requires in the exact formats it expects, opens
+your browser at GitHub's or GitLab's token page with the right scopes already
+selected, and reads the token back without echoing it. Both `.env` files are
+written and gitignored for you. Add `--yes` and flags to skip the prompts.
+
+You will need **Node 24 or newer**, since the scaffolded entry runs on Node's
+own TypeScript type stripping, and a **container runtime**: Docker, Podman,
+OrbStack, Colima and Apple `container` all work. It runs the Postgres from the
+generated `docker-compose.yml`, plus the agent containers unless you chose to
+run them natively.
+
+Then run the two halves, each from the project root, in its own terminal:
+
+```sh
+cd <project>/local    && npm install && npm run db:up && npm start   # backend on :8787
+cd <project>/frontend && npm install && npm run dev                  # SPA on :3000
+```
+
+Give the first backend start a minute: it pulls the executor-harness image your
+agent jobs run in before it begins serving, and later starts reuse it.
+
+The last piece is a **model provider**. Add one in `local/.env` before you
+start, or sign in and add it through the UI. Cloudflare Workers AI is the
+quickest to set up, and any direct vendor key works. The board comes up without
+one, but no model is selectable until you add it, so no pipeline can start.
+
+From there: connect the repo you want agents to work on, put a task on the
+board, and start a run. Full CLI reference (every flag, the `env` / `k3s` /
+`supervise` subcommands, what exactly gets scaffolded):
+[`@cat-factory/cli`](./backend/packages/cli/README.md). The local mode itself
+(container-runtime matrix, repo linking, the warm pool, ephemeral environments):
+[`deploy/local/README.md`](./deploy/local/README.md).
+
+**Other ways to run it**, all covered under [Deployment](#deployment): the
+Cloudflare Worker (D1 + Workflows + Containers), a long-running **Node.js
+service** over Postgres, or this repo's own `deploy/*` packages if you would
+rather copy a worked example than generate one.
 
 ## What it is
 
@@ -107,36 +159,46 @@ Two ideas anchor the model:
 
 ## How it works
 
-```
-┌──────────────┐   WebSocket events    ┌───────────────────────────┐
-│  Nuxt SPA    │ ◀──── push, not ────  │  Cloudflare Worker        │
-│ (frontend/app)│      polling         │  Hono controllers + D1    │
-│  Vue Flow    │ ───── REST ─────────▶ │  (runtimes/cloudflare)    │
-└──────────────┘                       └────────────┬──────────────┘
-                                                     │ ports (DI)
-                                          ┌──────────▼──────────┐
-                                          │   domain packages   │
-                                          │  kernel + services  │
-                                          └──────────┬──────────┘
-                                                     │ dispatch coding jobs
-                              ┌──────────────────────▼───────────────────────┐
-                              │ per-run Cloudflare Container (or runner pool) │
-                              │ executor-harness → Pi coding agent → PR    │
-                              └───────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    SPA["<b>Nuxt SPA</b> · frontend/app<br/>Vue Flow board"]
+
+    subgraph neutral["Runtime-neutral backend (the same code on every target)"]
+        HTTP["<b>HTTP layer</b> · @cat-factory/server<br/>Hono controllers, auth, RBAC"]
+        DOMAIN["<b>Domain</b> · orchestration, integrations, agents<br/>the delivery engine and its registries"]
+        PORTS["<b>Ports</b> · @cat-factory/kernel<br/>repositories, durable execution, events, VCS, models"]
+        HTTP --> DOMAIN --> PORTS
+    end
+
+    subgraph facades["Runtime facades (one per deployment target: adapters only)"]
+        CF["<b>Cloudflare Worker</b><br/>D1 · Workflows · Durable Objects · Containers"]
+        NODE["<b>Node service</b><br/>Postgres/Drizzle · pg-boss · realtime hub · runner pool"]
+        LOCAL["<b>Local</b><br/>the Node stack, containers on your machine"]
+    end
+
+    JOB["<b>Per-run container</b><br/>executor-harness drives a coding agent<br/>on a real checkout"]
+    VCS[("GitHub / GitLab<br/>branch, PR, CI, merge")]
+
+    SPA -- "REST" --> HTTP
+    HTTP -. "events PUSHED over WebSocket, never polled" .-> SPA
+    PORTS --> CF & NODE & LOCAL
+    CF & NODE & LOCAL -- "dispatch" --> JOB
+    JOB -- "clone, implement, push" --> VCS
+    JOB -- "progress, telemetry" --> PORTS
 ```
 
 The canonical pattern is **async + durable + observable**: a service starts a run,
-a Cloudflare **Workflows** instance drives it one checkpointed step at a time, a
-container executes the long-running agent work asynchronously, and every
-persisted transition is **pushed** to the browser through a per-workspace Durable
-Object. The same shape is reused by execution, bootstrap and blueprints. The
-end-to-end flows are written up in [`CLAUDE.md`](./CLAUDE.md).
+a durable driver advances it one checkpointed step at a time, a container executes
+the long-running agent work asynchronously, and every persisted transition is
+**pushed** to the browser. The same shape is reused by execution, bootstrap and
+blueprints. The end-to-end flows are written up in [`CLAUDE.md`](./CLAUDE.md).
 
-The domain + the HTTP layer are **runtime-neutral**, so the same backend serves two
-deployment targets: the Cloudflare Worker above and a **Node.js service**
-(`backend/runtimes/node`, Postgres via Drizzle + pg-boss for durable jobs). Each
-facade supplies only its differentiators; a shared conformance suite runs the same
-assertions against both to keep them from drifting.
+Everything above the facade line is **runtime-neutral**, which is what lets one
+backend serve several deployment targets. Each facade supplies only its
+differentiators (Cloudflare Workflows against pg-boss, D1 against Postgres, a
+Durable Object against a per-workspace hub), and a shared **conformance suite**
+runs the same assertions against every one of them, so a repository that maps a
+column differently fails a test instead of shipping.
 
 ## Repository layout
 
@@ -301,6 +363,19 @@ Each capability has a deeper write-up; start here and follow the link.
 
 ## Documentation index
 
+The docs come in three kinds, and it matters which one you are reading:
+
+| Kind                     | Where                                                     | What it tells you                                                                                                                                |
+| ------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Reference**            | `backend/docs/*.md`, `docs/*.md`, each package's `README` | How the platform behaves **today**. Kept in step with the code, and a change that outdates one updates it in the same PR.                        |
+| **Decisions (ADRs)**     | [`backend/docs/adr/`](./backend/docs/adr)                 | Why a shipped design is the way it is, and what was rejected. Numbered, dated and **not** rewritten as the code moves on.                        |
+| **In-flight initiative** | [`docs/initiatives/`](./docs/initiatives)                 | The plan for multi-PR work **in progress**. Describes a target state that may be partly built, so never read one as a description of what ships. |
+
+An initiative is converted into an ADR when its committed scope completes, so
+anything still under `docs/initiatives/` is by definition unfinished. Start from
+[`docs/initiatives/README.md`](./docs/initiatives/README.md) for what is
+currently open and what each one is trying to change.
+
 **Start here**
 
 - [Backend overview](./backend/README.md): the Worker + D1 monorepo and its layering.
@@ -311,6 +386,8 @@ Each capability has a deeper write-up; start here and follow the link.
 - [`docs/glossary.md`](./docs/glossary.md): vocabulary + naming map (block vs task vs
   card, the dir↔package names, runner/executor/transport, and where gates / agent kinds /
   migration parity live).
+- [`docs/README.md`](./docs/README.md): a map of the repo-wide docs, sorted into
+  reference, in-flight initiatives, and point-in-time records.
 - [`AGENTS.md`](./AGENTS.md): orientation for coding agents; each `backend/packages/*` and
   `backend/runtimes/*` also carries its own `AGENTS.md` with a "where things live" map.
 
@@ -333,12 +410,30 @@ Each capability has a deeper write-up; start here and follow the link.
   [the per-PR preview stacks](./deploy/preview/README.md)
 - [Self-hosted runner pool](./backend/docs/runner-pool-integration.md) ·
   [Kubernetes topology](./backend/docs/kubernetes-topology.md)
+- [GitHub vs GitLab: what each provider supports](./backend/docs/vcs-providers.md)
+
+**Agents & pipelines**
+
+- [Custom agents: ship your own agent kinds without forking](./backend/docs/custom-agents.md) ·
+  [authoring a role](./backend/docs/custom-agent-roles.md) ·
+  [gate & agent ergonomics](./backend/docs/custom-agent-gate-ergonomics.md)
+- [Per-workspace agent prompt overrides](./backend/docs/agent-prompt-overrides.md)
+- [Requirements review: the inline review-and-answer loop](./backend/docs/requirements-review.md)
+- [Consensus panels: running a review as several models](./backend/docs/consensus-panels.md)
+- [Agent-written PR descriptions](./backend/docs/pipeline-pr-descriptions.md)
+- [Built-in pipeline catalog lifecycle](./backend/docs/pipeline-catalog-lifecycle.md)
+- [Execution state machine](./docs/execution-state-machine.md)
 
 **Operations**
 
 - [Security model: what stands between an agent and your repository](./backend/docs/security-model.md)
+- [Environment variables: every knob, and which are reserved](./docs/environment-variables.md)
+- [Structured logging: the `Logger` port and what gets bound where](./backend/docs/logging.md)
+- [LLM telemetry: what every model call records, and where it lands](./backend/docs/llm-telemetry.md)
+- [Reports: where the spend and the work actually go](./backend/docs/reports.md)
 - [Storage & retention](./backend/docs/storage-and-retention.md)
 - [Container reaping & deletion](./backend/docs/container-reaping.md)
+- [Releases: changesets, the runner image, publishing](./docs/releases.md)
 
 **Architecture decisions (ADRs)**
 
@@ -362,8 +457,23 @@ Each capability has a deeper write-up; start here and follow the link.
 - [0018: App-owned AgentKindRegistry (no module-global registry)](./backend/docs/adr/0018-agent-kind-registry-di.md)
 - [0019: Frontend blocks, self-contained UI testing, dev previews](./backend/docs/adr/0019-frontend-preview-ui-testing.md)
 - [0020: Tiered spend budgets (account / workspace / user)](./backend/docs/adr/0020-tiered-spend-budgets.md)
+- [0021: Apriori branches (pre-existing branches as run input)](./backend/docs/adr/0021-apriori-branches.md)
+- [0022: Implementation-fork decision (two-phase coder step)](./backend/docs/adr/0022-coder-fork-decision.md)
+- [0023: "Review" task type: scalable deep review of an open PR](./backend/docs/adr/0023-pr-deep-review.md)
+- [0024: Repo-sourced Claude Skills: account library + pipeline step](./backend/docs/adr/0024-repo-sourced-claude-skills.md)
+- [0025: Workspace-level RBAC & membership](./backend/docs/adr/0025-workspace-rbac.md)
+- [0026: PR-review run observability and warm-pool isolation](./backend/docs/adr/0026-pr-review-observability-and-pool-isolation.md)
+- [0027: PR-review observability follow-up](./backend/docs/adr/0027-pr-review-observability-followup.md)
+- [0028: App-owned plugin registries (registry DI migration)](./backend/docs/adr/0028-registry-di.md)
 - [0029: Agent-kind capabilities: declared skills and tool servers (MCP)](./backend/docs/adr/0029-agent-kind-capabilities.md)
 - [0030: The `/api/v1` external surface (public API)](./backend/docs/adr/0030-public-api-surface.md)
+- [0031: Foundational services: a shared-capability catalog](./backend/docs/adr/0031-foundational-services.md)
+- [0032: Tracker webhook intake and per-ticket dispatch](./backend/docs/adr/0032-tracker-webhook-intake.md)
+- [0033: Bugfix reproduction proof: red-before, green-after](./backend/docs/adr/0033-bugfix-reproduction-proof.md)
+- [0034: The public API is stable](./backend/docs/adr/0034-public-api-stability.md)
+- [0035: Durable cross-replica auth rate limiting](./backend/docs/adr/0035-durable-auth-rate-limiting.md)
+- [0036: In-app tutorial tours](./backend/docs/adr/0036-in-app-tutorials.md)
+- [0037: Role-scoped merge policy and sandboxed runs](./backend/docs/adr/0037-role-scoped-merge-policy.md)
 
 ## Deployment
 
@@ -374,15 +484,20 @@ project in [`deploy/frontend/`](./deploy/frontend/wrangler.toml). The backend ca
 **alternatively** run as a long-running Node.js service (Postgres + pg-boss) from
 [`deploy/node/`](./deploy/node) (same HTTP API, different runtime). To deploy on
 **your own** infrastructure, copy those directories and swap the `workspace:*`
-dependency for the published npm version; see each package's README. The
-reference deployment below runs on Cloudflare under the `iselwin@gmail.com`
-account (`wrangler whoami` must show `fe0047c6e869c8cb875ca425a9c341af`).
+dependency for the published npm version; see each package's README.
 
-| Piece    | Cloudflare resource          | Production URL                        |
-| -------- | ---------------------------- | ------------------------------------- |
-| Backend  | Worker `cat-factory-backend` | `https://catfactory-api.kiberion.com` |
-| Frontend | Pages project `cat-factory`  | `https://catfactory.kiberion.com`     |
-| Data     | D1 database `cat_factory`    | (bound to the Worker as `DB`)         |
+A Cloudflare deployment is three resources, named in `deploy/*/wrangler.toml`
+and reachable at whatever hostnames you point at them:
+
+| Piece    | Cloudflare resource | Reached at                                        |
+| -------- | ------------------- | ------------------------------------------------- |
+| Backend  | a Worker            | its `*.workers.dev` URL, or your own API hostname |
+| Frontend | a Pages project     | your own app hostname                             |
+| Data     | a D1 database       | bound to the Worker as `DB`, not public           |
+
+The commands below use `$API_BASE` and `$APP_BASE` for those two hostnames, and
+the resource names as they ship in the example config. Substitute your own; the
+account the deploy lands in is whichever one `wrangler` is logged into.
 
 **Deploy the backend first** so any schema the new frontend expects is already
 live, then the frontend. Migrations run **before** the Worker deploy. The runner
@@ -408,9 +523,9 @@ pnpm deploy
 The migrations ship with the `@cat-factory/worker` library, so `migrations_dir`
 points at `node_modules/@cat-factory/worker/migrations` (see the comment in
 `deploy/backend/wrangler.toml` if your tooling can't follow the symlink). The
-Worker prints its `*.workers.dev` URL; production traffic reaches it through the
-`catfactory-api.kiberion.com` custom domain (configured in the Cloudflare
-dashboard, not in `wrangler.toml`). First-time setup (auth, provider, GitHub-App
+Worker prints its `*.workers.dev` URL; to serve it from your own hostname, add a
+custom domain in the Cloudflare dashboard, not in `wrangler.toml`. First-time
+setup (auth, provider, GitHub-App
 and container secrets) is in [`backend/README.md`](./backend/README.md#deploying).
 **Auth is required or the API fails closed.**
 
@@ -443,24 +558,24 @@ API base, then deploy the static output:
 
 ```sh
 cd deploy/frontend
-NUXT_PUBLIC_API_BASE=https://catfactory-api.kiberion.com pnpm generate
+NUXT_PUBLIC_API_BASE="$API_BASE" pnpm generate
 pnpm deploy                            # wrangler pages deploy; project + dir from wrangler.toml
 ```
 
 PowerShell equivalent for the build step:
 
 ```powershell
-$env:NUXT_PUBLIC_API_BASE = "https://catfactory-api.kiberion.com"; pnpm generate
+$env:NUXT_PUBLIC_API_BASE = $env:API_BASE; pnpm generate
 ```
 
 `pnpm generate` writes the static site to `.output/public`; `wrangler pages
-deploy` (no args) reads the project name `cat-factory` and that output dir from
+deploy` (no args) reads the project name and that output dir from
 `deploy/frontend/wrangler.toml`. `main` is the Pages **production** branch, so the
-deploy updates the `catfactory.kiberion.com` alias. Sanity-check after deploying:
+deploy updates the production alias. Sanity-check after deploying:
 
 ```sh
-curl -s https://catfactory-api.kiberion.com/health        # {"status":"ok"}
-curl -s https://catfactory.kiberion.com | grep -o catfactory-api.kiberion.com   # baked API base
+curl -s "$API_BASE/health"                          # {"status":"ok"}
+curl -s "$APP_BASE" | grep -o "${API_BASE#https://}"   # the API base baked into the SPA
 ```
 
 ### Emergency takedown
