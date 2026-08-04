@@ -1,11 +1,14 @@
 import { Writable } from 'node:stream'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { LogRecord, LogSink } from '@cat-factory/kernel'
 import {
   createPinoLogger,
   getLogLevel,
+  getLogSink,
   parseLogLevel,
   serialize,
   setLogLevel,
+  setLogSink,
 } from '../src/observability/logger.js'
 
 // The pino adapter is the ONE place the platform's message-first `Logger` port meets a logging
@@ -97,5 +100,73 @@ describe('the pino-backed logger', () => {
     child.debug('visible at debug')
     expect(lines().map((l) => (l as { msg: string }).msg)).toEqual(['visible at debug'])
     expect(getLogLevel()).toBe('debug')
+  })
+})
+
+describe('the second destination (LogSink)', () => {
+  /** A recording sink, plus the throwing one the fan-out has to survive. */
+  function recordingSink(): LogSink & { records: LogRecord[] } {
+    const records: LogRecord[] = []
+    return { records, record: (r) => void records.push(r), flush: async () => {} }
+  }
+
+  afterEach(() => setLogSink(null))
+
+  it('copies each emitted line, with the child-bound fields folded in', () => {
+    const sink = recordingSink()
+    setLogSink(sink)
+    const { logger } = capturing()
+
+    logger
+      .child({ workspaceId: 'ws1' })
+      .child({ executionId: 'exec1' })
+      .warn('poll failed', { attempts: 2 })
+
+    expect(sink.records).toHaveLength(1)
+    expect(sink.records[0]).toMatchObject({
+      level: 'warn',
+      msg: 'poll failed',
+      // Bound first, so a call site can still override a bound field.
+      fields: { workspaceId: 'ws1', executionId: 'exec1', attempts: 2 },
+    })
+    expect(typeof sink.records[0]!.timeMs).toBe('number')
+  })
+
+  it('honours the level gate, so one dial governs both destinations', () => {
+    const sink = recordingSink()
+    setLogSink(sink)
+    const { logger } = capturing()
+
+    logger.debug('below the threshold')
+    setLogLevel('debug')
+    logger.debug('at the threshold')
+
+    expect(sink.records.map((r) => r.msg)).toEqual(['at the threshold'])
+  })
+
+  it('survives a sink that throws, because a logger may not fail', () => {
+    setLogSink({
+      record: () => {
+        throw new Error('sink is broken')
+      },
+      flush: async () => {},
+    })
+    const { logger, lines } = capturing()
+
+    expect(() => logger.info('work continues')).not.toThrow()
+    // …and the local writer still has the line, which is what an operator reads.
+    expect(lines()).toHaveLength(1)
+  })
+
+  it('stops copying once detached', () => {
+    const sink = recordingSink()
+    setLogSink(sink)
+    const { logger } = capturing()
+    logger.info('exported')
+    setLogSink(null)
+    logger.info('local only')
+
+    expect(getLogSink()).toBeNull()
+    expect(sink.records.map((r) => r.msg)).toEqual(['exported'])
   })
 })
