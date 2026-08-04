@@ -718,14 +718,14 @@ it NEVER demotes; `coerceRequirement` defaults a garbled state to `aspirational`
 promote by assertion. Doc:
 [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
-**Pre-token input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
+**Pre-dispatch input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
 before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
 Traps: it is not a cheap reviewer (it never scores prose or infers intent, and every BLOCKING finding
 names an input no model could have acted on either); the park rides `step.approval`, so a generic
 approve would mark the run's first working step done (refused in `assertNotIterativeGate`, checked off
 the INSTANCE); `off` records NO findings where `passed` records an empty list, so an unwired or
 unreadable settings seam records `off` rather than the default mode. Doc:
-[`pre-token-input-gate.md`](./docs/initiatives/pre-token-input-gate.md).
+[`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
 **Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
 (review → answer → incorporate → re-review) that settles the PRODUCT layer only. Traps: a parked run

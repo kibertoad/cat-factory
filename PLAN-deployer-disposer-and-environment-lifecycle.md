@@ -49,10 +49,10 @@ dead-end at the tester. Fixing that is workstream **A**. The user also asked abo
 
 **Non-goals**
 
-- Making local k3s actually serve PREnvs (ingress controller, host `:80/:443` mapping, local
+- Making local k3s actually serve ephemeral environments (ingress controller, host `:80/:443` mapping, local
   image builds). That's local-environment setup, out of scope here; the wrapper repo's local mode
   should prefer `docker-compose`/`infraless` frames. This plan targets the upstream engine.
-- The Kargo adapter itself (separate repo, blocked on a kernel release; see `docs/env-lifecycle.md`).
+- The native provider adapter itself (separate repo, blocked on a kernel release; see `docs/env-lifecycle.md`).
 - Cyclic env dependencies (provider needing its consumer's URL) are explicitly out of scope upstream.
 
 ## 2. Current state (grounded in the source)
@@ -167,7 +167,7 @@ soft-deleting the prior live row, compare the **provider identity** of old vs ne
   `EnvironmentTeardownService.teardown` (**best-effort, async, non-blocking**: a teardown failure
   must not fail the new provision; the TTL reaper remains the backstop).
 
-This is the single highest-value disposal fix: it stops orphaning namespaces/projects/PREnvs on
+This is the single highest-value disposal fix: it stops orphaning namespaces/projects/ephemeral environments on
 config changes and on the `infraless` flip, without destabilizing the common overwrite-in-place case.
 
 **B2. Resolve the provider by the record's stored type/engine (G5).** `teardownRecord`
@@ -233,8 +233,8 @@ The reaper already works; two hardening items make it a reliable backstop under 
 **D1. Guarantee a TTL is always set.** `resolveExpiry` returns `null` when neither the provider nor
 the manifest supplies one → that env is **never swept**. Apply a **deployment-wide default TTL**
 (config, e.g. `ENVIRONMENT_DEFAULT_TTL_MINUTES`) as the final fallback in `resolveExpiry` so no env
-is immortal. (Kargo already caps `online_until` at +4h; keep the default at or below provider
-caps; the wrapper's `KARGO_DEFAULT_TTL_MINUTES` is advisory.)
+is immortal. (A provider may cap its own `online_until`, e.g. at +4h; keep the default at or
+below provider caps; a wrapper-side default-TTL knob is advisory.)
 
 **D2. Local-mothership sweeper.** Document that local-mothership relies on the remote mothership's
 cron (`runtimes/local/src/server.ts:139-144`); standalone local mode gets the Node timer. If
@@ -338,7 +338,7 @@ Phases 0–1 are independently shippable and already de-risk the reported failur
 - **D-A1:** Deployer skips `docker-compose` by default? (recommended: yes.)
 - **D-C5:** Default disposal timing: TTL-only + palette disposer (recommended), terminal disposer
   in built-ins, or an opt-in auto-dispose-on-completion flag?
-- **Default TTL value** for D1 (and its relationship to provider caps, e.g. Kargo's +4h).
+- **Default TTL value** for D1 (and its relationship to provider-side caps).
 - **Async/container-backed teardown**: needed now, or is namespace-DELETE sufficient for the k8s
   adapter (recommended: defer)?
 - **Disposer palette-addable vs system-only**: recommended palette-addable to honor the

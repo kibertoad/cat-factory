@@ -49,7 +49,7 @@ export interface InputGateControllerDeps {
 }
 
 /**
- * The PRE-TOKEN INPUT GATE: the run's last chance to refuse work for free.
+ * The PRE-DISPATCH INPUT GATE: the run's last chance to refuse work for free.
  *
  * Before a run's FIRST agent step is dispatched, this reduces the task's authored input
  * (kernel's pure {@link evaluateInputGate}) and parks the run when there is structurally

@@ -1,5 +1,12 @@
 # @cat-factory/observability-langfuse
 
+## 0.9.61
+
+### Patch Changes
+
+- Updated dependencies [e7e4404]
+  - @cat-factory/kernel@0.231.0
+
 ## 0.9.60
 
 ### Patch Changes
