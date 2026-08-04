@@ -33,7 +33,10 @@ export {
   classifyChangedPath,
   classifyChangedFiles,
   resolveMergeClassRule,
+  narrowMergeClassRule,
+  resolveRoleScopedMergeClassRule,
   type ChangeClassification,
+  type RoleScopedMergeClassRule,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
 export {

@@ -25,6 +25,7 @@ import {
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
 import { stepOptionsSchema } from './entities.js'
+import { workspaceRoleSchema } from './workspace-members.js'
 
 // ---------------------------------------------------------------------------
 // Run / execution runtime state: the shapes that describe an in-flight run and
@@ -1246,6 +1247,24 @@ export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 export const intakeOriginSchema = v.picklist(['ui', 'public-api'])
 export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
 
+/**
+ * Whether a run may LAND its work. `live` (the default, and every run before this existed) is the
+ * historical behaviour. `dry_run` is the sandboxed mode: the pipeline runs in full and opens its
+ * pull request, so the human sees a real diff on a real branch, but nothing merges — neither the
+ * `merger` step's auto-merge nor the manual merge endpoint.
+ *
+ * The PR is deliberately still opened. The deliverable a non-engineer needs to SEE is the diff,
+ * and withholding the push would leave them reading prose about work they cannot inspect; what
+ * makes the mode a sandbox is that the change cannot reach the default branch, not that it stays
+ * invisible.
+ *
+ * Requested per run at start, and FORCED for the roles a task's merge preset lists in
+ * `dryRunRoles`. The two compose one way only: a live request from a sandboxed role is a dry run,
+ * and there is no way to ask out of it, or the setting would be advisory.
+ */
+export const runModeSchema = v.picklist(['live', 'dry_run'])
+export type RunMode = v.InferOutput<typeof runModeSchema>
+
 export const runDiagnosticsSchema = v.object({
   /** Context of the most recent container-step dispatch. */
   lastDispatch: v.optional(
@@ -1352,6 +1371,31 @@ export const executionInstanceSchema = v.object({
    * signed-in user (auth-disabled/local dev) and for legacy runs.
    */
   initiatedBy: v.optional(v.nullable(v.string())),
+  /**
+   * The workspace ROLE that initiator held at the moment the run was admitted, pinned here so the
+   * merge decision can be scoped to it (`classRulesByRole`, `dryRunRoles`).
+   *
+   * PINNED rather than re-resolved, for two reasons. The merge settles on the durable driver's
+   * path, which rebuilds its world from the run alone and has no request context to resolve a role
+   * from — the same constraint that made `recordDispatchAttribution` record at dispatch. And it is
+   * the honest fact: the authority a run was ADMITTED under is what the operator granted, so a
+   * role change mid-run retunes the next run rather than silently re-governing one already in
+   * flight.
+   *
+   * ABSENT is a real state, not a tier: a recurring-schedule fire, a public-API start and
+   * auth-disabled dev all have no workspace role to pin. Such a run stays on the preset's base
+   * `classRules` — the policy that governed it before role scoping existed — rather than being
+   * guessed onto a role. Guessing either way is wrong in a way the other is not: `admin` hands an
+   * unattributed run the widest rules in the preset, and `viewer` sandboxes a deployment's whole
+   * schedule the day it first authors a role entry.
+   */
+  initiatedByRole: v.optional(v.nullable(workspaceRoleSchema)),
+  /**
+   * Whether this run may land its work ({@link runModeSchema}). Absent on legacy runs ⇒ `live`,
+   * which is what they were. Carried forward across retry/restart: a dry run stays a dry run, or
+   * the sandbox would be one retry deep.
+   */
+  mode: v.optional(runModeSchema),
   /**
    * HOW this run entered the system — `ui` (the SPA / any in-app surface, the default) or
    * `public-api` (started headlessly through `/api/v1`). Distinct from `initiatedBy`, which is

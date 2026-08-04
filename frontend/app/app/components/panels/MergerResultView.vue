@@ -7,7 +7,7 @@
 // banner — instead of the agent's raw JSON. Opened via the universal result-view host,
 // the same seam the requirements / tester windows use.
 import { computed } from 'vue'
-import type { ChangeClass, MergeAxis, MergeDecision } from '@cat-factory/contracts'
+import type { ChangeClass, MergeAxis, MergeDecision, WorkspaceRole } from '@cat-factory/contracts'
 import StepRunMeta from '~/components/panels/StepRunMeta.vue'
 import ResultWindowShell from '~/components/panels/ResultWindowShell.vue'
 import MarkdownProse from '~/components/common/MarkdownProse.vue'
@@ -70,6 +70,8 @@ const REASON_KEYS: Record<MergeDecision['reason'], string> = {
   merge_partial: 'panels.mergerResult.reason.merge_partial',
   class_auto_merge: 'panels.mergerResult.reason.class_auto_merge',
   class_requires_review: 'panels.mergerResult.reason.class_requires_review',
+  role_requires_review: 'panels.mergerResult.reason.role_requires_review',
+  dry_run: 'panels.mergerResult.reason.dry_run',
 }
 const OUTCOME_KEYS: Record<MergeDecision['outcome'], string> = {
   auto_merged: 'panels.mergerResult.outcome.auto_merged',
@@ -131,7 +133,18 @@ const axes = computed(() => {
   ]
 })
 
-/** The plain-language "why" line, interpolating the preset + any exceeded axes. */
+/**
+ * The role the run was admitted under, when one was pinned. A `role_requires_review` line names
+ * it, because the remedy that reason points at is a PERSON (a teammate on a higher tier can merge
+ * this as it stands) rather than a setting.
+ */
+const ROLE_KEYS: Record<WorkspaceRole, string> = {
+  admin: 'merge.role.admin',
+  member: 'merge.role.member',
+  viewer: 'merge.role.viewer',
+}
+
+/** The plain-language "why" line, interpolating the preset, any exceeded axes, and the role. */
 const reasonText = computed(() => {
   const d = decision.value
   if (!d) return ''
@@ -139,6 +152,11 @@ const reasonText = computed(() => {
   return t(REASON_KEYS[d.reason], {
     preset: d.thresholds.presetName,
     axes: axisLabels,
+    // Never blank: a role-scoped reason is only ever produced for a run that pinned one, and the
+    // fallback keeps the sentence readable rather than leaving a hole if that ever changes.
+    role: d.thresholds.initiatorRole
+      ? t(ROLE_KEYS[d.thresholds.initiatorRole])
+      : t('merge.role.unattributed'),
   })
 })
 </script>

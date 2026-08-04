@@ -7,6 +7,19 @@ import type { RiskPolicy } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
+/**
+ * The empty merge-policy identity every built-in ships: no per-class rule, no role narrowing
+ * anything, nobody sandboxed. Asserted as ONE thing because it IS one thing — the three emptinesses
+ * together are what keep a seeded workspace on byte-for-byte the policy it had before any of them
+ * existed, and a reseed has to restore all three or it returns a drifted preset to half the shipped
+ * behaviour.
+ */
+function expectShippedPolicyIdentity(preset: RiskPolicy): void {
+  expect(preset.classRules).toEqual({})
+  expect(preset.classRulesByRole).toEqual({})
+  expect(preset.dryRunRoles).toEqual([])
+}
+
 export function defineProvisioningConformance(harness: ConformanceHarness): void {
   describe('merge presets', () => {
     it('seeds the built-in catalog, enforces the single-default invariant, and guards the default', async () => {
@@ -23,18 +36,18 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       const manual = initial.body.find((p) => p.id === 'mp_manual_review')!
       expect(balanced.isDefault).toBe(true)
       expect(balanced.autoMergeEnabled).toBe(true)
-      // Bumped to 5 when the built-ins gained the JUDGE knobs (`judgeMinScore` /
-      // `judgeMaxBounces`), so existing workspaces are advised to reseed and pick them up.
-      expect(balanced.version).toBe(5)
+      // Bumped to 6 when the built-ins gained the ROLE-SCOPED pair (`classRulesByRole` /
+      // `dryRunRoles`), so existing workspaces are advised to reseed and pick them up.
+      expect(balanced.version).toBe(6)
       // The judge knobs round-trip with their defaults through both stores; "Manual review only"
       // spends no rework rounds on its own (it routes everything to the human it already asks).
       expect(balanced.judgeMinScore).toBe(0.7)
       expect(balanced.judgeMaxBounces).toBe(1)
       expect(manual.judgeMaxBounces).toBe(0)
-      // The built-ins ship NO per-class rules: every class falls back to the score ceilings, which
-      // is byte-for-byte the historical policy.
-      expect(balanced.classRules).toEqual({})
-      expect(manual.classRules).toEqual({})
+      // Every class falls back to the score ceilings and no role changes that — byte-for-byte the
+      // historical policy.
+      expectShippedPolicyIdentity(balanced)
+      expectShippedPolicyIdentity(manual)
       // The QC-companion budget round-trips with its default through both stores.
       expect(balanced.maxTesterQualityIterations).toBe(3)
       // "Manual review only" fully prevents auto-merge: every PR is routed to human review.
@@ -121,8 +134,8 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
         `/workspaces/${wsId}`,
       )
       expect(snap.body.riskPolicyCatalogVersions).toMatchObject({
-        mp_balanced: 5,
-        mp_manual_review: 5,
+        mp_balanced: 6,
+        mp_manual_review: 6,
       })
 
       // Seed, then drift a built-in (turn its auto-merge OFF + rename). Reseed must restore the
@@ -136,9 +149,10 @@ export function defineProvisioningConformance(harness: ConformanceHarness): void
       expect(reseeded.status).toBe(200)
       expect(reseeded.body.name).toBe('Balanced')
       expect(reseeded.body.autoMergeEnabled).toBe(true)
-      expect(reseeded.body.version).toBe(5)
-      // A reseed also restores the canonical (empty) per-class rule map.
-      expect(reseeded.body.classRules).toEqual({})
+      expect(reseeded.body.version).toBe(6)
+      // A reseed restores the whole shipped identity, so a workspace that drifted into narrowing
+      // or sandboxing a role is returned to it rather than keeping half.
+      expectShippedPolicyIdentity(reseeded.body)
       // The default is preserved across a reseed.
       expect(reseeded.body.isDefault).toBe(true)
 

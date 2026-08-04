@@ -93,6 +93,8 @@ export class RiskPolicyService {
       autoMergeEnabled: input.autoMergeEnabled,
       forkDecision: input.forkDecision ?? null,
       classRules: input.classRules,
+      classRulesByRole: input.classRulesByRole,
+      dryRunRoles: input.dryRunRoles,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -233,6 +235,8 @@ export class RiskPolicyService {
       judgeMaxBounces: seed.judgeMaxBounces,
       autoMergeEnabled: seed.autoMergeEnabled,
       forkDecision: seed.forkDecision,
+      classRulesByRole: seed.classRulesByRole,
+      dryRunRoles: seed.dryRunRoles,
       classRules: seed.classRules,
       isDefault: seed.isDefault,
       version: seed.version,
