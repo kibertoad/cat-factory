@@ -5,6 +5,8 @@
 '@cat-factory/orchestration': minor
 '@cat-factory/server': minor
 '@cat-factory/app': minor
+'@cat-factory/sdk': minor
+'@cat-factory/mcp-server': minor
 ---
 
 Disposer step, and a teardown that is proved rather than assumed
@@ -41,6 +43,11 @@ URL. It reads the frames off the deployer's own recorded outcomes rather than re
 it never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
 recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
 seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+client decodes the new row as a plain string rather than failing.
 
 Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
 because a missing verify row is treated as "not proved" rather than as a pass, runs whose
