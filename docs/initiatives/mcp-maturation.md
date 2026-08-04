@@ -83,7 +83,7 @@ dump and never uses the word MCP).
       or a separate budget); this is the phase's one image bump, so the harness-side test backfill
       rides it: the `toolServersSection` prompt contract, `harnesses` narrowing, Codex
       `config.toml` end to end, and the Codex+http case above.
-- [x] **2. The published server: guarded, filterable, structured.** (#1662) Landed as scoped, with
+- [x] **2. The published server: guarded, filterable, structured.** (#1665) Landed as scoped, with
       two decisions the slice had to make on the way: - **An OUTPUT schema is not an input schema reversed.** A caller's MCP client REFUSES a
       successful result with no `structuredContent` for a tool that declares a schema, and
       VALIDATES the content it gets. `/api/v1` is additive forever, so every assertion that
