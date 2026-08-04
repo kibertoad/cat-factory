@@ -5,7 +5,12 @@ import {
   repinInfrastructureTab,
 } from './InfrastructureWindow.logic'
 
-const NONE = { agents: false, environments: false, packageRegistries: false }
+const NONE = {
+  agents: false,
+  environments: false,
+  packageRegistries: false,
+  capabilityCredentials: false,
+}
 
 describe('infrastructureTabs', () => {
   it('shows nothing when no probe reports a backend', () => {
@@ -28,10 +33,30 @@ describe('infrastructureTabs', () => {
     expect(infrastructureTabs({ ...NONE, agents: true })).toEqual(['runner-pool'])
   })
 
+  it('gates the capability-credentials tab on its own two-part probe', () => {
+    // Unlike its neighbours this one also gates on CONTENT: the panel is a checklist projected
+    // from the deployment's registered capabilities, so a build that registers none has no
+    // credential to type. The window folds that (and the `secrets.manage` check) into the flag.
+    expect(infrastructureTabs({ ...NONE, capabilityCredentials: true })).toEqual([
+      'capability-credentials',
+    ])
+  })
+
   it('orders tabs by the question they answer, not by which probe resolved', () => {
     expect(
-      infrastructureTabs({ agents: true, environments: true, packageRegistries: true }),
-    ).toEqual(['runner-pool', 'environment', 'shared-stacks', 'package-registries'])
+      infrastructureTabs({
+        agents: true,
+        environments: true,
+        packageRegistries: true,
+        capabilityCredentials: true,
+      }),
+    ).toEqual([
+      'runner-pool',
+      'environment',
+      'shared-stacks',
+      'package-registries',
+      'capability-credentials',
+    ])
   })
 })
 

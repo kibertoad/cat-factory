@@ -2715,6 +2715,40 @@
         "removeFailed": "Impossible de supprimer l'entrée du registre"
       }
     },
+    "capabilityCredentials": {
+      "tab": "Identifiants des capacités",
+      "intro": "Les secrets que les serveurs d'outils et les intégrations génératives de ce déploiement réclament par leur nom. Les valeurs ne sont enregistrées que pour ce tableau, chiffrées au repos, et remises directement au processus de l'agent : elles n'apparaissent ni dans un prompt ni dans un journal. Les valeurs sont en écriture seule, une valeur enregistrée se remplace donc en en saisissant une nouvelle et n'est jamais relue.",
+      "credentialNoun": "l'identifiant {key}",
+      "required": "Obligatoire",
+      "optional": "Facultatif",
+      "stored": "Enregistré",
+      "storedAt": "Défini le {date}",
+      "notStoredWithFallback": "Rien n'est enregistré pour ce tableau. Ce déploiement lit aussi la clé dans son propre environnement, la capacité fonctionne donc peut-être encore.",
+      "notStored": "Rien n'est enregistré pour ce tableau et ce déploiement n'a pas de valeur de repli dans l'environnement : la capacité ne peut pas s'authentifier.",
+      "setValue": "Valeur",
+      "replaceValue": "Remplacer la valeur enregistrée",
+      "save": "Enregistrer",
+      "remove": "Supprimer l'identifiant",
+      "noneDeclared": "Aucune des capacités enregistrées de ce déploiement ne réclame d'identifiant.",
+      "subject": {
+        "toolServer": "Serveur d'outils",
+        "binaryGenerator": "Intégration générative"
+      },
+      "incomplete": {
+        "title": "Cette liste est peut-être incomplète",
+        "body": "Les intégrations génératives n'ont pas pu être lues : un identifiant réclamé par l'une d'elles manque peut-être ci-dessous. Les clés enregistrées que personne ne réclame restent masquées tant que la liste ne peut pas être relue."
+      },
+      "orphaned": {
+        "heading": "Enregistrées mais non réclamées",
+        "body": "Rien de ce que ce déploiement a enregistré ne réclame ces clés, ce que laisse derrière elle une intégration retirée ou une variable renommée. Elles restent chiffrées jusqu'à ce que vous les supprimiez."
+      },
+      "toast": {
+        "loadFailed": "Impossible de charger les identifiants des capacités",
+        "saved": "{key} enregistré",
+        "saveFailed": "Impossible d'enregistrer l'identifiant",
+        "removeFailed": "Impossible de supprimer l'identifiant"
+      }
+    },
     "apiTokens": {
       "title": "Jetons d'accès à l'API",
       "intro": "Créez des jetons que les systèmes externes présentent à l'API cat-factory. Chaque jeton s'authentifie en tant que cet espace de travail sur les points de terminaison /api/v1. Le secret n'est affiché qu'une seule fois, à sa création, et ne peut pas être récupéré, alors conservez-le immédiatement.",

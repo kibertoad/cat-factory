@@ -77,6 +77,22 @@ export const capabilityCredentialEntrySchema = v.object({
 export type CapabilityCredentialEntry = v.InferOutput<typeof capabilityCredentialEntrySchema>
 
 /**
+ * Set ONE credential's value, leaving every other stored key sealed as it is.
+ *
+ * The whole-set PUT cannot serve an operator filling in a checklist. The client never received
+ * the values, so re-sending the set means re-typing every secret, and sending only the edited one
+ * REPLACES the set: a workspace that fills in its second credential silently deletes its first.
+ * The narrow write is the twin of the per-key delete, and for the same reason.
+ *
+ * The key rides the path, held to {@link capabilityCredentialKeySchema} there, so a reserved name
+ * is refused at this boundary rather than reaching the store.
+ */
+export const setCapabilityCredentialSchema = v.object({
+  value: v.pipe(v.string(), v.minLength(1), v.maxLength(8192)),
+})
+export type SetCapabilityCredentialInput = v.InferOutput<typeof setCapabilityCredentialSchema>
+
+/**
  * The non-secret projection of a stored credential — what the API returns and the UI lists.
  *
  * A KEY and nothing else. There is deliberately no operator-authored description field, unlike a
@@ -128,6 +144,12 @@ export const capabilityCredentialStatusSchema = v.object({
 })
 export type CapabilityCredentialStatus = v.InferOutput<typeof capabilityCredentialStatusSchema>
 
+/**
+ * How many credentials one workspace may store. Exported because the per-KEY write has to hold
+ * the same ceiling as the whole-set PUT, and a second literal is a second number to keep in step.
+ */
+export const MAX_CAPABILITY_CREDENTIALS = 100
+
 /** Set/replace a workspace's capability credentials. Values write-only; keys unique. */
 export const upsertCapabilityCredentialsSchema = v.pipe(
   v.object({ entries: v.array(capabilityCredentialEntrySchema) }),
@@ -135,7 +157,10 @@ export const upsertCapabilityCredentialsSchema = v.pipe(
     (o) => new Set(o.entries.map((e) => e.key)).size === o.entries.length,
     'capability credential keys must be unique within a workspace',
   ),
-  v.check((o) => o.entries.length <= 100, 'at most 100 capability credentials per workspace'),
+  v.check(
+    (o) => o.entries.length <= MAX_CAPABILITY_CREDENTIALS,
+    `at most ${MAX_CAPABILITY_CREDENTIALS} capability credentials per workspace`,
+  ),
 )
 export type UpsertCapabilityCredentialsInput = v.InferOutput<
   typeof upsertCapabilityCredentialsSchema

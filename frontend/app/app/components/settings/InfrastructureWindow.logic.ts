@@ -19,12 +19,25 @@ export interface InfrastructureTabAvailability {
   environments: boolean
   /** The package-registries module answered its probe affirmatively (it 503s unconfigured). */
   packageRegistries: boolean
+  /**
+   * The capability-credential surface has something to show: its probe resolved (the module 503s
+   * with no encryption key, and 403s for a caller without `secrets.manage`) AND this deployment's
+   * registered capabilities declare a credential, or the workspace stored one nothing declares,
+   * or the declaration read failed.
+   *
+   * Unlike every other tab this one gates on CONTENT as well as availability, because the panel
+   * is a CHECKLIST projected from the deployment's code: a build that registers no tool server
+   * and no generative integration has no credential to type, so the tab would be a dead end. The
+   * failed-read case is deliberately kept IN — an unreadable list and an empty one are the same
+   * list and opposite facts, and only the panel can say which one this is.
+   */
+  capabilityCredentials: boolean
 }
 
 /**
  * The window's tabs, in display order. Order is the reading order of the questions they answer:
  * where agent containers run, where test environments run, what those environments attach to,
- * and what a checkout may install from.
+ * what a checkout may install from, and what the tools an agent reaches authenticate as.
  *
  * Shared stacks ride the test-environment probe because a stack is infra an environment attaches
  * to — there is nothing to attach without an environment backend.
@@ -34,6 +47,7 @@ export function infrastructureTabs(available: InfrastructureTabAvailability): In
   if (available.agents) tabs.push('runner-pool')
   if (available.environments) tabs.push('environment', 'shared-stacks')
   if (available.packageRegistries) tabs.push('package-registries')
+  if (available.capabilityCredentials) tabs.push('capability-credentials')
   return tabs
 }
 

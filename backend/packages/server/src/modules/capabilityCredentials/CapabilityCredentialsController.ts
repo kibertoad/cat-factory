@@ -1,6 +1,7 @@
 import {
   deleteCapabilityCredentialContract,
   getCapabilityCredentialsContract,
+  setCapabilityCredentialContract,
   setCapabilityCredentialsContract,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -80,6 +81,19 @@ export function capabilityCredentialsController(): Hono<AppEnv> {
   buildHonoRoute(app, setCapabilityCredentialsContract, async (c) => {
     const svc = requireCapabilityCredentials(c)
     const stored = await svc.set(param(c, 'workspaceId'), c.req.valid('json'))
+    return c.json(await viewFor(c.get('container'), stored), 200)
+  })
+
+  // The per-KEY write the credential CHECKLIST performs. It is not a convenience over the
+  // whole-set PUT: a client that never received the values cannot re-send the set, so without
+  // this, filling in a second credential would delete the first.
+  buildHonoRoute(app, setCapabilityCredentialContract, async (c) => {
+    const svc = requireCapabilityCredentials(c)
+    const stored = await svc.put(
+      param(c, 'workspaceId'),
+      c.req.valid('param').key,
+      c.req.valid('json').value,
+    )
     return c.json(await viewFor(c.get('container'), stored), 200)
   })
 
