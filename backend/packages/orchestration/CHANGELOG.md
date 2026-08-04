@@ -1,5 +1,181 @@
 # @cat-factory/orchestration
 
+## 0.195.0
+
+### Minor Changes
+
+- f1a6cb3: Put the platform's captured evidence on the pull request: the pre-PR validation run, the bugfix
+  reproduction proof, and direct links to the artifacts the report lists.
+
+  Two of the strongest things this platform does were invisible to the only audience that matters.
+  The executor-harness has always run the service's own check commands against the exact tree that
+  opens a PR, and has run the declared reproducing test against the pre-fix tree and the finished one,
+  but both landed on the step record and nowhere a reviewer looks. The verification report now
+  carries them.
+
+  **Pre-PR validation** is reported as its own section: each command, its exit code and duration, and
+  the captured log of whatever failed. It is deliberately kept apart from the `ci` section, because
+  they answer different questions: CI is the host's opinion of the pushed branch, on another machine
+  and later, while this is the platform's own run of the service's commands on the exact tree that
+  was pushed, and the one verdict the platform ENFORCED (only a green checkout opens a PR). A passing
+  command's log is dropped and the section says so in as many words: ten green logs would cost the
+  body budget that makes the failing one readable, and an unexplained empty tail would read as "the
+  command printed nothing".
+
+  **The reproduction proof** is reported as red-then-green or not at all. Only failing-on-the-pre-fix
+  tree and passing-on-this-one is proof; anything else is `inconclusive`, stated plainly, with the
+  producer's own diagnosis rendered verbatim rather than re-derived from the exit codes (a green
+  pre-fix tree can mean the test misses the defect, or that a resumed run's base already carried this
+  step's own work, and only the side that ran the two trees can tell those apart). A run whose bug
+  genuinely cannot be reproduced in a test publishes the agent's structural declaration with its
+  reason and what it verified instead, which is never the same thing as nobody having tried. The
+  verdict also surfaces in the app, on both the result-window shell and the step-detail card. Both
+  are needed, because the proof is recorded on whichever step opened the PR, and in every built-in
+  pipeline that is the `coder`, a kind with no dedicated result view.
+
+  **Captured artifacts are now reachable.** Each screenshot row carries a direct link to its bytes on
+  the deployment's own authenticated blob endpoint, built from a new `apiBaseUrl` dependency
+  (`PUBLIC_URL` on Node and local, `WORKER_PUBLIC_URL` on the Worker) rather than from the SPA origin
+  beside it: the two coincide on a same-origin deployment and diverge the moment the SPA is served
+  from its own host. The artifact id stays in the row (it is what an operator greps the store for),
+  and a deployment that configures no backend URL gets the id with no link rather than a link to
+  nowhere. The endpoint stays authenticated, so a report on a public repository does not make the
+  bytes reachable by an unguessable URL.
+
+  Two supporting changes. Untrusted text that reaches the body as CODE is now delimited by kernel
+  helpers sized to what it carries: `hostMarkdown.outputBlock` for a captured log, and
+  `codeCell` / `inlineCode` for a command, a path or a stored id. A fixed three-tick fence closes on
+  the first backtick run a linter or a snapshot test prints, and everything after it (the rest of the
+  log, the sections below, and the machine-readable JSON block) lands in the body as prose; the same
+  hazard applies inline, where a value carrying a backtick closes its span and re-exposes the
+  auto-link triggers the escapes skip inside code. And `pl_bugfix` gained a `repro-test` step before
+  its `coder`, so the manual bugfix preset produces a red test before the fix regardless of this
+  feature; the version bump offers the reseed to existing workspaces.
+
+  `repro-test` is also now estimate-GATABLE, and deliberately not gated anywhere. It is the most
+  expensive thing a small bugfix pays for (a container dispatch with a real checkout, a commit and a
+  push) and the least likely to earn its keep on a one-line change, so an author who wants a trivial
+  bug to skip it can now gate the step off a task estimate. No built-in preset does, because that
+  would change what every existing bugfix run costs and drop the evidence on whichever tasks a model
+  happened to score low. When a pipeline DOES gate it, the report names the skip as its own cause
+  rather than reporting it as the phase never having been enabled.
+
+  The report's JSON `version` goes to 5 for the two new sections and the artifact `url` field. The
+  `coder.reproductionProof` tri-state is now a task-facing control, deferred until the behaviour it
+  promises actually existed.
+
+- cc17221: Price the three input token classes at their own rates and surface the resulting cost on the run
+  and debug surfaces.
+
+  `ModelPrice` gains `cacheReadPerMillion` / `cacheWritePerMillion`, derived from the base input
+  rate where an entry names neither. This fixes a spend-gate defect as well as adding a display:
+  the ledger previously metered every input token at the fresh rate, so a cache-read-dominated run
+  was priced at roughly ten times its real cost and could exhaust a budget it had barely touched.
+
+  The telemetry stores now aggregate one grain finer (`agentKind, phase, provider, model`) so a
+  run's rollup can be priced while the model is still attached, and `priceRollupCells` folds the
+  model away again, returning the `(agentKind, phase)` cells every consumer already read, now
+  carrying `costEstimate`. That collapsed cell is its own type (`LlmRollupCell`), so a reader
+  cannot ask it which model it was: after the fold there is no single answer. An unpriceable slice
+  reports `null` rather than `0`, and a total containing one propagates that null instead of
+  reporting a partial sum as complete.
+
+  Public API (`/api/v1`), additive, `info.version` 1.1.0 → 1.2.0: the debug run overview's LLM
+  rollups carry `costEstimate` and the block carries `costCurrency`. The four SDK clients are
+  regenerated; the Python and Java manifests are bumped so the new models publish.
+
+  The run's LLM-metrics export now states whether it is `truncated`. It is capped at the newest
+  1000 calls, and a cost folded from that slice would be a smaller number that still reads as the
+  run's total, so a truncated bundle reports null costs rather than pricing the part it holds.
+
+- 889a497: Couple workspace RBAC to the per-class merge rules, and add a sandboxed run mode.
+
+  A merge preset now carries `classRulesByRole` — the per-change-class auto-merge rules narrowed by
+  the workspace role the run's initiator held — and `dryRunRoles`, the roles whose runs are forced
+  into dry-run mode: the pipeline runs in full and opens its pull request, but nothing merges. A run
+  can also request `mode: 'dry_run'` at start. Both settings default empty, so every existing preset
+  resolves to exactly its previous behaviour.
+
+  Narrowing is subtractive by construction: a role entry can make a class stricter than the base
+  rules but can never widen one, so a role allowlist is reviewable on its own and no preset edit can
+  turn one into a privilege grant. A role that authored nothing for a class, and a run with no role to
+  pin at all (a schedule fire, a public-API start, auth-disabled dev), both fall through to the base
+  rules rather than being treated as a tier.
+
+  The initiator's role and the run's mode are PINNED on the run at admission rather than re-resolved
+  at merge time: the merge settles on the durable driver's path, which has no request context to
+  resolve a role from, and a preset edited mid-run must not retroactively re-govern a run already in
+  flight. The sandbox is enforced at both exits — the auto-merge and the manual merge endpoint, which
+  refuses a dry run's PR with a new `dry_run_not_mergeable` conflict reason, since the review card the
+  first one raises is itself a merge button.
+
+  Two new `MergeDecision` reasons ship with it, kept apart from the existing ones because each points
+  at a different fix: `role_requires_review` (a teammate on a higher tier can merge this PR as it
+  stands) and `dry_run` (the scores were never consulted, so no threshold explains this outcome).
+
+  Wire and schema changes: `RiskPolicy` gains two required fields, `ExecutionInstance` gains optional
+  `initiatedByRole` and `mode`, and `merge_threshold_presets` gains a `class_rules_by_role` and a
+  `dry_run_roles` column on both runtimes (both with empty defaults, so existing rows need no
+  backfill).
+
+  Not yet built: the SPA controls for AUTHORING either preset field and for choosing a dry run on the
+  start-run button. Both are already writable over `/workspaces/:ws/risk-policies` and the start
+  endpoint respectively, so the capability is reachable today through the API.
+
+- 3605630: Finish the in-app-tutorial initiative (now [ADR 0033](backend/docs/adr/0033-in-app-tutorials.md)):
+  make the walkthroughs reach the user who needs one, and measure whether they do.
+
+  The catalogue already made every tour REACHABLE; nothing brought one up. Starting any tour saves the
+  launch-prompt answer, which is what stops that prompt returning, so after a user's first tour the
+  product never mentioned the tutorial again unless they went looking, and the two tours whose windows
+  are transient (answer a parked run, review and merge) were the least likely to be found while they
+  applied. So: the finish card now hands off to the one walkthrough the user's own last action
+  unlocked, and a contextual offer catches a tour's declared requirements flipping from blocked to
+  ready. Four new tours ship with it, the first of which closes the biggest hole in the arc: reading a
+  FAILED run (the state a first run reaches most often, and the only one that had no walkthrough),
+  plus where runs execute, review-by-panel, and the shared-services catalog.
+
+  Progress now follows the USER rather than the browser, through a new per-user `tutorial_progress`
+  table on both facades (`remote` in mothership mode, self-scoped). The browser-persisted store stays
+  what the SPA reads and stays fully functional with no accounts, no store wired, or offline; the
+  server row is a best-effort mirror. Both id lists are grow-only sets, UNIONED on both sides, because
+  two browsers signed in as one person each hold a full copy and each write it back: a
+  last-writer-wins replace on either side silently drops what the other learned. "Reset progress" is
+  therefore a DELETE. Each push carries the whole local state and reconciles the merged row it gets
+  back, so a merge that lost a concurrent writer's ids re-pushes instead of waiting for a local change
+  that may never come; a merge whose RESULT would exceed `MAX_TUTORIAL_TOUR_IDS` is refused with
+  `details.reason: 'tutorial_progress_too_large'` rather than truncated, since the row rides every
+  workspace snapshot.
+
+  Three new operational counters (`tutorial.tour_started` / `_completed` / `_abandoned`, dimensioned
+  by tour) answer the question the initiative could not answer about itself. They ride the existing
+  `OperationalMetrics` port because there is deliberately only one counter seam; the tour dimension is
+  bounded twice, by the wire schema's shape rule and by a per-process distinct-value cap that folds
+  the rest onto a visible `other` bucket, since a dimension whose values come from a browser is
+  otherwise an unbounded-cardinality hole in an operator's metrics backend.
+
+  New internal routes (not `/api/v1`, so no SDK surface): `GET|PUT|DELETE /tutorial/progress` and
+  `POST /tutorial/events`, root-mounted beside `/user-settings`. Root-mounted specifically so they sit
+  outside the workspace-RBAC viewer write floor, which a read-only viewer taking a walkthrough would
+  otherwise trip. The workspace snapshot gains an optional `tutorialProgress`, and `NavGates` gains
+  `boardHasFailedRun`; a deployment that builds its own gates object must add that field.
+
+### Patch Changes
+
+- Updated dependencies [f1a6cb3]
+- Updated dependencies [cc17221]
+- Updated dependencies [889a497]
+- Updated dependencies [3605630]
+  - @cat-factory/contracts@0.224.0
+  - @cat-factory/kernel@0.226.0
+  - @cat-factory/agents@0.108.0
+  - @cat-factory/spend@0.14.0
+  - @cat-factory/integrations@0.122.1
+  - @cat-factory/prompt-fragments@0.15.49
+  - @cat-factory/sandbox@0.11.43
+  - @cat-factory/workspaces@0.21.36
+  - @cat-factory/caching@0.14.2
+
 ## 0.194.0
 
 ### Minor Changes
