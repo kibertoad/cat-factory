@@ -8,11 +8,28 @@
 // A policy with auto-merge off has no thresholds to explain (the master switch wins before
 // any score is compared), so it says so instead of listing ceilings that never apply.
 import { computed } from 'vue'
-import type { RiskPolicy } from '~/types/merge'
-import { riskPolicyCeilings, type RiskPolicyAxis } from '~/utils/riskPolicy'
+import type { RiskPolicy, WorkspaceRole } from '~/types/merge'
+import { riskPolicyCeilings, rolePolicySummary, type RiskPolicyAxis } from '~/utils/riskPolicy'
 
 const props = defineProps<{ policy: RiskPolicy }>()
 const { t, n } = useI18n()
+
+// The role layer, when the policy has one. Worth a line here rather than only in settings: this
+// preview is what a task's merge-policy picker shows, and "runs started by a member never merge"
+// changes what picking this policy means for whoever is reading it.
+const ROLE_LABEL: Record<WorkspaceRole, () => string> = {
+  admin: () => t('merge.role.admin'),
+  member: () => t('merge.role.member'),
+  viewer: () => t('merge.role.viewer'),
+}
+const roleLayer = computed(() => {
+  const { sandboxed, narrowed } = rolePolicySummary(props.policy)
+  return {
+    sandboxed: sandboxed.map((r) => ROLE_LABEL[r]()).join(', '),
+    narrowed: narrowed.map((r) => ROLE_LABEL[r]()).join(', '),
+    any: sandboxed.length > 0 || narrowed.length > 0,
+  }
+})
 
 // Exhaustive over the axis union with LITERAL keys, so both i18n drift guards apply: the
 // typed-key check catches a renamed key, and the Record catches a new axis.
@@ -65,6 +82,20 @@ const ceilings = computed(() =>
       </div>
       <p class="text-[12px] leading-snug text-slate-400">
         {{ t('riskPolicy.preview.manualExplainer') }}
+      </p>
+    </div>
+
+    <!-- Who started the run changes what may land, on a policy that says so. -->
+    <div v-if="roleLayer.any" data-testid="risk-policy-preview-roles">
+      <div class="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-wide text-slate-500">
+        <UIcon name="i-lucide-users" class="h-3 w-3" />
+        {{ t('riskPolicy.preview.roleHeading') }}
+      </div>
+      <p v-if="roleLayer.sandboxed" class="text-[12px] leading-snug text-slate-400">
+        {{ t('riskPolicy.preview.roleSandboxed', { roles: roleLayer.sandboxed }) }}
+      </p>
+      <p v-if="roleLayer.narrowed" class="text-[12px] leading-snug text-slate-400">
+        {{ t('riskPolicy.preview.roleNarrowed', { roles: roleLayer.narrowed }) }}
       </p>
     </div>
 

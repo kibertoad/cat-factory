@@ -1215,6 +1215,16 @@ export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
 export const runModeSchema = v.picklist(['live', 'dry_run'])
 export type RunMode = v.InferOutput<typeof runModeSchema>
 
+/**
+ * Whether a run is sandboxed. A helper rather than `=== 'dry_run'` scattered across the merge path
+ * and the SPA, so every place that must refuse to land work (or must say that a run will never
+ * land any) reads the mode the same way, and so a run persisted before the mode existed
+ * (absent ⇒ `live`) can never be mistaken for one.
+ */
+export function isDryRun(mode: RunMode | null | undefined): boolean {
+  return mode === 'dry_run'
+}
+
 export const runDiagnosticsSchema = v.object({
   /** Context of the most recent container-step dispatch. */
   lastDispatch: v.optional(

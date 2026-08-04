@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { ExecutionInstance, Pipeline } from '~/types/domain'
-import type { RequestStepChangesInput } from '@cat-factory/contracts'
+import type { RequestStepChangesInput, RunMode } from '@cat-factory/contracts'
 import type { IterationCapChoice } from '~/types/execution'
 import type { ReviewEffort } from '~/types/merge'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -36,8 +36,17 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
    * pinned to an individual-usage model (Claude) needs the initiator's personal
    * password — supplied transparently from the local cache, and prompted via the
    * credential modal (then retried) when the server replies 428.
+   *
+   * `mode: 'dry_run'` REQUESTS a sandboxed run: the pipeline works and opens its pull request,
+   * and nothing merges. It is a request, not a decision — the task's merge preset can sandbox a
+   * role's runs whatever they asked for, so what the run got is read back off the run's own
+   * `mode`, never assumed from what was sent here.
    */
-  async function start(blockId: string, pipeline: Pipeline): Promise<boolean> {
+  async function start(
+    blockId: string,
+    pipeline: Pipeline,
+    options?: { mode?: RunMode },
+  ): Promise<boolean> {
     const ws = useWorkspaceStore()
     const personal = usePersonalSubscriptionsStore()
     // Returns false when the user cancels the personal-password prompt OR the start was
@@ -45,7 +54,15 @@ export function createExecutionCommands(ctx: ExecutionCommandContext) {
     // caller can revert its "Starting…" state without its own error handling.
     try {
       return await personal.withCredential(async (password) => {
-        await api.startExecution(ws.requireId(), blockId, { pipelineId: pipeline.id }, password)
+        await api.startExecution(
+          ws.requireId(),
+          blockId,
+          // Omitted rather than `mode: 'live'` for an ordinary start: `live` is what the absent
+          // field already means, and asking for it explicitly would read as a request to opt OUT
+          // of a policy sandbox, which is not something a start may do.
+          { pipelineId: pipeline.id, ...(options?.mode ? { mode: options.mode } : {}) },
+          password,
+        )
         await ws.refresh()
       })
     } catch (e) {

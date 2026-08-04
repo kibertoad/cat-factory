@@ -64,6 +64,11 @@ import { sweepExpiredEnvironments } from './infrastructure/environments/sweep'
 import { logger } from './infrastructure/observability/logger'
 import { runPlatformMetricsSweep } from './infrastructure/observability/platformMetrics'
 import { flushOperationalMetricsForIsolate } from './infrastructure/observability/operationalFlush'
+import {
+  flushOtelLogsForIsolate,
+  installOtelLogSink,
+} from './infrastructure/observability/logExport'
+import { loadOtelConfig } from './infrastructure/config/otel'
 import { SweepTick } from './infrastructure/observability/cronSweep'
 import {
   type CoreDependencies,
@@ -754,7 +759,7 @@ async function handleScheduled(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  applyLogSettings(env)
   const clock = new SystemClock()
   const tick = new SweepTick(ctx)
 
@@ -774,28 +779,54 @@ async function handleScheduled(
   // by a flush that runs after it. Draining while the passes were still in flight meant a cron
   // tick drained an empty collector and left its own counters waiting for a next tick in the
   // same isolate — which for the daily retention cron is a tick that never comes.
-  flushOperationalMetricsAfter(tick.settled(), env, ctx, clock)
+  flushTelemetryAfter(tick.settled(), env, ctx, clock)
 }
 
 /**
- * Flush THIS ISOLATE's operational counters once `work` settles, as a post-response
- * `waitUntil`. Every entry point calls it, because a Worker's collector is per-isolate and an
- * isolate is discarded without warning — see `observability/operationalFlush.ts` for why that
- * makes per-invocation flushing the correct shape rather than a wasteful one.
+ * Apply this isolate's logging settings from `env`: the emit threshold, and the opt-in OTLP
+ * log sink the lines are copied to. Every entry point calls it FIRST, because a fresh isolate
+ * can start on any of them and both settings are module state inside `@cat-factory/server`.
+ * Idempotent and cheap (an env parse plus a null check), so it is not once-guarded.
  *
- * `allSettled` rather than a catch: a FAILED invocation is exactly the one whose counters
- * matter, and its rejection is the caller's to propagate, not this bookkeeping's to observe.
+ * Reads `loadOtelConfig` rather than the whole `loadConfig`: this runs before the handler, and
+ * a deployment whose config validation fails must still serve its misconfiguration fallback
+ * with logging intact.
  */
-function flushOperationalMetricsAfter(
+function applyLogSettings(env: Env): void {
+  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  installOtelLogSink(loadOtelConfig(env))
+}
+
+/**
+ * Flush THIS ISOLATE's buffered telemetry once `work` settles, as a post-response
+ * `waitUntil`: the operational counters, and the exported log lines. Every entry point calls
+ * it, because both buffers are per-isolate and an isolate is discarded without warning; see
+ * `observability/operationalFlush.ts` for why that makes per-invocation flushing the correct
+ * shape rather than a wasteful one.
+ *
+ * `allSettled` rather than a catch: a FAILED invocation is exactly the one whose counters and
+ * lines matter, and its rejection is the caller's to propagate, not this bookkeeping's to
+ * observe. Both flushes are best-effort and resolve on failure, so neither can take the other
+ * down.
+ */
+function flushTelemetryAfter(
   work: Promise<unknown>,
   env: Env,
   ctx: ExecutionContext,
   clock: SystemClock,
 ): void {
   ctx.waitUntil(
-    Promise.allSettled([work]).then(
-      () => flushOperationalMetricsForIsolate(loadConfig(env).otel, clock.now()) ?? undefined,
-    ),
+    Promise.allSettled([work]).then(() => {
+      // ONE `loadOtelConfig` for both flushes, rather than the narrow read beside a whole
+      // `loadConfig(env).otel` (which is literally this same call). Both are telemetry that a
+      // deployment whose config validation fails still owes its operator, so neither should
+      // depend on the full config parsing cleanly.
+      const otel = loadOtelConfig(env)
+      return Promise.all([
+        flushOperationalMetricsForIsolate(otel, clock.now()) ?? undefined,
+        flushOtelLogsForIsolate(otel) ?? undefined,
+      ]).then(() => {})
+    }),
   )
 }
 
@@ -805,9 +836,9 @@ async function handleQueue(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<void> {
-  setLogLevel(parseLogLevel(env.LOG_LEVEL))
+  applyLogSettings(env)
   const work = routeQueueBatch(batch, env)
-  flushOperationalMetricsAfter(work, env, ctx, new SystemClock())
+  flushTelemetryAfter(work, env, ctx, new SystemClock())
   await work
 }
 
@@ -896,7 +927,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       // The Worker has no process env, so the configured verbosity is read off the request's
       // `env` binding. Cheap and idempotent, so it runs on every entry point rather than being
       // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
-      setLogLevel(parseLogLevel(env.LOG_LEVEL))
+      applyLogSettings(env)
       validateRegistrationsOnce({
         agentKindRegistry: registries.agentKindRegistry,
         gateRegistry: registries.gateRegistry,
@@ -909,7 +940,7 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       })
       const response = Promise.resolve(app.fetch(request, env, ctx))
       // Flush whatever THIS isolate counted while serving the request, after the response.
-      flushOperationalMetricsAfter(response, env, ctx, new SystemClock())
+      flushTelemetryAfter(response, env, ctx, new SystemClock())
       return response
     },
     scheduled: handleScheduled,
