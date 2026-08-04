@@ -1567,7 +1567,9 @@
     "window": {
       "oneHour": "Son bir saat",
       "oneDay": "Son 24 saat",
-      "sevenDays": "Son 7 gün"
+      "sevenDays": "Son 7 gün",
+      "thirtyDays": "Son 30 gün",
+      "ninetyDays": "Son 90 gün"
     },
     "outcomes": {
       "title": "Çalıştırma sonuçları",
@@ -1617,6 +1619,22 @@
     },
     "live": {
       "title": "Şu anda etkin"
+    },
+    "rollup": {
+      "none": "Günlük toplama henüz hiçbir şey üretmedi; bu pencere çalıştırma olmadığı için değil, veri olmadığı için boş.",
+      "stale": "Günlük toplama yalnızca {date} tarihine kadar geliyor. Sonrası boş geçen zaman değil, eksik veri.",
+      "current": "Günlük toplamadan; {date} tarihine kadar eksiksiz."
+    },
+    "gates": {
+      "title": "Kapı denemeleri",
+      "empty": "Bu pencerede sonuçlanan kapı yok.",
+      "gate": "Kapı",
+      "settled": "Sonuçlanan",
+      "cleanPasses": "Onarıcısız geçen",
+      "attempts": "Onarıcı denemeleri",
+      "helperFailures": "Onarıcı hataları",
+      "exhausted": "İnsana devredilen",
+      "hint": "Onarıcısız geçmek, ön kontrolün yettiği ve hiç onarıcı başlatılmadığı anlamına gelir. Onarıcı hataları, kendi işi çöken denemelerdir; çalışıp kontrolü kırmızı bırakan denemelerden farklıdır."
     }
   },
   "reports": {
@@ -1968,7 +1986,10 @@
         "dismissed": "Kapatıldı",
         "actFailed": "Bu işlem tamamlanamadı",
         "dismissFailed": "Kapatılamadı"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} tane daha gösterilmiyor",
+      "failingRunGone": "Bu çalıştırma artık yüklü değil ve açılacak bir görevi yok."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3376,6 +3397,48 @@
       "offHint": "Ayarlanmadı: her pano kendisi karar verir. Mevcut panolar seçimlerini korur.",
       "saved": "Çalıştırma kimlik bilgisi ilkesi kaydedildi",
       "saveFailed": "Çalıştırma kimlik bilgisi ilkesi kaydedilemedi"
+    },
+    "platformAlerts": {
+      "title": "Platform sağlığı uyarıları",
+      "description": "Bu hesabın çalıştırma sağlığının karşılaştırıldığı üst sınırlar. Boş alanlar kurulumun varsayılanlarını devralır.",
+      "muteLabel": "Bu hesap için uyarıları sustur",
+      "muteHint": "Burada uyarılar yalnızca kapatılabilir. Taramanın hiç çalışıp çalışmayacağı kurulum ayarıdır.",
+      "windowLabel": "Değerlendirme penceresi",
+      "windowHint": "Her koşulun ne kadar geriye baktığı. Daha uzun pencere daha yavaş tepki verir ve daha sessiz kalır.",
+      "thresholdsLabel": "Eşikler",
+      "inheritHint": "Kurulum varsayılanını devralmak için alanı boş bırakın. Sıfır boş bir alan değil, gerçek bir ayardır.",
+      "inheritPlaceholder": "Devralındı",
+      "reset": "Geçersiz kılmaları temizle",
+      "saved": "Uyarı ayarları kaydedildi",
+      "saveFailed": "Uyarı ayarları kaydedilemedi",
+      "window": {
+        "inherit": "Kurulum varsayılanı",
+        "oneHour": "Son saat",
+        "oneDay": "Son 24 saat",
+        "sevenDays": "Son 7 gün"
+      },
+      "thresholds": {
+        "minRuns": "En az çalıştırma",
+        "maxFailureRate": "Hata oranı üst sınırı",
+        "maxP99DurationMs": "p99 süre üst sınırı (dakika)",
+        "maxBacklog": "Birikme üst sınırı",
+        "stalledBuckets": "Durgunluk sayılmadan önceki boş aralık",
+        "minStalledPriorRuns": "Durgunluk sayılmadan önceki çalıştırma",
+        "maxFailureKindShare": "Baskın nedenin payı",
+        "maxSweepFailures": "Üst üste tarama hatası"
+      },
+      "hints": {
+        "minRuns": "Hata uyarılarının tetiklenebilmesi için pencerede gereken tamamlanmış çalıştırma sayısı.",
+        "maxFailureRate": "Başarısız olabilecek çalıştırmaların payı, 0 ile 1 arasında.",
+        "maxP99DurationMs": "En yavaş çalıştırmaların ne kadar sürebileceği.",
+        "maxBacklog": "Aynı anda sürebilecek tamamlanmamış çalıştırma sayısı.",
+        "stalledBuckets": "Durgunluk sayılan, eğilimin sonundaki boş aralıklar.",
+        "minStalledPriorRuns": "Pencerenin önceki bölümünün taşımış olması gereken çalıştırma sayısı. Sıfır her sessizlikte uyarır.",
+        "maxFailureKindShare": "Tek bir nedenin kapsayabileceği hata payı; 0’ın üzerinde ve en fazla 1.",
+        "maxSweepFailures": "Bir arka plan taramasının üst üste başarısız geçişi."
+      },
+      "notLoaded": "Bu hesabın mevcut ayarları yüklenemedi; kaydetmek diğerlerinin üzerine yazar. Düzenlemeden önce yeniden yükleyin.",
+      "invalidNumbers": "Bu üst sınırlar sayı değil"
     }
   },
   "providers": {

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { PlatformObservability } from '@cat-factory/contracts'
 import {
   DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+  alertsHaveRunEvidence,
   evaluatePlatformHealth,
   platformAlertReasons,
   platformHealthCardContent,
+  resolveAccountAlertConfig,
 } from './platform-health.logic.js'
 
 // A healthy baseline projection; each test overrides only the field it exercises.
@@ -30,8 +32,11 @@ function snapshot(over: {
       successRate: 1,
       ...over.outcomes,
     },
+    source: 'runs' as const,
+    rolledUpThrough: null,
     trend: { bucketMs: 300_000, points: over.trendPoints ?? [] },
     failures: over.failures ?? [],
+    gates: [],
     live: { running: 0, blocked: 0, paused: 0, pending: 0, ...over.live },
     durations: {
       count: 20,
@@ -256,5 +261,66 @@ describe('platformHealthCardContent covers every reason', () => {
       const { body } = platformHealthCardContent([reason], '1h')
       expect(body).not.toContain('a health threshold was crossed')
     }
+  })
+})
+
+describe('resolveAccountAlertConfig', () => {
+  const deployment = {
+    enabled: true,
+    window: '1h' as const,
+    thresholds: DEFAULT_PLATFORM_ALERT_THRESHOLDS,
+  }
+
+  it('inherits every threshold when the account stored nothing', () => {
+    const resolved = resolveAccountAlertConfig(deployment, undefined)
+    expect(resolved).toEqual(deployment)
+  })
+
+  it('overrides only the fields the account set, per field', () => {
+    const resolved = resolveAccountAlertConfig(deployment, {
+      window: '24h',
+      thresholds: { maxFailureRate: 0.9 },
+    })
+    expect(resolved.window).toBe('24h')
+    expect(resolved.thresholds.maxFailureRate).toBe(0.9)
+    // Everything else still comes from the deployment, including the neighbours of the field
+    // that WAS set; a spread-based merge would have wiped them.
+    expect(resolved.thresholds.minRuns).toBe(DEFAULT_PLATFORM_ALERT_THRESHOLDS.minRuns)
+    expect(resolved.thresholds.maxBacklog).toBe(DEFAULT_PLATFORM_ALERT_THRESHOLDS.maxBacklog)
+  })
+
+  it('keeps a stored ZERO as a real threshold rather than reading it as absent', () => {
+    // The whole point of the merge: `minStalledPriorRuns: 0` says "page even on an idle
+    // window". Collapsing it into "unset" would silently restore the deployment default and
+    // mute exactly the account that asked for the strictest setting available.
+    const resolved = resolveAccountAlertConfig(deployment, {
+      thresholds: { minStalledPriorRuns: 0 },
+    })
+    expect(resolved.thresholds.minStalledPriorRuns).toBe(0)
+  })
+
+  it('lets an account mute itself but never enable alerting the deployment never started', () => {
+    expect(resolveAccountAlertConfig(deployment, { enabled: false }).enabled).toBe(false)
+    // The env switch decides whether the sweep runs at all, so a stored `true` cannot start a
+    // timer that was never started, so it must not read as "alerting is on for this account".
+    expect(
+      resolveAccountAlertConfig({ ...deployment, enabled: false }, { enabled: true }).enabled,
+    ).toBe(false)
+  })
+})
+
+describe('alertsHaveRunEvidence', () => {
+  it('is true only for the conditions a failing run can be shown for', () => {
+    expect(alertsHaveRunEvidence(['failure_rate_high'])).toBe(true)
+    expect(alertsHaveRunEvidence(['failure_kind_dominant'])).toBe(true)
+    expect(alertsHaveRunEvidence(['backlog_high', 'failure_rate_high'])).toBe(true)
+  })
+
+  it('is false for conditions with no failing run behind them', () => {
+    // Linking a backlog or a stall alert to a run list that resolved to nothing would read as
+    // "there are no failures", which is the opposite of what those alerts are saying.
+    expect(alertsHaveRunEvidence(['backlog_high'])).toBe(false)
+    expect(alertsHaveRunEvidence(['throughput_stalled', 'duration_p99_high'])).toBe(false)
+    expect(alertsHaveRunEvidence([])).toBe(false)
   })
 })

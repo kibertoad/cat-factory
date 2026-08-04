@@ -34,6 +34,17 @@ export interface RetentionPass {
    */
   expire(table: string, del: () => Promise<number>): Promise<number>
   /**
+   * The same isolation for a table this pass WRITES rather than prunes: today the daily run
+   * rollup, which is materialised on the same schedule that bounds its neighbours.
+   *
+   * It shares the isolation for the reason the prunes do: a failing rollup must not abort the
+   * prunes that follow it, and it must be NAMED when it fails rather than reported as "0
+   * rows", which is also what a fully caught-up rollup returns. Kept a distinct verb from
+   * {@link prune} so a reader of the sweep can see at a glance which tables it is bounding and
+   * which it is filling.
+   */
+  materialize(table: string, write: () => Promise<number>): Promise<number>
+  /**
    * The tables whose prune threw this pass, in the order they were attempted. EMPTY on a
    * clean pass — a caller logs it only when non-empty, so a healthy deployment stays quiet.
    */
@@ -66,6 +77,19 @@ export function createRetentionPass(logger?: Logger): RetentionPass {
     prune: (table, windowMs, now, del) =>
       windowMs <= 0 ? Promise.resolve(0) : isolate(table, () => del(now - windowMs)),
     expire: (table, del) => isolate(table, del),
+    materialize: (table, write) => isolate(table, write),
     failed,
   }
 }
+
+/**
+ * How far back each rollup pass recomputes the daily run buckets.
+ *
+ * Not just "today": the sweep that owns it runs daily on the Worker and hourly on Node, so a
+ * missed pass (a deploy, an isolate that never fired, a restart) would otherwise leave a day
+ * permanently half-counted, and a half-counted day is indistinguishable from a quiet one once
+ * it is written. Recomputing a short trailing window makes every pass self-healing, at the
+ * cost of re-aggregating a few days of runs, which is one indexed GROUP BY, not a scan of
+ * history. Shared by both facades so the two cannot drift on how much they heal.
+ */
+export const RUN_DAY_ROLLUP_LOOKBACK_MS = 3 * 24 * 60 * 60_000

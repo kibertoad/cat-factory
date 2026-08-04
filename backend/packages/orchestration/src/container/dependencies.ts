@@ -32,15 +32,18 @@ import type {
   AgentContextSnapshotRepository,
   AgentExecutor,
   AgentPromptRepository,
-  WorkspaceAgentSettingsRepository,
   AgentSearchQueryRepository,
+  ApiContractRepository,
   AppCaches,
+  BinaryGeneratorRegistry,
+  BinaryGeneratorSource,
   BlockRepository,
   BootstrapJobRepository,
   BootstrapRunner,
   BrainstormSessionRepository,
   BranchProjectionRepository,
   BranchUpdater,
+  BugHuntAssessor,
   CheckRunProjectionRepository,
   ClarityReviewRepository,
   Clock,
@@ -67,22 +70,17 @@ import type {
   EnvironmentUserHandlerRepository,
   ExecutionEventPublisher,
   ExecutionRepository,
-  FragmentBriefGenerator,
-  FragmentBriefRepository,
-  FragmentSelector,
-  ApiContractRepository,
-  BinaryGeneratorRegistry,
-  BinaryGeneratorSource,
   FoundationalBuiltinSource,
   FoundationalServiceRegistry,
   FoundationalServiceRepository,
   FoundationalServiceSourceRepository,
   FoundationalSourceResyncRequest,
+  FragmentBriefGenerator,
+  FragmentBriefRepository,
+  FragmentSelector,
   FragmentSourceRepository,
+  GateOutcomeRepository,
   GateRegistry,
-  JudgeAssessor,
-  BugHuntAssessor,
-  JudgeRegistry,
   GitHubClient,
   GitHubInstallation,
   GitHubInstallationRepository,
@@ -93,6 +91,8 @@ import type {
   InitiativeRepository,
   IssueProjectionRepository,
   IssueWritebackProvider,
+  JudgeAssessor,
+  JudgeRegistry,
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,
   LlmCallMetricRepository,
@@ -102,12 +102,12 @@ import type {
   MergeTrackRecordRepository,
   ModelPresetRepository,
   ModelProvider,
-  OperationalMetrics,
   ModelProviderResolver,
   ModelRef,
   NotificationChannel,
   NotificationRepository,
   ObservabilityConnectionRepository,
+  OperationalMetrics,
   PackageRegistryConnectionRepository,
   PasswordHasher,
   PasswordResetTokenRepository,
@@ -126,9 +126,9 @@ import type {
   PullRequestProjectionRepository,
   ReferenceArchitectureRepository,
   ReleaseHealthConfigRepository,
-  ReportsRepository,
   RepoBootstrapper,
   RepoProjectionRepository,
+  ReportsRepository,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
   ResolveRunRepoContext,
@@ -171,6 +171,7 @@ import type {
   VcsProviderRegistry,
   WebhookVerifier,
   WorkRunner,
+  WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -451,6 +452,19 @@ export interface CoreDependencies {
    * endpoint; absent (tests / unconfigured facades) → no platform view, engine unaffected.
    */
   platformMetricsRepository?: PlatformMetricsRepository
+  /**
+   * Settled-gate projection (`gate_outcomes`): written by the engine's gate machine as each
+   * polling gate reaches a terminal verdict, read by the platform dashboard for the gate /
+   * CI-fixer attempt statistics.
+   *
+   * REQUIRED, unlike the rollup port above, and for the reason `logger` and
+   * `operationalMetrics` are: this one is WRITTEN by the engine, and an un-wired writer reads
+   * downstream as "no gate on this deployment ever escalated", which is exactly what a healthy
+   * deployment looks like. The rollup port is a pure READ whose absence removes a page; this
+   * one's absence silently removes the truth from a page that still renders. A facade with no
+   * such store passes {@link noopGateOutcomeRepository}, which says so in code.
+   */
+  gateOutcomeRepository: GateOutcomeRepository
   /**
    * Cross-cutting usage-analytics rollup port (spend per model/agent kind, spend + run
    * activity per workspace/service/task type, spend trend) backing the Reports view.

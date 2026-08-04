@@ -22,8 +22,11 @@ function snapshot(window: PlatformObservabilityWindow, accountTag: number): Plat
       other: 0,
       successRate: 1,
     },
+    source: 'runs' as const,
+    rolledUpThrough: null,
     trend: { bucketMs: 1_000, points: [] },
     failures: [],
+    gates: [],
     live: { running: 0, blocked: 0, paused: 0, pending: 0 },
     durations: {
       count: 0,

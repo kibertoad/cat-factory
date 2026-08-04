@@ -1433,6 +1433,40 @@ Rules that bind new work here:
   store needs its `workspaceSettingsRepository`**, or that gate is OPEN and an opted-out workspace's bodies
   are retained anyway.
 
+**The DEPLOYMENT-level projections are the exception to that store split, deliberately.**
+`gate_outcomes` (one row per polling gate that reaches a terminal verdict) and
+`platform_run_days` (the daily rollup behind the dashboard's `30d`/`90d` windows) live in the
+MAIN store beside `agent_runs`, are account-scoped through the same `workspaces` sub-select every
+other platform rollup uses, and are pruned by the RETENTION sweep rather than the telemetry one. A
+telemetry-store home would have forced a cross-store join or a workspace-id list threaded through
+every read. Three rules bind anything added beside them.
+
+- **A rollup is REWRITTEN, never appended, and an UPSERT is not a rewrite.** The current day's
+  counts are not final, so each pass recomputes a short trailing window; but the source rows
+  MUTATE (a run goes `running` → `done` with its `created_at` fixed), so a bucket the new pass no
+  longer produces is one `ON CONFLICT DO UPDATE` never touches. The pass therefore DELETEs its
+  window and re-inserts it, both in one transaction so no reader sees the gap. Left as an upsert,
+  every run that happened to be mid-flight at a sweep is counted twice, for as long as retention
+  keeps the orphan.
+- **A rollup's coverage is a fact about the SWEEP, so it cannot be derived from the rolled-up
+  rows.** `dailyRollupWatermark` reads what the pass RECORDED (`platform_rollup_state`, written in
+  the same transaction, deployment-scoped, moving only forward), never `max(day_start)`: an
+  account idle for a fortnight and a wedged sweep share a newest row, and a new account and a
+  rollup that never ran share an absence. Each pair needs the opposite operator response, so a
+  derived number answers a different question than the one being asked and sounds certain doing it.
+- **A projection whose writer REPLAYS derives its row id** from the run
+  (`<runId>:<stepIndex>:<outcome>`) rather than minting one, or one settle becomes two rows and
+  inflates every number the table exists to report.
+
+**A projection the ENGINE writes is `remote` in mothership mode, not `telemetry`.** The local-first
+bucket is for state a node also READS locally; a gate outcome is written on the node and read only
+by the admin-gated dashboard on the mothership, so a `node:sqlite` copy would be a write-only store
+nobody can see. It is allow-listed on the record's own `workspaceId` field. And because an un-wired
+writer reads downstream as "this never happens" rather than as an outage,
+`CoreDependencies.gateOutcomeRepository` is REQUIRED (`noopGateOutcomeRepository` for a caller with
+no store), the same rule as `logger` and `operationalMetrics`.
+Doc: [`platform-operator-observability.md`](./docs/initiatives/platform-operator-observability.md).
+
 **Remote debugging reads** (`/api/v1/debug/*`) expose the same sinks to an external caller (in practice an
 LLM diagnosing a run) under one rule a new endpoint must obey too: **a response's size has to be
 computable BEFORE the request.** So fan-out lists never carry bodies, slicing/filtering/searching happen in

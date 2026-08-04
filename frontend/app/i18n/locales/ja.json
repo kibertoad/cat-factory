@@ -1567,7 +1567,9 @@
     "window": {
       "oneHour": "過去1時間",
       "oneDay": "過去24時間",
-      "sevenDays": "過去7日間"
+      "sevenDays": "過去7日間",
+      "thirtyDays": "過去30日",
+      "ninetyDays": "過去90日"
     },
     "outcomes": {
       "title": "実行結果",
@@ -1617,6 +1619,22 @@
     },
     "live": {
       "title": "現在アクティブ"
+    },
+    "rollup": {
+      "none": "日次集計はまだ何も生成していません。この期間が空なのは実行がなかったからではなく、データがないためです。",
+      "stale": "日次集計は {date} までしか届いていません。それ以降は空いていた時間ではなく、欠けているデータです。",
+      "current": "日次集計より。{date} まで完全です。"
+    },
+    "gates": {
+      "title": "ゲートの試行",
+      "empty": "この期間に決着したゲートはありません。",
+      "gate": "ゲート",
+      "settled": "決着",
+      "cleanPasses": "修正なしで通過",
+      "attempts": "修正エージェントの試行",
+      "helperFailures": "修正エージェントの失敗",
+      "exhausted": "人に引き継ぎ",
+      "hint": "修正なしで通過とは、事前チェックだけで満たされ修正エージェントを一度も起動しなかったゲートのことです。修正エージェントの失敗とは、ジョブ自体が落ちた試行を指し、実行はされたがチェックが赤のままだった試行とは区別されます。"
     }
   },
   "reports": {
@@ -1968,7 +1986,10 @@
         "dismissed": "却下しました",
         "actFailed": "その操作を完了できませんでした",
         "dismissFailed": "却下できませんでした"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "他に {count} 件（非表示）",
+      "failingRunGone": "この実行はすでに読み込まれておらず、開けるタスクもありません。"
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3376,6 +3397,48 @@
       "offHint": "未設定: 各ボードが自分で決めます。既存のボードは選択をそのまま保ちます。",
       "saved": "実行認証情報ポリシーを保存しました",
       "saveFailed": "実行認証情報ポリシーを保存できませんでした"
+    },
+    "platformAlerts": {
+      "title": "プラットフォーム健全性アラート",
+      "description": "このアカウントの実行状況を照らし合わせる上限値です。空欄の項目はデプロイの既定値を引き継ぎます。",
+      "muteLabel": "このアカウントのアラートをミュートする",
+      "muteHint": "ここでできるのはアラートを止めることだけです。監視自体を動かすかどうかはデプロイ側の設定です。",
+      "windowLabel": "評価期間",
+      "windowHint": "各条件がどこまでさかのぼるか。期間が長いほど反応は遅く、通知は少なくなります。",
+      "thresholdsLabel": "しきい値",
+      "inheritHint": "空欄のままにするとデプロイの既定値を引き継ぎます。0 は空欄ではなく、実際の設定値です。",
+      "inheritPlaceholder": "継承",
+      "reset": "上書きを消去",
+      "saved": "アラート設定を保存しました",
+      "saveFailed": "アラート設定を保存できませんでした",
+      "window": {
+        "inherit": "デプロイの既定値",
+        "oneHour": "過去1時間",
+        "oneDay": "過去24時間",
+        "sevenDays": "過去7日"
+      },
+      "thresholds": {
+        "minRuns": "最小実行数",
+        "maxFailureRate": "失敗率の上限",
+        "maxP99DurationMs": "p99 実行時間の上限（分）",
+        "maxBacklog": "滞留数の上限",
+        "stalledBuckets": "停止とみなす空区間の数",
+        "minStalledPriorRuns": "停止と数える前に必要な実行数",
+        "maxFailureKindShare": "支配的な原因の割合",
+        "maxSweepFailures": "連続した監視の失敗回数"
+      },
+      "hints": {
+        "minRuns": "失敗アラートが発火できるようになるまでに期間内で必要な、終了した実行の数。",
+        "maxFailureRate": "失敗してよい実行の割合（0〜1）。",
+        "maxP99DurationMs": "最も遅い実行に許される所要時間。",
+        "maxBacklog": "同時に進行してよい未完了の実行数。",
+        "stalledBuckets": "停止とみなす、推移の末尾の空区間の数。",
+        "minStalledPriorRuns": "期間の前半が担っていたはずの実行数。0 にするとどんな沈黙でも通知します。",
+        "maxFailureKindShare": "単一の原因が占めてよい失敗の割合（0 より大きく 1 まで）。",
+        "maxSweepFailures": "ひとつのバックグラウンド監視が連続して失敗した回数。"
+      },
+      "notLoaded": "このアカウントの現在の設定を読み込めなかったため、保存すると他の設定が上書きされます。編集する前に再読み込みしてください。",
+      "invalidNumbers": "これらの上限値が数値ではありません"
     }
   },
   "providers": {

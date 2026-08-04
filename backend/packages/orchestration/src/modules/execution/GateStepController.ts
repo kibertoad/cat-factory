@@ -13,6 +13,7 @@ import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 
 // ---------------------------------------------------------------------------
 // The polling-gate STATE MACHINE: one generic evaluation shared by every registered gate
@@ -46,6 +47,12 @@ export interface GateStepControllerDeps {
       humanReviewGraceMinutes: number
     }
   >
+  /**
+   * Record the gate's terminal verdict into the queryable `gate_outcomes` projection (the
+   * operator dashboard's attempt statistics). Optional so a facade or test without the sink
+   * wired runs unchanged: an unwired projection costs a dashboard section, never a run.
+   */
+  recordGateOutcome?: (settled: SettledGate) => Promise<void>
   /** The engine's completion spine, so a passing gate finishes + advances like any step. */
   recordStepResult: (
     workspaceId: string,
@@ -152,6 +159,7 @@ export class GateStepController {
 
     if (probe.status === 'pass') {
       // Stop the moment the precheck passes — finish the step and advance.
+      await this.recordOutcome(workspaceId, instance, step, gate, 'passed')
       return this.deps.recordStepResult(workspaceId, instance, step, isFinalStep, {
         output: probe.passOutput ?? `${gate.kind} gate passed.`,
       })
@@ -178,6 +186,7 @@ export class GateStepController {
     }
 
     // Budget spent (or no async executor to escalate to): give up.
+    await this.recordOutcome(workspaceId, instance, step, gate, 'exhausted')
     const { error } = await gate.onExhausted({
       workspaceId,
       instance,
@@ -186,5 +195,29 @@ export class GateStepController {
       summary: probe.failureSummary,
     })
     return { kind: 'job_failed', error }
+  }
+
+  /**
+   * Project the settled gate for the operator rollup. Recorded BEFORE the verdict is acted on
+   * (the advance, or the gate's exhaustion handler) so a gate whose hand-off then throws is
+   * still counted: the statistic is about what the gate DID, and a run that failed noisily
+   * afterwards is exactly the one an operator is looking for. Never throws: the recorder is
+   * best-effort internally, and an unwired one is a no-op.
+   */
+  private async recordOutcome(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    gate: GateDefinition,
+    outcome: 'passed' | 'exhausted',
+  ): Promise<void> {
+    await this.deps.recordGateOutcome?.({
+      workspaceId,
+      instance,
+      step,
+      stepIndex: instance.currentStep,
+      helperKind: gate.helperKind,
+      outcome,
+    })
   }
 }

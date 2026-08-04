@@ -313,6 +313,24 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // The preset editor's per-class stats (ONE aggregate for every class).
     rollupByClass: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The settled-gate projection is written BY THE ENGINE, on the run path, as each polling gate
+  // reaches a terminal verdict — the same shape as the merge track record above, and proxied for
+  // the same reason: a mothership-mode node runs the gates, so leaving this unproxied would make
+  // the gate/CI-fixer attempt statistics permanently empty for every mothership deployment while
+  // the dashboard section still rendered, which is the "an un-wired writer reads as zero" trap
+  // the projection exists to avoid in the first place.
+  //
+  // It is deliberately NOT in the local-first `telemetry` bucket: nothing reads it on the node
+  // (the dashboard read is admin-gated on the mothership), so a `node:sqlite` copy would be a
+  // write-only store whose rows the operator could never see.
+  //
+  // `record(row)` binds on the record's own `workspaceId` FIELD, so a row can only ever land in
+  // the caller's in-scope workspace. Member-level, matching the run path that produces it. The
+  // account-scoped `statsSince` read and the `deleteOlderThan` prune stay mothership-internal
+  // (admin-gated dashboard read; cron-owned prune).
+  gateOutcomeRepository: {
+    record: { scope: { kind: 'workspaceField', arg: 0 } },
+  },
   // Shared stacks are a workspace-scoped, member-level config library (like merge presets): the
   // Infrastructure panel lists/creates/edits/deletes them and the board-load snapshot reads them.
   // All four repository methods take the workspaceId as arg0 — proxied to the mothership like the

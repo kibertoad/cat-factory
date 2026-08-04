@@ -357,6 +357,18 @@ export const PLATFORM_METRIC = {
   liveRuns: 'cat_factory.platform.live_runs',
   /** Windowed wall-clock run duration (seconds), split by statistic (avg/min/max/pNN). */
   runDuration: 'cat_factory.platform.run_duration',
+  /**
+   * Windowed count of SETTLED polling gates, split by gate kind and how it settled
+   * (`passed` / `exhausted` / `clean`, the last being a pass that spun up no helper at all,
+   * which is a separate series precisely because it is the one the precheck-first design is
+   * supposed to maximise).
+   */
+  gates: 'cat_factory.platform.gates',
+  /**
+   * Windowed count of helper-agent dispatches those gates spent (the CI-fixer attempt count),
+   * split by gate kind and by whether the helper's own job succeeded or failed.
+   */
+  gateAttempts: 'cat_factory.platform.gate_attempts',
 } as const
 
 /**
@@ -372,10 +384,17 @@ export const PLATFORM_ATTR = {
   runState: 'cat_factory.run_state',
   failureKind: 'cat_factory.failure_kind',
   durationStat: 'cat_factory.duration_stat',
+  /** The gate step's agent kind (`ci` / `conflicts` / …): a registry key, so bounded. */
+  gateKind: 'cat_factory.gate_kind',
+  /** How a settled gate ended, or how a helper dispatch did. A closed vocabulary. */
+  gateOutcome: 'cat_factory.gate_outcome',
 } as const
 
 /** Metric units: a dimensionless run count, a dimensionless ratio, and seconds. */
 export const RUN_UNIT = '{run}'
+/** The unit of the settled-gate gauges (a gate, and a helper dispatch against one). */
+export const GATE_UNIT = '{gate}'
+export const GATE_ATTEMPT_UNIT = '{attempt}'
 export const RATIO_UNIT = '1'
 /** The unit of the operational queue-depth gauge (live, dead-lettered, or otherwise). */
 export const JOB_UNIT = '{job}'
@@ -487,6 +506,52 @@ export function mapPlatformMetrics(
     }))
   if (durationPoints.length > 0) {
     gauges.push({ name: PLATFORM_METRIC.runDuration, unit: DURATION_UNIT, points: durationPoints })
+  }
+
+  // Gate statistics. Emitted only when a gate actually settled in the window: an empty series
+  // and a zero are different facts, and only the absence states "nothing settled" honestly
+  // (the same rule the failure taxonomy above follows).
+  if (snapshot.gates.length > 0) {
+    gauges.push({
+      name: PLATFORM_METRIC.gates,
+      unit: GATE_UNIT,
+      points: snapshot.gates.flatMap((g) => {
+        const at = (outcome: string, value: number): MappedGaugePoint => ({
+          attributes: {
+            ...windowed,
+            [PLATFORM_ATTR.gateKind]: g.gateKind,
+            [PLATFORM_ATTR.gateOutcome]: outcome,
+          },
+          value,
+          isInt: true,
+        })
+        // `clean` is a SUBSET of `passed`, not a sibling: summing the three would double-count
+        // every precheck-clean gate. Kept as its own series anyway because "passed without
+        // spinning anything up" is the number the precheck-first design exists to move.
+        return [at('passed', g.passed), at('exhausted', g.exhausted), at('clean', g.cleanPasses)]
+      }),
+    })
+    gauges.push({
+      name: PLATFORM_METRIC.gateAttempts,
+      unit: GATE_ATTEMPT_UNIT,
+      points: snapshot.gates.flatMap((g) => {
+        const at = (outcome: string, value: number): MappedGaugePoint => ({
+          attributes: {
+            ...windowed,
+            [PLATFORM_ATTR.gateKind]: g.gateKind,
+            [PLATFORM_ATTR.gateOutcome]: outcome,
+          },
+          value,
+          isInt: true,
+        })
+        // Split so a fixer that keeps CRASHING is distinguishable from one that runs clean and
+        // still cannot get the build green: same attempt count, opposite fixes.
+        return [
+          at('helper_failed', g.helperFailures),
+          at('helper_completed', Math.max(0, g.attempts - g.helperFailures)),
+        ]
+      }),
+    })
   }
 
   return gauges

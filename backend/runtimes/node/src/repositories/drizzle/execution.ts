@@ -13,13 +13,18 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   ExecutionStatus,
+  GateOutcomeRecord,
+  GateOutcomeRepository,
   LiveRunSummary,
   Pipeline,
   PipelineRepository,
   PipelineSchedule,
   PipelineScheduleRepository,
+  PlatformDailyRunCount,
   PlatformDurationStats,
+  PlatformFailedRunRef,
   PlatformFailureCount,
+  PlatformGateOutcomeCount,
   PlatformLiveCounts,
   PlatformMetricsRepository,
   PlatformRunOutcome,
@@ -30,7 +35,8 @@ import type {
   ScheduleTemplate,
   StaleAgentRun,
 } from '@cat-factory/kernel'
-import { LIVE_EXECUTION_STATUSES } from '@cat-factory/kernel'
+import { LIVE_EXECUTION_STATUSES, RUN_DAYS_ROLLUP } from '@cat-factory/kernel'
+import { DAY_MS } from '@cat-factory/orchestration'
 import { agentRunKindSchema } from '@cat-factory/contracts'
 import type { ExecutionRow } from '@cat-factory/server'
 import {
@@ -43,14 +49,17 @@ import {
   serializeIssueIntakeColumn,
   tryDecodeRows,
 } from '@cat-factory/server'
-import { and, desc, eq, gte, inArray, lt, notInArray, or, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, lt, lte, notInArray, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   agentRuns,
   blocks,
+  gateOutcomes,
   pipelineScheduleRuns,
   pipelineSchedules,
   pipelines,
+  platformRollupState,
+  platformRunDays,
   workspaces,
 } from '../../db/schema.js'
 
@@ -770,6 +779,255 @@ export class DrizzlePlatformMetricsRepository implements PlatformMetricsReposito
       p90Ms: at(row?.p90Ms),
       p99Ms: at(row?.p99Ms),
     }
+  }
+
+  async rollupRunDays(fromEpochMs: number, toEpochMs: number): Promise<number> {
+    // The aggregation happens in Postgres and no run row is loaded. Bounds snap to day edges so
+    // a partially-covered day is never written with only the covered part's counts, which would
+    // then read as a complete day.
+    const from = Math.floor(fromEpochMs / DAY_MS) * DAY_MS
+    const to = Math.ceil(toEpochMs / DAY_MS) * DAY_MS
+    if (to <= from) return 0
+    // DELETE the window, then INSERT it: an upsert alone is NOT a rewrite. A run's `status`
+    // MUTATES in place (`running` → `done`) while its `created_at` stays put, so a pass that ran
+    // while the day was in flight wrote a `(day, 'running')` bucket that a later pass's SELECT
+    // no longer produces — `DO UPDATE` never touches a row the new result set omits, and the
+    // orphan then sits in the table until retention, inflating every long-window total and trend
+    // by every run that happened to be mid-flight at a sweep. The delete is what makes "rewritten
+    // in place" true rather than "corrected where it still overlaps".
+    //
+    // Both statements ride ONE transaction so a concurrent dashboard read never observes the
+    // window mid-rewrite (it would see an empty stretch and render it as an idle period). The
+    // `ON CONFLICT` is kept as a belt on top of the braces: the `GROUP BY` makes the incoming
+    // keys unique, so it can only fire against a pass racing this one.
+    return await this.db.transaction(async (tx) => {
+      await tx
+        .delete(platformRunDays)
+        .where(and(gte(platformRunDays.day_start, from), lt(platformRunDays.day_start, to)))
+      // `failure_kind` is '' for a non-failed status because it is in the primary key (see
+      // migration 0079 for why a nullable key column would not deduplicate).
+      const res = await tx.execute(sql`
+        INSERT INTO platform_run_days (workspace_id, day_start, status, failure_kind, run_count)
+        SELECT ${agentRuns.workspace_id},
+               (${agentRuns.created_at} / ${DAY_MS}::bigint) * ${DAY_MS}::bigint AS day_start,
+               ${agentRuns.status},
+               CASE WHEN ${agentRuns.status} = 'failed'
+                    THEN coalesce((${agentRuns.failure}::jsonb ->> 'kind'), 'unknown')
+                    ELSE '' END AS failure_kind,
+               count(*)::int AS run_count
+        FROM ${agentRuns}
+        WHERE ${agentRuns.created_at} >= ${from} AND ${agentRuns.created_at} < ${to}
+        GROUP BY 1, 2, 3, 4
+        ON CONFLICT (workspace_id, day_start, status, failure_kind)
+          DO UPDATE SET run_count = excluded.run_count
+      `)
+      // The sweep's coverage, recorded INSIDE the same transaction as the rewrite it describes,
+      // so the watermark can never claim a day the rows do not have. `through_day` is the last
+      // day the pass actually covered (`to` is the exclusive end) and only ever moves FORWARD:
+      // a pass recomputing an OLD window (a backfill, a replay) must not walk it backwards and
+      // make a current rollup read as behind. `updated_at` is the pass's own upper bound, which
+      // is the caller's `now` before it was snapped to a day edge.
+      await tx
+        .insert(platformRollupState)
+        .values({ rollup: RUN_DAYS_ROLLUP, through_day: to - DAY_MS, updated_at: toEpochMs })
+        .onConflictDoUpdate({
+          target: platformRollupState.rollup,
+          set: {
+            through_day: sql`greatest(${platformRollupState.through_day}, ${to - DAY_MS})`,
+            updated_at: sql`greatest(${platformRollupState.updated_at}, ${toEpochMs})`,
+          },
+        })
+      return Number(res.rowCount ?? 0)
+    })
+  }
+
+  async dailyRunTotalsSince(
+    accountId: string,
+    sinceEpochMs: number,
+  ): Promise<PlatformDailyRunCount[]> {
+    const rows = await this.db
+      .select({
+        dayStart: platformRunDays.day_start,
+        status: platformRunDays.status,
+        failureKind: platformRunDays.failure_kind,
+        count: sql<number>`sum(${platformRunDays.run_count})::int`,
+      })
+      .from(platformRunDays)
+      .where(
+        and(
+          inArray(
+            platformRunDays.workspace_id,
+            this.db
+              .select({ id: workspaces.id })
+              .from(workspaces)
+              .where(eq(workspaces.account_id, accountId)),
+          ),
+          // Snap to the day the window starts IN, so a window beginning mid-day still includes
+          // that day's bucket rather than dropping the oldest day entirely.
+          gte(platformRunDays.day_start, Math.floor(sinceEpochMs / DAY_MS) * DAY_MS),
+        ),
+      )
+      .groupBy(platformRunDays.day_start, platformRunDays.status, platformRunDays.failure_kind)
+      .orderBy(platformRunDays.day_start)
+    return rows.map((r) => ({
+      dayStart: Number(r.dayStart),
+      status: r.status,
+      failureKind: r.failureKind === '' ? null : r.failureKind,
+      count: Number(r.count),
+    }))
+  }
+
+  async dailyRollupWatermark(): Promise<number | null> {
+    const [row] = await this.db
+      .select({ throughDay: platformRollupState.through_day })
+      .from(platformRollupState)
+      .where(eq(platformRollupState.rollup, RUN_DAYS_ROLLUP))
+    return row?.throughDay != null ? Number(row.throughDay) : null
+  }
+
+  async deleteRunDaysOlderThan(cutoff: number): Promise<number> {
+    const rows = await this.db
+      .delete(platformRunDays)
+      .where(lt(platformRunDays.day_start, cutoff))
+      .returning({ dayStart: platformRunDays.day_start })
+    return rows.length
+  }
+
+  async recentFailedRuns(
+    accountId: string,
+    sinceEpochMs: number,
+    perWorkspaceLimit: number,
+  ): Promise<PlatformFailedRunRef[]> {
+    if (perWorkspaceLimit <= 0) return []
+    // Capped PER WORKSPACE by a window function rather than one global LIMIT: a card belongs to
+    // a single workspace, and a noisy neighbour must not starve another's card of its evidence.
+    // The partition COUNT rides along so the cap can state what it left out without a second
+    // query that could disagree with the sample it accompanies.
+    const ranked = this.db
+      .select({
+        workspaceId: agentRuns.workspace_id,
+        executionId: agentRuns.id,
+        blockId: agentRuns.block_id,
+        createdAt: agentRuns.created_at,
+        failureKind: sql<string>`coalesce((${agentRuns.failure}::jsonb ->> 'kind'), 'unknown')`.as(
+          'failure_kind',
+        ),
+        rn: sql<number>`row_number() over (partition by ${agentRuns.workspace_id}
+              order by ${agentRuns.created_at} desc, ${agentRuns.id} desc)`.as('rn'),
+        workspaceFailedTotal:
+          sql<number>`(count(*) over (partition by ${agentRuns.workspace_id}))::int`.as(
+            'workspace_failed_total',
+          ),
+      })
+      .from(agentRuns)
+      .where(
+        and(
+          this.accountScope(accountId),
+          gte(agentRuns.created_at, sinceEpochMs),
+          eq(agentRuns.status, 'failed'),
+          eq(agentRuns.kind, 'execution'),
+        ),
+      )
+      .as('ranked')
+    const rows = await this.db
+      .select({
+        workspaceId: ranked.workspaceId,
+        executionId: ranked.executionId,
+        blockId: ranked.blockId,
+        failureKind: ranked.failureKind,
+        createdAt: ranked.createdAt,
+        workspaceFailedTotal: ranked.workspaceFailedTotal,
+      })
+      .from(ranked)
+      .where(lte(ranked.rn, perWorkspaceLimit))
+      .orderBy(ranked.workspaceId, desc(ranked.createdAt))
+    return rows.map((r) => ({
+      workspaceId: r.workspaceId,
+      executionId: r.executionId,
+      blockId: r.blockId ?? null,
+      failureKind: r.failureKind,
+      createdAt: Number(r.createdAt),
+      workspaceFailedTotal: Number(r.workspaceFailedTotal),
+    }))
+  }
+}
+
+/**
+ * The settled-gate projection on Postgres: the engine's write and the ONE aggregate behind the
+ * dashboard's gate / CI-fixer attempt statistics. Mirrors `D1GateOutcomeRepository`; the
+ * cross-runtime conformance suite asserts the two agree.
+ */
+export class DrizzleGateOutcomeRepository implements GateOutcomeRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async record(row: GateOutcomeRecord): Promise<void> {
+    // FIRST WRITE WINS on the derived id: the durable drivers replay, and re-inserting a settle
+    // would inflate every count this table exists to report.
+    await this.db
+      .insert(gateOutcomes)
+      .values({
+        id: row.id,
+        workspace_id: row.workspaceId,
+        execution_id: row.executionId,
+        block_id: row.blockId,
+        gate_kind: row.gateKind,
+        helper_kind: row.helperKind,
+        outcome: row.outcome,
+        attempts: row.attempts,
+        max_attempts: row.maxAttempts,
+        helper_failures: row.helperFailures,
+        duration_ms: row.durationMs,
+        created_at: row.createdAt,
+      })
+      .onConflictDoNothing({ target: gateOutcomes.id })
+  }
+
+  async statsSince(accountId: string, sinceEpochMs: number): Promise<PlatformGateOutcomeCount[]> {
+    const gates = sql<number>`count(*)::int`
+    const rows = await this.db
+      .select({
+        gateKind: gateOutcomes.gate_kind,
+        helperKind: gateOutcomes.helper_kind,
+        outcome: gateOutcomes.outcome,
+        gates,
+        attempts: sql<number>`coalesce(sum(${gateOutcomes.attempts}), 0)::int`,
+        helperFailures: sql<number>`coalesce(sum(${gateOutcomes.helper_failures}), 0)::int`,
+        cleanGates: sql<number>`count(*) filter (where ${gateOutcomes.attempts} = 0)::int`,
+      })
+      .from(gateOutcomes)
+      .where(
+        and(
+          inArray(
+            gateOutcomes.workspace_id,
+            this.db
+              .select({ id: workspaces.id })
+              .from(workspaces)
+              .where(eq(workspaces.account_id, accountId)),
+          ),
+          gte(gateOutcomes.created_at, sinceEpochMs),
+        ),
+      )
+      .groupBy(gateOutcomes.gate_kind, gateOutcomes.helper_kind, gateOutcomes.outcome)
+      .orderBy(desc(sql`count(*)`))
+    return rows.map((r) => ({
+      gateKind: r.gateKind,
+      helperKind: r.helperKind ?? null,
+      // Guard the stored string into the port's union; anything unrecognised reads as the
+      // non-passing outcome rather than being dropped from the statistic entirely.
+      outcome: r.outcome === 'passed' ? ('passed' as const) : ('exhausted' as const),
+      gates: Number(r.gates),
+      attempts: Number(r.attempts),
+      helperFailures: Number(r.helperFailures),
+      cleanGates: Number(r.cleanGates),
+    }))
+  }
+
+  async deleteOlderThan(cutoff: number): Promise<number> {
+    const rows = await this.db
+      .delete(gateOutcomes)
+      .where(lt(gateOutcomes.created_at, cutoff))
+      .returning({ id: gateOutcomes.id })
+    return rows.length
   }
 }
 

@@ -7,8 +7,10 @@ import { D1AgentSearchQueryRepository } from '../../src/infrastructure/repositor
 import { D1CommitProjectionRepository } from '../../src/infrastructure/repositories/D1CommitProjectionRepository'
 import { D1AuthAttemptRepository } from '../../src/infrastructure/repositories/D1AuthAttemptRepository'
 import { D1LlmCallMetricRepository } from '../../src/infrastructure/repositories/D1LlmCallMetricRepository'
+import { D1GateOutcomeRepository } from '../../src/infrastructure/repositories/D1GateOutcomeRepository'
 import { D1MachineNodeRepository } from '../../src/infrastructure/repositories/D1MachineNodeRepository'
 import { D1NotificationRepository } from '../../src/infrastructure/repositories/D1NotificationRepository'
+import { D1PlatformMetricsRepository } from '../../src/infrastructure/repositories/D1PlatformMetricsRepository'
 import { D1RateLimitRepository } from '../../src/infrastructure/repositories/D1RateLimitRepository'
 import { D1SubscriptionQuotaCycleRepository } from '../../src/infrastructure/repositories/D1SubscriptionQuotaCycleRepository'
 import { D1TokenUsageRepository } from '../../src/infrastructure/repositories/D1TokenUsageRepository'
@@ -30,6 +32,8 @@ const POLICY = {
   llmCallMetricsMs: 3 * DAY,
   provisioningLogMs: 14 * DAY,
   notificationsMs: 90 * DAY,
+  gateOutcomesMs: 90 * DAY,
+  runDaysMs: 400 * DAY,
 }
 
 function deps() {
@@ -54,6 +58,9 @@ function deps() {
       idGenerator: new CryptoIdGenerator(),
     }),
     notificationRepository: new D1NotificationRepository({ db }),
+    // Both operator-observability projections live in the main DB beside `agent_runs`.
+    gateOutcomeRepository: new D1GateOutcomeRepository({ db }),
+    platformMetricsRepository: new D1PlatformMetricsRepository({ db }),
     clock,
     policy: POLICY,
   }
@@ -254,6 +261,8 @@ describe('storage retention sweep', () => {
         llmCallMetricsMs: 0,
         provisioningLogMs: 0,
         notificationsMs: 0,
+        gateOutcomesMs: 0,
+        runDaysMs: 0,
       },
     })
 
@@ -275,6 +284,11 @@ describe('storage retention sweep', () => {
       // Auth attempts prune on a FIXED 1-hour window, not the policy; none seeded here.
       authAttempts: 0,
       notifications: 0,
+      gateOutcomes: 0,
+      runDays: 0,
+      // The rollup is a WRITE with every window disabled around it, so it still runs: a
+      // disabled RETENTION window means "never delete", not "stop materialising".
+      runDaysRolledUp: expect.any(Number),
       // A clean pass names no failed table. This list is what distinguishes a prune that
       // reclaimed nothing from one that could not run — both report 0 rows.
       failedTables: [],

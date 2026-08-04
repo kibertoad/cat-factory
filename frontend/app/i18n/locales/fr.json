@@ -1567,7 +1567,9 @@
     "window": {
       "oneHour": "Dernière heure",
       "oneDay": "Dernières 24 heures",
-      "sevenDays": "7 derniers jours"
+      "sevenDays": "7 derniers jours",
+      "thirtyDays": "30 derniers jours",
+      "ninetyDays": "90 derniers jours"
     },
     "outcomes": {
       "title": "Résultats des exécutions",
@@ -1617,6 +1619,22 @@
     },
     "live": {
       "title": "En direct"
+    },
+    "rollup": {
+      "none": "L'agrégation quotidienne n'a encore rien produit : cette fenêtre est vide faute de données, pas faute d'exécutions.",
+      "stale": "L'agrégation quotidienne ne va que jusqu'au {date}. Ce qui suit correspond à des données manquantes, pas à une période calme.",
+      "current": "Issu de l'agrégation quotidienne, complète jusqu'au {date}."
+    },
+    "gates": {
+      "title": "Tentatives des portes",
+      "empty": "Aucune porte ne s'est conclue dans cette fenêtre.",
+      "gate": "Porte",
+      "settled": "Conclues",
+      "cleanPasses": "Réussies sans réparateur",
+      "attempts": "Tentatives du réparateur",
+      "helperFailures": "Échecs du réparateur",
+      "exhausted": "Confiées à une personne",
+      "hint": "Réussie sans réparateur veut dire que la vérification préalable a suffi et qu'aucun réparateur n'a été lancé. Les échecs du réparateur sont les tentatives dont le travail lui-même a planté, par opposition à celles qui se sont exécutées en laissant la vérification au rouge."
     }
   },
   "reports": {
@@ -1968,7 +1986,10 @@
         "dismissed": "Ignoré",
         "actFailed": "Impossible de terminer cette action",
         "dismissFailed": "Impossible d'ignorer"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} de plus non affichées",
+      "failingRunGone": "Cette exécution n'est plus chargée et n'a aucune tâche à ouvrir."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3364,6 +3385,48 @@
       "offHint": "Non défini : chaque tableau décide pour lui-même. Les tableaux existants conservent leur choix.",
       "saved": "Politique d’identifiants d’exécution enregistrée",
       "saveFailed": "Impossible d’enregistrer la politique d’identifiants d’exécution"
+    },
+    "platformAlerts": {
+      "title": "Alertes de santé de la plateforme",
+      "description": "Plafonds auxquels la santé des exécutions de ce compte est comparée. Les champs vides héritent des valeurs du déploiement.",
+      "muteLabel": "Couper les alertes pour ce compte",
+      "muteHint": "Ici, les alertes ne peuvent qu'être coupées. Le fait que le balayage tourne relève du déploiement.",
+      "windowLabel": "Fenêtre d'évaluation",
+      "windowHint": "Jusqu'où chaque condition regarde en arrière. Une fenêtre plus longue réagit plus lentement et alerte moins.",
+      "thresholdsLabel": "Seuils",
+      "inheritHint": "Laissez un champ vide pour hériter de la valeur du déploiement. Un zéro est un réglage réel, pas un champ vide.",
+      "inheritPlaceholder": "Hérité",
+      "reset": "Effacer les surcharges",
+      "saved": "Réglages d'alerte enregistrés",
+      "saveFailed": "Impossible d'enregistrer les réglages d'alerte",
+      "window": {
+        "inherit": "Valeur du déploiement",
+        "oneHour": "Dernière heure",
+        "oneDay": "Dernières 24 heures",
+        "sevenDays": "7 derniers jours"
+      },
+      "thresholds": {
+        "minRuns": "Exécutions minimales",
+        "maxFailureRate": "Plafond du taux d'échec",
+        "maxP99DurationMs": "Plafond de durée p99 (minutes)",
+        "maxBacklog": "Plafond de l'encours",
+        "stalledBuckets": "Intervalles vides avant un arrêt",
+        "minStalledPriorRuns": "Exécutions avant de compter un arrêt",
+        "maxFailureKindShare": "Part de la cause dominante",
+        "maxSweepFailures": "Échecs consécutifs du balayage"
+      },
+      "hints": {
+        "minRuns": "Exécutions terminées que la fenêtre doit compter avant que les alertes d'échec puissent se déclencher.",
+        "maxFailureRate": "Part des exécutions autorisées à échouer, de 0 à 1.",
+        "maxP99DurationMs": "Durée maximale des exécutions les plus lentes.",
+        "maxBacklog": "Exécutions inachevées pouvant être en cours en même temps.",
+        "stalledBuckets": "Intervalles vides en fin de tendance comptant comme un arrêt.",
+        "minStalledPriorRuns": "Exécutions que la première partie de la fenêtre doit avoir portées. Zéro alerte au moindre silence.",
+        "maxFailureKindShare": "Part des échecs qu'une seule cause peut représenter, au-dessus de 0 et jusqu'à 1.",
+        "maxSweepFailures": "Passages consécutifs en échec d'un balayage en arrière-plan."
+      },
+      "notLoaded": "Les paramètres actuels de ce compte n'ont pas pu être chargés ; enregistrer écraserait les autres. Rechargez avant de modifier.",
+      "invalidNumbers": "Ces plafonds ne sont pas des nombres"
     }
   },
   "providers": {

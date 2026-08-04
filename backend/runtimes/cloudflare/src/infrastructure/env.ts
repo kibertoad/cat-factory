@@ -674,6 +674,10 @@ export interface Env {
    * Default 90. 0 disables pruning.
    */
   NOTIFICATION_RETENTION_DAYS?: string
+  /** Settled-gate projection (`gate_outcomes`) retention, in days. Default 90; 0 disables. */
+  GATE_OUTCOME_RETENTION_DAYS?: string
+  /** Daily run rollup (`platform_run_days`) retention, in days. Default 400; 0 disables. */
+  PLATFORM_RUN_DAY_RETENTION_DAYS?: string
 }
 
 /**

@@ -608,6 +608,16 @@ function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
       env.NOTIFICATION_RETENTION_DAYS,
       90,
     ),
+    // Settled-gate projection behind the dashboard's attempt statistics; one row per gate,
+    // so a generous 90 days costs little and covers the longest dashboard window.
+    gateOutcomesMs: retentionMs('GATE_OUTCOME_RETENTION_DAYS', env.GATE_OUTCOME_RETENTION_DAYS, 90),
+    // The daily run rollup exists to answer questions the raw scan is too expensive for, so
+    // it is kept the longest of all (~13 months): a rolled-up day is a handful of tiny rows.
+    runDaysMs: retentionMs(
+      'PLATFORM_RUN_DAY_RETENTION_DAYS',
+      env.PLATFORM_RUN_DAY_RETENTION_DAYS,
+      400,
+    ),
   }
 }
 

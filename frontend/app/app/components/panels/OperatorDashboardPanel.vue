@@ -25,6 +25,8 @@ const WINDOWS: { value: PlatformObservabilityWindow; label: string }[] = [
   { value: '1h', label: t('platformObservability.window.oneHour') },
   { value: '24h', label: t('platformObservability.window.oneDay') },
   { value: '7d', label: t('platformObservability.window.sevenDays') },
+  { value: '30d', label: t('platformObservability.window.thirtyDays') },
+  { value: '90d', label: t('platformObservability.window.ninetyDays') },
 ]
 
 // Exhaustive enum→label map (tier-2 dynamic-key guard): a new AgentFailureKind fails the
@@ -48,6 +50,21 @@ function failureLabel(kind: string): string {
   return key ? t(key) : kind
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// How the window was answered. A rollup-backed window that has materialised NOTHING must not
+// render as a quiet quarter, and one whose watermark is well behind `now` must not render its
+// empty tail as idleness, so the banner distinguishes "no rollup yet", "the rollup is behind"
+// and "up to date" rather than leaving all three to look like data.
+const rollupState = computed<'none' | 'stale' | 'current' | null>(() => {
+  const v = view.value
+  if (!v || v.source !== 'daily-rollup') return null
+  if (v.rolledUpThrough == null) return 'none'
+  // A day of slack: the sweep materialises the CURRENT day, so being one bucket behind is the
+  // normal state between passes rather than a gap worth flagging.
+  return v.generatedAt - v.rolledUpThrough > 2 * DAY_MS ? 'stale' : 'current'
+})
+
 // The largest failure count, so each taxonomy bar is drawn relative to the leader.
 const maxFailure = computed(() => Math.max(1, ...(view.value?.failures ?? []).map((f) => f.count)))
 // The largest total in any trend bucket, so each stacked column scales to the tallest.
@@ -57,6 +74,13 @@ const maxTrend = computed(() =>
 
 function barPct(count: number, max: number): number {
   return Math.round((count / max) * 100)
+}
+
+// Share of a gate kind's runs the precheck satisfied outright, 0..1: the number the
+// precheck-before-escalate design exists to move. Null (not 0) when nothing settled, because
+// "no gates ran" is not "every gate needed a fixer".
+function cleanRate(stat: { gates: number; cleanPasses: number }): number | null {
+  return stat.gates > 0 ? stat.cleanPasses / stat.gates : null
 }
 function heightPct(count: number, max: number): number {
   // Floor a non-zero column to 4% so a single run is still visible in the sparkline.
@@ -170,6 +194,41 @@ watch(
           </div>
 
           <div v-else-if="view" class="mx-auto flex max-w-5xl flex-col gap-6">
+            <!--
+              Rollup provenance. An un-materialised rollup and an idle quarter produce the same
+              empty series, so the long windows say which one this is instead of showing
+              confident zeros.
+            -->
+            <p
+              v-if="rollupState === 'none'"
+              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              data-testid="operator-rollup-missing"
+            >
+              {{ t('platformObservability.rollup.none') }}
+            </p>
+            <p
+              v-else-if="rollupState === 'stale'"
+              class="rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-xs text-amber-200"
+              data-testid="operator-rollup-stale"
+            >
+              {{
+                t('platformObservability.rollup.stale', {
+                  date: d(new Date(view.rolledUpThrough ?? 0), 'short'),
+                })
+              }}
+            </p>
+            <p
+              v-else-if="rollupState === 'current'"
+              class="text-xs text-slate-500"
+              data-testid="operator-rollup-current"
+            >
+              {{
+                t('platformObservability.rollup.current', {
+                  date: d(new Date(view.rolledUpThrough ?? 0), 'short'),
+                })
+              }}
+            </p>
+
             <!-- Outcome summary tiles -->
             <section>
               <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -268,6 +327,77 @@ watch(
                     }}</span
                   >
                 </div>
+              </div>
+            </section>
+
+            <!-- Gate / CI-fixer attempt statistics -->
+            <section>
+              <h2 class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {{ t('platformObservability.gates.title') }}
+              </h2>
+              <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+                <p v-if="!view.gates.length" class="py-4 text-center text-xs text-slate-500">
+                  {{ t('platformObservability.gates.empty') }}
+                </p>
+                <table v-else class="w-full text-left text-xs" data-testid="operator-gates">
+                  <thead class="text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th class="pb-2 pe-3 font-medium">
+                        {{ t('platformObservability.gates.gate') }}
+                      </th>
+                      <th class="pb-2 pe-3 text-end font-medium">
+                        {{ t('platformObservability.gates.settled') }}
+                      </th>
+                      <th class="pb-2 pe-3 text-end font-medium">
+                        {{ t('platformObservability.gates.cleanPasses') }}
+                      </th>
+                      <th class="pb-2 pe-3 text-end font-medium">
+                        {{ t('platformObservability.gates.attempts') }}
+                      </th>
+                      <th class="pb-2 pe-3 text-end font-medium">
+                        {{ t('platformObservability.gates.helperFailures') }}
+                      </th>
+                      <th class="pb-2 text-end font-medium">
+                        {{ t('platformObservability.gates.exhausted') }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="text-slate-300">
+                    <tr
+                      v-for="g in view.gates"
+                      :key="g.gateKind"
+                      class="border-t border-slate-800/70"
+                    >
+                      <td class="py-2 pe-3">
+                        <span class="font-medium text-slate-200">{{ g.gateKind }}</span>
+                        <span v-if="g.helperKind" class="ms-1.5 text-slate-500"
+                          >&rarr; {{ g.helperKind }}</span
+                        >
+                      </td>
+                      <td class="py-2 pe-3 text-end tabular-nums">{{ g.gates }}</td>
+                      <td class="py-2 pe-3 text-end tabular-nums">
+                        <span class="text-emerald-400">{{ g.cleanPasses }}</span>
+                        <span v-if="cleanRate(g) !== null" class="ms-1 text-slate-500"
+                          >({{ n(cleanRate(g) ?? 0, 'percent') }})</span
+                        >
+                      </td>
+                      <td class="py-2 pe-3 text-end tabular-nums">{{ g.attempts }}</td>
+                      <td class="py-2 pe-3 text-end tabular-nums">
+                        <span :class="g.helperFailures > 0 ? 'text-amber-400' : ''">{{
+                          g.helperFailures
+                        }}</span>
+                      </td>
+                      <td class="py-2 text-end tabular-nums">
+                        <span :class="g.exhausted > 0 ? 'text-rose-400' : ''">{{
+                          g.exhausted
+                        }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p class="mt-3 text-[11px] leading-relaxed text-slate-500">
+                  {{ t('platformObservability.gates.hint') }}
+                </p>
               </div>
             </section>
 

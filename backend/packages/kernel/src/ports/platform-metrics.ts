@@ -64,6 +64,43 @@ export interface PlatformDurationStats {
   p99Ms: number | null
 }
 
+/**
+ * One `(day, status, failureKind)` bucket of the DAILY ROLLUP table: the pre-aggregated
+ * counterpart of {@link PlatformRunOutcome} + {@link PlatformRunTrendPoint} +
+ * {@link PlatformFailureCount}, which is why a single row shape serves all three folds.
+ */
+export interface PlatformDailyRunCount {
+  /** UTC-midnight epoch-ms start of the day. */
+  dayStart: number
+  status: string
+  /** The `failure.kind` for a `failed` row (`unknown` when absent); null for every other status. */
+  failureKind: string | null
+  count: number
+}
+
+/** One failed run behind an alert, for the notification card's deep-link. */
+export interface PlatformFailedRunRef {
+  workspaceId: string
+  executionId: string
+  blockId: string | null
+  failureKind: string
+  createdAt: number
+  /**
+   * How many runs failed in that WORKSPACE's window in total: the denominator the capped
+   * sample is a sample OF. Carried on each row (a window function over the same partition)
+   * rather than fetched separately, so the cap can state what it dropped without a second
+   * query, and so the total can never disagree with the sample it accompanies.
+   */
+  workspaceFailedTotal: number
+}
+
+/**
+ * The `platform_rollup_state.rollup` key the daily run rollup records its coverage under. One
+ * constant so the two facades cannot write and read different keys, which would present a
+ * perfectly healthy sweep as one that has never run.
+ */
+export const RUN_DAYS_ROLLUP = 'run_days'
+
 export interface PlatformMetricsRepository {
   /**
    * Runs CREATED at or after `sinceEpochMs`, grouped by `(kind, status)`, for the
@@ -96,4 +133,54 @@ export interface PlatformMetricsRepository {
    * aggregate query (never a second scan to add the percentiles).
    */
   durationStatsSince(accountId: string, sinceEpochMs: number): Promise<PlatformDurationStats>
+  /**
+   * Materialise the DAILY ROLLUP for every day overlapping `[fromEpochMs, toEpochMs)`, as one
+   * `INSERT … SELECT … GROUP BY` per runtime, never a read-into-JS-and-write-back. Returns
+   * the number of rolled-up buckets written.
+   *
+   * IDEMPOTENT by construction: each day is recomputed from `agent_runs` and REPLACES the
+   * stored bucket, so re-running the window is free, a sweep that missed passes self-heals by
+   * widening nothing, and the current (still-accruing) day is corrected on every pass rather
+   * than frozen at whatever it held when it was first written. That is also why the rollup
+   * cannot be an append: a day's counts are not final until the day is over, and the
+   * "published values must be final" rule applies to a bucket the reader treats as complete.
+   */
+  rollupRunDays(fromEpochMs: number, toEpochMs: number): Promise<number>
+  /**
+   * The account's rolled-up daily buckets at or after `sinceEpochMs`: the long-window
+   * (`30d`/`90d`) source for the outcome totals, the trend AND the failure taxonomy, all of
+   * which fold from this one read.
+   */
+  dailyRunTotalsSince(accountId: string, sinceEpochMs: number): Promise<PlatformDailyRunCount[]>
+  /**
+   * The newest day the rollup SWEEP has covered (epoch ms, UTC midnight), or null when no pass
+   * has ever completed.
+   *
+   * Read from the sweep's own recorded coverage, NOT `max(dayStart)` over the rows above, and
+   * DEPLOYMENT-scoped rather than per account. Both of those are the same point: the question is
+   * about the SWEEP and the rows are about the RUNS. An account idle for a fortnight and a
+   * wedged pass produce the same newest row; an account created yesterday and a rollup that has
+   * never run produce the same absence. Deriving the watermark from data therefore answers a
+   * different question than the one the dashboard asks, and answers it in a way that reads as
+   * confident. The pass records what it covered, so null means "no pass has run" and a value
+   * means "covered through here" whether or not anything happened in between.
+   */
+  dailyRollupWatermark(): Promise<number | null>
+  /** Prune rolled-up daily buckets older than `cutoff` (epoch ms). Returns rows removed. */
+  deleteRunDaysOlderThan(cutoff: number): Promise<number>
+  /**
+   * The most recent FAILED execution runs in the window, at most `perWorkspaceLimit` per
+   * workspace, for the account: the evidence a `platform_health` card deep-links to.
+   *
+   * Capped PER WORKSPACE by a window function rather than by one global `LIMIT`, so a single
+   * noisy workspace cannot starve every other one's card of its own evidence, and each row
+   * carries its workspace's full failed count so the cap can report what it left out. Scoped
+   * to `execution` runs because those are the ones a card can open; a bootstrap failure has
+   * no run window to link to, and a link that lands nowhere is worse than no link.
+   */
+  recentFailedRuns(
+    accountId: string,
+    sinceEpochMs: number,
+    perWorkspaceLimit: number,
+  ): Promise<PlatformFailedRunRef[]>
 }

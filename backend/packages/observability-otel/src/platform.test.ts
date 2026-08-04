@@ -76,6 +76,9 @@ function snapshot(overrides: Partial<PlatformObservability> = {}): PlatformObser
       other: 0,
       successRate: 0.75,
     },
+    source: 'runs',
+    rolledUpThrough: null,
+    gates: [],
     trend: { bucketMs: 300_000, points: [] },
     failures: [
       { kind: 'agent', count: 1 },

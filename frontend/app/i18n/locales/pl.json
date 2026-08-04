@@ -1567,7 +1567,9 @@
     "window": {
       "oneHour": "Ostatnia godzina",
       "oneDay": "Ostatnie 24 godziny",
-      "sevenDays": "Ostatnie 7 dni"
+      "sevenDays": "Ostatnie 7 dni",
+      "thirtyDays": "Ostatnie 30 dni",
+      "ninetyDays": "Ostatnie 90 dni"
     },
     "outcomes": {
       "title": "Wyniki uruchomień",
@@ -1617,6 +1619,22 @@
     },
     "live": {
       "title": "Aktywne teraz"
+    },
+    "rollup": {
+      "none": "Dzienne zestawienie nie wyprodukowało jeszcze niczego, więc to okno jest puste z braku danych, a nie z braku uruchomień.",
+      "stale": "Dzienne zestawienie sięga tylko do {date}. To, co po tej dacie, to brakujące dane, a nie cisza.",
+      "current": "Z dziennego zestawienia, kompletnego do {date}."
+    },
+    "gates": {
+      "title": "Próby bramek",
+      "empty": "W tym oknie żadna bramka nie została rozstrzygnięta.",
+      "gate": "Bramka",
+      "settled": "Rozstrzygnięte",
+      "cleanPasses": "Zaliczone bez naprawiacza",
+      "attempts": "Próby naprawiacza",
+      "helperFailures": "Awarie naprawiacza",
+      "exhausted": "Przekazane człowiekowi",
+      "hint": "Zaliczenie bez naprawiacza oznacza, że wystarczyło wstępne sprawdzenie i naprawiacz w ogóle nie wystartował. Awarie naprawiacza to próby, w których padło samo zadanie, w odróżnieniu od prób, które się wykonały i zostawiły sprawdzenie na czerwono."
     }
   },
   "reports": {
@@ -1968,7 +1986,10 @@
         "dismissed": "Odrzucono",
         "actFailed": "Nie udało się wykonać tej akcji",
         "dismissFailed": "Nie udało się odrzucić"
-      }
+      },
+      "failingRun": "{kind} · {at}",
+      "failingRunsMore": "{count} więcej niepokazanych",
+      "failingRunGone": "To uruchomienie nie jest już wczytane i nie ma zadania do otwarcia."
     },
     "aiProvidersBanner": {
       "setup": {
@@ -3364,6 +3385,48 @@
       "offHint": "Nie ustawiono: każda tablica decyduje sama. Istniejące tablice zachowują swój wybór.",
       "saved": "Zapisano zasady poświadczeń uruchomień",
       "saveFailed": "Nie udało się zapisać zasad poświadczeń uruchomień"
+    },
+    "platformAlerts": {
+      "title": "Alerty o kondycji platformy",
+      "description": "Progi, z którymi porównywana jest kondycja uruchomień tego konta. Puste pola dziedziczą wartości domyślne wdrożenia.",
+      "muteLabel": "Wycisz alerty dla tego konta",
+      "muteHint": "Tutaj alerty można tylko wyłączyć. To, czy przebieg kontrolny w ogóle działa, jest ustawieniem wdrożenia.",
+      "windowLabel": "Okno oceny",
+      "windowHint": "Jak daleko wstecz patrzy każdy warunek. Dłuższe okno reaguje wolniej i odzywa się rzadziej.",
+      "thresholdsLabel": "Progi",
+      "inheritHint": "Zostaw pole puste, aby odziedziczyć wartość domyślną wdrożenia. Zero to prawdziwe ustawienie, a nie puste pole.",
+      "inheritPlaceholder": "Odziedziczone",
+      "reset": "Wyczyść nadpisania",
+      "saved": "Zapisano ustawienia alertów",
+      "saveFailed": "Nie udało się zapisać ustawień alertów",
+      "window": {
+        "inherit": "Wartość domyślna wdrożenia",
+        "oneHour": "Ostatnia godzina",
+        "oneDay": "Ostatnie 24 godziny",
+        "sevenDays": "Ostatnie 7 dni"
+      },
+      "thresholds": {
+        "minRuns": "Minimalna liczba uruchomień",
+        "maxFailureRate": "Górna granica odsetka awarii",
+        "maxP99DurationMs": "Górna granica czasu p99 (minuty)",
+        "maxBacklog": "Górna granica zaległości",
+        "stalledBuckets": "Puste przedziały przed uznaniem zastoju",
+        "minStalledPriorRuns": "Uruchomienia, zanim zastój się liczy",
+        "maxFailureKindShare": "Udział dominującej przyczyny",
+        "maxSweepFailures": "Awarie przebiegu pod rząd"
+      },
+      "hints": {
+        "minRuns": "Zakończone uruchomienia, których okno potrzebuje, zanim alerty o awariach mogą się odezwać.",
+        "maxFailureRate": "Udział uruchomień, które mogą zawieść, od 0 do 1.",
+        "maxP99DurationMs": "Jak długo mogą trwać najwolniejsze uruchomienia.",
+        "maxBacklog": "Niedokończone uruchomienia, które mogą być w toku jednocześnie.",
+        "stalledBuckets": "Końcowe puste przedziały trendu liczone jako zastój.",
+        "minStalledPriorRuns": "Uruchomienia, które musiała nieść wcześniejsza część okna. Zero alarmuje przy każdej ciszy.",
+        "maxFailureKindShare": "Udział awarii, jaki może przypaść jednej przyczynie, powyżej 0 i do 1.",
+        "maxSweepFailures": "Kolejne nieudane przebiegi jednego zadania w tle."
+      },
+      "notLoaded": "Nie udało się wczytać bieżących ustawień tego konta, więc zapis nadpisałby pozostałe. Odśwież przed edycją.",
+      "invalidNumbers": "Te limity nie są liczbami"
     }
   },
   "providers": {

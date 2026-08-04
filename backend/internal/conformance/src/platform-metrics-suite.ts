@@ -1,5 +1,6 @@
 import type { PlatformMetricsRepository } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defineRunDayAndFailureCases } from './platform-rollup-suite.js'
 
 // Cross-runtime parity for the deployment-level (platform-operator) rollups over
 // `agent_runs`. Each facade aggregates in its own SQL dialect (D1/SQLite vs
@@ -25,7 +26,15 @@ export interface PlatformMetricsSeedRun {
 export interface PlatformMetricsSeed {
   /** Insert a workspace owned by `accountId` (idempotent per id). */
   workspace(id: string, accountId: string): Promise<void>
-  /** Insert one `agent_runs` row. */
+  /**
+   * Insert one `agent_runs` row, or UPDATE it in place when `(workspaceId, id)` already exists.
+   *
+   * Upsert rather than insert because a run's `status` genuinely mutates over its lifetime while
+   * its `created_at` stays put (`running` → `done`/`failed`), and the daily rollup has to survive
+   * exactly that. A seed that could only ever insert could not express the transition, which is
+   * why the rollup shipped counting a settled run twice: once under the status it was rolled up
+   * with mid-flight, once under the one it ended on.
+   */
   run(row: PlatformMetricsSeedRun): Promise<void>
 }
 
@@ -380,5 +389,7 @@ export function definePlatformMetricsSuite(
       expect(byBucket.get('2000/done')).toBe(2)
       expect(byBucket.get('4000/failed')).toBe(1)
     })
+
+    defineRunDayAndFailureCases(makeRepo, makeSeed, ids)
   })
 }

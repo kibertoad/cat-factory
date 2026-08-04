@@ -22,6 +22,8 @@ import org.jspecify.annotations.Nullable;
  * @param onCallAssessment May be absent entirely.
  * @param pipelineName May be absent entirely.
  * @param platformAlerts May be absent entirely.
+ * @param platformFailedTotal May be absent entirely.
+ * @param platformFailingRuns May be absent entirely.
  * @param platformWindow May be absent entirely.
  * @param prUrl May be absent entirely.
  * @param releaseSignals May be absent entirely.
@@ -65,6 +67,12 @@ public record NotificationPayload(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformAlerts") @Nullable List<NotificationPayloadPlatformAlert> platformAlerts,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformFailedTotal") @Nullable Double platformFailedTotal,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformFailingRuns") @Nullable List<NotificationPayloadPlatformFailingRun> platformFailingRuns,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("platformWindow") @Nullable NotificationPayloadPlatformWindow platformWindow,
@@ -114,6 +122,8 @@ public record NotificationPayload(
         private @Nullable NotificationPayloadOnCallAssessment onCallAssessment;
         private @Nullable String pipelineName;
         private @Nullable List<NotificationPayloadPlatformAlert> platformAlerts;
+        private @Nullable Double platformFailedTotal;
+        private @Nullable List<NotificationPayloadPlatformFailingRun> platformFailingRuns;
         private @Nullable NotificationPayloadPlatformWindow platformWindow;
         private @Nullable String prUrl;
         private @Nullable List<NotificationPayloadReleaseSignal> releaseSignals;
@@ -189,6 +199,18 @@ public record NotificationPayload(
             return this;
         }
 
+        /** Set {@code platformFailedTotal}. */
+        public Builder platformFailedTotal(@Nullable Double platformFailedTotal) {
+            this.platformFailedTotal = platformFailedTotal;
+            return this;
+        }
+
+        /** Set {@code platformFailingRuns}. */
+        public Builder platformFailingRuns(@Nullable List<NotificationPayloadPlatformFailingRun> platformFailingRuns) {
+            this.platformFailingRuns = platformFailingRuns;
+            return this;
+        }
+
         /** Set {@code platformWindow}. */
         public Builder platformWindow(@Nullable NotificationPayloadPlatformWindow platformWindow) {
             this.platformWindow = platformWindow;
@@ -239,7 +261,7 @@ public record NotificationPayload(
 
         /** Build the {@link NotificationPayload}. */
         public NotificationPayload build() {
-            return new NotificationPayload(assessment, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlerts, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
+            return new NotificationPayload(assessment, changeClass, driftAffected, findingCount, forkCount, initiativeReason, mergeTrackRecordId, mergedRepos, onCallAssessment, pipelineName, platformAlerts, platformFailedTotal, platformFailingRuns, platformWindow, prUrl, releaseSignals, revertUrl, sliceCount, targetUserId, unmergedRepos, unreachableAreas);
         }
     }
 }

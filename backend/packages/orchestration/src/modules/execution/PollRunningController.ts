@@ -32,6 +32,7 @@ import type { AdvanceResult } from './advance.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { DeployerStepController } from './DeployerStepController.js'
 import type { FollowUpGateController } from './FollowUpGateController.js'
+import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 
 /**
  * Collaborators + bound call-backs the {@link PollRunningController} needs. The three
@@ -46,6 +47,13 @@ export interface PollRunningControllerDeps {
   followUpGate: FollowUpGateController
   runInitiatorScope: RunInitiatorScope
   gateFor: (agentKind: string) => GateDefinition | undefined
+  /**
+   * Record a gate's terminal verdict into the `gate_outcomes` projection, for the ONE gate path
+   * that settles here rather than in {@link GateStepController}: an investigate-don't-fix helper
+   * finishing (`post-release-health` → `on-call`). Optional so a facade or test without the sink
+   * runs unchanged; an unwired projection costs a dashboard row, never a run.
+   */
+  recordGateOutcome?: (settled: SettledGate) => Promise<void>
   recordStepResult: (
     workspaceId: string,
     instance: ExecutionInstance,
@@ -153,6 +161,20 @@ export class PollRunningController {
         block,
         step,
         result: jobResult,
+      })
+      // This is a TERMINAL gate verdict, so it joins the operator projection like the ones the
+      // precheck machine settles. Recorded as `exhausted`: the gate ended without the precheck
+      // going green and a human owns the outcome out-of-band (`on-call` raises
+      // `release_regression` and never reverts), which is the distinction that bucket carries.
+      // Recorded BEFORE the hand-off for the same reason `GateStepController` does it: a gate
+      // whose resolution then throws is exactly the one an operator is looking for.
+      await this.deps.recordGateOutcome?.({
+        workspaceId,
+        instance,
+        step,
+        stepIndex: instance.currentStep,
+        helperKind: completionGate.helperKind,
+        outcome: 'exhausted',
       })
       // Preserve the done-result's fields (usage metering etc.) while recording the gate's
       // resolved output; a failed investigation has no result to carry.

@@ -29,7 +29,9 @@ import { D1SubscriptionQuotaCycleRepository } from './infrastructure/repositorie
 import { D1AuthAttemptRepository } from './infrastructure/repositories/D1AuthAttemptRepository'
 import { D1MachineNodeRepository } from './infrastructure/repositories/D1MachineNodeRepository'
 import { D1PasswordResetTokenRepository } from './infrastructure/repositories/D1PasswordResetTokenRepository'
+import { D1GateOutcomeRepository } from './infrastructure/repositories/D1GateOutcomeRepository'
 import { D1NotificationRepository } from './infrastructure/repositories/D1NotificationRepository'
+import { D1PlatformMetricsRepository } from './infrastructure/repositories/D1PlatformMetricsRepository'
 import { buildContainer, buildCloudflareArtifactStoreResolver } from './infrastructure/container'
 import {
   GITHUB_RECONCILE_STALE_MS,
@@ -339,6 +341,10 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
         idGenerator: new CryptoIdGenerator(),
       }),
       notificationRepository: new D1NotificationRepository({ db: env.DB }),
+      // Both operator-observability projections live in the main DB beside `agent_runs`
+      // (they are account-scoped through the same `workspaces` sub-select).
+      gateOutcomeRepository: new D1GateOutcomeRepository({ db: env.DB }),
+      platformMetricsRepository: new D1PlatformMetricsRepository({ db: env.DB }),
       // Prune the separate provisioning-log database when its binding is present.
       ...(env.PROVISIONING_DB
         ? {

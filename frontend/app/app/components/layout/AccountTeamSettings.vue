@@ -5,6 +5,7 @@ import type { AccountRole } from '~/types/domain'
 import type { InvitationStatus } from '@cat-factory/contracts'
 import AccountDeploymentSettings from '~/components/layout/AccountDeploymentSettings.vue'
 import AccountModelPolicySettings from '~/components/layout/AccountModelPolicySettings.vue'
+import AccountPlatformAlertSettings from '~/components/layout/AccountPlatformAlertSettings.vue'
 import AccountRunCredentialSettings from '~/components/layout/AccountRunCredentialSettings.vue'
 import SecretInput from '~/components/common/SecretInput.vue'
 
@@ -337,6 +338,14 @@ async function disconnectEmail() {
     <!-- account-wide model-family allow/block policy (admin-only; hosted/mothership only) -->
     <section v-if="isAdmin && modelPolicySupported">
       <AccountModelPolicySettings :account-id="accountId" />
+    </section>
+
+    <!-- per-account tuning for the platform-health alert sweep (admin-only). Not gated on
+         `modelPolicySupported`: the alert thresholds bind wherever account settings exist, and
+         a deployment that never opted the sweep in already renders the mute switch as the
+         one-way control it is. -->
+    <section v-if="isAdmin">
+      <AccountPlatformAlertSettings :account-id="accountId" />
     </section>
 
     <!-- account-wide floor under each board's run-credential switch (admin-only). Not gated on
