@@ -5121,7 +5121,8 @@
         "foundational_service_exists": "Basisdienst existiert bereits",
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
-        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert"
+        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
+        "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5153,7 +5154,8 @@
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
-        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards."
+        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
+        "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

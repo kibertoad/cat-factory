@@ -4,6 +4,7 @@ import type {
   TrackerIssueEvent,
 } from '@cat-factory/kernel'
 import { githubIssueExternalId } from '../github-issues.logic.js'
+import { adfToMarkdown } from '../jira.logic.js'
 import { parseJsonBody, readObject, readString, verifyHmacSignature } from './hmac.js'
 
 // The per-vendor half of tracker webhook ingest: verify a delivery's signature and map its
@@ -116,11 +117,18 @@ export const jiraWebhookAdapter: TaskSourceWebhookAdapter = {
     if (event === 'comment_created') {
       const comment = readObject(payload, 'comment')
       const commentId = readString(comment, 'id')
-      // Jira Cloud v3 comments are ADF; `renderedBody` is the HTML rendering and `body` may be an
-      // ADF document rather than a string. `readString` yields null for the object case, so an ADF
-      // comment simply isn't ingested — a reply is a plain-text command line, and guessing at ADF
-      // traversal here would be a second, drifting copy of the import path's normalisation.
-      const body = readString(comment, 'body')
+      // Jira Cloud v3 comments are ADF: `body` is a document object, and only an older site (or a
+      // v2 REST client) sends a plain string. Reading it with `readString` alone therefore dropped
+      // every rich-text reply on the floor, silently, since an unparsed delivery is ACKED, so a
+      // reporter who answered a clarification question in Jira's own editor got no answer recorded
+      // and no acknowledgement telling them so.
+      //
+      // The normalisation is the IMPORT path's own `adfToMarkdown`, imported rather than
+      // re-derived: a second traversal here is exactly the drifting copy the previous note was
+      // right to refuse. `adfToMarkdown` already passes a plain string straight through, so it
+      // covers both shapes, and it preserves the line structure the reply grammar reads (a
+      // command counts only as the first token of a line).
+      const body = adfToMarkdown(readObject(comment, 'body') ?? readString(comment, 'body'))
       if (!commentId || !body) return null
       return {
         kind: 'comment',

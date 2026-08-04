@@ -48,6 +48,9 @@
               }
             ]
           },
+          "ticket": {
+            "$ref": "#/components/schemas/PublicTaskTicket"
+          },
           "title": {
             "maxLength": 200,
             "minLength": 1,
@@ -1433,6 +1436,36 @@
         "required": [
           "tasks",
           "nextCursor"
+        ],
+        "type": "object"
+      },
+      "PublicTaskTicket": {
+        "properties": {
+          "ref": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "jira",
+                  "github",
+                  "linear"
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "ref"
         ],
         "type": "object"
       },
