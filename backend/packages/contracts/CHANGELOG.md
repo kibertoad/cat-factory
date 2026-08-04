@@ -62,7 +62,7 @@
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -85,7 +85,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -4128,11 +4128,10 @@ pl_spike` is the task-type default, so a spike no longer dispatches a coder.
 
 ### Patch Changes
 
-- 6c4bcef: chore(environments): drop the proprietary "Kargo" name from shared custom-deployment-provider code and UI
+- 6c4bcef: chore(environments): use neutral illustrative naming in shared custom-deployment-provider code and UI
 
-  "Kargo" is one specific proprietary deployment provider and should not appear as the
-  canonical example in the framework's shared code or UI. Replaced every illustrative
-  reference (comments, the `manifestId` placeholder/help text, config-file examples) with
+  Shared framework code and UI should carry neutral, self-contained examples. Replaced
+  every illustrative reference (comments, the `manifestId` placeholder/help text, config-file examples) with
   neutral wording (`.deploy.yml`, `my-preview-template`, "a native custom env backend").
   Behaviour is unchanged.
 
@@ -7271,8 +7270,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that
@@ -7883,7 +7882,7 @@ details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the
@@ -9469,7 +9468,7 @@ credentials }` / `{ connected, provider, summary }`), plus `observabilityConnect
   share — and would overwrite — those files. Per-service artifact paths are a follow-up.
 
 - f066c59: Make the **native environment-adapter** path first-class, so a deployment can inject a
-  hand-written `EnvironmentProvider` (e.g. a Kargo adapter) instead of the generic
+  hand-written `EnvironmentProvider` (e.g. a native ephemeral-environment adapter) instead of the generic
   manifest-driven `HttpEnvironmentProvider` — with per-workspace config and the supported
   local-mode entry point.
 
@@ -9478,7 +9477,7 @@ credentials }` / `{ connected, provider, summary }`), plus `observabilityConnect
     `HttpEnvironmentProvider` ignores it; a native adapter reads + validates it off the
     per-call `manifest`. Because an injected provider is a deployment-wide singleton, the
     per-workspace connection's manifest is its only per-workspace config carrier — so a
-    single deployment can now target a different native project (Kargo project, link key,
+    single deployment can now target a different native project (provider project, link key,
     status map, …) per workspace. It rides inside the existing `manifest_json` JSON column on
     both runtimes — no migration, automatic D1 ⇄ Drizzle parity. **Not** covered by the
     manifest URL/SSRF checks (which only guard `baseUrl`/`tokenUrl`); an adapter that reads a
@@ -9492,7 +9491,7 @@ credentials }` / `{ connected, provider, summary }`), plus `observabilityConnect
     exposed (overriding it would discard local mode's differentiators).
   - New `backend/docs/native-environment-adapter.md` documents the injection contract, the
     env-port-vs-runner-port boundary, teardown/TTL idempotency, the `@cat-factory/kernel`
-    adapter dependency, and a reference `KargoEnvironmentProvider` sketch.
+    adapter dependency, and a reference native-adapter sketch.
 
   No backwards-incompatible changes: every addition is optional and defaults to today's
   behaviour.

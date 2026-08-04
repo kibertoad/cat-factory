@@ -1388,7 +1388,7 @@ export const executionInstanceSchema = v.object({
    */
   diagnostics: v.optional(runDiagnosticsSchema),
   /**
-   * The PRE-TOKEN INPUT GATE's verdict on the task this run implements (see
+   * The PRE-DISPATCH INPUT GATE's verdict on the task this run implements (see
    * {@link runInputGateSchema}): the structural check of the authored input that runs before
    * the first agent step is dispatched, so a task nobody could act on parks having spent no
    * tokens at all.

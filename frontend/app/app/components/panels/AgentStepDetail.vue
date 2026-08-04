@@ -173,7 +173,7 @@ const dedicatedPark = computed(() =>
   step.value ? dedicatedParkView(step.value, instance.value) : null,
 )
 /**
- * The PRE-TOKEN INPUT GATE's verdict when it is what holds this step. Answered INLINE here
+ * The PRE-DISPATCH INPUT GATE's verdict when it is what holds this step. Answered INLINE here
  * (unlike the other dedicated parks, which redirect to a window): its remedy is to edit the
  * task, so there is no second modal to send anyone to.
  *
@@ -448,7 +448,7 @@ async function copyOutput() {
               <!-- a park a dedicated window owns (fork choice / follow-up triage): the
                    generic approval rail can't resolve it (the server refuses), so point
                    the human at the window that can -->
-              <!-- the pre-token input gate holds this step: answered here, in place -->
+              <!-- the pre-dispatch input gate holds this step: answered here, in place -->
               <InputGateNotice
                 v-if="inputGateVerdict && instance"
                 :gate="inputGateVerdict"

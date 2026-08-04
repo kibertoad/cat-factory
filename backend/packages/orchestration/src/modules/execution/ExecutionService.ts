@@ -188,7 +188,7 @@ export class ExecutionService {
   private readonly visualConfirmationController: VisualConfirmationController
   /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
   private readonly reviewGate: ReviewGateController
-  /** The pre-token input gate; see {@link InputGateController}. */
+  /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
@@ -420,7 +420,7 @@ export class ExecutionService {
     this.reviewGate = gateWindows.reviewGate
     this.forkDecisionController = gateWindows.forkDecisionController
     this.prReviewController = gateWindows.prReviewController
-    // The pre-token input gate: not a gate WINDOW (it guards the run's first dispatch and has no
+    // The pre-dispatch input gate: not a gate WINDOW (it guards the run's first dispatch and has no
     // pipeline step of its own), so it has its own factory over the same dependency bag.
     this.inputGate = buildInputGateController(dependencies, {
       stateMachine: this.runStateMachine,
@@ -845,7 +845,7 @@ export class ExecutionService {
   // delegations (the public API is unchanged by the extraction).
 
   /**
-   * Whether the PRE-TOKEN INPUT GATE would park a run started against this input, evaluated
+   * Whether the PRE-DISPATCH INPUT GATE would park a run started against this input, evaluated
    * without writing anything. The public API's admission asks before starting a run, so a key
    * that cannot answer a park is refused up front rather than left holding one.
    * @see InputGateController.wouldBlock
@@ -855,7 +855,7 @@ export class ExecutionService {
   }
 
   /**
-   * Resolve a run parked on the PRE-TOKEN INPUT GATE: `recheck` (re-evaluate the task as it
+   * Resolve a run parked on the PRE-DISPATCH INPUT GATE: `recheck` (re-evaluate the task as it
    * now stands, which is what actually clears the park) or `proceed` (waive the findings).
    * @see InputGateController.resolve
    */

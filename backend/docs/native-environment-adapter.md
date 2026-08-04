@@ -6,10 +6,11 @@ against) through the `EnvironmentProvider` port. The default implementation,
 HTTP request templates, so one stateless instance serves any org whose preview-env tooling
 exposes a REST API.
 
-When an org's tooling is too bespoke to describe declaratively (e.g. **Kargo**, whose
-PREnvs are keyed by project + git ref and whose links/status need provider-specific logic),
-you write a **native adapter** instead: a hand-written `EnvironmentProvider`. This document
-is the contract for writing one.
+When an org's tooling is too bespoke to describe declaratively (say an in-house ephemeral-environment
+system whose environments are keyed by project + git ref and whose links/status need
+provider-specific logic), you write a **native adapter** instead: a hand-written
+`EnvironmentProvider`. This document is the contract for writing one, using a fictional
+in-house provider called **acme-envs** as the running example.
 
 > **Wiring in one line:** the env subsystem uses an **app-owned backend registry** keyed by
 > a `kind` discriminator (mirroring the runner-pool backends): you register an
@@ -102,26 +103,26 @@ the facade builds, then hand that registry to the container build.
 // my-org-backends.ts - a plain value, NOT a side-effect import.
 import type { EnvironmentBackendProvider } from '@cat-factory/integrations'
 
-export const kargoEnvironmentBackend: EnvironmentBackendProvider = {
-  kind: 'kargo', // any lower-kebab slug that isn't a reserved built-in
-  displayLabel: 'Kargo PREnvs', // shown in the connect-form backend selector
-  referencedSecretKeys: () => ['kargo_token'],
+export const acmeEnvsEnvironmentBackend: EnvironmentBackendProvider = {
+  kind: 'acme-envs', // any lower-kebab slug that isn't a reserved built-in
+  displayLabel: 'Acme ephemeral environments', // shown in the connect-form backend selector
+  referencedSecretKeys: () => ['acme_envs_token'],
   connectionMeta: (config) => ({
-    providerId: 'kargo',
-    label: 'manifest' in config ? config.manifest.label : 'Kargo',
+    providerId: 'acme-envs',
+    label: 'manifest' in config ? config.manifest.label : 'Acme envs',
     baseUrl: 'manifest' in config ? config.manifest.baseUrl : '',
   }),
   assertConfigSafe: () => {}, // SSRF-guard any URL you read out of providerConfig (see below)
   toManifest: (config) => {
-    if (!('manifest' in config)) throw new Error('expected a manifest-shaped kargo config')
+    if (!('manifest' in config)) throw new Error('expected a manifest-shaped acme-envs config')
     return config.manifest
   },
-  fromManifest: (manifest) => ({ kind: 'kargo', manifest }),
+  fromManifest: (manifest) => ({ kind: 'acme-envs', manifest }),
   // REQUIRED: the per-type infra engine(s) this backend serves. An ephemeral-environment
   // backend rides `remote-custom` - this is what makes it selectable as a run target for a
   // service's `custom` provision type. Omit it and the backend is unreachable from the UI.
   engines: () => ['remote-custom'],
-  buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy),
+  buildProvider: (ctx) => new AcmeEnvsEnvironmentProvider(ctx.urlPolicy),
 }
 ```
 
@@ -130,13 +131,16 @@ export const kargoEnvironmentBackend: EnvironmentBackendProvider = {
 // exposes a `buildContainer` seam exactly for this facade-level customization (local mode uses it).
 import { start, buildNodeContainer } from '@cat-factory/node-server'
 import { createBackendRegistries } from '@cat-factory/integrations'
-import { kargoEnvironmentBackend } from './my-org-backends.js'
+import { acmeEnvsEnvironmentBackend } from './my-org-backends.js'
 
 const backendRegistries = createBackendRegistries()
-backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)
+backendRegistries.environmentBackendRegistry.register(acmeEnvsEnvironmentBackend)
 // A `remote-custom` backend ALSO needs a custom manifest type in the catalog, else no service can
 // pin it - see "Also register a custom manifest type" below.
-backendRegistries.customManifestTypeRegistry.register({ manifestId: 'kargo', label: 'Kargo PREnv' })
+backendRegistries.customManifestTypeRegistry.register({
+  manifestId: 'acme-envs',
+  label: 'Acme envs',
+})
 
 await start({ buildContainer: (opts) => buildNodeContainer({ ...opts, backendRegistries }) })
 ```
@@ -179,16 +183,16 @@ sources by `manifestId`:
 
   ```ts
   backendRegistries.customManifestTypeRegistry.register({
-    manifestId: 'kargo', // what a service pins and the handler's `acceptsManifestId` matches
-    label: 'Kargo PREnv',
-    description: 'Kargo ephemeral preview environment, provisioned from the repo config.',
+    manifestId: 'acme-envs', // what a service pins and the handler's `acceptsManifestId` matches
+    label: 'Acme envs',
+    description: 'Ephemeral environment, provisioned from the repo config.',
     // Optional: prefilled onto a service's `manifestPath` on selection + the seed for path
     // auto-detection (a complete path, or a bare filename searched one level deep).
-    defaultManifestPath: '.kargo/prenv.yaml',
+    defaultManifestPath: '.acme-envs/env.yaml',
     // Optional: the coding-agent prompt for the service inspector's "Generate / fix" button
     // (generate the manifest when missing, fix it when invalid). Absent ⇒ no button.
     fixerPrompt:
-      'Author a valid Kargo PREnv manifest describing this service (image, ports, health check).',
+      'Author a valid acme-envs manifest describing this service (image, ports, health check).',
   })
   ```
 
@@ -206,7 +210,7 @@ for the full catalog model.
 
 A backend's provider is built once per `kind` from the registry and is stateless, so the
 **only** per-workspace data it ever sees is the per-call `manifest` (+ `inputs` /
-`provisionContext`). So per-workspace settings (e.g. the **Kargo project**) must travel on
+`provisionContext`). So per-workspace settings (e.g. the **provider-side project**) must travel on
 the manifest, via the opaque **`providerConfig`** bag
 (`backend/packages/contracts/src/environments.ts`):
 
@@ -254,8 +258,8 @@ So a native adapter's connection is **not** a dummy. Map the manifest fields lik
 - **`RunnerTransport` / `RunnerPoolProvider`** = where cat-factory's **executor-harness
   coding agents run** (coder, mocker, merger, …).
 
-Kargo PREnvs are **environments**: implement `EnvironmentProvider`. A Kargo-backed
-_runner_ (mapping Kargo CI jobs / AI sandboxes onto the executor-harness) is a separate
+Ephemeral environments are **environments**: implement `EnvironmentProvider`. A _runner_ backed by the same
+provider (mapping its CI jobs / AI sandboxes onto the executor-harness) is a separate
 piece, but it uses the **exact same extension pattern**: see [Custom runner backends](#custom-runner-backends).
 
 ## Custom runner backends
@@ -277,7 +281,7 @@ the built-in `manifest` pool reuses, not a custom-kind seam.)
 cat-factory's TTL sweeper (`EnvironmentTeardownService.sweepExpired`) calls `teardown` and
 **always tombstones the local record even if the provider returns 404**, so teardown is
 idempotent and an already-gone environment never wedges the registry. A provider with its
-own auto-expiry (e.g. Kargo `online_until`) coexists safely: cat-factory owns teardown of
+own auto-expiry (e.g. an `online_until` cap) coexists safely: cat-factory owns teardown of
 the environments it created; the provider's auto-expiry is a backstop. Make your adapter's
 `teardown` tolerant of an already-deleted environment (treat 404 as success).
 
@@ -300,13 +304,13 @@ from `@cat-factory/integrations` (`environmentsLogic.assertSafeEnvironmentUrl`).
 > of `providerConfig`, guard it yourself with `STRICT_URL_SAFETY_POLICY` /
 > `assertSafeEnvironmentUrl` before fetching it.
 
-## Reference: a native Kargo adapter (sketch)
+## Reference: a native ephemeral-environment adapter (sketch)
 
 This is the `EnvironmentProvider` (the port) that
 [`buildProvider`](#registering-the-backend) returns: wire it by defining a
-`kargoEnvironmentBackend` value whose `buildProvider: (ctx) => new KargoEnvironmentProvider(ctx.urlPolicy)`
-and registering it by reference (`backendRegistries.environmentBackendRegistry.register(kargoEnvironmentBackend)`),
-plus its custom manifest type (`backendRegistries.customManifestTypeRegistry.register({ manifestId: 'kargo', label: 'Kargo PREnv' })`),
+`acmeEnvsEnvironmentBackend` value whose `buildProvider: (ctx) => new AcmeEnvsEnvironmentProvider(ctx.urlPolicy)`
+and registering it by reference (`backendRegistries.environmentBackendRegistry.register(acmeEnvsEnvironmentBackend)`),
+plus its custom manifest type (`backendRegistries.customManifestTypeRegistry.register({ manifestId: 'acme-envs', label: 'Acme envs' })`),
 without which no service can pin the `custom` type (see [Also register a custom manifest type](#also-register-a-custom-manifest-type-for-remote-custom-backends)).
 
 ```ts
@@ -330,14 +334,14 @@ const STATUS_MAP: Record<string, EnvironmentStatus> = {
   destroyed: 'torn_down',
 }
 
-export class KargoEnvironmentProvider implements EnvironmentProvider {
+export class AcmeEnvsEnvironmentProvider implements EnvironmentProvider {
   async provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment> {
     const cfg = req.manifest.providerConfig ?? {}
     const project = String(cfg.project ?? '') // per-workspace, validated here
-    const token = req.resolveSecret('kargo_token')
+    const token = req.resolveSecret('acme_envs_token')
     const gitRef = req.provisionContext?.pullNumber ?? req.provisionContext?.branch
-    // POST {manifest.baseUrl}/prenvs  -> 202 pending PREnv
-    const prenv = await this.call(req.manifest.baseUrl, token, 'POST', `/prenvs`, {
+    // POST {manifest.baseUrl}/environments  -> 202 pending environment
+    const env = await this.call(req.manifest.baseUrl, token, 'POST', `/environments`, {
       project,
       git_ref: gitRef,
       github: {
@@ -345,39 +349,44 @@ export class KargoEnvironmentProvider implements EnvironmentProvider {
         repo: req.provisionContext?.repoName,
       },
     })
-    return this.toEnvironment(prenv)
+    return this.toEnvironment(env)
   }
 
   async status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment> {
-    const token = req.resolveSecret('kargo_token')
-    const prenv = await this.call(req.manifest.baseUrl, token, 'GET', `/prenvs/${req.externalId}`)
-    return this.toEnvironment(prenv)
+    const token = req.resolveSecret('acme_envs_token')
+    const env = await this.call(
+      req.manifest.baseUrl,
+      token,
+      'GET',
+      `/environments/${req.externalId}`,
+    )
+    return this.toEnvironment(env)
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {
-    const token = req.resolveSecret('kargo_token')
+    const token = req.resolveSecret('acme_envs_token')
     try {
-      await this.call(req.manifest.baseUrl, token, 'DELETE', `/prenvs/${req.externalId}`)
+      await this.call(req.manifest.baseUrl, token, 'DELETE', `/environments/${req.externalId}`)
     } catch (err) {
       if (!isNotFound(err)) throw err // 404 == already gone == success
     }
     return { status: 'torn_down' }
   }
 
-  private toEnvironment(prenv: KargoPrenv): ProvisionedEnvironment {
+  private toEnvironment(env: AcmeEnv): ProvisionedEnvironment {
     return {
-      externalId: prenv.id,
-      url: pickTestableLink(prenv.links), // lowest-priority absolute-http link
-      status: STATUS_MAP[prenv.status] ?? 'provisioning', // unknown -> keep polling
-      expiresAt: prenv.online_until ? Date.parse(prenv.online_until) : null,
+      externalId: env.id,
+      url: pickTestableLink(env.links), // lowest-priority absolute-http link
+      status: STATUS_MAP[env.status] ?? 'provisioning', // unknown -> keep polling
+      expiresAt: env.online_until ? Date.parse(env.online_until) : null,
       access: null,
-      fields: { project: prenv.project },
+      fields: { project: env.project },
     }
   }
 }
 ```
 
-The open Kargo-side questions (status vocabulary, canonical link key/priority, machine-auth
-scheme, create idempotency/timing, `git_ref` precedence) are answered by the Kargo team and
-then encoded in the adapter and/or `providerConfig` (e.g. a `providerConfig.statusMap` /
-`providerConfig.linkKey`), no cat-factory code change.
+The open provider-side questions (status vocabulary, canonical link key/priority, machine-auth
+scheme, create idempotency/timing, `git_ref` precedence) are answered by whoever owns the
+provider and then encoded in the adapter and/or `providerConfig` (e.g. a
+`providerConfig.statusMap` / `providerConfig.linkKey`), no cat-factory code change.

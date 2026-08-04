@@ -167,7 +167,7 @@ function isLiveFork(state: ForkDecisionStepState): boolean {
 }
 
 /**
- * Project the PRE-TOKEN INPUT GATE's verdict for an external caller. The issue CODES are the same
+ * Project the PRE-DISPATCH INPUT GATE's verdict for an external caller. The issue CODES are the same
  * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
  * whoever filed the ticket) rather than parsing our prose.
  */
@@ -347,7 +347,7 @@ export function publicDecisionController(): Hono<AppEnv> {
 }
 
 function registerInputGateRoutes(app: Hono<AppEnv>): void {
-  // Answer a run parked on the PRE-TOKEN INPUT GATE: `recheck` after fixing the task, or
+  // Answer a run parked on the PRE-DISPATCH INPUT GATE: `recheck` after fixing the task, or
   // `proceed` to waive the findings.
   //
   // Runs under the RUN'S OWN initiator, for the same reason the fork route does: releasing the

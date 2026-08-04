@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
 // ---------------------------------------------------------------------------
-// The PRE-TOKEN INPUT GATE's wire vocabulary: what a run's structural input check
+// The PRE-DISPATCH INPUT GATE's wire vocabulary: what a run's structural input check
 // found, how severe it is, and how the run was let past it.
 //
 // The gate is a deterministic reduction over a task's own authored fields (title,

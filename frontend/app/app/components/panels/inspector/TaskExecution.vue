@@ -61,7 +61,7 @@ const isEmpty = computed(
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
 /**
- * The run's PRE-TOKEN INPUT GATE notice: the park while it holds the run, the waiver once
+ * The run's PRE-DISPATCH INPUT GATE notice: the park while it holds the run, the waiver once
  * somebody overruled it, and the ADVISORY findings a `passed` verdict still carries (which is
  * the entire product of `advisory` mode, and how `standard` mode reports a thin description).
  * Read off the RUN, not a step: the gate guards the first dispatch and leaves nothing
@@ -483,7 +483,7 @@ async function mergePr() {
             </UButton>
             <!-- The generic approve/review rail. Reached only once no dedicated surface owns
                  the park: the branches above took the fork and follow-up windows, so the one
-                 left to exclude is the PRE-TOKEN INPUT GATE, which rides `step.approval` too
+                 left to exclude is the PRE-DISPATCH INPUT GATE, which rides `step.approval` too
                  but is refused by the generic resolver server-side (approving it would mark the
                  run's first working step done and skip the work). It is answered by the notice
                  above the list. Asked of `dedicatedParkView` rather than re-derived here, so
