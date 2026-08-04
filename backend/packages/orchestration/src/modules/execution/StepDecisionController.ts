@@ -94,8 +94,24 @@ export class StepDecisionController {
    * (`companion.exceeded`), the follow-up companion with undecided items, and a coder
    * parked on the implementation-fork decision (whose approve would skip the build
    * dispatch entirely).
+   *
+   * The PRE-TOKEN INPUT GATE is checked off the INSTANCE rather than the step, because that is
+   * where its verdict lives: the gate guards a step's DISPATCH, so it parks whatever step 0
+   * happens to be and leaves nothing kind-specific behind for a step-only check to recognise.
+   * Approving it generically would mark that first step done and advance past the work the run
+   * exists to do: the same short-circuit as the fork park, one step earlier.
    */
-  private assertNotIterativeGate(step: PipelineStep): void {
+  private assertNotIterativeGate(instance: ExecutionInstance, step: PipelineStep): void {
+    if (instance.inputGate?.status === 'blocked') {
+      throw new ConflictError(
+        "Resolve this run's input check through its notice (fix the task and re-check, or " +
+          'proceed anyway), not the approval gate',
+        // `input_gate_parked`, NOT `input_gate_not_parked`: the gate IS holding this run, and the
+        // caller reached for the wrong surface. The sibling reason means the opposite and its copy
+        // would tell somebody staring at a live park that there is nothing left to answer.
+        'input_gate_parked',
+      )
+    }
     if (step.agentKind === REQUIREMENTS_REVIEW_AGENT_KIND) {
       throw new ConflictError(
         'Resolve the requirements review through its review window, not the approval gate',
@@ -267,7 +283,7 @@ export class StepDecisionController {
         stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
         const step = inst.steps[stepIndex]
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-        this.assertNotIterativeGate(step)
+        this.assertNotIterativeGate(inst, step)
         if (step.approval.status === 'approved') {
           alreadyApproved = true
           return
@@ -333,7 +349,7 @@ export class StepDecisionController {
       (inst) => {
         const step = inst.steps.find((s) => s.approval?.id === approvalId)
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-        this.assertNotIterativeGate(step)
+        this.assertNotIterativeGate(inst, step)
         if (step.approval.status === 'approved') {
           throw new ConflictError(`Approval '${approvalId}' is already approved`)
         }
@@ -427,7 +443,7 @@ export class StepDecisionController {
       (inst) => {
         const step = inst.steps.find((s) => s.approval?.id === approvalId)
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
-        this.assertNotIterativeGate(step)
+        this.assertNotIterativeGate(inst, step)
         if (step.approval.status === 'approved') {
           throw new ConflictError(`Approval '${approvalId}' is already approved`)
         }

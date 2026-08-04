@@ -622,6 +622,7 @@ export type PublicDecision =
   | PublicRequirementsDecision
   | PublicForkDecision
   | PublicJudgeDecision
+  | PublicInputGateDecision
 
 export interface PublicDecisionList {
   decisions: PublicDecision[]
@@ -658,6 +659,39 @@ export interface PublicIncorporate {
   /** Length 0..4000. */
   feedback?: string
 }
+
+export interface PublicInputGateDecision {
+  checkedAt: number
+  issues: PublicInputGateDecisionIssue[]
+  kind: 'input-gate'
+  mode: PublicInputGateDecisionMode
+  status: PublicInputGateDecisionStatus
+}
+
+export interface PublicInputGateDecisionIssue {
+  code: PublicInputGateDecisionIssueCode
+  severity: PublicInputGateDecisionIssueSeverity
+}
+
+export type PublicInputGateDecisionIssueCode = 'description_missing' | 'description_placeholder' | 'description_thin' | 'reproduction_missing' | 'review_target_missing' | 'success_criteria_missing'
+
+/** Every `PublicInputGateDecisionIssueCode` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_INPUT_GATE_DECISION_ISSUE_CODE_VALUES = ['description_missing', 'description_placeholder', 'description_thin', 'reproduction_missing', 'review_target_missing', 'success_criteria_missing'] as const
+
+export type PublicInputGateDecisionIssueSeverity = 'blocking' | 'advisory'
+
+/** Every `PublicInputGateDecisionIssueSeverity` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_INPUT_GATE_DECISION_ISSUE_SEVERITY_VALUES = ['blocking', 'advisory'] as const
+
+export type PublicInputGateDecisionMode = 'standard' | 'advisory' | 'off'
+
+/** Every `PublicInputGateDecisionMode` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_INPUT_GATE_DECISION_MODE_VALUES = ['standard', 'advisory', 'off'] as const
+
+export type PublicInputGateDecisionStatus = 'off' | 'not_applicable' | 'passed' | 'blocked' | 'overridden'
+
+/** Every `PublicInputGateDecisionStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_INPUT_GATE_DECISION_STATUS_VALUES = ['off', 'not_applicable', 'passed', 'blocked', 'overridden'] as const
 
 export interface PublicJob {
   createdAt: number
@@ -773,6 +807,15 @@ export type PublicResolveExceededChoice = 'extra-round' | 'proceed' | 'stop-rese
 
 /** Every `PublicResolveExceededChoice` value, for exhaustive handling and runtime validation. */
 export const PUBLIC_RESOLVE_EXCEEDED_CHOICE_VALUES = ['extra-round', 'proceed', 'stop-reset'] as const
+
+export interface PublicResolveInputGate {
+  choice: PublicResolveInputGateChoice
+}
+
+export type PublicResolveInputGateChoice = 'recheck' | 'proceed'
+
+/** Every `PublicResolveInputGateChoice` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_RESOLVE_INPUT_GATE_CHOICE_VALUES = ['recheck', 'proceed'] as const
 
 export interface PublicResolveJudge {
   choice: PublicResolveJudgeChoice

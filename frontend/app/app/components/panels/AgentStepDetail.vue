@@ -20,6 +20,7 @@ import { useStepTimer } from '~/composables/useStepTimer'
 import { useStepProse } from '~/composables/useStepProse'
 import { useStepApproval } from '~/composables/useStepApproval'
 import { dedicatedParkView } from '~/utils/pipelineRender'
+import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 
 // Detail overlay for a single pipeline step. Opened by clicking an agent in the
 // inspector list (TaskExecution) or the focus-view pipeline (PipelineProgress) via
@@ -168,7 +169,21 @@ const companionExceeded = computed(() => approvalPending.value && !!step.value?.
 // resolver refuses these server-side, so the rail is replaced by a redirect to that window.
 // Computed live, since a coder step can park on one WHILE this overlay is already open
 // (the routing in `dispatchStepView` only covers the open click).
-const dedicatedPark = computed(() => (step.value ? dedicatedParkView(step.value) : null))
+const dedicatedPark = computed(() =>
+  step.value ? dedicatedParkView(step.value, instance.value) : null,
+)
+/**
+ * The PRE-TOKEN INPUT GATE's verdict when it is what holds this step. Answered INLINE here
+ * (unlike the other dedicated parks, which redirect to a window): its remedy is to edit the
+ * task, so there is no second modal to send anyone to.
+ *
+ * Only the PARK, hence the literal `blocked` tone at the call site: this overlay exists to
+ * answer one step's park, and an advisory finding is about the run rather than this step. It is
+ * reported once, on the run panel, instead of on every step overlay opened under it.
+ */
+const inputGateVerdict = computed(() =>
+  dedicatedPark.value === 'input-gate' ? (instance.value?.inputGate ?? null) : null,
+)
 /** The generic approve/request-changes/reject rail applies (no dedicated surface owns the park). */
 const genericApprovalPending = computed(
   () => approvalPending.value && !companionExceeded.value && !dedicatedPark.value,
@@ -181,7 +196,7 @@ function openDedicatedWindow() {
   if (!c || !park) return
   close()
   if (park === 'follow-ups') ui.openFollowUps(c.instanceId, c.stepIndex)
-  else ui.openForkDecision(c.instanceId, c.stepIndex)
+  else if (park === 'fork-decision') ui.openForkDecision(c.instanceId, c.stepIndex)
 }
 
 function close() {
@@ -433,8 +448,17 @@ async function copyOutput() {
               <!-- a park a dedicated window owns (fork choice / follow-up triage): the
                    generic approval rail can't resolve it (the server refuses), so point
                    the human at the window that can -->
+              <!-- the pre-token input gate holds this step: answered here, in place -->
+              <InputGateNotice
+                v-if="inputGateVerdict && instance"
+                :gate="inputGateVerdict"
+                tone="blocked"
+                :execution-id="instance.id"
+                compact
+              />
+
               <div
-                v-if="dedicatedPark"
+                v-if="dedicatedPark && dedicatedPark !== 'input-gate'"
                 class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4"
                 data-testid="dedicated-park-redirect"
               >

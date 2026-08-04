@@ -14,6 +14,7 @@ const DEFAULTS: WorkspaceSettings = {
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
+  inputGateMode: 'standard',
   reviewFrictionMode: 'off',
   reviewFrictionWarnCount: 3,
   reviewFrictionBlockCount: null,

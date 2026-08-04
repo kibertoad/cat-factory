@@ -747,7 +747,8 @@ func (s *UsageService) Get(ctx context.Context) (*PublicUsage, error) {
 	return &out, nil
 }
 
-// DecisionsService a parked run's human decisions — requirement findings, forks and judge verdicts.
+// DecisionsService a parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token
+// input gate.
 type DecisionsService struct {
 	client *Client
 }
@@ -866,6 +867,27 @@ func (s *DecisionsService) ResolveExceeded(ctx context.Context, runID string, bo
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/requirements/resolve-exceeded", pathEscape(runID)),
+		Body:   body,
+	}
+	var out PublicDecisionList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ResolveInputGate resolve a run parked on the task's input check
+// Settle a run the pre-token input gate parked before its first agent step because the task
+// states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it
+// over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and
+// releases the run only if the blocking findings are gone; a still-blocked verdict comes back as
+// an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run
+// as an `overridden` record. Requires a `decide`-scope key.
+// POST /api/v1/runs/{runId}/decisions/input-gate/resolve (operation resolvePublicRunInputGate).
+func (s *DecisionsService) ResolveInputGate(ctx context.Context, runID string, body PublicResolveInputGate) (*PublicDecisionList, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/runs/%s/decisions/input-gate/resolve", pathEscape(runID)),
 		Body:   body,
 	}
 	var out PublicDecisionList

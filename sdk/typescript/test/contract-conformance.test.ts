@@ -135,6 +135,14 @@ expectMutuallyAssignable<
   sdk.PublicChooseFork,
   v.InferOutput<typeof contracts.publicChooseForkSchema>
 >()
+expectMutuallyAssignable<
+  sdk.PublicInputGateDecision,
+  v.InferOutput<typeof contracts.publicInputGateDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicResolveInputGate,
+  v.InferOutput<typeof contracts.publicResolveInputGateSchema>
+>()
 
 /** Every DTO asserted above. Compared against the spec so the list cannot fall behind. */
 const ASSERTED_COMPONENTS = [
@@ -168,6 +176,8 @@ const ASSERTED_COMPONENTS = [
   'PublicIncorporate',
   'PublicResolveExceeded',
   'PublicChooseFork',
+  'PublicInputGateDecision',
+  'PublicResolveInputGate',
 ] as const
 
 describe('generated models conform to the Valibot contracts', () => {
