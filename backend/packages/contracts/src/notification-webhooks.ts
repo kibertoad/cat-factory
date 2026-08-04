@@ -105,6 +105,26 @@ export const putNotificationWebhookSchema = v.object({
 export type PutNotificationWebhookInput = v.InferOutput<typeof putNotificationWebhookSchema>
 
 /**
+ * What `GET /api/v1/notification-webhook` answers: the registered endpoint, or `null` when the
+ * workspace has none. Both the session surface and the public one project the SAME
+ * {@link notificationWebhookSchema}, because the projection is already the client-facing shape
+ * with the secret reduced to a boolean, and a second near-identical DTO would be one more thing
+ * to keep in step for no caller-visible gain.
+ *
+ * The WRAPPER, though, is public-surface-only, and it is not decoration. A bare nullable body is
+ * an honest wire shape but a poor generated one: the SDK emitters model a null at the top level of
+ * a response far less faithfully than a null on a FIELD (Go decodes a `null` body into a
+ * zero-valued struct, so "no endpoint registered" would arrive as an endpoint whose URL is the
+ * empty string). Wrapping keeps "none is registered" a value every client reads the same way, and
+ * leaves room to add a sibling field later without changing the response type.
+ */
+export const publicNotificationWebhookSchema = v.object({
+  /** The registered endpoint, or `null` when the workspace has none. */
+  webhook: v.nullable(notificationWebhookSchema),
+})
+export type PublicNotificationWebhook = v.InferOutput<typeof publicNotificationWebhookSchema>
+
+/**
  * The JSON body of one webhook delivery. Deliberately a thin envelope over the SAME
  * `notificationSchema` the in-app inbox and the public `GET /api/v1/notifications` already expose
  * — a notification is already a small client-facing projection with no block/execution/credential

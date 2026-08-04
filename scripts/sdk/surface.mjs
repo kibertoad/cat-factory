@@ -1,4 +1,4 @@
-// The SDK's PUBLIC shape: how the 38 `/api/v1` operations are grouped into resource clients
+// The SDK's PUBLIC shape: how the 41 `/api/v1` operations are grouped into resource clients
 // and what each method is called.
 //
 // This is a chosen table, not a derivation, for the same reason `OPERATION_DOCS` in
@@ -44,6 +44,11 @@ const SURFACE = {
   listPublicNotifications: { group: 'notifications', method: 'list' },
   actPublicNotification: { group: 'notifications', method: 'act' },
   dismissPublicNotification: { group: 'notifications', method: 'dismiss' },
+
+  // ---- The outbound webhook (push enrolment) ---------------------------------------------
+  getPublicNotificationWebhook: { group: 'webhook', method: 'get' },
+  putPublicNotificationWebhook: { group: 'webhook', method: 'set' },
+  deletePublicNotificationWebhook: { group: 'webhook', method: 'delete' },
 
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
@@ -103,6 +108,8 @@ export const GROUP_DOCS = {
   tasks: "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
+  webhook:
+    "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
     "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",

@@ -29,6 +29,9 @@ export function buildInstructions(selection: ToolSelection): string {
     'Two things here cost real money and real time, so confirm with the user before calling them: ' +
       '`tasks_start` / `tasks_retry` and `jobs_create` each begin an agent run against a real ' +
       'repository, and `notifications_act` can merge a pull request. Everything else is cheap.',
+    '`webhook_set` and `webhook_delete` change where this workspace pushes its notifications, run ' +
+      'events and health alerts, so they can silently cut off or redirect an integration someone ' +
+      'else depends on. Confirm with the user, and read `webhook_get` first.',
     'A run PARKS on a human decision and then waits indefinitely by design; it is not stuck. Read ' +
       'the park with `decisions_list` and answer it with the other `decisions_*` tools, or leave ' +
       'it for a person.',

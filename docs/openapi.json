@@ -492,6 +492,82 @@
         ],
         "type": "object"
       },
+      "NotificationWebhook": {
+        "properties": {
+          "alertEvents": {
+            "items": {
+              "enum": [
+                "platform_health.firing",
+                "platform_health.resolved"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "hasSecret": {
+            "type": "boolean"
+          },
+          "runEvents": {
+            "items": {
+              "enum": [
+                "run.started",
+                "run.completed",
+                "run.failed"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "types": {
+            "items": {
+              "enum": [
+                "merge_review",
+                "pipeline_complete",
+                "ci_failed",
+                "test_failed",
+                "requirement_review",
+                "clarity_review",
+                "release_regression",
+                "decision_required",
+                "human_test_ready",
+                "visual_confirmation_ready",
+                "human_review",
+                "followup_pending",
+                "fork_decision_pending",
+                "judge_review",
+                "pr_review_ready",
+                "initiative",
+                "platform_health",
+                "infra_unreachable",
+                "budget_paused",
+                "key_drift",
+                "merge_tag_request"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "updatedAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "types",
+          "runEvents",
+          "alertEvents",
+          "enabled",
+          "hasSecret",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
       "PublicChooseFork": {
         "properties": {
           "custom": {
@@ -988,6 +1064,24 @@
         },
         "required": [
           "notifications"
+        ],
+        "type": "object"
+      },
+      "PublicNotificationWebhook": {
+        "properties": {
+          "webhook": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NotificationWebhook"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "webhook"
         ],
         "type": "object"
       },
@@ -1656,6 +1750,78 @@
         ],
         "type": "object"
       },
+      "PutNotificationWebhook": {
+        "properties": {
+          "alertEvents": {
+            "items": {
+              "enum": [
+                "platform_health.firing",
+                "platform_health.resolved"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "runEvents": {
+            "items": {
+              "enum": [
+                "run.started",
+                "run.completed",
+                "run.failed"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "secret": {
+            "maxLength": 200,
+            "minLength": 16,
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "enum": [
+                "merge_review",
+                "pipeline_complete",
+                "ci_failed",
+                "test_failed",
+                "requirement_review",
+                "clarity_review",
+                "release_regression",
+                "decision_required",
+                "human_test_ready",
+                "visual_confirmation_ready",
+                "human_review",
+                "followup_pending",
+                "fork_decision_pending",
+                "judge_review",
+                "pr_review_ready",
+                "initiative",
+                "platform_health",
+                "infra_unreachable",
+                "budget_paused",
+                "key_drift",
+                "merge_tag_request"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2000,
+            "pattern": "^https://",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
       "StartPublicTask": {
         "properties": {
           "pipelineId": {
@@ -1698,7 +1864,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5093,6 +5259,131 @@
         ]
       }
     },
+    "/api/v1/notification-webhook": {
+      "delete": {
+        "description": "Deregister the endpoint; deliveries stop. Idempotent.",
+        "operationId": "deletePublicNotificationWebhook",
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Remove the outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      },
+      "get": {
+        "description": "The endpoint this workspace delivers notifications, run-lifecycle events and platform-health alerts to, or `{ \"webhook\": null }` when none is registered. The signing secret is never returned — `hasSecret` reports only whether one is set.",
+        "operationId": "getPublicNotificationWebhook",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicNotificationWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Read the workspace's outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      },
+      "put": {
+        "description": "Register the HTTPS endpoint deliveries are POSTed to, or update the one already registered. An omitted field keeps its stored value, so a caller can subscribe to run events without re-sending the URL or secret. Supplying `secret` rotates the signing secret; omitting it keeps the current one. The endpoint must be `https:` and publicly routable unless the deployment widened its allow-list.",
+        "operationId": "putPublicNotificationWebhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutNotificationWebhook"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationWebhook"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Register or update the outbound webhook",
+        "tags": [
+          "Webhook"
+        ]
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "description": "List the open, human-actionable notifications in the key’s workspace (merge reviews, pipeline-complete confirmations, CI/test failures, and informational cards).",
@@ -6602,6 +6893,10 @@
     },
     {
       "name": "Usage"
+    },
+    {
+      "description": "The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.",
+      "name": "Webhook"
     }
   ]
 }
