@@ -32,11 +32,13 @@ export function anthropicResolver(opts: { apiKey?: string; baseURL?: string }): 
  *
  * `fetch` overrides the transport the SDK uses. Cloud vendors leave it unset (the AI-SDK
  * default fetch, which follows 3xx redirects automatically). A LOCAL runner endpoint
- * (Ollama / LM Studio / …) MUST pass a redirect-revalidating fetch (`fetchLocalRunner`) so
- * the inline path re-runs the SSRF allow-list on every hop — otherwise a permitted local
- * host could `302` the call to the cloud-metadata endpoint and the default fetch would
- * follow it silently (SEC-2). This mirrors the proxy path, which already routes local-runner
- * calls through `fetchLocalRunner`.
+ * (Ollama / LM Studio / …) MUST pass the endpoint service's policy-bound
+ * `LocalModelEndpointService.fetchRunner`, so the inline path re-runs the SSRF allow-list on
+ * every hop under the DEPLOYMENT's loopback/LAN policy: otherwise a permitted local host
+ * could `302` the call to the cloud-metadata endpoint and the default fetch would follow it
+ * silently (SEC-2). Never the bare `fetchLocalRunner`, which defaults to the strict policy
+ * and would therefore refuse a LAN endpoint an operator deliberately allowed. This mirrors
+ * the proxy path, which routes local-runner calls through the same transport.
  */
 export function openAiCompatibleResolver(opts: {
   name: string

@@ -462,6 +462,16 @@ export interface Env {
    */
   ENVIRONMENTS_DETECTION_CONVENTIONS?: string
 
+  // ---- Locally-run model endpoints (per-user runners) ---------------------
+  /**
+   * `true` to let a user register a locally-run model endpoint (Ollama / LM Studio / …)
+   * on a private-LAN host (RFC1918 / ULA / mDNS `.local`) in addition to loopback. OFF
+   * by default: the LAN allow-list is an internal-network SSRF grant on a shared
+   * deployment (SEC-3). RFC1918 is unroutable from workerd, so on this facade the flag
+   * mostly governs what the write boundary accepts; kept symmetric with the Node facade.
+   */
+  LOCAL_MODELS_ALLOW_LAN?: string
+
   // ---- Self-hosted runner pool ("bring your own infra"; opt-in) -----------
   /**
    * Enables routing repo-operating coding jobs (`coder`, `mocker`, `playwright`)

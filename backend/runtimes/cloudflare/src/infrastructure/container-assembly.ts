@@ -66,7 +66,10 @@ import { D1AgentRunRepository } from './repositories/D1AgentRunRepository'
 import { D1BinaryArtifactMetadataStore } from './repositories/D1BinaryArtifactMetadataStore'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
+import { CryptoIdGenerator } from './runtime'
+import { D1AuthAttemptRepository } from './repositories/D1AuthAttemptRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { D1MachineNodeRepository } from './repositories/D1MachineNodeRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
 import { D1ExecutionRepository } from './repositories/D1ExecutionRepository'
@@ -252,6 +255,53 @@ function selectWorkerDurableJobDeps(args: {
       ? new WorkflowsEnvironmentTestRunner(env.ENV_TEST_WORKFLOW)
       : undefined,
   }
+}
+
+/**
+ * The pipeline-start capability probe: what a workspace + run initiator actually has
+ * configured, which is what refuses a start with a clear cause instead of failing deep in a
+ * provider SDK.
+ *
+ * Extracted from {@link buildWorkerCoreDependencies} to keep it inside its size budget. It is a
+ * cohesive unit: every argument here exists only to answer that one question, and the closure is
+ * built once per container rather than per call.
+ */
+function selectWorkerProviderCapabilities(
+  deps: Pick<
+    WorkerContainerAssemblyInput,
+    | 'env'
+    | 'config'
+    | 'db'
+    | 'caches'
+    | 'apiKeys'
+    | 'subscriptions'
+    | 'personalSubscriptions'
+    | 'cloudflareModelsEnabled'
+    | 'localModelEndpoints'
+    | 'openRouterCatalog'
+    | 'accountSettings'
+  > & { bedrockModels: Set<string> | undefined },
+): NonNullable<CoreDependencies['resolveProviderCapabilities']> {
+  const { env, config, db } = deps
+  return (workspaceId, initiatedBy) =>
+    resolveWorkspaceCapabilities(
+      {
+        apiKeys: deps.apiKeys,
+        subscriptions: deps.subscriptions,
+        personalSubscriptions: deps.personalSubscriptions,
+        cloudflareModelsEnabled: deps.cloudflareModelsEnabled,
+        ...(deps.bedrockModels ? { bedrockModels: deps.bedrockModels } : {}),
+        baseUrlFor: (provider) => baseUrlFor(provider, env),
+        localModelEndpoints: deps.localModelEndpoints,
+        openRouterCatalog: deps.openRouterCatalog,
+        accountSettings: deps.accountSettings,
+        workspaceAccountOf: (id) => new D1WorkspaceRepository({ db }).accountOf(id),
+        modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+        caches: deps.caches,
+      },
+      workspaceId,
+      initiatedBy,
+    )
 }
 
 /**
@@ -516,30 +566,52 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     caches,
     // The pipeline-start guard resolves what's configured for a workspace + initiator.
-    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
-      resolveWorkspaceCapabilities(
-        {
-          apiKeys,
-          subscriptions,
-          personalSubscriptions,
-          cloudflareModelsEnabled,
-          ...(bedrockModels ? { bedrockModels } : {}),
-          baseUrlFor: (provider) => baseUrlFor(provider, env),
-          localModelEndpoints,
-          openRouterCatalog,
-          accountSettings,
-          workspaceAccountOf: (workspaceId) =>
-            new D1WorkspaceRepository({ db }).accountOf(workspaceId),
-          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
-          caches,
-        },
-        workspaceId,
-        initiatedBy,
-      ),
+    resolveProviderCapabilities: selectWorkerProviderCapabilities({
+      env,
+      config,
+      db,
+      caches,
+      apiKeys,
+      subscriptions,
+      personalSubscriptions,
+      cloudflareModelsEnabled,
+      bedrockModels,
+      localModelEndpoints,
+      openRouterCatalog,
+      accountSettings,
+    }),
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App token.
     runInitiatorScope: runWithInitiator,
     ...overrides,
+  }
+}
+
+/**
+ * What the machine/auth boundary needs on this facade: the machine-node roster the shared gate
+ * consults on every `/internal/*` call (SEC-5), the durable password-throttle ledger (SEC-4), and
+ * the client address the throttle keys on.
+ *
+ * Grouped because the three are one concern and because `resolveClientAddress` is a per-FACADE
+ * decision that must not drift from the store it feeds: `cf-connecting-ip` is authentic HERE and
+ * only here, since the Cloudflare edge injects it and overwrites whatever the client sent, and a
+ * Worker is unreachable except through that edge. The Node facade deliberately does NOT read that
+ * header (a generic reverse proxy forwards it untouched), which is why the choice lives per facade
+ * rather than behind a shared trust flag.
+ */
+function selectWorkerMachineAuthDeps(
+  db: D1Database,
+): Pick<
+  ServerContainer,
+  'machineNodeRepository' | 'authAttemptRepository' | 'resolveClientAddress'
+> {
+  return {
+    machineNodeRepository: new D1MachineNodeRepository({ db }),
+    authAttemptRepository: new D1AuthAttemptRepository({
+      db,
+      idGenerator: new CryptoIdGenerator(),
+    }),
+    resolveClientAddress: (c) => c.req.header('cf-connecting-ip') ?? undefined,
   }
 }
 
@@ -703,6 +775,8 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       repoProjectionRepository: new D1RepoProjectionRepository({ db }),
       githubInstallationRepository: new D1GitHubInstallationRepository({ db }),
     } as unknown as PersistenceRegistry,
+    // The machine/auth boundary's own wiring (SEC-4 + SEC-5), mirrored on the Node facade.
+    ...selectWorkerMachineAuthDeps(db),
     // App-owned backend registries, surfaced so the workspace snapshot's backend-kind
     // selectors (`environmentBackendKinds` / `runnerBackendKinds`) read the registered kinds.
     environmentBackendRegistry,

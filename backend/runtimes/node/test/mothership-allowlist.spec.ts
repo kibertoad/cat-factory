@@ -174,6 +174,28 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     consume: 'pending',
     deleteExpired: 'sweeper',
   },
+  // The machine-node roster + revocation tombstones (SEC-5) are the machine API's OWN auth
+  // state, so none of it may be remotely callable: a node that could reach `revoke` (or worse,
+  // `recordMint`) over the RPC could tombstone other tenants' satellites or take over a node
+  // id, and `isRevoked` is the very check the gate runs BEFORE dispatch. Mothership-internal
+  // by construction: 'admin' rather than 'pending' because this is permanent, not a backlog.
+  machineNodeRepository: {
+    recordMint: 'admin',
+    get: 'admin',
+    listByUser: 'admin',
+    revoke: 'admin',
+    isRevoked: 'admin',
+    deleteExpired: 'sweeper',
+  },
+  // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
+  // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
+  // a satellite ever needs it. Mothership-internal by construction, like the roster above.
+  authAttemptRepository: {
+    record: 'admin',
+    countByKeySince: 'admin',
+    countByIpSince: 'admin',
+    deleteOlderThan: 'sweeper',
+  },
   // `getByAccount` is now allow-listed (the email-settings panel's member-level read; the record's
   // provider key rides a SEALED `apiKeyCipher` blob, so no plaintext crosses the machine API).
   // `upsert`/`softDelete` (connect/disconnect) are admin-gated → stay mothership-internal.

@@ -3098,6 +3098,15 @@
       "confirmRemove": {
         "title": "Usunąć ten runner?",
         "body": "\"{name}\" zostanie usunięty. Tej operacji nie można cofnąć."
+      },
+      "blocked": "Adres URL tego runnera nie jest dozwolony w tym wdrożeniu, dlatego jego modele są ukryte w selektorze.",
+      "urlReason": {
+        "invalid_url": "To nie jest prawidłowy adres URL.",
+        "scheme_not_allowed": "Adres URL runnera musi zaczynać się od http:// lub https://.",
+        "credentials_not_allowed": "Adres URL runnera nie może zawierać nazwy użytkownika ani hasła.",
+        "query_or_fragment_not_allowed": "Podaj tylko adres bazowy, bez zapytania \"?\" i bez fragmentu \"#\".",
+        "host_not_loopback": "To wdrożenie łączy się tylko z runnerami na własnej maszynie (localhost). Poproś operatora o zezwolenie na runnery w sieci lokalnej.",
+        "host_not_local": "Runner musi działać na Twojej maszynie lub w Twojej sieci lokalnej. Publiczne hosty nie są dozwolone."
       }
     },
     "infrastructure": {

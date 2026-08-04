@@ -212,6 +212,13 @@ with the mandatory `ENCRYPTION_KEY`. Networking: the LLM proxy runs in **this ho
 so it reaches the runner at `localhost` directly; you only need a non-default base URL
 if your runner listens elsewhere or you run the orchestrator itself in a container.
 
+A runner on another machine on your LAN (an LM Studio box, a homelab Ollama host) works
+too: local mode defaults `LOCAL_MODELS_ALLOW_LAN=true`, which permits private
+10./172.16-31./192.168. addresses, ULA IPv6 and mDNS `.local` names beside loopback. Set
+`LOCAL_MODELS_ALLOW_LAN=false` to restrict runners to this machine only. Hosted Node
+deployments default the flag OFF because LAN reach from a shared server is an
+internal-network SSRF exposure; see `backend/docs/model-support.md`.
+
 ## Open the UI
 
 The board is a separate SPA ([`deploy/frontend`](../frontend)), not served by this

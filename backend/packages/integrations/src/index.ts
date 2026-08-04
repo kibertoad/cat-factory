@@ -449,7 +449,13 @@ export {
   type LocalModelEndpointServiceDependencies,
   type ResolvedLocalEndpoint,
 } from './modules/providers/LocalModelEndpointService.js'
-export { fetchLocalRunner, localRunnerUrlError } from './modules/providers/localModelUrl.js'
+export {
+  fetchLocalRunner,
+  type LocalRunnerUrlPolicy,
+  type LocalRunnerUrlRefusal,
+  localRunnerUrlRefusal,
+  runnerRequestUrl,
+} from './modules/providers/localModelUrl.js'
 export {
   UserSecretService,
   type UserSecretServiceDependencies,

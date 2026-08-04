@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { signerFor, type MachinePayload, TOKEN_AUDIENCE } from '../../auth/signing.js'
+import { verifyMachineRequest } from '../../auth/machineGate.js'
 import type { AppEnv } from '../../http/env.js'
 import {
   type PersistenceRegistry,
@@ -40,11 +40,8 @@ export function persistenceController(): Hono<AppEnv> {
       )
     }
 
-    const secret = container.config.auth.sessionSecret
-    const token = c.req.header('authorization')?.replace(/^Bearer\s+/i, '')
-    const payload = secret
-      ? await signerFor(secret).verify<MachinePayload>(token, { aud: TOKEN_AUDIENCE.machine })
-      : null
+    // The shared machine gate: audience-pinned verify + the revoked-node roster check.
+    const payload = await verifyMachineRequest(c)
     if (!payload) {
       return c.json(
         { ok: false, error: { code: 'forbidden', message: 'invalid machine token' } },

@@ -957,6 +957,15 @@
       "confirmRemove": {
         "title": "Rimuovere questo runner?",
         "body": "\"{name}\" verra rimosso. Questa operazione non puo essere annullata."
+      },
+      "blocked": "L'URL di questo runner non è consentito su questo deployment, quindi i suoi modelli sono nascosti nel selettore.",
+      "urlReason": {
+        "invalid_url": "Questo URL non è valido.",
+        "scheme_not_allowed": "L'URL di un runner deve iniziare con http:// o https://.",
+        "credentials_not_allowed": "L'URL di un runner non può contenere nome utente o password.",
+        "query_or_fragment_not_allowed": "Inserisci solo l'URL di base, senza query \"?\" né frammento \"#\".",
+        "host_not_loopback": "Questo deployment raggiunge solo runner sulla propria macchina (localhost). Chiedi a un operatore di consentire i runner della rete locale.",
+        "host_not_local": "Un runner deve essere sulla tua macchina o nella tua rete locale. Gli host pubblici non sono consentiti."
       }
     },
     "modelPolicy": {

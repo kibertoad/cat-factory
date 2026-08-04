@@ -22,7 +22,12 @@ const SECRET = 'test-session-secret-0123456789'
 const AUTH = { enabled: true, sessionSecret: SECRET, devOpen: false } as unknown as AuthConfig
 
 /** A fake HTTP server + socket pair so the upgrade listener can be driven directly. */
-function harness(opts: { accountOf?: (id: string) => Promise<string | null> } = {}) {
+function harness(
+  opts: {
+    accountOf?: (id: string) => Promise<string | null>
+    isRevoked?: (nodeId: string) => Promise<boolean>
+  } = {},
+) {
   const hub = new NodeRealtimeHub()
   let listener: ((request: IncomingMessage, socket: Duplex, head: Buffer) => void) | undefined
   const server = {
@@ -35,7 +40,12 @@ function harness(opts: { accountOf?: (id: string) => Promise<string | null> } = 
     hub,
     AUTH,
     noopLogger,
-    opts.accountOf ? { accountOf: opts.accountOf } : undefined,
+    opts.accountOf
+      ? {
+          accountOf: opts.accountOf,
+          ...(opts.isRevoked ? { isRevoked: opts.isRevoked } : {}),
+        }
+      : undefined,
   )
   const upgrade = async (path: string, token?: string) => {
     // The verdict resolves asynchronously inside the listener (an HMAC verify, then the account
@@ -116,6 +126,50 @@ describe('machine event subscription (Node upgrade listener)', () => {
     const failed = await broken.upgrade('/internal/events/subscribe/ws_1', await token())
     expect(failed.written[0]).toContain('404')
     broken.stop()
+  })
+
+  it('refuses a REVOKED node with the same 403 as an invalid token (SEC-5)', async () => {
+    // The tombstone has to bind on the ONE long-lived machine surface too, not just the
+    // request-shaped `/internal/*` calls, or a leaked token keeps streaming a workspace's
+    // events for the rest of its 30-day life.
+    const { upgrade, stop } = harness({ accountOf, isRevoked: async () => true })
+    const revoked = await upgrade('/internal/events/subscribe/ws_1', await token())
+    expect(revoked.written[0]).toContain('403')
+    stop()
+  })
+
+  it('fails CLOSED with a 503 when the roster read throws, instead of crashing the process', async () => {
+    // An unreadable roster is not consent to serve a possibly-revoked node. It must also not
+    // reject the handshake promise: this runs on an HTTP `upgrade`, where there is no error
+    // handler above us, so an unhandled rejection would take the process down (Node's default)
+    // and leave the socket open. 503 rather than 403 because the node should RETRY, not
+    // reconnect for a fresh id.
+    const { upgrade, stop } = harness({
+      accountOf,
+      isRevoked: async () => {
+        throw new Error('roster down')
+      },
+    })
+    const res = await upgrade('/internal/events/subscribe/ws_1', await token())
+    expect(res.written[0]).toContain('503')
+    stop()
+  })
+
+  it('accepts a live (non-revoked) node when the roster answers', async () => {
+    const seen: string[] = []
+    const { upgrade, stop } = harness({
+      accountOf,
+      isRevoked: async (nodeId) => {
+        seen.push(nodeId)
+        return false
+      },
+    })
+    // A live node passes the tombstone check and is refused by nothing here (the accept half is
+    // covered below over a real socket); assert the roster was consulted with the signed node id.
+    await upgrade('/internal/events/subscribe/ws_other', await token())
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatch(/^node_/)
+    stop()
   })
 
   // The ACCEPT half, over a real listener and a real `ws` client. It cannot be driven through the
