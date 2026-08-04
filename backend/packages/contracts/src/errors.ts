@@ -178,7 +178,7 @@ export const CONFLICT_REASONS = [
   // useful to a headless integration: a redelivered webhook reads it as "already filed" and
   // follows the existing task instead of filing a duplicate.
   'ticket_already_linked',
-  // A caller tried to resolve a run's PRE-TOKEN INPUT GATE that is not (or is no longer) parked
+  // A caller tried to resolve a run's PRE-DISPATCH INPUT GATE that is not (or is no longer) parked
   // on it: the gate passed, the workspace has it off, or another surface already answered it.
   // The remedy is "nothing to do here": the SPA refreshes the run rather than re-offering a
   // decision that has already been taken.

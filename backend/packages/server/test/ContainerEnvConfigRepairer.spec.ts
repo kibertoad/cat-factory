@@ -36,7 +36,7 @@ const INSTALLATION: GitHubInstallation = {
 function repairProvider(over: Partial<EnvironmentProvider> = {}): EnvironmentProvider {
   return {
     describeRepairAgent: () => ({
-      prompt: 'Make .kargo.yml valid: it needs a name and a jobs list.',
+      prompt: 'Make .acme-envs.yml valid: it needs a name and a jobs list.',
     }),
     ...over,
   } as unknown as EnvironmentProvider
@@ -69,7 +69,7 @@ const REQUEST: EnvConfigRepairRequest = {
   owner: 'kibertoad',
   repo: 'acme',
   gitRef: 'feature/x',
-  issues: [{ severity: 'error' as const, message: 'missing jobs', path: '.kargo.yml' }],
+  issues: [{ severity: 'error' as const, message: 'missing jobs', path: '.acme-envs.yml' }],
   inputs: { name: 'acme' },
 }
 
@@ -107,7 +107,7 @@ describe('ContainerEnvConfigRepairer', () => {
       'https://github.com/kibertoad/acme.git',
     )
     // The user prompt is the provider's repair prompt.
-    expect(spec.userPrompt).toContain('.kargo.yml')
+    expect(spec.userPrompt).toContain('.acme-envs.yml')
     // A repair dispatches the same `agent` kind as an execution step, so it carries the same
     // correlation ids — otherwise its container's log lines join to nothing. A repair has no
     // separate execution row, so its job id IS its run id.

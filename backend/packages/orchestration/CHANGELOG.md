@@ -1,5 +1,53 @@
 # @cat-factory/orchestration
 
+## 0.199.0
+
+### Minor Changes
+
+- 2619d79: MCP maturation slice 1: every declared tool server is either served or STATED.
+
+  A dispatch now checks the running harness's MCP TRANSPORTS, not just whether it speaks MCP, so an
+  `http` server on a Codex run (whose client is stdio-only) is dropped under a new
+  `transport_unsupported` reason instead of being advertised in the prompt and then silently skipped by
+  the harness's TOML writer. Boot validation and the capability-credential checklist now enumerate
+  `AgentKindRegistry.kindsWithCapabilities()` (every kind declaring a capability on its own
+  registration, plus every kind named by `assignSkills` / `assignToolServers`), so a server attached to
+  a built-in such as `coder` reaches the same refusals and the same operator checklist as a registered
+  kind's own. New checks: a transport/harness combination no run could serve, an `allowedTools` entry
+  that is not a single tool name (the harness joins the list with commas), and a per-dispatch server
+  budget, both dimensions of which warn at boot and drop the excess under `over_budget` at dispatch.
+  The harness exempts `mcp__*` calls from the no-edit progress bound and bounds them with their own
+  `JOB_MAX_CONSECUTIVE_MCP_CALLS` streak, plus a `JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS` backstop shared
+  by every no-edit-exempt family (each per-family streak resets on a call outside its family, so
+  interleaving two of them was bounded only by the job's wall-clock ceiling).
+
+  OPERATORS UPGRADING: capabilities attached by `assignSkills` / `assignToolServers` were previously
+  not boot-validated at all, so a declaration that is now an ERROR (a cleartext off-loopback endpoint,
+  a reserved credential key, an unregistered id, a malformed server id or tool name) turns a
+  deployment that used to start into one that refuses to. That is the intent of the change, and each
+  message names the kind and the declaration to fix.
+
+  INTERNAL BREAK: `UnavailableToolServer['reason']` gains `transport_unsupported` and `over_budget`, so
+  a deployment rendering that union exhaustively must map them. Runner image bumped to 1.89.0.
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+- Updated dependencies [2619d79]
+  - @cat-factory/contracts@0.230.1
+  - @cat-factory/kernel@0.232.0
+  - @cat-factory/agents@0.110.0
+  - @cat-factory/integrations@0.123.5
+  - @cat-factory/caching@0.14.9
+  - @cat-factory/prompt-fragments@0.15.56
+  - @cat-factory/sandbox@0.11.50
+  - @cat-factory/spend@0.14.7
+  - @cat-factory/workspaces@0.21.43
+
 ## 0.198.0
 
 ### Minor Changes
@@ -75,7 +123,7 @@
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -98,7 +146,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -3644,7 +3692,7 @@ initiative-planner (gate) → initiative-committer`, and the analysis is folded 
 
 ### Patch Changes
 
-- 0f7cba1: Make the environment self-test WAIT for a synchronously-recorded env to become ready before tearing it down. Previously, a provider whose `provision()` returns immediately (a REST provider like a Kargo adapter, which responds with `provisioning`/no-URL and comes up asynchronously) had its env recorded at dispatch and torn down on the very next poll — the self-test only confirmed the create call returned a handle, never that the env actually stood up. `advanceProvisioning` now polls the provider's status (`refreshStatus`) for a synchronously-recorded env and stays in `provisioning` until it reaches `ready` (then tears down), fails the run on a terminal-not-ready status (`failed`/`expired`/torn down) carrying the provider's reason, and relies on the durable driver's existing poll budget to bound the wait. A provider that returns `ready` synchronously (e.g. compose) still advances on the first poll.
+- 0f7cba1: Make the environment self-test WAIT for a synchronously-recorded env to become ready before tearing it down. Previously, a provider whose `provision()` returns immediately (a REST provider style native adapter, which responds with `provisioning`/no-URL and comes up asynchronously) had its env recorded at dispatch and torn down on the very next poll — the self-test only confirmed the create call returned a handle, never that the env actually stood up. `advanceProvisioning` now polls the provider's status (`refreshStatus`) for a synchronously-recorded env and stays in `provisioning` until it reaches `ready` (then tears down), fails the run on a terminal-not-ready status (`failed`/`expired`/torn down) carrying the provider's reason, and relies on the durable driver's existing poll budget to bound the wait. A provider that returns `ready` synchronously (e.g. compose) still advances on the first poll.
 - Updated dependencies [f0e9bab]
   - @cat-factory/contracts@0.171.0
   - @cat-factory/kernel@0.165.0
@@ -11784,8 +11832,8 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
 
 - 4b5d267: Environment provider repo-config lifecycle: validate + bootstrap (+ agent-repair seam)
 
-  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. a future Kargo
-  adapter) can manage its config file inside the deployed repo:
+  Adds optional `EnvironmentProvider` capabilities so a native adapter (e.g. one for an
+  in-house ephemeral-environment system) can manage its config file inside the deployed repo:
 
   - `validateRepo` — mechanical repo-config validation, run on-demand
     (`POST /environments/connection/validate-repo`) and as a provision pre-flight gate that
@@ -12644,7 +12692,7 @@ markLeased` is replaced by a single atomic select-and-mark (`leaseLeastUsed`: Po
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the

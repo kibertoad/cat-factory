@@ -95,7 +95,7 @@ export class StepDecisionController {
    * parked on the implementation-fork decision (whose approve would skip the build
    * dispatch entirely).
    *
-   * The PRE-TOKEN INPUT GATE is checked off the INSTANCE rather than the step, because that is
+   * The PRE-DISPATCH INPUT GATE is checked off the INSTANCE rather than the step, because that is
    * where its verdict lives: the gate guards a step's DISPATCH, so it parks whatever step 0
    * happens to be and leaves nothing kind-specific behind for a step-only check to recognise.
    * Approving it generically would mark that first step done and advance past the work the run
