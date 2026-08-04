@@ -238,6 +238,17 @@ export function registerIntroduceApiOperation(
   pipelineRegistry.register({
     id: INTRODUCE_API_PIPELINE_ID,
     name: 'Introduce API',
+    // The two halves of an operation's pipeline LIFECYCLE, and they buy different things.
+    // `builtin: true` makes it a read-only catalog template: a workspace clones it to deviate
+    // rather than editing the definition out from under the operation that pins it. The explicit
+    // `version` is the ROLLOUT channel: a board seeded before the org shipped this operation is
+    // offered the pipeline by the new-pipeline advisory and materialises it with one reseed, and
+    // bumping the number here marks every stored copy outdated so the same reseed adopts the new
+    // definition. A versionless (non-builtin) registration is the other legitimate shape (an
+    // editable starting point each workspace owns), but it is ONE-SHOT: reseed refuses a stored
+    // non-builtin, so the org could never roll a fix out to the boards already holding it.
+    builtin: true,
+    version: 1,
     agentKinds: ['architect', 'coder', 'tester-api', 'conflicts', 'ci', 'merger'],
     stepOptions: [
       { agentVariantId: ORG_ARCHITECT_API_VARIANT_ID },

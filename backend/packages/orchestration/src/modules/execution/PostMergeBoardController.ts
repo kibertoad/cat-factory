@@ -1,11 +1,14 @@
 import type {
   BlockRepository,
   ExecutionEventPublisher,
+  Logger,
+  Pipeline,
   PipelineRepository,
   SubscriptionVendor,
 } from '@cat-factory/kernel'
 import { dependenciesMet, serviceOf } from '../board/board.logic.js'
 import type { BoardService } from '../board/BoardService.js'
+import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import type { RunAdmission } from './RunAdmission.js'
 
 /**
@@ -17,9 +20,16 @@ import type { RunAdmission } from './RunAdmission.js'
 export interface PostMergeBoardHost {
   readonly blockRepository: BlockRepository
   readonly pipelineRepository: PipelineRepository
+  /**
+   * Resolves a dependent's PINNED pipeline when the board holds no row for it, so an auto-start is
+   * not the one launch path still stuck behind the new-pipeline advisory. Read-only here: the
+   * `start` this controller calls does the adopting write itself.
+   */
+  readonly pipelineAdoption: PipelineAdoption
   readonly admission: RunAdmission
   readonly board: BoardService
   readonly events: ExecutionEventPublisher
+  readonly logger: Logger
 }
 
 /** The two calls that must be bound to the service, because they need state only it holds. */
@@ -88,15 +98,36 @@ export class PostMergeBoardController {
     const pipelines = await this.host.pipelineRepository.listByWorkspace(workspaceId)
     const pipelinesById = new Map(pipelines.map((p) => [p.id, p]))
     const firstPipeline = pipelines[0] ?? null
+    // A dependent may PIN a catalog pipeline this board was never seeded with (a reusable
+    // operation's canned pipeline on a board older than the operation), and dropping it here would
+    // leave auto-start as the one launch path still stuck behind the new-pipeline advisory: the
+    // task simply never begins, with nothing said. Resolve those from the code catalog and let
+    // `start` do the adopting write. Read from the CATALOG rather than a point read per miss
+    // because the list above already proves there is no row (banned N+1), and built lazily because
+    // almost every propagation resolves every dependent straight out of the list.
+    let adoptable: Map<string, Pipeline> | undefined
+    const pipelineFor = (pinned: string) =>
+      pipelinesById.get(pinned) ??
+      (adoptable ??= this.host.pipelineAdoption.adoptableCatalog()).get(pinned) ??
+      null
     for (const dependent of dependents) {
       // All of the dependent's blockers must now be satisfied (not just the one that merged).
       if (!dependenciesMet(blocks, dependent.id)) continue
       // Only auto-start a fresh task — never replace a run already in flight or a finished one.
       if (dependent.status !== 'planned' && dependent.status !== 'ready') continue
-      const pipeline = dependent.pipelineId
-        ? (pipelinesById.get(dependent.pipelineId) ?? null)
-        : firstPipeline
-      if (!pipeline) continue
+      const pipeline = dependent.pipelineId ? pipelineFor(dependent.pipelineId) : firstPipeline
+      if (!pipeline) {
+        // Nothing stored, nothing adoptable: the pin names a pipeline this deployment no longer
+        // defines (a deleted custom one, a retired built-in), or the dependent pins nothing and
+        // the board's library is empty. Two different fixes, told apart by whether `pipelineId` is
+        // present, and both need saying: the only other symptom is work that never starts.
+        this.host.logger.warn('Skipped a dependent auto-start: no pipeline resolved', {
+          workspaceId,
+          blockId: dependent.id,
+          pipelineId: dependent.pipelineId,
+        })
+        continue
+      }
       // Skip dependents that would lease an individual-usage credential (can't unlock
       // unattended) — resolved from the block + pipeline already in hand, no re-reads.
       const individual = await this.deps.resolveIndividualVendors(
