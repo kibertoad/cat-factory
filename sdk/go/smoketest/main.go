@@ -225,9 +225,12 @@ func main() {
 			return err
 		}
 		observations["webhookInitiallyNull"] = before.Webhook == nil
+		// `URL` is a pointer because omitting it is meaningful (keep the registered endpoint),
+		// which is the same reason `Secret` is one.
+		url := "https://hooks.example.com/cat-factory-smoketest"
 		secret := "smoketest-signing-secret"
 		saved, err := client.Webhook.Set(ctx, catfactory.PutNotificationWebhook{
-			URL:       "https://hooks.example.com/cat-factory-smoketest",
+			URL:       &url,
 			Secret:    &secret,
 			RunEvents: []catfactory.NotificationWebhookRunEvent{catfactory.NotificationWebhookRunEventRunCompleted},
 		})
