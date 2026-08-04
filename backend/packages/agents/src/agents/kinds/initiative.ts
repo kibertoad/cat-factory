@@ -8,7 +8,7 @@ import { linkedContextSection } from '../prompts/standard.js'
 // ---------------------------------------------------------------------------
 // The `initiative-breakdown` agent kind — the first agent reachable from the PUBLIC API.
 //
-// An external system posts an initiative brief to `POST /api/v1/initiatives`; the engine runs
+// An external system posts an initiative brief to `POST /api/v1/jobs`; the engine runs
 // this single INLINE step (one-shot LLM, no checkout, no repo, no push) and persists the result
 // to the DB for asynchronous retrieval. Its deliverable IS its reply — a structured breakdown of
 // the initiative into services / modules / candidate tasks — so it is a FORWARD-planning kind

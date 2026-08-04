@@ -2972,6 +2972,7 @@
       "storedAt": "Last set {date}",
       "notStoredWithFallback": "Nothing stored for this board. This deployment also reads the key from its own environment, so the capability may still be working.",
       "notStored": "Nothing stored for this board, and this deployment has no environment fallback, so the capability cannot authenticate.",
+      "notStoredUnknownFallback": "Nothing stored for this board. This deployment's credential chain cannot be described here, so whether this key is answered elsewhere is not known.",
       "setValue": "Value",
       "replaceValue": "Replace the stored value",
       "save": "Save",

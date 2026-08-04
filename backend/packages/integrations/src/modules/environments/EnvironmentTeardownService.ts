@@ -1,8 +1,8 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, Logger, ProvisioningOutcome } from '@cat-factory/kernel'
 import type { EnvironmentRecord, EnvironmentRegistryRepository } from '@cat-factory/kernel'
 import type { SecretCipher } from '@cat-factory/kernel'
 import type { EnvironmentHandle } from '@cat-factory/kernel'
-import { assertFound } from '@cat-factory/kernel'
+import { assertFound, noopLogger, runBestEffort } from '@cat-factory/kernel'
 import type { EnvironmentConnectionService } from './EnvironmentConnectionService.js'
 import { recordToHandle } from './environments.logic.js'
 import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningLogService.js'
@@ -12,6 +12,27 @@ import type { ProvisioningLogRecorder } from '../provisioning-logs/ProvisioningL
 // the local record is always tombstoned so an unreachable provider can't leave
 // the registry wedged; the provider call surfaces errors to the caller.
 
+/**
+ * Notified after a teardown ATTEMPT has been recorded in the provisioning log, whether it
+ * succeeded or failed. Its one consumer today is the run's PR verification report, whose
+ * environment-lifecycle proof cannot be closed by the run itself: the TTL sweep that reclaims the
+ * environment fires long after the last step settled, so without this edge the PR says "still
+ * live" about an environment the platform destroyed on schedule.
+ *
+ * The FAILURE edge matters as much as the success one, and for the same reason. A run that has
+ * settled has no step hook left to fire, so an environment the provider refuses to reclaim would
+ * otherwise sit on the PR as "nobody has torn this down yet" rather than as the thing an operator
+ * has to go and do: the same unreachable-leg hole one state over. The hook is therefore fired
+ * from the ONE place that records the attempt, so a future third teardown path cannot forget it.
+ *
+ * Strictly best-effort and swallowed by the service: reclaiming infrastructure must never
+ * depend on a downstream bookkeeping write.
+ */
+export type EnvironmentTeardownRecordedHook = (
+  record: EnvironmentRecord,
+  outcome: ProvisioningOutcome,
+) => Promise<void>
+
 export interface EnvironmentTeardownServiceDependencies {
   connectionService: EnvironmentConnectionService
   environmentRegistryRepository: EnvironmentRegistryRepository
@@ -19,10 +40,27 @@ export interface EnvironmentTeardownServiceDependencies {
   clock: Clock
   /** Best-effort provisioning-event log; absent ⇒ teardown is unchanged. */
   provisioningLog?: ProvisioningLogRecorder
+  /** Structured logger for the best-effort hook below; absent ⇒ its failures are unreported. */
+  logger?: Logger
 }
 
 export class EnvironmentTeardownService {
-  constructor(private readonly deps: EnvironmentTeardownServiceDependencies) {}
+  private readonly log: Logger
+  /**
+   * Late-bound because the engine that consumes it is constructed AFTER this service (it is
+   * injected into the provisioning service, which the engine takes). Same shape as
+   * `setInitiativeLoop` in the composition root, and for the same reason.
+   */
+  private teardownRecordedHook: EnvironmentTeardownRecordedHook | undefined
+
+  constructor(private readonly deps: EnvironmentTeardownServiceDependencies) {
+    this.log = deps.logger ?? noopLogger
+  }
+
+  /** Late-bind the teardown-recorded notification. Unset ⇒ nothing is notified. */
+  setTeardownRecordedHook(hook: EnvironmentTeardownRecordedHook | undefined): void {
+    this.teardownRecordedHook = hook
+  }
 
   /** Tear down a single environment and tombstone its record. */
   async teardown(workspaceId: string, id: string): Promise<EnvironmentHandle> {
@@ -72,7 +110,7 @@ export class EnvironmentTeardownService {
         // Log the verbatim provider error before it propagates (the sweep swallows
         // it; an on-demand teardown surfaces it). The local record is NOT tombstoned
         // on a provider failure, matching the existing retry-next-pass behaviour.
-        await this.logTeardown(
+        await this.recordTeardownAttempt(
           record,
           'failure',
           error instanceof Error ? error.message : String(error),
@@ -85,12 +123,19 @@ export class EnvironmentTeardownService {
       record.id,
       this.deps.clock.now(),
     )
-    await this.logTeardown(record, 'success', null)
+    await this.recordTeardownAttempt(record, 'success', null)
   }
 
-  private async logTeardown(
+  /**
+   * Append the attempt to the provisioning log and then notify, in that order and in ONE place.
+   * The ordering is what makes the notification usable: its consumer reads the log back, so a
+   * hook fired before the row landed would report the state the edge exists to correct. Keeping
+   * both here is what makes the FAILURE edge structural rather than a line someone remembered to
+   * add beside the success one.
+   */
+  private async recordTeardownAttempt(
     record: EnvironmentRecord,
-    outcome: 'success' | 'failure',
+    outcome: ProvisioningOutcome,
     error: string | null,
   ): Promise<void> {
     await this.deps.provisioningLog?.record({
@@ -104,6 +149,14 @@ export class EnvironmentTeardownService {
       outcome,
       error,
       detail: null,
+    })
+    const hook = this.teardownRecordedHook
+    if (!hook) return
+    await runBestEffort(this.log, 'environment.teardownRecordedHook', () => hook(record, outcome), {
+      workspaceId: record.workspaceId,
+      environmentId: record.id,
+      executionId: record.executionId,
+      outcome,
     })
   }
 

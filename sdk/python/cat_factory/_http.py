@@ -30,12 +30,12 @@ from .errors import (
 )
 
 #: SDK version, stamped into ``User-Agent``. Kept in step with pyproject.toml by ``check:sdk``.
-SDK_VERSION = "0.1.0"
+SDK_VERSION = "0.2.0"
 
 #: Methods that may be replayed after a failure.
 #:
 #: A transport failure with no response tells us nothing about whether the server acted, so only
-#: a method that is idempotent BY DEFINITION is replayed. ``POST /initiatives`` and
+#: a method that is idempotent BY DEFINITION is replayed. ``POST /jobs`` and
 #: ``POST /tasks/:id/start`` both cost real LLM work, and a duplicate is not something the SDK
 #: may decide to risk on the caller's behalf.
 _IDEMPOTENT = frozenset({"GET", "HEAD", "DELETE"})

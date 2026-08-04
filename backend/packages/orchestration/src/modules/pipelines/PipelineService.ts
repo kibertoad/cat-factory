@@ -161,6 +161,24 @@ export class PipelineService {
     return this.pipelineRepository.listByWorkspace(workspaceId)
   }
 
+  /**
+   * One pipeline by id, or null when the workspace has no such pipeline.
+   *
+   * The point-read behind a rule that only ever asks about ONE pipeline: the public API's start
+   * paths resolve a caller-supplied `pipelineId` before deciding whether to admit it, and did so by
+   * listing the workspace's whole catalog and filtering in JS. That is a full table read on the hot
+   * start path to answer a question the repository already indexes, and it grows with a workspace's
+   * catalog rather than with the request.
+   *
+   * Deliberately returns null rather than throwing, unlike the mutating paths that go through
+   * `assertFound`: an unknown id is not this method's error to raise. Both callers hand the id on to
+   * `ExecutionService.start`, which owns the "no such pipeline" refusal and its message.
+   */
+  async get(workspaceId: string, id: string): Promise<Pipeline | null> {
+    await this.requireWorkspace(workspaceId)
+    return this.pipelineRepository.get(workspaceId, id)
+  }
+
   async create(workspaceId: string, input: CreatePipelineInput): Promise<Pipeline> {
     await this.requireWorkspace(workspaceId)
     assertSomeEnabled(input.agentKinds, input.enabled)

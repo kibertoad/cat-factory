@@ -27,7 +27,10 @@ const API_PREFIX = '/api/v1'
 // every changesets release with no bearing on the API contract, and baking one in would make the
 // committed `docs/openapi.json` go stale on every release — the drift guard (`check:openapi`)
 // would then fail spuriously on the next PR that merges a release, even when no contract changed.
-// Bump this only when the `/api/v1` contract itself changes in a versioned way.
+//
+// The public API is STABLE (see CLAUDE.md "The public API is stable"): additive changes bump the
+// minor here; a breaking change is not allowed on `/api/v1` at all: it means a new `/api/v2`
+// prefix served beside v1 through a deprecation window, and a new spec version with it.
 const API_VERSION = '1.0.0'
 
 /**
@@ -38,8 +41,8 @@ const API_VERSION = '1.0.0'
 const COMPONENT_SCHEMAS = {
   ErrorResponse: 'errorResponseSchema',
   PublicJob: 'publicJobSchema',
-  InitiativeAccepted: 'initiativeAcceptedSchema',
-  CreateInitiativeJob: 'createInitiativeJobSchema',
+  PublicJobAccepted: 'publicJobAcceptedSchema',
+  CreatePublicJob: 'createPublicJobSchema',
   PublicService: 'publicServiceSchema',
   PublicServiceList: 'publicServiceListSchema',
   PublicTask: 'publicTaskSchema',
@@ -72,17 +75,17 @@ const COMPONENT_SCHEMAS = {
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
 const OPERATION_DOCS = {
-  createInitiativeJob: {
-    tag: 'Initiatives',
-    summary: 'Start an initiative-breakdown run',
+  createPublicJob: {
+    tag: 'Jobs',
+    summary: 'Start a headless job',
     description:
       'Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.',
   },
   getPublicJob: {
-    tag: 'Initiatives',
-    summary: 'Get an initiative job',
+    tag: 'Jobs',
+    summary: 'Get a job',
     description:
-      'Poll a headless initiative run started by this key: its status and, once finished, its result.',
+      'Poll a headless job started through this surface: its status and, once finished, its result.',
   },
   listPublicServices: {
     tag: 'Services',
@@ -106,13 +109,13 @@ const OPERATION_DOCS = {
     tag: 'Tasks',
     summary: "Get a task's status",
     description:
-      'Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one exists).',
+      'Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).',
   },
   startPublicTask: {
     tag: 'Tasks',
     summary: 'Start (run) a task',
     description:
-      'Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).',
+      'Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).',
   },
   updatePublicTask: {
     tag: 'Tasks',
@@ -145,10 +148,10 @@ const OPERATION_DOCS = {
       'Delete a task and its run history. Destructive, so it sits at the top of the scope ladder: requires an `admin`-scoped key.',
   },
   listPublicJobs: {
-    tag: 'Initiatives',
-    summary: "List the workspace's initiative jobs",
+    tag: 'Jobs',
+    summary: "List the workspace's jobs",
     description:
-      'List the headless initiative runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.',
+      'List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.',
   },
   resolvePublicRunJudge: {
     tag: 'Decisions',
@@ -186,10 +189,10 @@ const OPERATION_DOCS = {
       'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
   },
   cancelPublicJob: {
-    tag: 'Initiatives',
-    summary: 'Cancel an initiative job',
+    tag: 'Jobs',
+    summary: 'Cancel a job',
     description:
-      'Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.',
+      'Stop a headless job run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.',
   },
   listPublicRunDecisions: {
     tag: 'Decisions',
@@ -297,7 +300,7 @@ const OPERATION_DOCS = {
 
 /** Descriptions for the operation tags (groups). */
 const TAG_DESCRIPTIONS = {
-  Initiatives: 'Headless initiative-breakdown runs (start, poll, stream).',
+  Jobs: 'Headless runs of a public, inline pipeline (start, poll, stream).',
   Services: 'The workspace’s board services.',
   Tasks: 'Board tasks under a service (create, list, read, edit, start, stop, retry, stream).',
   Pipelines: 'The workspace’s pipelines (discover a pipelineId to start a task with).',
@@ -503,14 +506,14 @@ export async function buildOpenApiDoc() {
   }
 
   // The raw SSE routes that are NOT contracts (streaming Hono routes), documented by hand.
-  tags.add('Initiatives')
+  tags.add('Jobs')
   paths[`${API_PREFIX}/jobs/{id}/events`] = {
     get: {
       operationId: 'streamPublicJobEvents',
-      tags: ['Initiatives'],
-      summary: 'Stream an initiative job (SSE)',
+      tags: ['Jobs'],
+      summary: 'Stream a job (SSE)',
       description:
-        'Server-sent events for a headless initiative run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.',
+        'Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.',
       parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
       responses: {
         200: {

@@ -28,7 +28,7 @@ describe('public API — break down an initiative', () => {
     const auth = { authorization: `Bearer ${secret}` }
 
     // A missing/invalid key is rejected.
-    const noKey = await app.call('POST', '/api/v1/initiatives', {
+    const noKey = await app.call('POST', '/api/v1/jobs', {
       pipelineId: 'pl_initiative_breakdown',
       input: 'x',
     })
@@ -37,7 +37,7 @@ describe('public API — break down an initiative', () => {
     // Start an initiative breakdown.
     const started = await app.call<{ jobId: string; status: string }>(
       'POST',
-      '/api/v1/initiatives',
+      '/api/v1/jobs',
       { pipelineId: 'pl_initiative_breakdown', input: 'Build a cat feeder service' },
       auth,
     )
@@ -71,7 +71,7 @@ describe('public API — break down an initiative', () => {
     // A non-public pipeline id is refused.
     const nonPublic = await app.call(
       'POST',
-      '/api/v1/initiatives',
+      '/api/v1/jobs',
       { pipelineId: 'pl_blueprint', input: 'x' },
       auth,
     )
@@ -105,7 +105,7 @@ interface Task {
   title: string
   taskType: string
   status: string
-  executionId: string | null
+  runId: string | null
   pullRequestUrl: string | null
 }
 
@@ -149,7 +149,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
     expect(created.body.serviceId).toBe(serviceId)
     expect(created.body.status).toBe('planned')
     expect(created.body.taskType).toBe('feature')
-    expect(created.body.executionId).toBeNull()
+    expect(created.body.runId).toBeNull()
     const taskId = created.body.taskId
 
     // Read its status.
@@ -203,7 +203,7 @@ describe('public API — basic board workloads (services + tasks)', () => {
     )
     expect(started.status).toBe(202)
     expect(started.body.status).toBe('in_progress')
-    expect(started.body.executionId).toBeTruthy()
+    expect(started.body.runId).toBeTruthy()
 
     // Drive the durable run to completion and confirm the status surfaces.
     await app.drive(workspaceId)

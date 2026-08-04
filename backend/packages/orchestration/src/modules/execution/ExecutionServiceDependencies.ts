@@ -30,6 +30,7 @@ import type {
   PrVerificationReportPublisher,
   ProviderCapabilities,
   ProviderRegistry,
+  ProvisioningLogRepository,
   PullRequestMerger,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
@@ -519,6 +520,13 @@ export interface ExecutionServiceDependencies {
    * a no-VCS deployment) → the engine behaves exactly as it did before the feature.
    */
   prVerificationReportPublisher?: PrVerificationReportPublisher
+  /**
+   * Optional: the provisioning event log, read by the verification report to DATE the ephemeral
+   * environment's lifecycle (when it came up, when it was reclaimed, and how many attempts
+   * failed). Absent → the environment section reports the lifecycle as un-evidenced rather than
+   * as an environment nobody tore down.
+   */
+  provisioningLogRepository?: ProvisioningLogRepository
   /**
    * Optional: the deployment's public SPA base URL, used to build the verification report's
    * observability deep link. Absent → the report carries no link rather than a dead one.

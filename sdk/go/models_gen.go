@@ -11,8 +11,8 @@ package catfactory
 
 import "encoding/json"
 
-// CreateInitiativeJob is the `CreateInitiativeJob` wire model.
-type CreateInitiativeJob struct {
+// CreatePublicJob is the `CreatePublicJob` wire model.
+type CreatePublicJob struct {
 	Input      string `json:"input"`
 	PipelineID string `json:"pipelineId"`
 	// Title may be absent entirely.
@@ -549,34 +549,6 @@ const (
 // GetDebugLlmCallViewValues lists every GetDebugLlmCallView this SDK release knows.
 var GetDebugLlmCallViewValues = []GetDebugLlmCallView{GetDebugLlmCallViewRaw, GetDebugLlmCallViewMessages}
 
-// InitiativeAccepted is the `InitiativeAccepted` wire model.
-type InitiativeAccepted struct {
-	JobID  string                   `json:"jobId"`
-	Links  InitiativeAcceptedLinks  `json:"links"`
-	Status InitiativeAcceptedStatus `json:"status"`
-}
-
-// InitiativeAcceptedLinks is the `InitiativeAcceptedLinks` wire model.
-type InitiativeAcceptedLinks struct {
-	Events string `json:"events"`
-	Self   string `json:"self"`
-}
-
-// InitiativeAcceptedStatus is the `InitiativeAcceptedStatus` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type InitiativeAcceptedStatus string
-
-const (
-	InitiativeAcceptedStatusRunning   InitiativeAcceptedStatus = "running"
-	InitiativeAcceptedStatusSucceeded InitiativeAcceptedStatus = "succeeded"
-	InitiativeAcceptedStatusFailed    InitiativeAcceptedStatus = "failed"
-)
-
-// InitiativeAcceptedStatusValues lists every InitiativeAcceptedStatus this SDK release knows.
-var InitiativeAcceptedStatusValues = []InitiativeAcceptedStatus{InitiativeAcceptedStatusRunning, InitiativeAcceptedStatusSucceeded, InitiativeAcceptedStatusFailed}
-
 // ListDebugAgentContextResponse is the `ListDebugAgentContextResponse` wire model.
 type ListDebugAgentContextResponse struct {
 	// NextCursor always present; nil when the server has no value for it.
@@ -1107,8 +1079,21 @@ type PublicJob struct {
 	JobID      string    `json:"jobId"`
 	PipelineID string    `json:"pipelineId"`
 	// Result always present; nil when the server has no value for it.
-	Result *PublicJobResult         `json:"result"`
-	Status InitiativeAcceptedStatus `json:"status"`
+	Result *PublicJobResult `json:"result"`
+	Status PublicJobStatus  `json:"status"`
+}
+
+// PublicJobAccepted is the `PublicJobAccepted` wire model.
+type PublicJobAccepted struct {
+	JobID  string                 `json:"jobId"`
+	Links  PublicJobAcceptedLinks `json:"links"`
+	Status PublicJobStatus        `json:"status"`
+}
+
+// PublicJobAcceptedLinks is the `PublicJobAcceptedLinks` wire model.
+type PublicJobAcceptedLinks struct {
+	Events string `json:"events"`
+	Self   string `json:"self"`
 }
 
 // PublicJobResult is the `PublicJobResult` wire model.
@@ -1117,6 +1102,21 @@ type PublicJobResult struct {
 	Data   any    `json:"data"`
 	Output string `json:"output"`
 }
+
+// PublicJobStatus is the `PublicJobStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicJobStatus string
+
+const (
+	PublicJobStatusRunning   PublicJobStatus = "running"
+	PublicJobStatusSucceeded PublicJobStatus = "succeeded"
+	PublicJobStatusFailed    PublicJobStatus = "failed"
+)
+
+// PublicJobStatusValues lists every PublicJobStatus this SDK release knows.
+var PublicJobStatusValues = []PublicJobStatus{PublicJobStatusRunning, PublicJobStatusSucceeded, PublicJobStatusFailed}
 
 // PublicJudgeDecision is the `PublicJudgeDecision` wire model.
 type PublicJudgeDecision struct {
@@ -1408,17 +1408,17 @@ var PublicSetFindingStatusStatusValues = []PublicSetFindingStatusStatus{PublicSe
 
 // PublicTask is the `PublicTask` wire model.
 type PublicTask struct {
-	Description string `json:"description"`
-	// ExecutionID always present; nil when the server has no value for it.
-	ExecutionID *string `json:"executionId"`
+	Description string  `json:"description"`
 	Progress    float64 `json:"progress"`
 	// PullRequestURL always present; nil when the server has no value for it.
-	PullRequestURL *string    `json:"pullRequestUrl"`
-	ServiceID      string     `json:"serviceId"`
-	Status         TaskStatus `json:"status"`
-	TaskID         string     `json:"taskId"`
-	TaskType       string     `json:"taskType"`
-	Title          string     `json:"title"`
+	PullRequestURL *string `json:"pullRequestUrl"`
+	// RunID always present; nil when the server has no value for it.
+	RunID     *string    `json:"runId"`
+	ServiceID string     `json:"serviceId"`
+	Status    TaskStatus `json:"status"`
+	TaskID    string     `json:"taskId"`
+	TaskType  string     `json:"taskType"`
+	Title     string     `json:"title"`
 }
 
 // PublicTaskList is the `PublicTaskList` wire model.

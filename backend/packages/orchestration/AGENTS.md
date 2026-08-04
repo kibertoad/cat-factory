@@ -59,7 +59,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
   composed from the settled run's own state and published onto its PR through the
-  `PrVerificationReportPublisher` port). Every untrusted value it interpolates crosses kernel's
+  `PrVerificationReportPublisher` port), with `prReport.environments.ts` holding the **test
+  environment lifecycle** proof (environment up → evidence captured from it while live →
+  teardown confirmed) because it is the one section composed from a source outside the
+  in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.
+  Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
+  to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
+  the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
+  rule both halves share lives under both in `prReport.steps.ts`. Every untrusted value it
+  interpolates crosses kernel's
   shared `hostMarkdown` boundary (`shared/host-markdown.logic.ts`: auto-link triggers, table
   cells, code fences), which lives there rather than here because the tracker-issue writebacks
   in `@cat-factory/integrations` render through the SAME escapes; the composer scrubs free text

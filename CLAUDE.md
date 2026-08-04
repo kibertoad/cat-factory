@@ -36,12 +36,36 @@ model: the `RunDispatcher` controller extractions, `FetchGitHubClient` → `revi
 number may only change in your PR when a split made it smaller. If you believe a split is impossible,
 STOP and say so rather than bumping silently.
 
-## Backwards compatibility is NOT a goal
+## Compatibility: the public API is STABLE; everything internal is not
 
-Pre-1.0, no external consumers. Do NOT add migrations, shims, dual-read/dual-write paths, deprecation
-windows, or "legacy" fallbacks to preserve old data or old wire shapes. When a change makes existing
-rows, tokens, config, or request/response shapes obsolete, it is fine for them to break: prefer the clean
-shape and let stale state be re-created. Flag the break in the changeset.
+### The public API does not break, full stop
+
+The externally consumed surface is: `/api/v1` (paths, request/response shapes, error `code` values
+and `details.reason` vocabularies, SSE event names, scope semantics), the four SDK clients under
+`sdk/`, and the outbound webhook delivery contract. External integrations and published SDK
+releases build on it, so a change there is held to a different bar than the rest of the repo
+(design record: [ADR 0032](./backend/docs/adr/0032-public-api-stability.md)):
+
+- **Additive changes are the normal mode**: a new endpoint, a new optional field, a new enum
+  value, a new error code. The SDKs tolerate unknown values by design, so additions ship freely;
+  bump the OpenAPI `info.version` minor.
+- **Anything else needs an INCREMENTAL MIGRATION PATH plus a VERSION CHANGE, in that order.** The
+  old shape keeps working while the new one is served beside it (a new field beside the one it
+  replaces, a new `/api/v2` prefix for a path or semantics change), the version records the step
+  (OpenAPI `info.version` major, SDK majors), and the changeset plus
+  [`backend/docs/public-api.md`](./backend/docs/public-api.md) document what moves and by when.
+  Removing the old half is a second, LATER change, made only after consumers have had a release
+  window to move. Never rename, retype, remove, or re-scope in place.
+- **Narrowing what a scope or key may do is a break too**, not a bug-fix: a live integration built
+  on the old admission loses capability. It takes the same migration path.
+
+### Internals: backwards compatibility is NOT a goal
+
+Pre-1.0 for everything the public surface does not cover: internal wire shapes, persisted rows,
+tokens, config. Do NOT add migrations, shims, dual-read/dual-write paths, deprecation windows, or
+"legacy" fallbacks to preserve old data or old INTERNAL wire shapes. When a change makes existing
+rows, tokens, config, or internal request/response shapes obsolete, it is fine for them to break:
+prefer the clean shape and let stale state be re-created. Flag the break in the changeset.
 
 **But a break must ARRIVE as one.** Retiring a member of a CLOSED vocabulary that is also PERSISTED
 (`BinaryModality`, a step's stored enum, a reason code on a saved row) does not remove the old value
@@ -1188,8 +1212,8 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   everything outside the platform's own configuration** is a developer's own tooling, and only the
   deployment knows what an integration may see: `{ allowKeys }`, which a deployment installing
   third-party agent packages (or a mothership-mode node) sets through its facade's
-  `createToolSecretResolver` factory. **On the Worker that factory registers PROCESS-WIDE**
-  (`registerToolSecretResolverFactory`, the `registerModelRegistry` pattern), because a Worker builds a
+  `createToolSecretResolver` factory. **On the Worker that policy registers PROCESS-WIDE**
+  (`registerToolSecretPolicy`, the `registerModelRegistry` pattern), because a Worker builds a
   container per entry point and the one that dispatches container agents is the durable driver, so an
   option held on the app would be accepted and never asked anything. **The VALUE's primary home is the
   per-workspace capability-credential store**, not the environment: every facade composes it in FRONT
@@ -1199,8 +1223,20 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   that an empty list would flatten: a stored key nothing declares (`orphaned`), a declaration read that
   FAILED (`declarationsIncomplete`, which also suppresses the orphan list, or an unreachable
   mothership reports every generator credential as stale), and a key the environment still answers
-  (`environmentFallback`). Doc:
-  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  (`environmentFallback`). **That last one is a TRI-STATE read off the chain the facade COMPOSED, never
+  a default the surface asserts beside it**: `buildToolSecretChain` is the one composition site and it
+  returns the resolver and its description together, so a deployment that declared its chain store-only
+  (`capabilityCredentialEnvironmentFallback: false`, the multi-tenant shape) reports `false` and one
+  that supplied its own resolver reports ABSENT, because that resolver replaced the chain and may read
+  Vault, the environment, or both. Guessing either way is the same mistake mirrored: `true` leaves a
+  credential nothing will resolve, `false` sends an operator hunting for a value that already answers.
+  **The absent line states only that the chain is undescribable HERE and never WHY**, because a facade
+  that wired the store and dropped the flag lands on the same value, and copy blaming a custom resolver
+  makes that wiring bug read as a deliberate configuration. **The chain itself is a REQUIRED dependency
+  of both executor builders**, since the one default they could carry (the deployment environment alone)
+  silently drops the per-workspace store, which is the leak the store exists to prevent: a default is
+  only safe where the safe answer is the convenient one.
+  Doc: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.

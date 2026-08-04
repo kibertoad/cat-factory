@@ -1,7 +1,7 @@
 {
   "components": {
     "schemas": {
-      "CreateInitiativeJob": {
+      "CreatePublicJob": {
         "properties": {
           "input": {
             "maxLength": 50000,
@@ -97,42 +97,6 @@
         },
         "required": [
           "error"
-        ],
-        "type": "object"
-      },
-      "InitiativeAccepted": {
-        "properties": {
-          "jobId": {
-            "type": "string"
-          },
-          "links": {
-            "properties": {
-              "events": {
-                "type": "string"
-              },
-              "self": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "self",
-              "events"
-            ],
-            "type": "object"
-          },
-          "status": {
-            "enum": [
-              "running",
-              "succeeded",
-              "failed"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "jobId",
-          "status",
-          "links"
         ],
         "type": "object"
       },
@@ -902,6 +866,42 @@
         ],
         "type": "object"
       },
+      "PublicJobAccepted": {
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "links": {
+            "properties": {
+              "events": {
+                "type": "string"
+              },
+              "self": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "self",
+              "events"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId",
+          "status",
+          "links"
+        ],
+        "type": "object"
+      },
       "PublicNotificationList": {
         "properties": {
           "notifications": {
@@ -1331,7 +1331,10 @@
           "description": {
             "type": "string"
           },
-          "executionId": {
+          "progress": {
+            "type": "number"
+          },
+          "pullRequestUrl": {
             "anyOf": [
               {
                 "type": "string"
@@ -1341,10 +1344,7 @@
               }
             ]
           },
-          "progress": {
-            "type": "number"
-          },
-          "pullRequestUrl": {
+          "runId": {
             "anyOf": [
               {
                 "type": "string"
@@ -1403,7 +1403,7 @@
           "taskType",
           "status",
           "progress",
-          "executionId",
+          "runId",
           "pullRequestUrl"
         ],
         "type": "object"
@@ -4623,61 +4623,9 @@
         ]
       }
     },
-    "/api/v1/initiatives": {
-      "post": {
-        "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
-        "operationId": "createInitiativeJob",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateInitiativeJob"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InitiativeAccepted"
-                }
-              }
-            },
-            "description": "Accepted — the run has started"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Server error"
-          }
-        },
-        "summary": "Start an initiative-breakdown run",
-        "tags": [
-          "Initiatives"
-        ]
-      }
-    },
     "/api/v1/jobs": {
       "get": {
-        "description": "List the headless initiative runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
+        "description": "List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.",
         "operationId": "listPublicJobs",
         "parameters": [
           {
@@ -4779,15 +4727,65 @@
             "description": "Server error"
           }
         },
-        "summary": "List the workspace's initiative jobs",
+        "summary": "List the workspace's jobs",
         "tags": [
-          "Initiatives"
+          "Jobs"
+        ]
+      },
+      "post": {
+        "description": "Start a public, inline pipeline headlessly against a supplied brief. Returns a job id to poll or stream. Nothing is pushed to GitHub.",
+        "operationId": "createPublicJob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePublicJob"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicJobAccepted"
+                }
+              }
+            },
+            "description": "Accepted — the run has started"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Start a headless job",
+        "tags": [
+          "Jobs"
         ]
       }
     },
     "/api/v1/jobs/{id}": {
       "get": {
-        "description": "Poll a headless initiative run started by this key: its status and, once finished, its result.",
+        "description": "Poll a headless job started through this surface: its status and, once finished, its result.",
         "operationId": "getPublicJob",
         "parameters": [
           {
@@ -4831,15 +4829,15 @@
             "description": "Server error"
           }
         },
-        "summary": "Get an initiative job",
+        "summary": "Get a job",
         "tags": [
-          "Initiatives"
+          "Jobs"
         ]
       }
     },
     "/api/v1/jobs/{id}/cancel": {
       "post": {
-        "description": "Stop a headless initiative run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.",
+        "description": "Stop a headless job run, freeing its concurrency slot. Idempotent — an already-finished job is returned as-is. Use this to abandon a run parked on a decision you do not intend to answer.",
         "operationId": "cancelPublicJob",
         "parameters": [
           {
@@ -4883,15 +4881,15 @@
             "description": "Server error"
           }
         },
-        "summary": "Cancel an initiative job",
+        "summary": "Cancel a job",
         "tags": [
-          "Initiatives"
+          "Jobs"
         ]
       }
     },
     "/api/v1/jobs/{id}/events": {
       "get": {
-        "description": "Server-sent events for a headless initiative run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.",
+        "description": "Server-sent events for a headless job run: `progress` frames until a terminal `done`/`error`/`stopped`/`timeout` event. Authenticated by the API key header.",
         "operationId": "streamPublicJobEvents",
         "parameters": [
           {
@@ -4925,9 +4923,9 @@
             "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
           }
         },
-        "summary": "Stream an initiative job (SSE)",
+        "summary": "Stream a job (SSE)",
         "tags": [
-          "Initiatives"
+          "Jobs"
         ]
       }
     },
@@ -5923,7 +5921,7 @@
         ]
       },
       "get": {
-        "description": "Read a task’s current lifecycle status, run progress, execution id, and PR URL (once one exists).",
+        "description": "Read a task’s current lifecycle status, run progress, run id, and PR URL (once one exists).",
         "operationId": "getPublicTask",
         "parameters": [
           {
@@ -6181,7 +6179,7 @@
     },
     "/api/v1/tasks/{taskId}/start": {
       "post": {
-        "description": "Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).",
+        "description": "Start a task’s pipeline. Uses the request’s pipelineId, else the task’s pinned pipeline. A pipeline that can park on a human decision requires a `decide`-scope key. A task on an individual-usage model cannot be started through the API (no headless personal-credential unlock).",
         "operationId": "startPublicTask",
         "parameters": [
           {
@@ -6357,8 +6355,8 @@
       "name": "Decisions"
     },
     {
-      "description": "Headless initiative-breakdown runs (start, poll, stream).",
-      "name": "Initiatives"
+      "description": "Headless runs of a public, inline pipeline (start, poll, stream).",
+      "name": "Jobs"
     },
     {
       "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",

@@ -8,7 +8,7 @@
 // said nothing" are different facts, and a caller that cannot tell them apart cannot report
 // either one honestly.
 
-export interface CreateInitiativeJob {
+export interface CreatePublicJob {
   /** Length 1..50000. */
   input: string
   /** Length 1..∞. */
@@ -411,22 +411,6 @@ export type GetDebugLlmCallView = 'raw' | 'messages'
 /** Every `GetDebugLlmCallView` value, for exhaustive handling and runtime validation. */
 export const GET_DEBUG_LLM_CALL_VIEW_VALUES = ['raw', 'messages'] as const
 
-export interface InitiativeAccepted {
-  jobId: string
-  links: InitiativeAcceptedLinks
-  status: InitiativeAcceptedStatus
-}
-
-export interface InitiativeAcceptedLinks {
-  events: string
-  self: string
-}
-
-export type InitiativeAcceptedStatus = 'running' | 'succeeded' | 'failed'
-
-/** Every `InitiativeAcceptedStatus` value, for exhaustive handling and runtime validation. */
-export const INITIATIVE_ACCEPTED_STATUS_VALUES = ['running', 'succeeded', 'failed'] as const
-
 export interface ListDebugAgentContextResponse {
   /** Always present; `null` when the server has no value for it. */
   nextCursor: string | null
@@ -673,7 +657,18 @@ export interface PublicJob {
   pipelineId: string
   /** Always present; `null` when the server has no value for it. */
   result: PublicJobResult | null
-  status: InitiativeAcceptedStatus
+  status: PublicJobStatus
+}
+
+export interface PublicJobAccepted {
+  jobId: string
+  links: PublicJobAcceptedLinks
+  status: PublicJobStatus
+}
+
+export interface PublicJobAcceptedLinks {
+  events: string
+  self: string
 }
 
 export interface PublicJobResult {
@@ -681,6 +676,11 @@ export interface PublicJobResult {
   data: unknown | null
   output: string
 }
+
+export type PublicJobStatus = 'running' | 'succeeded' | 'failed'
+
+/** Every `PublicJobStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_JOB_STATUS_VALUES = ['running', 'succeeded', 'failed'] as const
 
 export interface PublicJudgeDecision {
   bounces: number
@@ -849,11 +849,11 @@ export const PUBLIC_SET_FINDING_STATUS_STATUS_VALUES = ['dismissed', 'open'] as 
 
 export interface PublicTask {
   description: string
-  /** Always present; `null` when the server has no value for it. */
-  executionId: string | null
   progress: number
   /** Always present; `null` when the server has no value for it. */
   pullRequestUrl: string | null
+  /** Always present; `null` when the server has no value for it. */
+  runId: string | null
   serviceId: string
   status: TaskStatus
   taskId: string

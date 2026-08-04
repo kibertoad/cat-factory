@@ -129,6 +129,14 @@ export async function startLocal(
      */
     createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
     /**
+     * Whether this node's environment answers a capability credential the workspace has not
+     * stored. Defaults to true, which is right for a laptop: the operator sets the variable they
+     * already set for everything else. A multi-tenant deployment built on this facade sets it
+     * false so a workspace that has typed nothing resolves nothing. Ignored when
+     * {@link createToolSecretResolver} is set, which replaces the chain outright.
+     */
+    capabilityCredentialEnvironmentFallback?: boolean
+    /**
      * App-owned backend registries (environment + runner kind → provider), registered BY
      * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
      * A deployment builds `createBackendRegistries()`, registers its custom backend(s) onto it
@@ -286,6 +294,7 @@ async function bootLocal(
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
     createToolSecretResolver: options.createToolSecretResolver,
+    capabilityCredentialEnvironmentFallback: options.capabilityCredentialEnvironmentFallback,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
     // so it never reaches this facade's own catch above — thread the same local-mode `.env`-CLI
     // advertisement through `start()`'s misconfiguration path so those problems get it too.
@@ -347,6 +356,7 @@ async function startLocalMothership(
     foundationalServiceRegistry?: FoundationalServiceRegistry
     binaryGeneratorRegistry?: BinaryGeneratorRegistry
     createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
+    capabilityCredentialEnvironmentFallback?: boolean
     seedEnvironmentHandlers?: RegisterHandlerInput[]
     seedSharedStacks?: CreateSharedStackInput[]
   },
@@ -360,6 +370,7 @@ async function startLocalMothership(
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     createToolSecretResolver,
+    capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
     seedSharedStacks,
   } = extensions
@@ -386,6 +397,7 @@ async function startLocalMothership(
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
     createToolSecretResolver,
+    capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
     seedSharedStacks,
   })

@@ -13,7 +13,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to a type chec
     from .operations import (
         DebugResource,
         DecisionsResource,
-        InitiativesResource,
+        JobsResource,
         NotificationsResource,
         PipelinesResource,
         ServicesResource,
@@ -51,7 +51,7 @@ class CatFactoryClient:
     # copy of the surface table that nothing keeps in sync --- a group added to the generator
     # would import, run, and simply not be reachable from the client anyone constructs.
     if TYPE_CHECKING:
-        initiatives: InitiativesResource
+        jobs: JobsResource
         services: ServicesResource
         tasks: TasksResource
         pipelines: PipelinesResource
@@ -77,7 +77,7 @@ class CatFactoryClient:
         :param api_key: a public-API key of the form ``cf_live_<keyId>.<secret>``.
         :param timeout: per-request deadline in seconds.
         :param max_retries: retries for a RETRIABLE failure. A non-idempotent request is never
-            retried automatically, so raising this does not make ``initiatives.create`` replayable.
+            retried automatically, so raising this does not make ``jobs.create`` replayable.
         :param headers: headers sent on every request.
         :param user_agent: prefixed to ``User-Agent`` so a deployment's logs can attribute calls
             to your integration.
