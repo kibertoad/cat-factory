@@ -35,7 +35,7 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.6.0'
+const API_VERSION = '1.7.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -74,13 +74,21 @@ const COMPONENT_SCHEMAS = {
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
-  // Parked decisions. `PublicDecisionList` is the response of ALL eight decision routes, and it
-  // transitively carries the full finding + fork-option shapes — hoisting it (and the members of
-  // its variant) keeps the spec from inlining ~21KB per operation.
+  // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
+  // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
+  // members of its variant) keeps the spec from inlining tens of KB per operation.
   PublicReviewFinding: 'publicReviewFindingSchema',
   PublicRequirementsDecision: 'publicRequirementsDecisionSchema',
   PublicForkDecision: 'publicForkDecisionSchema',
   PublicInputGateDecision: 'publicInputGateDecisionSchema',
+  PublicApprovalGateDecision: 'publicApprovalGateDecisionSchema',
+  PublicAgentDecision: 'publicAgentDecisionSchema',
+  PublicClarityDecision: 'publicClarityDecisionSchema',
+  PublicBrainstormDecision: 'publicBrainstormDecisionSchema',
+  PublicPrReviewDecision: 'publicPrReviewDecisionSchema',
+  PublicHumanTestEnvironment: 'publicHumanTestEnvironmentSchema',
+  PublicHumanTestDecision: 'publicHumanTestDecisionSchema',
+  PublicVisualConfirmDecision: 'publicVisualConfirmDecisionSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -89,6 +97,13 @@ const COMPONENT_SCHEMAS = {
   PublicResolveExceeded: 'publicResolveExceededSchema',
   PublicChooseFork: 'publicChooseForkSchema',
   PublicResolveInputGate: 'publicResolveInputGateSchema',
+  PublicApproveStep: 'publicApproveStepSchema',
+  PublicRequestStepChanges: 'publicRequestStepChangesSchema',
+  PublicRejectStep: 'publicRejectStepSchema',
+  PublicResolveAgentDecision: 'publicResolveAgentDecisionSchema',
+  PublicResolvePrReview: 'publicResolvePrReviewSchema',
+  PublicChallengePrReviewFinding: 'publicChallengePrReviewFindingSchema',
+  PublicRequestGateFix: 'publicRequestGateFixSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -283,6 +298,150 @@ const OPERATION_DOCS = {
     description:
       'Pick one of the proposed implementation forks (by id) or submit your own approach. The Coder then runs with the choice folded in as a binding directive. Requires a `decide`-scope key.',
   },
+  approvePublicRunStep: {
+    tag: 'Decisions',
+    summary: 'Approve a parked step',
+    description:
+      "Approve the proposal a gated step is holding up, optionally replacing it with an edited one (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes from the run's decision list; passing it back is what makes a racing app user and a racing integration resolve the same gate. Requires a `decide`-scope key.",
+  },
+  requestPublicRunStepChanges: {
+    tag: 'Decisions',
+    summary: 'Request changes on a parked step',
+    description:
+      'Send the gated step back to re-run with your guidance folded in. Unlike the in-app twin this takes freeform feedback only: anchored per-block comments address source line ranges of a rendered proposal, which a headless caller never rendered. Requires a `decide`-scope key.',
+  },
+  rejectPublicRunStep: {
+    tag: 'Decisions',
+    summary: 'Reject a parked step',
+    description:
+      'Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the board can retry. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunStepExceeded: {
+    tag: 'Decisions',
+    summary: 'Resolve a companion gate at its rework cap',
+    description:
+      'Pick how a quality companion that spent its automatic rework budget proceeds: one more round, proceed with the output as it stands, or stop and reset the task. A gate in this state reports `exceeded: true` and refuses the plain approve. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunAgentDecision: {
+    tag: 'Decisions',
+    summary: 'Answer an agent-raised decision',
+    description:
+      'Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the offered options or a steer of your own. Requires a `decide`-scope key.',
+  },
+  replyPublicRunClarityFinding: {
+    tag: 'Decisions',
+    summary: 'Answer a clarity (bug-triage) finding',
+    description:
+      "Record an answer to one clarity-review finding — the bug-report twin of the requirements loop. Returns the run's updated decision list. Requires a `decide`-scope key.",
+  },
+  setPublicRunClarityFindingStatus: {
+    tag: 'Decisions',
+    summary: 'Dismiss or reopen a clarity finding',
+    description:
+      'Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. Only `open` findings block incorporation. Requires a `decide`-scope key.',
+  },
+  incorporatePublicRunClarity: {
+    tag: 'Decisions',
+    summary: 'Incorporate clarity answers',
+    description:
+      'Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows the review `incorporating` while the durable driver folds and re-reviews in the background. Requires a `decide`-scope key.',
+  },
+  reReviewPublicRunClarity: {
+    tag: 'Decisions',
+    summary: 'Re-triage the clarified report',
+    description:
+      'Run one more triage pass over the incorporated bug report. On convergence the parked run advances. Requires a `decide`-scope key.',
+  },
+  proceedPublicRunClarity: {
+    tag: 'Decisions',
+    summary: 'Proceed past the clarity review',
+    description:
+      'Settle the clarity phase with the last clarified report and advance the parked run. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunClarityExceeded: {
+    tag: 'Decisions',
+    summary: 'Resolve a clarity review at its iteration cap',
+    description:
+      'Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with the last clarified report, or stop and reset the task. Requires a `decide`-scope key.',
+  },
+  replyPublicRunBrainstormOption: {
+    tag: 'Decisions',
+    summary: 'Respond to a brainstorm option',
+    description:
+      'Pick or steer one of the options the brainstorm agent proposed, for the named stage (`requirements` or `architecture`). A task may hold one live session per stage at once. Requires a `decide`-scope key.',
+  },
+  setPublicRunBrainstormOptionStatus: {
+    tag: 'Decisions',
+    summary: 'Dismiss or reopen a brainstorm option',
+    description:
+      'Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options block incorporation. Requires a `decide`-scope key.',
+  },
+  incorporatePublicRunBrainstorm: {
+    tag: 'Decisions',
+    summary: 'Incorporate brainstorm picks',
+    description:
+      'Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session `incorporating` while the durable driver folds and re-runs in the background. Requires a `decide`-scope key.',
+  },
+  reReviewPublicRunBrainstorm: {
+    tag: 'Decisions',
+    summary: 'Re-run a brainstorm pass',
+    description:
+      'Run one more brainstorm pass against the converged direction. Requires a `decide`-scope key.',
+  },
+  proceedPublicRunBrainstorm: {
+    tag: 'Decisions',
+    summary: 'Proceed past a brainstorm',
+    description:
+      'Settle the brainstorm with the last converged direction and advance the parked run. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunBrainstormExceeded: {
+    tag: 'Decisions',
+    summary: 'Resolve a brainstorm at its iteration cap',
+    description:
+      'Pick how a brainstorm that exhausted its pass budget proceeds: one more round, proceed with the last converged direction, or stop and reset the task. Requires a `decide`-scope key.',
+  },
+  resolvePublicRunPrReview: {
+    tag: 'Decisions',
+    summary: 'Resolve a parked PR deep review',
+    description:
+      'Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.',
+  },
+  dismissPublicRunPrReviewFinding: {
+    tag: 'Decisions',
+    summary: 'Dismiss a PR review finding',
+    description:
+      'Drop one finding from the parked review entirely. Curation rather than a resolution: the run stays parked. Requires a `decide`-scope key.',
+  },
+  challengePublicRunPrReviewFinding: {
+    tag: 'Decisions',
+    summary: 'Challenge a PR review finding',
+    description:
+      'Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.',
+  },
+  confirmPublicRunHumanTest: {
+    tag: 'Decisions',
+    summary: 'Confirm a human-test gate',
+    description:
+      'Confirm the change works in the ephemeral environment: it is torn down and the run advances. The decision carries the environment URL to exercise; confirming without exercising it approves untested work. Requires a `decide`-scope key.',
+  },
+  requestPublicRunHumanTestFix: {
+    tag: 'Decisions',
+    summary: 'Request a fix from a human-test gate',
+    description:
+      'Submit findings against the tested environment and dispatch a fixer, which commits onto the PR branch before the environment is rebuilt. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.',
+  },
+  approvePublicRunVisualConfirm: {
+    tag: 'Decisions',
+    summary: 'Approve a visual-confirmation gate',
+    description:
+      'Approve the captured screenshots against the reference designs and advance the run. The images themselves are not readable over this API — the decision carries only artifact ids — so approving on the projection alone approves screenshots you have not seen. Requires a `decide`-scope key.',
+  },
+  requestPublicRunVisualConfirmFix: {
+    tag: 'Decisions',
+    summary: 'Request a fix from a visual-confirmation gate',
+    description:
+      'Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.',
+  },
 
   // The remote-debugging reads (`/api/v1/debug/*`, `read` scope). A two-level drill-down: the
   // run-scoped lists live under `/debug/runs/:runId/*`, while a point read that carries BODIES is
@@ -331,6 +490,12 @@ const OPERATION_DOCS = {
     description:
       'The web searches the run’s agents actually performed, keyset-paginated. Retained only when the deployment records agent context.',
   },
+  listDebugToolCalls: {
+    tag: 'Debug',
+    summary: "List a run's tool calls",
+    description:
+      'The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.',
+  },
   listDebugLogs: {
     tag: 'Debug',
     summary: "List a run's infrastructure log",
@@ -352,7 +517,7 @@ const TAG_DESCRIPTIONS = {
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Debug:
-    'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
+    'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
 
 /** Human descriptions for the response status codes we emit (OpenAPI requires a description). */

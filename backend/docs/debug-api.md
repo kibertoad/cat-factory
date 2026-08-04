@@ -4,7 +4,7 @@ The read-only surface that lets something outside the browser answer **"why did 
 stall, or cost that much"**: in practice, an LLM handed an API key and asked to diagnose a run.
 
 Everything it returns was already captured: the per-call LLM telemetry, the per-dispatch agent
-context, the searches an agent performed, and the provisioning event log (see
+context, the searches an agent performed, the tool calls it made, and the provisioning event log (see
 [`storage-and-retention.md`](./storage-and-retention.md) and the "Telemetry & agent-context
 observability" section of the root [`CLAUDE.md`](../../CLAUDE.md)). What was missing is a way to
 **walk** it: the SPA's observability drill-down loads a run's whole telemetry into a browser, which
@@ -107,7 +107,28 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
 | `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
+| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?limit=`, `?cursor=`                             |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
+
+The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
+the size rule because a tool call's `args`/`result` are capped at CAPTURE time rather than stored
+unbounded and windowed at read time: a page is at most `limit x 2 x MAX_TOOL_BODY_CHARS`.
+
+It is also the one served in two ORDERS, chosen with `?order=`:
+
+- `recent` (the default) is the newest-first `(createdAt, id)` keyset every list here shares, with
+  a cursor to walk a long run.
+- `trajectory` is what the sink exists for: the run's calls oldest-first, in the order the agents
+  actually made them. It is a bounded PREFIX of the run, so it returns `nextCursor: null`, and
+  supplying a cursor with it is a `400` rather than a silent fall back to the other order.
+
+Do NOT re-sort a page yourself to get the trajectory. It looks derivable from the rows and is not:
+`seq` restarts at zero on every dispatch, and `jobId` is a string, so ordering by it sorts a run's
+dispatches by agent-kind spelling and its re-runs `-10` before `-2`. The server orders by when
+each call actually STARTED, with `seq` separating the calls that share a millisecond.
+
+Both orders take `?jobId=` to narrow to ONE dispatch, which is how "what did the third ci-fixer
+round actually do, in order" is asked.
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that
@@ -284,6 +305,7 @@ stored character is reachable; a body larger than one window is read in stitched
 - Reads + projections: `backend/packages/orchestration/src/modules/debug/`
   (`RunDebugService.ts`, `debug.logic.ts`, `promptMessages.ts`)
 - Ports: kernel `llm-metrics.ts`, `agent-context.ts`, `agent-search-queries.ts`,
+  `agent-tool-calls.ts`,
   `provisioning-log-repositories.ts`, and `ExecutionRepository.listRecent`
 - Stores: `D1*` under `backend/runtimes/cloudflare/src/infrastructure/repositories/` ⇄ Drizzle
   under `backend/runtimes/node/src/repositories/drizzle/` ⇄ the local `node:sqlite` telemetry
@@ -291,7 +313,7 @@ stored character is reachable; a body larger than one window is read in stitched
 
 Cross-runtime parity is pinned twice: the per-store suites
 (`llm-metrics-suite`, `agent-context-suite`, `agent-search-queries-suite`,
-`provisioning-log-suite`) drive the real SQL on both runtimes, including the search predicate,
+`agent-tool-calls-suite`, `provisioning-log-suite`) drive the real SQL on both runtimes, including the search predicate,
 the match offsets (in code points, against astral-plane characters) and the offset windows, and
 `suites/integration-public-debug.ts` drives the HTTP surface end to end and asserts every sink
 reads `available: true` on the conformance facades (all of which wire the stores), so a facade

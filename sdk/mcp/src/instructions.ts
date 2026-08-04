@@ -1,4 +1,4 @@
-import type { ToolSelection } from './config.ts'
+import type { ReadOnlyReason, ToolSelection } from './config.ts'
 import { CAT_FACTORY_OMITTED_OPERATIONS, CAT_FACTORY_TOOL_GROUPS } from './tools.generated.ts'
 
 // The server's `instructions`: the one piece of prose a model reads before it reads any tool.
@@ -44,12 +44,7 @@ export function buildInstructions(selection: ToolSelection): string {
     'Results are JSON. Lists are keyset-paginated: pass the `cursor` a page returns to get the ' +
       'next one, and stop when it comes back null (an empty page with a cursor is normal).',
   ]
-  if (writeToolsHidden) {
-    sections.push(
-      'This server was started READ-ONLY: only the tools that change nothing are exposed. The ' +
-        'deployment supports creating and running tasks; you cannot do it from here.',
-    )
-  }
+  if (writeToolsHidden) sections.push(readOnlySection(writeToolsHidden))
   if (filteredGroups.length > 0) {
     sections.push(
       `The operator switched off these tool groups on THIS server: ${filteredGroups.join(', ')}. ` +
@@ -82,6 +77,30 @@ export function buildInstructions(selection: ToolSelection): string {
     ).join('\n')}`,
   )
   return sections.filter(Boolean).join('\n\n')
+}
+
+/**
+ * Why only the reading tools are here, in the words the cause deserves.
+ *
+ * Both cases hide the same tools and each needs a DIFFERENT person to act: an operator's switch is
+ * fixed in the host's config, a `read`-scoped key is fixed by minting a wider one. Collapsing them
+ * into one sentence would send a model to argue with whoever is nearest.
+ */
+function readOnlySection(reason: ReadOnlyReason): string {
+  const supported =
+    'The deployment supports creating and running tasks; you cannot do it from here. Say which ' +
+    'tool you would have used rather than looking for another route to the same effect.'
+  switch (reason) {
+    case 'configured':
+      return `This server was started READ-ONLY: only the tools that change nothing are exposed. ${supported}`
+    case 'key-scope':
+      return (
+        'The API key this session is authenticated with is READ-scoped, so only the tools that ' +
+        `change nothing are exposed; a write would be refused even if it were listed. ${supported} ` +
+        'A `write`-scoped key (or `decide` to answer parked decisions, `admin` to delete) exposes ' +
+        'the rest, and whoever gave you this key can mint one.'
+      )
+  }
 }
 
 /**

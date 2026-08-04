@@ -468,6 +468,7 @@ function startBackgroundSweepers(deps: {
       llmCallMetricRepository: repos.llmCallMetricRepository,
       agentContextSnapshotRepository: repos.agentContextSnapshotRepository,
       agentSearchQueryRepository: repos.agentSearchQueryRepository,
+      agentToolCallRepository: repos.agentToolCallRepository,
       pipelineScheduleRepository: repos.pipelineScheduleRepository,
       subscriptionActivationRepository: new DrizzleSubscriptionActivationRepository(db),
       subscriptionQuotaCycleRepository: repos.subscriptionQuotaCycleRepository,

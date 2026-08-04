@@ -9,13 +9,23 @@ import {
   ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
 } from '@cat-factory/integrations'
-import type { AppCaches, Clock, IdGenerator, WebSearchAvailability } from '@cat-factory/kernel'
+import type {
+  AppCaches,
+  Clock,
+  IdGenerator,
+  Logger,
+  StoreAgentContextGate,
+  WebSearchAvailability,
+} from '@cat-factory/kernel'
+import { createStoreAgentContextGate } from '@cat-factory/kernel'
 import {
   AgentContextObservabilityService,
   LlmObservabilityService,
   PACKAGE_REGISTRY_CIPHER_INFO,
   SearchQueryObservabilityService,
+  ToolCallObservabilityService,
   makeHarnessCallRecorder,
+  makeToolCallRecorder,
   resolvePackageRegistriesForDispatch,
 } from '@cat-factory/orchestration'
 import {
@@ -36,6 +46,7 @@ export interface NodeRunServicesInput {
   idGenerator: IdGenerator
   clock: Clock
   caches?: AppCaches
+  logger: Logger
 }
 
 /**
@@ -46,7 +57,7 @@ export interface NodeRunServicesInput {
  * test-secret dispatch resolvers, and the modeled subscription-quota provider.
  */
 export function buildNodeRunServices(input: NodeRunServicesInput) {
-  const { env, config, repos, idGenerator, clock, caches } = input
+  const { env, config, repos, idGenerator, clock, caches, logger } = input
 
   // Agent-context observability sink: records the complete, redacted context provided
   // to each container agent (composed prompts + folded-in fragments + injected files).
@@ -88,6 +99,25 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
       ...(caches?.workspaceSettings ? { workspaceSettingsCache: caches.workspaceSettings } : {}),
     }),
   )
+  // Persist the tool calls each poll drains as trajectory rows — what the agent DID, beside
+  // the per-call cost rows above. The settings repository is required for the same reason: a
+  // tool call's arguments are as model-authored as a prompt is, so they ride the same gate.
+  const recordToolCalls = makeToolCallRecorder(
+    new ToolCallObservabilityService({
+      agentToolCallRepository: repos.agentToolCallRepository,
+      clock,
+    }),
+    logger,
+  )
+  // The double gate on those calls' captured bodies, composed HERE (the facade is what knows the
+  // deployment switch) and applied once per drain, so the store and any external trace sink see
+  // the same decision. `false` short-circuits the settings read entirely.
+  const toolBodyGate: StoreAgentContextGate = config.observability.recordPrompts
+    ? createStoreAgentContextGate({
+        repository: repos.workspaceSettingsRepository,
+        ...(caches?.workspaceSettings ? { cache: caches.workspaceSettings } : {}),
+      })
+    : () => Promise.resolve(false)
   // A deployment-wide trusted web-search upstream, built from this facade's own `WEB_SEARCH_*`
   // env, used by the search proxy as a fallback when a run's account has no web-search config
   // (local mode defaults `WEB_SEARCH_SEARXNG_URL` to its self-hosted SearXNG). Distinct from the
@@ -218,7 +248,11 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
   return {
     agentContextObservability,
     searchQueryObservability,
-    recordHarnessCalls,
+    // The three telemetry hooks the container executor takes, grouped so the composition root
+    // spreads them as ONE thing: they are one concern (what a job's poll records, and what it is
+    // permitted to keep), and listing them field-by-field there is the re-listing the rest of
+    // this bundle already avoids.
+    executorTelemetry: { recordHarnessCalls, recordToolCalls, toolBodyGate },
     defaultWebSearchUpstream,
     resolveWebSearchAvailability,
     packageRegistrySecretCipher,

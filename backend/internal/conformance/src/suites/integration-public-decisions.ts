@@ -33,6 +33,9 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
   describe('public API — parked decisions', () => {
     registerAdmissionTests(harness)
     registerAnsweringTests(harness)
+    registerApprovalAnsweringTests(harness)
+    registerDialogueAnsweringTests(harness)
+    registerStaleRunTests(harness)
     registerScopeAndCancelTests(harness)
   })
 }
@@ -147,8 +150,12 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     )
     expect(refused.status).toBe(403)
     expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
-    // The refusal names the exit route of THIS surface, not the jobs cancel.
-    expect(refused.body.error.message).toContain('POST /api/v1/tasks/:taskId/stop')
+    // An approval gate IS answerable over the public surface now, so the refusal must steer the
+    // operator there rather than describing the park as cancel-only — the same honesty rule the
+    // input-gate case below pins. (Which EXIT route a refusal names when a park is unanswerable
+    // is asserted on the `human-review` case, the one surface still in that position.)
+    expect(refused.body.error.message).toContain('/api/v1/runs/:runId/decisions')
+    expect(refused.body.error.message).not.toContain('cancel')
 
     const decideAuth = await mintKey(app, wsId, 'decide')
     const started = await app.call(
@@ -189,6 +196,9 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
     expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
     // The refusal must NAME the surface, or an operator cannot tell which step to drop.
     expect(refused.body.error.message).toContain('human-review')
+    // And, for the ONE park the decision surface still cannot answer, it must name the exit route
+    // of THIS start surface rather than the jobs cancel, which 404s for a board task run.
+    expect(refused.body.error.message).toContain('POST /api/v1/tasks/:taskId/stop')
 
     // The control, in the same test so the two can never drift apart: the identical chain minus
     // the gate is still startable by a plain `write` key. Widening the park enumeration must not
@@ -391,6 +401,277 @@ function registerAnsweringTests(harness: ConformanceHarness): void {
     const done = (await app.drive(wsId)).find((e) => e.blockId === taskId)!
     expect(done.status).toBe('done')
     expect(done.inputGate?.status).toBe('passed')
+  })
+}
+
+/**
+ * The generic APPROVAL GATE — "pause a run until a human approves", the park any pipeline can
+ * carry and the one an integration meets first.
+ *
+ * Both halves belong here rather than only in a unit test. The gate's state rides the run's step
+ * (D1 ⇄ Drizzle `detail` JSON) and answering it wakes each facade's own durable driver, so a
+ * facade that persisted the approval differently, or never re-drove the run, would pass a pure
+ * projection test and strand every parked run in production.
+ */
+function registerApprovalAnsweringTests(harness: ConformanceHarness): void {
+  it('lists a parked approval gate and advances the run when the public key approves', async () => {
+    const app = harness.makeApp({ confidence: 1 })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    const gated = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Gated architect',
+      agentKinds: ['architect', 'coder'],
+      gates: [true, false],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: gated.body.id,
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(parked.status).toBe('blocked')
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      decisions: {
+        kind: string
+        approvalId?: string
+        stepKind?: string
+        proposal?: string
+        exceeded?: boolean
+      }[]
+    }>('GET', `/api/v1/runs/${parked.id}/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+    const gate = listed.body.decisions.find((d) => d.kind === 'approval-gate')!
+    expect(gate).toBeDefined()
+    // The projection has to carry the id the answer is addressed by, the step whose output is
+    // being judged, and the proposal itself — without all three the caller is being asked to
+    // approve something it cannot see.
+    expect(gate.approvalId).toBe(parked.steps[0]!.approval!.id)
+    expect(gate.stepKind).toBe('architect')
+    expect(gate.proposal).toBe(parked.steps[0]!.output)
+    // An ordinary pipeline gate, not a companion at its rework cap: the caller answers with
+    // `approve`, not `resolve-exceeded`.
+    expect(gate.exceeded).toBe(false)
+
+    const approved = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/approvals/${gate.approvalId}/approve`,
+      {},
+      decideAuth,
+    )
+    expect(approved.status).toBe(200)
+    // Answered: the gate is settled, so it is no longer a decision anybody has to answer.
+    expect(approved.body.decisions.some((d) => d.kind === 'approval-gate')).toBe(false)
+
+    const advanced = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(advanced.steps[0]!.approval?.status).toBe('approved')
+    expect(advanced.steps[0]!.state).toBe('done')
+  })
+
+  it('reports a park a dedicated surface owns as ITS kind, never as an approval gate', async () => {
+    // The trap this pins. `step.approval` is the engine's generic parking mechanism, so an input
+    // gate, a review gate, a fork choice and a human-verdict gate all leave a PENDING approval on
+    // the step — and the engine refuses the generic approve/request-changes/reject verbs on every
+    // one of them. A projection that reported "pending approval ⇒ approval-gate" would hand a
+    // well-behaved integration a route the engine answers with a 409, forever.
+    //
+    // Driven through the input gate because it is the one such park a conformance run can reach
+    // without a live model: it holds the run before the first dispatch.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const task = await app.call<{ id: string }>(
+      'POST',
+      `/workspaces/${wsId}/blocks/blk_auth/tasks`,
+      { title: 'Make the login better' },
+    )
+    expect(
+      (
+        await app.call(
+          'POST',
+          `/api/v1/tasks/${task.body.id}/start`,
+          { pipelineId: 'pl_simple' },
+          decideAuth,
+        )
+      ).status,
+    ).toBe(202)
+    await app.drive(wsId)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === task.body.id)!
+
+    // The engine really did park it on an approval — this test would be vacuous otherwise.
+    expect(exec.steps.some((s) => s.approval?.status === 'pending')).toBe(true)
+
+    const listed = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'GET',
+      `/api/v1/runs/${exec.id}/decisions`,
+      undefined,
+      decideAuth,
+    )
+    expect(listed.status).toBe(200)
+    const kinds = listed.body.decisions.map((d) => d.kind)
+    expect(kinds).toContain('input-gate')
+    expect(kinds).not.toContain('approval-gate')
+  })
+}
+
+/**
+ * The CLARITY review over the public surface, end to end: park, answer a finding, proceed, advance.
+ *
+ * Requirements already has this loop asserted above, and clarity is its twin driven by the same
+ * `ReviewGateController`. The twin-ness is exactly what makes the assertion worth having,
+ * because everything AROUND the shared controller is per-kind and per-facade: a separate store
+ * (D1 ⇄ Drizzle), a separate `container.clarity` module a facade must wire, and a separate
+ * step-gated read in the decision projection. A facade that mounted the routes but never wired the
+ * clarity module would answer every one of them with a 503 while requirements stayed green.
+ *
+ * Driven through the `bug-investigator`'s `needs_clarification` verdict, which seeds one finding
+ * per question deterministically, so this runs with no reviewer model, exactly like the
+ * requirements case.
+ */
+function registerDialogueAnsweringTests(harness: ConformanceHarness): void {
+  it('lists a parked CLARITY review, answers a finding, and proceeds the run', async () => {
+    const app = harness.makeApp({
+      customResult: {
+        clarity: 'needs_clarification',
+        summary: 'The submit handler swallows the validation error.',
+        rootCauseHypotheses: ['Unhandled promise rejection in onSubmit'],
+        affectedRepos: [],
+        suggestedReproductions: ['Submit the form with an empty email'],
+        questions: ['What are the exact reproduction steps?'],
+      },
+    })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Triage & investigate',
+      agentKinds: ['bug-investigator', 'clarity-review', 'architect'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(parked.status).toBe('blocked')
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      decisions: {
+        kind: string
+        findings?: { itemId: string; status: string }[]
+        clarifiedReport?: string | null
+      }[]
+    }>('GET', `/api/v1/runs/${parked.id}/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+
+    // Reported as its OWN kind. The clarity gate parks on a `step.approval` like everything else,
+    // so a projection reading "pending approval ⇒ approval-gate" would offer verbs the engine
+    // refuses here: the same trap the input-gate case above pins, on a second surface.
+    const review = listed.body.decisions.find((d) => d.kind === 'clarity-review')!
+    expect(review).toBeDefined()
+    expect(listed.body.decisions.some((d) => d.kind === 'approval-gate')).toBe(false)
+    const open = review.findings!.find((f) => f.status === 'open')!
+    expect(open).toBeDefined()
+
+    const answered = await app.call<{
+      decisions: { kind: string; findings?: { itemId: string; status: string; reply: string }[] }[]
+    }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/clarity/findings/${open.itemId}/reply`,
+      { reply: 'Submit the login form with an empty email on Firefox 141.' },
+      decideAuth,
+    )
+    expect(answered.status).toBe(200)
+    const item = answered.body.decisions
+      .find((d) => d.kind === 'clarity-review')!
+      .findings!.find((f) => f.itemId === open.itemId)!
+    expect(item.status).toBe('answered')
+
+    // Proceed settles the review and RELEASES the park, the half that only the assembled facade
+    // can prove, since it wakes each runtime's own durable driver.
+    const proceeded = await app.call(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/clarity/proceed`,
+      undefined,
+      decideAuth,
+    )
+    expect(proceeded.status).toBe(200)
+    const advanced = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(advanced.steps.find((s) => s.agentKind === 'clarity-review')?.state).toBe('done')
+    expect(advanced.status).not.toBe('blocked')
+  })
+}
+
+/**
+ * The invariant that makes the BLOCK-SCOPED routes safe: a run its task has moved past is not
+ * resolvable at all.
+ *
+ * The three iterative reviews and both human-verdict gates delegate to service methods keyed by
+ * BLOCK, not by run, so the `runId` in the path names a run nothing downstream reads. Left alone
+ * that is a misaddressing hazard (answer with a stale id, act on whatever run the block now
+ * holds), and the ONLY reason it is not one is that the execution repositories never leave a
+ * superseded
+ * run readable: `insertLive` deletes the block's terminal rows in the same transaction that claims
+ * the new live one, so resolution itself is the check and `loadScopedRun` returns a 404.
+ *
+ * That invariant lives in each facade's own repository (D1 ⇄ Drizzle), not in the HTTP layer, and
+ * nothing else asserts the public surface depends on it. A runtime re-check in the gate would be
+ * an unreachable branch; this is the guard that actually fails if the invariant is ever relaxed.
+ */
+function registerStaleRunTests(harness: ConformanceHarness): void {
+  it('refuses a block-scoped answer once the task has moved on', async () => {
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.seedReadyReview(wsId, 'task_login')
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Coder only',
+      agentKinds: ['coder'],
+    })
+
+    const first = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(first.status).toBe(201)
+    const staleRunId = first.body.id
+
+    // Drive the first run to completion, then start a SECOND on the same task: the ordinary
+    // re-run, which re-points `block.executionId`. The first run is still perfectly readable,
+    // which is the whole point: resolution succeeds and only the block check can catch it.
+    await app.drive(wsId)
+    const second = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+    )
+    expect(second.status).toBe(201)
+    expect(second.body.id).not.toBe(staleRunId)
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/runs/${staleRunId}/decisions/requirements/proceed`,
+      undefined,
+      decideAuth,
+    )
+    // The superseded run is GONE, not merely un-answerable, which is what makes it impossible
+    // for this call to have proceeded the review on the second run instead.
+    expect(refused.status).toBe(404)
+    expect(refused.body.error.code).toBe('not_found')
+
+    // The control, in the same test so the two cannot drift: the LIVE run answers fine.
+    const accepted = await app.call(
+      'POST',
+      `/api/v1/runs/${second.body.id}/decisions/requirements/proceed`,
+      undefined,
+      decideAuth,
+    )
+    expect(accepted.status).toBe(200)
   })
 }
 

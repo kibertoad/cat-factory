@@ -888,8 +888,8 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Three sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`) live in a dedicated
-telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
+live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
 Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
 The full model, and the authority for anything recording an LLM call:
 [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
@@ -905,6 +905,11 @@ The full model, and the authority for anything recording an LLM call:
   spent it by whoever OWNS the boundary.
 - **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
   add a query.
+- **The tool-call TRAJECTORY is one sink per invocation, ordered SERVER-SIDE by `(startedAt, seq)`**
+  and never by the drain stamp several calls share nor by the job id, a string that sorts dispatches
+  by agent-kind spelling; a harness image that numbers nothing has its trajectory skipped rather
+  than collapsed onto colliding ids, and `bodies` marks a withheld arg list so it never reads as a
+  tool that took none.
 - **Bodies are double-gated** (`LLM_RECORD_PROMPTS` AND the per-workspace `storeAgentContext`, via
   kernel's `createStoreAgentContextGate`), on every path that captures a model body, external trace
   fan-out included; a read that throws fails closed.
@@ -1065,6 +1070,15 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
   (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
+- **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
+  the test made that population, so the count is a local fact. A total over a population it does NOT
+  control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
+  every ordinary addition, names nothing about what broke, and trains the next person to re-pin it
+  unread. Derive that expectation from the same source the code reads and assert the structural
+  property (every operation accounted for EXACTLY ONCE across exposed and omitted; a facade listing
+  EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
+  existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
+  bug is consistent in both halves.
 - **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw
   script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces
   as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`:

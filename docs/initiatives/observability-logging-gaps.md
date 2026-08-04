@@ -202,6 +202,10 @@ attribution by `(repoId, prNumber)` fails permanently for that record.
 ### C. Telemetry, tracing, metrics, health
 
 **C1: Tracing covers only LLM generations and container tool spans, as siblings. (P2)**
+_(The tool-span half is now more than a sibling: a call carries its ordinal and (behind the double
+gate) its arguments and result, and the same batch is PERSISTED as the `agent_tool_calls`
+trajectory rather than existing only where a trace sink happened to be wired. The parentage and
+end-to-end-trace halves below are still 3.3.)_
 The `LlmTraceSink` port has exactly two emit methods; the OTel/Langfuse mappings export three
 mappers. Trace id is an FNV hash of `executionId`; tool spans carry no parent span id. **Not**
 traced: HTTP server spans on the Hono app, DB queries, pg-boss/CF-queue jobs, workflow steps,

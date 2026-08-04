@@ -357,6 +357,7 @@ export interface SignalInput {
     llmCalls: DebugSinkStatus
     agentContext: DebugSinkStatus
     searchQueries: DebugSinkStatus
+    toolCalls: DebugSinkStatus
     provisioningLog: DebugSinkStatus
   }
   /** Provisioning attempts for this run recorded as failures. */
@@ -504,6 +505,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     ['llmCalls', sinks.llmCalls, 'model calls'],
     ['agentContext', sinks.agentContext, 'agent-context snapshots'],
     ['searchQueries', sinks.searchQueries, 'web searches'],
+    ['toolCalls', sinks.toolCalls, 'tool calls'],
     ['provisioningLog', sinks.provisioningLog, 'provisioning events'],
   ] as const) {
     if (!sink.available) {

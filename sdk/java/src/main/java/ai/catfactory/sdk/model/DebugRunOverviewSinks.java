@@ -13,6 +13,7 @@ import org.jspecify.annotations.Nullable;
  * @param llmCalls the {@code llmCalls} field.
  * @param provisioningLog the {@code provisioningLog} field.
  * @param searchQueries the {@code searchQueries} field.
+ * @param toolCalls the {@code toolCalls} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DebugRunOverviewSinks(
@@ -22,7 +23,9 @@ public record DebugRunOverviewSinks(
 
     @JsonProperty("provisioningLog") DebugRunOverviewSinksAgentContext provisioningLog,
 
-    @JsonProperty("searchQueries") DebugRunOverviewSinksAgentContext searchQueries
+    @JsonProperty("searchQueries") DebugRunOverviewSinksAgentContext searchQueries,
+
+    @JsonProperty("toolCalls") DebugRunOverviewSinksAgentContext toolCalls
 ) {
 
     /** A new builder for {@link DebugRunOverviewSinks}. */
@@ -41,6 +44,7 @@ public record DebugRunOverviewSinks(
         private @Nullable DebugRunOverviewSinksAgentContext llmCalls;
         private @Nullable DebugRunOverviewSinksAgentContext provisioningLog;
         private @Nullable DebugRunOverviewSinksAgentContext searchQueries;
+        private @Nullable DebugRunOverviewSinksAgentContext toolCalls;
 
         /** Set {@code agentContext}. */
         public Builder agentContext(@Nullable DebugRunOverviewSinksAgentContext agentContext) {
@@ -66,9 +70,15 @@ public record DebugRunOverviewSinks(
             return this;
         }
 
+        /** Set {@code toolCalls}. */
+        public Builder toolCalls(@Nullable DebugRunOverviewSinksAgentContext toolCalls) {
+            this.toolCalls = toolCalls;
+            return this;
+        }
+
         /** Build the {@link DebugRunOverviewSinks}. */
         public DebugRunOverviewSinks build() {
-            return new DebugRunOverviewSinks(agentContext, llmCalls, provisioningLog, searchQueries);
+            return new DebugRunOverviewSinks(agentContext, llmCalls, provisioningLog, searchQueries, toolCalls);
         }
     }
 }

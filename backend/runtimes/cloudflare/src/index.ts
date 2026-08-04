@@ -22,6 +22,7 @@ import { D1RateLimitRepository } from './infrastructure/repositories/D1RateLimit
 import { D1TokenUsageRepository } from './infrastructure/repositories/D1TokenUsageRepository'
 import { D1LlmCallMetricRepository } from './infrastructure/repositories/D1LlmCallMetricRepository'
 import { D1AgentContextSnapshotRepository } from './infrastructure/repositories/D1AgentContextSnapshotRepository'
+import { D1AgentToolCallRepository } from './infrastructure/repositories/D1AgentToolCallRepository'
 import { D1AgentSearchQueryRepository } from './infrastructure/repositories/D1AgentSearchQueryRepository'
 import { D1ProvisioningLogRepository } from './infrastructure/repositories/D1ProvisioningLogRepository'
 import { D1PipelineScheduleRepository } from './infrastructure/repositories/D1PipelineScheduleRepository'
@@ -336,6 +337,7 @@ function runDailyRetentionSweeps(env: Env, tick: SweepTick, clock: SystemClock):
         db: telemetryDb,
       }),
       agentSearchQueryRepository: new D1AgentSearchQueryRepository({ db: telemetryDb }),
+      agentToolCallRepository: new D1AgentToolCallRepository({ db: telemetryDb }),
       // Modeled subscription quota-cycle counters live in the main DB (migration 0047).
       subscriptionQuotaCycleRepository: new D1SubscriptionQuotaCycleRepository({ db: env.DB }),
       pipelineScheduleRepository: new D1PipelineScheduleRepository({ db: env.DB }),

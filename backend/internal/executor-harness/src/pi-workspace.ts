@@ -325,6 +325,9 @@ export async function runAgentInWorkspace(
       expectsEdits: spec.expectsEdits ?? true,
       onActivity: opts.onActivity,
       onProgress: opts.onProgress,
+      // The run's tool-call trajectory, the same hook the Pi path feeds — so a subscription run
+      // and a proxied one produce the same evidence rather than one of them producing none.
+      onSpan: opts.onSpan,
       // Per-slice review capture, so a parallel review's finished slices are persisted as they
       // land rather than only in the terminal output. Only the subscription runners fan work out
       // across subagents, so this is the only path that can produce it.

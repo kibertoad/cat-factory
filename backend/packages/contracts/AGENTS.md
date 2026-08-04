@@ -14,6 +14,15 @@ top-level files are the domain contracts.
 - `entities.ts`: the `Block` and other entity schemas. The canonical unit of work is a
   **block** (`task` is the tracker-boundary name, `card` the UI/events name: one thing, three
   names; `docs/glossary.md`).
+- `execution.ts`: the run/step runtime state, composed from the step-state clusters that live in
+  their own modules: `gate.ts` (polling gates), `human-verdict-gates.ts` (human-test, visual
+  confirmation) and `step-decisions.ts` (an agent's question, review comments, a companion
+  verdict, and the approval gate — which is also the engine's GENERIC parking mechanism, so a
+  pending approval does NOT by itself mean "approval gate"; orchestration's
+  `dedicatedParkSurface` is what tells them apart).
+- `public-decisions.ts`: the external projection of every park a run can stop on, plus the bodies
+  that answer them. The kind union is the surface's honesty check — a member with no route behind
+  it is a promise `/api/v1` cannot keep.
 - `events.ts`: the `WorkspaceEvent` union pushed to the SPA; `errors.ts`: the `reason`/`code`
   vocabulary the SPA maps to i18n keys. Both axes are declared here: `DOMAIN_ERROR_CODES` /
   `API_ERROR_CODES` are the STATUS CLASS on `error.code` (kernel's `DomainErrorCode` is derived

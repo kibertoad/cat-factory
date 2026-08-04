@@ -1,12 +1,19 @@
 import type { DatabaseSync } from 'node:sqlite'
-import type { AgentContextSnapshot, AgentSearchQuery, LlmCallMetric } from '@cat-factory/kernel'
+import type {
+  AgentContextSnapshot,
+  AgentSearchQuery,
+  AgentToolCall,
+  LlmCallMetric,
+} from '@cat-factory/kernel'
 import {
   type MetricRow,
   type SearchQueryRow,
   type SnapshotRow,
+  type ToolCallRow,
   rowToMetric,
   rowToQuery,
   rowToSnapshot,
+  rowToToolCall,
 } from './telemetryRows.js'
 
 // The UPSTREAM half of the mothership-mode telemetry bucket, on the LOCAL side
@@ -22,7 +29,7 @@ import {
 export interface PendingIngestRun {
   workspaceId: string
   executionId: string
-  /** The newest captured row across the run's three sinks — the high-water mark to mark. */
+  /** The newest captured row across the run's sinks — the high-water mark to mark. */
   lastWriteAt: number
 }
 
@@ -53,7 +60,7 @@ export interface LocalTelemetryIngestReader {
    * producing telemetry for the grace period is done as far as its telemetry is concerned. A
    * resumed run simply becomes a candidate again.
    *
-   * One grouped query over the three sinks — never a per-run probe.
+   * One grouped query over every sink — never a per-run probe.
    */
   listPendingRuns(quiescentBefore: number, limit: number): PendingIngestRun[]
   listMetrics(
@@ -74,6 +81,12 @@ export interface LocalTelemetryIngestReader {
     cursor: IngestCursor | undefined,
     limit: number,
   ): AgentSearchQuery[]
+  listToolCalls(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentToolCall[]
   /** Record that the run is uploaded through `throughAt` (its `lastWriteAt` at sweep time). */
   markIngested(workspaceId: string, executionId: string, throughAt: number, at: number): void
   /**
@@ -102,7 +115,7 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
   constructor(private readonly db: DatabaseSync) {}
 
   listPendingRuns(quiescentBefore: number, limit: number): PendingIngestRun[] {
-    // ONE grouped query across the three run-scoped sinks, anti-joined against the high-water
+    // ONE grouped query across the run-scoped sinks, anti-joined against the high-water
     // marks. `execution_id IS NOT NULL` drops the un-run-scoped LLM calls (an inline call that
     // resolved no run): they are not part of "a finished run's telemetry" and there is nothing to
     // key their upload on.
@@ -118,6 +131,9 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
              UNION ALL
              SELECT workspace_id, execution_id, MAX(created_at)
                FROM agent_search_queries GROUP BY 1, 2
+             UNION ALL
+             SELECT workspace_id, execution_id, MAX(created_at)
+               FROM agent_tool_calls GROUP BY 1, 2
            ) AS w
            LEFT JOIN telemetry_ingest_state s
              ON s.workspace_id = w.workspace_id AND s.execution_id = w.execution_id
@@ -196,6 +212,20 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
       cursor,
       limit,
     ).map(rowToQuery)
+  }
+
+  listToolCalls(
+    workspaceId: string,
+    executionId: string,
+    cursor: IngestCursor | undefined,
+    limit: number,
+  ): AgentToolCall[] {
+    // Walked on the `(created_at, id)` keyset like every other sink, NOT in trajectory order:
+    // the upload only has to move each row exactly once, and the mothership re-derives the
+    // trajectory from the `(job_id, seq)` the rows carry.
+    return this.page<ToolCallRow>('agent_tool_calls', workspaceId, executionId, cursor, limit).map(
+      rowToToolCall,
+    )
   }
 
   markIngested(workspaceId: string, executionId: string, throughAt: number, at: number): void {

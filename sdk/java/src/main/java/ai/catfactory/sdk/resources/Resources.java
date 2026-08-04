@@ -71,12 +71,12 @@ public abstract class Resources {
         return usage;
     }
 
-    /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
+    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
     public DecisionsClient decisions() {
         return decisions;
     }
 
-    /** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
     public DebugClient debug() {
         return debug;
     }

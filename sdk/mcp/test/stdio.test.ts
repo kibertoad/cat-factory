@@ -24,6 +24,11 @@ function recording() {
         log.push(line)
         events.push('log')
       },
+      // Reading a file is the executable's dependency, so the boot needs one even where no key file
+      // is named: a read reaching here at all would be the bug.
+      readSecretFile: (path: string) => {
+        throw new Error(`unexpected key-file read of ${path}`)
+      },
       connect: async (_server: Server) => {
         events.push('connect')
       },
@@ -61,8 +66,8 @@ describe('bootStdioServer', () => {
         [ENV_VARS.baseUrl]: 'https://cat-factory.test',
         [ENV_VARS.apiKeyFile]: '/run/secrets/cat-factory',
       },
-      readSecretFile: () => 'cf_live_key.secret\n',
       ...deps,
+      readSecretFile: () => 'cf_live_key.secret\n',
     })
     // The key never appears in what the process says about itself, on any path.
     expect(log.join('')).not.toContain('cf_live_key')

@@ -2,6 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createCatFactoryMcpServer } from '../src/server.ts'
+import { CAT_FACTORY_TOOLS } from '../src/tools.generated.ts'
 import type { CatFactoryMcpOptions } from '../src/config.ts'
 
 // Drives the facade the way a host does: a REAL MCP client over an in-memory transport, against a
@@ -72,7 +73,12 @@ describe('the MCP facade end to end', () => {
   it('lists tools with their schemas and the read-only annotation', async () => {
     ;({ client } = await connect(OPTIONS, () => json({})))
     const { tools } = await client.listTools()
-    expect(tools).toHaveLength(40)
+    // The facade lists the generated table, whole: nothing added by the server layer, nothing
+    // dropped by it. Asserted against the table rather than a pinned count, so an added endpoint
+    // costs no edit here and a tool the server silently withholds still fails.
+    expect(tools.map((tool) => tool.name).sort()).toEqual(
+      CAT_FACTORY_TOOLS.map((tool) => tool.name).sort(),
+    )
     const start = tools.find((tool) => tool.name === 'tasks_start')!
     expect(start.annotations?.readOnlyHint).toBe(false)
     expect(tools.find((tool) => tool.name === 'tasks_get')!.annotations?.readOnlyHint).toBe(true)

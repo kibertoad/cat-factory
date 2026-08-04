@@ -12,10 +12,20 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `modules/*/…Controller.ts`: the ~50 Hono controllers, one dir per module.
 - `modules/publicApi/`: the key-authenticated `/api/v1` surface (NOT behind the session gate):
   `PublicApiController` (jobs/board/pipelines/notifications), `PublicDecisionController` (a run's
-  parked human decisions; the headless clarification loop), `PublicDebugController` (the
+  parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run
+  for the key, `projection.ts` turns a run into the decision list, and one `*Routes.ts` per park
+  family answers it — approval gates and agent questions, the three iterative-review loops, the
+  container-backed PR review and human-verdict gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
-  an LLM can walk them within a context budget; see `docs/debug-api.md`), `publicApiAuth.ts` (the
-  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
+  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
+  HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
+  Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
+  tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
+  caller's own key; deliberately NOT an OpenAPI operation, see `docs/public-api.md`),
+  `publicApiAuth.ts` (the
+  shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder, plus `authorizeOrThrow` for a route
+  with no contract-declared response and `bearerToken` for the one that FORWARDS the key),
+  `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
   the pre-dispatch input gate, which parks on the shape of the TASK and so is invisible to the
   step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
@@ -43,7 +53,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   budget: `containerAgentLogging.ts` (the workflow↔container seam's log vocabulary) and
   `agentContextRecord.ts` (the observability snapshot's ALLOW-LIST projection; the one place
   that decides what of a dispatch may be persisted, so a new body field is opt-in, never
-  inherited). Every dispatcher of the `agent` kind (the executor, the bootstrapper and
+  inherited). A third, `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
+  gate ONCE and hands the same gated batch to the trajectory store and to any wired trace sink,
+  so the two can never end up with different answers about what a workspace permitted. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has

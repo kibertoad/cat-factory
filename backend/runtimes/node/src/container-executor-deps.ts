@@ -28,6 +28,7 @@ import type {
   ProvisioningSubsystem,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
+  StoreAgentContextGate,
   SubscriptionQuotaTarget,
   TestSecretEntry,
   ToolSecretResolver,
@@ -37,6 +38,7 @@ import {
   AgentContextObservabilityService,
   type CoreDependencies,
   type HarnessCallsRecordInput,
+  type ToolCallsRecordInput,
 } from '@cat-factory/orchestration'
 import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
@@ -262,6 +264,9 @@ export interface NodeContainerExecutorDeps {
    */
   resolveToolSecrets: ToolSecretResolver
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
+  /** The tool-call trajectory drain's two halves; see `@cat-factory/server`'s `toolTrajectory.ts`. */
+  recordToolCalls?: (input: ToolCallsRecordInput) => Promise<void>
+  toolBodyGate?: StoreAgentContextGate
   recordSubscriptionQuotaUsage?: (
     target: SubscriptionQuotaTarget,
     usage: { inputTokens: number; outputTokens: number },
@@ -290,6 +295,8 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     resolveTestSecrets,
     resolveToolSecrets,
     recordHarnessCalls,
+    recordToolCalls,
+    toolBodyGate,
     recordSubscriptionQuotaUsage,
   } = deps
   // The harness reaches models only through this service's LLM proxy; `PUBLIC_URL`
@@ -388,6 +395,10 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // Per-call telemetry for the subscription harnesses (proxy-bypassing), recorded
     // into `llm_call_metrics` alongside the proxy-metered Pi rows.
     ...(recordHarnessCalls ? { recordHarnessCalls } : {}),
+    // The tool-call trajectory: persisted rows plus the body gate both it and the trace sinks
+    // are governed by. An absent gate withholds every body, which the rows then SAY.
+    ...(recordToolCalls ? { recordToolCalls } : {}),
+    ...(toolBodyGate ? { toolBodyGate } : {}),
     // Modeled subscription quota-cycle tracking (Part B): fold a finished subscription
     // run's tokens into the rolling windows, for BOTH pooled and personal runs.
     ...(recordSubscriptionQuotaUsage ? { recordSubscriptionQuotaUsage } : {}),

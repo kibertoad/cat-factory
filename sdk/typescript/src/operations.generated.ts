@@ -22,10 +22,14 @@ import type {
   ListDebugLogsResponse,
   ListDebugRunsResponse,
   ListDebugSearchQueriesResponse,
+  ListDebugToolCallsOrder,
+  ListDebugToolCallsResponse,
   ListPublicJobsResponse,
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
+  PublicApproveStep,
+  PublicChallengePrReviewFinding,
   PublicChooseFork,
   PublicDecisionList,
   PublicIncorporate,
@@ -35,10 +39,15 @@ import type {
   PublicNotificationList,
   PublicNotificationWebhook,
   PublicPipelineList,
+  PublicRejectStep,
   PublicReplyFinding,
+  PublicRequestGateFix,
+  PublicRequestStepChanges,
+  PublicResolveAgentDecision,
   PublicResolveExceeded,
   PublicResolveInputGate,
   PublicResolveJudge,
+  PublicResolvePrReview,
   PublicRun,
   PublicServiceList,
   PublicSetFindingStatus,
@@ -102,6 +111,14 @@ export type DebugListRunsQuery = {
 export type DebugListSearchQueriesQuery = {
   limit?: number
   cursor?: string
+}
+
+/** Query parameters for `client.debug.listToolCalls()`. */
+export type DebugListToolCallsQuery = {
+  limit?: number
+  cursor?: string
+  jobId?: string
+  order?: ListDebugToolCallsOrder
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -533,12 +550,67 @@ export class UsageResource {
   }
 }
 
-/** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
+/** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
 export class DecisionsResource {
   readonly #transport: Transport
 
   constructor(transport: Transport) {
     this.#transport = transport
+  }
+
+  /**
+   * Answer an agent-raised decision
+   * Answer a question an agent raised mid-work. Resolving RE-RUNS the asking step with the choice folded in, rather than advancing past it. The choice is taken verbatim, so it may be one of the offered options or a steer of your own. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/questions/{decisionId}/answer` — operation `resolvePublicRunAgentDecision`.
+   */
+  answerAgentDecision(runId: string, decisionId: string, body: PublicResolveAgentDecision, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/questions/${encodePathSegment(decisionId)}/answer`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Approve a parked step
+   * Approve the proposal a gated step is holding up, optionally replacing it with an edited one (the edit is what flows to every downstream step), and advance the run. The `approvalId` comes from the run's decision list; passing it back is what makes a racing app user and a racing integration resolve the same gate. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/approve` — operation `approvePublicRunStep`.
+   */
+  approveStep(runId: string, approvalId: string, body: PublicApproveStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/approve`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Approve a visual-confirmation gate
+   * Approve the captured screenshots against the reference designs and advance the run. The images themselves are not readable over this API — the decision carries only artifact ids — so approving on the projection alone approves screenshots you have not seen. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/visual-confirmation/approve` — operation `approvePublicRunVisualConfirm`.
+   */
+  approveVisualConfirmation(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/visual-confirmation/approve`,
+      options,
+    })
+  }
+
+  /**
+   * Challenge a PR review finding
+   * Dispatch a read-only investigator to re-examine one finding against the full source, optionally with a specific concern. It upholds, strengthens or retracts the finding, and the review re-parks carrying the verdict. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/challenge` — operation `challengePublicRunPrReviewFinding`.
+   */
+  challengePrReviewFinding(runId: string, findingId: string, body: PublicChallengePrReviewFinding, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/findings/${encodePathSegment(findingId)}/challenge`,
+      body,
+      options,
+    })
   }
 
   /**
@@ -556,6 +628,32 @@ export class DecisionsResource {
   }
 
   /**
+   * Confirm a human-test gate
+   * Confirm the change works in the ephemeral environment: it is torn down and the run advances. The decision carries the environment URL to exercise; confirming without exercising it approves untested work. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/human-test/confirm` — operation `confirmPublicRunHumanTest`.
+   */
+  confirmHumanTest(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/human-test/confirm`,
+      options,
+    })
+  }
+
+  /**
+   * Dismiss a PR review finding
+   * Drop one finding from the parked review entirely. Curation rather than a resolution: the run stays parked. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss` — operation `dismissPublicRunPrReviewFinding`.
+   */
+  dismissPrReviewFinding(runId: string, findingId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/findings/${encodePathSegment(findingId)}/dismiss`,
+      options,
+    })
+  }
+
+  /**
    * Incorporate the answers
    * Fold the recorded answers into one standardized requirements document. Asynchronous — the run re-reviews in the background, so the response shows the review `incorporating`. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/requirements/incorporate` — operation `incorporatePublicRunRequirements`.
@@ -564,6 +662,34 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/requirements/incorporate`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Incorporate brainstorm picks
+   * Fold the picks into one converged direction. ASYNCHRONOUS: the response shows the session `incorporating` while the durable driver folds and re-runs in the background. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/incorporate` — operation `incorporatePublicRunBrainstorm`.
+   */
+  incorporateBrainstorm(runId: string, stage: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/incorporate`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Incorporate clarity answers
+   * Fold the recorded answers into one standardized bug report. ASYNCHRONOUS: the response shows the review `incorporating` while the durable driver folds and re-reviews in the background. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/clarity/incorporate` — operation `incorporatePublicRunClarity`.
+   */
+  incorporateClarity(runId: string, body: PublicIncorporate, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/incorporate`,
       body,
       options,
     })
@@ -596,6 +722,74 @@ export class DecisionsResource {
   }
 
   /**
+   * Proceed past a brainstorm
+   * Settle the brainstorm with the last converged direction and advance the parked run. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/proceed` — operation `proceedPublicRunBrainstorm`.
+   */
+  proceedBrainstorm(runId: string, stage: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/proceed`,
+      options,
+    })
+  }
+
+  /**
+   * Proceed past the clarity review
+   * Settle the clarity phase with the last clarified report and advance the parked run. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/clarity/proceed` — operation `proceedPublicRunClarity`.
+   */
+  proceedClarity(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/proceed`,
+      options,
+    })
+  }
+
+  /**
+   * Reject a parked step
+   * Reject the gated proposal: the run stops entirely, recording a terminal `rejected` failure the board can retry. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/reject` — operation `rejectPublicRunStep`.
+   */
+  rejectStep(runId: string, approvalId: string, body: PublicRejectStep, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/reject`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Respond to a brainstorm option
+   * Pick or steer one of the options the brainstorm agent proposed, for the named stage (`requirements` or `architecture`). A task may hold one live session per stage at once. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}/reply` — operation `replyPublicRunBrainstormOption`.
+   */
+  replyToBrainstormOption(runId: string, stage: string, itemId: string, body: PublicReplyFinding, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/options/${encodePathSegment(itemId)}/reply`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Answer a clarity (bug-triage) finding
+   * Record an answer to one clarity-review finding — the bug-report twin of the requirements loop. Returns the run's updated decision list. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}/reply` — operation `replyPublicRunClarityFinding`.
+   */
+  replyToClarityFinding(runId: string, itemId: string, body: PublicReplyFinding, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/findings/${encodePathSegment(itemId)}/reply`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Answer a review finding
    * Record an answer to one reviewer finding. Returns the run's updated decision list. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}/reply` — operation `replyPublicRunFinding`.
@@ -610,6 +804,48 @@ export class DecisionsResource {
   }
 
   /**
+   * Request a fix from a human-test gate
+   * Submit findings against the tested environment and dispatch a fixer, which commits onto the PR branch before the environment is rebuilt. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/human-test/request-fix` — operation `requestPublicRunHumanTestFix`.
+   */
+  requestHumanTestFix(runId: string, body: PublicRequestGateFix, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/human-test/request-fix`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Request changes on a parked step
+   * Send the gated step back to re-run with your guidance folded in. Unlike the in-app twin this takes freeform feedback only: anchored per-block comments address source line ranges of a rendered proposal, which a headless caller never rendered. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/request-changes` — operation `requestPublicRunStepChanges`.
+   */
+  requestStepChanges(runId: string, approvalId: string, body: PublicRequestStepChanges, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/request-changes`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Request a fix from a visual-confirmation gate
+   * Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/visual-confirmation/request-fix` — operation `requestPublicRunVisualConfirmFix`.
+   */
+  requestVisualConfirmationFix(runId: string, body: PublicRequestGateFix, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/visual-confirmation/request-fix`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Re-review the incorporated document
    * Run one more reviewer pass over the incorporated document. On convergence the parked run advances. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/requirements/re-review` — operation `reReviewPublicRunRequirements`.
@@ -618,6 +854,60 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/requirements/re-review`,
+      options,
+    })
+  }
+
+  /**
+   * Re-run a brainstorm pass
+   * Run one more brainstorm pass against the converged direction. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/re-review` — operation `reReviewPublicRunBrainstorm`.
+   */
+  reReviewBrainstorm(runId: string, stage: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/re-review`,
+      options,
+    })
+  }
+
+  /**
+   * Re-triage the clarified report
+   * Run one more triage pass over the incorporated bug report. On convergence the parked run advances. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/clarity/re-review` — operation `reReviewPublicRunClarity`.
+   */
+  reReviewClarity(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/re-review`,
+      options,
+    })
+  }
+
+  /**
+   * Resolve a brainstorm at its iteration cap
+   * Pick how a brainstorm that exhausted its pass budget proceeds: one more round, proceed with the last converged direction, or stop and reset the task. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/brainstorm/{stage}/resolve-exceeded` — operation `resolvePublicRunBrainstormExceeded`.
+   */
+  resolveBrainstormExceeded(runId: string, stage: string, body: PublicResolveExceeded, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/resolve-exceeded`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Resolve a clarity review at its iteration cap
+   * Pick how a clarity review that exhausted its pass budget proceeds: one more round, proceed with the last clarified report, or stop and reset the task. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/clarity/resolve-exceeded` — operation `resolvePublicRunClarityExceeded`.
+   */
+  resolveClarityExceeded(runId: string, body: PublicResolveExceeded, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/resolve-exceeded`,
+      body,
       options,
     })
   }
@@ -665,6 +955,62 @@ export class DecisionsResource {
   }
 
   /**
+   * Resolve a parked PR deep review
+   * Record the curated finding selection and say what to do with it: `finish` completes the read-only review, `fix` hands the selected findings to a fixer that commits onto the reviewed PR branch, `post` publishes them as inline PR review comments. `fix` and `post` need at least one selected finding and act on the real pull request. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/pr-review/resolve` — operation `resolvePublicRunPrReview`.
+   */
+  resolvePrReview(runId: string, body: PublicResolvePrReview, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/resolve`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Resolve a companion gate at its rework cap
+   * Pick how a quality companion that spent its automatic rework budget proceeds: one more round, proceed with the output as it stands, or stop and reset the task. A gate in this state reports `exceeded: true` and refuses the plain approve. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/approvals/{approvalId}/resolve-exceeded` — operation `resolvePublicRunStepExceeded`.
+   */
+  resolveStepExceeded(runId: string, approvalId: string, body: PublicResolveExceeded, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/resolve-exceeded`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Dismiss or reopen a brainstorm option
+   * Dismiss a proposed option, or reopen one dismissed by mistake. Only `open` options block incorporation. Requires a `decide`-scope key.
+   * `PATCH /api/v1/runs/{runId}/decisions/brainstorm/{stage}/options/{itemId}` — operation `setPublicRunBrainstormOptionStatus`.
+   */
+  setBrainstormOptionStatus(runId: string, stage: string, itemId: string, body: PublicSetFindingStatus, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'PATCH',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/brainstorm/${encodePathSegment(stage)}/options/${encodePathSegment(itemId)}`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Dismiss or reopen a clarity finding
+   * Dismiss a clarity finding as not applicable, or reopen one dismissed by mistake. Only `open` findings block incorporation. Requires a `decide`-scope key.
+   * `PATCH /api/v1/runs/{runId}/decisions/clarity/findings/{itemId}` — operation `setPublicRunClarityFindingStatus`.
+   */
+  setClarityFindingStatus(runId: string, itemId: string, body: PublicSetFindingStatus, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'PATCH',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/findings/${encodePathSegment(itemId)}`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Dismiss or reopen a finding
    * Dismiss a finding as not applicable, or reopen one dismissed by mistake. Requires a `decide`-scope key.
    * `PATCH /api/v1/runs/{runId}/decisions/requirements/findings/{itemId}` — operation `setPublicRunFindingStatus`.
@@ -679,7 +1025,7 @@ export class DecisionsResource {
   }
 }
 
-/** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+/** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
 export class DebugResource {
   readonly #transport: Transport
 
@@ -877,6 +1223,36 @@ export class DebugResource {
       cursor = page.nextCursor
     }
   }
+
+  /**
+   * List a run's tool calls
+   * The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.
+   * `GET /api/v1/debug/runs/{runId}/tool-calls` — operation `listDebugToolCalls`.
+   */
+  listToolCalls(runId: string, query: DebugListToolCallsQuery = {}, options: RequestOptions = {}): Promise<ListDebugToolCallsResponse> {
+    return this.#transport.request<ListDebugToolCallsResponse>({
+      method: 'GET',
+      path: `/api/v1/debug/runs/${encodePathSegment(runId)}/tool-calls`,
+      query,
+      options,
+    })
+  }
+
+  /**
+   * Every `toolCalls` across every page of `listToolCalls()`.
+   * Follows `nextCursor` until the server reports no further page. The cursor is opaque
+   * and carries a position, never authority — each page re-applies the key's full scope.
+   */
+  async *listToolCallsAll(runId: string, query: DebugListToolCallsQuery = {}, options: RequestOptions = {}): AsyncGenerator<ListDebugToolCallsResponse['toolCalls'][number]> {
+    let cursor: string | undefined = query.cursor
+    for (;;) {
+      const page = await this.listToolCalls(runId, { ...query, cursor }, options)
+      for (const item of page.toolCalls) yield item
+      if (!page.nextCursor) return
+      if (page.nextCursor === cursor) throw repeatedCursorError()
+      cursor = page.nextCursor
+    }
+  }
 }
 
 /**
@@ -902,9 +1278,9 @@ export abstract class CatFactoryResources {
   readonly webhook: WebhookResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
-  /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate. */
+  /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
   readonly decisions: DecisionsResource
-  /** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+  /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource
 
   protected constructor(transport: Transport) {

@@ -1,6 +1,7 @@
 import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
+  AgentToolCallRepository,
   Clock,
   CommitProjectionRepository,
   LlmCallMetricRepository,
@@ -74,6 +75,8 @@ export interface RetentionDeps {
   agentContextSnapshotRepository: AgentContextSnapshotRepository
   /** Agent-search queries; pruned on the same window as the LLM call telemetry. */
   agentSearchQueryRepository: AgentSearchQueryRepository
+  /** The tool-call trajectory; pruned on the same window as the LLM call telemetry. */
+  agentToolCallRepository: AgentToolCallRepository
   /** Idle modeled subscription quota-cycle counters, pruned to a fixed 30-day window. */
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   /** Optional: prunes recurring-pipeline run history to {@link SCHEDULE_RUN_RETENTION_MS}. */
@@ -115,6 +118,7 @@ export interface RetentionResult {
   llmCallMetrics: number
   agentContextSnapshots: number
   agentSearchQueries: number
+  agentToolCalls: number
   subscriptionQuotaCycles: number
   scheduleRuns: number
   provisioningLog: number
@@ -152,6 +156,7 @@ export async function sweepRetention({
   llmCallMetricRepository,
   agentContextSnapshotRepository,
   agentSearchQueryRepository,
+  agentToolCallRepository,
   subscriptionQuotaCycleRepository,
   pipelineScheduleRepository,
   provisioningLogRepository,
@@ -193,6 +198,10 @@ export async function sweepRetention({
       policy.llmCallMetricsMs,
       now,
       (c) => agentSearchQueryRepository.deleteOlderThan(c),
+    ),
+    // Same window as the LLM call telemetry (the tool-call trajectory's captured bodies).
+    agentToolCalls: await pass.prune('agent_tool_calls', policy.llmCallMetricsMs, now, (c) =>
+      agentToolCallRepository.deleteOlderThan(c),
     ),
     // Idle quota cycles past the fixed 30-day window (well beyond the weekly one).
     subscriptionQuotaCycles: await pass.prune(

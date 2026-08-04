@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
+  AgentToolCall,
+  AgentToolCallRepository,
   Clock,
   ExecutionInstance,
   ExecutionRepository,
@@ -202,9 +204,10 @@ describe('RunDebugService with unwired sinks', () => {
       llmCalls: { available: false, count: 0 },
       agentContext: { available: false, count: 0 },
       searchQueries: { available: false, count: 0 },
+      toolCalls: { available: false, count: 0 },
       provisioningLog: { available: false, count: 0 },
     })
-    expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(4)
+    expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(5)
     expect(overview.signals.map((s) => s.code)).not.toContain('no_model_calls')
     expect(overview.generatedAt).toBe(4_242)
   })
@@ -256,5 +259,62 @@ describe('RunDebugService overview', () => {
     expect(overview.sinks.provisioningLog).toEqual({ available: true, count: 4 })
     // The failure count rides the same aggregate pass and drives the top signal.
     expect(overview.signals[0]).toMatchObject({ code: 'provisioning_failed', count: 1 })
+  })
+})
+
+describe('RunDebugService.listToolCalls', () => {
+  function toolCallRepo() {
+    const listPage = vi.fn(async () => [] as AgentToolCall[])
+    const listByExecution = vi.fn(async () => [] as AgentToolCall[])
+    const repo = { listPage, listByExecution } as unknown as AgentToolCallRepository
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      agentToolCallRepository: repo,
+    })
+    return { service, listPage, listByExecution }
+  }
+
+  it('serves the ordered read from the store, not by re-sorting a keyset page', async () => {
+    // The order is the product. A client sorting rows by `(jobId, seq)` gets it wrong in a way
+    // that looks right, so the ordering has to be computed where the rows are.
+    const { service, listPage, listByExecution } = toolCallRepo()
+
+    const page = await service.listToolCalls('ws', 'exec_1', {
+      limit: 20,
+      order: 'trajectory',
+      jobId: 'exec_1-coder',
+    })
+
+    expect(listPage).not.toHaveBeenCalled()
+    expect(listByExecution).toHaveBeenCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 20,
+      jobId: 'exec_1-coder',
+    })
+    // A bounded PREFIX, so there is no position to resume from — and saying so is what stops a
+    // caller looping on a cursor the read never issues.
+    expect(page.nextCursor).toBeNull()
+  })
+
+  it('defaults to the resumable keyset page every sibling list serves', async () => {
+    const { service, listPage, listByExecution } = toolCallRepo()
+
+    await service.listToolCalls('ws', 'exec_1', { limit: 20 })
+
+    expect(listByExecution).not.toHaveBeenCalled()
+    // One more than asked: how the shared paginator learns there IS a next page.
+    expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
+  })
+
+  it('reports an unwired sink as empty rather than throwing', async () => {
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+    })
+    expect(await service.listToolCalls('ws', 'exec_1', { limit: 5, order: 'trajectory' })).toEqual({
+      items: [],
+      nextCursor: null,
+    })
   })
 })

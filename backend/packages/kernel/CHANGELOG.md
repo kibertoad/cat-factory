@@ -1,5 +1,171 @@
 # @cat-factory/kernel
 
+## 0.236.1
+
+### Patch Changes
+
+- Updated dependencies [99be350]
+  - @cat-factory/contracts@0.237.0
+
+## 0.236.0
+
+### Minor Changes
+
+- c9c1dd3: Persist an agent's tool calls as a first-class trajectory: one row per invocation, in the order it
+  made them, carrying the tool's arguments and result. The evidence standard for a merged PR is
+  "how, not just the diff", and until now the tool loop survived a run only as metadata spans a
+  trace sink had to be wired to see, so reconstructing what an agent actually did meant diffing
+  consecutive prompt bodies against each other.
+
+  The fourth telemetry sink (`agent_tool_calls`), beside the per-call cost rows and the dispatch
+  context snapshots, in the same store and on the same retention window: D1 on Cloudflare, the
+  `telemetry` Postgres schema on Node, `node:sqlite` on a mothership-mode node, with the same
+  cross-runtime conformance assertions and the same local-first routing as its siblings. Readable
+  through a new `GET /api/v1/debug/runs/:runId/tool-calls` (additive; the spec's `info.version`
+  takes a minor and the four SDK clients plus the MCP facade gain the operation), and exported on
+  the OTel and Langfuse tool spans alongside the dispatch and ordinal a trajectory orders by.
+
+  The endpoint serves two orders, because the order is the product and a client cannot derive it
+  from the rows: `recent` is the newest-first keyset every sibling debug list shares, and
+  `order=trajectory` is the run's calls oldest-first as the agents made them, a bounded prefix that
+  issues no cursor (pairing one with it is refused rather than quietly served in the other order).
+  Both narrow to a single dispatch with `jobId`. The server orders by when each call STARTED, with
+  `seq` separating the calls that share a millisecond: sorting by the job id instead would order a
+  run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+
+  Both harnesses produce it: the Pi runner pairs each `tool_execution_start` with its end, and the
+  claude-code runner pairs each `tool_use` block with the `tool_result` that answers it — the CLI's
+  own stream being the only place a subscription run's tool loop is visible at all. Bodies are
+  capped and secret-scrubbed at capture, and ride the same `LLM_RECORD_PROMPTS` +
+  `storeAgentContext` double gate as every other captured body; a withheld body is recorded AS
+  withheld, so an opted-out workspace's trajectory never reads as a run whose every tool took no
+  arguments.
+
+  Breaks nothing, retains nothing new by default beyond a run's tool metadata, and requires the
+  `1.91.0` runner image (an older image's calls still reach the trace sinks; their trajectory is
+  skipped rather than persisted under colliding ids, and the skip is logged).
+
+### Patch Changes
+
+- Updated dependencies [c9c1dd3]
+  - @cat-factory/contracts@0.236.0
+
+## 0.235.1
+
+### Patch Changes
+
+- 6b9f696: Make `redactSecrets` cost depend on the SIZE of a body rather than its shape.
+
+  The scrub runs over every captured prompt, every LLM response body and every injected context
+  file before it lands in telemetry, so its cost is on the recording path for a whole
+  agent-context snapshot. Two rules made that cost depend on the shape of a body instead, and
+  neither is visible in an absolute timing budget: both are cheap on prose and expensive on
+  inputs that are entirely ordinary in agent context.
+
+  **URL userinfo.** The pattern led with `[a-z][a-z0-9+.-]{0,39}` before the required `://`. That
+  bound keeps the rule linear (the comment on it records an earlier O(n²) fix, and that fix was
+  right), but a bounded run in the LEADING position is still re-walked at every offset: ~40 steps
+  per character of any unbroken alphanumeric text before failing. That is ~130ms per 512KB of
+  base64, roughly 15x prose, and base64 is not an exotic input here (an inlined asset, a data URI,
+  a lockfile hash column, a minified bundle). The scheme moves into a lookbehind, so the pattern's
+  first obligation at each offset is the literal `://` and a non-matching position is rejected on
+  a single character comparison.
+
+  **PEM private-key blocks.** The rule was one regex spanning `BEGIN … [\s\S]*? … END`. That body
+  is unbounded, so a header with no END after it makes the engine scan to end-of-string, advance
+  to the next header, and rescan the same tail: quadratic in the number of unterminated headers,
+  not merely a bad constant. 2MB of them took ~19 SECONDS. Truncation upstream of the scrub
+  produces exactly that input, since a capped context file can lose its END marker. The two
+  markers are now walked in lockstep by `redactPrivateKeyBlocks`, where each scan only moves
+  forward and a header with no END ends the whole pass (no later header can have one either),
+  making it strictly O(n).
+
+  Redaction behaviour is unchanged on both counts, verified differentially rather than by
+  inspection. For the URL rule the scheme is no longer consumed, so it survives in the output
+  untouched instead of being re-emitted by the replacement; the hand-written cases plus 200k
+  randomised URL-alphabet strings produce byte-identical output. For the PEM rule the pairing
+  decisions a scanner could plausibly get wrong (first END wins, a nested header is swallowed, an
+  unterminated header is left in place, scanning resumes after the closing marker) are pinned as
+  explicit cases, and 300k randomised marker-dense strings produce byte-identical output.
+
+  Credential-free bodies now cost within ~1.15x of prose of the same size whatever their shape,
+  against ~10x for base64 and ~1000x for unterminated PEM headers before. That is a statement
+  about the rules as they stand rather than a property anything enforces: the test measures each
+  known-pathological shape against prose instead of an absolute budget, so it survives a slow CI
+  box, but a new rule with the same defect needs its own shape added there to be caught. A body
+  full of real credentials is legitimately slower (~10x on back-to-back URLs), because that cost
+  is redaction work rather than rescanning.
+
+  Found via a unit test that scrubs ~6MB of single-character filler to exercise the snapshot size
+  budget. It spent 1.7s of its 5s default timeout inside the URL rule, which is why it failed only
+  when the whole monorepo's suites ran concurrently; it is now 76ms.
+
+## 0.235.0
+
+### Minor Changes
+
+- cec0c3e: Attach spec-sized requirements documents when creating a task over the public API.
+
+  `/api/v1` had no way to give a run a specification. `description` caps at 2,000 characters because
+  it is a task's own framing, echoed into every prompt; the 50,000-character `POST /jobs` brief drives
+  inline pipelines that never touch a repository; and the app's own attach-a-document flow is
+  session-authed. A headless caller holding a PRD could only paste a truncated version of it into a
+  field and hope. `POST /api/v1/services/:serviceId/tasks` now takes an ordered `documents` list, each
+  entry either NAMING a page in a connected document source (imported and attached, as `ticket`
+  already does for a tracker issue) or CARRYING the text itself. The full body reaches agents exactly
+  as a document a human attached does: materialised under `.cat-context/` for a container agent,
+  folded into the prompt for an inline one.
+
+  Carrying the text needed a document with no source behind it, so `DocumentOrigin` (`DocumentSourceKind`
+  plus `upload`) is now what a stored row and its block/role links are keyed by, while everything a
+  provider does stays typed against the narrow union. That keeps the missing `upload` provider a
+  compile error rather than an `undefined` at whichever call site reaches for it first. An uploaded
+  document has no origin URL, and every reader now renders that absence as nothing rather than as
+  `Title ()` or a bare `Source:` line.
+
+  One fix rode along, found by the cross-runtime assertion for the new origin rather than by
+  reasoning: `urlMatchCandidates` used to hand back `['', '/']` for an empty needle, so `getByUrl`
+  would match every row whose stored `url` is empty. Nothing produced such a row before uploads, and
+  no caller passes an empty URL today, but "a lookup for nothing resolves to an arbitrary uploaded
+  document, which the caller then hands an agent as the page a description pointed at" is not a trap
+  to leave armed. It now returns null, and the four repositories that call it answer "no match".
+
+  A document is now attached to at most ONE block, enforced where the link is written rather than at
+  the new endpoint. `linkedBlockId` is a single column, so attaching a document another task already
+  holds MOVED the link instead of copying it: the earlier task silently lost a document it was created
+  with, and nothing in its next run reported the absence. That was reachable from the app's own
+  picker too, which offers already-attached documents for re-use. `linkToBlock` now refuses with
+  `document_already_linked` and the holder's id, the same rule and shape as one-task-per-ticket, with
+  translated SPA copy. Two things keep it from wedging anything: a link naming a DELETED block is not
+  a holder (so the guard heals rows left by past deletes), and `removeBlock` now detaches a doomed
+  block's documents through the removal cascade, so new ones are not made. Only the link goes; the
+  document survives its task.
+
+  Attaching a list is one unit of work rather than a loop: `linkManyToBlock` asserts the block once,
+  resolves the whole list through a new batched `DocumentRepository.listByRefs` and writes the links
+  through a new `linkBlockMany` (both mirrored D1 ⇄ Drizzle, with cross-runtime assertions, plus
+  `detachBlocks` for the cascade). The point method in a loop was three round-trips per document, ten
+  of which re-read the same block.
+
+  Worth watching in review: the creation is all-or-nothing. Everything refusable (an unconfigured
+  source, an unparseable ref, a page the provider will not serve, an upload that renders to no
+  readable text, a document another task holds) is refused before the board changes, and an
+  attachment that fails after the task exists takes the task back off the board, because a task
+  silently missing part of its spec is the failure this whole surface exists to prevent. Two ordering
+  details carry that: uploads are written only after the whole list resolves (an import is idempotent
+  on its ref, but every upload mints an id, so an eager write would leave one orphan per retry), and
+  the rollback detaches by BLOCK rather than by the refs it resolved (a rollback can be running
+  because one of those refs belongs to another task, and clearing it by ref would commit the very
+  loss the guard just refused). The attach runs before the ticket claim so that rollback can never
+  orphan a claimed ticket. Naming `documents` does not work in mothership mode yet, for the same
+  reason `ticket` does not: the document write surface is still `pending` on the persistence
+  allow-list, which the new `linkBlockMany`/`detachBlocks` join rather than widen.
+
+### Patch Changes
+
+- Updated dependencies [cec0c3e]
+  - @cat-factory/contracts@0.235.0
+
 ## 0.234.2
 
 ### Patch Changes

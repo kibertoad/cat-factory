@@ -1,0 +1,128 @@
+import * as v from 'valibot'
+
+// ---------------------------------------------------------------------------
+// The HUMAN decisions a run's step can be holding: a question an agent raised, the review comments
+// a person or a quality companion left on an output, a companion's stored verdict, and the approval
+// gate a step parks on.
+//
+// Split out of `execution.ts` (which keeps the run/step runtime state that COMPOSES these), for the
+// same reason `gate.ts` and `human-verdict-gates.ts` are separate: they are one cohesive cluster,
+// they are what a decision-answering surface reads, and `execution.ts` is at its size budget. Both
+// files are re-exported from the package barrel, so consumers are unaffected. This file depends on
+// nothing else in the package; `execution.ts` composes it, not the other way round.
+// ---------------------------------------------------------------------------
+
+/**
+ * A question an agent raised mid-work and would not answer unilaterally. Unlike an approval gate
+ * (which fires AFTER a step produced its output), resolving a decision RE-RUNS the same step with
+ * the choice folded in. `chosen` is null while the run is parked on it.
+ */
+export const decisionSchema = v.object({
+  id: v.string(),
+  question: v.string(),
+  options: v.array(v.string()),
+  chosen: v.nullable(v.string()),
+})
+export type Decision = v.InferOutput<typeof decisionSchema>
+
+/**
+ * One GitHub-review-style comment left on a specific block or item of an agent's
+ * proposal — either by a human reviewing an approval gate, or by a quality
+ * companion (e.g. the Spec Reviewer) grading a structured output. `quotedSource`
+ * is the verbatim raw markdown of the block the comment targets (sliced from the
+ * proposal by its source line range), so a "request changes" re-run can quote the
+ * agent's own text back to it rather than a re-rendered approximation. It is
+ * OPTIONAL because a comment may instead anchor to a structured item via
+ * {@link anchorId} (e.g. a spec requirement / acceptance-criterion id), where the
+ * reviewed output is rendered as discrete items rather than free prose and there is
+ * no quoted source range — the shape a companion returns.
+ */
+export const stepReviewCommentSchema = v.object({
+  /**
+   * Verbatim raw-markdown source of the commented prose block. Optional: a comment
+   * may instead anchor to a structured item via {@link anchorId}, where there is no
+   * prose source to quote.
+   */
+  quotedSource: v.optional(v.string()),
+  /**
+   * 0-based source line range [start, end) of the commented prose block, for
+   * best-effort re-anchoring. Optional: a comment may instead anchor to a structured
+   * item via {@link anchorId} (e.g. a spec requirement/acceptance-criterion id), where
+   * there is no prose line range.
+   */
+  srcStart: v.optional(v.number()),
+  srcEnd: v.optional(v.number()),
+  /**
+   * Stable id of the structured item the comment targets (e.g. a spec
+   * requirement/criterion id), when the reviewed output is rendered as structured
+   * items rather than free prose. Absent for prose-range comments.
+   */
+  anchorId: v.optional(v.string()),
+  /** The reviewer's note on this block / item. */
+  body: v.string(),
+})
+export type StepReviewComment = v.InferOutput<typeof stepReviewCommentSchema>
+
+/**
+ * The standardized, stored verdict a quality companion produced for an output it
+ * graded — shared by every companion site (the pipeline companion step and the
+ * requirements-rework gate). The raw model response is {@link companionAssessmentSchema}
+ * (rating + summary + comments); this is the persisted, self-describing record of how
+ * that assessment was applied: the `rating`, the `threshold` it was judged against,
+ * whether it `passed`, and the `feedback` surfaced to the human / fed into a rework.
+ */
+export const companionVerdictSchema = v.object({
+  /** Overall quality of the graded output (0..1, higher = better). */
+  rating: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** The quality bar the rating had to reach to pass. */
+  threshold: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
+  /** Whether the rating met the threshold. */
+  passed: v.boolean(),
+  /** The companion's challenge / justification (its assessment summary). */
+  feedback: v.string(),
+})
+export type CompanionVerdict = v.InferOutput<typeof companionVerdictSchema>
+
+/**
+ * An approval gate's lifecycle: `pending` while awaiting the human; terminal
+ * `approved`/`rejected`; `changes_requested` re-runs the step. Named (rather
+ * than inlined in {@link stepApprovalSchema}) because the public decision
+ * projection reports the same states, and two picklists spelling one lifecycle
+ * is how the SPA and the API end up disagreeing about what `pending` means.
+ */
+export const stepApprovalStatusSchema = v.picklist([
+  'pending',
+  'approved',
+  'changes_requested',
+  'rejected',
+])
+export type StepApprovalStatus = v.InferOutput<typeof stepApprovalStatusSchema>
+
+/**
+ * A human approval gate raised after a step whose pipeline marked it
+ * `requiresApproval`. Unlike a {@link Decision} (which an agent raises and which
+ * re-runs the same step on resolution), an approval gate fires once the step has
+ * already produced its `proposal`; approving advances the run (carrying the —
+ * possibly edited — proposal forward as context), requesting changes re-runs the
+ * same step with the human's `feedback` (+ per-block `comments`), and rejecting
+ * stops the run entirely (a terminal `rejected` failure the board can retry).
+ *
+ * It is also the engine's GENERIC parking mechanism, which is the trap for anything that reads it:
+ * a review gate, a brainstorm, a fork choice, a human-verdict gate, a follow-up triage and an
+ * interview all leave a `pending` approval here while being driven by their own verbs entirely.
+ * "This step has a pending approval" therefore does NOT mean "this is an approval gate"; the
+ * engine's `dedicatedParkSurface` is what tells the two apart.
+ */
+export const stepApprovalSchema = v.object({
+  /** Unique id of this gate; the durable run parks on it like a decision. */
+  id: v.string(),
+  /** `pending` while awaiting the human; terminal `approved`/`rejected`; `changes_requested` re-runs the step. */
+  status: stepApprovalStatusSchema,
+  /** The agent's output the human is reviewing (editable before approval). */
+  proposal: v.string(),
+  /** When changes were requested, the human's freeform guidance fed into the re-run. */
+  feedback: v.optional(v.string()),
+  /** When changes were requested, per-block review comments fed into the re-run. */
+  comments: v.optional(v.array(stepReviewCommentSchema)),
+})
+export type StepApproval = v.InferOutput<typeof stepApprovalSchema>

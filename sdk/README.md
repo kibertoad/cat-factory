@@ -14,8 +14,10 @@ Official clients for the cat-factory **public API** (`/api/v1`) in four language
 Beside them, [`sdk/mcp`](./mcp) is a **Model Context Protocol facade**, not a fifth client: the same
 operations projected as MCP tools over the TypeScript client, so an MCP host can drive a workspace
 directly. It rides this generator for the same reason the clients do (it must not be able to drift
-from the surface it exposes) and re-implements none of their behaviour. See
-[its README](./mcp/README.md).
+from the surface it exposes) and re-implements none of their behaviour. It serves BOTH access paths a
+host can take: the `cat-factory-mcp` stdio binary, and the deployment's own hosted
+`POST /api/v1/mcp`, which the backend mounts from this same package so the two cannot answer
+differently. See [its README](./mcp/README.md).
 
 There is **no separate Kotlin SDK**, and that is a decision rather than an omission; see
 [Java and Kotlin](#java-and-kotlin) below.
@@ -37,7 +39,7 @@ the generator would produce.
 What is generated is deliberately narrow: the wire **models** and the **operation methods**. Each
 SDK's transport, error hierarchy, retry policy, pagination helper and SSE reader are hand-written
 and live beside the generated files. That split is what keeps a contract change from rewriting
-behaviour, and a behaviour fix from having to be re-applied across 42 operations × 4 languages.
+behaviour, and a behaviour fix from having to be re-applied across 66 operations × 4 languages.
 
 Generated files are marked as such in their header and named so it is obvious:
 `*.generated.ts`, `models.py` / `operations.py`, `*_gen.go`, and everything under the Java

@@ -77,6 +77,7 @@ export interface TelemetryIngestSweepResult {
   metrics: number
   snapshots: number
   searchQueries: number
+  toolCalls: number
   /** Runs left un-marked because their upload failed — retried on the next pass. */
   failed: number
   /**
@@ -194,6 +195,7 @@ export async function sweepTelemetryIngest(
     metrics: 0,
     snapshots: 0,
     searchQueries: 0,
+    toolCalls: 0,
     failed: 0,
     skipped: 0,
   }
@@ -217,13 +219,24 @@ export async function sweepTelemetryIngest(
         PAGE_SIZES.searchQueries,
         (rows) => send({ searchQueries: rows }),
       )
+      const toolCalls = await drainSink(
+        (cursor, limit) => deps.reader.listToolCalls(workspaceId, executionId, cursor, limit),
+        PAGE_SIZES.toolCalls,
+        (rows) => send({ toolCalls: rows }),
+      )
       result.metrics += metrics.uploaded
       result.snapshots += snapshots.uploaded
       result.searchQueries += searchQueries.uploaded
+      result.toolCalls += toolCalls.uploaded
       // A row too large to ever post is dropped rather than retried forever — but a cap that drops
       // something says what it dropped, naming the rows so the gap in the mothership's view of
       // this run is explicable rather than an unexplained hole.
-      const oversized = [...metrics.oversized, ...snapshots.oversized, ...searchQueries.oversized]
+      const oversized = [
+        ...metrics.oversized,
+        ...snapshots.oversized,
+        ...searchQueries.oversized,
+        ...toolCalls.oversized,
+      ]
       if (oversized.length > 0) {
         result.skipped += oversized.length
         deps.log.warn('mothership telemetry ingest skipped rows over the body cap', {
