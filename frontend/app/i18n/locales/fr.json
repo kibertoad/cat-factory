@@ -3224,13 +3224,25 @@
       "executionBackend": {
         "label": "Où s'exécutent les agents",
         "local-docker": "Docker local (hôte)",
+        "local-dockerDesc": "Exécute chaque agent dans un conteneur sur le démon Docker de cette machine.",
         "cloudflare-containers": "Cloudflare Containers (intégré)",
-        "runner-pool": "Pool d'exécuteurs auto-hébergé"
+        "cloudflare-containersDesc": "Exécute les agents sur la plateforme de conteneurs par exécution intégrée à Cloudflare.",
+        "kubernetes": "Cluster Kubernetes",
+        "kubernetesDesc": "Exécute chaque agent en tant que pod dans un cluster Kubernetes que vous gérez.",
+        "runner-pool": "Pool d'exécuteurs personnalisé (HTTP)",
+        "runner-poolDesc": "Envoie les agents vers votre propre ordonnanceur derrière une API de manifestes HTTP.",
+        "k3s": "Kubernetes local (k3s)",
+        "k3sDesc": "Préconfiguré pour un cluster k3s/k3d local sur cette machine : il suffit de coller un jeton."
       },
       "testEnvBackend": {
         "label": "Où s'exécutent les environnements de test",
-        "local-compose": "docker-compose dans le conteneur",
-        "environment-provider": "Fournisseur d'environnements",
+        "local-compose": "docker-compose dans le conteneur (dépendances du Testeur)",
+        "local-composeDesc": "Démarre les dépendances du Testeur avec docker-compose à l'intérieur du conteneur de l'exécution. Pour un environnement de prévisualisation complet de l'application, utilisez l'option d'environnement de prévisualisation Docker Compose ci-dessous.",
+        "kubernetes": "Cluster Kubernetes",
+        "kubernetesDesc": "Provisionne un namespace par PR dans un cluster Kubernetes que vous gérez. Idéal pour les applications natives Kubernetes ou si vous exploitez déjà un cluster.",
+        "environment-provider": "Fournisseur HTTP personnalisé",
+        "environment-providerDesc": "Provisionne des environnements éphémères via votre propre API de gestion HTTP. Idéal si vous disposez déjà d'un outillage dédié aux environnements de prévisualisation.",
+        "compose": "Environnement de prévisualisation Docker Compose",
         "composeDesc": "Démarre le docker-compose.yml du dépôt sur un démon Docker local comme URL du Testeur. Idéal pour les applications locales basées sur Compose. Prend en charge les images préconstruites ou la construction depuis les sources ; nécessite un démon Docker, donc uniquement pour les déploiements locaux."
       },
       "dockerComposeInfo": "Les services Docker Compose démarrent sur le Docker local du runtime : aucune connexion requise (le conteneur d’exécution doit prendre en charge Docker-in-Docker). Configurez le service, le port et la source de l’image (image préconstruite ou construction depuis les sources) dans les paramètres d’environnement du service.",

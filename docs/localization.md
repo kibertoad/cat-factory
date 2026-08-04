@@ -36,30 +36,10 @@ is left**.
   only sees keys written as static `t('literal')` calls. `i18n-locale-parity.mjs --since
   origin/<base>` requires a PR that adds, changes or removes an `en.json` key to make the
   same change in the other nine catalogs. Pre-existing lag on keys a PR does not touch
-  passes both, which is deliberate (it keeps the gates from fighting the incremental
-  policy) and is why the coverage table below is worth keeping.
-
-## Catalog coverage
-
-Message keys per catalog, excluding the `@`-prefixed translator descriptions (those are
-`en`-only by design):
-
-| Locale(s)               | Message keys | Missing vs `en` |
-| ----------------------- | -----------: | --------------: |
-| `en` (source)           |         5044 |               - |
-| `de`, `it`, `ja`, `tr`  |         5044 |               0 |
-| `he`                    |         5043 |               1 |
-| `es`, `fr`, `pl`, `uk`  |         5032 |              12 |
-
-The 13 gaps are all in `settings.infrastructure.*` (the execution-backend and
-test-env-backend picker labels and descriptions). `InfrastructureBackendPicker.vue` holds
-those keys as string literals in a table and resolves them through `t(item.label)`, so
-vue-i18n-extract cannot see them as used and `i18n:check` does not report them; the four
-locales fall back to English instead of leaking a raw key. See **Known issues**.
-
-Only `pl` and `uk` have a custom plural selector (the Slavic one/few/many rule in
-`i18n.config.ts`); `he`, `ja` and `tr` use vue-i18n's default selector, which matches
-their catalogs' 2-form entries but is not the CLDR rule for Hebrew.
+  passes both, deliberately: it keeps the gates from fighting the incremental policy.
+  Standing lag is therefore tracked by hand, under **Remaining** below.
+- **Plural selectors are overridden only for `pl` and `uk`** (the Slavic one/few/many
+  rule in `i18n.config.ts`). The other seven run on vue-i18n's default selector.
 
 ## Progress
 
@@ -215,10 +195,7 @@ migration and are intentionally skipped.
   guarded) removes the last raw strings from the board/inspector surfaces.
 - `app/pages/index.vue`, `app/pages/reset-password.vue`: page-level copy.
 
-**Translation backfill**
-
-- The 13 `settings.infrastructure.*` keys missing from `es`/`fr`/`pl`/`uk` (12 each) and
-  `he` (1), listed under **Catalog coverage** above. They currently fall back to English.
+All ten catalogs are otherwise at full key parity with `en`.
 
 ## Per-phase checklist
 
@@ -247,9 +224,15 @@ For each phase (see `CLAUDE.md` → Internationalization for the full rules):
 - **A dynamically-resolved key can go missing in a locale without any gate noticing.**
   `i18n:check` scans for static `t('literal')` calls, so a key held as a string in a
   data table and resolved through `t(item.label)` is invisible to it, and the parity
-  guard only couples keys a PR actually touched. The 13 `settings.infrastructure.*` gaps
-  above arrived exactly this way. When you add a key that is resolved indirectly, check
-  the catalogs by hand; the fallback to `en` makes the gap silent in the UI.
+  guard only couples keys a PR actually touched. The `settings.infrastructure.*` picker
+  labels went missing from four catalogs exactly this way and were only found by a manual
+  sweep. When you add a key that is resolved indirectly, check the catalogs by hand: the
+  fallback to `en` makes the gap silent in the UI rather than leaking a raw key.
+- **`he` uses two different terms for the Tester** (`הבוחן` in
+  `settings.infrastructure.testEnvBackend.composeDesc`, `סוכן הבדיקה` in
+  `local-composeDesc`), and three of its `testEnvBackend` descriptions drop the
+  "Best for …" second sentence that `en` carries. Picking one term is a translation
+  decision, not a mechanical fix.
 - **Plural rules are only overridden for `pl` and `uk`.** `he` in particular has a
   four-form CLDR rule (one/two/many/other) and is running on vue-i18n's default 2-form
   selector, so a Hebrew count message reads as an approximation rather than a wrong

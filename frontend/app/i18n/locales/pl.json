@@ -3224,13 +3224,25 @@
       "executionBackend": {
         "label": "Gdzie działają agenci",
         "local-docker": "Lokalny Docker (host)",
+        "local-dockerDesc": "Uruchamia każdego agenta w kontenerze na demonie Dockera tej maszyny.",
         "cloudflare-containers": "Cloudflare Containers (wbudowane)",
-        "runner-pool": "Samodzielnie hostowana pula runnerów"
+        "cloudflare-containersDesc": "Uruchamia agentów na wbudowanej platformie kontenerów Cloudflare, po jednym na uruchomienie.",
+        "kubernetes": "Klaster Kubernetes",
+        "kubernetesDesc": "Uruchamia każdego agenta jako pod w klastrze Kubernetes, którym sam zarządzasz.",
+        "runner-pool": "Własna pula runnerów (HTTP)",
+        "runner-poolDesc": "Kieruje agentów do własnego harmonogramu za API manifestów HTTP.",
+        "k3s": "Lokalny Kubernetes (k3s)",
+        "k3sDesc": "Wypełnione wstępnie dla lokalnego klastra k3s/k3d na tej maszynie: wystarczy wkleić token."
       },
       "testEnvBackend": {
         "label": "Gdzie działają środowiska testowe",
-        "local-compose": "docker-compose w kontenerze",
-        "environment-provider": "Dostawca środowisk",
+        "local-compose": "docker-compose w kontenerze (zależności Testera)",
+        "local-composeDesc": "Uruchamia zależności Testera przez docker-compose wewnątrz kontenera uruchomienia. Pełne środowisko podglądu aplikacji znajdziesz w opcji środowiska podglądu Docker Compose poniżej.",
+        "kubernetes": "Klaster Kubernetes",
+        "kubernetesDesc": "Tworzy przestrzeń nazw dla każdego PR w klastrze Kubernetes, którym sam zarządzasz. Najlepsze dla aplikacji natywnych dla Kubernetes lub gdy już masz klaster.",
+        "environment-provider": "Własny dostawca HTTP",
+        "environment-providerDesc": "Tworzy efemeryczne środowiska przez własne API zarządzania HTTP. Najlepsze, gdy masz już własne narzędzia do środowisk podglądu.",
+        "compose": "Środowisko podglądu Docker Compose",
         "composeDesc": "Uruchamia własny plik docker-compose.yml repozytorium na lokalnym demonie Dockera jako adres URL Testera. Najlepsze dla lokalnych aplikacji opartych na Compose. Obsługuje gotowe obrazy lub budowanie ze źródeł; wymaga demona Dockera, więc tylko wdrożenia lokalne."
       },
       "dockerComposeInfo": "Usługi Docker Compose uruchamiają się na lokalnym Dockerze środowiska uruchomieniowego: połączenie nie jest potrzebne (kontener uruchomienia musi obsługiwać Docker-in-Docker). Skonfiguruj usługę, port i źródło obrazu (pobranie gotowego lub budowanie ze źródeł) w ustawieniach środowiska usługi.",
