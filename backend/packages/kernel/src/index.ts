@@ -559,11 +559,18 @@ export {
   type ResolvedToolServer,
   type SkillVersionPin,
   type UnavailableToolServer,
+  MCP_HARNESS_TRANSPORTS,
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
+  MCP_TOOL_NAME_PATTERN,
+  TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
   isValidMcpServerId,
+  isValidMcpToolName,
+  mcpHarnessServesTransport,
+  mcpServableHarnesses,
   mcpServerSupportsHarness,
+  toolServerDeclaredBytes,
 } from './domain/agent-capabilities.js'
 
 export {
