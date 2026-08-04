@@ -22,7 +22,8 @@
         "deleteTitle": "Elimina preset",
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} override",
-        "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti."
+        "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti.",
+        "customRouteOrder": "ordine rotte personalizzato"
       },
       "editor": {
         "useBaseModel": "Usa il modello di base",
@@ -43,6 +44,30 @@
         "nameRequiredTitle": "Nome obbligatorio",
         "nameRequiredBody": "Assegna un nome al preset.",
         "saveFailed": "Impossibile salvare il preset"
+      },
+      "routes": {
+        "direct": "L'API propria del fornitore del modello",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "Gateway OpenRouter",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abbonamento (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Richiede una chiave API per quel fornitore.",
+        "bedrock": "Viene eseguito nella tua region AWS, sui modelli consentiti dal tuo account.",
+        "openrouter": "Una chiave, molti fornitori, rivenduti con un margine.",
+        "cloudflare": "Sempre disponibile, senza cache dei prompt.",
+        "subscription": "Quota forfettaria su un piano collegato."
+      },
+      "routeOrder": {
+        "label": "Ordine delle rotte",
+        "defaultHint": "Questo preset segue il valore predefinito del deployment. Sposta una rotta in alto per preferirla.",
+        "customHint": "Questo preset preferisce le rotte in questo ordine. Un modello raggiungibile solo su una rotta inferiore funziona comunque, viene solo provato dopo.",
+        "reset": "Usa l'ordine predefinito",
+        "moveUp": "Preferisci di più questa rotta",
+        "moveDown": "Preferisci di meno questa rotta",
+        "subscriptionOverrideHint": "Un abbonamento collegato prevale comunque sui modelli che ne offrono uno: il motore li instrada al piano indipendentemente da questo ordine. Le rotte sotto la voce abbonamento si applicano a tutti gli altri modelli.",
+        "badgesUseDefaultPresetHint": "La rotta mostrata accanto a ogni modello qui sopra è quella del preset predefinito dello spazio di lavoro, non di questo preset."
       }
     },
     "account": {
@@ -5096,7 +5121,8 @@
         "foundational_service_exists": "Il servizio fondamentale esiste già",
         "binary_output_service_invalid": "Impossibile risolvere il servizio per gli output binari",
         "binary_output_generator_invalid": "Impossibile risolvere il generatore per gli output binari",
-        "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio"
+        "foundational_service_not_inherited": "Questa bacheca ha registrato quel servizio",
+        "ticket_already_linked": "Questo ticket ha già un'attività"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5128,7 +5154,8 @@
         "foundational_service_exists": "Un servizio fondamentale con questo identificatore è già registrato in questo ambito. Apri la voce esistente e modificala: due servizi non possono condividere un identificatore, perché è il nome che un architetto indica nella sua progettazione.",
         "binary_output_service_invalid": "Un passaggio che genera output binari seleziona un servizio fondamentale che il catalogo di questo workspace non riesce a risolvere: l'identificatore è sconosciuto, oppure il servizio di archiviazione scelto non ha la capacità asset-storage. Correggi la selezione del passaggio o registra il servizio, poi riavvia.",
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un'integrazione generativa che questa installazione non registra, oppure nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare. Le integrazioni generative si registrano nel codice dell'installazione, non in questo workspace: registrala o correggi la selezione del passaggio, poi riavvia.",
-        "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca."
+        "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
+        "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -5948,7 +5975,7 @@
       "newDescription": "Sono stati rilasciati nuovi preset di modello integrati. Aggiungili alla libreria di questa board.",
       "add": "Aggiungi",
       "updatesHeading": "Aggiornamenti disponibili",
-      "updatesDescription": "È stata rilasciata una versione più recente di questi preset di modello integrati. Ripristina i valori iniziali per adottarla (il predefinito e l'ordinamento vengono mantenuti).",
+      "updatesDescription": "È stata rilasciata una versione più recente di questi preset di modello integrati. Ripristina i valori iniziali per adottarla: il predefinito e l'ordinamento vengono mantenuti, ma un ordine delle rotte personalizzato sul preset viene azzerato.",
       "versionAvailable": "Versione {from} → {to} disponibile.",
       "reseed": "Ripristina",
       "reseedAll": "Aggiorna tutti ({count})",

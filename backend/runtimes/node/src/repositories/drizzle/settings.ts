@@ -41,7 +41,12 @@ import type {
   WorkspaceSettings,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
-import { parseNotificationWebhookTypes, parseRunLifecycleEvents } from '@cat-factory/server'
+import {
+  parseNotificationWebhookTypes,
+  parseProviderPreferenceColumn,
+  parseRunLifecycleEvents,
+  serializeProviderPreferenceColumn,
+} from '@cat-factory/server'
 import { and, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
@@ -182,6 +187,7 @@ function rowToModelPreset(row: ModelPresetRow): ModelPreset {
   } catch {
     // A malformed JSON column degrades to no overrides (base model applies to all).
   }
+  const providerPreference = parseProviderPreferenceColumn(row.provider_preference)
   return {
     id: row.id,
     name: row.name,
@@ -189,6 +195,7 @@ function rowToModelPreset(row: ModelPresetRow): ModelPreset {
     overrides,
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
+    ...(providerPreference ? { providerPreference } : {}),
     createdAt: row.created_at,
   }
 }
@@ -243,6 +250,7 @@ export class DrizzleModelPresetRepository implements ModelPresetRepository {
       overrides: JSON.stringify(preset.overrides),
       is_default: preset.isDefault ? 1 : 0,
       version: preset.version ?? null,
+      provider_preference: serializeProviderPreferenceColumn(preset.providerPreference),
       created_at: preset.createdAt,
     }
     // Demote + upsert run in one transaction so the single-default invariant can never
@@ -270,6 +278,7 @@ export class DrizzleModelPresetRepository implements ModelPresetRepository {
             overrides: values.overrides,
             is_default: values.is_default,
             version: values.version,
+            provider_preference: values.provider_preference,
           },
         })
     })

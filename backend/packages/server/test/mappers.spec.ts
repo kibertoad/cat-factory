@@ -11,8 +11,10 @@ import {
   executionToDetail,
   rowToBlock,
   rowToExecution,
+  parseProviderPreferenceColumn,
   rowToPipeline,
   rowToWorkspace,
+  serializeProviderPreferenceColumn,
 } from '../src/persistence/mappers.js'
 import { DataIntegrityError } from '../src/persistence/decode.js'
 
@@ -498,5 +500,67 @@ describe('rowToWorkspace / rowToPipeline', () => {
     expect('thresholds' in bare).toBe(false)
     expect('followUps' in bare).toBe(false)
     expect('labels' in bare).toBe(false)
+  })
+})
+
+// `model_presets.provider_preference` (D1 migration 0078 ⇄ the Drizzle column). Shared by both
+// runtimes' repos, so a bug here mis-reads a preset's route order on Postgres AND D1 identically —
+// and the failure mode is silent, since a dropped order simply resolves on the deployment default.
+describe('parseProviderPreferenceColumn', () => {
+  it('round-trips a stored order', () => {
+    expect(parseProviderPreferenceColumn('["bedrock","direct"]')).toEqual(['bedrock', 'direct'])
+  })
+
+  it('reads NULL / empty / a stored empty list as UNDEFINED, never as an empty order', () => {
+    // `undefined` is what `ModelPreset.providerPreference` uses for "the deployment default order".
+    // An empty array would read as an order over NO routes, which is a different (and impossible)
+    // statement — and would make `orderedModelFlavorPreference` answer a different question.
+    expect(parseProviderPreferenceColumn(null)).toBeUndefined()
+    expect(parseProviderPreferenceColumn(undefined)).toBeUndefined()
+    expect(parseProviderPreferenceColumn('')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('[]')).toBeUndefined()
+  })
+
+  it('DROPS a retired route and keeps the survivors in their relative order', () => {
+    // The deliberate opposite of `isBinaryModality`'s "name it": the value names a ROUTE, so once
+    // the route is gone there is no current member a human could re-pick it as. What it must never
+    // do is reach a `Record<ModelFlavor, …>` lookup, which is what the narrowing prevents.
+    expect(parseProviderPreferenceColumn('["vertex","bedrock","direct"]')).toEqual([
+      'bedrock',
+      'direct',
+    ])
+  })
+
+  it('reads a row whose every entry is retired as UNDEFINED (nothing left to reorder)', () => {
+    expect(parseProviderPreferenceColumn('["vertex","azure"]')).toBeUndefined()
+  })
+
+  it('degrades malformed or non-array JSON to undefined rather than throwing', () => {
+    // A run must not fail to start because one preset row is corrupt; it resolves on the default
+    // order, which is exactly what a preset stating nothing does.
+    expect(parseProviderPreferenceColumn('{')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('"bedrock"')).toBeUndefined()
+    expect(parseProviderPreferenceColumn('{"0":"bedrock"}')).toBeUndefined()
+  })
+
+  it('drops non-string entries without taking the whole list down', () => {
+    expect(parseProviderPreferenceColumn('["bedrock",7,null,{"a":1},"direct"]')).toEqual([
+      'bedrock',
+      'direct',
+    ])
+  })
+})
+
+describe('serializeProviderPreferenceColumn', () => {
+  it('writes NULL for absent or empty (the column value meaning "the default order")', () => {
+    expect(serializeProviderPreferenceColumn(undefined)).toBeNull()
+    expect(serializeProviderPreferenceColumn([])).toBeNull()
+  })
+
+  it('round-trips through the parser', () => {
+    const order = ['cloudflare', 'direct'] as const
+    expect(parseProviderPreferenceColumn(serializeProviderPreferenceColumn(order))).toEqual([
+      ...order,
+    ])
   })
 })

@@ -8,6 +8,7 @@ import type {
   GitHubRepo,
   GroupCacheHandle,
   Logger,
+  ModelPresetCacheValue,
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
@@ -94,6 +95,7 @@ export interface AppCachesProfile {
   viewerRepos: GroupCacheProfile
   patInstallationRepos: GroupCacheProfile
   riskPolicy: GroupCacheProfile
+  modelPreset: GroupCacheProfile
   workspaceAccess: GroupCacheProfile
 }
 
@@ -200,6 +202,11 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // `default`) — a workspace has a small preset library, so a modest per-group bound covers the
   // picked presets plus the default. Slow-moving (admin-changed); invalidation-driven, no probe.
   riskPolicy: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 32 },
+  // A workspace's resolved MODEL presets, on the same profile as `riskPolicy` one row over: same
+  // key shape (`picked:<id>` / `default`), same small library per workspace, same slow-moving
+  // admin-changed source. Read harder than the merge preset, though — every dispatch and every
+  // inline call resolves both the step's model and the preset's route order through it.
+  modelPreset: { enabled: true, ttlInMsecs: 5 * 60_000, maxGroups: 1000, maxItemsPerGroup: 32 },
   // One resolved access decision per (workspace, user) — grouped by workspace, keyed by user, so a
   // large board keeps a member entry each. Slow-moving (roster/access-mode are admin actions);
   // invalidation-driven, no version probe. A SHORT 60s TTL: it's the freshness backstop only (the
@@ -267,6 +274,10 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // invalidation bus on the Worker, so the isolate resolves it live — same class as
   // `workspaceSettings`/`accountModelPolicy`.
   riskPolicy: { ...DEFAULT_APP_CACHES_PROFILE.riskPolicy, enabled: false },
+  // Pass-through for exactly the same reason as `riskPolicy`: the model-preset library is our own
+  // mutable D1 state, and a TTL'd entry would keep dispatching on a re-pointed model or a
+  // re-ordered route list that a peer isolate has already rewritten.
+  modelPreset: { ...DEFAULT_APP_CACHES_PROFILE.modelPreset, enabled: false },
   // Pass-through: the resolved workspace-access decision reads our own mutable D1 state (the roster
   // + access-mode + account memberships) with no cross-isolate invalidation bus on the Worker, so a
   // TTL'd entry would keep granting access after a peer isolate revoked a member. The isolate
@@ -492,6 +503,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.riskPolicy,
     options,
   )
+  const modelPreset = buildGroupCache<ModelPresetCacheValue>(
+    'model-preset',
+    profile.modelPreset,
+    options,
+  )
   const workspaceAccess = buildGroupCache<WorkspaceAccessCacheValue>(
     'workspace-access',
     profile.workspaceAccess,
@@ -512,6 +528,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     viewerRepos,
     patInstallationRepos,
     riskPolicy,
+    modelPreset,
     workspaceAccess,
     close: async () => {
       await Promise.all([
@@ -529,6 +546,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         viewerRepos.close(),
         patInstallationRepos.close(),
         riskPolicy.close(),
+        modelPreset.close(),
         workspaceAccess.close(),
       ])
     },

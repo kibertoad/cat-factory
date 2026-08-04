@@ -1,8 +1,11 @@
 import type {
   Clock,
   CreateModelPresetInput,
+  GroupCacheHandle,
   IdGenerator,
+  ModelFlavor,
   ModelPreset,
+  ModelPresetCacheValue,
   ModelPresetRepository,
   UpdateModelPresetInput,
   WorkspaceRepository,
@@ -30,6 +33,13 @@ export interface ModelPresetServiceDependencies {
    * choice is always preserved. Defaults to {@link DEFAULT_MODEL_PRESET_ID} (Kimi).
    */
   defaultPresetId?: string
+  /**
+   * Optional: the `AppCaches.modelPreset` slice the run path resolves a block's preset through
+   * (its model for the kind AND its route order). Every write below invalidates the workspace
+   * group so a preset edit is visible on the very next dispatch. Absent → the run path reads live
+   * (tests / no cache wired).
+   */
+  modelPresetCache?: GroupCacheHandle<ModelPresetCacheValue>
 }
 
 /**
@@ -50,12 +60,14 @@ export class ModelPresetService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly defaultPresetId: string
+  private readonly cache?: GroupCacheHandle<ModelPresetCacheValue>
 
   constructor(deps: ModelPresetServiceDependencies) {
     this.presets = deps.modelPresetRepository
     this.workspaceRepository = deps.workspaceRepository
     this.idGenerator = deps.idGenerator
     this.clock = deps.clock
+    this.cache = deps.modelPresetCache
     // Resolve the deployment's seeded-default id to a REAL catalog id up front. Only a
     // built-in can be seeded as the first-seed default, so a `defaultPresetId` that matches no
     // catalog seed (a stale/mistyped value from a deploy-app wrapper) is a misconfiguration:
@@ -66,6 +78,27 @@ export class ModelPresetService {
     this.defaultPresetId = seedModelPresets().some((p) => p.id === requested)
       ? requested
       : DEFAULT_MODEL_PRESET_ID
+  }
+
+  /**
+   * Drop the workspace's cached preset library after a write commits. Coarse (one group == one
+   * workspace) because a write can flip which preset is the default, so a single edit's blast
+   * radius is the whole library — over-invalidation is always safe (CLAUDE.md caching rule).
+   */
+  private async invalidate(workspaceId: string): Promise<void> {
+    await this.cache?.invalidateGroup(workspaceId)
+  }
+
+  /**
+   * The route order the preset in force states, for a caller that holds the service rather than
+   * the repository (the `/models` catalog). Side-effect-free and never seeds, like the free
+   * function it delegates to — see {@link resolvePresetProviderPreference}.
+   */
+  providerPreferenceFor(
+    workspaceId: string,
+    modelPresetId?: string,
+  ): Promise<readonly ModelFlavor[] | undefined> {
+    return resolvePresetProviderPreference(this.presets, workspaceId, modelPresetId, this.cache)
   }
 
   /** List a workspace's presets, seeding the built-in presets if none exist yet. */
@@ -86,9 +119,13 @@ export class ModelPresetService {
       overrides: input.overrides,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
+      // An empty list is the same statement as no list — "use the default order" — so it is
+      // normalised away here rather than persisted as an order over no routes.
+      ...(input.providerPreference?.length ? { providerPreference: input.providerPreference } : {}),
       createdAt: this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
+    await this.invalidate(workspaceId)
     return preset
   }
 
@@ -109,8 +146,20 @@ export class ModelPresetService {
       ...(patch.baseModelId !== undefined ? { baseModelId: patch.baseModelId } : {}),
       ...(patch.overrides !== undefined ? { overrides: patch.overrides } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
+      // Three distinct patches, and the empty one is the reason this is not a plain spread: an
+      // ABSENT `providerPreference` leaves the stored order alone, a non-empty one replaces it,
+      // and an EMPTY one resets the preset to the default order (so "reset" needs no route of
+      // its own). `undefined` is written, not omitted, so the reset actually clears the column.
+      ...(patch.providerPreference !== undefined
+        ? {
+            providerPreference: patch.providerPreference.length
+              ? patch.providerPreference
+              : undefined,
+          }
+        : {}),
     }
     await this.presets.upsert(workspaceId, updated)
+    await this.invalidate(workspaceId)
     return updated
   }
 
@@ -122,6 +171,7 @@ export class ModelPresetService {
       throw new ConflictError('Cannot delete the default preset; promote another preset first.')
     }
     await this.presets.remove(workspaceId, id)
+    await this.invalidate(workspaceId)
   }
 
   /**
@@ -131,6 +181,9 @@ export class ModelPresetService {
    * old presets but not the new one). The canonical base model / overrides / `version`
    * overwrite (or create) the stored row; an existing copy's `isDefault` + `createdAt` are
    * preserved so reseeding never silently changes which preset is the default or its ordering.
+   * A built-in declares no route preference, so a reseed also RESETS one the workspace had set on
+   * it — the same disposition as its base model and overrides, which is what "restore the canonical
+   * definition" means (a workspace wanting to keep a route order copies the preset instead).
    * When re-materialising a built-in the workspace had deleted, it only (re)claims the default
    * if the seed is THIS deployment's default preset AND the workspace currently has none — so
    * reseeding never steals the default away from the user's chosen preset. Rejects an id not in
@@ -158,6 +211,7 @@ export class ModelPresetService {
       createdAt: existing?.createdAt ?? this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
+    await this.invalidate(workspaceId)
     return preset
   }
 
@@ -183,6 +237,9 @@ export class ModelPresetService {
         createdAt: now + offset++,
       })
     }
+    // A dispatch that resolved before first-use seeding cached the null default; drop it so the
+    // very next one sees the seeded library rather than the deployment's routing fallback.
+    await this.invalidate(workspaceId)
   }
 
   /** A catalog seed as a persisted preset (its stable id + version, without `createdAt`/default). */
@@ -210,9 +267,95 @@ export async function resolvePresetModelForKind(
   workspaceId: string,
   agentKind: string,
   modelPresetId?: string,
+  cache?: GroupCacheHandle<ModelPresetCacheValue>,
 ): Promise<string> {
-  const preset =
-    (modelPresetId ? await repo.get(workspaceId, modelPresetId) : null) ??
-    (await repo.getDefault(workspaceId))
-  return modelForKindFromPreset(preset, agentKind)
+  return (await resolvePresetRouting(repo, workspaceId, agentKind, modelPresetId, cache)).modelId
+}
+
+/**
+ * The route order the preset in force states, or undefined for the deployment's default order.
+ * The `providerPreference` sibling of {@link resolvePresetModelForKind}: same preset selection
+ * (selected id else the workspace default), same side-effect-free contract, so the hot dispatch
+ * path and the start guard resolve the order from the same row the model id came from.
+ *
+ * Undefined covers three facts that need no distinguishing, because all three mean "nothing
+ * reorders the routes": the preset states no preference, the library is not yet seeded, and the
+ * selected id no longer exists.
+ */
+export async function resolvePresetProviderPreference(
+  repo: ModelPresetRepository,
+  workspaceId: string,
+  modelPresetId?: string,
+  cache?: GroupCacheHandle<ModelPresetCacheValue>,
+): Promise<readonly ModelFlavor[] | undefined> {
+  return preferenceOf(await presetInForce(repo, workspaceId, modelPresetId, cache))
+}
+
+/** Both preset-derived facts a resolution needs, from ONE row. */
+export interface PresetRouting {
+  /** The model id `agentKind` resolves to (`overrides[kind] ?? baseModelId`). */
+  modelId: string
+  /** The preset's route order; undefined ⇒ the deployment's default order. */
+  providerPreference?: readonly ModelFlavor[]
+}
+
+/**
+ * The model a kind runs AND the order that model's routes are tried in, resolved from a SINGLE
+ * read of the preset in force.
+ *
+ * The two facts live in one row and every caller on the run path wants both, so asking for them
+ * separately ({@link resolvePresetModelForKind} then {@link resolvePresetProviderPreference}) reads
+ * that row twice per resolution. Those two remain for the callers that genuinely want one half —
+ * the facade-wired `resolveWorkspaceModelDefault` closure, whose signature the executors share, and
+ * the `/models` catalog, which resolves no kind — and both are now folds over this.
+ */
+export async function resolvePresetRouting(
+  repo: ModelPresetRepository,
+  workspaceId: string,
+  agentKind: string,
+  modelPresetId?: string,
+  cache?: GroupCacheHandle<ModelPresetCacheValue>,
+): Promise<PresetRouting> {
+  const preset = await presetInForce(repo, workspaceId, modelPresetId, cache)
+  const preference = preferenceOf(preset)
+  return {
+    modelId: modelForKindFromPreset(preset, agentKind),
+    ...(preference ? { providerPreference: preference } : {}),
+  }
+}
+
+/** An empty stored order is the same statement as none: "walk the deployment's default". */
+function preferenceOf(preset: ModelPreset | null): readonly ModelFlavor[] | undefined {
+  const preference = preset?.providerPreference
+  return preference?.length ? preference : undefined
+}
+
+/**
+ * The preset a block resolves under: its selected one, else the workspace default.
+ *
+ * Read through the `AppCaches.modelPreset` slice when one is wired, keyed per resolved id so a
+ * selected preset and the default cache separately, grouped by workspace so one write drops the
+ * whole library. A null (deleted selected id / unseeded default) caches as a VALUE and still falls
+ * through, exactly as an uncached read would — the `ModelPresetCacheValue` wrapper, since
+ * layered-loader treats a bare null as unresolved. The shape is `RunMergePolicy.resolve`'s, one
+ * row over.
+ */
+async function presetInForce(
+  repo: ModelPresetRepository,
+  workspaceId: string,
+  modelPresetId?: string,
+  cache?: GroupCacheHandle<ModelPresetCacheValue>,
+): Promise<ModelPreset | null> {
+  const read = async (
+    key: string,
+    load: () => Promise<ModelPreset | null>,
+  ): Promise<ModelPreset | null> => {
+    if (!cache) return load()
+    return (await cache.get(key, workspaceId, async () => ({ preset: await load() }))).preset
+  }
+  if (modelPresetId) {
+    const picked = await read(`picked:${modelPresetId}`, () => repo.get(workspaceId, modelPresetId))
+    if (picked) return picked
+  }
+  return read('default', () => repo.getDefault(workspaceId))
 }

@@ -378,6 +378,7 @@ export type {
   BudgetLimitCacheValue,
   CachedRepoRead,
   GroupCacheHandle,
+  ModelPresetCacheValue,
   ResolvedFoundationalService,
   RiskPolicyCacheValue,
   WorkspaceAccessCacheValue,

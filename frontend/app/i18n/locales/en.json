@@ -622,7 +622,8 @@
         "foundational_service_exists": "Foundational service already exists",
         "binary_output_service_invalid": "Binary output service can't be resolved",
         "binary_output_generator_invalid": "Binary output generator can't be resolved",
-        "foundational_service_not_inherited": "This board registered that service"
+        "foundational_service_not_inherited": "This board registered that service",
+        "ticket_already_linked": "This issue already has a task"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -657,7 +658,8 @@
         "foundational_service_exists": "A foundational service with this id is already registered at this scope. Open the existing entry and edit it — two services cannot share an id, because the id is what an architect names in its design.",
         "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again.",
         "binary_output_generator_invalid": "A step that generates binary outputs selects a generative integration this deployment doesn't register, or none of the selected integrations produces a content type the step must deliver. Generative integrations are registered in the deployment's code, not in this workspace: register it or fix the step's selection, then start again.",
-        "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead."
+        "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead.",
+        "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -2416,7 +2418,8 @@
         "deleteTitle": "Delete preset",
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
-        "empty": "No presets yet. Create one to map models to your agents."
+        "empty": "No presets yet. Create one to map models to your agents.",
+        "customRouteOrder": "custom route order"
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -2437,6 +2440,30 @@
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
         "saveFailed": "Could not save the preset"
+      },
+      "routes": {
+        "direct": "The model's own provider API",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter gateway",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Subscription (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Needs an API key for that provider.",
+        "bedrock": "Runs in your AWS Region, on the models your account allows.",
+        "openrouter": "One key, many vendors, resold at a margin.",
+        "cloudflare": "Always available, no prompt caching.",
+        "subscription": "Flat-rate quota on a connected plan."
+      },
+      "routeOrder": {
+        "label": "Route order",
+        "defaultHint": "This preset follows the deployment default. Move a route up to prefer it instead.",
+        "customHint": "This preset prefers routes in this order. A model reachable only on a lower route still runs, it is just tried later.",
+        "reset": "Use default order",
+        "moveUp": "Prefer this route more",
+        "moveDown": "Prefer this route less",
+        "subscriptionOverrideHint": "A connected subscription still wins for models that offer one: the engine routes those to the plan regardless of this order. Routes below the subscription entry apply to every other model.",
+        "badgesUseDefaultPresetHint": "The route shown next to each model above is the one the workspace default preset takes, not this preset's."
       }
     },
     "account": {
@@ -4562,7 +4589,7 @@
       "newDescription": "New built-in model presets have shipped. Add them to this board's library.",
       "add": "Add",
       "updatesHeading": "Updates available",
-      "updatesDescription": "A newer version of these built-in model presets has shipped. Reseed to adopt it (the default and ordering are kept).",
+      "updatesDescription": "A newer version of these built-in model presets has shipped. Reseed to adopt it: the default and ordering are kept, but a custom route order on the preset is cleared.",
       "versionAvailable": "Version {from} → {to} available.",
       "reseed": "Reseed",
       "reseedAll": "Update all ({count})",

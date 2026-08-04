@@ -12,11 +12,6 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/pg-core'
-// The only FK targets in the schema live in `tables/identity.js`; the two per-user
-// credential tables below reference `users.id`, so it is imported by name here (the rest
-// of that module is re-exported further down).
-import { users } from './tables/identity.js'
-
 // Raw binary column (Postgres `bytea`), used by the Node-only `binary_artifact_blobs`
 // store-in-DB blob backend. Reads/writes as a `Uint8Array`.
 const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
@@ -42,8 +37,8 @@ const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
 // The TENANCY & IDENTITY tables (the `workspaces` / `users` roots, login identities, the
 // account + membership graph, invitations / password resets, and the per-account email and
 // settings rows) live in `tables/identity.ts` — one cohesive group, extracted to keep this
-// module inside its size budget — and are re-exported below. `users` is also imported by
-// name at the top of this file, because the two per-user credential tables reference it.
+// module inside its size budget — and are re-exported below. It also holds the schema's only
+// FK TARGETS, so the modules whose tables reference `users.id` import it by name.
 export * from './tables/identity.js'
 // The foundational-services catalog (backend/docs/adr/0031-foundational-services.md).
 export * from './tables/foundational-services.js'
@@ -395,6 +390,10 @@ export const modelPresets = pgTable(
     is_default: integer('is_default').notNull().default(0),
     // Monotonic catalog version for a built-in preset (NULL on custom; treated as 0).
     version: integer('version'),
+    // The order this preset's runs prefer a model's routes in (JSON array of `ModelFlavor`,
+    // most preferred first). REORDERS, never filters: omitted routes are appended in the
+    // default order. NULL (or an empty array) -> the deployment's default order.
+    provider_preference: text('provider_preference'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
   },
   (t) => [
@@ -1252,95 +1251,17 @@ export const referenceArchitectures = pgTable(
 // re-exported here so drizzle-kit and every repository still read ONE schema module.
 export { slackConnections, slackMemberMappings, slackSettings } from './schema-slack.js'
 
-// Provider-subscription token pool (mirror of D1 migration 0035): per-workspace,
-// per-vendor subscription credentials (Claude Pro/Max OAuth token, ChatGPT
-// auth.json) authenticating the Claude Code / Codex harnesses. The credential is
-// stored as an opaque SecretCipher envelope; usage counters drive usage-aware
-// rotation. A workspace may hold many tokens per vendor (a pool).
-export const providerSubscriptionTokens = pgTable(
-  'provider_subscription_tokens',
-  {
-    id: text('id').primaryKey(),
-    workspace_id: text('workspace_id').notNull(),
-    vendor: text('vendor').notNull(),
-    label: text('label').notNull(),
-    token_cipher: text('token_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    last_used_at: bigint('last_used_at', { mode: 'number' }),
-    window_started_at: bigint('window_started_at', { mode: 'number' }),
-    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
-    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
-    request_count: integer('request_count').notNull().default(0),
-    // Lifecycle flags (0/1): `enabled` gates leasing, `is_default` pins the preferred token
-    // for a (workspace, vendor). Mirror of D1 migration 0058.
-    enabled: integer('enabled').notNull().default(1),
-    is_default: integer('is_default').notNull().default(0),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [index('idx_provider_subs_pool').on(t.workspace_id, t.vendor, t.deleted_at)],
-)
-
-// Subscription quota-cycle counters (mirror of D1 migration 0047): the MODELED
-// rolling-window usage behind "how much of a subscription's quota cycle is left"
-// (usage-and-quota-tracking, Part B). One row per (scope, scope_id, vendor, window_kind):
-// scope 'pooled' → a provider_subscription_tokens id; scope 'user' → a user id. Each
-// window accumulates the same tokens but resets on its own cadence (window_started_at is
-// the first-use anchor, re-stamped when the window ages out). Never billed.
-export const subscriptionQuotaCycles = pgTable(
-  'subscription_quota_cycles',
-  {
-    id: text('id').primaryKey(),
-    scope: text('scope').notNull(),
-    scope_id: text('scope_id').notNull(),
-    vendor: text('vendor').notNull(),
-    window_kind: text('window_kind').notNull(),
-    window_started_at: bigint('window_started_at', { mode: 'number' }).notNull(),
-    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
-    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
-    request_count: integer('request_count').notNull().default(0),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('idx_subscription_quota_cycles_key').on(
-      t.scope,
-      t.scope_id,
-      t.vendor,
-      t.window_kind,
-    ),
-    index('idx_subscription_quota_cycles_window').on(t.window_started_at),
-  ],
-)
-
-// Direct-provider API-key pool: UI-onboarded vendor API keys scoped to an
-// account, workspace, or user (mirror of D1 migration 0042). The key is stored as
-// an opaque SecretCipher envelope — never plaintext.
-export const providerApiKeys = pgTable(
-  'provider_api_keys',
-  {
-    id: text('id').primaryKey(),
-    scope: text('scope').notNull(),
-    scope_id: text('scope_id').notNull(),
-    provider: text('provider').notNull(),
-    label: text('label').notNull(),
-    key_cipher: text('key_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    last_used_at: bigint('last_used_at', { mode: 'number' }),
-    window_started_at: bigint('window_started_at', { mode: 'number' }),
-    input_tokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
-    output_tokens: bigint('output_tokens', { mode: 'number' }).notNull().default(0),
-    request_count: integer('request_count').notNull().default(0),
-    // Lifecycle flags (0/1): `enabled` gates leasing, `is_default` pins the preferred key
-    // for a (scope, scope_id, provider). Mirror of D1 migration 0058.
-    enabled: integer('enabled').notNull().default(1),
-    is_default: integer('is_default').notNull().default(0),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [index('idx_provider_api_keys_pool').on(t.scope, t.scope_id, t.provider, t.deleted_at)],
-)
+// The OUTBOUND MODEL-PROVIDER CREDENTIAL tables (the pooled subscription tokens, the
+// direct-provider API keys, the personal subscriptions + their per-run activations, the
+// per-user local endpoints, the gateway-model catalog and the quota-cycle windows they all
+// accumulate into) live in `tables/model-credentials.ts` — one cohesive group, extracted to
+// keep this module inside its size budget — and are re-exported here.
+export * from './tables/model-credentials.js'
 
 // Inbound public-API keys: the credentials external systems present to `/api/v1` (mirror of D1
 // migration 0034). The secret is stored ONLY as a one-way peppered hash — never plaintext, never
-// recoverable — the opposite of the provider keys above (which are decryptable for outbound use).
+// recoverable — the opposite of the outbound provider credentials in
+// `tables/model-credentials.ts` (which are decryptable, because a run has to replay them).
 export const publicApiKeys = pgTable(
   'public_api_keys',
   {
@@ -1362,56 +1283,6 @@ export const publicApiKeys = pgTable(
     revoked_at: bigint('revoked_at', { mode: 'number' }),
   },
   (t) => [index('idx_public_api_keys_workspace').on(t.workspace_id)],
-)
-
-// Individual-usage subscriptions (Claude): per-USER, never pooled (mirror of D1
-// migration 0039). The credential is double-encrypted (password layer inside the
-// system layer).
-export const personalSubscriptions = pgTable(
-  'personal_subscriptions',
-  {
-    id: text('id').primaryKey(),
-    // ON DELETE RESTRICT: can't drop a user that still owns a personal subscription
-    // (the orphaned `psub_X -> usr_OLD` row from the incident).
-    user_id: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    vendor: text('vendor').notNull(),
-    label: text('label').notNull(),
-    token_cipher: text('token_cipher').notNull(),
-    expires_at: bigint('expires_at', { mode: 'number' }),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-    last_used_at: bigint('last_used_at', { mode: 'number' }),
-    deleted_at: bigint('deleted_at', { mode: 'number' }),
-  },
-  (t) => [
-    uniqueIndex('idx_personal_subs_user_vendor')
-      .on(t.user_id, t.vendor)
-      .where(sql`${t.deleted_at} IS NULL`),
-    index('idx_personal_subs_expiry')
-      .on(t.expires_at)
-      .where(sql`${t.deleted_at} IS NULL`),
-  ],
-)
-
-// Per-USER locally-run model endpoints (Ollama / LM Studio / llama.cpp / vLLM / custom),
-// keyed by (user_id, provider). The optional bearer key is system-key-encrypted in
-// `api_key_cipher`; `models` is a JSON array of enabled model ids (mirror of D1
-// migration 0002).
-export const localModelEndpoints = pgTable(
-  'local_model_endpoints',
-  {
-    user_id: text('user_id').notNull(),
-    provider: text('provider').notNull(),
-    label: text('label').notNull(),
-    base_url: text('base_url').notNull(),
-    api_key_cipher: text('api_key_cipher'),
-    models: text('models').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.user_id, t.provider] })],
 )
 
 // Per-USER infra handler overrides (local mode): the per-user layer over a workspace's
@@ -1479,43 +1350,6 @@ export const userSecrets = pgTable(
   (t) => [primaryKey({ columns: [t.user_id, t.kind] })],
 )
 
-// Per-WORKSPACE enabled GATEWAY models (the dynamic catalog subset) — OpenRouter today,
-// LiteLLM and others later. `models` is a JSON array of { id, name, contextLength?,
-// inputPerMillion, outputPerMillion } — the enabled subset with cached context + price
-// (mirror of D1 migration 0006). Keyed by (workspace_id, provider).
-export const providerModelCatalog = pgTable(
-  'provider_model_catalog',
-  {
-    workspace_id: text('workspace_id').notNull(),
-    provider: text('provider').notNull(),
-    models: text('models').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [primaryKey({ columns: [t.workspace_id, t.provider] })],
-)
-
-// Per-run activations of a personal credential: the raw token re-encrypted with the
-// system key only, scoped to one execution with a TTL (mirror of D1 migration 0039).
-export const subscriptionActivations = pgTable(
-  'subscription_activations',
-  {
-    id: text('id').primaryKey(),
-    execution_id: text('execution_id').notNull(),
-    // ON DELETE RESTRICT: a users row can't be removed while it still has a run activation.
-    user_id: text('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'restrict' }),
-    vendor: text('vendor').notNull(),
-    token_cipher: text('token_cipher').notNull(),
-    created_at: bigint('created_at', { mode: 'number' }).notNull(),
-    expires_at: bigint('expires_at', { mode: 'number' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('idx_sub_activations_run').on(t.execution_id, t.user_id, t.vendor),
-    index('idx_sub_activations_expiry').on(t.expires_at),
-  ],
-)
 // The VCS/projection tables (installations, repos, per-user repo access, and the branch /
 // pull-request / issue / commit / check-run / sync-cursor projections) live in
 // `tables/vcs.ts` — one cohesive group, extracted to keep this module inside its size budget —

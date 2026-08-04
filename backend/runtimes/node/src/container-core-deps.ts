@@ -73,7 +73,7 @@ import {
 // into a sibling module so this composition root stays within the file-size budget.
 import { RUNNERS_CIPHER_INFO, buildTraceSink } from './container-executor-deps.js'
 
-import type { NodeAppRegistriesResult } from './container-foundation.js'
+import type { NodeAppRegistriesResult, NodeContainerFoundation } from './container-foundation.js'
 import type {
   NodeContainerOptions,
   NodeModelDepsResult,
@@ -154,6 +154,8 @@ export interface NodeCoreDepsBundle {
   incidentEnrichmentDeps: NodeAccountDepsResult['incidentEnrichmentDeps']
   accountSettings: NodeAccountDepsResult['accountSettings']
   resolveBinaryArtifactStore: NodeAccountDepsResult['resolveBinaryArtifactStore']
+  /** The route order a model preset states, folded onto the resolved provider capabilities. */
+  resolvePresetProviderPreference: NodeContainerFoundation['resolvePresetProviderPreference']
 }
 
 /**
@@ -503,6 +505,7 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     notificationChannel,
     runLifecycleSink,
     accountSettings,
+    resolvePresetProviderPreference,
   } = bundle
   // The Bedrock allow-list gating `bedrock`-flavour selectability: one deployment-level env
   // read (Bedrock uses the deployment's own AWS credentials, so nothing resolves per
@@ -653,8 +656,13 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
     ...slackDeps,
     // Account invitations + per-account email senders (UI-onboarded, DB-stored).
     ...selectNodeEmailInvitationDeps(config, repos),
-    // The pipeline-start guard resolves what's configured for a workspace + initiator.
-    resolveProviderCapabilities: (workspaceId: string, initiatedBy?: string | null) =>
+    // The pipeline-start guard resolves what's configured for a workspace + initiator, under the
+    // model preset the run will use (so the guard walks each model's routes in dispatch order).
+    resolveProviderCapabilities: (
+      workspaceId: string,
+      initiatedBy?: string | null,
+      modelPresetId?: string,
+    ) =>
       resolveWorkspaceCapabilities(
         {
           apiKeys,
@@ -669,9 +677,11 @@ function buildNodeServiceDeps(bundle: NodeCoreDepsBundle) {
           workspaceAccountOf: (workspaceId) => repos.workspaceRepository.accountOf(workspaceId),
           modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
           ...(options.caches ? { caches: options.caches } : {}),
+          resolvePresetProviderPreference,
         },
         workspaceId,
         initiatedBy,
+        modelPresetId,
       ),
     // Real-time push (when a hub is wired) + the composed notification channel (in-app
     // push + Slack). These come AFTER the spreads so the composite replaces the bare

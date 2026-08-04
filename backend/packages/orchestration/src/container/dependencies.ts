@@ -1198,10 +1198,15 @@ export interface CoreDependencies {
    * The pipeline-start guard uses it to block a run whose steps' canonical models have
    * no usable provider. Wired by each facade from its API-key + subscription services;
    * absent → the guard is skipped.
+   *
+   * `modelPresetId` is the preset the caller is resolving under (a block's selected one, absent →
+   * the workspace default preset), which is what carries the preset's `providerPreference` onto
+   * the capability set — so the guard walks a model's routes in the SAME order the dispatch will.
    */
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   /**
    * Stores a workspace's default service-fragment selection (the best-practice

@@ -22,7 +22,8 @@
         "deleteTitle": "Preset löschen",
         "basePrefix": "Basis:",
         "overrideCount": "{count} Override | {count} Overrides",
-        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen."
+        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen.",
+        "customRouteOrder": "eigene Routen-Reihenfolge"
       },
       "editor": {
         "useBaseModel": "Basismodell verwenden",
@@ -43,6 +44,30 @@
         "nameRequiredTitle": "Name erforderlich",
         "nameRequiredBody": "Gib dem Preset einen Namen.",
         "saveFailed": "Preset konnte nicht gespeichert werden"
+      },
+      "routes": {
+        "direct": "Die eigene Provider-API des Modells",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter-Gateway",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abo (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Benötigt einen API-Schlüssel für diesen Provider.",
+        "bedrock": "Läuft in deiner AWS-Region, mit den für dein Konto freigegebenen Modellen.",
+        "openrouter": "Ein Schlüssel, viele Anbieter, mit Aufschlag weiterverkauft.",
+        "cloudflare": "Immer verfügbar, ohne Prompt-Caching.",
+        "subscription": "Pauschales Kontingent eines verbundenen Tarifs."
+      },
+      "routeOrder": {
+        "label": "Routen-Reihenfolge",
+        "defaultHint": "Dieses Preset folgt dem Standard des Deployments. Verschiebe eine Route nach oben, um sie zu bevorzugen.",
+        "customHint": "Dieses Preset bevorzugt Routen in dieser Reihenfolge. Ein Modell, das nur über eine niedrigere Route erreichbar ist, läuft weiterhin und wird nur später versucht.",
+        "reset": "Standardreihenfolge verwenden",
+        "moveUp": "Diese Route stärker bevorzugen",
+        "moveDown": "Diese Route weniger bevorzugen",
+        "subscriptionOverrideHint": "Ein verbundenes Abo gewinnt weiterhin bei Modellen, die eines anbieten: Die Engine leitet diese unabhängig von dieser Reihenfolge auf den Tarif. Routen unterhalb des Abo-Eintrags gelten für alle anderen Modelle.",
+        "badgesUseDefaultPresetHint": "Die Route neben jedem Modell oben ist die des Standard-Presets des Workspace, nicht die dieses Presets."
       }
     },
     "account": {
@@ -5096,7 +5121,8 @@
         "foundational_service_exists": "Basisdienst existiert bereits",
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
-        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert"
+        "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
+        "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5128,7 +5154,8 @@
         "foundational_service_exists": "Ein Basisdienst mit dieser ID ist in diesem Bereich bereits registriert. Öffnen Sie den vorhandenen Eintrag und bearbeiten Sie ihn — zwei Dienste können sich keine ID teilen, denn die ID ist der Name, den ein Architekt in seinem Entwurf verwendet.",
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
-        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards."
+        "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
+        "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -5948,7 +5975,7 @@
       "newDescription": "Neue integrierte Modell-Presets sind verfügbar. Füge sie zur Bibliothek dieses Boards hinzu.",
       "add": "Hinzufügen",
       "updatesHeading": "Updates verfügbar",
-      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen (Standard und Reihenfolge bleiben erhalten).",
+      "updatesDescription": "Eine neuere Version dieser integrierten Modell-Presets ist verfügbar. Führe ein erneutes Seeding durch, um sie zu übernehmen: Standard und Reihenfolge bleiben erhalten, eine eigene Routen-Reihenfolge auf dem Preset wird jedoch zurückgesetzt.",
       "versionAvailable": "Version {from} → {to} verfügbar.",
       "reseed": "Erneut seeden",
       "reseedAll": "Alle aktualisieren ({count})",
