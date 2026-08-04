@@ -13,7 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.
+ * A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made,
+ * infra logs.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class DebugClient {
@@ -263,6 +264,47 @@ public final class DebugClient {
                         .build();
                 ListDebugSearchQueriesResponse page = listSearchQueries(runId, nextQuery);
                 return new Page<>(page.queries(), page.nextCursor());
+            }
+        };
+    }
+
+    /**
+     * List a run's tool calls (no query parameters).
+     */
+    public ListDebugToolCallsResponse listToolCalls(String runId) {
+        return listToolCalls(runId, DebugListToolCallsQuery.none());
+    }
+
+    /**
+     * List a run's tool calls
+     * The tool calls the run’s agents made, in the order they made them — which command, against
+     * what, and what came back. The half of “how did this diff come about” that neither the diff
+     * nor a prompt body answers. Arguments and results are retained only when the deployment
+     * records agent context AND the workspace has not opted out; `bodies` says which, so an empty
+     * `args` is never mistaken for a call that took none.
+     * {@code GET /api/v1/debug/runs/{runId}/tool-calls} (operation {@code listDebugToolCalls}).
+     */
+    public ListDebugToolCallsResponse listToolCalls(String runId, DebugListToolCallsQuery query) {
+        return transport.request("GET", "/api/v1/debug/runs/" + Transport.pathSegment(runId) + "/tool-calls", null, query.toQuery(), new TypeReference<ListDebugToolCallsResponse>() {});
+    }
+
+    /**
+     * Every {@code toolCalls} across every page of {@code listToolCalls()}.
+     * Pages lazily, following {@code nextCursor} until the server reports no further page. A page
+     * may legitimately arrive empty while a cursor is still set, so iteration ends on the cursor,
+     * never on an empty page.
+     */
+    public Iterator<ListDebugToolCallsResponseToolCall> listToolCallsAll(String runId, DebugListToolCallsQuery query) {
+        return new PageIterator<ListDebugToolCallsResponseToolCall>() {
+            @Override
+            protected Page<ListDebugToolCallsResponseToolCall> fetch(@Nullable String cursor) {
+                DebugListToolCallsQuery nextQuery = DebugListToolCallsQuery.builder()
+                        .limit(query.limit())
+                        .jobId(query.jobId())
+                        .cursor(cursor)
+                        .build();
+                ListDebugToolCallsResponse page = listToolCalls(runId, nextQuery);
+                return new Page<>(page.toolCalls(), page.nextCursor());
             }
         };
     }

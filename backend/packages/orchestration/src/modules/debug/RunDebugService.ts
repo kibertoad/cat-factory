@@ -1,6 +1,8 @@
 import type {
   AgentContextSnapshotRepository,
   AgentSearchQueryRepository,
+  AgentToolCall,
+  AgentToolCallRepository,
   AgentSearchQuery,
   Clock,
   ExecutionInstance,
@@ -66,6 +68,7 @@ export interface RunDebugServiceDependencies {
   agentContextSnapshotRepository?: AgentContextSnapshotRepository
   /** Per-search telemetry. Absent ⇒ the search reads return empty. */
   agentSearchQueryRepository?: AgentSearchQueryRepository
+  agentToolCallRepository?: AgentToolCallRepository
   /** The provisioning event log. Absent ⇒ the log reads return empty. */
   provisioningLogRepository?: ProvisioningLogRepository
   /**
@@ -158,12 +161,13 @@ export class RunDebugService {
    */
   async overview(workspaceId: string, execution: ExecutionInstance): Promise<DebugRunOverview> {
     const runId = execution.id
-    // Independent aggregates over four separate stores — issued together rather than in
+    // Independent aggregates over five separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
-    const [summaries, contextCount, searchCount, logCounts] = await Promise.all([
+    const [summaries, contextCount, searchCount, toolCallCount, logCounts] = await Promise.all([
       this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
+      this.deps.agentToolCallRepository?.countByExecution(workspaceId, runId) ?? 0,
       // Total + failures in one aggregate pass — the overview always wants both.
       this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? {
         total: 0,
@@ -182,6 +186,7 @@ export class RunDebugService {
         count: contextCount,
       },
       searchQueries: { available: !!this.deps.agentSearchQueryRepository, count: searchCount },
+      toolCalls: { available: !!this.deps.agentToolCallRepository, count: toolCallCount },
       provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCounts.total },
     }
     return {
@@ -335,6 +340,36 @@ export class RunDebugService {
       executionId: runId,
       limit: opts.limit + 1,
       cursor: opts.cursor,
+    })
+    return paginate(
+      rows,
+      opts.limit,
+      (row) => ({ createdAt: row.createdAt, id: row.id }),
+      (row) => row,
+    )
+  }
+
+  /**
+   * One bounded page of the run's tool-call trajectory.
+   *
+   * Paged on the `(createdAt, id)` keyset like every other fan-out list here, NOT in trajectory
+   * order: the two are different reads. This one answers "show me the most recent activity" and
+   * has to page a long run; the trajectory ORDER (`(jobId, seq)`) rides on the rows themselves,
+   * so a caller reconstructing a run's sequence sorts the pages it collected rather than asking
+   * the store for an ordering no cursor can resume from.
+   */
+  async listToolCalls(
+    workspaceId: string,
+    runId: string,
+    opts: { limit: number; cursor?: DebugCursor; jobId?: string },
+  ): Promise<DebugPage<AgentToolCall>> {
+    const repo = this.deps.agentToolCallRepository
+    if (!repo) return { items: [], nextCursor: null }
+    const rows = await repo.listPage(workspaceId, {
+      executionId: runId,
+      limit: opts.limit + 1,
+      ...(opts.cursor ? { cursor: opts.cursor } : {}),
+      ...(opts.jobId ? { jobId: opts.jobId } : {}),
     })
     return paginate(
       rows,

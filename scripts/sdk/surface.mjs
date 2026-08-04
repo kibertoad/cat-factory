@@ -67,6 +67,7 @@ const SURFACE = {
   getDebugLlmCall: { group: 'debug', method: 'getLlmCall' },
   listDebugAgentContext: { group: 'debug', method: 'listAgentContext', paginates: 'snapshots' },
   getDebugAgentContext: { group: 'debug', method: 'getAgentContext' },
+  listDebugToolCalls: { group: 'debug', method: 'listToolCalls', paginates: 'toolCalls' },
   listDebugLogs: { group: 'debug', method: 'listLogs', paginates: 'entries' },
   listDebugSearchQueries: {
     group: 'debug',
@@ -106,7 +107,8 @@ export const GROUP_DOCS = {
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
     "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
-  debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
+  debug:
+    "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
 }
 
 /** The resource groups in emission order. */

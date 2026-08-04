@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { agentFailureSchema, executionStatusSchema, runDiagnosticsSchema } from './execution.js'
 import {
   agentSearchQuerySchema,
+  agentToolCallSchema,
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
@@ -354,6 +355,7 @@ export const debugRunOverviewSchema = v.object({
     llmCalls: debugSinkStatusSchema,
     agentContext: debugSinkStatusSchema,
     searchQueries: debugSinkStatusSchema,
+    toolCalls: debugSinkStatusSchema,
     provisioningLog: debugSinkStatusSchema,
   }),
   /**
@@ -707,6 +709,36 @@ export const debugSearchQueryListSchema = v.object({
   nextCursor: v.nullable(v.string()),
 })
 export type DebugSearchQueryList = v.InferOutput<typeof debugSearchQueryListSchema>
+
+/**
+ * Query params for the tool-call trajectory list. It takes the small-row page params plus one
+ * of its own: a run's step can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph
+ * iteration), and "what did the third ci-fixer round actually do" is a different question from
+ * "what did this run do", so a caller can name the dispatch instead of reading every round
+ * interleaved by timestamp.
+ */
+export const listDebugToolCallsQuerySchema = v.object({
+  limit: v.optional(pageLimitSchema),
+  cursor: v.optional(cursorSchema),
+  jobId: v.optional(v.string()),
+})
+export type ListDebugToolCallsQuery = v.InferOutput<typeof listDebugToolCallsQuerySchema>
+
+/**
+ * The tool calls the run's agents made: the TRAJECTORY, which is the half of "how did this diff
+ * come about" that no diff and no prompt body answers.
+ *
+ * Rows come back WHOLE, bodies included, because a tool call's `args`/`result` are capped at
+ * CAPTURE time rather than stored unbounded and sliced at read time (unlike a prompt), so the
+ * page's size is `limit x cap` and computable before the request — the rule every endpoint here
+ * obeys. `bodies` says whether they were retained at all, so an empty `args` on a `withheld` row
+ * is read as an opt-out rather than as a tool that took no arguments.
+ */
+export const debugToolCallListSchema = v.object({
+  toolCalls: v.array(agentToolCallSchema),
+  nextCursor: v.nullable(v.string()),
+})
+export type DebugToolCallList = v.InferOutput<typeof debugToolCallListSchema>
 
 /**
  * The run's slice of the provisioning event log — every attempt to spin up or tear down the

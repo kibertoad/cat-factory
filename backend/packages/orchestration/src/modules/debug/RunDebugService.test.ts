@@ -202,9 +202,10 @@ describe('RunDebugService with unwired sinks', () => {
       llmCalls: { available: false, count: 0 },
       agentContext: { available: false, count: 0 },
       searchQueries: { available: false, count: 0 },
+      toolCalls: { available: false, count: 0 },
       provisioningLog: { available: false, count: 0 },
     })
-    expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(4)
+    expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(5)
     expect(overview.signals.map((s) => s.code)).not.toContain('no_model_calls')
     expect(overview.generatedAt).toBe(4_242)
   })

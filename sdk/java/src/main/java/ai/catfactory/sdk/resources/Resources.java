@@ -69,7 +69,7 @@ public abstract class Resources {
         return decisions;
     }
 
-    /** A run's recorded telemetry: LLM calls, the context each agent was given, infra logs. */
+    /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
     public DebugClient debug() {
         return debug;
     }

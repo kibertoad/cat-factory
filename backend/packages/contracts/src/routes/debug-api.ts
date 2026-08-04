@@ -8,11 +8,13 @@ import {
   debugRunListSchema,
   debugRunOverviewSchema,
   debugSearchQueryListSchema,
+  debugToolCallListSchema,
   getDebugAgentContextQuerySchema,
   getDebugLlmCallQuerySchema,
   listDebugAgentContextQuerySchema,
   listDebugLlmCallsQuerySchema,
   listDebugPageQuerySchema,
+  listDebugToolCallsQuerySchema,
   listDebugRunsQuerySchema,
 } from '../debug-api.js'
 import { errorResponses, singleStringParam } from './_shared.js'
@@ -94,6 +96,15 @@ export const listDebugSearchQueriesContract = defineApiContract({
   pathResolver: ({ runId }) => `/api/v1/debug/runs/${runId}/search-queries`,
   requestQuerySchema: listDebugPageQuerySchema,
   responsesByStatusCode: { 200: debugSearchQueryListSchema, ...errorResponses },
+})
+
+/** The tool calls the run's agents made, in trajectory order, keyset-paginated. */
+export const listDebugToolCallsContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/debug/runs/${runId}/tool-calls`,
+  requestQuerySchema: listDebugToolCallsQuerySchema,
+  responsesByStatusCode: { 200: debugToolCallListSchema, ...errorResponses },
 })
 
 /** The run's provisioning event log — how its infrastructure came up, or why it didn't. */

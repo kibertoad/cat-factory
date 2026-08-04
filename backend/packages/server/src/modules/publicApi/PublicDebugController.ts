@@ -7,6 +7,7 @@ import {
   listDebugLogsContract,
   listDebugRunsContract,
   listDebugSearchQueriesContract,
+  listDebugToolCallsContract,
 } from '@cat-factory/contracts'
 import type { DebugCursor, DebugPage, RunDebugService } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
@@ -252,6 +253,33 @@ export function publicDebugController(): Hono<AppEnv> {
       cursor: cursor.cursor,
     })
     return c.json({ queries: page.items, nextCursor: nextCursorOf(page) }, 200)
+  })
+
+  // The tool calls the run's agents made: the trajectory. Rows come back whole (both bodies are
+  // capped at capture, so the page size is computable before the request) with `bodies` saying
+  // whether they were retained at all.
+  buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) {
+      return c.json(
+        { error: { code: gate.fail.code, message: gate.fail.message } },
+        gate.fail.status,
+      )
+    }
+    const debug = requireDebug(c)
+    if (!debug) return unavailable(c)
+    const workspaceId = gate.auth.workspaceId
+    const runId = c.req.valid('param').runId
+    const query = c.req.valid('query')
+    const cursor = readCursor(query.cursor)
+    if ('invalid' in cursor) return invalidCursor(c)
+    if (!(await debug.runExists(workspaceId, runId))) return notFound(c, 'run')
+    const page = await debug.listToolCalls(workspaceId, runId, {
+      limit: query.limit ?? DEFAULT_SMALL_ROW_PAGE,
+      ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
+      ...(query.jobId ? { jobId: query.jobId } : {}),
+    })
+    return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
 
   // The run's provisioning event log: how its infrastructure came up, or why it didn't. For a
