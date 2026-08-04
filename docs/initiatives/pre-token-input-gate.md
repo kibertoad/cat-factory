@@ -55,12 +55,44 @@ a model could not have acted on either.
 | 3   | Workspace `inputGateMode` (D1 ⇄ Drizzle column) + settings panel                                  | ✅ done |     |
 | 4   | SPA notice (inspector + step detail), park routing, i18n across all locales                       | ✅ done |     |
 | 5   | Cross-runtime conformance: park → recheck → release, `off`/`advisory`, the 409                    | ✅ done |     |
-| 6   | Tell the AGENTS what was waived (`AgentRunContext`), so an overridden run's prompt states the gap | ⬜ todo |     |
-| 7   | Public API: surface the verdict on the job view + a `decisions`-scope resolve rung                | ⬜ todo |     |
+| 6   | Public API: the verdict as a parked decision + a `decide`-scope resolve, and admission for it     | ✅ done |     |
+| 7   | Tell the AGENTS what was waived (`AgentRunContext`), so an overridden run's prompt states the gap | ⬜ todo |     |
 | 8   | Per-task-type findings for deployment-registered types (a `TaskTypeRegistry` hook)                | ⬜ todo |     |
 | 9   | Count the parks (`OperationalMetrics`), so "is this catching more than it was" is answerable      | ⬜ todo |     |
 
 ## Conventions & gotchas
+
+- **`not_applicable` is decided by whether the block describes AUTHORED TASK input**, which is
+  two separate mechanisms rather than one list of task types (`describesAuthoredTaskInput`).
+  A run can be started against a frame, a module, an epic or an INITIATIVE ANCHOR, and such a
+  block stands for an entity whose real input lives elsewhere: an initiative's planning pipeline
+  runs against its anchor, whose description is a caption while the goal and the committed plan
+  are what the run actually reads. Judging the caption parked every initiative run, on a field
+  the flow never fills in and no task card exists to fix. The second mechanism is the
+  platform-authored TASK TYPE (`recurring`, the schedule's reused block).
+  What is deliberately NOT exempt: a task the platform CREATED whose description is still a real
+  brief (an initiative-spawned item, a task imported from a tracker ticket). Those are ordinary
+  board tasks a human can edit, so they are judged like any other; what they need is an answer
+  path without a browser, which is the public decision surface below.
+- **The gate is the one park that turns on the shape of the TASK rather than the PIPELINE**, and
+  that is why the public API needed more than a resolve route. `parkSurfacesOf` reads the step
+  chain, so it cannot see this one: a run whose pipeline parks nowhere at all still stops here.
+  A `write`-scope key could therefore start a title-only task and get a run that was parked with
+  nothing able to answer it and `stop`/`cancel` as its only exit, which is the exact failure
+  `publicApiAdmission` exists to prevent. Both halves landed together and both are required:
+  `publicRunParkSurfaces` composes the gate into what admission gates on (its `inputGateBlocks`
+  argument is REQUIRED, so a new start surface must answer the question), and
+  `POST /api/v1/runs/:runId/decisions/input-gate/resolve` is what makes the surface answerable,
+  so the refusal steers at the decision surface instead of describing the park as cancel-only.
+  `InputGateController.wouldBlock` is a second evaluation site, which is safe only because the
+  check is pure and deterministic: it and the engine's own call agree unless the task changed in
+  between, and then the later one should win.
+- **A verdict that is recorded is not automatically a verdict worth SHOWING.** `off`,
+  `not_applicable` and a clean `passed` are three different facts that all mean "nothing to tell
+  a human", while a `passed` verdict carrying advisories has something to say and is not a park.
+  `inputGateNoticeFor` is the one rule; keying the SPA off `status` alone left every advisory
+  finding recorded, reported over the API and invisible in the product, which is `advisory` MODE
+  with nothing to watch.
 
 - **The gate evaluates at `currentStep === 0` ONLY, and at most once per run.** Both halves are
   load-bearing. The settled verdict is what makes it idempotent under a durable replay: a
@@ -78,7 +110,11 @@ a model could not have acted on either.
   the work the run exists to do, the fork-decision trap, one step earlier. It is refused
   server-side in `assertNotIterativeGate` (checked off the INSTANCE, since the gate parks
   whatever step 0 happens to be and leaves nothing kind-specific on the step), and the SPA routes
-  it through `dedicatedParkView`, which now takes the run.
+  it through `dedicatedParkView`, which REQUIRES the run (optional was how two call sites
+  silently stopped passing it, and a missing run reads as "the generic rail applies").
+  The refusal is its own conflict reason, `input_gate_parked`, and NOT the `input_gate_not_parked`
+  the resolve route raises: those are opposite facts, and copy that fits "already answered" tells
+  somebody looking at a live park that there is nothing to answer.
 - **`recheck` RE-EVALUATES rather than trusting the caller.** A still-blocked recheck is an
   ordinary 200 with refreshed findings, not an error: nothing went wrong, the task is just not
   fixed yet. The decision id is deliberately UNCHANGED across a failed recheck, because the

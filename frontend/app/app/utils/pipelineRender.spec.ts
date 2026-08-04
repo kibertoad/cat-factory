@@ -61,9 +61,9 @@ describe('dedicatedParkView', () => {
   })
 
   it('owns the fork park while awaiting a choice, and while a chat reply is in flight', () => {
-    expect(dedicatedParkView(step({ forkDecision: { status: 'awaiting_choice' } as never }), run())).toBe(
-      'fork-decision',
-    )
+    expect(
+      dedicatedParkView(step({ forkDecision: { status: 'awaiting_choice' } as never }), run()),
+    ).toBe('fork-decision')
     expect(dedicatedParkView(step({ forkDecision: { status: 'answering' } as never }), run())).toBe(
       'fork-decision',
     )
@@ -84,13 +84,17 @@ describe('dedicatedParkView', () => {
   // refuses it server-side: approving it would mark the run's first working step done and skip
   // the work the run exists to do.
   it('owns a step whose park is the input gate, read off the run', () => {
-    const blocked = run({ inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 } } as never)
+    const blocked = run({
+      inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 },
+    } as never)
     expect(dedicatedParkView(step({}), blocked)).toBe('input-gate')
   })
 
   it('releases the step once the gate is waived or passed', () => {
     for (const status of ['overridden', 'passed', 'off', 'not_applicable']) {
-      const settled = run({ inputGate: { status, mode: 'standard', issues: [], checkedAt: 1 } } as never)
+      const settled = run({
+        inputGate: { status, mode: 'standard', issues: [], checkedAt: 1 },
+      } as never)
       expect(dedicatedParkView(step({}), settled)).toBeNull()
     }
   })
@@ -98,7 +102,9 @@ describe('dedicatedParkView', () => {
   it('does not claim a step with no pending approval, whatever the gate says', () => {
     // The gate's verdict alone must not turn an unparked step into a dedicated park: a run
     // parked on the gate has exactly one step holding the approval.
-    const blocked = run({ inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 } } as never)
+    const blocked = run({
+      inputGate: { status: 'blocked', mode: 'standard', issues: [], checkedAt: 1 },
+    } as never)
     expect(dedicatedParkView(step({ approval: null, state: 'working' }), blocked)).toBeNull()
   })
 })

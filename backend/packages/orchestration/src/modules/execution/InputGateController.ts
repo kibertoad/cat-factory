@@ -5,6 +5,7 @@ import type {
   ExecutionInstance,
   ExecutionRepository,
   InputGateMode,
+  InputGateInput,
   Logger,
   PipelineStep,
   ResolveInputGateChoice,
@@ -242,6 +243,26 @@ export class InputGateController {
       await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
     }
     return settled!
+  }
+
+  /**
+   * Whether the gate would PARK a run started against this input right now: the same pure check
+   * {@link evaluate} runs, under the same workspace mode, with nothing written.
+   *
+   * This exists for the public API's ADMISSION, which has to decide before a run exists whether a
+   * caller can answer the parks it is about to set in motion. The gate is the one park that turns
+   * on the shape of the TASK rather than the shape of the pipeline, so `parkSurfacesOf` cannot see
+   * it and a key with no `decide` scope would otherwise start a run that parks with nothing able
+   * to answer it.
+   *
+   * Being a second evaluation site is safe precisely because the check is pure and deterministic
+   * over the input: this and the engine's own call agree unless the TASK changed in between, and
+   * then the later one is the one that should win. It takes the gate INPUT rather than a `Block`
+   * so the jobs surface can ask about the anchor block it is about to create.
+   */
+  async wouldBlock(workspaceId: string, input: InputGateInput): Promise<boolean> {
+    const verdict = evaluateInputGate(input, await this.resolveMode(workspaceId))
+    return verdict.status === 'blocked'
   }
 
   /**

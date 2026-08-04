@@ -13,7 +13,8 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A parked run's human decisions — requirement findings, forks and judge verdicts.
+ * A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token
+ * input gate.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class DecisionsClient {
@@ -100,6 +101,21 @@ public final class DecisionsClient {
      */
     public PublicDecisionList resolveExceeded(String runId, PublicResolveExceeded body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/requirements/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Resolve a run parked on the task's input check
+     * Settle a run the pre-token input gate parked before its first agent step because the task
+     * states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit
+     * it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and
+     * releases the run only if the blocking findings are gone; a still-blocked verdict comes back
+     * as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the
+     * run as an `overridden` record. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/input-gate/resolve} (operation {@code
+     * resolvePublicRunInputGate}).
+     */
+    public PublicDecisionList resolveInputGate(String runId, PublicResolveInputGate body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/input-gate/resolve", body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**

@@ -862,9 +862,17 @@ empty list, because "nobody looked" and "we looked and found nothing" are differ
 or unreadable settings seam therefore records `off`, never the default mode); and the park rides
 `step.approval`, so `assertNotIterativeGate` refuses a generic approve off the INSTANCE (approving it
 would mark the run's first working step done and skip the work) and the SPA routes it through
-`dedicatedParkView`, which takes the run. `recheck` RE-EVALUATES rather than trusting the caller and
-keeps the SAME decision id when it still fails; `proceed` records `overridden`, never `passed`, and
-keeps the waived findings. Doc:
+`dedicatedParkView`, which REQUIRES the run. `recheck` RE-EVALUATES rather than trusting the caller
+and keeps the SAME decision id when it still fails; `proceed` records `overridden`, never `passed`,
+and keeps the waived findings. `not_applicable` covers every block whose description is not authored
+TASK input: a non-`task` LEVEL (a frame, module, epic or initiative ANCHOR stands for an entity whose
+real input is elsewhere) plus the `recurring` type. A platform-CREATED task with a real brief is not
+exempt: it is an ordinary board task, and what it needs is an answer path without a browser. That is
+the other half: the gate is the one park that turns on the shape of the TASK rather than the
+PIPELINE, so `parkSurfacesOf` cannot see it and a `write` key could start a run parked with nothing
+able to answer it. `publicRunParkSurfaces` composes it into public admission (its `inputGateBlocks`
+argument is REQUIRED, so a new start surface must answer the question) and
+`POST /api/v1/runs/:runId/decisions/input-gate/resolve` is what makes it answerable. Doc:
 [`pre-token-input-gate.md`](./docs/initiatives/pre-token-input-gate.md).
 
 **Requirements review**: the FIRST step of the default pipelines, handled inline in the engine

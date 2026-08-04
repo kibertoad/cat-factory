@@ -134,6 +134,7 @@ when (val decision = client.decisions().list(runId).decisions.first()) {
     is PublicRequirementsDecision -> handleRequirements(decision)
     is PublicForkDecision -> handleFork(decision)
     is PublicJudgeDecision -> handleJudge(decision)
+    is PublicInputGateDecision -> handleInputGate(decision)
 }                                        // exhaustive: the interface is sealed
 ```
 

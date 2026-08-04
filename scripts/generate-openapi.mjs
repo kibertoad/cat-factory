@@ -31,7 +31,7 @@ const API_PREFIX = '/api/v1'
 // The public API is STABLE (see CLAUDE.md "The public API is stable"): additive changes bump the
 // minor here; a breaking change is not allowed on `/api/v1` at all: it means a new `/api/v2`
 // prefix served beside v1 through a deprecation window, and a new spec version with it.
-const API_VERSION = '1.1.0'
+const API_VERSION = '1.2.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -65,6 +65,7 @@ const COMPONENT_SCHEMAS = {
   PublicReviewFinding: 'publicReviewFindingSchema',
   PublicRequirementsDecision: 'publicRequirementsDecisionSchema',
   PublicForkDecision: 'publicForkDecisionSchema',
+  PublicInputGateDecision: 'publicInputGateDecisionSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -72,6 +73,7 @@ const COMPONENT_SCHEMAS = {
   PublicIncorporate: 'publicIncorporateSchema',
   PublicResolveExceeded: 'publicResolveExceededSchema',
   PublicChooseFork: 'publicChooseForkSchema',
+  PublicResolveInputGate: 'publicResolveInputGateSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -153,6 +155,12 @@ const OPERATION_DOCS = {
     summary: "List the workspace's jobs",
     description:
       'List the headless runs THIS surface created, newest first and keyset-paginated. Scoped to internal-anchored runs exactly like the single-job read, so an external key can never enumerate the workspace’s ordinary board runs.',
+  },
+  resolvePublicRunInputGate: {
+    tag: 'Decisions',
+    summary: "Resolve a run parked on the task's input check",
+    description:
+      'Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.',
   },
   resolvePublicRunJudge: {
     tag: 'Decisions',

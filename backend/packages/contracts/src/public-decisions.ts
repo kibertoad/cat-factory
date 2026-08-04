@@ -1,5 +1,11 @@
 import * as v from 'valibot'
 import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
+import {
+  inputGateIssueSchema,
+  inputGateModeSchema,
+  inputGateStatusSchema,
+  resolveInputGateSchema,
+} from './input-gate.js'
 import { judgeStatusSchema, judgeVerdictSchema, resolveJudgeSchema } from './judge.js'
 import { publicRunStatusSchema } from './public-api.js'
 import {
@@ -18,11 +24,12 @@ import {
 // the SPA, so a headless (`/api/v1`) run could not include clarification at all — the public
 // surface refused any pipeline that could park.
 //
-// These resources are the external counterpart of that loop. Two decision kinds are exposed today:
-// the requirements review (findings + the iteration loop) and the implementation-fork choice. Both
-// are deliberately SMALL projections of the internal entities, following the `publicTask` /
-// `publicService` pattern: a caller sees the findings and their stable ids, never the engine's
-// step/approval internals, the recommendation machinery, or the reviewer's model plumbing.
+// These resources are the external counterpart of that loop. Four decision kinds are exposed
+// today: the requirements review (findings + the iteration loop), the implementation-fork choice,
+// a parked judge verdict, and the pre-token input gate. Each is deliberately a SMALL projection of
+// the internal entity, following the `publicTask` / `publicService` pattern: a caller sees the
+// findings and their stable ids, never the engine's step/approval internals, the recommendation
+// machinery, or the reviewer's model plumbing.
 //
 // Answering rides the SAME service methods the SPA controllers call, so the park's CAS/approval-id
 // arbitration and the task's merge-preset knobs (iteration cap, tolerated severity) apply
@@ -31,7 +38,12 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Which parked decision a `publicDecision` entry describes. */
-export const publicDecisionKindSchema = v.picklist(['requirements-review', 'fork', 'judge'])
+export const publicDecisionKindSchema = v.picklist([
+  'requirements-review',
+  'fork',
+  'judge',
+  'input-gate',
+])
 export type PublicDecisionKind = v.InferOutput<typeof publicDecisionKindSchema>
 
 /**
@@ -131,10 +143,36 @@ export const publicJudgeDecisionSchema = v.object({
 })
 export type PublicJudgeDecision = v.InferOutput<typeof publicJudgeDecisionSchema>
 
+/**
+ * A run parked on the PRE-TOKEN INPUT GATE as exposed externally: the task states nothing an
+ * agent could act on, and the run stopped before its first dispatch having spent nothing.
+ *
+ * This one is exposed for a reason the other three do not have. The gate parks on the shape of
+ * the TASK rather than the shape of the pipeline, so it can hold ANY public run, including one
+ * whose pipeline carries no park at all; a caller filing title-only tasks would otherwise watch
+ * them stop with `GET .../decisions` reporting `parked: true` and nothing to answer, and
+ * `POST /api/v1/jobs/:id/cancel` as the only way out. The findings are the same closed codes the
+ * SPA renders, so an integration can map them to its own copy or hand them back to whoever filed
+ * the ticket.
+ */
+export const publicInputGateDecisionSchema = v.object({
+  kind: v.literal('input-gate'),
+  /** The disposition; only `blocked` accepts an answer. */
+  status: inputGateStatusSchema,
+  /** The workspace mode the evaluation ran under, so a verdict explains its own severities. */
+  mode: inputGateModeSchema,
+  /** Every finding, blocking and advisory alike, in a stable order. */
+  issues: v.array(inputGateIssueSchema),
+  /** Epoch ms of the evaluation that produced this verdict. */
+  checkedAt: v.number(),
+})
+export type PublicInputGateDecision = v.InferOutput<typeof publicInputGateDecisionSchema>
+
 export const publicDecisionSchema = v.variant('kind', [
   publicRequirementsDecisionSchema,
   publicForkDecisionSchema,
   publicJudgeDecisionSchema,
+  publicInputGateDecisionSchema,
 ])
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
@@ -219,3 +257,13 @@ export type PublicChooseForkInput = v.InferOutput<typeof publicChooseForkSchema>
  */
 export const publicResolveJudgeSchema = resolveJudgeSchema
 export type PublicResolveJudgeInput = v.InferOutput<typeof publicResolveJudgeSchema>
+
+/**
+ * Resolve a run parked on the PRE-TOKEN INPUT GATE from a headless caller. Identical to the
+ * SPA's {@link resolveInputGateSchema} — both surfaces drive the SAME service method, so there
+ * is nothing to narrow: `recheck` re-evaluates the task as it now stands (which is what actually
+ * clears the park, so an integration fixes the task over `PATCH /api/v1/tasks/:taskId` first),
+ * and `proceed` waives the findings and records who did it.
+ */
+export const publicResolveInputGateSchema = resolveInputGateSchema
+export type PublicResolveInputGateInput = v.InferOutput<typeof publicResolveInputGateSchema>

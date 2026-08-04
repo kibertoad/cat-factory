@@ -17,6 +17,7 @@ import type {
   StepReviewComment,
   IssueWritebackProvider,
   Logger,
+  InputGateInput,
   ResolveInputGateChoice,
   RunInputGate,
 } from '@cat-factory/kernel'
@@ -837,6 +838,16 @@ export class ExecutionService {
   // FollowUpController call these on `executionService`; the per-step dispatch + completion
   // spine + the follow-up companion gate live on {@link RunDispatcher}, so these are thin
   // delegations (the public API is unchanged by the extraction).
+
+  /**
+   * Whether the PRE-TOKEN INPUT GATE would park a run started against this input, evaluated
+   * without writing anything. The public API's admission asks before starting a run, so a key
+   * that cannot answer a park is refused up front rather than left holding one.
+   * @see InputGateController.wouldBlock
+   */
+  inputGateWouldBlock(workspaceId: string, input: InputGateInput): Promise<boolean> {
+    return this.inputGate.wouldBlock(workspaceId, input)
+  }
 
   /**
    * Resolve a run parked on the PRE-TOKEN INPUT GATE: `recheck` (re-evaluate the task as it

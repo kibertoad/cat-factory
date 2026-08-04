@@ -489,7 +489,9 @@ async function mergePr() {
                  above the list. Asked of `dedicatedParkView` rather than re-derived here, so
                  the rule that decides which surface owns a park lives in exactly one place. -->
             <UButton
-              v-else-if="s.approval && s.approval.status === 'pending' && !dedicatedParkView(s, instance)"
+              v-else-if="
+                s.approval && s.approval.status === 'pending' && !dedicatedParkView(s, instance)
+              "
               color="warning"
               variant="soft"
               size="xs"
