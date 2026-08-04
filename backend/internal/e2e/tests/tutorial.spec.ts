@@ -267,7 +267,11 @@ test.describe('tutorial offers that come to the user', () => {
     // mechanism firing on a board load rather than on the moment.
     const nudge = page.getByTestId('tutorial-nudge')
     await expect(nudge).toBeVisible({ timeout: LIVE_TIMEOUT })
-    await expect(nudge).toContainText('Answer a waiting run')
+    // Web-first on the TITLE, not just the card: an offer raised for whichever tour happened to be
+    // next would mean the mechanism fired on something other than the park. Given a timeout rather
+    // than asserted instantly because starting the run and parking it are two world changes, and
+    // the store keeps the NEWER offer, so the card can legitimately name the first one for a tick.
+    await expect(nudge).toContainText('Answer a waiting run', { timeout: LIVE_TIMEOUT })
     await nudge.getByTestId('tutorial-nudge-start').click()
     await expect(page.getByTestId('tutorial-tooltip')).toBeVisible({ timeout: LIVE_TIMEOUT })
     // Suppressed while a tour runs: the card would compete with the coach mark for the same

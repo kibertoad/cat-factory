@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import en from '../../i18n/locales/en.json'
 import {
+  boardStateFingerprint,
   computeCoachMarkLayout,
   isLaunchOffer,
   launchActionFor,
@@ -298,44 +299,95 @@ describe('newlyAvailableTour', () => {
   })
 })
 
+describe('boardStateFingerprint', () => {
+  /** Only the fields the fingerprint reads, plus the two it must ignore. */
+  const worldGates = (over: Partial<NavGates> = {}) =>
+    ({
+      boardHasService: true,
+      boardHasTask: true,
+      boardHasRun: true,
+      boardHasOpenDecision: false,
+      boardHasPendingApproval: false,
+      boardHasFinishedRun: false,
+      boardHasFailedRun: false,
+      githubAvailable: true,
+      canWriteBoard: true,
+      ...over,
+    }) as NavGates
+
+  it('changes when the world moves', () => {
+    expect(boardStateFingerprint(worldGates({ boardHasOpenDecision: true }))).not.toBe(
+      boardStateFingerprint(worldGates()),
+    )
+  })
+
+  it('does NOT change when a permission or a capability resolves', () => {
+    // The distinction the contextual offer turns on. A run parking is something that HAPPENED; a
+    // probe answering is the app finding out about itself, and only the first is a moment to
+    // interrupt someone about. Every gate here loads asynchronously, so without this the app's own
+    // startup is indistinguishable from the user having done something.
+    expect(
+      boardStateFingerprint(worldGates({ githubAvailable: false, canWriteBoard: false })),
+    ).toBe(boardStateFingerprint(worldGates()))
+  })
+})
+
 describe('resolveNudge', () => {
   const entries = (...tours: TutorialTour[]) => resolveTourCatalogue(tours, gates(true))
   const open = { declined: false, isCompleted: () => false, wasNudged: () => false }
   const catalogue = entries(withSteps('a', [step('one')]), withSteps('b', [step('one')]))
+  const AFTER = 'world-moved'
+  const held = (...ids: string[]) => ({ ready: new Set(ids), boardState: 'world-before' })
 
   it('seeds nothing and offers nothing before the board is up', () => {
-    // The bug this function exists to make impossible. Every board-state requirement reads a store
-    // the workspace snapshot fills, so BEFORE it lands nothing is ready — and a baseline taken
-    // then would make the hydration itself a transition, greeting every board load with an offer
-    // about a walkthrough that has been available for weeks.
-    expect(resolveNudge({ boardReady: false, catalogue, previouslyReady: null, ...open })).toEqual({
-      baseline: null,
-      offer: null,
-    })
+    // Every gate reads a store something fills asynchronously, so BEFORE the snapshot lands
+    // nothing is ready — and a baseline taken then makes the app's own startup a transition.
+    expect(
+      resolveNudge({ boardReady: false, catalogue, boardState: AFTER, previous: null, ...open }),
+    ).toEqual({ baseline: null, offer: null })
   })
 
   it('seeds the standing state on the first resolution once the board is up, silently', () => {
     const { baseline, offer } = resolveNudge({
       boardReady: true,
       catalogue,
-      previouslyReady: null,
+      boardState: AFTER,
+      previous: null,
       ...open,
     })
-    expect([...(baseline ?? [])]).toEqual(['a', 'b'])
+    expect([...(baseline?.ready ?? [])]).toEqual(['a', 'b'])
+    expect(baseline?.boardState).toBe(AFTER)
     expect(offer).toBeNull()
   })
 
-  it('offers what crossed into ready once a baseline is held', () => {
+  it('offers what crossed into ready when the world also moved', () => {
     const { baseline, offer } = resolveNudge({
       boardReady: true,
       catalogue,
-      previouslyReady: new Set(['a']),
+      boardState: AFTER,
+      previous: held('a'),
       ...open,
     })
     expect(offer?.id).toBe('b')
     // Advanced even though it produced an offer, so a tour flickering ready → blocked → ready
     // (which live run gates do) cannot re-offer itself.
-    expect([...(baseline ?? [])]).toEqual(['a', 'b'])
+    expect([...(baseline?.ready ?? [])]).toEqual(['a', 'b'])
+  })
+
+  it('says NOTHING when readiness widened but the world did not move', () => {
+    // The failure this guard exists for, and the general form of it: a permission resolving or a
+    // capability probe answering makes tours takeable that were only "blocked" because the app had
+    // not found out yet. Offered there, the mechanism greets every board load — which is the thing
+    // it was built to replace. The baseline still advances, so the widening is absorbed silently.
+    const { baseline, offer } = resolveNudge({
+      boardReady: true,
+      catalogue,
+      boardState: 'world-before',
+      previous: held('a'),
+      ...open,
+    })
+    expect(offer).toBeNull()
+    expect([...(baseline?.ready ?? [])]).toEqual(['a', 'b'])
   })
 
   it('DISCARDS the baseline when the board goes away, so the next one re-seeds', () => {
@@ -343,8 +395,13 @@ describe('resolveNudge', () => {
     // different set of tours. Carrying the old baseline across would report every one of them as
     // having just become takeable.
     expect(
-      resolveNudge({ boardReady: false, catalogue, previouslyReady: new Set(['a']), ...open })
-        .baseline,
+      resolveNudge({
+        boardReady: false,
+        catalogue,
+        boardState: AFTER,
+        previous: held('a'),
+        ...open,
+      }).baseline,
     ).toBeNull()
   })
 })

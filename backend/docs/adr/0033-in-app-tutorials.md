@@ -95,16 +95,25 @@ standing state instead of the transition would greet every board load with an of
 walkthrough available for weeks; the transition rule also means the permission-gated platform tours,
 ready from the first render, never reach it at all.
 
-**Why the baseline is seeded from board READINESS and not from the first resolution.** A transition
-rule is only as good as what it is measured against, and this one was measured against nothing: the
-requirements that can newly become true are all board state, read off stores the workspace snapshot
-fills, so a baseline taken when the offer's watcher mounts records "nothing is takeable" and the
-board's own hydration reads as a transition. That is the every-board-load greeting the rule exists
-to prevent, arriving through the mechanism meant to be its cure, and the review that caught it also
-caught that the assembled test asserting otherwise could not fail (the fixture it used declines the
-tutorial, which switches the whole mechanism off). So the baseline is taken once `workspace.ready`
-is set, the three-state rule is pure in `resolveNudge` and unit-tested, and a board SWITCH discards
-the baseline rather than reporting everything the incoming board satisfies as newly available.
+**Why the transition needs two guards, not one.** A transition rule is only as good as what it is
+measured against, and this one was measured against nothing: every gate reads a store something
+fills asynchronously, so a baseline taken when the offer's watcher mounts records "nothing is
+takeable" and the app's own startup reads as a transition. That is the every-board-load greeting the
+rule exists to prevent, arriving through the mechanism meant to be its cure, and the review that
+caught it also caught that the assembled test asserting otherwise could not fail (the fixture it
+used declines the tutorial, which switches the whole mechanism off).
+
+The first guard is board READINESS: no baseline is taken until the workspace snapshot has been fanned
+out, and a board switch discards the baseline rather than reporting everything the incoming board
+satisfies as newly available. That alone was still wrong, which is the more interesting half:
+`workspace.ready` flips before the RBAC access and the integration probes have landed, so those
+resolutions widened availability and the offer fired on a plain board load anyway. The second guard
+is therefore a board-state FINGERPRINT, and an offer requires it to have MOVED. Readiness widening
+is not the world changing: a capability probe answering makes a tour takeable that was "blocked"
+only because the app had not found out yet, and the app finding out about itself is not a moment to
+interrupt anyone about. The alternative was to enumerate which stores load late and wait for them,
+which is a list that rots the moment a gate gains a new source; the fingerprint needs no list,
+because nothing outside the `boardHas*` gates describes the world.
 
 **Why the failure path is part of the delivery loop.** `boardHasFinishedRun` deliberately excludes
 failures, because a result view and a merge control are not what a failed run renders. That left the
@@ -150,6 +159,11 @@ miss counts as an unexpected skip).
   a permanent "you missed N steps" notice.
 - **A new OFFER surface must thin against `offeredAtLaunch`**, or it starts interrupting people with
   reference material.
+- **A new `boardHas*` gate belongs in `BOARD_STATE_GATES`, and a new gate of any other kind does
+  not.** The contextual offer fires only when that fingerprint moves, so a board-state gate left out
+  of it silently costs the moment it was added to catch, while a permission or capability gate put
+  INTO it re-opens the every-board-load greeting. The test for which it is: could following the
+  product change this value, or does it only ever become KNOWN?
 - **A new gate field doubles `navRequirementDrift`'s matrix.** At sixteen booleans the whole
   enumeration still costs milliseconds, which is the price of a guard that assumes nothing about how
   either predicate is spelled; a materially larger gate set would need a different strategy.

@@ -1,5 +1,9 @@
 import { ref, watch } from 'vue'
-import { resolveNudge } from '~/utils/tutorial'
+import { boardStateFingerprint, resolveNudge } from '~/utils/tutorial'
+import { createSharedComposables } from '@modular-vue/vue'
+import type { AppDeps } from '~/modular/registry'
+
+const { useOptional } = createSharedComposables<AppDeps>()
 
 /**
  * The contextual offer: watch the resolved tour catalogue and hold out the ONE walkthrough that
@@ -27,34 +31,45 @@ export function useTutorialNudge() {
   const tutorial = useTutorialStore()
   const workspace = useWorkspaceStore()
   const { catalogue } = useTutorialTours()
+  // The same registered `gates` service the catalogue resolves against, so the fingerprint below
+  // can never describe a different board than the availability it is paired with. `useOptional`
+  // for the bare-install case the nav filter also allows: no gates means no board state to move,
+  // so the offer simply never fires.
+  const gates = useOptional('gates')
 
   /**
-   * The ids that were already takeable last time we looked, so an offer fires on a TRANSITION
-   * rather than on the standing state. `null` = no baseline yet (never seeded, or the board went
-   * away and the next one must seed its own).
+   * What the last look saw: which tours were takeable, and the board-state stamp they went with.
+   * `null` = no baseline yet (never seeded, or the board went away and the next one must seed its
+   * own).
    *
    * `resolveNudge` decides when this is seeded, advanced and discarded; the only reason it lives
    * out here is that a pure function cannot hold it.
    */
-  const previouslyReady = ref<Set<string> | null>(null)
+  const previous = ref<{ ready: ReadonlySet<string>; boardState: string } | null>(null)
 
   watch(
-    // `workspace.ready` is what makes the baseline mean anything. Every board-state requirement a
-    // tour declares reads a store the workspace SNAPSHOT fills, so before `ready` they are all
-    // false, and a baseline seeded then records "nothing is takeable" — leaving the board's own
-    // hydration to read as a transition. `ready` is also re-set to false per board, which is what
-    // makes switching boards re-seed instead of offering everything the new board satisfies.
-    () => [catalogue.value, workspace.ready] as const,
-    ([entries, boardReady]) => {
+    // Two inputs beyond the catalogue, and each closes a different half of the "the app starting up
+    // is not a moment" problem. `workspace.ready` gates taking a baseline at all on the snapshot
+    // having landed, and is re-set per board so a SWITCH re-seeds. The board-state fingerprint is
+    // what an offer requires to have moved, so the permissions and capability probes that resolve
+    // after `ready` widen availability without being mistaken for something the user did.
+    () =>
+      [catalogue.value, workspace.ready, gates.value ? boardStateFingerprint(gates.value) : ''] as [
+        typeof catalogue.value,
+        boolean,
+        string,
+      ],
+    ([entries, boardReady, boardState]) => {
       const { baseline, offer } = resolveNudge({
         boardReady,
         catalogue: entries,
-        previouslyReady: previouslyReady.value,
+        boardState,
+        previous: previous.value,
         declined: tutorial.decision === 'declined',
         isCompleted: (id) => tutorial.isCompleted(id),
         wasNudged: (id) => tutorial.wasNudged(id),
       })
-      previouslyReady.value = baseline
+      previous.value = baseline
       if (offer) tutorial.offerNudge(offer.id)
     },
     { immediate: true },

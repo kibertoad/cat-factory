@@ -237,16 +237,24 @@ asked. And the offer is HELD rather than dropped while a tour or a tutorial wind
 the two most valuable moments (a run parked, a run failed) routinely arrive then; it is marked spent
 when RAISED, so holding it cannot become nagging.
 
-**The BASELINE that transition is measured against is the subtle half, and it is seeded from a
-resolution taken once `workspace.ready` is set.** Every requirement that can newly become true is
-BOARD STATE, read off stores the workspace snapshot fills, so a baseline taken when the composable
-mounts records "nothing is takeable" and the board's own hydration then reads as a transition —
-which is the every-board-load greeting the transition rule exists to prevent, arriving through the
-mechanism meant to be its cure. `workspace.ready` is also re-set per board, which is what makes
-switching boards RE-SEED rather than offer everything the incoming board happens to satisfy. That
-whole three-state rule (not ready / ready with no baseline / ready with one) is pure in
-`resolveNudge`, so it is unit-tested rather than inferred from a watcher; the composable holds only
-the ref, because a pure function cannot.
+**What that transition is measured against is the subtle half, and it takes TWO guards** (both in
+the pure `resolveNudge`, so they are unit-tested rather than inferred from a watcher; the composable
+holds only the ref, because a pure function cannot). Every gate reads a store something fills
+asynchronously, so a baseline taken when the composable mounts records "nothing is takeable" and the
+app's own startup then reads as a transition, which is the every-board-load greeting the rule exists
+to prevent arriving through the mechanism meant to be its cure.
+
+- **`workspace.ready`** gates taking a baseline at all on the snapshot having been fanned out, and
+  is re-set per board, which is what makes switching boards RE-SEED rather than offer everything the
+  incoming board happens to satisfy.
+- **A board-state FINGERPRINT** (`boardStateFingerprint`, over the `boardHas*` gates) is what an
+  offer requires to have MOVED. Readiness widening is not the world changing: a permission
+  resolving or a capability probe answering makes tours takeable that were "blocked" only because
+  the app had not found out yet, and the app finding out about itself is not a moment to interrupt
+  anyone about. Those resolutions advance the baseline silently. This is the guard that generalises
+  — it needs no list of which stores load late, because none of them describe the world — and it is
+  the reason readiness alone was not enough: `workspace.ready` flips before the RBAC access and the
+  integration probes have landed.
 
 **The catalogue lists the tours it CANNOT start, and says what would unlock each.** That is the
 reason a tour's preconditions are declared (`TutorialRequirement`: an id, a copy key, and the

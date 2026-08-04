@@ -306,12 +306,13 @@ export function readyTourIds(catalogue: readonly TutorialCatalogueEntry[]): Set<
  * Three rules, and the first is the one that is easy to get wrong:
  *
  *  - It fires on a TRANSITION into `ready`, never on the standing state, which is why the caller
- *    must SEED `previouslyReady` from a resolution taken once the board is UP (see
- *    {@link resolveNudge}, which owns that half). Fired on the standing state it would nudge
- *    about everything already available on every board load, which is the launch prompt with
- *    none of its manners. The transition rule also means the permission-gated platform tours
- *    (ready from the first render on any board) naturally never reach it, and only the
- *    board-state tours — a run parked, a run failed, a PR ready to merge — can.
+ *    must SEED `previouslyReady` from a resolution taken once the board is up AND may only offer
+ *    where the world itself moved (see {@link resolveNudge}, which owns both halves). Fired on
+ *    the standing state it would nudge about everything already available on every board load,
+ *    which is the launch prompt with none of its manners. The transition rule also means the
+ *    permission-gated platform tours (ready from the first render on any board) naturally never
+ *    reach it, and only the board-state tours — a run parked, a run failed, a PR ready to
+ *    merge — can.
  *  - Only the launch-offer arc, for the reason `offeredAtLaunch` exists: a tour declared as
  *    reference material someone comes and gets is not one to interrupt them with. Reusing that
  *    declaration rather than inventing a second opt-out keeps a consumer deployment's tour
@@ -345,44 +346,76 @@ export function newlyAvailableTour(input: {
 }
 
 /**
+ * The gates that describe the WORLD: facts about this board that a person or a run changed.
+ *
+ * Everything else `NavGates` carries is a fact about the DEPLOYMENT or the VIEWER (a permission, a
+ * wired integration, the interface tier), and the difference is what {@link resolveNudge} turns on.
+ */
+const BOARD_STATE_GATES = [
+  'boardHasService',
+  'boardHasTask',
+  'boardHasRun',
+  'boardHasOpenDecision',
+  'boardHasPendingApproval',
+  'boardHasFinishedRun',
+  'boardHasFailedRun',
+] as const satisfies readonly (keyof NavGates)[]
+
+/**
+ * A comparable stamp of the board-state gates, so "did the world move" is one `!==`.
+ *
+ * A string of bits rather than a Set of what is true: the question is only whether this differs
+ * from the last look, and a stamp makes that answerable without caring which bit moved.
+ */
+export function boardStateFingerprint(gates: NavGates): string {
+  return BOARD_STATE_GATES.map((gate) => (gates[gate] ? '1' : '0')).join('')
+}
+
+/**
  * One step of the contextual offer's state machine: the baseline to carry forward, and the tour
  * to offer (if any) from this resolution of the catalogue.
  *
  * Pure, and separate from {@link newlyAvailableTour}, because the BASELINE is the part that was
  * wrong when this shipped and the part a reactive wrapper cannot be trusted with. A transition
- * rule is only as good as what it is measured against, and the gates every tour's `requires`
- * reads are BOARD STATE: they are all false until the workspace snapshot has been fanned out
- * into the stores. So a baseline seeded from the first resolution after mount records "nothing is
- * takeable", and the board's own hydration then reads as a transition — which turns the whole
- * mechanism into exactly the every-board-load greeting the transition rule exists to prevent
- * ("here is a walkthrough", about a run that finished a fortnight ago).
+ * rule is only as good as what it is measured against, and this one was measured against an app
+ * that had not finished starting: every gate reads a store something fills asynchronously, so a
+ * baseline taken too early records "nothing is takeable" and the app's own startup then reads as a
+ * transition. That turns the mechanism into exactly the every-board-load greeting it exists to
+ * prevent ("here is a new walkthrough", about a run that finished a fortnight ago).
  *
- * Hence `boardReady`. Three states, and the third is why this is a function rather than an `if`:
+ * Two guards, because the first alone was not enough and the second is the general form of why:
  *
- *  - Board not up ⇒ no baseline and no offer. Also DISCARDS any baseline already held, so
- *    switching boards re-seeds against the new board rather than treating everything the new
- *    board happens to satisfy as something that just changed.
- *  - Board up, no baseline yet ⇒ SEED it and offer nothing. This is the standing state, and
- *    saying nothing about it is the whole point.
- *  - Board up, baseline held ⇒ advance the baseline and offer whatever crossed into `ready`.
+ *  - `boardReady` gates any baseline at all on the workspace snapshot having been fanned out, so
+ *    board state is in place before anything is recorded as the standing state. It also DISCARDS
+ *    the baseline when the board goes away, so switching boards re-seeds against the new one
+ *    rather than reporting everything it happens to satisfy as having just changed.
+ *  - `boardState` (a {@link boardStateFingerprint}) is what an offer actually requires to have
+ *    MOVED. Readiness widening is not the same as the world changing: a permission resolving, or
+ *    a capability probe answering, makes tours takeable that were "blocked" only because the app
+ *    did not know yet, and the app finding out about itself is not a moment to interrupt anyone
+ *    about. Those resolutions advance the baseline SILENTLY. This is the guard that generalises:
+ *    it needs no list of which stores load late, because none of them describe the world.
  *
- * The baseline advances on EVERY resolution, including ones that produce an offer, so a tour
- * flickering ready → blocked → ready (which live run gates do) cannot re-offer itself.
+ * So an offer needs both halves — a tour that just became takeable, and a world that just moved —
+ * and the baseline advances on every resolution either way, so a tour flickering
+ * ready → blocked → ready (which live run gates do) cannot re-offer itself.
  */
 export function resolveNudge(input: {
   boardReady: boolean
   catalogue: readonly TutorialCatalogueEntry[]
-  previouslyReady: ReadonlySet<string> | null
+  boardState: string
+  previous: { ready: ReadonlySet<string>; boardState: string } | null
   declined: boolean
   isCompleted: (tourId: string) => boolean
   wasNudged: (tourId: string) => boolean
-}): { baseline: Set<string> | null; offer: TutorialTour | null } {
+}): { baseline: { ready: Set<string>; boardState: string } | null; offer: TutorialTour | null } {
   if (!input.boardReady) return { baseline: null, offer: null }
-  const baseline = readyTourIds(input.catalogue)
-  if (input.previouslyReady === null) return { baseline, offer: null }
+  const baseline = { ready: readyTourIds(input.catalogue), boardState: input.boardState }
+  if (input.previous === null) return { baseline, offer: null }
+  if (input.previous.boardState === input.boardState) return { baseline, offer: null }
   return {
     baseline,
-    offer: newlyAvailableTour({ ...input, previouslyReady: input.previouslyReady }),
+    offer: newlyAvailableTour({ ...input, previouslyReady: input.previous.ready }),
   }
 }
 
