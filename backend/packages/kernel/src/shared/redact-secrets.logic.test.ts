@@ -48,42 +48,6 @@ describe('redactSecrets', () => {
     expect(redactSecrets('no scheme user:pass@host')).toBe('no scheme user:pass@host')
   })
 
-  it('costs the same on credential-free text of any shape', () => {
-    // The scrub runs over every captured prompt and every injected context file, so its cost
-    // must depend on the SIZE of a body and not its shape. A rule whose bounded run can be
-    // retried at every offset (the URL-userinfo scheme prefix, before it moved into a
-    // lookbehind) is still linear, so only a comparison catches it: it cost ~15x more on
-    // base64 than on prose, ~130ms per 512KB, which is why one large context file dominated
-    // the cost of recording a whole agent-context snapshot.
-    const size = 2 * 1024 * 1024
-    const fill = (unit: string): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size)
-    // Base64 is the shape that bit: a long unbroken run of scheme-legal characters, and an
-    // ordinary thing to find in a lockfile, an inlined asset, or a data URI.
-    const base64 = fill('aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgcGF5bG9hZA')
-    const prose = fill('the quick brown fox jumps over the lazy dog ')
-    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
-    // with the rest of the monorepo's tests. Both bodies are measured the same way in the
-    // same process, so contention that survives the minimum hits both sides of the ratio.
-    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
-    // a millisecond's granularity is noise against samples an order of magnitude larger.
-    const fastest = (body: string): number => {
-      let best = Number.POSITIVE_INFINITY
-      for (let i = 0; i < 3; i++) {
-        const started = Date.now()
-        redactSecrets(body)
-        best = Math.min(best, Date.now() - started)
-      }
-      return best
-    }
-    const baseline = fastest(prose)
-    const ratio = fastest(base64) / baseline
-    // Parity is ~1x once no rule re-walks a bounded run per offset; the regression this pins
-    // is an order of magnitude away, so 4x separates them without riding on absolute timings.
-    expect(ratio, `base64 took ${ratio.toFixed(1)}x prose (${baseline.toFixed(1)}ms)`).toBeLessThan(
-      4,
-    )
-  })
-
   it('drops secret-ish query/JSON params keeping the field name', () => {
     const out = redactSecrets('{"token":"abcd1234efgh","note":"keep me"}')
     expect(out).not.toContain('abcd1234efgh')
@@ -126,6 +90,86 @@ describe('redactSecrets', () => {
   it('leaves a public certificate block untouched (only private keys are dropped)', () => {
     const cert = '-----BEGIN CERTIFICATE-----\nMIIBkTCB+w==\n-----END CERTIFICATE-----'
     expect(redactSecrets(cert)).toBe(cert)
+  })
+
+  it('pairs PEM markers exactly as one BEGIN-to-END regex would', () => {
+    // The block scrub walks the BEGIN and END markers in lockstep instead of matching one
+    // `BEGIN…[\s\S]*?…END` regex, so these pin the pairing decisions where a scanner could
+    // plausibly diverge from that regex: the drop runs to the FIRST END after a header
+    // (swallowing any nested header), a header with no END is left in place, and scanning
+    // resumes after the END that closed the previous block.
+    const b = '-----BEGIN RSA PRIVATE KEY-----'
+    const e = '-----END RSA PRIVATE KEY-----'
+    const cases: [string, string][] = [
+      [`${b}body${e}`, '[REDACTED]'],
+      [`a${b}1${e}b${b}2${e}c`, 'a[REDACTED]b[REDACTED]c'],
+      // A nested BEGIN is swallowed by the outer block rather than starting its own.
+      [`${b}x${b}y${e}`, '[REDACTED]'],
+      // The first END closes the first BEGIN; the trailing END is then ordinary text.
+      [`${b}x${e}y${e}`, `[REDACTED]y${e}`],
+      // Unterminated: no second delimiter to bound the drop, so it stays put.
+      [`${b}dangling body with no end marker`, `${b}dangling body with no end marker`],
+      // An END with no BEGIN before it is not a block at all.
+      [`${e}${b}`, `${e}${b}`],
+      [`${b}${e}${b}`, `[REDACTED]${b}`],
+    ]
+    for (const [input, expected] of cases) {
+      expect(redactSecrets(input), input).toBe(expected)
+    }
+  })
+
+  it('costs the same on credential-free text of any shape', () => {
+    // The scrub runs over every captured prompt and every injected context file, so its cost
+    // must depend on the SIZE of a body and not its shape. Two rules have broken that, and
+    // neither shows up in a single-body timing budget, so each shape below is measured
+    // against prose of the same size:
+    //   - the URL-userinfo scheme prefix, before it moved into a lookbehind, re-walked its
+    //     bounded run at every offset: ~15x prose on base64, ~130ms per 512KB;
+    //   - the PEM block body, before the markers were walked in lockstep, was an unbounded
+    //     lazy `[\s\S]*?` that rescanned the tail once per unterminated header: ~19s for 2MB,
+    //     quadratic rather than merely a bad constant.
+    const size = 2 * 1024 * 1024
+    const fill = (unit: string): string => unit.repeat(Math.ceil(size / unit.length)).slice(0, size)
+    const prose = fill('the quick brown fox jumps over the lazy dog ')
+    const shapes: Record<string, string> = {
+      // A long unbroken run of scheme-legal characters: an ordinary thing to find in a
+      // lockfile, an inlined asset, or a data URI.
+      base64: fill('aGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgcGF5bG9hZA'),
+      // Armor headers that never close. Truncation upstream of the scrub produces exactly
+      // this, since a capped context file can lose its END marker.
+      'unterminated PEM headers': fill('-----BEGIN RSA PRIVATE KEY-----\nMIIEow\n'),
+      // Single-character filler: the body the agent-context size-budget test scrubs.
+      filler: fill('x'),
+    }
+    // Best-of-N: a scheduler stall inflates a single sample, and this suite shares a machine
+    // with the rest of the monorepo's tests. Every body is measured the same way in the same
+    // process, so contention that survives the minimum hits both sides of the ratio.
+    // `Date.now` rather than `performance`: kernel compiles against the ES2022 lib alone, and
+    // a millisecond's granularity is noise against samples an order of magnitude larger.
+    const fastest = (body: string): number => {
+      let best = Number.POSITIVE_INFINITY
+      for (let i = 0; i < 3; i++) {
+        const started = Date.now()
+        redactSecrets(body)
+        best = Math.min(best, Date.now() - started)
+      }
+      return best
+    }
+    const baseline = fastest(prose)
+    // A zero baseline would turn every ratio below into Infinity/NaN and fail the comparison
+    // with no hint of why, so it is asserted as its own condition. 2MB of prose is ~17ms, so
+    // this only trips if the body stopped being scrubbed at all.
+    expect(
+      baseline,
+      'prose baseline must be measurable at millisecond granularity',
+    ).toBeGreaterThan(0)
+    for (const [name, body] of Object.entries(shapes)) {
+      const ratio = fastest(body) / baseline
+      // Parity is ~1x once no rule rescans per offset or per marker; both regressions above
+      // are an order of magnitude away, so 4x separates them without riding on absolute
+      // timings. Measured worst case under 2x CPU oversubscription is 1.5x.
+      expect(ratio, `${name} took ${ratio.toFixed(1)}x prose (${baseline}ms)`).toBeLessThan(4)
+    }
   })
 })
 

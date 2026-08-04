@@ -10,23 +10,52 @@
 
 const REPLACEMENT = '[REDACTED]'
 
+// The armor markers of a PEM-encoded private key, covering the RSA/EC/OPENSSH/ENCRYPTED/PGP
+// variants. Kept as two SEPARATE patterns rather than one `BEGIN…[\s\S]*?…END` regex: see
+// `redactPrivateKeyBlocks`.
+const PEM_PRIVATE_KEY_BEGIN = /-----BEGIN[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----/g
+const PEM_PRIVATE_KEY_END = /-----END[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----/g
+
+/**
+ * Drop PEM-armored private keys pasted verbatim, block and all. Such a block has no
+ * field-name/URL/token-scheme scaffolding for the {@link RULES} shape rules to catch, so it is
+ * found by its armor header and dropped wholesale, regardless of the enclosing filename (a key
+ * pasted into a prompt or an ordinarily-named doc is caught too). Public certs
+ * (`BEGIN CERTIFICATE`) are intentionally left untouched.
+ *
+ * Two markers scanned in lockstep rather than one regex with a lazy `[\s\S]*?` body, because
+ * that body is unbounded: a header with no END after it makes the engine scan to end-of-string,
+ * then advance to the next header and scan the same tail again, which is quadratic in the number
+ * of unterminated headers (2MB of them cost ~19s). Here each marker scan only ever moves
+ * FORWARD, and a header with no END terminates the whole loop rather than one iteration, since
+ * no LATER header can have one either. That makes the pass strictly O(n) whatever the input
+ * shape, matching the regex byte-for-byte (pinned by the equivalence cases in the test).
+ *
+ * An unterminated header is left in place, exactly as the regex left it: there is no second
+ * delimiter to bound the drop, and guessing one would either spare a key body or swallow
+ * unrelated text to end-of-string.
+ */
+function redactPrivateKeyBlocks(value: string): string {
+  PEM_PRIVATE_KEY_BEGIN.lastIndex = 0
+  let begin = PEM_PRIVATE_KEY_BEGIN.exec(value)
+  if (begin === null) return value
+  let out = ''
+  let copiedTo = 0
+  while (begin !== null) {
+    PEM_PRIVATE_KEY_END.lastIndex = begin.index + begin[0].length
+    const end = PEM_PRIVATE_KEY_END.exec(value)
+    if (end === null) break
+    out += value.slice(copiedTo, begin.index) + REPLACEMENT
+    copiedTo = end.index + end[0].length
+    PEM_PRIVATE_KEY_BEGIN.lastIndex = copiedTo
+    begin = PEM_PRIVATE_KEY_BEGIN.exec(value)
+  }
+  return copiedTo === 0 ? value : out + value.slice(copiedTo)
+}
+
 // Each rule matches a secret-bearing fragment; the capture group(s) bracket the literal
 // prefix to keep (so the reader still sees WHAT was redacted) and the secret to drop.
 const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
-  // PEM-armored private keys pasted verbatim (`-----BEGIN … PRIVATE KEY-----` …
-  // `-----END … PRIVATE KEY-----`), covering RSA/EC/OPENSSH/ENCRYPTED/PGP variants. Such a
-  // block has no field-name/URL/token-scheme scaffolding for the shape rules below to catch,
-  // so it is matched on its armor header and dropped wholesale — regardless of the enclosing
-  // filename, so a key pasted into a prompt or an ordinarily-named doc is caught too. The
-  // body is `[\s\S]*?` (non-greedy, bounded by the literal END marker), so no catastrophic
-  // backtracking. Runs FIRST so a later field-name rule (e.g. a `key:` echo preceding the
-  // block) can't consume the `-----BEGIN` marker and leave the body behind. Public certs
-  // (`BEGIN CERTIFICATE`) are intentionally left untouched.
-  {
-    pattern:
-      /-----BEGIN[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----[\s\S]*?-----END[ A-Z0-9]*PRIVATE KEY[ A-Z0-9]*-----/g,
-    replace: () => REPLACEMENT,
-  },
   // `Authorization: Bearer <token>` / `Bearer <token>` (case-insensitive scheme).
   {
     pattern: /\b(bearer|basic|token)\s+([A-Za-z0-9._+/=~-]{8,})/gi,
@@ -80,7 +109,9 @@ const RULES: { pattern: RegExp; replace: (m: RegExpMatchArray) => string }[] = [
  */
 export function redactSecrets(value: string | null): string | null {
   if (value == null) return value
-  let out = value
+  // PEM blocks FIRST, so a later field-name rule (e.g. a `key:` echo preceding the block)
+  // can't consume the `-----BEGIN` marker and leave the body behind.
+  let out = redactPrivateKeyBlocks(value)
   for (const rule of RULES) {
     out = out.replace(rule.pattern, (...args) => {
       // String.replace passes (match, ...groups, offset, string); reconstruct the

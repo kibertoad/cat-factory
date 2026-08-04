@@ -68,7 +68,22 @@ and therefore carries the symmetric D1 ⇄ Drizzle + conformance work.
   cost ~15x more on base64 than on prose. Lead with the literal instead and match the prefix in
   a lookbehind, so a non-matching offset is rejected on one character comparison; the prefix
   then survives in the output untouched rather than being re-emitted by the replacement.
-  Shape-independence is pinned by a test comparing base64 against prose of the same size.
+- **A DELIMITED BLOCK is scanned marker-to-marker, never matched as one regex.** A rule
+  spanning `START … [\s\S]*? … END` looks safe because the lazy body is bounded by a literal,
+  but only when the END is THERE: a START with none after it scans to end-of-string, then the
+  next START rescans the same tail, which is quadratic in unterminated STARTs rather than a bad
+  constant (2MB of bare PEM headers took ~19s). Truncation upstream of the scrub produces that
+  input for free, since a capped context file can lose its closing marker. Walk the two markers
+  in lockstep instead (`redactPrivateKeyBlocks`): each scan only moves FORWARD, and the first
+  START with no END ends the whole pass, because no later START can have one either.
+- **Shape-independence is measured, not enforced.** A test scrubs each known-pathological shape
+  (base64, unterminated PEM headers, single-character filler) and asserts it stays within 4x
+  prose of the same size, rather than asserting an absolute budget that a slow CI box would
+  flake on. Both defects above were ~10x and ~1000x, so the margin is wide. It only covers the
+  shapes listed in it, so a new rule owes the test the shape that would expose ITS worst case.
+  Do not read a high ratio as automatically a bug: a body full of real credentials is ~10x
+  prose because it is doing redaction work, which is why every shape in the test is
+  credential-free.
 - The SSRF `safeFetch` takes an injected `assertSafe` + error factory (and an optional
   `doFetch` for tests). Reuse it for any new provider that fetches an org-supplied URL;
   don't reintroduce a bare `fetch` with `redirect: 'follow'`. It also strips the body +
