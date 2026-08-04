@@ -1,5 +1,13 @@
 # @cat-factory/provider-s3
 
+## 0.2.299
+
+### Patch Changes
+
+- Updated dependencies [2c7d17d]
+- Updated dependencies [aa62acf]
+  - @cat-factory/kernel@0.237.0
+
 ## 0.2.298
 
 ### Patch Changes
