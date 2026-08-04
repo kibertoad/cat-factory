@@ -4,6 +4,7 @@ import type {
   LlmCallMetric,
   LlmCallMetricRepository,
 } from '@cat-factory/kernel'
+import { foldRollupsByPhase } from '@cat-factory/kernel'
 import {
   LlmObservabilityService,
   makeHarnessCallRecorder,
@@ -263,6 +264,53 @@ function registerMetricRollupTests(
     )
     const summaries = await repo.summarizeByExecution(ws, e1)
     expect(summaries.map((s) => s.agentKind).sort()).toEqual(['coder', 'reviewer'])
+  })
+
+  it('splits the rollup by MODEL so a mixed-model step can be priced', async () => {
+    const repo = makeRepo()
+    const { ws, e1 } = ids()
+    // One agent kind, one phase, two models — the NORMAL shape on a subscription harness,
+    // whose CLI serves some of its own turns with a cheaper model of its choosing. The store
+    // must keep them apart: cost is a function of `(model, token classes)`, so a cell that
+    // lumped both could only be priced at one of their rates and would be wrong either way.
+    for (const [id, model, promptTokens] of [
+      ['a', 'claude-opus-5', 100],
+      ['b', 'claude-opus-5', 200],
+      ['c', 'claude-haiku-4-5', 700],
+    ] as const) {
+      await repo.record(
+        metric({
+          id: `${ws}-${id}`,
+          workspaceId: ws,
+          executionId: e1,
+          agentKind: 'coder',
+          phase: 'agent',
+          provider: 'anthropic',
+          model,
+          promptTokens,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        }),
+      )
+    }
+    const cells = (await repo.summarizeByExecution(ws, e1)).sort((a, b) =>
+      a.model.localeCompare(b.model),
+    )
+    expect(cells.map((c) => [c.model, c.calls, c.promptTokens])).toEqual([
+      ['claude-haiku-4-5', 1, 700],
+      ['claude-opus-5', 2, 300],
+    ])
+    // Every cell carries its provider too, since a bare model id does not identify a price.
+    expect(cells.every((c) => c.provider === 'anthropic')).toBe(true)
+    // The store NEVER prices: a price table is deployment configuration, not SQL, so an
+    // unpriced cell says null rather than claiming the calls were free.
+    expect(cells.every((c) => c.costEstimate === null)).toBe(true)
+    // Folding the model away reproduces the single `(agentKind, phase)` cell every consumer
+    // reads, with the totals intact.
+    const folded = foldRollupsByPhase(cells)
+    expect(folded).toHaveLength(1)
+    expect(folded[0]?.calls).toBe(3)
+    expect(folded[0]?.promptTokens).toBe(1000)
   })
 
   it('cuts the rollup by phase and charges carry cost per conversation, not per run', async () => {

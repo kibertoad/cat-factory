@@ -119,6 +119,7 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       //   composed report (and its in-place idempotency) is asserted against real D1.
       prVerificationReportPublisher: o.prVerificationReportPublisher,
       appBaseUrl: o.appBaseUrl,
+      apiBaseUrl: o.apiBaseUrl,
     }),
     ...backendRegistries,
     ...fragmentLibraryDeps(),

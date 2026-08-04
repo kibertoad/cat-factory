@@ -20,6 +20,13 @@ import {
   composeEnvironments,
   renderEnvironments,
 } from './prReport.environments.js'
+import {
+  composeReproduction,
+  composeValidation,
+  makeOutputCapper,
+  renderReproduction,
+  renderValidation,
+} from './prReport.commands.js'
 import { findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
@@ -497,6 +504,12 @@ export function composePrVerificationReport(
   inputs: PrReportInputs,
 ): PrVerificationReport {
   const truncations: string[] = []
+  // The two captured-output sections share the spine's list cap and add a char cap of their own,
+  // both logging into the ONE `truncations` array a reader learns to read.
+  const commandCaps = {
+    cap: <T>(items: readonly T[], label: string): T[] => cap(items, label, truncations),
+    output: makeOutputCapper(truncations),
+  }
   const steps = instance.steps.map((step, index) => ({
     index,
     agentKind: step.agentKind,
@@ -522,6 +535,8 @@ export function composePrVerificationReport(
       })),
     },
     ci: composeCi(instance, truncations),
+    validation: composeValidation(instance, commandCaps),
+    reproduction: composeReproduction(instance, commandCaps),
     tests: composeTests(instance, truncations),
     requirements: composeRequirements(instance, inputs.spec, truncations),
     environments: composeEnvironments(instance, inputs.environments, (items, label) =>
@@ -781,6 +796,11 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '',
     ...renderRun(report.run, report.observability.runUrl),
     ...renderCi(report.ci),
+    // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same
+    // question a reviewer asks first ("does it work?"), and unlike CI they are the platform's own
+    // run of the commands on the exact tree that was pushed.
+    ...renderValidation(report.validation),
+    ...renderReproduction(report.reproduction),
     ...renderTests(report.tests),
     ...renderRequirements(report.requirements),
     ...renderEnvironments(report.environments),
@@ -810,8 +830,15 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
   const dropped = `${body}\n_The machine-readable JSON block was omitted: this report exceeds the ${hostMarkdown.MAX_SECTION_CHARS}-character budget for a pull-request description._`
   if (dropped.length <= hostMarkdown.MAX_SECTION_CHARS) return dropped
   // Absolute backstop: the prose alone is over budget. Cut it rather than let the host reject
-  // the whole write.
-  return `${dropped.slice(0, hostMarkdown.MAX_SECTION_CHARS - TRUNCATED_SECTION_NOTE.length)}${TRUNCATED_SECTION_NOTE}`
+  // the whole write — then drop whatever fenced block the cut landed INSIDE. The captured-output
+  // sections put real fences in the prose half (a validation log, a reproduction tree's log), and
+  // a blind slice through one leaves it unclosed, which swallows the truncation note and the
+  // section's own `:end` marker into a code block. `balanceFences` is the wrong tool here: it
+  // ADDS a closing fence to text that is already over the limit, by an amount sized to the
+  // longest backtick run in the block. Dropping only ever removes, so it fits by construction,
+  // and the half a cut leaves behind is the HEAD of a log whose failure is reported at its tail.
+  const room = hostMarkdown.MAX_SECTION_CHARS - TRUNCATED_SECTION_NOTE.length
+  return `${hostMarkdown.dropOpenFence(dropped.slice(0, room))}${TRUNCATED_SECTION_NOTE}`
 }
 
 /** Closes a section that had to be cut at {@link hostMarkdown.MAX_SECTION_CHARS}. */

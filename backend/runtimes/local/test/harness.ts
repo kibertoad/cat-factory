@@ -164,6 +164,7 @@ type ConformanceAppOpts = {
   resolveDeployCloneTarget?: CoreDependencies['resolveDeployCloneTarget']
   prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
   appBaseUrl?: string
+  apiBaseUrl?: string
   backendRegistries?: BackendRegistries
   agentKindRegistry?: AgentKindRegistry
   gateRegistry?: CoreDependencies['gateRegistry']
@@ -268,6 +269,7 @@ function buildConformanceOverrides(
       resolveDeployCloneTarget: o.resolveDeployCloneTarget,
       prVerificationReportPublisher: o.prVerificationReportPublisher,
       appBaseUrl: o.appBaseUrl,
+      apiBaseUrl: o.apiBaseUrl,
     }),
   }
 }

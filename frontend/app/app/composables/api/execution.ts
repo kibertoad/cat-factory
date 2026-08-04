@@ -15,7 +15,7 @@ import {
   resumeSpendContract,
   startExecutionContract,
 } from '@cat-factory/contracts'
-import type { RequestStepChangesInput } from '@cat-factory/contracts'
+import type { RequestStepChangesInput, RunMode } from '@cat-factory/contracts'
 import type { IterationCapChoice } from '~/types/execution'
 import type { ReviewEffort } from '~/types/merge'
 import type { ApiContext } from './context'
@@ -27,7 +27,10 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
     startExecution: (
       workspaceId: string,
       blockId: string,
-      body: { pipelineId: string },
+      // `mode: 'dry_run'` REQUESTS a sandboxed run (the pipeline runs and opens its PR, but
+      // nothing merges). Omitted ⇒ live. The task's merge preset can force a sandbox regardless
+      // of what is asked here, so the response's `mode` is what the run actually got.
+      body: { pipelineId: string; mode?: RunMode },
       password?: string,
     ) =>
       sendWith(pwHeaders(password), startExecutionContract, {

@@ -39,7 +39,10 @@ it only reaches the logger the Worker writes through while both imports resolve 
   (app-owned registry resolution), `container-trace-sinks.ts` (external LLM-trace destinations),
   `container-model-resolver.ts` (the memoised inline `ModelProviderResolver` + the per-step
   workspace default), `container-executor-deps.ts` (runner-transport selection, the container
-  executor, the inline/sandbox composite and the consensus wrap) and `container-vcs-identity.ts`
+  executor, the inline/sandbox composite and the consensus wrap), `container-notification-deps.ts`
+  (how this facade DELIVERS a notification: the Slack transport, the outbound
+  notification-webhook feature, and the composition of everything that is not the in-app push;
+  keep symmetric with Node's own) and `container-vcs-identity.ts`
   (the multi-App GitHub registry + the repo-target resolvers several siblings share). The
   executor and vcs-identity modules never import the root back (what they need from it arrives
   through `WorkerExecutorDeps`), so the module graph stays one-way.

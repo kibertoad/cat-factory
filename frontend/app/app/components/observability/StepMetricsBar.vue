@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { StepMetrics } from '~/types/execution'
 import {
+  formatCost,
   formatMs,
   formatTokens,
   headroomColor,
@@ -33,6 +34,10 @@ const totalInput = computed(() => totalInputTokens(m.value))
 const cacheRead = computed(() => m.value.cacheReadTokens ?? 0)
 const cacheWrite = computed(() => m.value.cacheWriteTokens ?? 0)
 const hasCache = computed(() => cacheRead.value > 0 || cacheWrite.value > 0)
+// Money beside the volume, not instead of it. Null when the deployment prices nothing or has
+// no rate for the model that ran — the figure is then OMITTED rather than shown as 0.00, which
+// would claim the step was free.
+const cost = computed(() => formatCost(m.value.costEstimate, m.value.costCurrency))
 const headroom = computed(() => headroomRatio(m.value))
 const transport = computed(() => transportRatio(m.value))
 const headroomTone = computed(() => headroomColor(headroom.value, m.value.truncatedCalls > 0))
@@ -61,6 +66,12 @@ const headroomTone = computed(() => headroomColor(headroom.value, m.value.trunca
       >
         {{ formatTokens(totalInput) }}↑ {{ formatTokens(m.completionTokens) }}↓
       </span>
+      <template v-if="cost">
+        <span class="text-slate-500">·</span>
+        <span class="tabular-nums text-slate-300" :title="t('observability.metricsBar.costHint')">
+          {{ cost }}
+        </span>
+      </template>
       <div class="ms-auto flex items-center gap-1">
         <UBadge v-if="m.errors > 0" color="error" variant="subtle" size="sm">
           {{ t('observability.metricsBar.errors', { count: m.errors }, m.errors) }}

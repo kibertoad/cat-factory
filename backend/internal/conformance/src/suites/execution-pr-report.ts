@@ -15,6 +15,8 @@ import type { ConformanceHarness } from '../harness.js'
 // against real D1 and real Postgres alike.
 const PR: PullRequestRef = { number: 42, url: 'https://github.test/o/r/pull/42', branch: 'work' }
 const APP_BASE_URL = 'https://app.example.test'
+/** The BACKEND's own public origin — deliberately a different host from the SPA's above. */
+const API_BASE_URL = 'https://api.example.test'
 
 export function defineExecutionPrReportConformance(harness: ConformanceHarness): void {
   describe('execution engine', () => {
@@ -153,6 +155,8 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         expect(report.run.executionId).toBe(second.id)
       })
 
+      registerCapturedEvidenceTests(harness)
+
       it('publishes nothing when the workspace turned the report off', async () => {
         // The per-workspace opt-out (`publishPrVerificationReport`). A pull request is a more
         // exposed surface than the telemetry store, so a workspace can decline it — and the
@@ -208,5 +212,222 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         expect(exec.status).toBe('done')
       })
     })
+  })
+}
+
+/**
+ * The two CAPTURED-OUTPUT sections plus the artifact links: the report's evidence that a COMMAND
+ * ran and what it printed, as opposed to a verdict somebody produced.
+ *
+ * Registered from the suite above; split out purely to keep each function within the per-function
+ * line budget. Every test is unchanged.
+ */
+function registerCapturedEvidenceTests(harness: ConformanceHarness): void {
+  it('carries the pre-PR validation commands and the FAILING one’s captured output', async () => {
+    // Slice 9 of the report: the platform's OWN run of the service's check commands against
+    // the tree that opened the PR — the one verdict here the platform ENFORCED, as opposed to
+    // the host's later opinion in the `ci` section. Runtime-neutral engine behaviour reading a
+    // harness-written step field, so it is asserted on D1 and Postgres alike.
+    const publisher = new FakePrReportPublisher()
+    const app = harness.makeApp(
+      {
+        asyncKinds: ['coder'],
+        pullRequest: PR,
+        validationReport: {
+          passed: false,
+          attempts: 2,
+          maxAttempts: 3,
+          at: 1_700_000_000_000,
+          outcomes: [
+            { label: 'lint', command: 'pnpm lint', exitCode: 0, passed: true, outputTail: 'ok' },
+            {
+              label: 'test',
+              command: 'pnpm test',
+              exitCode: 1,
+              passed: false,
+              outputTail: 'AssertionError: expected 200, got 401',
+            },
+          ],
+        },
+      },
+      { prVerificationReportPublisher: publisher, gateProviders: { ciStatus: makeFakeCi([true]) } },
+    )
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + CI',
+      agentKinds: ['coder', 'ci'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect((await app.drive(wsId)).find((e) => e.blockId === 'task_login')?.status).toBe('done')
+
+    const report = parsePrVerificationReport(publisher.reportJson('task_login'))
+    expect(report.validation.status).toBe('reported')
+    expect(report.validation.passed).toBe(false)
+    expect(report.validation.attempts).toBe(2)
+    expect(report.validation.commands.map((c) => c.label)).toEqual(['lint', 'test'])
+    // The failing command's log is the evidence; the passing one's is deliberately dropped so
+    // the failing one stays inside the body budget, and the section says which rule it applied.
+    expect(report.validation.commands[0]?.outputTail ?? null).toBeNull()
+    expect(report.validation.commands[1]?.outputTail).toContain('expected 200, got 401')
+
+    const section = publisher.section('task_login')!
+    expect(section).toContain('Pre-PR validation')
+    expect(section).toContain('AssertionError: expected 200, got 401')
+    expect(section).toContain('retained for FAILING commands only')
+  })
+
+  it('carries the bugfix reproduction proof, with both trees’ captured output', async () => {
+    // Phase C of the reproduction-proof initiative: red on the pre-fix tree, green on the
+    // final one is the ONLY shape that proves "this change fixes the bug", and the verdict is
+    // the harness's (computed from two exit codes) rather than the model's own claim.
+    const publisher = new FakePrReportPublisher()
+    const app = harness.makeApp(
+      {
+        asyncKinds: ['coder'],
+        pullRequest: PR,
+        customResultByKind: {
+          'repro-test': {
+            outcome: 'reproduced',
+            testPaths: ['src/auth/login.test.ts'],
+            notes: 'Login rejects a valid token after refresh.',
+            command: 'pnpm vitest run src/auth/login.test.ts',
+          },
+        },
+        reproductionReport: {
+          status: 'reproduced',
+          command: 'pnpm vitest run src/auth/login.test.ts',
+          testPaths: ['src/auth/login.test.ts'],
+          base: { exitCode: 1, passed: false, outputTail: 'expected 200, got 401' },
+          final: { exitCode: 0, passed: true, outputTail: '1 passed' },
+          attempts: 1,
+          maxAttempts: 3,
+          at: 1_700_000_000_000,
+        },
+      },
+      { prVerificationReportPublisher: publisher },
+    )
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Reproduce & fix',
+      agentKinds: ['repro-test', 'coder'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect((await app.drive(wsId)).find((e) => e.blockId === 'task_login')?.status).toBe('done')
+
+    const report = parsePrVerificationReport(publisher.reportJson('task_login'))
+    expect(report.reproduction.status).toBe('reported')
+    expect(report.reproduction.verdict).toBe('reproduced')
+    expect(report.reproduction.command).toContain('login.test.ts')
+    // BOTH logs ride the report: only a human reading them can see whether the pre-fix tree
+    // was red for the RIGHT reason, which the symmetric-worktree design does not claim to know.
+    expect(report.reproduction.base?.outputTail).toContain('got 401')
+    expect(report.reproduction.final?.outputTail).toContain('1 passed')
+
+    const section = publisher.section('task_login')!
+    expect(section).toContain('Reproduction proof')
+    expect(section).toContain('FAILED on the pre-fix tree')
+  })
+
+  it('states a CONCEDED reproduction rather than leaving the section blank', async () => {
+    // The distinction the whole feature exists to make: "could not be reproduced" must never
+    // be indistinguishable from "nobody tried". A concede dispatches no proof at all, so the
+    // ENGINE mints the declaration — which is exactly the kind of engine-side fold that can
+    // work on one facade and not the other.
+    const publisher = new FakePrReportPublisher()
+    const app = harness.makeApp(
+      {
+        asyncKinds: ['coder'],
+        pullRequest: PR,
+        customResultByKind: {
+          'repro-test': {
+            outcome: 'not_reproducible',
+            testPaths: [],
+            notes: 'Needs production traffic volume.',
+            alternativeVerification: 'Traced the refresh path against the reported request ids.',
+          },
+        },
+      },
+      { prVerificationReportPublisher: publisher },
+    )
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Reproduce & fix',
+      agentKinds: ['repro-test', 'coder'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect((await app.drive(wsId)).find((e) => e.blockId === 'task_login')?.status).toBe('done')
+
+    const report = parsePrVerificationReport(publisher.reportJson('task_login'))
+    expect(report.reproduction.verdict).toBe('declared_infeasible')
+    expect(report.reproduction.reason).toContain('production traffic')
+    expect(report.reproduction.alternativeVerification).toContain('refresh path')
+
+    const section = publisher.section('task_login')!
+    expect(section).toContain('declared infeasible')
+    expect(section).toContain('Verified instead')
+  })
+
+  it('links each captured artifact to its bytes, not just its id', async () => {
+    // The evidence rows used to carry an opaque store id and nothing else, so reaching a
+    // screenshot meant knowing the app well enough to find the run. The link is built from the
+    // deployment's own BACKEND url (not the SPA origin beside it, which is a different host the
+    // moment the SPA is served separately), so both facades have to thread the right config.
+    const publisher = new FakePrReportPublisher()
+    const app = harness.makeApp(
+      {
+        asyncKinds: ['coder', 'tester-api'],
+        asyncPolls: 1,
+        pullRequest: PR,
+        testReports: [
+          {
+            greenlight: true,
+            summary: 'looks right',
+            tested: ['login'],
+            outcomes: [{ name: 'login', status: 'passed' as const }],
+            concerns: [],
+            environment: 'ephemeral' as const,
+            screenshots: [{ view: 'login', artifactId: 'art_1' }],
+          },
+        ],
+      },
+      {
+        prVerificationReportPublisher: publisher,
+        appBaseUrl: APP_BASE_URL,
+        apiBaseUrl: API_BASE_URL,
+      },
+    )
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Build + test',
+      agentKinds: ['coder', 'tester-api'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect((await app.drive(wsId)).find((e) => e.blockId === 'task_login')?.status).toBe('done')
+
+    const report = parsePrVerificationReport(publisher.reportJson('task_login'))
+    const shot = report.environments.evidence.screenshots[0]
+    expect(shot?.artifactId).toBe('art_1')
+    // The id STAYS beside the link: it is what an operator greps the store for, and a
+    // deployment with no public backend URL has only that to offer.
+    expect(shot?.url).toBe(`${API_BASE_URL}/workspaces/${wsId}/artifacts/art_1/blob`)
+    expect(publisher.section('task_login')).toContain(
+      `${API_BASE_URL}/workspaces/${wsId}/artifacts/art_1/blob`,
+    )
   })
 }

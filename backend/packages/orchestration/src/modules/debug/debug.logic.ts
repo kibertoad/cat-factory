@@ -4,7 +4,7 @@ import type {
   ExecutionInstance,
   LlmCallBodySlice,
   LlmCallMetricPage,
-  LlmCallMetricSummary,
+  LlmRollupCell,
   PipelineStep,
 } from '@cat-factory/kernel'
 import { foldRollupTotals, foldRollupsByAgentKind, foldRollupsByPhase } from '@cat-factory/kernel'
@@ -260,7 +260,7 @@ export function toDebugAgentContextDetail(
 
 /**
  * Fold the store's `(agentKind, phase)` rollup cells into the run-level totals + the two
- * breakdowns the overview reports. Built from {@link LlmCallMetricSummary} — the aggregate the
+ * breakdowns the overview reports. Built from {@link LlmRollupCell} — the aggregate the
  * store computes without touching a text column — rather than from the calls themselves, so a
  * 3,000-call run costs one GROUP BY here instead of reading 3,000 rows to add them up in
  * JavaScript.
@@ -272,7 +272,7 @@ export function toDebugAgentContextDetail(
  * The per-kind output reuses the metrics EXPORT's shapes on purpose: both describe the same
  * run's model activity, and two independently-derived totals would eventually disagree.
  */
-export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
+export function foldLlmRollup(summaries: LlmRollupCell[]): {
   totals: LlmExportTotals
   byAgentKind: LlmExportInsight[]
   byPhase: LlmPhaseInsight[]
@@ -294,6 +294,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
     transportOverheadRatio: transportOverheadRatio(s.upstreamMs, s.overheadMs),
     errors: s.errors,
     warnings: s.warnings,
+    costEstimate: s.costEstimate,
   }))
   const phases = foldRollupsByPhase(summaries)
   // Denominator for each phase's share of the carry cost. Folded from the phase rows
@@ -315,6 +316,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
       errors: p.errors,
       warnings: p.warnings,
       truncatedCalls: p.truncatedCalls,
+      costEstimate: p.costEstimate,
     }))
     // Expensive slice first: the caller reading this is asking which phase to attack, and a
     // store-order list buries the answer behind whichever phase happened to run first.
@@ -338,6 +340,7 @@ export function foldLlmRollup(summaries: LlmCallMetricSummary[]): {
       errors: runTotals.errors,
       warnings: runTotals.warnings,
       truncatedCalls: runTotals.truncatedCalls,
+      costEstimate: runTotals.costEstimate,
     },
     byAgentKind,
     byPhase,

@@ -182,7 +182,7 @@ export interface RunnerJobResult {
    * failed validation report this never fails the job (see the initiative's D6): the fix may
    * well be correct, and how much the weak evidence matters is a reviewer's call. The executor's
    * `toRunResult` forwards it onto {@link AgentRunResult.reproductionReport}. Absent when the
-   * run carried no declaration. See `docs/initiatives/bugfix-reproduction-proof.md`.
+   * run carried no declaration. See `backend/docs/adr/0033-bugfix-reproduction-proof.md`.
    */
   reproductionReport?: RunnerReproductionReport
   /**

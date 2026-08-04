@@ -15,7 +15,7 @@ import {
 } from '@cat-factory/contracts'
 import { CODER_REPRODUCTION_PROOF_CONFIG_ID, reproTestOutcome } from '@cat-factory/agents'
 
-// Pure logic for the BUGFIX REPRODUCTION PROOF phase (docs/initiatives/bugfix-reproduction-proof.md).
+// Pure logic for the BUGFIX REPRODUCTION PROOF phase (backend/docs/adr/0033-bugfix-reproduction-proof.md).
 //
 // The engine resolves the per-task tri-state + the run's reproduction DECLARATION into the spec
 // the container executor forwards on a PR-opening coding job body. Side-effect-free so it is

@@ -1,6 +1,10 @@
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { promptCacheParams, readInputTokenClasses } from '@cat-factory/agents'
+import {
+  type InputTokenClasses,
+  promptCacheParams,
+  readInputTokenClasses,
+} from '@cat-factory/agents'
 import { isLocalRunner } from '@cat-factory/contracts'
 import {
   type ApiKeyProvider,
@@ -141,7 +145,12 @@ interface ProxyCallContext {
   localModelEndpoints: ServerContainer['localModelEndpoints']
   waitUntil: (task: Promise<unknown>) => void
   observe: (obs: ProxyCallObservation) => void
-  record: (usage: LlmTokenUsage | null) => Promise<number>
+  /**
+   * Meter this call into the spend ledger. `classes` carries the input split when the
+   * dispatch path already reconciled it (the streaming scraper does, off the same
+   * observation the metric is built from); omitted, the meter re-reads it from `usage`.
+   */
+  record: (usage: LlmTokenUsage | null, classes?: InputTokenClasses) => Promise<number>
 }
 
 /** A resolved OpenAI-compatible upstream (the call URL + bearer key + optional leased pool key). */
@@ -469,7 +478,7 @@ async function relayUpstream(
     // record the observation (off the response path) once it ends.
     const body = upstreamRes.body.pipeThrough(
       observationStream(dispatchAt, (obs) => {
-        waitUntil(record(obs.usage))
+        waitUntil(record(obs.usage, obs.inputTokens))
         observe(obs)
       }),
     )
@@ -796,11 +805,20 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
   // folded back into its rolling-window rotation counters when the call completes.
   let leasedApiKeyId: string | null = null
 
-  const record = (usage: LlmTokenUsage | null): Promise<number> => {
+  const record = (usage: LlmTokenUsage | null, classes?: InputTokenClasses): Promise<number> => {
     if (!usage) return Promise.resolve(0)
-    const inputTokens = usage.prompt_tokens ?? 0
+    // The SAME reconciliation the observation path applies (`readInputTokenClasses`), with the
+    // same precedence for a gateway that already knew its own split. The ledger reads
+    // `prompt_tokens` no longer: it is the whole prompt on the inclusive shapes and fresh-only
+    // on the exclusive ones, so metering off it BOTH over-priced an OpenAI-style cached call
+    // (cache reads at the fresh rate) and lost Anthropic's cache reads from the volume figure
+    // entirely.
+    const input = classes ?? readInputTokenClasses(usage)
+    const inputTokens = input.fresh + input.cacheRead + input.cacheWrite
     const outputTokens = usage.completion_tokens ?? 0
-    // Fold usage into the leased key's rotation counters (best-effort, off the meter).
+    // Fold usage into the leased key's rotation counters (best-effort, off the meter). This
+    // weight must count EVERY billed input bucket — a cached token still consumes the key's
+    // rolling window — so it takes the summed total, not the fresh share.
     if (leasedApiKeyId && apiKeys) {
       void runBestEffort(
         log,
@@ -817,6 +835,11 @@ async function handleChatCompletion(c: Context<AppEnv>): Promise<Response> {
       agentKind: session.agentKind,
       model: `${session.provider}:${session.model}`,
       usage: { inputTokens, outputTokens },
+      inputClasses: {
+        promptTokens: input.fresh,
+        cacheReadTokens: input.cacheRead,
+        cacheWriteTokens: input.cacheWrite,
+      },
     })
   }
 

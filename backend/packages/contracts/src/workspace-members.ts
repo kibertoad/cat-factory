@@ -18,7 +18,9 @@ import * as v from 'valibot'
  * would add no expressive power (`{viewer, admin}` ≡ `admin`). Fixed pre-1.0
  * (no custom roles); each maps onto a permission set via the kernel catalog.
  */
-export const workspaceRoleSchema = v.picklist(['admin', 'member', 'viewer'])
+export const WORKSPACE_ROLES = ['admin', 'member', 'viewer'] as const
+
+export const workspaceRoleSchema = v.picklist(WORKSPACE_ROLES)
 export type WorkspaceRole = v.InferOutput<typeof workspaceRoleSchema>
 
 /**

@@ -217,6 +217,7 @@ interface MothershipAppOptions {
   resolveRepoFilesForCoords?: CoreDependencies['resolveRepoFilesForCoords']
   prVerificationReportPublisher?: CoreDependencies['prVerificationReportPublisher']
   appBaseUrl?: string
+  apiBaseUrl?: string
   backendRegistries?: BackendRegistries
   initiativePresetRegistry?: CoreDependencies['initiativePresetRegistry']
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
@@ -312,12 +313,15 @@ function buildMothershipOverrides(
     // mothership composition root too, not only the Worker/Node/local-standalone ones.
     ...(opts?.judgeAssessor ? { judgeAssessor: opts.judgeAssessor } : {}),
     // The engine's PR verification-report publisher (+ the public app URL its observability
-    // deep link is built from), so the report hook is driven through the mothership
-    // composition root exactly as through the Worker/Node/local-standalone harnesses.
+    // deep link is built from, and the public BACKEND url its artifact links are built from),
+    // so the report hook is driven through the mothership composition root exactly as through
+    // the Worker/Node/local-standalone harnesses. The two urls are threaded separately because
+    // the report keeps them apart: one opens a panel a human browses, the other returns bytes.
     ...(opts?.prVerificationReportPublisher
       ? { prVerificationReportPublisher: opts.prVerificationReportPublisher }
       : {}),
     ...(opts?.appBaseUrl ? { appBaseUrl: opts.appBaseUrl } : {}),
+    ...(opts?.apiBaseUrl ? { apiBaseUrl: opts.apiBaseUrl } : {}),
   }
 }
 

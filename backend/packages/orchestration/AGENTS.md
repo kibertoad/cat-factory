@@ -63,6 +63,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   environment lifecycle** proof (environment up → evidence captured from it while live →
   teardown confirmed) because it is the one section composed from a source outside the
   in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.
+  `prReport.commands.ts` holds the two CAPTURED-OUTPUT sections (the platform's own pre-PR
+  validation run off `step.validation`, and the bugfix reproduction proof off `step.reproduction`),
+  which are the report's only sections carrying raw command logs rather than a verdict somebody
+  produced: they bound each log from the END (a failure is reported at the tail), record the cut in
+  the report's `truncations`, and fence it with `hostMarkdown.outputBlock`, whose fence is sized one
+  tick longer than the longest backtick run in the log so a linter quoting a fenced snippet cannot
+  spill the rest of the report — including the machine-readable JSON block — into the body as prose.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
   to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
   the TTL sweep reclaims an environment long after the run's last step settled. The step-selection

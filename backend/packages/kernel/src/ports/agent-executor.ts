@@ -215,7 +215,7 @@ export interface AgentRunContext {
    * The harness runs the command against the PRE-FIX tree and the FINAL tree in symmetric fresh
    * worktrees and reports both exit codes: only red-then-green is proof. Absent when the run is
    * not opted in or carries no declaration ⇒ the harness's existing path, unchanged. See
-   * `docs/initiatives/bugfix-reproduction-proof.md`.
+   * `backend/docs/adr/0033-bugfix-reproduction-proof.md`.
    */
   reproduction?: {
     command: string

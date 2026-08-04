@@ -175,9 +175,11 @@ test.describe('the tutorial catalogue', () => {
     await expect(page.getByTestId('tutorial-overlay')).toBeHidden()
 
     // Broken off past the first step, so the row now offers the position back — the whole
-    // reason a stray Esc is survivable.
+    // reason a stray Esc is survivable. The badge must read PAUSED specifically: a mere
+    // "a badge is present" assertion passes for `completed` too, and the difference between
+    // those two is exactly what decides whether the row offers Resume or Repeat.
     await page.getByTestId('nav-tutorial').click()
-    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toBeVisible({
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toHaveText(/paused/i, {
       timeout: LIVE_TIMEOUT,
     })
 
@@ -185,6 +187,98 @@ test.describe('the tutorial catalogue', () => {
     await page.getByTestId('tutorial-catalogue-reset').click()
     await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toBeHidden()
     await expect(page.getByTestId('tutorial-catalogue-reset')).toBeHidden()
+  })
+})
+
+// The two surfaces that BRING a walkthrough up rather than waiting to be opened. Both are only
+// assertable assembled: the handoff resolves the next candidate against the LIVE gates at the moment
+// a completion lands, and the contextual offer fires on a gate transition the unit tests can only
+// simulate with a fixture object.
+test.describe('tutorial offers that come to the user', () => {
+  test('hands off to the next walkthrough from the finish card', async ({ page, seededBoard }) => {
+    // Driven from the catalogue rather than the launch prompt so this reads as the RETURNING user
+    // it is about: the prompt is already answered on this fixture, which is exactly the state that
+    // makes the handoff the only thing left that can offer a tour.
+    void seededBoard
+    await page.getByTestId('nav-tutorial').click()
+    await expect(page.getByTestId('tutorial-catalogue')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await page.getByTestId('tutorial-catalogue-start-board-basics').click()
+
+    const tooltip = page.getByTestId('tutorial-tooltip')
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // Walk to the last step. Bounded, and it asserts it ARRIVED rather than trusting the count:
+    // an anchor-skip can move the cursor more than one step at a time, so a fixed number of clicks
+    // is not the same as reaching the end.
+    const handoff = page.getByTestId('tutorial-next-tour')
+    for (let i = 0; i < 12 && !(await handoff.isVisible()); i++) {
+      await tooltip.getByTestId('tutorial-next').click()
+    }
+    await expect(handoff).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // Taking the offer completes THIS tour and opens the next one in a single tick. Two things are
+    // asserted about the result, and the second is the one a unit test cannot reach: the overlay
+    // stayed mounted across the swap, so the finished tour's skipped steps must not be counted
+    // against the new one — an abridged notice here would be a false claim about a fresh tour.
+    await handoff.getByTestId('tutorial-next-tour-start').click()
+    await expect(tooltip).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('tutorial-next-tour')).toBeHidden()
+    await expect(page.getByTestId('tutorial-abridged')).toBeHidden()
+
+    // And the finished tour is recorded as COMPLETED, which is what makes the handoff a course
+    // rather than a loop: taking the offer had to write the completion before launching the next.
+    await tooltip.getByTestId('tutorial-skip').click()
+    await page.getByTestId('nav-tutorial').click()
+    await expect(page.getByTestId('tutorial-catalogue')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    await expect(page.getByTestId('tutorial-catalogue-status-board-basics')).toHaveText(
+      /completed/i,
+      { timeout: LIVE_TIMEOUT },
+    )
+  })
+
+  test('raises the contextual offer when a run parks, with no reload', async ({
+    page,
+    request,
+  }) => {
+    test.slow()
+    // NOT the `seededBoard` fixture: it pre-answers the launch prompt with "no thanks", and a
+    // decline is the one state in which this mechanism deliberately says nothing at all ("no
+    // thanks" answered the question about guided tours, not about when it was asked). So this
+    // spec seeds its own board as a user who ACCEPTED, which is the returning user the
+    // contextual offer exists for.
+    const snapshot = await createSeededWorkspace(request)
+    const workspaceId = snapshot.workspace.id
+    await pinWorkspace(page, workspaceId, { tutorial: 'accepted' })
+    await openBoard(page)
+    const pipeline = await createSimplePipeline(request, workspaceId)
+
+    // Nothing is waiting, so nothing has become newly takeable: the offer fires on a TRANSITION
+    // off a baseline seeded once the board is up, and this asserts that arriving on a board which
+    // already satisfies most of the catalog is not itself treated as a transition.
+    await expect(page.getByTestId('tutorial-nudge')).toBeHidden()
+
+    await startRun(request, workspaceId, 'task_login', pipeline.id)
+    await expect(page.getByTestId('decision-badge')).toBeVisible({ timeout: LIVE_TIMEOUT })
+
+    // LIVE: the park flipped `answer-park` from blocked to ready, and the offer names it — the whole
+    // point of the mechanism, since this is the tour whose window is transient and whose cost
+    // (a run parked indefinitely) is the one the tutorial exists to prevent. The TITLE is asserted,
+    // not just the card: an offer raised for whichever tour happened to be next would be the
+    // mechanism firing on a board load rather than on the moment.
+    const nudge = page.getByTestId('tutorial-nudge')
+    await expect(nudge).toBeVisible({ timeout: LIVE_TIMEOUT })
+    // Web-first on the TITLE, not just the card: an offer raised for whichever tour happened to be
+    // next would mean the mechanism fired on something other than the park. Given a timeout rather
+    // than asserted instantly because starting the run and parking it are two world changes, and
+    // the store keeps the NEWER offer, so the card can legitimately name the first one for a tick.
+    await expect(nudge).toContainText('Answer a waiting run', { timeout: LIVE_TIMEOUT })
+    await nudge.getByTestId('tutorial-nudge-start').click()
+    await expect(page.getByTestId('tutorial-tooltip')).toBeVisible({ timeout: LIVE_TIMEOUT })
+    // Suppressed while a tour runs: the card would compete with the coach mark for the same
+    // attention, and it is already spent, so it does not come back after the tour ends either.
+    await expect(nudge).toBeHidden()
+    await page.getByTestId('tutorial-tooltip').getByTestId('tutorial-skip').click()
+    await expect(page.getByTestId('tutorial-nudge')).toBeHidden()
   })
 })
 

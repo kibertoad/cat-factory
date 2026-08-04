@@ -81,11 +81,11 @@ const INLINE_TYPE_NAMES = {
   'agentKind,evictionRecoveries,finishedAt,firstEvictionDetail,hasStructuredResult,index,lastActivityAt,model,outputChars,progress,skipped,startedAt,state,subtasks':
     'DebugRunStep',
   'agentKind,code,count,message,severity,stepIndex': 'DebugRunSignal',
-  'agentKind,cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,errors,maxOutputTokens,outputHeadroomRatio,overheadMs,peakCompletionTokens,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
+  'agentKind,cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,costEstimate,errors,maxOutputTokens,outputHeadroomRatio,overheadMs,peakCompletionTokens,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
     'DebugLlmAgentKindRollup',
-  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,carryCostShare,carryCostTokens,completionTokens,errors,overheadMs,phase,promptTokens,truncatedCalls,upstreamMs,warnings':
+  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,carryCostShare,carryCostTokens,completionTokens,costEstimate,errors,overheadMs,phase,promptTokens,truncatedCalls,upstreamMs,warnings':
     'DebugLlmPhaseRollup',
-  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,errors,overheadMs,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
+  'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,costEstimate,errors,overheadMs,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
     'DebugLlmTotals',
 }
 

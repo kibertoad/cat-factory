@@ -7,6 +7,7 @@ import {
   workspaceSchema,
 } from './entities.js'
 import { executionInstanceSchema } from './execution.js'
+import { tutorialProgressSchema } from './tutorial.js'
 import { userSettingsSchema } from './user-settings.js'
 import { bootstrapJobSchema } from './bootstrap.js'
 import { envConfigRepairJobSchema } from './env-config-repair.js'
@@ -112,6 +113,14 @@ export const workspaceSnapshotSchema = v.object({
    * so the budget screen can render the current value without a separate fetch.
    */
   userSettings: v.optional(userSettingsSchema),
+  /**
+   * The signed-in caller's in-app tutorial progress. Carried here rather than fetched, for the
+   * same reason `userSettings` is: it is read on EVERY board load (the launch prompt and the
+   * contextual offer both need it before the first render), and a separate request would let the
+   * prompt decide whether to appear against a copy it has not reconciled yet. Absent ⇒ no store is
+   * wired on this facade, and the SPA keeps using its browser-persisted copy alone.
+   */
+  tutorialProgress: v.optional(tutorialProgressSchema),
   /**
    * Operator hard ceilings on the account/user budget tiers (from the deployment env
    * vars). Attached so the budget configuration screens can show the hard limit and

@@ -91,6 +91,17 @@ export interface PrVerificationReportControllerDeps {
    */
   appBaseUrl?: string
   /**
+   * Optional: this deployment's own externally-reachable BACKEND base URL (`PUBLIC_URL` on Node,
+   * `WORKER_PUBLIC_URL` on the Worker), used to build direct links to the bytes of the artifacts
+   * the report lists. Absent ⇒ the rows carry their artifact ids and no link.
+   *
+   * Deliberately separate from {@link appBaseUrl}: the two are the same origin on a same-origin
+   * deployment and different ones the moment the SPA is served from its own host, and a link built
+   * from the wrong one is worse than no link. They also answer different questions — the app URL
+   * opens a panel a human browses, this one returns bytes to anything holding a credential.
+   */
+  apiBaseUrl?: string
+  /**
    * Optional structured logger for the best-effort failure path. Wire it: publishing is the
    * one part of the run that is DESIGNED to fail silently, so without a log a revoked token or
    * a rejected body leaves no trace anywhere — the report simply stops appearing.
@@ -158,6 +169,7 @@ export class PrVerificationReportController {
           environments: {
             provisioning: await this.provisioningEvents(workspaceId, instance),
             evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
+            artifactUrl: (artifactId) => this.artifactUrl(workspaceId, artifactId),
           },
           now: this.deps.clock.now(),
         }),
@@ -341,6 +353,23 @@ export class PrVerificationReportController {
    * are values that narrow parser knows: adding a third means teaching it the view first, or
    * the link silently degrades to "the right board, no panel".
    */
+  /**
+   * The direct link to ONE stored artifact's bytes, on this deployment's authenticated blob
+   * endpoint (`GET /workspaces/:ws/artifacts/:id/blob`), or null when no public backend URL is
+   * configured.
+   *
+   * This is what turns a captured screenshot from an opaque id into something a reviewer can open
+   * and a downstream tool can fetch. The endpoint is authenticated, which is the point: the bytes
+   * are workspace-scoped, and a report on a public repository must never carry an unguessable-URL
+   * bypass of that. A reader without access gets a 401 rather than the image — the honest outcome,
+   * and the same one the app deep link beside it produces.
+   */
+  private artifactUrl(workspaceId: string, artifactId: string): string | null {
+    const base = this.deps.apiBaseUrl?.trim()
+    if (!base) return null
+    return `${base.replace(/\/$/, '')}/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/blob`
+  }
+
   private deepLink(
     workspaceId: string,
     instance: ExecutionInstance,

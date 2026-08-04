@@ -134,6 +134,9 @@ function buildPrReportController(
     // than reporting an environment nobody reclaimed as one nobody recorded.
     provisioningLogRepository: deps.provisioningLogRepository,
     appBaseUrl: deps.appBaseUrl,
+    // The BACKEND's own public URL, for direct links to captured artifacts' bytes. Distinct from
+    // the SPA origin above, which the two links deliberately do not share.
+    apiBaseUrl: deps.apiBaseUrl,
     logger: deps.logger,
   })
 }
@@ -482,6 +485,11 @@ export class ExecutionService {
       stepGraph: this.stepGraph,
       workRunner: this.workRunner,
       subscriptionActivations: subscriptionActivationRepository,
+      logger: this.log,
+      // The one merge-policy fact the start path needs, as a bound callback: the lifecycle
+      // controller launches runs and has no other business with the preset layer.
+      resolveDryRunRoles: async (ws, block) =>
+        (await this.mergePolicy.resolve(ws, block)).dryRunRoles,
       requireWorkspace: (ws) => this.requireWorkspace(ws),
       requireBlock: (ws, id) => this.requireBlock(ws, id),
       failRun: (ws, id, message, kind, detail, reason) =>
