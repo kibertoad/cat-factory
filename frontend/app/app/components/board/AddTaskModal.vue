@@ -521,7 +521,10 @@ watch(open, (isOpen) => {
   docOutlineHints.value = ''
   reviewPrRef.value = ''
   reviewFocus.value = ''
-  customFieldValues.value = defaultDescriptorValues(selectedCustomType.value?.fields ?? [])
+  // Empty rather than default-seeded: `taskType` was just reset to a BUILT-IN above, which
+  // declares no descriptor fields. Picking a custom type from here runs the `taskType` watcher,
+  // and that is the one place the new type's declared defaults are seeded.
+  customFieldValues.value = {}
   // Pre-seed the best-practice fragments from the enclosing service's standards, so a new task
   // ships with its service's fragments already selected (and freely add/removable here). The task
   // OWNS this selection from creation — the engine folds exactly these, without re-unioning the
@@ -679,7 +682,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
     }
     toast.add({
       title: t('board.addTask.addFailedTitle'),
-      description: reviewTargetMessage(e) ?? (e instanceof Error ? e.message : String(e)),
+      description: createRefusalMessage(e) ?? (e instanceof Error ? e.message : String(e)),
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
@@ -709,10 +712,22 @@ const REVIEW_TARGET_MESSAGES: Record<
       : null,
 }
 
-function reviewTargetMessage(error: unknown): string | null {
+/**
+ * Translated copy for a machine-readable creation refusal, or null to fall back to the server's
+ * own English prose. Two reasons are recognised: a review task's unresolvable target PR, and a
+ * custom type's collected values contradicting its descriptor.
+ *
+ * The second one is reachable here even though `canAdd` mirrors the same check client-side, and
+ * that is the whole point of the server-side check: the descriptor can be re-registered while this
+ * dialog sits open, so the form the user filled is not the form the server now validates against.
+ * The individual problems stay out of the copy: they are backend English naming field keys, so
+ * what the user is told is the ONE thing they can act on (reopen the dialog).
+ */
+function createRefusalMessage(error: unknown): string | null {
   const details = (apiErrorEnvelope(error)?.details ?? {}) as Record<string, unknown>
   const reason = details.reason
   if (typeof reason !== 'string') return null
+  if (reason === 'task_type_fields_invalid') return t('board.addTask.customFieldsInvalid')
   return REVIEW_TARGET_MESSAGES[reason as ReviewTargetReason]?.(details) ?? null
 }
 

@@ -76,14 +76,14 @@ function isBlank(value: DescriptorFieldValue): boolean {
  * agent's prompt exactly as it reads in the form that collected it.
  *
  * Trimmed after, because a `textarea` value routinely arrives with a trailing newline and the
- * section renders one value per line. An undeclared bag key has no descriptor to consult, so it
- * renders under a fieldless one: raw value, no caption lookup.
+ * section renders one value per line. An undeclared bag key has no descriptor to consult, which
+ * the shared renderer takes as such: raw value, no caption lookup.
  */
 function renderValue(
   value: DescriptorFieldValue,
   descriptor: TaskTypeFieldDescriptor | undefined,
 ): string {
-  return renderDescriptorFieldValue(descriptor ?? { key: '', label: '' }, value).trim()
+  return renderDescriptorFieldValue(descriptor, value).trim()
 }
 
 /**

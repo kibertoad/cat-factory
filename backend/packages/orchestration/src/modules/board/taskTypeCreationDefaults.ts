@@ -68,6 +68,11 @@ export interface TaskTypeCreationDefaults {
    * internal API and (from the public-API slice) a headless caller: the create form's `required`
    * markers and option lists mean nothing if only the form enforces them.
    *
+   * An ABSENT bag is checked too, against an empty one. A required field is unanswered whether the
+   * caller sent `custom: {}` or sent no `custom` key at all, and the two spellings must refuse
+   * alike or the whole check is opt-in: a headless caller would satisfy an operation's declared
+   * form by omitting it, which is the door this exists to close.
+   *
    * Three cases pass straight through, each deliberately:
    * - a BUILT-IN type, whose fields are the schema-typed top-level keys, already validated there;
    * - a type this process does not REGISTER, because an unregistered namespaced type is a supported
@@ -122,11 +127,11 @@ function checkCustomFields(
   fields: TaskTypeFields | undefined,
   registry: TaskTypeRegistry | undefined,
 ): TaskTypeFields | undefined {
-  const custom = fields?.custom
-  if (!fields || !custom) return fields
   const descriptor = registry?.get(taskType)
   if (!descriptor || descriptor.formPanel) return fields
   const declared = descriptor.fields ?? []
+  // An absent bag is an EMPTY one, not an exemption: a required field is unanswered either way.
+  const custom = fields?.custom ?? {}
   const problems = validateDescriptorFields(declared, custom)
   if (problems.length > 0) {
     throw new ValidationError(
@@ -136,7 +141,7 @@ function checkCustomFields(
   }
   const sanitized = sanitizeDescriptorFields(declared, custom)
   if (Object.keys(sanitized).length > 0) return { ...fields, custom: sanitized }
-  const { custom: _dropped, ...rest } = fields
+  const { custom: _dropped, ...rest } = fields ?? {}
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 

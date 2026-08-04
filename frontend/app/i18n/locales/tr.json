@@ -299,6 +299,7 @@
       "continue": "Devam",
       "submit": "Görev ekle",
       "addFailedTitle": "Görev eklenemedi",
+      "customFieldsInvalid": "Bu görev türünün formu siz açtıktan sonra değişti, bu nedenle yanıtlar artık istenenle uyuşmuyor. İletişim kutusunu kapatıp yeniden açarak güncel alanları doldurun.",
       "linkFailed": "Görev eklendi, ancak {count} ek bağlanamadı | Görev eklendi, ancak {count} ek bağlanamadı",
       "review": {
         "prUrl": "Pull request",

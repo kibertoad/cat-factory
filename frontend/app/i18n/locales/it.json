@@ -2671,6 +2671,7 @@
       "continue": "Continua",
       "submit": "Aggiungi attività",
       "addFailedTitle": "Impossibile aggiungere l'attività",
+      "customFieldsInvalid": "Il modulo di questo tipo di attività è cambiato da quando lo hai aperto, quindi le risposte non corrispondono più a quanto richiesto. Chiudi e riapri la finestra per compilare i campi attuali.",
       "linkFailed": "Attività aggiunta, ma {count} allegato non è stato collegato | Attività aggiunta, ma {count} allegati non sono stati collegati",
       "review": {
         "prUrl": "Pull request",

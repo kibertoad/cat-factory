@@ -299,6 +299,7 @@
       "continue": "Continuar",
       "submit": "Añadir tarea",
       "addFailedTitle": "No se pudo añadir la tarea",
+      "customFieldsInvalid": "El formulario de este tipo de tarea ha cambiado desde que lo abriste, por lo que las respuestas ya no coinciden con lo que pide. Cierra y vuelve a abrir el diálogo para rellenar los campos actuales.",
       "linkFailed": "Tarea añadida, pero no se pudo vincular {count} adjunto | Tarea añadida, pero no se pudieron vincular {count} adjuntos",
       "review": {
         "prUrl": "Pull request",

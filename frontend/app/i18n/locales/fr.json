@@ -299,6 +299,7 @@
       "continue": "Continuer",
       "submit": "Ajouter la tâche",
       "addFailedTitle": "Impossible d’ajouter la tâche",
+      "customFieldsInvalid": "Le formulaire de ce type de tâche a changé depuis son ouverture : les réponses ne correspondent donc plus à ce qui est demandé. Fermez puis réouvrez la boîte de dialogue pour remplir les champs actuels.",
       "linkFailed": "Tâche ajoutée, mais {count} pièce jointe n’a pas pu être liée | Tâche ajoutée, mais {count} pièces jointes n’ont pas pu être liées",
       "review": {
         "prUrl": "Pull request",

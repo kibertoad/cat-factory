@@ -299,6 +299,7 @@
       "continue": "Dalej",
       "submit": "Dodaj zadanie",
       "addFailedTitle": "Nie udało się dodać zadania",
+      "customFieldsInvalid": "Formularz tego typu zadania zmienił się od chwili otwarcia, więc odpowiedzi nie odpowiadają już temu, o co pyta. Zamknij i otwórz okno ponownie, aby wypełnić aktualne pola.",
       "linkFailed": "Zadanie dodane, ale nie udało się powiązać {count} załącznika | Zadanie dodane, ale nie udało się powiązać {count} załączników | Zadanie dodane, ale nie udało się powiązać {count} załączników",
       "review": {
         "prUrl": "Pull request",

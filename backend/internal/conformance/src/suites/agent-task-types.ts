@@ -190,6 +190,14 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
         taskTypeFields: { custom: {} },
       })
       expect(missing.status).toBe(422)
+      // And OMITTING the bag is the same refusal, not an exemption: a required field is unanswered
+      // either way, and a check the caller opts out of by sending nothing is not a check. This is
+      // the spelling a headless caller reaches for first, so it is pinned beside the empty one.
+      const omitted = await app.call('POST', path, {
+        title: 'Expose orders',
+        taskType: 'conf:introduce-api',
+      })
+      expect(omitted.status).toBe(422)
       const badOption = await app.call('POST', path, {
         title: 'Expose orders',
         taskType: 'conf:introduce-api',

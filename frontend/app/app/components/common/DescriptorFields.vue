@@ -17,6 +17,12 @@
 import { computed } from 'vue'
 import { isDescriptorFieldVisible, isSafeRepoDirPath } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
+import {
+  descriptorGroupValue,
+  setDescriptorCheckbox,
+  setDescriptorValue,
+  toggleDescriptorGroupValue,
+} from '~/utils/descriptorFields'
 
 const props = withDefaults(
   defineProps<{
@@ -40,41 +46,23 @@ const visibleFields = computed(() =>
   props.fields.filter((f) => isDescriptorFieldVisible(f, model.value)),
 )
 
-/**
- * An "empty" value that must stay ABSENT from the model rather than freeze on the entity: an
- * unchecked (`false`) checkbox, a blank string, or an empty multi-select. A numeric `0` is a real
- * value and is kept (strict `=== false`/`=== ''` never match it).
- */
-function isEmptyValue(value: DescriptorFieldValue): boolean {
-  return value === false || value === '' || (Array.isArray(value) && value.length === 0)
-}
-
-/**
- * Immutably set one field's value on the model, DROPPING empty values so a cleared field never
- * freezes an empty `''`/`[]`/`false` (mirrors `ProviderConnectionTab`'s delete-when-blank and what
- * the shared `validate`/`sanitize` treat as unset: an unchecked box / blank field stays absent).
- */
+// The value-mutation rules live in `utils/descriptorFields.ts` as pure functions over the bag (what
+// an edit does to it, including the drop-when-empty rule that keeps an unset answer from freezing),
+// so they are unit-tested without mounting this component. Here they are only bound to the model.
 function set(key: string, value: DescriptorFieldValue | undefined): void {
-  const next = { ...model.value }
-  if (value === undefined || isEmptyValue(value)) delete next[key]
-  else next[key] = value
-  model.value = next
+  model.value = setDescriptorValue(model.value, key, value)
 }
 
-/**
- * Set a checkbox value. A checkbox whose descriptor default is ON (`default: 'true'`) must be able
- * to persist an explicit `false`: {@link set} otherwise drops a `false` (an off box "stays unset"),
- * which for a default-ON field is indistinguishable from "untouched, still on", so a consumer that
- * reads the opt-out as `humanReview !== false` (e.g. `seedMigrationPlan`) could never observe the
- * unchecked state and the toggle would be dead. A default-OFF checkbox keeps the drop-when-false
- * behaviour (absent === unchecked), so it never freezes a redundant `false`.
- */
 function setCheckbox(field: DescriptorField, checked: boolean): void {
-  if (!checked && field.default === 'true') {
-    model.value = { ...model.value, [field.key]: false }
-    return
-  }
-  set(field.key, checked)
+  model.value = setDescriptorCheckbox(model.value, field, checked)
+}
+
+function toggleGroup(key: string, option: string, checked: boolean): void {
+  model.value = toggleDescriptorGroupValue(model.value, key, option, checked)
+}
+
+function groupValue(key: string): string[] {
+  return descriptorGroupValue(model.value, key)
 }
 
 function stringValue(key: string): string {
@@ -87,15 +75,6 @@ function boolValue(key: string): boolean {
 function numberStr(key: string): string {
   const v = model.value[key]
   return typeof v === 'number' ? String(v) : ''
-}
-function groupValue(key: string): string[] {
-  const v = model.value[key]
-  return Array.isArray(v) ? v : []
-}
-
-function toggleGroup(key: string, option: string, checked: boolean): void {
-  const current = groupValue(key)
-  set(key, checked ? [...new Set([...current, option])] : current.filter((o) => o !== option))
 }
 
 /** A `path` field is flagged only when non-empty AND unsafe (empty is handled by `required`). */

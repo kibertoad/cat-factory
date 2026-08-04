@@ -505,7 +505,10 @@ final so neither ships a shape that changes a slice later.
   **Kernel re-exports the four helpers**, keeping the "an org package imports its whole vocabulary
   from kernel, with no contracts dependency" rule slice 1 established.
 - **A declared `maxLength` is now enforced SERVER-side** for both surfaces, not just by the input's
-  own attribute. It was a form-only bound before, and a form is not the only door.
+  own attribute. It was a form-only bound before, and a form is not the only door. It is also CAPPED
+  at `DESCRIPTOR_FIELD_VALUE_MAX`, the bound the filled bag itself carries: a descriptor allowed to
+  declare more would render an input accepting what the request schema then refuses, and that
+  refusal arrives as a raw schema error rather than the readable per-field message.
 - **`InitiativePresetFields.vue` is GONE**, not left beside the new one:
   `components/common/DescriptorFields.vue` is the single renderer, taking `:fields` plus a
   `testid-prefix` so each surface keeps its own selectors. The task form's `select` therefore
@@ -517,6 +520,21 @@ final so neither ships a shape that changes a slice later.
   omitting a field that is `required` AND has a `default` is refused today where the SPA is not.
   Either the check applies defaults first (one rule at every door) or the public contract demands
   explicit values; do not let the two doors diverge by accident.
+- **The rest of `utils/descriptorFields.ts` is the EDIT rules** (`setDescriptorValue`,
+  `setDescriptorCheckbox`, `toggleDescriptorGroupValue`), pure functions over the value bag rather
+  than methods inside the SFC, because what an edit freezes is exactly what a unit test should be
+  able to reach without mounting a component. They enforce the same drop-when-unset judgement the
+  shared `sanitize` makes, plus the one thing only a form sees: a half-typed `number` input reads as
+  `NaN`, which serialises to `null` and is refused by the value schema.
+- **An ABSENT bag is checked against an EMPTY one.** A required field is unanswered whether the
+  caller sent `custom: {}` or no `custom` key at all, and a check the caller opts out of by sending
+  nothing is not a check. This is a behaviour change for any non-SPA path creating a task of an
+  operation with required fields (an initiative item's `spawn`, a script): it is a 422 now.
+- **Sanitization DROPS an unfilled value rather than freezing it**, because validation short-circuits
+  on one and therefore type-checks it never: a `false` on a text field reached the row and the prompt
+  fold rendered it to every agent as `Notes: No`. The single exception is an explicit `false` on a
+  `checkbox`, the opt-OUT of a default-ON toggle, which a consumer reads as `inputs[key] !== false`
+  (`seedMigrationPlan`) and which absence cannot express.
 - **Creation validation lives in the slice-1 collaborator** (`board/taskTypeCreationDefaults.ts`
   `validatedFields`), because it is the same registry lookup as the fragment union and the pipeline
   pin, read a third time. `BoardService` gained two lines, which is all its budget had left.
@@ -530,12 +548,14 @@ final so neither ships a shape that changes a slice later.
   size budget. Slices 4 and 7 add their assertions THERE.
 - **The example's `operations` field is now a `checkbox-group`** (`string[]`, as slice 1 flagged),
   and a `showWhen`-gated `actionName` field exercises conditional visibility end to end.
-- **Boot validation gained the FORM checks the richer vocabulary needs** (`checkTaskTypeForm`):
+- **Boot validation gained the FORM checks the richer vocabulary needs** (`descriptorFormProblems`):
   a duplicate field key, an optionless `select`/`checkbox-group`, and a `showWhen` gating a field on
   an undeclared key are ERRORS, not warnings, because each is fully known from the registration and
   invisible at run time (the last one hides its own field forever). Keep this bar for any attribute a
   later slice adds: warn only where boot genuinely cannot see the answer, as with a tenant-tier
-  fragment id.
+  fragment id. It takes a plain FIELD LIST and both surfaces go through it under their own code
+  prefixes (`task_type_field_*` / `initiative_preset_field_*`), so an initiative preset's create form
+  is boot-validated too; all three facades pass `initiativePresetRegistry`.
 - **One i18n key moved**: the path-invalid message is `common.pathInvalid` now that two surfaces
   render it, carrying each locale's existing translation verbatim.
 

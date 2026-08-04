@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
+  DESCRIPTOR_FIELD_VALUE_MAX,
   descriptorFieldValuesSchema,
   isDescriptorFieldVisible,
   renderDescriptorFieldValue,
@@ -109,6 +110,28 @@ describe('validateDescriptorFields: the shared maxLength bound', () => {
     const fields = [field({ key: 'ops', type: 'checkbox-group', maxLength: 2 })]
     expect(validateDescriptorFields(fields, { ops: ['a', 'b', 'c'] })).toEqual([])
   })
+
+  it('REFUSES a declared maxLength above the value bound, which could never be filled', () => {
+    // A descriptor allowed to declare more than the bag itself carries would render an input that
+    // accepts what the request schema then refuses, and that refusal arrives as a raw schema error
+    // rather than the readable per-field message above.
+    expect(() =>
+      v.parse(taskTypeFieldDescriptorSchema, {
+        key: 'notes',
+        label: 'Notes',
+        type: 'textarea',
+        maxLength: DESCRIPTOR_FIELD_VALUE_MAX,
+      }),
+    ).not.toThrow()
+    expect(() =>
+      v.parse(taskTypeFieldDescriptorSchema, {
+        key: 'notes',
+        label: 'Notes',
+        type: 'textarea',
+        maxLength: DESCRIPTOR_FIELD_VALUE_MAX + 1,
+      }),
+    ).toThrow()
+  })
 })
 
 describe('the rules read the same on a task type as on a preset', () => {
@@ -121,6 +144,38 @@ describe('the rules read the same on a task type as on a preset', () => {
     expect(isDescriptorFieldVisible(fields[1]!, { style: 'action' })).toBe(true)
     expect(isDescriptorFieldVisible(fields[1]!, {})).toBe(false)
     expect(sanitizeDescriptorFields(fields, { verb: 'refund' })).toEqual({})
+  })
+
+  it('drops a value validation never type-checked, so it cannot be frozen', () => {
+    // `validateDescriptorFields` short-circuits on a value that says nothing, which means a `false`
+    // on a text field passes NO type check. Freezing it would put a wrong-typed answer on the
+    // entity that the prompt fold then renders to every agent (`notes: false` reads as `No`), and
+    // would claim a bag was collected when nothing was. The API is the door this comes through:
+    // the form renderer drops these at the edit.
+    const text = [field({ key: 'notes', type: 'textarea' })]
+    expect(validateDescriptorFields(text, { notes: false })).toEqual([])
+    expect(sanitizeDescriptorFields(text, { notes: false })).toEqual({})
+    expect(sanitizeDescriptorFields(text, { notes: '   ' })).toEqual({})
+    const ops = [field({ key: 'ops', type: 'checkbox-group' })]
+    expect(sanitizeDescriptorFields(ops, { ops: [] })).toEqual({})
+  })
+
+  it('KEEPS an explicit false on a checkbox, the one unfilled value that is an answer', () => {
+    // The opt-OUT of a default-ON toggle. Absent and `false` are the same value there and opposite
+    // facts, so a consumer reading `inputs[key] !== false` needs the `false` to survive.
+    const gate = [field({ key: 'humanReview', type: 'checkbox', default: 'true' })]
+    expect(sanitizeDescriptorFields(gate, { humanReview: false })).toEqual({ humanReview: false })
+    // A numeric 0 is a real answer too (the strict emptiness comparisons never match it).
+    expect(
+      sanitizeDescriptorFields([field({ key: 'depth', type: 'number' })], { depth: 0 }),
+    ).toEqual({ depth: 0 })
+  })
+
+  it('renders a value with no descriptor at all, rather than needing a fake one', () => {
+    // A bag key outlives the descriptor that declared it (a node whose build predates a
+    // re-registration still renders the row it stored), so the renderer takes an absent field.
+    expect(renderDescriptorFieldValue(undefined, ['create', 'list'])).toBe('create, list')
+    expect(renderDescriptorFieldValue(undefined, true)).toBe('Yes')
   })
 
   it('renders a multi-select through its option captions', () => {

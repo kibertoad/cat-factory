@@ -14,7 +14,9 @@ import {
   validateRegistrations,
 } from './validation/validateRegistrations.js'
 import type { AgentRunContext, CustomTaskType, GateRegistry } from '@cat-factory/kernel'
+import type { InitiativePresetDescriptor, InitiativePresetField } from '@cat-factory/contracts'
 import {
+  InitiativePresetRegistry,
   defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
@@ -1118,5 +1120,73 @@ describe('custom task types (reusable operations)', () => {
     })
     expect(problems[0]?.severity).toBe('error')
     expect(problems[0]?.code).toBe('task_type_unknown_pipeline')
+  })
+})
+
+describe('initiative presets: the OTHER descriptor-driven form', () => {
+  // Both surfaces declare their form over one vocabulary (`contracts/src/form-fields.ts`), so both
+  // break the same three ways and both are held to the same bar by the SAME checker. Without this,
+  // the fillability check would cover whichever surface happened to get it first.
+  const descriptorFor = (fields: InitiativePresetField[]): InitiativePresetDescriptor => ({
+    id: 'preset_org_audit',
+    presentation: {
+      label: 'Org audit',
+      icon: 'i-lucide-search-check',
+      color: '#6366f1',
+      description: 'Audit the estate against the org standards.',
+    },
+    fields,
+    planningPipelineId: 'pl_initiative',
+    interview: 'skip',
+    humanReviewDefault: true,
+    defaultFragmentIds: [],
+  })
+
+  const problemsFor = (fields: InitiativePresetField[]) => {
+    const initiativePresetRegistry = new InitiativePresetRegistry()
+    initiativePresetRegistry.register({ descriptor: descriptorFor(fields) })
+    return collectRegistrationProblems({
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      initiativePresetRegistry,
+    }).filter((problem) => problem.code.startsWith('initiative_preset_'))
+  }
+
+  it('ERRORS on a preset create form that structurally cannot be filled', () => {
+    const optionless = problemsFor([{ key: 'style', label: 'Style', type: 'select' }])
+    expect(optionless[0]?.severity).toBe('error')
+    expect(optionless[0]?.code).toBe('initiative_preset_field_no_options')
+    expect(optionless[0]?.message).toContain('preset_org_audit')
+
+    expect(
+      problemsFor([
+        { key: 'verb', label: 'Verb', type: 'text', showWhen: { key: 'nope', equals: 'a' } },
+      ])[0]?.code,
+    ).toBe('initiative_preset_field_unknown_condition')
+
+    expect(
+      problemsFor([
+        { key: 'root', label: 'Root', type: 'path' },
+        { key: 'root', label: 'Root again', type: 'text' },
+      ])[0]?.code,
+    ).toBe('initiative_preset_field_duplicate')
+  })
+
+  it('is silent on a well-formed form, and on the built-in presets that ride along', () => {
+    // `all()` includes the baked-in generic preset, so an empty registry still gets checked: the
+    // shipped descriptors are registrations like any other and are not exempted.
+    expect(
+      problemsFor([
+        { key: 'style', label: 'Style', type: 'select', options: [{ value: 'a', label: 'A' }] },
+        { key: 'verb', label: 'Verb', type: 'text', showWhen: { key: 'style', equals: 'a' } },
+      ]),
+    ).toEqual([])
+    expect(
+      collectRegistrationProblems({
+        agentKindRegistry: defaultAgentKindRegistry(),
+        gateRegistry: defaultGateRegistry(),
+        initiativePresetRegistry: new InitiativePresetRegistry(),
+      }).filter((problem) => problem.code.startsWith('initiative_preset_')),
+    ).toEqual([])
   })
 })

@@ -126,8 +126,17 @@ export const descriptorFieldEntries = {
   ),
   /** Single-condition visibility; absent means always shown. */
   showWhen: v.optional(descriptorFieldShowWhenSchema),
-  /** Max length for a string value (characters), enforced by the input AND the validator. */
-  maxLength: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(10000))),
+  /**
+   * Max length for a string value (characters), enforced by the input AND the validator.
+   *
+   * Capped at {@link DESCRIPTOR_FIELD_VALUE_MAX}, the bound the filled bag itself carries: a
+   * descriptor allowed to declare more would render an input that accepts what the wire schema
+   * then refuses, and that refusal arrives as a raw schema error from the request parse rather
+   * than the readable per-field message {@link validateDescriptorFields} produces.
+   */
+  maxLength: v.optional(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(DESCRIPTOR_FIELD_VALUE_MAX)),
+  ),
 } as const
 
 /**
@@ -210,6 +219,21 @@ function isFilled(value: DescriptorFieldValue | undefined): value is DescriptorF
 }
 
 /**
+ * Whether a value {@link isFilled} rejects is nonetheless an ANSWER worth freezing. Exactly one
+ * is: an explicit `false` on a `checkbox`, which is the opt-OUT of a default-ON toggle. Absent and
+ * `false` are the same value there and opposite facts, so dropping it would leave a consumer
+ * reading `inputs[key] !== false` (the tech-migration preset's `humanReview`) unable to ever
+ * observe the unchecked state, and the toggle would be dead.
+ *
+ * A `false` on any OTHER field type is not an answer at all: it is a wrong-typed value that
+ * {@link validateDescriptorFields} never type-checked, because the fill check short-circuits
+ * first. Same for a blank string or an empty multi-select, which say nothing anywhere.
+ */
+function isExplicitOptOut(field: DescriptorField, value: DescriptorFieldValue): boolean {
+  return field.type === 'checkbox' && value === false
+}
+
+/**
  * Validate filled values against a field list, returning a list of human-readable problems (EMPTY
  * means valid). Pure + total (never throws), so a controller maps a non-empty result to a single
  * `ValidationError` and the SPA disables its submit button off the same call. Enforces: no unknown
@@ -278,11 +302,19 @@ function semanticProblems(field: DescriptorField, value: DescriptorFieldValue): 
 }
 
 /**
- * Reduce filled values to the ones SAFE to freeze: only fields the list declares AND that are
- * currently VISIBLE (their `showWhen` holds). Unknown keys and hidden fields, whose stale values
- * {@link validateDescriptorFields} deliberately skips, are dropped, so a hidden field can never
- * freeze an unvalidated value (e.g. a `path` that escapes the repo). Pure + total; run AFTER
- * validation, on values already known valid.
+ * Reduce filled values to the ones SAFE to freeze: only fields the list declares, that are
+ * currently VISIBLE (their `showWhen` holds), and that {@link validateDescriptorFields} actually
+ * inspected. Unknown keys and hidden fields, whose stale values validation deliberately skips, are
+ * dropped, so a hidden field can never freeze an unvalidated value (e.g. a `path` that escapes the
+ * repo). Pure + total; run AFTER validation, on values already known valid.
+ *
+ * The UNFILLED values go too, and that is the same rule rather than a second one: validation
+ * short-circuits on a value that says nothing, so a `false` on a `text` field, a blank string or
+ * an empty multi-select reaches here having passed NO type check. Keeping them would freeze a
+ * wrong-typed answer the prompt fold then renders to every agent as the operation's own brief
+ * (`notes: false` reads as `Notes: No`), and would put a `custom` bag on a row that collected
+ * nothing, when its presence is what tells the dispatch projection parameters WERE collected. The
+ * one exception is {@link isExplicitOptOut}.
  */
 export function sanitizeDescriptorFields(
   fields: readonly DescriptorField[],
@@ -292,7 +324,9 @@ export function sanitizeDescriptorFields(
   for (const field of fields) {
     if (!isDescriptorFieldVisible(field, values)) continue
     const value = values[field.key]
-    if (value !== undefined) sanitized[field.key] = value
+    if (value === undefined) continue
+    if (!isFilled(value) && !isExplicitOptOut(field, value)) continue
+    sanitized[field.key] = value
   }
   return sanitized
 }
@@ -302,13 +336,18 @@ export function sanitizeDescriptorFields(
  * `checkbox-group` joined, boolean as `Yes`/`No`). Shared by the initiative create flow's
  * skip-interview qa seeding, the operation prompt fold, and the SPA form review, so a field reads
  * identically everywhere. Deployment-supplied English. Pure + total.
+ *
+ * `field` is OPTIONAL because a bag key can outlive the descriptor that declared it (a node whose
+ * build predates a re-registration still has to render the row it stored). With no field there is
+ * no option list to consult, so the raw value is the answer; the caller does not have to invent a
+ * fieldless descriptor to say so.
  */
 export function renderDescriptorFieldValue(
-  field: DescriptorField,
+  field: DescriptorField | undefined,
   value: DescriptorFieldValue,
 ): string {
   const labelOf = (raw: string): string =>
-    (field.options ?? []).find((o) => o.value === raw)?.label ?? raw
+    (field?.options ?? []).find((o) => o.value === raw)?.label ?? raw
   if (Array.isArray(value)) return value.map(labelOf).join(', ')
   if (typeof value === 'boolean') return value ? 'Yes' : 'No'
   if (typeof value === 'number') return String(value)

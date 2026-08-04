@@ -2671,6 +2671,7 @@
       "continue": "Weiter",
       "submit": "Aufgabe hinzufügen",
       "addFailedTitle": "Aufgabe konnte nicht hinzugefügt werden",
+      "customFieldsInvalid": "Das Formular dieses Aufgabentyps hat sich seit dem Öffnen geändert, daher passen die Antworten nicht mehr zu den Angaben, die es verlangt. Schließen Sie den Dialog und öffnen Sie ihn erneut, um die aktuellen Felder auszufüllen.",
       "linkFailed": "Aufgabe hinzugefügt, aber {count} Anhang konnte nicht verknüpft werden | Aufgabe hinzugefügt, aber {count} Anhänge konnten nicht verknüpft werden",
       "review": {
         "prUrl": "Pull Request",

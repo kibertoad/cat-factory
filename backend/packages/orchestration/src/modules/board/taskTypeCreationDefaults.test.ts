@@ -117,6 +117,22 @@ describe('taskTypeCreationDefaults', () => {
       ).toEqual({ custom: { entity: 'Order' } })
     })
 
+    it('refuses an ABSENT bag exactly as it refuses an empty one', () => {
+      // The two spellings of "nothing was collected" must refuse alike, or the check is opt-in: a
+      // headless caller would satisfy an operation's declared form by omitting `taskTypeFields`
+      // altogether, which is the door it exists to close. The SPA never gets here (its submit
+      // button mirrors the same rule), so this case is reachable only from the API.
+      const { defaults } = build(FORM)
+      const required = /Field "entity" is required/
+      expect(() => defaults.validatedFields('org:introduce-api', undefined)).toThrow(required)
+      expect(() => defaults.validatedFields('org:introduce-api', {})).toThrow(required)
+      expect(() => defaults.validatedFields('org:introduce-api', { custom: {} })).toThrow(required)
+      // A top-level built-in key on a custom type is not an answer to its form either.
+      expect(() => defaults.validatedFields('org:introduce-api', { severity: 'high' })).toThrow(
+        required,
+      )
+    })
+
     it('refuses a bag that contradicts the descriptor, naming every problem', () => {
       const { defaults } = build(FORM)
       const call = () =>
