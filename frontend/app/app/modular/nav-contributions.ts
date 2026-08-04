@@ -279,7 +279,7 @@ const S = (...s: NavSurface[]) => s as readonly NavSurface[]
  *
  * Everything else stays in basic because the delivery loop needs it: authoring a flow
  * (`build-pipeline`), adding a repo (`add-from-repo`), the standards/skills library
- * (`fragments`), the PREnv + runner plumbing (`infrastructure`, which is also the only route
+ * (`fragments`), the ephemeral-env + runner plumbing (`infrastructure`, which is also the only route
  * to the guided per-service Compose environment setup), and the workspace/model configuration
  * a run actually reads (`workspace-settings`, `model-config`).
  */

@@ -203,7 +203,7 @@ export const workspaceSettingsSchema = v.object({
    */
   delegateAgentsToRunnerPool: v.boolean(),
   /**
-   * Whether/how the PRE-TOKEN INPUT GATE applies to this workspace's runs: the deterministic
+   * Whether/how the PRE-DISPATCH INPUT GATE applies to this workspace's runs: the deterministic
    * structural check of a task's authored input, run before the first agent step is dispatched
    * so a task nobody could act on parks having spent nothing.
    *

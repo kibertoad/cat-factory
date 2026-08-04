@@ -17,7 +17,7 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   an LLM can walk them within a context budget; see `docs/debug-api.md`), `publicApiAuth.ts` (the
   shared bearer gate + `read ⊂ write ⊂ decide ⊂ admin` ladder), `publicApiAdmission.ts` (what an external
   caller may launch: `parkSurfacesOf` reads the PIPELINE, and `publicRunParkSurfaces` composes in
-  the pre-token input gate, which parks on the shape of the TASK and so is invisible to the
+  the pre-dispatch input gate, which parks on the shape of the TASK and so is invisible to the
   step chain) and `publicApiPaging.ts` (the opaque keyset cursor codec every bounded list
   on the surface shares (`GET /jobs`, `GET /services/:id/tasks`, every `/api/v1/debug/*` list) plus the coarse-status
   projection `mapStatus`, its derived inverse `internalStatusesFor`, and `jobSortKey`, the ONE
@@ -96,7 +96,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
 - `observability/logger.ts`: the **only place a logging library is named**: pino adapted onto the
   kernel `Logger` port, exported as the process-wide `logger` (plus `createPinoLogger` for a custom
   destination, and `parseLogLevel`/`setLogLevel`, which each facade applies from `LOG_LEVEL` at the
-  top of its boot path). Patterns and rules: [`backend/docs/logging.md`](../../docs/logging.md).
+  top of its boot path). It also owns the SECOND-destination seam: `setLogSink` installs a kernel
+  `LogSink` (the opt-in OTLP log exporter) that every emitted line is copied to, with the
+  `child`-bound fields folded in and behind the same level gate. Patterns and rules:
+  [`backend/docs/logging.md`](../../docs/logging.md).
 - `persistence/mappers.ts`: the dialect-agnostic row↔domain mappers shared by **both** stores.
 - The **mothership-mode machine API** (`/internal/*`, machine-token authed, mounted on both
   facades: see `docs/initiatives/mothership-mode.md`): `persistence/rpc.ts` +

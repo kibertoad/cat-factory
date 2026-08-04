@@ -6,9 +6,9 @@ import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 
 /**
- * Workspace-scoped PRE-TOKEN INPUT GATE endpoint. The gate parks a run before its first agent
+ * Workspace-scoped PRE-DISPATCH INPUT GATE endpoint. The gate parks a run before its first agent
  * step when the task states nothing an agent could act on (see
- * `docs/initiatives/pre-token-input-gate.md`); this is how a human clears that park, either by
+ * `docs/initiatives/pre-dispatch-input-gate.md`); this is how a human clears that park, either by
  * fixing the task and asking for a `recheck`, or by waiving the findings with `proceed`.
  *
  * There is no matching read: the verdict rides the run (`ExecutionInstance.inputGate`), which

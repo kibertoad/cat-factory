@@ -1,5 +1,47 @@
 # @cat-factory/app
 
+## 0.217.2
+
+### Patch Changes
+
+- 8ef3ad5: Give Hebrew its own plural selector, and fix Ukrainian's.
+
+  Only `pl` and `uk` overrode vue-i18n's built-in plural selector, so `he` ran on the default 2-form
+  rule: n === 1 took the singular and everything else took the plural. Hebrew has a distinct DUAL,
+  so every Hebrew count message was an approximation at n === 2, both for the lexical duals
+  ("יומיים" for two days, "פעמיים" for twice) and for the spelled-out numeral prose wants ("שתי
+  משימות" rather than "2 משימות"). All 84 `he` plural entries are re-authored with the dual form.
+
+  Note this is a THREE-form CLDR rule (one/two/other), not the four (one/two/many/other) the
+  localization doc claimed. The `many` bucket for round tens was retired from CLDR because modern
+  Hebrew does not inflect for it, and current ICU agrees; authoring a fourth form would have put a
+  duplicate of `other` in every entry for a translator to keep in sync forever.
+
+  Two pre-existing bugs surfaced while pinning the selectors against `Intl.PluralRules`:
+
+  - **Ukrainian shared Polish's rule**, but the two differ: Polish reserves `one` for exactly 1,
+    while Ukrainian gives it to every count ending in 1 except the teens. 21, 31, …, 101 were
+    rendering the `many` form ("21 репозиторіїв" for "21 репозиторій"), 89 of the first 1000 counts.
+  - **Three `pl`/`uk` entries carried only 2 of the 3 required forms**, so the selector indexed past
+    the end of the form array and vue-i18n threw out of `t()`. That blanked the surface rendering
+    the message for any count in the `many` bucket (0, 5-21, …), rather than picking a wrong form.
+    The missing forms are restored, and the selector now clamps so a short entry can never throw.
+
+  The form count an entry carries is load-bearing (one form too few re-points every remaining slot
+  onto a different count), and neither existing i18n gate can see it: the key exists and it moved
+  with `en`, which is all they check. `i18n/plural-forms.spec.ts` closes that gap.
+
+## 0.217.1
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+- Updated dependencies [1f14793]
+  - @cat-factory/contracts@0.230.1
+
 ## 0.217.0
 
 ### Minor Changes
@@ -82,7 +124,7 @@
 
 ### Minor Changes
 
-- 10e0341: Answer the pre-token input gate over the public API, and stop it judging blocks that carry no
+- 10e0341: Answer the pre-dispatch input gate over the public API, and stop it judging blocks that carry no
   authored task input.
 
   The gate is the one park that turns on the shape of the TASK rather than the pipeline, so the
@@ -105,7 +147,7 @@
   Advisory findings are also visible at last: they were recorded on the run and reported over the
   API while rendering nowhere, which left `advisory` mode with nothing to watch.
 
-- 10e0341: Add the pre-token input gate: a deterministic structural check of a task's own authored fields,
+- 10e0341: Add the pre-dispatch input gate: a deterministic structural check of a task's own authored fields,
   run before a run's first agent step is dispatched. A task that states nothing an agent could act
   on now parks having spent nothing, where the cheapest refusal previously cost one requirements-
   review call to report an absence a string comparison already knew about.
@@ -10272,7 +10314,7 @@ details } }` envelope under `body`. The old `$fetch` threw an ofetch `FetchError
   - **Native runner-adapter seam**: an injected `runnerPoolProvider` now drives the actual
     dispatch transport on both the Cloudflare and Node facades (falling back to the generic
     `HttpRunnerPoolProvider`), fully symmetric with `environmentProvider`. A wrapper can thus
-    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. Kargo) to
+    ship one package implementing `EnvironmentProvider` + `RunnerPoolProvider` (e.g. an in-house platform) to
     serve both concerns with native code on every runtime.
 
   BREAKING (pre-1.0, internal): an un-pinned Tester task in local mode now defaults to the

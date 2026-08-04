@@ -148,7 +148,7 @@ export const GROUP_DOCS = {
     "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
+    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-dispatch input gate.",
   debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
 }
 

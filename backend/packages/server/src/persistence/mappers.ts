@@ -903,7 +903,7 @@ interface ExecutionDetail {
   frontendBindings?: ResolvedFrontendBinding[]
   /** After-the-fact investigation context (see {@link ExecutionInstance.diagnostics}). */
   diagnostics?: RunDiagnostics
-  /** The pre-token input gate's verdict (see {@link ExecutionInstance.inputGate}). */
+  /** The pre-dispatch input gate's verdict (see {@link ExecutionInstance.inputGate}). */
   inputGate?: RunInputGate
 }
 
@@ -945,7 +945,7 @@ function parseRunDiagnostics(value: unknown): RunDiagnostics | undefined {
 }
 
 /**
- * The pre-token input gate's stored verdict. Dropped when malformed, exactly like the
+ * The pre-dispatch input gate's stored verdict. Dropped when malformed, exactly like the
  * diagnostics above: an unreadable record must not brick the whole snapshot decode, and an
  * ABSENT verdict already has a defined meaning (the gate has not evaluated this run yet), so
  * dropping one is at worst a re-evaluation rather than a false clean bill of health.
@@ -1045,7 +1045,7 @@ export function rowToExecution(row: ExecutionRow): ExecutionInstance {
       const diagnostics = parseRunDiagnostics(detail.diagnostics)
       return diagnostics ? { diagnostics } : {}
     })(),
-    // The pre-token input gate's verdict rides in `detail` too (absent until the run reaches
+    // The pre-dispatch input gate's verdict rides in `detail` too (absent until the run reaches
     // its first dispatch); dropped if malformed, like the diagnostics above.
     ...(() => {
       const inputGate = parseRunInputGate(detail.inputGate)
@@ -1105,7 +1105,7 @@ export function executionToDetail(instance: ExecutionInstance): string {
     // Diagnostics are stamped once a container step dispatches; a pure inline/gate run has none
     // (JSON.stringify omits the undefined key so those runs carry nothing extra).
     diagnostics: instance.diagnostics,
-    // The pre-token input gate's verdict, once it has one. Absent until the run reaches its
+    // The pre-dispatch input gate's verdict, once it has one. Absent until the run reaches its
     // first dispatch, which is a real state (see `ExecutionInstance.inputGate`), so an
     // un-evaluated run carries nothing extra.
     inputGate: instance.inputGate,

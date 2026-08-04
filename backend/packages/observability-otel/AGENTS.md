@@ -28,6 +28,19 @@ Two things in `src/mapping.ts` bind changes here:
   The convention is experimental, so what we cover, extend and deliberately omit is documented
   rather than inferred.
 
+Also exports the **log exporter** (`src/logs.ts`, `createOtelLogExporter`): the kernel `LogSink`
+implementation that POSTs the platform's own structured lines to `{endpoint}/v1/logs`. Fetch on
+both runtimes; the mapping (severity, attributes, the run's trace id) lives in `src/mapping.ts`
+with everything else. Three things bind a change here:
+
+- **The exporter must never feed itself.** It reports its own failures through a logger bound
+  with `SELF_LOG_FIELD` and refuses to export any record carrying it, or a collector outage
+  becomes an endless batch about the outage.
+- **Draining belongs to the facade** (Node interval + shutdown flush ⇄ Worker per-invocation
+  `waitUntil`), because a Worker's buffer is per isolate. The exporter owns no timer.
+- **Every bound states what it dropped**: the queue cap reports its drop count on the next
+  batch, and the 8 KiB attribute cap says how much it cut.
+
 Also exports the **platform-operator metrics** exporter (`src/platform.ts`,
 `createPlatformMetricsOtelExporter`): a fetch-based OTLP GAUGE publisher for the
 deployment-level run-health aggregates (the dual of the per-call LLM sink). Fetch-on-both

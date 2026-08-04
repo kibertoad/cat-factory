@@ -125,25 +125,30 @@ describe('SSRF host guard — scheme and credential rules', () => {
 })
 
 describe('URL safety policy — trusted internal-host widening', () => {
-  const internalHosts: UrlSafetyPolicy = { schemes: ['https'], allowHosts: ['.internal', 'kargo'] }
+  const internalHosts: UrlSafetyPolicy = {
+    schemes: ['https'],
+    allowHosts: ['.internal', 'acme-envs'],
+  }
   const httpAndHosts: UrlSafetyPolicy = {
     schemes: ['https', 'http'],
     allowHosts: ['.corp', '10.1.2.3'],
   }
 
   it('still rejects internal hosts under the strict default', () => {
-    expect(() => assertSafeEnvironmentUrl('https://kargo.internal')).toThrow(ValidationError)
+    expect(() => assertSafeEnvironmentUrl('https://envs.internal')).toThrow(ValidationError)
     expect(() => assertSafeEnvironmentUrl('https://10.1.2.3')).toThrow(ValidationError)
-    expect(() => assertSafeEnvironmentUrl('http://kargo')).toThrow(ValidationError)
+    expect(() => assertSafeEnvironmentUrl('http://acme-envs')).toThrow(ValidationError)
   })
 
   it('allows an exact-match exempt host', () => {
-    expect(() => assertSafeEnvironmentUrl('https://kargo', 'base URL', internalHosts)).not.toThrow()
+    expect(() =>
+      assertSafeEnvironmentUrl('https://acme-envs', 'base URL', internalHosts),
+    ).not.toThrow()
   })
 
   it('allows a dot-suffix exempt host (and its sub-hosts)', () => {
     expect(() =>
-      assertSafeEnvironmentUrl('https://prenv.kargo.internal', 'base URL', internalHosts),
+      assertSafeEnvironmentUrl('https://box.envs.internal', 'base URL', internalHosts),
     ).not.toThrow()
     // The bare suffix host itself (`internal`) also matches `.internal`.
     expect(() =>
@@ -166,15 +171,15 @@ describe('URL safety policy — trusted internal-host widening', () => {
       ValidationError,
     )
     // http is still rejected when the policy only permits https.
-    expect(() => assertSafeEnvironmentUrl('http://kargo', 'base URL', internalHosts)).toThrow(
+    expect(() => assertSafeEnvironmentUrl('http://acme-envs', 'base URL', internalHosts)).toThrow(
       ValidationError,
     )
   })
 
   it('forbids embedded credentials regardless of policy', () => {
-    expect(() => assertSafeEnvironmentUrl('https://u:p@kargo', 'base URL', internalHosts)).toThrow(
-      ValidationError,
-    )
+    expect(() =>
+      assertSafeEnvironmentUrl('https://u:p@acme-envs', 'base URL', internalHosts),
+    ).toThrow(ValidationError)
   })
 })
 

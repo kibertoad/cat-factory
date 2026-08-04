@@ -158,7 +158,7 @@ hoc where it can be avoided:
     and the deployment-wide operator + reports rollups).
 
   Sole-route items stay in basic when the delivery loop runs on them: the pipeline builder,
-  add-from-repo, the fragment library, the infrastructure/PREnv windows, and the workspace /
+  add-from-repo, the fragment library, the infrastructure/ephemeral-env windows, and the workspace /
   model configuration a run actually reads. `nav-contributions.spec.ts` pins the advanced set
   against a table naming each item's kind and reason, so promoting one forces that claim to be
   written down rather than assumed.
@@ -577,10 +577,12 @@ layer ships the base `en` locale, and a downstream deployment overrides by dropp
 [`docs/localization.md`](../../docs/localization.md).
 
 - `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
-- `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the named
-  `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here so the module can
-  deep-merge across the `extends` chain. Referenced as the BARE filename
+- `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the plural
+  selectors, the named `numberFormats`/`datetimeFormats`). Messages are deliberately NOT here
+  so the module can deep-merge across the `extends` chain. Referenced as the BARE filename
   `vueI18n: 'i18n.config.ts'`, never `layerDir`-anchored.
+- `i18n/plural-rules.ts`: the per-locale plural selectors, kept beside the config as pure
+  logic so they unit-test standalone. See **Plural forms** below.
 - `package.json` `files` MUST include `"i18n"`. Release-blocking.
 
 **Adding a string**: add the key to `en.json` under the feature namespace, resolve with
@@ -604,6 +606,25 @@ so a dynamic lookup is total; **no cross-key concatenation** (a full sentence is
   Reserve the runtime-assembled key + exhaustive `Record` guard for lookups genuinely unknown
   until runtime.
 - Straight quotes, no em-dashes in new entries.
+
+**Plural forms: how MANY forms an entry carries is part of its contract.** Most locales run on
+vue-i18n's built-in selector, where a 2-form entry is `one | other` and a 3-form entry is
+`zero | one | other` (the leading zero form is a copy nicety, not a CLDR category: "no
+participants" beats "0 participants"). `pl`, `uk` and `he` override that selector in
+`i18n/plural-rules.ts` because the built-in one cannot express their agreement, so their entries
+carry the locale's CLDR categories instead, optionally behind the same zero form:
+
+| Locale      | CLDR forms            | With a zero form              |
+| ----------- | --------------------- | ----------------------------- |
+| `pl` / `uk` | `one \| few \| many`  | `zero \| one \| few \| many`  |
+| `he`        | `one \| two \| other` | `zero \| one \| two \| other` |
+
+Dropping a form does not drop a case, it RE-POINTS every remaining slot onto a different count,
+so `i18n/plural-forms.spec.ts` fails the build on an entry whose form count is neither shape (and
+on a key `en` pluralizes that one of those three renders flat). Neither other i18n gate can see
+this: the key exists and it moved with `en`, which is all they check. `plural-rules.spec.ts`
+separately pins each selector against `Intl.PluralRules`, so a hand-written rule that disagrees
+with the platform's own CLDR data fails a test rather than shipping.
 
 **Translator descriptions (`@<key>` siblings): default to NONE.** They live only in `en.json` and
 are notes to a translator, never runtime data. Add one ONLY when a competent translator seeing
@@ -633,6 +654,8 @@ rather than being dropped. A new failure-presenting surface copies that split (t
 4. **Locale parity**: `i18n-locale-parity.mjs --since origin/<base>` requires a PR that adds,
    changes, or removes an `en.json` key to make the SAME change in every other locale. It is
    change-coupling against the merge-base, NOT full key parity.
+5. **Plural shape**: `i18n/plural-forms.spec.ts` fails on a `pl`/`uk`/`he` entry carrying the
+   wrong number of forms (see **Plural forms** above), which the other three gates all pass.
 
 **Translate for real: NEVER ship an English string as a non-`en` value.** The parity gate checks
 only that the key exists, so it will pass a verbatim English copy, and that copy is a bug. The

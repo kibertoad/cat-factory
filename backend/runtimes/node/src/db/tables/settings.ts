@@ -96,7 +96,7 @@ export const workspaceSettings = pgTable('workspace_settings', {
   // workspace's runner pool instead of the host container runtime. Off by default; integer
   // 0/1 to match the SQLite store.
   delegate_agents_to_runner_pool: integer('delegate_agents_to_runner_pool').notNull().default(0),
-  // The PRE-TOKEN INPUT GATE's mode ('standard'|'advisory'|'off'). `standard` by default: every
+  // The PRE-DISPATCH INPUT GATE's mode ('standard'|'advisory'|'off'). `standard` by default: every
   // blocking finding names an input no model could act on either, so the gate can only ever save
   // the call that would have reported the same absence. Mirrors the D1 column.
   input_gate_mode: text('input_gate_mode').notNull().default('standard'),
