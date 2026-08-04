@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fetch as undiciFetch, getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici'
 import { createRecordingLogger, type LlmGenerationEvent } from '@cat-factory/kernel'
 import { LangfuseTraceSink } from './index.js'
 
@@ -18,9 +18,15 @@ beforeEach(() => {
   agent = new MockAgent()
   agent.disableNetConnect()
   setGlobalDispatcher(agent)
+  // Node's built-in `fetch` binds to its OWN bundled undici, which ignores a dispatcher set on
+  // the userland `undici` package — so the MockAgent above would be silently bypassed and the
+  // sink would hit the REAL Langfuse ingestion API. Route the SUT's `fetch` through the
+  // userland undici's fetch, which honours the dispatcher we set.
+  vi.stubGlobal('fetch', undiciFetch)
 })
 
 afterEach(async () => {
+  vi.unstubAllGlobals()
   setGlobalDispatcher(previousDispatcher)
   await agent.close()
 })

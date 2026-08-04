@@ -174,7 +174,9 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       // A NEW review task is seeded with the registered type default onto its own selection.
       const review = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
         title: 'Review the auth PR',
+        description: 'Read the open auth pull request and report on its correctness and risk.',
         taskType: 'review',
+        taskTypeFields: { prNumber: 41 },
       })
       expect(review.body.fragmentIds).toEqual(['test.review-checklist'])
 

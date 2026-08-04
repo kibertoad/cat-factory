@@ -15,7 +15,7 @@ first answer surface).
 ## Goal & rationale
 
 `/api/v1` covers the task lifecycle end to end **except when a run parks on a human**. The public
-decision surface answers three park surfaces and the engine has at least the eight below that it does
+decision surface answers four park surfaces and the engine has at least the eight below that it does
 not. Enumerated rather than counted, because "the engine has N parks" is the kind of claim that
 quietly goes stale: this is what the investigation found, not a proof of exhaustiveness, and a
 surface discovered later belongs in this table rather than in a revised number:
@@ -25,6 +25,7 @@ surface discovered later belongs in this table rather than in a revised number:
 | `requirements-review`     | review module        | ✅ `/runs/:runId/decisions/requirements/*` |
 | implementation fork       | `step.forkDecision`  | ✅ `/runs/:runId/decisions/fork/choose`    |
 | judge verdict             | `step.judge`         | ✅ `/runs/:runId/decisions/judge/resolve`  |
+| pre-token input gate      | `instance.inputGate` | ✅ `/runs/:runId/decisions/input-gate/…`   |
 | approval gate             | `step.approval`      | ❌ none (slice **A1**                      |
 | agent-raised decision     | `step.decision`      | ❌ none) slice **A2**                      |
 | `clarity-review`          | clarity module       | ❌ none (slice **A3**                      |
@@ -34,6 +35,14 @@ surface discovered later belongs in this table rather than in a revised number:
 | human-test window         | `step.humanTest`     | ❌ none (slice **A6**                      |
 | visual-confirmation gate  | `step.visualConfirm` | ❌ none) slice **A6**                      |
 | `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)              |
+
+**The pre-token input gate is the odd row**, and worth reading before adding another: every other
+entry is a park a PIPELINE can carry, so `parkSurfacesOf` sees it in the step chain and admission
+can refuse a `write` key up front. The gate parks on the shape of the TASK, so it holds runs under
+pipelines that park nowhere and was invisible to that enumeration entirely. It is composed in at
+the START surfaces instead (`publicRunParkSurfaces`, whose `inputGateBlocks` argument is required),
+which is the pattern any future task-shaped park should copy rather than trying to squeeze into
+`parkSurfacesOf`.
 
 Which start path can reach which differs, and that difference matters when ranking:
 `POST /api/v1/jobs` is inline-only, so it reaches the review, brainstorm, approval-gate,

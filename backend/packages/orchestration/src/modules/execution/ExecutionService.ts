@@ -17,11 +17,13 @@ import type {
   StepReviewComment,
   IssueWritebackProvider,
   Logger,
+  InputGateInput,
+  ResolveInputGateChoice,
+  RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
-import { producerWasSkipped, shouldRunGatedStep } from './stepGating.logic.js'
 import {
   resolveIndividualVendors,
   type HasPersonalSubscription,
@@ -46,7 +48,13 @@ import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
-import { buildGateWindowControllers, buildReviewSubjects } from './gate-window-controllers.js'
+import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
+import type { InputGateController } from './InputGateController.js'
+import {
+  buildGateWindowControllers,
+  buildInputGateController,
+  buildReviewSubjects,
+} from './gate-window-controllers.js'
 import { buildRunContextAndAdmission } from './run-context-admission.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
@@ -64,7 +72,6 @@ import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
-import { isReentrantDecisionResume } from './reentrancy.logic.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type {
   IterationCapChoice,
@@ -181,6 +188,10 @@ export class ExecutionService {
   private readonly visualConfirmationController: VisualConfirmationController
   /** Drives both iterative review gates (requirements + clarity); kind-parameterised. */
   private readonly reviewGate: ReviewGateController
+  /** The pre-token input gate; see {@link InputGateController}. */
+  private readonly inputGate: InputGateController
+  /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
+  private stepPreambleDepsCache?: StepPreambleDeps
   /** Drives the human-facing half of the implementation-fork decision phase on the Coder step. */
   private readonly forkDecisionController: ForkDecisionController
   private readonly prReviewController: PrReviewController
@@ -409,6 +420,12 @@ export class ExecutionService {
     this.reviewGate = gateWindows.reviewGate
     this.forkDecisionController = gateWindows.forkDecisionController
     this.prReviewController = gateWindows.prReviewController
+    // The pre-token input gate: not a gate WINDOW (it guards the run's first dispatch and has no
+    // pipeline step of its own), so it has its own factory over the same dependency bag.
+    this.inputGate = buildInputGateController(dependencies, {
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+    })
     // The review-gate subjects + the two interactive interview gates, built by the sibling
     // factory over the same collaborators (see gate-window-controllers.ts).
     const reviewSubjects = buildReviewSubjects({
@@ -768,6 +785,31 @@ export class ExecutionService {
     }
   }
 
+  /**
+   * The preamble's bound collaborators. Built lazily and memoised because two of them
+   * (`RunDispatcher`'s methods) resolve through a field assigned after this one in the
+   * constructor, exactly like the dispatcher's own lazily-resolved closures.
+   */
+  private get stepPreambleDeps(): StepPreambleDeps {
+    const cached = this.stepPreambleDepsCache
+    if (cached) return cached
+    const deps: StepPreambleDeps = {
+      spend: this.spend,
+      accountOf: (ws) => this.workspaceRepository.accountOf(ws),
+      currentStepIsNonMetered: (ws, inst, step) =>
+        this.runDispatcher.currentStepIsNonMetered(ws, inst, step),
+      skipGatedStep: (ws, inst, step, isFinal) =>
+        this.runDispatcher.skipGatedStep(ws, inst, step, isFinal),
+      blockOf: (ws, blockId) => this.blockRepository.get(ws, blockId),
+      stateMachine: this.runStateMachine,
+      stepGraph: this.stepGraph,
+      inputGate: this.inputGate,
+      agentKindRegistry: this.agentKindRegistry,
+    }
+    this.stepPreambleDepsCache = deps
+    return deps
+  }
+
   /** Advance a single running instance by one step, persisting the result. */
   private async stepInstance(
     workspaceId: string,
@@ -777,72 +819,11 @@ export class ExecutionService {
     const step = instance.steps[instance.currentStep]
     if (!step) return { kind: 'noop' }
 
-    // Spend gate: don't incur monetary LLM cost once the budget is exhausted. Pause
-    // the run (so the frontend can flag it) and stop here. A previously-paused run
-    // that finds the budget has freed up resumes and proceeds. EXEMPTION: a step that
-    // incurs no metered monetary cost — a flat-rate subscription (Claude Code / Codex)
-    // OR a local-runner model (keyless, on the user's own endpoint) — never contributes
-    // to the budget, so it must not be held hostage by a budget other (metered) models
-    // exhausted. This is what lets a deliberately local-only / subscription-only workspace
-    // keep running at a `0` budget (see the spend-budget docs).
-    const budgetAccountId = await this.workspaceRepository.accountOf(workspaceId)
-    if (
-      await this.spend.isOverBudget(workspaceId, {
-        accountId: budgetAccountId,
-        userId: instance.initiatedBy,
-      })
-    ) {
-      if (!(await this.runDispatcher.currentStepIsNonMetered(workspaceId, instance, step))) {
-        if (instance.status !== 'paused') {
-          instance.status = 'paused'
-          await this.runStateMachine.casPersist(workspaceId, instance)
-          await this.runStateMachine.emitInstance(workspaceId, instance)
-          // Surface the pause in the inbox (F3): a `paused` run is invisible to the sweeper and
-          // has no auto-resume, so without this card the paused board badge is its only signal.
-          await this.runStateMachine.raiseBudgetPaused(workspaceId)
-        }
-        return { kind: 'paused' }
-      }
-    }
-    if (instance.status === 'paused') instance.status = 'running'
-
-    if (step.state === 'waiting_decision') {
-      // Several gates are re-entrant: a human action sets a `pending*` marker on the parked step and
-      // wakes the driver, and the step handler must run the (slow) resume work in the durable driver
-      // instead of immediately re-parking on its stale decision id. See {@link
-      // isReentrantDecisionResume} for the per-gate cases.
-      if (!isReentrantDecisionResume(step, this.agentKindRegistry)) {
-        // Parked on either an agent-raised decision or a human approval gate; both
-        // are addressed by the same durable event id.
-        const pendingId = step.decision?.id ?? step.approval?.id
-        if (pendingId) {
-          instance.status = 'blocked'
-          await this.runStateMachine.casPersist(workspaceId, instance)
-          await this.runStateMachine.emitInstance(workspaceId, instance)
-          return { kind: 'awaiting_decision', decisionId: pendingId }
-        }
-      }
-    }
-    this.stepGraph.startStep(step)
-
-    const block = await this.blockRepository.get(workspaceId, instance.blockId)
-    if (!block) return { kind: 'noop' }
-    const isFinalStep = instance.currentStep === instance.steps.length - 1
-
-    // Estimate gating: a step gated on the task estimate is transparently SKIPPED when the
-    // estimate — written by an earlier task-estimator step in this same run — falls below the
-    // threshold. No agent is spun up; the step finishes as `skipped` and the run advances.
-    // Evaluated here (not at build time) because the estimate only exists once the estimator
-    // step has run.
-    //
-    // A COMPANION whose producer was skipped is skipped for the second reason: with producers
-    // now gatable, it would otherwise grade whatever step happens to precede it. Checked
-    // alongside its own gate because either reason is sufficient and they need not agree — a
-    // companion with no gate of its own still cascades.
-    const gatedOut = step.gating?.enabled && !shouldRunGatedStep(block.estimate, step.gating)
-    if (gatedOut || producerWasSkipped(instance.steps, instance.currentStep)) {
-      return this.runDispatcher.skipGatedStep(workspaceId, instance, step, isFinalStep)
-    }
+    // The four pre-dispatch checks (spend gate, decision park, input gate, estimate gating),
+    // in the order money is at stake. See {@link runStepPreamble}.
+    const preamble = await runStepPreamble(this.stepPreambleDeps, workspaceId, instance, step)
+    if (preamble.kind === 'stop') return preamble.result
+    const { block, isFinalStep } = preamble
 
     // The fixed run-lifecycle preamble is done; hand the per-kind work to the
     // engine-internal StepHandler registry (the first handler whose `canHandle` claims
@@ -862,6 +843,30 @@ export class ExecutionService {
   // FollowUpController call these on `executionService`; the per-step dispatch + completion
   // spine + the follow-up companion gate live on {@link RunDispatcher}, so these are thin
   // delegations (the public API is unchanged by the extraction).
+
+  /**
+   * Whether the PRE-TOKEN INPUT GATE would park a run started against this input, evaluated
+   * without writing anything. The public API's admission asks before starting a run, so a key
+   * that cannot answer a park is refused up front rather than left holding one.
+   * @see InputGateController.wouldBlock
+   */
+  inputGateWouldBlock(workspaceId: string, input: InputGateInput): Promise<boolean> {
+    return this.inputGate.wouldBlock(workspaceId, input)
+  }
+
+  /**
+   * Resolve a run parked on the PRE-TOKEN INPUT GATE: `recheck` (re-evaluate the task as it
+   * now stands, which is what actually clears the park) or `proceed` (waive the findings).
+   * @see InputGateController.resolve
+   */
+  resolveInputGate(
+    workspaceId: string,
+    executionId: string,
+    choice: ResolveInputGateChoice,
+    userId?: string | null,
+  ): Promise<RunInputGate> {
+    return this.inputGate.resolve(workspaceId, executionId, choice, userId)
+  }
 
   /** @see RunDispatcher.pollAgentJob */
   pollAgentJob(workspaceId: string, executionId: string): Promise<AdvanceResult> {

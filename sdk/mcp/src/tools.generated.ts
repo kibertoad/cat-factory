@@ -399,6 +399,16 @@ export const CAT_FACTORY_TOOLS: readonly CatFactoryTool[] = [
     invoke: (client, args) => client.decisions.resolveExceeded(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveExceeded']>[1]),
   },
   {
+    name: 'decisions_resolve_input_gate',
+    title: 'Resolve a run parked on the task\'s input check',
+    group: 'decisions',
+    operationId: 'resolvePublicRunInputGate',
+    readOnly: false,
+    description: 'Resolve a run parked on the task\'s input check\n\nSettle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.\n\nCalls `POST /api/v1/runs/{runId}/decisions/input-gate/resolve` (operation `resolvePublicRunInputGate`).',
+    inputSchema: {"type":"object","properties":{"runId":{"type":"string","description":"Path parameter `runId`."},"body":{"type":"object","properties":{"choice":{"type":"string","enum":["recheck","proceed"]}},"required":["choice"],"description":"The request body."}},"additionalProperties":false,"required":["runId","body"]},
+    invoke: (client, args) => client.decisions.resolveInputGate(str(args, 'runId'), args.body as Parameters<CatFactoryClient['decisions']['resolveInputGate']>[1]),
+  },
+  {
     name: 'decisions_resolve_judge',
     title: 'Resolve a parked judge verdict',
     group: 'decisions',
@@ -534,6 +544,6 @@ export const CAT_FACTORY_TOOL_GROUPS: Readonly<Record<string, string>> = {
   'pipelines': 'The pipelines a task can be started with, and whether each is headless-startable.',
   'notifications': 'The workspace\'s human-actionable inbox: list, act on, or dismiss a run tail.',
   'usage': 'The billing period\'s metered budget position and the per-model breakdown behind it.',
-  'decisions': 'A parked run\'s human decisions — requirement findings, forks and judge verdicts.',
+  'decisions': 'A parked run\'s human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.',
   'debug': 'A run\'s recorded telemetry: LLM calls, the context each agent was given, infra logs.',
 }

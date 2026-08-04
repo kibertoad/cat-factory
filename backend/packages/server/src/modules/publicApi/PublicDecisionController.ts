@@ -1,5 +1,6 @@
 import {
   choosePublicRunForkContract,
+  resolvePublicRunInputGateContract,
   resolvePublicRunJudgeContract,
   incorporatePublicRunRequirementsContract,
   listPublicRunDecisionsContract,
@@ -14,6 +15,7 @@ import {
   type PublicDecision,
   type PublicDecisionList,
   type RequirementReview,
+  type RunInputGate,
 } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
@@ -165,6 +167,33 @@ function isLiveFork(state: ForkDecisionStepState): boolean {
 }
 
 /**
+ * Project the PRE-TOKEN INPUT GATE's verdict for an external caller. The issue CODES are the same
+ * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
+ * whoever filed the ticket) rather than parsing our prose.
+ */
+function toInputGateDecision(gate: RunInputGate): PublicDecision {
+  return {
+    kind: 'input-gate',
+    status: gate.status,
+    mode: gate.mode,
+    issues: gate.issues,
+    checkedAt: gate.checkedAt,
+  }
+}
+
+/**
+ * Whether the gate's verdict is something the caller still has to act on. ONLY `blocked`, which is
+ * narrower than the other three predicates here on purpose: `off`, `not_applicable` and `passed`
+ * are recorded facts about a run that was never held up, and `overridden` is a park somebody
+ * already answered. Listing any of them would put a decision in front of a caller with nothing to
+ * decide, and `parked` is read off the run's own status rather than from this list, so a settled
+ * verdict has nothing to add to it.
+ */
+function isLiveInputGate(gate: RunInputGate): boolean {
+  return gate.status === 'blocked'
+}
+
+/**
  * Build the run's decision list: whatever it is currently asking a human, plus the run status so a
  * caller can distinguish "parked, answer me" from "still working". Three point-reads at most (the
  * run, the live review for its block, the run's fork state) — no per-step or per-item fan-out.
@@ -202,6 +231,13 @@ async function buildDecisionList<E extends AppEnv>(
       : [...execution.steps].reverse().find((s) => s.judge != null)
   if (judgeStep?.judge && isLiveJudge(judgeStep.judge)) {
     decisions.push(toJudgeDecision(judgeStep.agentKind, judgeStep.judge))
+  }
+
+  // The input gate parks BEFORE the first dispatch, so when it is live it is the only thing the
+  // run is asking. Listed first for that reason: it is the earliest question, and the steps whose
+  // decisions follow have not run.
+  if (execution.inputGate && isLiveInputGate(execution.inputGate)) {
+    decisions.unshift(toInputGateDecision(execution.inputGate))
   }
 
   return {
@@ -306,7 +342,40 @@ export function publicDecisionController(): Hono<AppEnv> {
   registerRequirementsDecisionRoutes(app)
   registerForkDecisionRoutes(app)
   registerJudgeRoutes(app)
+  registerInputGateRoutes(app)
   return app
+}
+
+function registerInputGateRoutes(app: Hono<AppEnv>): void {
+  // Answer a run parked on the PRE-TOKEN INPUT GATE: `recheck` after fixing the task, or
+  // `proceed` to waive the findings.
+  //
+  // Runs under the RUN'S OWN initiator, for the same reason the fork route does: releasing the
+  // park wakes the durable driver, and a board run started in the SPA carries a `usr_*` initiator
+  // whose credentials the resumed work must keep using. A genuinely headless run has
+  // `initiatedBy: null`, where this is a no-op.
+  //
+  // The waiver is recorded against no user (`null`): a key is not a person, and inventing one
+  // would put a name on the record that never read the findings. `overriddenAt` still says when.
+  buildHonoRoute(app, resolvePublicRunInputGateContract, async (c) => {
+    const { runId } = c.req.valid('param')
+    const gated = await gateDecisionAction(c, runId)
+    if ('fail' in gated) {
+      return c.json(failureBody(gated.fail), gated.fail.status)
+    }
+    const { workspaceId, scoped } = gated
+    await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
+      c
+        .get('container')
+        .executionService.resolveInputGate(
+          workspaceId,
+          scoped.execution.id,
+          c.req.valid('json').choice,
+          null,
+        ),
+    )
+    return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
+  })
 }
 
 function registerDecisionReadRoutes(app: Hono<AppEnv>): void {

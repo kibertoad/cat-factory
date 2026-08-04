@@ -662,6 +662,9 @@
               "maxBounces"
             ],
             "type": "object"
+          },
+          {
+            "$ref": "#/components/schemas/PublicInputGateDecision"
           }
         ]
       },
@@ -791,6 +794,72 @@
           }
         },
         "required": [],
+        "type": "object"
+      },
+      "PublicInputGateDecision": {
+        "properties": {
+          "checkedAt": {
+            "type": "number"
+          },
+          "issues": {
+            "items": {
+              "properties": {
+                "code": {
+                  "enum": [
+                    "description_missing",
+                    "description_placeholder",
+                    "description_thin",
+                    "reproduction_missing",
+                    "review_target_missing",
+                    "success_criteria_missing"
+                  ],
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "blocking",
+                    "advisory"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "severity"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "input-gate"
+          },
+          "mode": {
+            "enum": [
+              "standard",
+              "advisory",
+              "off"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "off",
+              "not_applicable",
+              "passed",
+              "blocked",
+              "overridden"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "status",
+          "mode",
+          "issues",
+          "checkedAt"
+        ],
         "type": "object"
       },
       "PublicJob": {
@@ -1043,6 +1112,21 @@
               "extra-round",
               "proceed",
               "stop-reset"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice"
+        ],
+        "type": "object"
+      },
+      "PublicResolveInputGate": {
+        "properties": {
+          "choice": {
+            "enum": [
+              "recheck",
+              "proceed"
             ],
             "type": "string"
           }
@@ -5306,6 +5390,68 @@
           }
         },
         "summary": "Choose an implementation approach",
+        "tags": [
+          "Decisions"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/decisions/input-gate/resolve": {
+      "post": {
+        "description": "Settle a run the pre-token input gate parked before its first agent step because the task states nothing an agent could act on. `recheck` re-evaluates the task as it now stands (edit it over `PATCH /api/v1/tasks/{taskId}` first: the fix is verified, not taken on trust) and releases the run only if the blocking findings are gone; a still-blocked verdict comes back as an ordinary 200 with refreshed findings. `proceed` waives the findings, which stay on the run as an `overridden` record. Requires a `decide`-scope key.",
+        "operationId": "resolvePublicRunInputGate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicResolveInputGate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicDecisionList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Resolve a run parked on the task's input check",
         "tags": [
           "Decisions"
         ]

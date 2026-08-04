@@ -220,7 +220,13 @@ describe('public API — basic board workloads (services + tasks)', () => {
     const task = await app.call<Task>(
       'POST',
       `/api/v1/services/${frame.body.id}/tasks`,
-      { title: 'Pin an individual model' },
+      {
+        title: 'Pin an individual model',
+        // A real description because the subject here is the CREDENTIAL refusal below: a
+        // title-only task is refused earlier, by the pre-token input gate's admission check, and
+        // this key has no `decide` scope to answer that park.
+        description: 'Run the estimator against this service so the model pin can be exercised.',
+      },
       auth,
     )
     expect(

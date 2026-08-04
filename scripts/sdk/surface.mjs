@@ -52,6 +52,7 @@ const SURFACE = {
   listPublicRunDecisions: { group: 'decisions', method: 'list' },
   choosePublicRunFork: { group: 'decisions', method: 'chooseFork' },
   resolvePublicRunJudge: { group: 'decisions', method: 'resolveJudge' },
+  resolvePublicRunInputGate: { group: 'decisions', method: 'resolveInputGate' },
   setPublicRunFindingStatus: { group: 'decisions', method: 'setFindingStatus' },
   replyPublicRunFinding: { group: 'decisions', method: 'replyToFinding' },
   incorporatePublicRunRequirements: { group: 'decisions', method: 'incorporate' },
@@ -132,7 +133,8 @@ export const GROUP_DOCS = {
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
-  decisions: "A parked run's human decisions — requirement findings, forks and judge verdicts.",
+  decisions:
+    "A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate.",
   debug: "A run's recorded telemetry: LLM calls, the context each agent was given, infra logs.",
 }
 

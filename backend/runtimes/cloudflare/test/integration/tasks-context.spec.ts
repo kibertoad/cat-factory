@@ -36,6 +36,7 @@ describe('task context injection', () => {
     })
     const task = await app.call<Block>('POST', `/workspaces/${ws}/blocks/${frame.body.id}/tasks`, {
       title: 'Implement limiter',
+      description: 'Add a per-tenant token-bucket rate limiter in front of the gateway.',
     })
 
     // Connect, import the issue and attach it to the task as context.

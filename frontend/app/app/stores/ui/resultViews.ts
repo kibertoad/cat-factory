@@ -78,13 +78,21 @@ export function createUiResultViews() {
     // Likewise a coder parked on the implementation-fork choice or on undecided follow-up
     // items: those parks ride `step.approval` too, but the generic approve resolver refuses
     // them server-side, so the step must open the window that CAN resolve it.
+    const park = step ? dedicatedParkView(step, instance) : null
     const view = step?.consensus?.enabled
       ? 'consensus-session'
       : step?.prReview
         ? 'pr-review'
         : step
-          ? (dedicatedParkView(step) ?? agentKindMeta(step.agentKind).resultView)
+          ? (park ?? agentKindMeta(step.agentKind).resultView)
           : undefined
+    // The PRE-TOKEN INPUT GATE is the one dedicated park with no window of its own: it is
+    // answered by an inline notice, which the generic step detail renders. Routing to the
+    // step's usual result view instead would open a window about work that has not run.
+    if (park === 'input-gate') {
+      stepDetail.value = { instanceId, stepIndex }
+      return
+    }
     if (view && instance) {
       // The brainstorm window is shared by both stages; carry which one from the step's kind.
       const stage =
