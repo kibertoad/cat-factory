@@ -693,12 +693,12 @@ export interface PublicAgentDecision {
 
 export interface PublicApprovalGateDecision {
   approvalId: string
-  approvals: number
   exceeded: boolean
   /** Always present; `null` when the server has no value for it. */
   feedback: string | null
   kind: 'approval-gate'
   proposal: string
+  recordedApprovals: number
   requiredApprovals: number
   status: PublicApprovalGateDecisionStatus
   stepIndex: number

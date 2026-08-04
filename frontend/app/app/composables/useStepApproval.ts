@@ -91,6 +91,23 @@ export function useStepApproval(opts: {
   })
 
   /**
+   * Whether the viewer's approval would be the one that CLEARS the gate. Always true without a
+   * quorum; under one it folds the viewer in the way the server does, so a re-approval by someone
+   * already counted does not read as a new vote.
+   *
+   * This is what decides whether "approve with corrections" is offered: a quorum votes on ONE
+   * artifact, so an edit that does not clear the gate would rewrite the proposal under the people
+   * already counted toward it and the ones still to come. The server refuses that
+   * (`proposal_not_editable_until_quorum`); hiding the affordance is what stops a reviewer typing
+   * a correction into a dead end, the same disposition as `outputIsRendered`.
+   */
+  const approvalWouldClearGate = computed(() => {
+    const q = quorum.value
+    if (!q) return true
+    return (viewerHasApproved.value ? q.recorded : q.recorded + 1) >= q.required
+  })
+
+  /**
    * Why the viewer may not resolve this gate, or null when they may. Drives the disabled state of
    * all three verbs, since the policy governs every resolution and not just approve.
    *
@@ -112,7 +129,7 @@ export function useStepApproval(opts: {
   // a toast by the store) or a cancelled credential prompt keeps the review open.
   async function approve() {
     const id = opts.approvalId()
-    if (!opts.instanceId() || !id || submitting.value) return
+    if (!opts.instanceId() || !id || submitting.value || refusal.value) return
     submitting.value = true
     try {
       if (await execution.approveStep(opts.instanceId()!, id)) opts.close()
@@ -135,7 +152,9 @@ export function useStepApproval(opts: {
   }
   async function approveWithEdits() {
     const id = opts.approvalId()
-    if (!opts.instanceId() || !id || submitting.value) return
+    if (!opts.instanceId() || !id || submitting.value || refusal.value) return
+    // The server refuses an edit that does not clear the gate; never send one.
+    if (!approvalWouldClearGate.value) return
     submitting.value = true
     try {
       if (await execution.approveStep(opts.instanceId()!, id, draftProposal.value)) opts.close()
@@ -146,6 +165,7 @@ export function useStepApproval(opts: {
   async function requestChanges() {
     const id = opts.approvalId()
     if (!opts.instanceId() || !id || submitting.value || !canRequestChanges.value) return
+    if (refusal.value) return
     submitting.value = true
     try {
       const ok = await execution.requestStepChanges(opts.instanceId()!, id, {
@@ -165,7 +185,7 @@ export function useStepApproval(opts: {
   }
   async function reject() {
     const id = opts.approvalId()
-    if (!opts.instanceId() || !id || submitting.value) return
+    if (!opts.instanceId() || !id || submitting.value || refusal.value) return
     submitting.value = true
     try {
       if (await execution.rejectStep(opts.instanceId()!, id, feedback.value.trim() || undefined)) {
@@ -208,6 +228,7 @@ export function useStepApproval(opts: {
     canRequestChanges,
     quorum,
     viewerHasApproved,
+    approvalWouldClearGate,
     refusal,
     syncHighlights,
     onProseClick,

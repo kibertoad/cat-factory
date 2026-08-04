@@ -10,11 +10,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicApprovalGateDecision} wire model.
  * @param approvalId the {@code approvalId} field.
- * @param approvals the {@code approvals} field.
  * @param exceeded the {@code exceeded} field.
  * @param feedback Always present; {@code null} when the server has no value for it.
  * @param kind the {@code kind} field.
  * @param proposal the {@code proposal} field.
+ * @param recordedApprovals the {@code recordedApprovals} field.
  * @param requiredApprovals the {@code requiredApprovals} field.
  * @param status the {@code status} field.
  * @param stepIndex the {@code stepIndex} field.
@@ -24,8 +24,6 @@ import org.jspecify.annotations.Nullable;
 public record PublicApprovalGateDecision(
     @JsonProperty("approvalId") String approvalId,
 
-    @JsonProperty("approvals") Double approvals,
-
     @JsonProperty("exceeded") Boolean exceeded,
 
     /** Always present; {@code null} when the server has no value for it. */
@@ -34,6 +32,8 @@ public record PublicApprovalGateDecision(
     @JsonProperty("kind") String kind,
 
     @JsonProperty("proposal") String proposal,
+
+    @JsonProperty("recordedApprovals") Double recordedApprovals,
 
     @JsonProperty("requiredApprovals") Double requiredApprovals,
 
@@ -57,11 +57,11 @@ public record PublicApprovalGateDecision(
      */
     public static final class Builder {
         private @Nullable String approvalId;
-        private @Nullable Double approvals;
         private @Nullable Boolean exceeded;
         private @Nullable String feedback;
         private @Nullable String kind;
         private @Nullable String proposal;
+        private @Nullable Double recordedApprovals;
         private @Nullable Double requiredApprovals;
         private @Nullable PublicApprovalGateDecisionStatus status;
         private @Nullable Double stepIndex;
@@ -70,12 +70,6 @@ public record PublicApprovalGateDecision(
         /** Set {@code approvalId}. */
         public Builder approvalId(@Nullable String approvalId) {
             this.approvalId = approvalId;
-            return this;
-        }
-
-        /** Set {@code approvals}. */
-        public Builder approvals(@Nullable Double approvals) {
-            this.approvals = approvals;
             return this;
         }
 
@@ -100,6 +94,12 @@ public record PublicApprovalGateDecision(
         /** Set {@code proposal}. */
         public Builder proposal(@Nullable String proposal) {
             this.proposal = proposal;
+            return this;
+        }
+
+        /** Set {@code recordedApprovals}. */
+        public Builder recordedApprovals(@Nullable Double recordedApprovals) {
+            this.recordedApprovals = recordedApprovals;
             return this;
         }
 
@@ -129,7 +129,7 @@ public record PublicApprovalGateDecision(
 
         /** Build the {@link PublicApprovalGateDecision}. */
         public PublicApprovalGateDecision build() {
-            return new PublicApprovalGateDecision(approvalId, approvals, exceeded, feedback, kind, proposal, requiredApprovals, status, stepIndex, stepKind);
+            return new PublicApprovalGateDecision(approvalId, exceeded, feedback, kind, proposal, recordedApprovals, requiredApprovals, status, stepIndex, stepKind);
         }
     }
 }

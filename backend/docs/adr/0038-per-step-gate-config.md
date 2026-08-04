@@ -67,10 +67,28 @@ person presses.
 
 `minApprovals` counts DISTINCT identities. Each approval is recorded on the gate
 (`StepApproval.approvals`), a second approval from the same identity replaces the first rather than
-counting twice, and the gate stays `pending` — the run stays parked — until the count is reached.
+counting twice, and the gate stays `pending` (the run stays parked) until the count is reached.
 
-Both the bar and the policy are SNAPSHOTTED onto the approval when the gate is raised, never
-re-read from the pipeline at approve time: the definition stays editable while a run is parked on
+A quorum votes on ONE artifact, so only the approval that CLEARS the gate may carry a `proposal`
+edit. An edit landing on an earlier approval would rewrite the text under the people already
+counted toward the bar and the ones still to come, leaving every recorded approval standing against
+something its approver never saw, and the next editor would overwrite it again. Refused rather than
+accepted-and-misleading (`proposal_not_editable_until_quorum`, the sibling of the `outputIsRendered`
+refusal); the reviewer's route is a plain approve, or request-changes, which re-runs the step with
+the correction as feedback. The SPA withholds the affordance and says why, rather than letting the
+button vanish.
+
+Both the bar and the policy are SNAPSHOTTED onto the approval when the gate is raised, by the ONE
+`buildStepApproval` builder every raise site goes through. Two settle paths raise this same
+checkpoint: the ordinary step settle (`RunDispatcher`) and a gated COMPANION's settle
+(`CompanionController`, which raises it on the producer's output once the companion has cleared
+it). While each built its own object literal they did not stay in step: a raise with no
+`approverPolicy` reads as "anyone entitled to write" and one with no `requiredApprovals` as a
+quorum of one, so the divergence failed OPEN and silently: a configured companion gate saved
+without complaint and resolved as though it had been configured with nothing. The builder is the
+fix; a source-level test refuses a hand-rolled literal so a third raiser cannot drift the same way.
+
+The snapshot is never re-read from the pipeline at approve time: the definition stays editable while a run is parked on
 it, and a bar that moved under the people already counted toward it is a bar nobody agreed to. Same
 reasoning as pinning a run's initiator role at admission (ADR 0037).
 
@@ -130,7 +148,8 @@ enabled for a request the server refuses.
   its pipelines.
 - **A public-API caller can hold a gate open.** An `approve` that records a vote without reaching
   the quorum returns 200 and leaves the run parked, which is why
-  `publicApprovalGateDecisionSchema` now projects `requiredApprovals` and `approvals` — without the
+  `publicApprovalGateDecisionSchema` now projects `requiredApprovals` and `recordedApprovals` (the
+  COUNT, named apart from the internal `StepApproval.approvals` LIST it counts). Without the
   tally an integration could not tell a recorded approval from a call that failed. Additive to the
   public surface (ADR 0034): new response fields, no behaviour change for a gate with no config.
 - **Named approvers are workspace user ids**, so a policy does not survive being cloned into a

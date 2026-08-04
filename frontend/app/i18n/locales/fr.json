@@ -1452,6 +1452,7 @@
       },
       "quorumProgress": "{recorded} approbations sur {required}",
       "quorumYours": "(la vôtre est comptée)",
+      "quorumEditLocked": "Les corrections seront possibles quand votre approbation sera celle qui libère ce point de contrôle. D'ici là, approuvez tel quel ou demandez des modifications.",
       "notAnApprover": "Ce contrôle désigne qui peut le lever, et vous n'en faites pas partie.",
       "approverIdentityRequired": "Ce contrôle désigne qui peut le lever : l'une de ces personnes doit être connectée pour le faire."
     },

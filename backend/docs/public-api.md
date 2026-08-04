@@ -566,7 +566,7 @@ run is waiting on a park this surface does not model
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                                    |
-| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. Body `{ proposal? (≤50000) }` — an edit replaces the agent's text and is what flows downstream.                                            |
+| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. Body `{ proposal? (≤50000) }`; an edit replaces the agent's text and is what flows downstream. Refused under an unmet quorum (see below).  |
 | `POST …/approvals/:approvalId/request-changes`        | `decide` | Body `{ feedback (1–10000) }`; the gated step re-runs with the guidance folded in.                                                                                                      |
 | `POST …/approvals/:approvalId/reject`                 | `decide` | Body `{ reason? (≤2000) }`; the run stops entirely (a terminal `rejected` failure the board can retry).                                                                                 |
 | `POST …/approvals/:approvalId/resolve-exceeded`       | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a companion gate at its automatic-rework cap (`exceeded: true`), which refuses the plain approve.                |
@@ -599,15 +599,19 @@ Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
   a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
   `resolve-exceeded` is what settles it.
 
-  **`requiredApprovals` / `approvals` are why an `approve` may legitimately not advance the run.**
+  **`requiredApprovals` / `recordedApprovals` are why an `approve` may legitimately not advance the
+  run.**
   A pipeline step can configure its gate to need several DISTINCT approvals (ADR 0038); until the
   count is reached your call returns `200`, the approval is recorded, and the decision stays
   `pending`. Read the tally back rather than treating a still-parked run as a failed call. Your key
   counts as ONE approval, and calling twice does not make it two. A gate whose pipeline NAMES its
   approvers cannot be answered by a key at all (`403 not_a_gate_approver` /
   `gate_approver_identity_required`) — a shared credential is not one of the people it named — and
-  that applies to `request-changes` and `reject` as much as to `approve`. A gate with no such
-  configuration behaves exactly as it always has.
+  that applies to `request-changes` and `reject` as much as to `approve`. Under an unmet quorum a
+  `proposal` edit is refused (`422 proposal_not_editable_until_quorum`): a quorum votes on ONE
+  artifact, so only the approval that CLEARS the gate may change it: send a plain approve, or use
+  `request-changes` to have the step re-run with your correction. A gate with no such configuration
+  behaves exactly as it always has.
 
 - **`agent-decision`**: an agent hit a fork mid-work and asked. Carries the `decisionId`, the
   `question` and the `options` it offered. Resolving **re-runs** the asking step with the choice

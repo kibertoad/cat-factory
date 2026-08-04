@@ -230,6 +230,7 @@ const {
   canRequestChanges,
   quorum: gateQuorum,
   viewerHasApproved,
+  approvalWouldClearGate,
   refusal: gateRefusal,
   onProseClick,
   addDraftComment,
@@ -254,6 +255,15 @@ const GATE_REFUSAL_KEYS: Record<GateApprovalRefusal, string> = {
   not_a_gate_approver: 'panels.stepDetail.notAnApprover',
   gate_approver_identity_required: 'panels.stepDetail.approverIdentityRequired',
 }
+
+/**
+ * Whether "approve with corrections" is offered RIGHT NOW. Two independent reasons withhold it,
+ * and they are kept apart because their remedies differ: an output that is a rendering can never
+ * be edited here, while an unmet quorum only means not yet: this viewer's approval is not the
+ * one that clears the gate, and an edit under it would move the artifact beneath the approvals
+ * already recorded. Each states itself below rather than the button quietly vanishing.
+ */
+const proposalEditableNow = computed(() => proposalEditable.value && approvalWouldClearGate.value)
 
 const resolvingCap = ref(false)
 async function resolveCompanionCap(choice: IterationCapChoice) {
@@ -858,26 +868,35 @@ async function copyOutput() {
               size="sm"
               icon="i-lucide-check"
               block
-              :disabled="rejectArmed"
+              :disabled="rejectArmed || !!gateRefusal"
               :loading="submitting"
               @click="approve"
             >
               {{ t('panels.stepDetail.approveAndProceed') }}
             </UButton>
             <UButton
-              v-if="proposalEditable"
+              v-if="proposalEditableNow"
               color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-pencil"
               block
-              :disabled="rejectArmed || submitting"
+              :disabled="rejectArmed || submitting || !!gateRefusal"
               @click="startEditing"
             >
               {{ t('panels.stepDetail.approveWithCorrections') }}
             </UButton>
-            <p v-else class="text-[10px] text-slate-500" data-testid="step-rendered-output-note">
+            <p
+              v-else-if="!proposalEditable"
+              class="text-[10px] text-slate-500"
+              data-testid="step-rendered-output-note"
+            >
               {{ t('panels.stepDetail.renderedOutputNote') }}
+            </p>
+            <!-- Withheld only until the quorum is one approval away, so it says so rather than
+               leaving a reviewer to wonder where the affordance went. -->
+            <p v-else class="text-[10px] text-slate-500" data-testid="step-quorum-edit-locked">
+              {{ t('panels.stepDetail.quorumEditLocked') }}
             </p>
 
             <!-- destructive: a two-step inline confirm instead of a native dialog -->
@@ -919,7 +938,7 @@ async function copyOutput() {
                 icon="i-lucide-rotate-ccw"
                 class="flex-1"
                 data-testid="step-request-changes"
-                :disabled="!canRequestChanges"
+                :disabled="!canRequestChanges || !!gateRefusal"
                 :loading="submitting"
                 @click="requestChanges"
               >
@@ -931,7 +950,7 @@ async function copyOutput() {
                 size="sm"
                 icon="i-lucide-ban"
                 class="flex-1"
-                :disabled="submitting"
+                :disabled="submitting || !!gateRefusal"
                 @click="armReject"
               >
                 {{ t('panels.stepDetail.reject') }}

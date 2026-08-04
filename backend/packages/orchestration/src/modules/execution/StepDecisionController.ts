@@ -281,11 +281,15 @@ export class StepDecisionController {
         const step = inst.steps[stepIndex]
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
         this.assertNotIterativeGate(inst, step)
-        this.assertGateApprover(step.approval, actor)
+        // The idempotent no-op is answered BEFORE the policy, so re-approving a gate that is
+        // already through stays a no-op for everyone. Refusing it 403 would report a refusal
+        // about a call that was never going to change anything, and the docstring's promise of
+        // idempotence would hold only for the people the policy happens to name.
         if (step.approval.status === 'approved') {
           alreadyApproved = true
           return
         }
+        this.assertGateApprover(step.approval, actor)
         if (step.approval.status === 'rejected') {
           throw new ConflictError(`Approval '${approvalId}' was rejected`)
         }
@@ -301,6 +305,14 @@ export class StepDecisionController {
         // committed artifact stayed the ingested one, so the correction silently reaches
         // nothing. Refuse rather than accept-and-drop; the reviewer's route is "request
         // changes", which re-runs the producer with the correction as feedback.
+        // Fold WHO approved before anything is written, because whether this approval completes
+        // the quorum decides what the call is allowed to do. Counting distinct identities is what
+        // makes a double-click idempotent rather than a second vote.
+        const { approvals, satisfied } = foldGateApproval(
+          step.approval,
+          actor,
+          this.deps.clock.now(),
+        )
         if (opts.proposal !== undefined) {
           if (step.outputIsRendered) {
             throw new ValidationError(
@@ -310,16 +322,23 @@ export class StepDecisionController {
               { reason: 'proposal_not_editable' },
             )
           }
+          // A quorum votes on ONE artifact. An edit landing on an approval that does NOT complete
+          // the quorum would rewrite the proposal under the people already counted toward it, and
+          // under the ones still to come: every recorded approval would then stand against text
+          // its approver never saw, and the next editor would silently overwrite this one. Refuse
+          // rather than accept-and-mislead; the last approver may still edit, and anyone may
+          // request changes, which re-runs the step with the correction as feedback.
+          if (!satisfied) {
+            throw new ValidationError(
+              'This gate needs more approvals before it clears, so the proposal cannot be edited ' +
+                'yet: an edit now would change what the other approvers are signing off on. ' +
+                'Approve as-is, or request changes to have the step re-run with your correction.',
+              { reason: 'proposal_not_editable_until_quorum' },
+            )
+          }
           step.output = opts.proposal
           step.approval.proposal = opts.proposal
         }
-        // Record WHO approved before deciding whether that is enough. Counting distinct
-        // identities is what makes a double-click idempotent rather than a second vote.
-        const { approvals, satisfied } = foldGateApproval(
-          step.approval,
-          actor,
-          this.deps.clock.now(),
-        )
         step.approval.approvals = approvals
         if (!satisfied) {
           awaitingQuorum = true
@@ -334,7 +353,12 @@ export class StepDecisionController {
     if (awaitingQuorum) {
       // The gate is still holding the run: push the new tally to the board and stop. No driver
       // signal (nothing to wake — the run is meant to stay parked) and no block write.
-      await this.deps.runStateMachine.emitInstance(workspaceId, instance)
+      //
+      // `rollUpMetrics: false` because no step SETTLED here: this emit redraws a counter, and the
+      // rollup is a per-run GROUP BY over `llm_call_metrics` that would re-aggregate the whole run
+      // once per vote. Same disposition as the progress-only poll folds; the SPA carries the last
+      // rollup forward, so the metrics bar does not blank between approvals.
+      await this.deps.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
       return instance
     }
     await this.deps.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
@@ -367,7 +391,6 @@ export class StepDecisionController {
         const step = inst.steps.find((s) => s.approval?.id === approvalId)
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
         this.assertNotIterativeGate(inst, step)
-        this.assertGateApprover(step.approval, actor)
         if (step.approval.status === 'approved') {
           throw new ConflictError(`Approval '${approvalId}' is already approved`)
         }
@@ -379,6 +402,9 @@ export class StepDecisionController {
         if (step.approval.status === 'changes_requested') {
           throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
         }
+        // After the settled-state checks, as in the sibling resolutions: a gate that is already
+        // resolved reports THAT, and the policy answers only calls that could still change it.
+        this.assertGateApprover(step.approval, actor)
 
         const stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
 
@@ -463,7 +489,6 @@ export class StepDecisionController {
         const step = inst.steps.find((s) => s.approval?.id === approvalId)
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
         this.assertNotIterativeGate(inst, step)
-        this.assertGateApprover(step.approval, actor)
         if (step.approval.status === 'approved') {
           throw new ConflictError(`Approval '${approvalId}' is already approved`)
         }
@@ -473,10 +498,13 @@ export class StepDecisionController {
           throw new ConflictError(`Approval '${approvalId}' is being re-run`)
         }
         // Already rejected (and the run already failed): leave it as-is and skip failRun below.
+        // Settled states are answered BEFORE the policy for the reason `approveStep` answers its
+        // own no-op first: a call that cannot change anything reports the state, not a refusal.
         if (step.approval.status === 'rejected') {
           alreadyRejected = true
           return
         }
+        this.assertGateApprover(step.approval, actor)
         step.approval.status = 'rejected'
         if (reason) step.approval.feedback = reason
       },

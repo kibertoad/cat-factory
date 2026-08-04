@@ -9,6 +9,8 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
+import type { DescriptorField } from '@cat-factory/contracts'
+import { sanitizeDescriptorFields } from '@cat-factory/contracts'
 import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -53,6 +55,13 @@ export interface GateStepControllerDeps {
    * wired runs unchanged: an unwired projection costs a dashboard section, never a run.
    */
   recordGateOutcome?: (settled: SettledGate) => Promise<void>
+  /**
+   * The per-step parameters the gate REGISTERED for a step kind declared, so the values frozen
+   * onto the gate state can be reduced to the ones that declaration actually covers. Reads the
+   * app-owned registry the dispatcher already holds rather than a second copy: what the builder
+   * offered, what run admission validated and what a probe reads must be one declaration.
+   */
+  declaredGateFields: (agentKind: string) => readonly DescriptorField[] | undefined
   /** The engine's completion spine, so a passing gate finishes + advances like any step. */
   recordStepResult: (
     workspaceId: string,
@@ -106,7 +115,16 @@ export class GateStepController {
       // pipeline save and again at run admission. Copied onto the gate state once, alongside the
       // budget it may itself override, so every subsequent poll reads one settled snapshot rather
       // than re-deriving from a pipeline definition that is editable mid-run.
-      const config = step.stepOptions?.gateConfig?.fields ?? {}
+      //
+      // SANITIZED on the way in, not merely validated, because this is where the value is FROZEN
+      // onto the run. Validation deliberately skips a field whose `showWhen` currently fails, so
+      // a stale answer under a hidden field reaches here having passed no type check; freezing it
+      // would hand a gate's probe a value nothing ever inspected. Same rule, and the same helper,
+      // every other descriptor form applies at its own write.
+      const config = sanitizeDescriptorFields(
+        this.deps.declaredGateFields(step.agentKind) ?? [],
+        step.stepOptions?.gateConfig?.fields ?? {},
+      )
       step.gate = {
         phase: 'checking',
         attempts: 0,

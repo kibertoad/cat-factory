@@ -1452,6 +1452,7 @@
       },
       "quorumProgress": "{recorded} z {required} zatwierdzeń",
       "quorumYours": "(twoje jest policzone)",
+      "quorumEditLocked": "Poprawki będzie można wpisać, gdy Twoja akceptacja odblokuje tę bramkę. Do tego czasu zatwierdź bez zmian lub poproś o zmiany.",
       "notAnApprover": "Ta bramka wskazuje, kto może ją rozstrzygnąć, a ciebie na tej liście nie ma.",
       "approverIdentityRequired": "Ta bramka wskazuje, kto może ją rozstrzygnąć, więc musi to zrobić jedna z tych osób po zalogowaniu."
     },

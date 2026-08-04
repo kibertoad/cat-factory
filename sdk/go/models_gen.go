@@ -1085,13 +1085,13 @@ type PublicAgentDecision struct {
 
 // PublicApprovalGateDecision is the `PublicApprovalGateDecision` wire model.
 type PublicApprovalGateDecision struct {
-	ApprovalID string  `json:"approvalId"`
-	Approvals  float64 `json:"approvals"`
-	Exceeded   bool    `json:"exceeded"`
+	ApprovalID string `json:"approvalId"`
+	Exceeded   bool   `json:"exceeded"`
 	// Feedback always present; nil when the server has no value for it.
 	Feedback          *string                          `json:"feedback"`
 	Kind              string                           `json:"kind"`
 	Proposal          string                           `json:"proposal"`
+	RecordedApprovals float64                          `json:"recordedApprovals"`
 	RequiredApprovals float64                          `json:"requiredApprovals"`
 	Status            PublicApprovalGateDecisionStatus `json:"status"`
 	StepIndex         float64                          `json:"stepIndex"`

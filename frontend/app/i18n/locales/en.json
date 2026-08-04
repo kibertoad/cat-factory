@@ -1541,6 +1541,7 @@
       },
       "quorumProgress": "{recorded} of {required} approvals",
       "quorumYours": "(yours counted)",
+      "quorumEditLocked": "Corrections can be typed once yours is the approval that clears this gate. Until then, approve as-is or request changes.",
       "notAnApprover": "This gate names who may resolve it, and you are not one of them.",
       "approverIdentityRequired": "This gate names who may resolve it, so it has to be resolved by one of those people signed in."
     },

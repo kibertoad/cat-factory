@@ -159,7 +159,7 @@ export function toApprovalDecision(
     // `approve` legitimately not advance the run, and without the tally a caller could not tell
     // that from a call that failed.
     requiredApprovals: approval.requiredApprovals ?? 1,
-    approvals: approval.approvals?.length ?? 0,
+    recordedApprovals: approval.approvals?.length ?? 0,
     exceeded: step.companion?.exceeded === true,
   }
 }

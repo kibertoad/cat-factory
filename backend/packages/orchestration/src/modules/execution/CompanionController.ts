@@ -18,6 +18,7 @@ import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { buildStepApproval } from './stepApproval.js'
 import type { StepGraph } from './StepGraph.js'
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
@@ -407,13 +408,17 @@ export class CompanionController {
     }
     // A gated companion now raises the HUMAN approval gate on the producer's output
     // (the human reviews what the companion just cleared). Never on the final step.
+    //
+    // Through the SHARED builder, so the companion's gate carries the approver policy and quorum
+    // the companion STEP configured, exactly as the ordinary settle path does. Hand-rolling the
+    // literal here is what silently dropped both (see `stepApproval.ts`).
     if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
       const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
-      step.approval = {
-        id: this.deps.idGenerator.next('appr'),
-        status: 'pending',
-        proposal: producer?.output ?? step.output ?? '',
-      }
+      step.approval = buildStepApproval(
+        step,
+        this.deps.idGenerator.next('appr'),
+        producer?.output ?? step.output ?? '',
+      )
       this.deps.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')

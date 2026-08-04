@@ -1982,6 +1982,7 @@
       },
       "quorumProgress": "{recorded} von {required} Freigaben",
       "quorumYours": "(deine ist gezählt)",
+      "quorumEditLocked": "Korrekturen sind möglich, sobald deine Freigabe dieses Gate auflöst. Bis dahin unverändert freigeben oder Änderungen anfordern.",
       "notAnApprover": "Dieses Gate benennt, wer es auflösen darf, und du gehörst nicht dazu.",
       "approverIdentityRequired": "Dieses Gate benennt, wer es auflösen darf; eine dieser Personen muss dafür angemeldet sein."
     },

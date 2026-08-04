@@ -31,13 +31,12 @@ import type {
   StepResolverRegistry,
 } from '@cat-factory/kernel'
 import {
-  hasApproverPolicy,
   isAsyncAgentExecutor,
   noopLogger,
-  requiredGateApprovals,
   runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
+import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
 import { applyContainerRunning, applySubtaskProgress } from './step-fold.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
@@ -379,6 +378,7 @@ export class RunDispatcher {
         runStateMachine: deps.runStateMachine,
         runInitiatorScope: this.runInitiatorScope,
         resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        declaredGateFields: (kind) => this.gateRegistry.configFields(kind),
         ...gateOutcomeRecorder,
         recordStepResult: (ws, instance, step, isFinalStep, result) =>
           this.recordStepResult(ws, instance, step, isFinalStep, result),
@@ -910,21 +910,9 @@ export class RunDispatcher {
     // wake it. Never gates the final step (nothing downstream to feed) and is
     // idempotent: an already-approved step falls through to advance/finish.
     if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
-      // The gate's POLICY is snapshotted here, not read at approve time: the pipeline definition
-      // stays editable while a run is parked on it, and a bar that moved under the people already
-      // counted toward it is a bar nobody agreed to. Same reasoning as pinning a run's initiator
-      // role at admission.
-      const gateConfig = step.stepOptions?.gateConfig
-      const requiredApprovals = requiredGateApprovals(gateConfig)
-      step.approval = {
-        id: this.idGenerator.next('appr'),
-        status: 'pending',
-        proposal: step.output,
-        ...(requiredApprovals > 1 ? { requiredApprovals } : {}),
-        ...(hasApproverPolicy(gateConfig?.approvers)
-          ? { approverPolicy: gateConfig!.approvers }
-          : {}),
-      }
+      // Through the shared builder, which snapshots the gate's configured policy. See
+      // `stepApproval.ts` for why a second raise site may not hand-roll this literal.
+      step.approval = buildStepApproval(step, this.idGenerator.next('appr'), step.output)
       return this.parkStepAwaitingInput(workspaceId, instance, step, step.approval.id)
     }
 

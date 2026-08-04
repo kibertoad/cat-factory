@@ -1452,6 +1452,7 @@
       },
       "quorumProgress": "{required} onaydan {recorded} tanesi",
       "quorumYours": "(seninki sayıldı)",
+      "quorumEditLocked": "Bu geçidi açan onay sizinki olduğunda düzeltme yazabilirsiniz. O ana kadar olduğu gibi onaylayın ya da değişiklik isteyin.",
       "notAnApprover": "Bu kapı kimlerin karar verebileceğini belirtiyor ve sen bunlardan biri değilsin.",
       "approverIdentityRequired": "Bu kapı kimlerin karar verebileceğini belirtiyor; bu kişilerden biri oturum açarak karar vermeli."
     },

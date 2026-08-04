@@ -34,9 +34,15 @@ cannot be met on a deployment running with auth off, since counting distinct app
 identities that deployment does not have. All of this is additive: a gate with no config behaves
 byte-for-byte as it did.
 
+A quorum votes on ONE artifact, so only the approval that CLEARS the gate may carry a `proposal`
+edit. An edit on an earlier approval is refused (`proposal_not_editable_until_quorum`) rather than
+silently rewriting the text under the people already counted toward the bar; the SPA withholds the
+affordance and says why. Both raise sites for the human gate now go through one `buildStepApproval`
+builder, so a gated COMPANION step honours the policy and quorum its step configured.
+
 Public API (`/api/v1`, surface version now `1.9.0`, additive): the `approval-gate` decision projects
-`requiredApprovals` and `approvals`, because a quorum makes `approve` legitimately not advance the
-run and without the tally a caller could not tell that from a failed call.
+`requiredApprovals` and `recordedApprovals`, because a quorum makes `approve` legitimately not
+advance the run and without the tally a caller could not tell that from a failed call.
 
 Internal break, per the pre-1.0 rule: `ExecutionService.approveStep` / `requestStepChanges` /
 `rejectStep` now require a `GateActor`. Required rather than optional so an entry point that forgets

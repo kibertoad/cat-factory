@@ -71,6 +71,10 @@ function fakeDeps(inst: ExecutionInstance) {
       settleAdvancedGate,
       advanceRunPastGate,
     } as never,
+    // Only the request-changes path reaches these: it re-runs the step and wakes the durable
+    // driver, where approve/reject settle through `runStateMachine` alone.
+    stepGraph: { startStep: vi.fn(), rerunProducerThrough: vi.fn() } as never,
+    workRunner: { signalDecision: vi.fn(async () => {}) } as never,
     requireWorkspace: vi.fn(async () => ({})),
   } as unknown as StepDecisionControllerDeps
   return { deps, emitInstance, settleAdvancedGate, advanceRunPastGate }
@@ -182,5 +186,88 @@ describe('approving a gate that demands a quorum', () => {
     )
     expect(step.output).toBe('a corrected proposal')
     expect(step.approval?.proposal).toBe('a corrected proposal')
+  })
+})
+
+describe('the policy governs REQUEST CHANGES too', () => {
+  it('refuses a caller the policy does not name, leaving the gate pending', async () => {
+    // The third resolution, asserted here rather than assumed from the other two: each of the
+    // three settles the checkpoint, and a bounce back to the agent with someone else's feedback
+    // folded in is a resolution the wrong person should not be able to make either.
+    const step = gatedStep({ approverPolicy: { userIds: ['usr_release'] } })
+    const { deps } = fakeDeps(instance(step))
+    const controller = new StepDecisionController(deps)
+
+    await expect(
+      controller.requestStepChanges(
+        'ws_1',
+        'exec_1',
+        'appr_1',
+        { feedback: 'redo it' },
+        user('usr_other'),
+      ),
+    ).rejects.toThrow(ForbiddenError)
+    expect(step.approval?.status).toBe('pending')
+    expect(step.approval?.feedback).toBeUndefined()
+  })
+
+  it('admits a caller the policy names', async () => {
+    const step = gatedStep({ approverPolicy: { userIds: ['usr_release'] } })
+    const { deps } = fakeDeps(instance(step))
+    const controller = new StepDecisionController(deps)
+
+    await controller.requestStepChanges(
+      'ws_1',
+      'exec_1',
+      'appr_1',
+      { feedback: 'redo it' },
+      user('usr_release'),
+    )
+    expect(step.approval?.status).toBe('changes_requested')
+  })
+})
+
+describe('editing the proposal under an unmet quorum', () => {
+  it('is REFUSED, so an early approver cannot move the artifact under the others', async () => {
+    // A quorum votes on ONE artifact. Accepting the edit here would leave every approval already
+    // recorded standing against text its approver never saw, and let the next approver overwrite
+    // it again. A silent rewrite is exactly what the recorded tally exists to make impossible.
+    const step = gatedStep({ requiredApprovals: 2 })
+    const { deps } = fakeDeps(instance(step))
+    const controller = new StepDecisionController(deps)
+
+    await expect(
+      controller.approveStep('ws_1', 'exec_1', 'appr_1', { proposal: 'my rewrite' }, user('usr_1')),
+    ).rejects.toMatchObject({ details: { reason: 'proposal_not_editable_until_quorum' } })
+    // Refused whole: neither the edit nor the vote landed, so nothing half-applied.
+    expect(step.output).toBe('a proposal')
+    expect(step.approval?.approvals ?? []).toHaveLength(0)
+  })
+
+  it('leaves a plain approve on the same gate working', async () => {
+    const step = gatedStep({ requiredApprovals: 2 })
+    const { deps } = fakeDeps(instance(step))
+    const controller = new StepDecisionController(deps)
+
+    await controller.approveStep('ws_1', 'exec_1', 'appr_1', {}, user('usr_1'))
+    expect(step.approval?.approvals).toHaveLength(1)
+  })
+})
+
+describe('re-approving a gate that is already through', () => {
+  it('stays a no-op for someone the policy does not name', async () => {
+    // The idempotent no-op is answered before the policy: a second click on a settled gate
+    // changes nothing, and reporting 403 for it would make the documented idempotence hold only
+    // for the people the policy happens to list.
+    const step = gatedStep({
+      status: 'approved',
+      approverPolicy: { userIds: ['usr_release'] },
+    })
+    const { deps, settleAdvancedGate } = fakeDeps(instance(step))
+    const controller = new StepDecisionController(deps)
+
+    await controller.approveStep('ws_1', 'exec_1', 'appr_1', {}, user('usr_other'))
+    expect(step.approval?.status).toBe('approved')
+    expect(settleAdvancedGate).not.toHaveBeenCalled()
   })
 })

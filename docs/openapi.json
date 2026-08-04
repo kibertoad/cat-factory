@@ -655,9 +655,6 @@
           "approvalId": {
             "type": "string"
           },
-          "approvals": {
-            "type": "number"
-          },
           "exceeded": {
             "type": "boolean"
           },
@@ -676,6 +673,9 @@
           },
           "proposal": {
             "type": "string"
+          },
+          "recordedApprovals": {
+            "type": "number"
           },
           "requiredApprovals": {
             "type": "number"
@@ -705,7 +705,7 @@
           "proposal",
           "feedback",
           "requiredApprovals",
-          "approvals",
+          "recordedApprovals",
           "exceeded"
         ],
         "type": "object"

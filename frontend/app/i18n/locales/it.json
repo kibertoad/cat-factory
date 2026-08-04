@@ -1982,6 +1982,7 @@
       },
       "quorumProgress": "{recorded} di {required} approvazioni",
       "quorumYours": "(la tua è conteggiata)",
+      "quorumEditLocked": "Le correzioni si potranno scrivere quando la tua approvazione sarà quella che sblocca questo gate. Fino ad allora, approva così com'è o richiedi modifiche.",
       "notAnApprover": "Questo gate indica chi può risolverlo e tu non sei tra loro.",
       "approverIdentityRequired": "Questo gate indica chi può risolverlo, quindi deve farlo una di quelle persone dopo aver effettuato l’accesso."
     },

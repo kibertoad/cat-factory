@@ -256,8 +256,14 @@ export const publicApprovalGateDecisionSchema = v.object({
    * one of the people a policy named.
    */
   requiredApprovals: v.number(),
-  /** The approvals recorded so far, toward {@link requiredApprovals}. */
-  approvals: v.number(),
+  /**
+   * The approvals recorded so far, toward {@link requiredApprovals}.
+   *
+   * Named for the COUNT rather than `approvals`, which on the internal `StepApproval` is the list
+   * of records this counts. Two surfaces a caller crosses constantly should not spell one word two
+   * types.
+   */
+  recordedApprovals: v.number(),
   /**
    * True when this gate is a quality COMPANION's iteration-cap park rather than an ordinary
    * pipeline gate: the automatic rework budget was spent with the rating still under the bar.

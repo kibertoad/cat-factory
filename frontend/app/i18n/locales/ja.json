@@ -1452,6 +1452,7 @@
       },
       "quorumProgress": "承認 {recorded} / {required}",
       "quorumYours": "(あなたの承認は集計済み)",
+      "quorumEditLocked": "このゲートを解除する承認があなたのものになった時点で、修正を入力できます。それまでは、そのまま承認するか変更を依頼してください。",
       "notAnApprover": "このゲートは解除できる人を指定しており、あなたは含まれていません。",
       "approverIdentityRequired": "このゲートは解除できる人を指定しているため、その人がサインインして解除する必要があります。"
     },

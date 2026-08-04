@@ -1452,6 +1452,7 @@
       },
       "quorumProgress": "{recorded} de {required} aprobaciones",
       "quorumYours": "(la tuya está contada)",
+      "quorumEditLocked": "Podrás escribir correcciones cuando tu aprobación sea la que libere esta puerta. Hasta entonces, aprueba tal cual o solicita cambios.",
       "notAnApprover": "Esta compuerta designa quién puede resolverla y tú no estás en la lista.",
       "approverIdentityRequired": "Esta compuerta designa quién puede resolverla, así que debe resolverla una de esas personas con la sesión iniciada."
     },

@@ -1,3 +1,4 @@
+import { hasApproverPolicy } from '@cat-factory/contracts'
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
 import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from './types.js'
@@ -131,10 +132,19 @@ export function seedBlocks(): Block[] {
  * wrong step.
  *
  * `gate` is the extension seam it was always meant to be: `true` is a plain human checkpoint, and
- * an OBJECT is that same checkpoint plus its configuration (who may approve it and how many of
- * them, or the parameters of the registered gate this step's kind runs). The object lowers into
- * `gates[i] = true` plus `stepOptions[i].gateConfig`, so a configured gate needs no new array and
- * no new column. See `backend/docs/adr/0038-per-step-gate-config.md`.
+ * an OBJECT is that step's gate CONFIGURATION, lowering into `stepOptions[i].gateConfig`, so a
+ * configured gate needs no new array and no new column. See
+ * `backend/docs/adr/0038-per-step-gate-config.md`.
+ *
+ * The object form does NOT imply a human checkpoint by itself, because the two halves of
+ * `StepGateConfig` answer different questions. `approvers` / `minApprovals` configure the human
+ * gate and therefore raise `gates[i]`; `fields` configures the REGISTERED gate the step's kind
+ * already runs (a `ci` step's attempt budget, a `post-release-health` step's watch window), which
+ * has nothing to do with pausing for a person. Lowering `{ fields: … }` into `gates[i] = true`
+ * would bolt a human approval pause onto a `ci` step whose author only wanted three fixer rounds
+ * silently, since nothing downstream can tell an intended checkpoint from an inferred one.
+ * `assertValidGateConfig` draws the same line at the other door: it requires `gates[i]` for the
+ * approval half and never for `fields`.
  *
  * `gate` and `gating` are mutually exclusive on one step, and `validatePipelineShape` enforces
  * that rather than this type: the estimate may ADD a human checkpoint but never cancel an approval
@@ -169,9 +179,15 @@ function definePipeline(spec: {
   public?: boolean
 }): Pipeline {
   const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
-  // An OBJECT `gate` is a gate too — it is the checkpoint plus its configuration — so the boolean
-  // flag is "did this step declare a gate at all", never "is it exactly `true`".
-  const gates = norm.map((s) => s.gate !== undefined && s.gate !== false)
+  // A human checkpoint is `gate: true`, or an object configuring the APPROVAL half. An object that
+  // only carries `fields` configures the step's registered gate and raises no checkpoint. See the
+  // `SeedStep` docs for why conflating the two would be a silent pause nobody authored.
+  const gates = norm.map(
+    (s) =>
+      s.gate === true ||
+      (typeof s.gate === 'object' &&
+        (hasApproverPolicy(s.gate.approvers) || s.gate.minApprovals !== undefined)),
+  )
   const enabled = norm.map((s) => s.enabled !== false)
   const gating = norm.map((s) => s.gating ?? null)
   const stepOptions = norm.map((s) => {
