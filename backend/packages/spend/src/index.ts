@@ -29,6 +29,7 @@ export {
   startOfNextMonthUtc,
 } from './pricing.js'
 export {
+  type SpendAlertSignals,
   type SpendAlertState,
   type SpendForecast,
   type SpendForecastConfidence,
@@ -37,6 +38,7 @@ export {
   DEFAULT_SPEND_ALERT_THRESHOLDS,
   MIN_OBSERVED_SPAN_MS,
   forecastSpend,
+  mergeSpendAlertStates,
   spendAlertEscalated,
   spendAlertFiring,
   spendAlertState,

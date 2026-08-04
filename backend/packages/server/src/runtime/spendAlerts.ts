@@ -2,8 +2,8 @@ import type { BudgetAlert, NotificationPayload } from '@cat-factory/contracts'
 import { distinctAccountIds, spendThresholdCardContent } from '@cat-factory/orchestration'
 import type { Logger, Notification, Workspace } from '@cat-factory/kernel'
 import { describeError } from '@cat-factory/kernel'
-import type { ScopedSpendForecast } from '@cat-factory/spend'
-import { spendAlertEscalated, spendAlertFiring } from '@cat-factory/spend'
+import type { ScopedSpendForecast, SpendAlertState } from '@cat-factory/spend'
+import { mergeSpendAlertStates, spendAlertEscalated, spendAlertFiring } from '@cat-factory/spend'
 import type { ServerContainer } from '../http/env.js'
 
 // Runtime-neutral spend-alert sweep: the PROACTIVE half of the spend safeguard, shared by both
@@ -125,18 +125,23 @@ async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<bo
   ].filter(isFiring)
   if (firing.length === 0) return false
 
-  // The WORST firing tier owns the headline and the escalation decision. A workspace holds at
-  // most one block-less card per type, so the two tiers cannot each have one; leading with the
-  // worse of them is what keeps the card honest when both fire.
+  // The WORST firing tier owns the HEADLINE. A workspace holds at most one open block-less card
+  // per type, so the two tiers cannot each have one; leading with the worse of them is what keeps
+  // the card honest when both fire.
   const worst = [...firing].sort(bySeverity)[0]!
-  const previous = readNotifiedState(lastNotified.get(workspace.id))
-  if (!spendAlertEscalated(previous, worst.forecast.alert)) return false
-
   const alerts: BudgetAlert[] = firing.map(({ tier, forecast }) => ({
     tier,
     threshold: forecast.alert.threshold,
     projectedOverrun: forecast.alert.projectedOverrun,
   }))
+
+  // The ESCALATION decision is made on the FOLD of every firing tier, not on the worst one: the
+  // card being compared against lists them all, so only a fold-versus-fold comparison sees a
+  // SECOND tier starting to fire beside an unchanged first one.
+  const next = mergeSpendAlertStates(worst.forecast.alert.periodStart, alerts)
+  const previous = readNotifiedState(lastNotified.get(workspace.id))
+  if (!spendAlertEscalated(previous, next)) return false
+
   const { title, body } = spendThresholdCardContent(alerts, {
     tier: worst.tier,
     costLimit: worst.forecast.costLimit,
@@ -160,8 +165,10 @@ async function settleWorkspace(deps: SettleDeps, input: SettleInput): Promise<bo
     // The tiers and their STATE, never the amounts: a log line naming a workspace's spend puts a
     // per-tenant financial figure into the deployment's operational log.
     tiers: alerts.map((a) => a.tier).join(','),
-    threshold: worst.forecast.alert.threshold,
-    projectedOverrun: worst.forecast.alert.projectedOverrun,
+    // The FOLD, matching what the escalation test acted on: logging the worst tier's own signals
+    // would omit the account overrun that is sometimes the sole reason this card was raised.
+    threshold: next.threshold,
+    projectedOverrun: next.projectedOverrun,
   })
   return true
 }
@@ -196,24 +203,13 @@ function bySeverity(a: FiringTier, b: FiringTier): number {
  * deployment. A card with no period stamped (nothing was ever raised, or a card written before
  * this payload existed) reads as "never notified", so the next firing state escalates, which is the safe
  * direction, since the cost is one extra card rather than a missed warning.
+ *
+ * Folded through the SAME `mergeSpendAlertStates` the sweep folds this pass's tiers with, so the
+ * two sides of the escalation test can never come to mean different things.
  */
-function readNotifiedState(card: Notification | undefined): {
-  periodStart: number
-  threshold: number | null
-  projectedOverrun: boolean
-} | null {
+function readNotifiedState(card: Notification | undefined): SpendAlertState | null {
   const payload: NotificationPayload | null | undefined = card?.payload
   const periodStart = payload?.budgetPeriodStart
   if (typeof periodStart !== 'number') return null
-  const alerts = payload?.budgetAlerts ?? []
-  return {
-    periodStart,
-    // Folded back to the same worst-tier shape the escalation test compares against, so a card
-    // raised for the account tier cannot be re-raised a minute later for a milder workspace one.
-    threshold: alerts.reduce<number | null>(
-      (max, a) => (a.threshold != null && (max == null || a.threshold > max) ? a.threshold : max),
-      null,
-    ),
-    projectedOverrun: alerts.some((a) => a.projectedOverrun),
-  }
+  return mergeSpendAlertStates(periodStart, payload?.budgetAlerts ?? [])
 }

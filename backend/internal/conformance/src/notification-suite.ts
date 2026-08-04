@@ -161,6 +161,21 @@ export function defineNotificationSuite(
       expect((await repo.listLatestByType([], 'budget_threshold')).size).toBe(0)
     })
 
+    it('breaks a same-millisecond tie on id, so the pick is stable across passes', async () => {
+      // Both facades reduce to one row per workspace in SQL, so the tiebreak has to be in the
+      // ORDER BY rather than in whatever order rows happen to arrive. Without it the caller's
+      // "has this already been notified?" answer flaps between two cards minted in the same
+      // millisecond, and the spend sweep re-raises (or wrongly withholds) a card on alternate
+      // passes for the rest of the period.
+      const repo = makeRepo()
+      const a = ids().ws
+      await repo.upsert(a, notification({ id: `${a}-aaa`, type: 'budget_threshold', createdAt: 7 }))
+      await repo.upsert(a, notification({ id: `${a}-zzz`, type: 'budget_threshold', createdAt: 7 }))
+      for (let pass = 0; pass < 3; pass += 1) {
+        expect((await repo.listLatestByType([a], 'budget_threshold')).get(a)?.id).toBe(`${a}-zzz`)
+      }
+    })
+
     it('prunes resolved rows past the cutoff, keeping open + fresh-resolved ones', async () => {
       const repo = makeRepo()
       const { ws } = ids()

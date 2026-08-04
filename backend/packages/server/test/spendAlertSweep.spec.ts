@@ -222,6 +222,48 @@ describe('sweepSpendAlerts', () => {
     ])
   })
 
+  it('re-raises when a SECOND tier starts firing beside an unchanged first one', async () => {
+    // The workspace has been at 80% since the last pass, so the WORST tier has not moved; what
+    // is new is the account's projected overrun. Escalation is decided on the fold of every
+    // firing tier, so this is news; deciding it on the worst tier alone would drop the account's
+    // warning silently and permanently (nothing else about this period will ever change it).
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws_1', 'acc_1')],
+      byWorkspace: { ws_1: forecast({ threshold: 0.8 }) },
+      byAccount: { acc_1: forecast({ threshold: null, projectedOverrun: true }) },
+      lastNotified: {
+        ws_1: card({
+          budgetPeriodStart: PERIOD_START,
+          budgetAlerts: [{ tier: 'workspace', threshold: 0.8, projectedOverrun: false }],
+        }),
+      },
+    })
+    expect(await sweepSpendAlerts(container, NOW)).toEqual({ raised: 1 })
+    expect(raises[0]!.payload?.budgetAlerts).toEqual([
+      { tier: 'workspace', threshold: 0.8, projectedOverrun: false },
+      { tier: 'account', threshold: null, projectedOverrun: true },
+    ])
+  })
+
+  it('does not re-raise once BOTH tiers have been notified', async () => {
+    const { container, raises } = makeContainer({
+      workspaces: [workspace('ws_1', 'acc_1')],
+      byWorkspace: { ws_1: forecast({ threshold: 0.8 }) },
+      byAccount: { acc_1: forecast({ threshold: null, projectedOverrun: true }) },
+      lastNotified: {
+        ws_1: card({
+          budgetPeriodStart: PERIOD_START,
+          budgetAlerts: [
+            { tier: 'workspace', threshold: 0.8, projectedOverrun: false },
+            { tier: 'account', threshold: null, projectedOverrun: true },
+          ],
+        }),
+      },
+    })
+    expect(await sweepSpendAlerts(container, NOW)).toEqual({ raised: 0 })
+    expect(raises).toEqual([])
+  })
+
   it('is a no-op when the notifications module is not wired', async () => {
     const { container, raises } = makeContainer({
       workspaces: [workspace('ws_1', 'acc_1')],

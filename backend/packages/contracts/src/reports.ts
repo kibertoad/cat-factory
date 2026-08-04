@@ -141,7 +141,11 @@ export const reportsViewSchema = v.object({
     /** Spend per linked REPOSITORY, keyed by the provider repo id and labelled `owner/name`. */
     byRepo: v.array(reportSpendRowSchema),
     byTaskType: v.array(reportSpendRowSchema),
-    /** Spend per linked tracker TICKET, keyed `source:externalId` and labelled with its title. */
+    /**
+     * Spend per linked tracker TICKET, keyed `source:externalId` (e.g. `jira:PROJ-412`) and
+     * carrying NO label: the key is self-describing, and a block linked from two tickets could
+     * otherwise be labelled with one ticket's title beside the other's ref.
+     */
     byTicket: v.array(reportSpendRowSchema),
   }),
   /** Run activity sliced every way, each busiest-first. */

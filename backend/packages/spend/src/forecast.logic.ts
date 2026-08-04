@@ -214,6 +214,38 @@ export function spendAlertFiring(state: SpendAlertState): boolean {
 }
 
 /**
+ * The signals one tier contributes to a fold: {@link SpendAlertState} minus the period, which
+ * belongs to the scope rather than to any one tier.
+ */
+export type SpendAlertSignals = Pick<SpendAlertState, 'threshold' | 'projectedOverrun'>
+
+/**
+ * Fold the per-tier states a scope is in into the ONE state {@link spendAlertEscalated} compares:
+ * the highest threshold any tier crossed, and whether any tier projects an overrun.
+ *
+ * BOTH sides of that comparison must come from here. A card lists every tier that was firing when
+ * it was raised, so pitting it against a single tier's state is not a stricter test but a
+ * different one, and it loses real warnings: an account tier that newly starts projecting an
+ * overrun beside a workspace tier already sitting at 80% moves the fold and leaves the worst tier
+ * untouched, so the card is never re-raised and the account's overrun is never announced. Folding
+ * both sides through one function is what makes that asymmetry impossible to reintroduce.
+ */
+export function mergeSpendAlertStates(
+  periodStart: number,
+  tiers: readonly SpendAlertSignals[],
+): SpendAlertState {
+  let threshold: number | null = null
+  let projectedOverrun = false
+  for (const tier of tiers) {
+    if (tier.threshold != null && (threshold == null || tier.threshold > threshold)) {
+      threshold = tier.threshold
+    }
+    projectedOverrun ||= tier.projectedOverrun
+  }
+  return { periodStart, threshold, projectedOverrun }
+}
+
+/**
  * Whether `next` is an ESCALATION over what was last notified: the once-per-crossing rule.
  *
  * Only an upward move earns a fresh notification: a new period re-arms everything, a higher
@@ -223,6 +255,8 @@ export function spendAlertFiring(state: SpendAlertState): boolean {
  *
  * A null `previous` means nothing has been notified for this scope yet, so any firing state
  * escalates.
+ *
+ * Both arguments must be folds over the SAME tier set (see {@link mergeSpendAlertStates}).
  */
 export function spendAlertEscalated(
   previous: SpendAlertState | null,

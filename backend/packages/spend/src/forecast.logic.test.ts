@@ -4,6 +4,7 @@ import {
   MIN_OBSERVED_SPAN_MS,
   type SpendAlertState,
   forecastSpend,
+  mergeSpendAlertStates,
   spendAlertEscalated,
   spendAlertFiring,
   spendAlertState,
@@ -181,5 +182,38 @@ describe('spendAlertEscalated', () => {
     }
     expect(spendAlertEscalated(at80, quiet)).toBe(false)
     expect(spendAlertEscalated({ ...at80, threshold: 0.95 }, at80)).toBe(false)
+  })
+})
+
+describe('mergeSpendAlertStates', () => {
+  it('takes the highest threshold across tiers, and an overrun projected by any of them', () => {
+    expect(
+      mergeSpendAlertStates(PERIOD_START, [
+        { threshold: 0.8, projectedOverrun: false },
+        { threshold: null, projectedOverrun: true },
+      ]),
+    ).toEqual({ periodStart: PERIOD_START, threshold: 0.8, projectedOverrun: true })
+  })
+
+  it('folds an empty tier list into a state that fires nothing', () => {
+    const folded = mergeSpendAlertStates(PERIOD_START, [])
+    expect(folded).toEqual({ periodStart: PERIOD_START, threshold: null, projectedOverrun: false })
+    expect(spendAlertFiring(folded)).toBe(false)
+  })
+
+  it('escalates when a SECOND tier starts firing beside an unchanged first one', () => {
+    // The asymmetry this fold exists to prevent: comparing the previously notified card (which
+    // lists every tier) against one tier's own state would find nothing new here, and the
+    // account's projected overrun would never be announced.
+    const notified = mergeSpendAlertStates(PERIOD_START, [
+      { threshold: 0.8, projectedOverrun: false },
+    ])
+    const now = mergeSpendAlertStates(PERIOD_START, [
+      { threshold: 0.8, projectedOverrun: false },
+      { threshold: null, projectedOverrun: true },
+    ])
+    expect(spendAlertEscalated(notified, now)).toBe(true)
+    // ...and still does not re-escalate once that second tier has been notified too.
+    expect(spendAlertEscalated(now, now)).toBe(false)
   })
 })

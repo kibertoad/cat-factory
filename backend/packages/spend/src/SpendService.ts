@@ -223,6 +223,33 @@ export class SpendService {
   }
 
   /**
+   * The same for MANY workspaces, as ONE batched settings read.
+   *
+   * Deliberately not `resolvePricing` in a loop: that is a point read per workspace, which is the
+   * banned N+1 the moment a caller holds a list, and the alert sweep holds every spending
+   * workspace in the deployment. The shared cache is bypassed rather than consulted per id
+   * because it would not help and would hurt: the isolate-safe (Worker) profile disables the
+   * `workspaceSettings` slice outright, so every lookup there is a real D1 round trip, and on Node
+   * a sweep touching every tenant would churn a cache sized for the hot single-workspace gate.
+   *
+   * Every requested id is present in the result; a workspace with no persisted overrides maps to
+   * the base table, exactly as the single-workspace read resolves it.
+   */
+  private async resolvePricingMany(workspaceIds: string[]): Promise<Map<string, SpendPricing>> {
+    const out = new Map<string, SpendPricing>()
+    const repository = this.workspaceSettingsRepository
+    if (!repository) {
+      for (const id of workspaceIds) out.set(id, this.pricing)
+      return out
+    }
+    const settings = await repository.listByWorkspaceIds(workspaceIds)
+    for (const id of workspaceIds) {
+      out.set(id, mergeSpendPricing(this.pricing, settings.get(id) ?? null))
+    }
+    return out
+  }
+
+  /**
    * Invalidate a cached account effective limit (called after an account-budget edit, via
    * `AccountService`'s budget-change callback). A no-op when no cache is wired.
    */
@@ -254,6 +281,26 @@ export class SpendService {
       ? await this.accountBudgetLimitCache.get(accountId, accountId, load)
       : await load()
     return effectiveTierLimit(limit, cap)
+  }
+
+  /**
+   * The same for MANY accounts, as ONE batched account read (see {@link resolvePricingMany} for
+   * why the per-id cache is bypassed rather than consulted). Every requested id is present:
+   * an account with no configured limit resolves to the env cap alone, `Infinity` when unset.
+   */
+  private async resolveAccountLimits(accountIds: string[]): Promise<Map<string, number>> {
+    const cap = this.pricing.accountMonthlyLimitCap
+    const out = new Map<string, number>()
+    const repository = this.accountRepository
+    if (!repository) {
+      for (const id of accountIds) out.set(id, effectiveTierLimit(null, cap))
+      return out
+    }
+    const configured = new Map(
+      (await repository.listByIds(accountIds)).map((a) => [a.id, a.spendMonthlyLimit ?? null]),
+    )
+    for (const id of accountIds) out.set(id, effectiveTierLimit(configured.get(id) ?? null, cap))
+    return out
   }
 
   /** The user tier's effective monthly limit (configured user limit clamped by the env cap). */
@@ -438,12 +485,12 @@ export class SpendService {
    * total, and the alert state each is in. Advisory only: nothing here can pause a run.
    *
    * Batched because the alert sweep asks about every workspace in the deployment on every
-   * pass: two grouped ledger reads (period-to-date and the trailing burn-rate window) serve
-   * the whole set, where a per-workspace point read would be the banned N+1 run every few
-   * minutes across every tenant. Workspaces with no metered spend this period are absent from
-   * the result: they have nothing to forecast, and skipping them is what keeps a deployment
-   * full of quiet boards cheap to sweep. Their pricing is never resolved either, so the
-   * per-workspace settings read is paid only for boards that actually spent something.
+   * pass: two grouped ledger reads (period-to-date and the trailing burn-rate window) plus one
+   * batched settings read serve the whole set, where a per-workspace point read would be the
+   * banned N+1 run every few minutes across every tenant. Workspaces with no metered spend this
+   * period are absent from the result: they have nothing to forecast, and skipping them is what
+   * keeps a deployment full of quiet boards cheap to sweep. Their pricing is never resolved
+   * either, which is why the settings read follows the ledger reads instead of joining them.
    */
   async forecastWorkspaces(
     workspaceIds: string[],
@@ -455,9 +502,10 @@ export class SpendService {
       this.tokenUsageRepository.meteredSpendByWorkspaceSince(workspaceIds, periodStart),
       this.tokenUsageRepository.meteredSpendByWorkspaceSince(workspaceIds, windowStart),
     ])
+    const pricingByWorkspace = await this.resolvePricingMany([...period.keys()])
     const out = new Map<string, ScopedSpendForecast>()
     for (const [workspaceId, spent] of period) {
-      const pricing = await this.resolvePricing(workspaceId)
+      const pricing = pricingByWorkspace.get(workspaceId) ?? this.pricing
       out.set(
         workspaceId,
         this.buildForecast({
@@ -485,9 +533,10 @@ export class SpendService {
       this.tokenUsageRepository.meteredSpendByAccountSince(accountIds, periodStart),
       this.tokenUsageRepository.meteredSpendByAccountSince(accountIds, windowStart),
     ])
+    const limitByAccount = await this.resolveAccountLimits([...period.keys()])
     const out = new Map<string, ScopedSpendForecast>()
     for (const [accountId, spent] of period) {
-      const costLimit = await this.resolveAccountLimit(accountId)
+      const costLimit = limitByAccount.get(accountId) ?? Number.POSITIVE_INFINITY
       // An inactive tier (no configured limit, no operator cap) is skipped outright rather
       // than forecast against `Infinity`: there is no ceiling to warn about approaching.
       if (!Number.isFinite(costLimit)) continue
