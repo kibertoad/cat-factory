@@ -116,10 +116,22 @@ export const HEADLESS_KEY_MINT_SCOPE = 'admin' as const satisfies PublicApiScope
  * automatically and one inserted below stays mintable, where a literal list would silently freeze
  * whichever set was true the day it was written.
  */
+export type HeadlessMintableScope = Exclude<PublicApiScope, typeof HEADLESS_KEY_MINT_SCOPE>
 export const HEADLESS_MINTABLE_SCOPES = PUBLIC_API_SCOPES.slice(
   0,
   PUBLIC_API_SCOPES.indexOf(HEADLESS_KEY_MINT_SCOPE),
-) as readonly PublicApiScope[]
+) as readonly HeadlessMintableScope[]
+
+/**
+ * The gate must be the TOP rung, or the two statements of the same rule diverge: the value above
+ * is every rung BELOW the gate, while its type is every rung EXCEPT it, and those coincide only
+ * while nothing sits above. A rung added above `admin` fails this assignment rather than silently
+ * shipping a schema whose TypeScript type admits a scope its runtime validation refuses.
+ */
+type TopScopeRung = typeof PUBLIC_API_SCOPES extends readonly [...infer _Rest, infer Top]
+  ? Top
+  : never
+const _mintGateIsTopRung: TopScopeRung = HEADLESS_KEY_MINT_SCOPE
 
 /**
  * Mint a key HEADLESSLY, over `/api/v1` — the same body as the session-authed create, minus the
