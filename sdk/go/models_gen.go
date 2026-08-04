@@ -1047,6 +1047,84 @@ const (
 // NotificationWebhookRunEventValues lists every NotificationWebhookRunEvent this SDK release knows.
 var NotificationWebhookRunEventValues = []NotificationWebhookRunEvent{NotificationWebhookRunEventRunStarted, NotificationWebhookRunEventRunCompleted, NotificationWebhookRunEventRunFailed}
 
+// PublicAgentDecision is the `PublicAgentDecision` wire model.
+type PublicAgentDecision struct {
+	DecisionID string   `json:"decisionId"`
+	Kind       string   `json:"kind"`
+	Options    []string `json:"options"`
+	Question   string   `json:"question"`
+	StepKind   string   `json:"stepKind"`
+}
+
+// PublicApprovalGateDecision is the `PublicApprovalGateDecision` wire model.
+type PublicApprovalGateDecision struct {
+	ApprovalID string `json:"approvalId"`
+	Exceeded   bool   `json:"exceeded"`
+	// Feedback always present; nil when the server has no value for it.
+	Feedback  *string                          `json:"feedback"`
+	Kind      string                           `json:"kind"`
+	Proposal  string                           `json:"proposal"`
+	Status    PublicApprovalGateDecisionStatus `json:"status"`
+	StepIndex float64                          `json:"stepIndex"`
+	StepKind  string                           `json:"stepKind"`
+}
+
+// PublicApprovalGateDecisionStatus is the `PublicApprovalGateDecisionStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicApprovalGateDecisionStatus string
+
+const (
+	PublicApprovalGateDecisionStatusPending          PublicApprovalGateDecisionStatus = "pending"
+	PublicApprovalGateDecisionStatusApproved         PublicApprovalGateDecisionStatus = "approved"
+	PublicApprovalGateDecisionStatusChangesRequested PublicApprovalGateDecisionStatus = "changes_requested"
+	PublicApprovalGateDecisionStatusRejected         PublicApprovalGateDecisionStatus = "rejected"
+)
+
+// PublicApprovalGateDecisionStatusValues lists every PublicApprovalGateDecisionStatus this SDK release knows.
+var PublicApprovalGateDecisionStatusValues = []PublicApprovalGateDecisionStatus{PublicApprovalGateDecisionStatusPending, PublicApprovalGateDecisionStatusApproved, PublicApprovalGateDecisionStatusChangesRequested, PublicApprovalGateDecisionStatusRejected}
+
+// PublicApproveStep is the `PublicApproveStep` wire model.
+type PublicApproveStep struct {
+	// Proposal may be absent entirely.
+	Proposal *string `json:"proposal,omitempty"`
+}
+
+// PublicBrainstormDecision is the `PublicBrainstormDecision` wire model.
+type PublicBrainstormDecision struct {
+	// ConvergedDirection always present; nil when the server has no value for it.
+	ConvergedDirection *string                          `json:"convergedDirection"`
+	Iteration          float64                          `json:"iteration"`
+	Kind               string                           `json:"kind"`
+	MaxIterations      float64                          `json:"maxIterations"`
+	Options            []PublicReviewFinding            `json:"options"`
+	SessionID          string                           `json:"sessionId"`
+	Stage              PublicBrainstormDecisionStage    `json:"stage"`
+	Status             PublicRequirementsDecisionStatus `json:"status"`
+	TaskID             string                           `json:"taskId"`
+}
+
+// PublicBrainstormDecisionStage is the `PublicBrainstormDecisionStage` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicBrainstormDecisionStage string
+
+const (
+	PublicBrainstormDecisionStageRequirements PublicBrainstormDecisionStage = "requirements"
+	PublicBrainstormDecisionStageArchitecture PublicBrainstormDecisionStage = "architecture"
+)
+
+// PublicBrainstormDecisionStageValues lists every PublicBrainstormDecisionStage this SDK release knows.
+var PublicBrainstormDecisionStageValues = []PublicBrainstormDecisionStage{PublicBrainstormDecisionStageRequirements, PublicBrainstormDecisionStageArchitecture}
+
+// PublicChallengePrReviewFinding is the `PublicChallengePrReviewFinding` wire model.
+type PublicChallengePrReviewFinding struct {
+	// Question may be absent entirely.
+	Question *string `json:"question,omitempty"`
+}
+
 // PublicChooseFork is the `PublicChooseFork` wire model.
 type PublicChooseFork struct {
 	// Custom may be absent entirely.
@@ -1055,6 +1133,19 @@ type PublicChooseFork struct {
 	ForkID *string `json:"forkId,omitempty"`
 	// Note may be absent entirely.
 	Note *string `json:"note,omitempty"`
+}
+
+// PublicClarityDecision is the `PublicClarityDecision` wire model.
+type PublicClarityDecision struct {
+	// ClarifiedReport always present; nil when the server has no value for it.
+	ClarifiedReport *string                          `json:"clarifiedReport"`
+	Findings        []PublicReviewFinding            `json:"findings"`
+	Iteration       float64                          `json:"iteration"`
+	Kind            string                           `json:"kind"`
+	MaxIterations   float64                          `json:"maxIterations"`
+	ReviewID        string                           `json:"reviewId"`
+	Status          PublicRequirementsDecisionStatus `json:"status"`
+	TaskID          string                           `json:"taskId"`
 }
 
 // PublicDecision is a `PublicDecision`: exactly one variant pointer is non-nil, chosen by kind.
@@ -1072,6 +1163,20 @@ type PublicDecision struct {
 	PublicJudgeDecision *PublicJudgeDecision
 	// PublicInputGateDecision is set when kind == "input-gate".
 	PublicInputGateDecision *PublicInputGateDecision
+	// PublicApprovalGateDecision is set when kind == "approval-gate".
+	PublicApprovalGateDecision *PublicApprovalGateDecision
+	// PublicAgentDecision is set when kind == "agent-decision".
+	PublicAgentDecision *PublicAgentDecision
+	// PublicClarityDecision is set when kind == "clarity-review".
+	PublicClarityDecision *PublicClarityDecision
+	// PublicBrainstormDecision is set when kind == "brainstorm".
+	PublicBrainstormDecision *PublicBrainstormDecision
+	// PublicPrReviewDecision is set when kind == "pr-review".
+	PublicPrReviewDecision *PublicPrReviewDecision
+	// PublicHumanTestDecision is set when kind == "human-test".
+	PublicHumanTestDecision *PublicHumanTestDecision
+	// PublicVisualConfirmDecision is set when kind == "visual-confirmation".
+	PublicVisualConfirmDecision *PublicVisualConfirmDecision
 	// Raw is the undecoded body, always populated.
 	Raw json.RawMessage
 }
@@ -1115,6 +1220,55 @@ func (u *PublicDecision) UnmarshalJSON(data []byte) error {
 		}
 		u.PublicInputGateDecision = &out
 		return nil
+	case "approval-gate":
+		var out PublicApprovalGateDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicApprovalGateDecision = &out
+		return nil
+	case "agent-decision":
+		var out PublicAgentDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicAgentDecision = &out
+		return nil
+	case "clarity-review":
+		var out PublicClarityDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicClarityDecision = &out
+		return nil
+	case "brainstorm":
+		var out PublicBrainstormDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicBrainstormDecision = &out
+		return nil
+	case "pr-review":
+		var out PublicPrReviewDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicPrReviewDecision = &out
+		return nil
+	case "human-test":
+		var out PublicHumanTestDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicHumanTestDecision = &out
+		return nil
+	case "visual-confirmation":
+		var out PublicVisualConfirmDecision
+		if err := json.Unmarshal(data, &out); err != nil {
+			return err
+		}
+		u.PublicVisualConfirmDecision = &out
+		return nil
 	}
 	// An unknown variant is NOT an error: the surface is additive, and Raw + Kind still let
 	// a caller see exactly what arrived.
@@ -1134,6 +1288,27 @@ func (u PublicDecision) MarshalJSON() ([]byte, error) {
 	}
 	if u.PublicInputGateDecision != nil {
 		return json.Marshal(u.PublicInputGateDecision)
+	}
+	if u.PublicApprovalGateDecision != nil {
+		return json.Marshal(u.PublicApprovalGateDecision)
+	}
+	if u.PublicAgentDecision != nil {
+		return json.Marshal(u.PublicAgentDecision)
+	}
+	if u.PublicClarityDecision != nil {
+		return json.Marshal(u.PublicClarityDecision)
+	}
+	if u.PublicBrainstormDecision != nil {
+		return json.Marshal(u.PublicBrainstormDecision)
+	}
+	if u.PublicPrReviewDecision != nil {
+		return json.Marshal(u.PublicPrReviewDecision)
+	}
+	if u.PublicHumanTestDecision != nil {
+		return json.Marshal(u.PublicHumanTestDecision)
+	}
+	if u.PublicVisualConfirmDecision != nil {
+		return json.Marshal(u.PublicVisualConfirmDecision)
 	}
 	if len(u.Raw) > 0 {
 		return u.Raw, nil
@@ -1189,6 +1364,62 @@ const (
 
 // PublicForkDecisionStatusValues lists every PublicForkDecisionStatus this SDK release knows.
 var PublicForkDecisionStatusValues = []PublicForkDecisionStatus{PublicForkDecisionStatusProposing, PublicForkDecisionStatusAwaitingChoice, PublicForkDecisionStatusAnswering, PublicForkDecisionStatusChosen, PublicForkDecisionStatusSinglePath, PublicForkDecisionStatusSkipped}
+
+// PublicHumanTestDecision is the `PublicHumanTestDecision` wire model.
+type PublicHumanTestDecision struct {
+	Attempts float64 `json:"attempts"`
+	// DegradedReason always present; nil when the server has no value for it.
+	DegradedReason *string `json:"degradedReason"`
+	// Environment always present; nil when the server has no value for it.
+	Environment *PublicHumanTestEnvironment  `json:"environment"`
+	Kind        string                       `json:"kind"`
+	MaxAttempts float64                      `json:"maxAttempts"`
+	Phase       PublicHumanTestDecisionPhase `json:"phase"`
+}
+
+// PublicHumanTestDecisionPhase is the `PublicHumanTestDecisionPhase` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicHumanTestDecisionPhase string
+
+const (
+	PublicHumanTestDecisionPhaseProvisioning       PublicHumanTestDecisionPhase = "provisioning"
+	PublicHumanTestDecisionPhaseAwaitingHuman      PublicHumanTestDecisionPhase = "awaiting_human"
+	PublicHumanTestDecisionPhaseFixing             PublicHumanTestDecisionPhase = "fixing"
+	PublicHumanTestDecisionPhaseResolvingConflicts PublicHumanTestDecisionPhase = "resolving_conflicts"
+	PublicHumanTestDecisionPhasePassed             PublicHumanTestDecisionPhase = "passed"
+)
+
+// PublicHumanTestDecisionPhaseValues lists every PublicHumanTestDecisionPhase this SDK release knows.
+var PublicHumanTestDecisionPhaseValues = []PublicHumanTestDecisionPhase{PublicHumanTestDecisionPhaseProvisioning, PublicHumanTestDecisionPhaseAwaitingHuman, PublicHumanTestDecisionPhaseFixing, PublicHumanTestDecisionPhaseResolvingConflicts, PublicHumanTestDecisionPhasePassed}
+
+// PublicHumanTestEnvironment is the `PublicHumanTestEnvironment` wire model.
+type PublicHumanTestEnvironment struct {
+	// ExpiresAt always present; nil when the server has no value for it.
+	ExpiresAt *float64                         `json:"expiresAt"`
+	Status    PublicHumanTestEnvironmentStatus `json:"status"`
+	// URL always present; nil when the server has no value for it.
+	URL *string `json:"url"`
+}
+
+// PublicHumanTestEnvironmentStatus is the `PublicHumanTestEnvironmentStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicHumanTestEnvironmentStatus string
+
+const (
+	PublicHumanTestEnvironmentStatusProvisioning PublicHumanTestEnvironmentStatus = "provisioning"
+	PublicHumanTestEnvironmentStatusReady        PublicHumanTestEnvironmentStatus = "ready"
+	PublicHumanTestEnvironmentStatusFailed       PublicHumanTestEnvironmentStatus = "failed"
+	PublicHumanTestEnvironmentStatusExpired      PublicHumanTestEnvironmentStatus = "expired"
+	PublicHumanTestEnvironmentStatusTearingDown  PublicHumanTestEnvironmentStatus = "tearing_down"
+	PublicHumanTestEnvironmentStatusTornDown     PublicHumanTestEnvironmentStatus = "torn_down"
+)
+
+// PublicHumanTestEnvironmentStatusValues lists every PublicHumanTestEnvironmentStatus this SDK release knows.
+var PublicHumanTestEnvironmentStatusValues = []PublicHumanTestEnvironmentStatus{PublicHumanTestEnvironmentStatusProvisioning, PublicHumanTestEnvironmentStatusReady, PublicHumanTestEnvironmentStatusFailed, PublicHumanTestEnvironmentStatusExpired, PublicHumanTestEnvironmentStatusTearingDown, PublicHumanTestEnvironmentStatusTornDown}
 
 // PublicIncorporate is the `PublicIncorporate` wire model.
 type PublicIncorporate struct {
@@ -1399,9 +1630,161 @@ type PublicPipelineList struct {
 	Pipelines []PublicPipeline `json:"pipelines"`
 }
 
+// PublicPrReviewDecision is the `PublicPrReviewDecision` wire model.
+type PublicPrReviewDecision struct {
+	Findings []PublicPrReviewDecisionFinding `json:"findings"`
+	Kind     string                          `json:"kind"`
+	// PRURL always present; nil when the server has no value for it.
+	PRURL              *string                       `json:"prUrl"`
+	SelectedFindingIds []string                      `json:"selectedFindingIds"`
+	Slices             []PublicPrReviewDecisionSlice `json:"slices"`
+	Status             PublicPrReviewDecisionStatus  `json:"status"`
+	// Summary always present; nil when the server has no value for it.
+	Summary *string `json:"summary"`
+}
+
+// PublicPrReviewDecisionFinding is the `PublicPrReviewDecisionFinding` wire model.
+type PublicPrReviewDecisionFinding struct {
+	Category PublicPrReviewDecisionFindingCategory `json:"category"`
+	// Challenge always present; nil when the server has no value for it.
+	Challenge *PublicPrReviewDecisionFindingChallenge `json:"challenge"`
+	Detail    string                                  `json:"detail"`
+	FindingID string                                  `json:"findingId"`
+	// Line always present; nil when the server has no value for it.
+	Line     *float64                              `json:"line"`
+	Path     string                                `json:"path"`
+	Severity PublicPrReviewDecisionFindingSeverity `json:"severity"`
+	// Side always present; nil when the server has no value for it.
+	Side *PublicPrReviewDecisionFindingSide `json:"side"`
+	// SliceID always present; nil when the server has no value for it.
+	SliceID *string `json:"sliceId"`
+	// SuggestedFix always present; nil when the server has no value for it.
+	SuggestedFix *string `json:"suggestedFix"`
+	Title        string  `json:"title"`
+}
+
+// PublicPrReviewDecisionFindingCategory is the `PublicPrReviewDecisionFindingCategory` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicPrReviewDecisionFindingCategory string
+
+const (
+	PublicPrReviewDecisionFindingCategoryCorrectness     PublicPrReviewDecisionFindingCategory = "correctness"
+	PublicPrReviewDecisionFindingCategorySecurity        PublicPrReviewDecisionFindingCategory = "security"
+	PublicPrReviewDecisionFindingCategoryPerformance     PublicPrReviewDecisionFindingCategory = "performance"
+	PublicPrReviewDecisionFindingCategoryMaintainability PublicPrReviewDecisionFindingCategory = "maintainability"
+	PublicPrReviewDecisionFindingCategoryStyle           PublicPrReviewDecisionFindingCategory = "style"
+	PublicPrReviewDecisionFindingCategoryTest            PublicPrReviewDecisionFindingCategory = "test"
+	PublicPrReviewDecisionFindingCategoryOther           PublicPrReviewDecisionFindingCategory = "other"
+)
+
+// PublicPrReviewDecisionFindingCategoryValues lists every PublicPrReviewDecisionFindingCategory this SDK release knows.
+var PublicPrReviewDecisionFindingCategoryValues = []PublicPrReviewDecisionFindingCategory{PublicPrReviewDecisionFindingCategoryCorrectness, PublicPrReviewDecisionFindingCategorySecurity, PublicPrReviewDecisionFindingCategoryPerformance, PublicPrReviewDecisionFindingCategoryMaintainability, PublicPrReviewDecisionFindingCategoryStyle, PublicPrReviewDecisionFindingCategoryTest, PublicPrReviewDecisionFindingCategoryOther}
+
+// PublicPrReviewDecisionFindingChallenge is the `PublicPrReviewDecisionFindingChallenge` wire model.
+type PublicPrReviewDecisionFindingChallenge struct {
+	// Justification always present; nil when the server has no value for it.
+	Justification *string `json:"justification"`
+	// Question always present; nil when the server has no value for it.
+	Question *string                                      `json:"question"`
+	Status   PublicPrReviewDecisionFindingChallengeStatus `json:"status"`
+}
+
+// PublicPrReviewDecisionFindingChallengeStatus is the `PublicPrReviewDecisionFindingChallengeStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicPrReviewDecisionFindingChallengeStatus string
+
+const (
+	PublicPrReviewDecisionFindingChallengeStatusInvestigating PublicPrReviewDecisionFindingChallengeStatus = "investigating"
+	PublicPrReviewDecisionFindingChallengeStatusUpheld        PublicPrReviewDecisionFindingChallengeStatus = "upheld"
+	PublicPrReviewDecisionFindingChallengeStatusAmended       PublicPrReviewDecisionFindingChallengeStatus = "amended"
+	PublicPrReviewDecisionFindingChallengeStatusRetracted     PublicPrReviewDecisionFindingChallengeStatus = "retracted"
+	PublicPrReviewDecisionFindingChallengeStatusFailed        PublicPrReviewDecisionFindingChallengeStatus = "failed"
+)
+
+// PublicPrReviewDecisionFindingChallengeStatusValues lists every PublicPrReviewDecisionFindingChallengeStatus this SDK release knows.
+var PublicPrReviewDecisionFindingChallengeStatusValues = []PublicPrReviewDecisionFindingChallengeStatus{PublicPrReviewDecisionFindingChallengeStatusInvestigating, PublicPrReviewDecisionFindingChallengeStatusUpheld, PublicPrReviewDecisionFindingChallengeStatusAmended, PublicPrReviewDecisionFindingChallengeStatusRetracted, PublicPrReviewDecisionFindingChallengeStatusFailed}
+
+// PublicPrReviewDecisionFindingSeverity is the `PublicPrReviewDecisionFindingSeverity` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicPrReviewDecisionFindingSeverity string
+
+const (
+	PublicPrReviewDecisionFindingSeverityBlocker PublicPrReviewDecisionFindingSeverity = "blocker"
+	PublicPrReviewDecisionFindingSeverityHigh    PublicPrReviewDecisionFindingSeverity = "high"
+	PublicPrReviewDecisionFindingSeverityMedium  PublicPrReviewDecisionFindingSeverity = "medium"
+	PublicPrReviewDecisionFindingSeverityLow     PublicPrReviewDecisionFindingSeverity = "low"
+	PublicPrReviewDecisionFindingSeverityNit     PublicPrReviewDecisionFindingSeverity = "nit"
+)
+
+// PublicPrReviewDecisionFindingSeverityValues lists every PublicPrReviewDecisionFindingSeverity this SDK release knows.
+var PublicPrReviewDecisionFindingSeverityValues = []PublicPrReviewDecisionFindingSeverity{PublicPrReviewDecisionFindingSeverityBlocker, PublicPrReviewDecisionFindingSeverityHigh, PublicPrReviewDecisionFindingSeverityMedium, PublicPrReviewDecisionFindingSeverityLow, PublicPrReviewDecisionFindingSeverityNit}
+
+// PublicPrReviewDecisionFindingSide is the `PublicPrReviewDecisionFindingSide` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicPrReviewDecisionFindingSide string
+
+const (
+	PublicPrReviewDecisionFindingSideLEFT  PublicPrReviewDecisionFindingSide = "LEFT"
+	PublicPrReviewDecisionFindingSideRIGHT PublicPrReviewDecisionFindingSide = "RIGHT"
+)
+
+// PublicPrReviewDecisionFindingSideValues lists every PublicPrReviewDecisionFindingSide this SDK release knows.
+var PublicPrReviewDecisionFindingSideValues = []PublicPrReviewDecisionFindingSide{PublicPrReviewDecisionFindingSideLEFT, PublicPrReviewDecisionFindingSideRIGHT}
+
+// PublicPrReviewDecisionSlice is the `PublicPrReviewDecisionSlice` wire model.
+type PublicPrReviewDecisionSlice struct {
+	Paths     []string `json:"paths"`
+	Rationale string   `json:"rationale"`
+	SliceID   string   `json:"sliceId"`
+	Title     string   `json:"title"`
+}
+
+// PublicPrReviewDecisionStatus is the `PublicPrReviewDecisionStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicPrReviewDecisionStatus string
+
+const (
+	PublicPrReviewDecisionStatusReviewing         PublicPrReviewDecisionStatus = "reviewing"
+	PublicPrReviewDecisionStatusAwaitingSelection PublicPrReviewDecisionStatus = "awaiting_selection"
+	PublicPrReviewDecisionStatusChallenging       PublicPrReviewDecisionStatus = "challenging"
+	PublicPrReviewDecisionStatusFixing            PublicPrReviewDecisionStatus = "fixing"
+	PublicPrReviewDecisionStatusPosting           PublicPrReviewDecisionStatus = "posting"
+	PublicPrReviewDecisionStatusDone              PublicPrReviewDecisionStatus = "done"
+	PublicPrReviewDecisionStatusSkipped           PublicPrReviewDecisionStatus = "skipped"
+)
+
+// PublicPrReviewDecisionStatusValues lists every PublicPrReviewDecisionStatus this SDK release knows.
+var PublicPrReviewDecisionStatusValues = []PublicPrReviewDecisionStatus{PublicPrReviewDecisionStatusReviewing, PublicPrReviewDecisionStatusAwaitingSelection, PublicPrReviewDecisionStatusChallenging, PublicPrReviewDecisionStatusFixing, PublicPrReviewDecisionStatusPosting, PublicPrReviewDecisionStatusDone, PublicPrReviewDecisionStatusSkipped}
+
+// PublicRejectStep is the `PublicRejectStep` wire model.
+type PublicRejectStep struct {
+	// Reason may be absent entirely.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // PublicReplyFinding is the `PublicReplyFinding` wire model.
 type PublicReplyFinding struct {
 	Reply string `json:"reply"`
+}
+
+// PublicRequestGateFix is the `PublicRequestGateFix` wire model.
+type PublicRequestGateFix struct {
+	Findings string `json:"findings"`
+}
+
+// PublicRequestStepChanges is the `PublicRequestStepChanges` wire model.
+type PublicRequestStepChanges struct {
+	Feedback string `json:"feedback"`
 }
 
 // PublicRequirementsDecision is the `PublicRequirementsDecision` wire model.
@@ -1434,6 +1817,11 @@ const (
 
 // PublicRequirementsDecisionStatusValues lists every PublicRequirementsDecisionStatus this SDK release knows.
 var PublicRequirementsDecisionStatusValues = []PublicRequirementsDecisionStatus{PublicRequirementsDecisionStatusReady, PublicRequirementsDecisionStatusIncorporating, PublicRequirementsDecisionStatusReviewing, PublicRequirementsDecisionStatusMerged, PublicRequirementsDecisionStatusExceeded, PublicRequirementsDecisionStatusIncorporated}
+
+// PublicResolveAgentDecision is the `PublicResolveAgentDecision` wire model.
+type PublicResolveAgentDecision struct {
+	Choice string `json:"choice"`
+}
 
 // PublicResolveExceeded is the `PublicResolveExceeded` wire model.
 type PublicResolveExceeded struct {
@@ -1495,6 +1883,29 @@ const (
 
 // PublicResolveJudgeChoiceValues lists every PublicResolveJudgeChoice this SDK release knows.
 var PublicResolveJudgeChoiceValues = []PublicResolveJudgeChoice{PublicResolveJudgeChoiceProceed, PublicResolveJudgeChoiceBounce, PublicResolveJudgeChoiceStop}
+
+// PublicResolvePrReview is the `PublicResolvePrReview` wire model.
+type PublicResolvePrReview struct {
+	// Action may be absent entirely.
+	Action *PublicResolvePrReviewAction `json:"action,omitempty"`
+	// FindingIds may be absent entirely.
+	FindingIds []string `json:"findingIds,omitempty"`
+}
+
+// PublicResolvePrReviewAction is the `PublicResolvePrReviewAction` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicResolvePrReviewAction string
+
+const (
+	PublicResolvePrReviewActionFinish PublicResolvePrReviewAction = "finish"
+	PublicResolvePrReviewActionFix    PublicResolvePrReviewAction = "fix"
+	PublicResolvePrReviewActionPost   PublicResolvePrReviewAction = "post"
+)
+
+// PublicResolvePrReviewActionValues lists every PublicResolvePrReviewAction this SDK release knows.
+var PublicResolvePrReviewActionValues = []PublicResolvePrReviewAction{PublicResolvePrReviewActionFinish, PublicResolvePrReviewActionFix, PublicResolvePrReviewActionPost}
 
 // PublicReviewFinding is the `PublicReviewFinding` wire model.
 type PublicReviewFinding struct {
@@ -1798,6 +2209,41 @@ const (
 
 // PublicUsageRowBillingValues lists every PublicUsageRowBilling this SDK release knows.
 var PublicUsageRowBillingValues = []PublicUsageRowBilling{PublicUsageRowBillingMetered, PublicUsageRowBillingSubscription}
+
+// PublicVisualConfirmDecision is the `PublicVisualConfirmDecision` wire model.
+type PublicVisualConfirmDecision struct {
+	Attempts float64 `json:"attempts"`
+	// DegradedReason always present; nil when the server has no value for it.
+	DegradedReason *string                           `json:"degradedReason"`
+	Kind           string                            `json:"kind"`
+	MaxAttempts    float64                           `json:"maxAttempts"`
+	Pairs          []PublicVisualConfirmDecisionPair `json:"pairs"`
+	Phase          PublicVisualConfirmDecisionPhase  `json:"phase"`
+}
+
+// PublicVisualConfirmDecisionPair is the `PublicVisualConfirmDecisionPair` wire model.
+type PublicVisualConfirmDecisionPair struct {
+	// ActualArtifactID always present; nil when the server has no value for it.
+	ActualArtifactID *string `json:"actualArtifactId"`
+	// ReferenceArtifactID always present; nil when the server has no value for it.
+	ReferenceArtifactID *string `json:"referenceArtifactId"`
+	View                string  `json:"view"`
+}
+
+// PublicVisualConfirmDecisionPhase is the `PublicVisualConfirmDecisionPhase` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicVisualConfirmDecisionPhase string
+
+const (
+	PublicVisualConfirmDecisionPhaseAwaitingHuman PublicVisualConfirmDecisionPhase = "awaiting_human"
+	PublicVisualConfirmDecisionPhaseFixing        PublicVisualConfirmDecisionPhase = "fixing"
+	PublicVisualConfirmDecisionPhaseApproved      PublicVisualConfirmDecisionPhase = "approved"
+)
+
+// PublicVisualConfirmDecisionPhaseValues lists every PublicVisualConfirmDecisionPhase this SDK release knows.
+var PublicVisualConfirmDecisionPhaseValues = []PublicVisualConfirmDecisionPhase{PublicVisualConfirmDecisionPhaseAwaitingHuman, PublicVisualConfirmDecisionPhaseFixing, PublicVisualConfirmDecisionPhaseApproved}
 
 // PutNotificationWebhook is the `PutNotificationWebhook` wire model.
 type PutNotificationWebhook struct {

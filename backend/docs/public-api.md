@@ -108,21 +108,20 @@ machine-readable; `message` is operator prose. Codes fall in two families:
   validation failure carries `issues: [{ path, message }]`.
 - **Surface-specific codes**, unique to `/api/v1` (branch on these, not on the message):
 
-  | Code                             | Status  | Where                                                                                                        |
-  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------ |
-  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                         |
-  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                  |
-  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                 |
-  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                            |
-  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                |
-  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                            |
-  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                       |
-  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                   |
-  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly |
-  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                  |
-  | `no_review`                      | 404     | requirements decision routes: the run has no live requirements review                                        |
-  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                    |
-  | `document_already_linked`        | 409     | task create: a named document is already attached to another live task (`details.taskId` names it)           |
+  | Code                             | Status  | Where                                                                                                         |
+  | -------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+  | `insufficient_scope`             | 403     | any route, when the key's scope is below the minimum                                                          |
+  | `invalid_cursor`                 | 400     | any paginated list, on a malformed `cursor`                                                                   |
+  | `pipeline_not_public`            | 400     | `POST /jobs`: unknown or non-public pipeline                                                                  |
+  | `pipeline_not_inline`            | 400     | `POST /jobs`: pipeline has container/GitHub steps                                                             |
+  | `pipeline_requires_decide_scope` | 403     | `POST /jobs` and `POST /tasks/:id/start`: pipeline can park on a human, key is below `decide`                 |
+  | `too_many_active_runs`           | 429     | `POST /jobs`: the workspace already has 5 headless jobs in flight                                             |
+  | `pipeline_required`              | 400     | `POST /tasks/:id/start`: no pinned pipeline and no `pipelineId` passed                                        |
+  | `service_archived`               | 409     | `POST /tasks/:id/start`: the enclosing service is archived                                                    |
+  | `individual_model_unsupported`   | 409     | start / retry / notification `act` that would run an individual-usage (personal-credential) model headlessly  |
+  | `no_run`                         | 404/409 | task run reads (404: never started) and stop/retry (409: nothing to act on)                                   |
+  | `no_review`                      | 404     | an iterative-review decision route (requirements / clarity / brainstorm): the run carries no such live entity |
+  | `notification_not_actionable`    | 409     | `POST /notifications/:id/act` on a card with no automated headless action                                     |
 
 ### Pagination
 
@@ -298,12 +297,7 @@ support.
     "cat-factory": {
       "command": "npx",
       "args": ["-y", "@cat-factory/mcp-server"],
-      // CAT_FACTORY_API_KEY takes the key inline; CAT_FACTORY_API_KEY_FILE names a file to read it
-      // from, which keeps a long-lived credential out of the host's plaintext config.
-      "env": {
-        "CAT_FACTORY_BASE_URL": "$BASE",
-        "CAT_FACTORY_API_KEY_FILE": "/run/secrets/cat-factory",
-      },
+      "env": { "CAT_FACTORY_BASE_URL": "$BASE", "CAT_FACTORY_API_KEY": "cf_live_..." },
     },
   },
 }
@@ -545,29 +539,55 @@ interactive user. A pipeline can be startable on a board task without being eith
 
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
 
-The external counterpart of the SPA's requirements-review, fork and judge windows, plus the
-pre-dispatch input gate's notice. Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
+The external counterpart of every window the SPA offers a human when a run stops and waits for one.
+Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
 possibly started by a human in the SPA). Reading needs `read`; **answering needs `decide`**.
 
 Every action returns the run's **whole decision list**, re-read after the action:
 `{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
-run is waiting on a park type this surface cannot answer yet
-([tracker](../../docs/initiatives/public-api-additions.md)); your options are the SPA or cancel.
+run is waiting on a park this surface does not model
+([tracker](../../docs/initiatives/public-api-additions.md)); the one you should expect is
+`human-review`, whose answer is a person approving the pull request on the VCS host.
 
-| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                    |
-| ----------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                         |
-| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                      |
-| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                |
-| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round. |
-| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                       |
-| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                           |
-| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                  |
-| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                 |
-| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                 |
-| `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                   |
+| Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
+| ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET …`                                               | `read`   | List the currently-parked decisions.                                                                                                                                                    |
+| `POST …/approvals/:approvalId/approve`                | `decide` | Approve a gated step's proposal and advance. Body `{ proposal? (≤50000) }` — an edit replaces the agent's text and is what flows downstream.                                            |
+| `POST …/approvals/:approvalId/request-changes`        | `decide` | Body `{ feedback (1–10000) }`; the gated step re-runs with the guidance folded in.                                                                                                      |
+| `POST …/approvals/:approvalId/reject`                 | `decide` | Body `{ reason? (≤2000) }`; the run stops entirely (a terminal `rejected` failure the board can retry).                                                                                 |
+| `POST …/approvals/:approvalId/resolve-exceeded`       | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a companion gate at its automatic-rework cap (`exceeded: true`), which refuses the plain approve.                |
+| `POST …/questions/:decisionId/answer`                 | `decide` | Body `{ choice (1–4000) }`; answer a decision an agent raised. The asking step **re-runs** with it.                                                                                     |
+| `POST …/requirements/findings/:itemId/reply`          | `decide` | Answer one reviewer finding. Body `{ reply (1–4000) }`.                                                                                                                                 |
+| `PATCH …/requirements/findings/:itemId`               | `decide` | Body `{ status: "dismissed" \| "open" }`; dismiss a finding as not applicable, or reopen one.                                                                                           |
+| `POST …/requirements/incorporate`                     | `decide` | Fold recorded answers into the requirements document. Body `{ feedback? (≤4000) }`. **Asynchronous**: the response shows `incorporating`; poll or stream for the next round.            |
+| `POST …/requirements/re-review`                       | `decide` | One more reviewer pass over the incorporated document.                                                                                                                                  |
+| `POST …/requirements/proceed`                         | `decide` | Settle the requirements phase and advance the run.                                                                                                                                      |
+| `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                             |
+| `POST\|PATCH …/clarity/…`                             | `decide` | The **same six verbs** as `…/requirements/…`, over the bug-report triage loop: `findings/:itemId/reply`, `findings/:itemId`, `incorporate`, `re-review`, `proceed`, `resolve-exceeded`. |
+| `POST\|PATCH …/brainstorm/:stage/…`                   | `decide` | The same six verbs again, over a dialogue stage (`requirements` \| `architecture`), with the items called `options/:itemId` rather than `findings/:itemId`.                             |
+| `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                            |
+| `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                            |
+| `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                              |
+| `POST …/pr-review/resolve`                            | `decide` | Body `{ action?: "finish" \| "fix" \| "post", findingIds?: string[] }`; record the curated selection. `fix`/`post` need ≥1 finding and **act on the real pull request**.                |
+| `POST …/pr-review/findings/:findingId/dismiss`        | `decide` | Drop one finding from the review. Curation, not a resolution: the run stays parked.                                                                                                     |
+| `POST …/pr-review/findings/:findingId/challenge`      | `decide` | Body `{ question? (≤4000) }`; dispatch a read-only investigator to uphold, strengthen or retract the finding.                                                                           |
+| `POST …/human-test/confirm`                           | `decide` | The change works in the ephemeral environment: it is torn down and the run advances.                                                                                                    |
+| `POST …/human-test/request-fix`                       | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the tested environment, then rebuild it.                                                                                        |
+| `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                             |
+| `POST …/visual-confirmation/request-fix`              | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the captured screenshots.                                                                                                       |
 
-Four decision kinds appear in `decisions[]`, discriminated by `kind`:
+Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
+
+- **`approval-gate`**: a step marked `requiresApproval` finished and the run is holding its output
+  up for a person — the simplest park, and the one any pipeline can carry. Carries the
+  `approvalId` every action addresses, the `stepKind` and `stepIndex` whose output is being judged,
+  the `proposal` itself, and the last `feedback`. **`exceeded: true` changes the verb**: the gate is
+  a quality companion at its automatic-rework cap, the plain approve is refused (`409`), and
+  `resolve-exceeded` is what settles it.
+- **`agent-decision`**: an agent hit a fork mid-work and asked. Carries the `decisionId`, the
+  `question` and the `options` it offered. Resolving **re-runs** the asking step with the choice
+  folded in rather than advancing past it — the difference from an approval gate. Your `choice` is
+  taken verbatim, so it may be one of the options or a steer of your own.
 
 - **`requirements-review`**: the clarification loop. Findings carry a stable `itemId`, category,
   severity, status and any recorded `reply`; the decision carries `iteration` / `maxIterations` and
@@ -589,10 +609,38 @@ Four decision kinds appear in `decisions[]`, discriminated by `kind`:
   This is the one park that depends on the **task** rather than the pipeline, which is why a
   `write`-scope key is refused at start (`pipeline_requires_decide_scope`) for a task it would
   hold, rather than being handed a run it cannot answer.
+- **`clarity-review`**: the bug-report triage loop — the requirements review's twin over a
+  different document, settling `clarifiedReport` instead of `incorporatedRequirements`. It is its
+  own kind rather than a variant of `requirements-review` because a run can carry **both**: a
+  bugfix pipeline clarifies the report and then reviews the requirements derived from it.
+- **`brainstorm`**: a structured dialogue that proposes concrete `options` with their trade-offs
+  and converges on one direction. Keyed by `(task, stage)`, so a decision list can carry **two**
+  brainstorm entries at once (`requirements` and `architecture`) — key your own state by
+  `kind` + `stage`, not `kind` alone.
+- **`pr-review`**: the read-only reviewer sliced an open pull request and the run is waiting for
+  someone to curate which findings matter. Carries the `slices`, the severity-ordered `findings`
+  (each with its path/line anchor, `suggestedFix` and any `challenge` verdict) and the current
+  `selectedFindingIds`. Reachable only through `POST /tasks/:taskId/start`, since a `pr-reviewer`
+  step is container-backed.
+- **`human-test`**: a live ephemeral `environment` is up and the run is waiting for someone to
+  exercise it. `degradedReason` non-null means no environment was provisioned and the change has
+  to be tested against the PR branch by hand.
+- **`visual-confirmation`**: the UI tester's screenshots are waiting to be compared against the
+  reference designs. `pairs` carries the artifact ids per view, but **the images are not readable
+  over this API** — resolving an id to an image needs the app, so approving on this projection
+  alone approves screenshots you have not seen.
+
+The last two are exposed with their limits stated rather than sold as equivalent to the rest: the
+verbs are mechanical, but the judgement they record is the one an API consumer is least able to
+supply. They earn their place for an integration that drives its own human through a different UI,
+or that has a real automated check to point at `environment.url`.
 
 Answers ride the **same service methods** the SPA calls, so racing surfaces (a human in the app and
 your integration) are already arbitrated: whoever answers first wins, no locking needed on your
-side.
+side. That sharing is also why the list only ever offers you verbs the engine will accept: several
+specialised parks ride the same internal approval flag as a plain gate, and each is reported as
+**its own** kind rather than as `approval-gate`, because the engine refuses the generic
+approve/request-changes/reject on them.
 
 ### Notification inbox
 
