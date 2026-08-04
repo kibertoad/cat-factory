@@ -40,18 +40,19 @@ generated project stands alone outside this repo.
 npx @cat-factory/cli init
 ```
 
-It is interactive: it asks for a project name, generates the three required
-crypto secrets in the exact formats the server needs, lets you pick how agents
-run (a prewarmed Docker pool, or your own installed `claude`/`codex` CLI on the
-host), and opens your browser at GitHub's or GitLab's token page with the right
-scopes pre-selected, then reads the token back. It writes both `.env` files and
-gitignores them. Pass `--yes` with flags to drive it non-interactively.
+It walks you through the choices that matter: the project name, whether agents
+run in a prewarmed Docker pool or on your own installed `claude`/`codex` CLI,
+and which source-control provider to connect. Along the way it generates the
+three crypto secrets the server requires in the exact formats it expects, opens
+your browser at GitHub's or GitLab's token page with the right scopes already
+selected, and reads the token back without echoing it. Both `.env` files are
+written and gitignored for you. Add `--yes` and flags to skip the prompts.
 
-You need **Node 24 or newer** (the scaffolded entry runs on Node's own
-TypeScript type stripping) and a **container runtime** for the Postgres the
-generated `docker-compose.yml` brings up, and for the agent containers unless
-you picked native mode. Docker, Podman, OrbStack, Colima and Apple `container`
-all work.
+You will need **Node 24 or newer**, since the scaffolded entry runs on Node's
+own TypeScript type stripping, and a **container runtime**: Docker, Podman,
+OrbStack, Colima and Apple `container` all work. It runs the Postgres from the
+generated `docker-compose.yml`, plus the agent containers unless you chose to
+run them natively.
 
 Then run the two halves, each from the project root, in its own terminal:
 
@@ -60,17 +61,17 @@ cd <project>/local    && npm install && npm run db:up && npm start   # backend o
 cd <project>/frontend && npm install && npm run dev                  # SPA on :3000
 ```
 
-The executor image agent jobs run in needs no `docker pull`: the backend fetches
-the version it was built against on first boot, which is why that boot is the
-slow one. Pin `LOCAL_HARNESS_IMAGE` only to lock a specific version.
+Give the first backend start a minute: it pulls the executor-harness image your
+agent jobs run in before it begins serving, and later starts reuse it.
 
-One thing is still yours to supply: **at least one model provider**, set in
-`local/.env` or added through the UI after you sign in. The stack boots without
-one, but no model is selectable until you do, so no pipeline can start.
+The last piece is a **model provider**. Add one in `local/.env` before you
+start, or sign in and add it through the UI. Cloudflare Workers AI is the
+quickest to set up, and any direct vendor key works. The board comes up without
+one, but no model is selectable until you add it, so no pipeline can start.
 
-Sign in, connect the repo you want agents to work on, put a task on the board,
-and start a run. Full CLI reference (every flag, the `env` / `k3s` / `supervise`
-subcommands, what exactly gets scaffolded):
+From there: connect the repo you want agents to work on, put a task on the
+board, and start a run. Full CLI reference (every flag, the `env` / `k3s` /
+`supervise` subcommands, what exactly gets scaffolded):
 [`@cat-factory/cli`](./backend/packages/cli/README.md). The local mode itself
 (container-runtime matrix, repo linking, the warm pool, ephemeral environments):
 [`deploy/local/README.md`](./deploy/local/README.md).
