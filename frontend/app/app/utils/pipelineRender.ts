@@ -2,7 +2,7 @@
 // TaskPipelineMini, AgentStepDetail), so the "is this step still live?" logic stays
 // in one place rather than being re-derived as inline ternaries per component.
 
-import type { AgentState, PipelineStep } from '~/types/execution'
+import type { AgentState, ExecutionInstance, PipelineStep } from '~/types/execution'
 
 /**
  * Visual state of a conditionally-run companion attached to a gate step (today the
@@ -141,8 +141,23 @@ export function isCompanionKind(kind: string): boolean {
  * server-side (`assertNotIterativeGate`), so every surface that offers a step's pending
  * approval must route these to their window instead of the generic "Approve & proceed"
  * rail — which would blink a 409 and resolve nothing.
+ *
+ * `input-gate` is the odd one out: it is resolved by an inline NOTICE rather than an overlay,
+ * because its remedy is to go and edit the task, which is a board action rather than something
+ * a modal could hold.
  */
-export function dedicatedParkView(step: PipelineStep): 'follow-ups' | 'fork-decision' | null {
+export function dedicatedParkView(
+  step: PipelineStep,
+  instance?: ExecutionInstance | null,
+): 'follow-ups' | 'fork-decision' | 'input-gate' | null {
+  // The PRE-TOKEN INPUT GATE parks whatever step 0 happens to be, so it leaves nothing on the
+  // STEP to recognise it by: its verdict is a fact about the RUN. Checked first, and off the
+  // instance: approving it generically would mark the run's first working step done and skip
+  // the work the run exists to do. The instance is optional only so a caller with a step and no
+  // run in hand still type-checks; every real park surface passes it.
+  if (instance?.inputGate?.status === 'blocked' && step.approval?.status === 'pending') {
+    return 'input-gate'
+  }
   // The fork park sits BEFORE the coder's build dispatch; `answering` (a chat turn in
   // flight) still belongs to the fork window, which renders the pending reply.
   const fork = step.forkDecision?.status

@@ -16,6 +16,7 @@ import { useNowTick, stepDurationLabel } from '~/composables/useStepTimer'
 import type { PipelineStep } from '~/types/execution'
 import type { ChangeClass, ReviewEffort } from '~/types/merge'
 import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
+import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 
 const props = defineProps<{ block: Block }>()
 
@@ -58,6 +59,17 @@ const isEmpty = computed(
 // A failed run is no longer executing: a step left mid-flight must stop showing
 // its live "Spinning up…" phase (the shared failure banner renders below).
 const runFailed = computed(() => instance.value?.status === 'failed')
+/**
+ * The run's PRE-TOKEN INPUT GATE verdict, shown while it is parked on it (and once waived, so
+ * the record of what was overruled stays visible on the run that carries it). Read off the RUN,
+ * not a step: the gate guards the first dispatch and leaves nothing kind-specific behind.
+ */
+const inputGateVerdict = computed(() => {
+  const gate = instance.value?.inputGate
+  return gate && (gate.status === 'blocked' || gate.status === 'overridden') ? gate : null
+})
+/** While the gate holds the run, the per-step generic approval affordance must not be offered. */
+const inputGateBlocked = computed(() => instance.value?.inputGate?.status === 'blocked')
 
 // A failed pipeline run surfaces the shared failure banner + retry — the
 // execution failure surface that the old `pr_ready` flip used to hide.
@@ -298,6 +310,14 @@ async function mergePr() {
           </UButton>
         </div>
       </div>
+      <!-- The run parked before its first dispatch because the task states nothing to act on.
+           Rendered above the step list: the remedy is to edit the task, not to open a step. -->
+      <InputGateNotice
+        v-if="inputGateVerdict"
+        :gate="inputGateVerdict"
+        :execution-id="instance.id"
+        class="mb-2"
+      />
       <ul class="space-y-1">
         <li
           v-for="(s, i) in instance.steps"
@@ -461,8 +481,13 @@ async function mergePr() {
             >
               {{ t('inspector.execution.reviewFindings') }}
             </UButton>
+            <!-- The generic approve/review rail. Suppressed while the run is parked on its
+                 PRE-TOKEN INPUT GATE: that park rides `step.approval` too, but the generic
+                 resolver refuses it server-side (approving it would mark the run's first
+                 working step done and skip the work), and the notice above the list is where
+                 it is actually answered. -->
             <UButton
-              v-else-if="s.approval && s.approval.status === 'pending'"
+              v-else-if="s.approval && s.approval.status === 'pending' && !inputGateBlocked"
               color="warning"
               variant="soft"
               size="xs"

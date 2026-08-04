@@ -850,6 +850,23 @@ strip it. `coerceRequirement` defaults a garbled state to `aspirational`, so a m
 assertion. Design and the withdrawn alternative:
 [`service-acceptance-criteria.md`](./docs/initiatives/service-acceptance-criteria.md).
 
+**Pre-token input gate**: the run's last chance to refuse work for FREE. Before the first agent step
+is dispatched (`InputGateController`, hooked in `stepInstance` at `currentStep === 0`), kernel's pure
+`evaluateInputGate` reduces the task's own authored fields and parks the run when there is
+structurally nothing to act on. The check never judges quality or infers intent, which is what the
+requirements reviewer is for; every BLOCKING finding names an input no model could have acted on
+either, which is what lets the gate default to on. Three rules bind it: it runs at STEP 0 and at most
+ONCE per run (the verdict on `instance.inputGate` is the replay guard, and past the first dispatch a
+park would cost an interruption and save nothing); `off` records NO findings while `passed` records an
+empty list, because "nobody looked" and "we looked and found nothing" are different facts (an unwired
+or unreadable settings seam therefore records `off`, never the default mode); and the park rides
+`step.approval`, so `assertNotIterativeGate` refuses a generic approve off the INSTANCE (approving it
+would mark the run's first working step done and skip the work) and the SPA routes it through
+`dedicatedParkView`, which takes the run. `recheck` RE-EVALUATES rather than trusting the caller and
+keeps the SAME decision id when it still fails; `proceed` records `overridden`, never `passed`, and
+keeps the waived findings. Doc:
+[`pre-token-input-gate.md`](./docs/initiatives/pre-token-input-gate.md).
+
 **Requirements review**: the FIRST step of the default pipelines, handled inline in the engine
 (`RequirementReviewService`, orchestration `modules/requirements/`, table `requirement_reviews`). The
 reviewer raises severity-tagged findings, the run parks, and the dedicated window drives an iterative

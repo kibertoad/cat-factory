@@ -80,6 +80,7 @@ export type {
   WorkspaceAccess,
   WorkspaceMember,
   TaskLimitMode,
+  InputGateMode,
   ReviewFrictionMode,
   WorkspaceSettings,
   WorkspaceMetadata,

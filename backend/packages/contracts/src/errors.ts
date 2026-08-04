@@ -166,6 +166,11 @@ export const CONFLICT_REASONS = [
   // interchangeable — a delete drops the authored description and contracts, a suppression
   // drops nothing. The SPA steers to the delete action instead.
   'foundational_service_not_inherited',
+  // A caller tried to resolve a run's PRE-TOKEN INPUT GATE that is not (or is no longer) parked
+  // on it: the gate passed, the workspace has it off, or another surface already answered it.
+  // A distinct reason because the remedy is "nothing to do here" rather than "fix the task": the SPA
+  // refreshes the run rather than re-offering a decision that has already been taken.
+  'input_gate_not_parked',
 ] as const
 
 export type ConflictReason = (typeof CONFLICT_REASONS)[number]

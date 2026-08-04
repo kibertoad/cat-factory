@@ -681,7 +681,7 @@ const ITEM_ICON: Record<string, string> = {
               s.approval &&
               s.approval.status === 'pending' &&
               !prReviewAwaiting(s) &&
-              !dedicatedParkView(s)
+              !dedicatedParkView(s, props.instance)
             "
             class="mt-3"
           >

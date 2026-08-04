@@ -13,6 +13,7 @@ import { documentsApi } from './api/documents'
 import { executionApi } from './api/execution'
 import { followUpsApi } from './api/followUps'
 import { forkDecisionApi } from './api/forkDecision'
+import { inputGateApi } from './api/inputGate'
 import { judgeApi } from './api/judge'
 import { prReviewApi } from './api/prReview'
 import { fragmentsApi } from './api/fragments'
@@ -128,6 +129,7 @@ export function useApi() {
     ...reviewsApi(ctx),
     ...followUpsApi(ctx),
     ...forkDecisionApi(ctx),
+    ...inputGateApi(ctx),
     ...judgeApi(ctx),
     ...prReviewApi(ctx),
     ...humanTestApi(ctx),

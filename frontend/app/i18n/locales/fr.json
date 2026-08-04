@@ -565,7 +565,8 @@
         "foundational_service_exists": "Ce service fondamental existe déjà",
         "binary_output_service_invalid": "Service des sorties binaires introuvable",
         "binary_output_generator_invalid": "Générateur de sorties binaires introuvable",
-        "foundational_service_not_inherited": "Ce tableau a enregistré ce service"
+        "foundational_service_not_inherited": "Ce tableau a enregistré ce service",
+        "input_gate_not_parked": "Rien à répondre"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -597,7 +598,8 @@
         "foundational_service_exists": "Un service fondamental portant cet identifiant est déjà enregistré dans cette portée. Ouvrez l’entrée existante et modifiez-la : deux services ne peuvent pas partager un identifiant, car c’est le nom qu’un architecte emploie dans sa conception.",
         "binary_output_service_invalid": "Une étape qui génère des sorties binaires sélectionne un service fondamental que le catalogue de cet espace de travail ne peut pas résoudre : l’identifiant est inconnu, ou le service de stockage choisi ne porte pas la capacité asset-storage. Corrigez la sélection de l’étape ou enregistrez le service, puis relancez.",
         "binary_output_generator_invalid": "Une étape qui génère des sorties binaires sélectionne une intégration générative que ce déploiement n’enregistre pas, ou aucune des intégrations sélectionnées ne produit un type de contenu que l’étape doit livrer. Les intégrations génératives sont enregistrées dans le code du déploiement, pas dans cet espace de travail : enregistrez-la ou corrigez la sélection de l’étape, puis relancez.",
-        "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau."
+        "foundational_service_not_inherited": "L'écartement s'applique à un service hérité du compte. Cet identifiant est enregistré par ce tableau : il n'y a donc rien à écarter - supprimez plutôt l'entrée propre au tableau.",
+        "input_gate_not_parked": "Cette exécution n'attend plus sa vérification d'entrée. Quelqu'un y a peut-être déjà répondu, ou l'exécution a avancé."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -3095,6 +3097,16 @@
         "saveFailed": "Impossible d'enregistrer les paramètres",
         "budgetSaved": "Budget enregistré",
         "budgetSaveFailed": "Impossible d'enregistrer le budget"
+      },
+      "inputGate": {
+        "heading": "Vérification des entrées avant le démarrage d'une exécution",
+        "body": "Contrôle la formulation d'une tâche avant l'envoi du premier pas de l'agent, pour qu'une tâche inexploitable s'arrête sans rien dépenser. Standard met l'exécution en pause sur une description vide ou de remplissage, un bogue sans contexte de reproduction, ou une tâche de relecture sans pull request.",
+        "mode": "Mode",
+        "modes": {
+          "standard": "Standard (mettre en pause sur un manque bloquant)",
+          "advisory": "Indicatif (enregistrer, jamais mettre en pause)",
+          "off": "Désactivé (ignorer la vérification)"
+        }
       }
     },
     "localModelEndpoints": {
@@ -4482,6 +4494,49 @@
       "park": "A demandé à une personne",
       "bounce": "Renvoyé pour reprise",
       "fail": "Exécution échouée"
+    }
+  },
+  "inputGate": {
+    "blockedTitle": "Cette tâche a besoin de plus de détails avant de s'exécuter",
+    "blockedBody": "L'exécution s'est arrêtée avant le premier pas de l'agent, rien n'a donc été dépensé. Complétez ce qui manque sur la tâche, puis relancez la vérification.",
+    "waivedTitle": "Démarrée malgré une tâche incomplète",
+    "waivedBody": "Quelqu'un a choisi d'exécuter cette tâche avec les manques ci-dessous encore ouverts. Ils sont conservés dans l'historique de l'exécution.",
+    "severity": {
+      "blocking": "Bloquant",
+      "advisory": "Indicatif"
+    },
+    "recheck": "Revérifier la tâche",
+    "proceed": "Exécuter quand même",
+    "recheckHint": "La vérification lit la tâche telle qu'elle est maintenant, modifiez-la d'abord.",
+    "issue": {
+      "description_missing": {
+        "title": "Aucune description",
+        "hint": "Le titre nomme la tâche ; la description est ce sur quoi un agent travaille. Dites ce qui doit changer et pourquoi."
+      },
+      "description_placeholder": {
+        "title": "Description de remplissage",
+        "hint": "La description est un substitut (\"TBD\", \"n/a\", \"à corriger\") plutôt qu'un énoncé du travail."
+      },
+      "description_thin": {
+        "title": "Description très courte",
+        "hint": "Quelques mots définissent rarement ce que \"terminé\" veut dire. Plus de détail ici évite un aller-retour de questions."
+      },
+      "reproduction_missing": {
+        "title": "Aucun contexte de reproduction",
+        "hint": "Un bogue sans étapes, sans observé-contre-attendu et sans trace d'appels ne permet pas de savoir quand il est corrigé."
+      },
+      "review_target_missing": {
+        "title": "Aucune pull request à relire",
+        "hint": "Une tâche de relecture a besoin du numéro ou de l'URL de la pull request à lire."
+      },
+      "success_criteria_missing": {
+        "title": "Aucun critère de réussite",
+        "hint": "Indiquez la question à laquelle le spike répond, ou ce qu'est un bon résultat, pour donner une cible au temps imparti."
+      },
+      "unknown": {
+        "title": "Constat non reconnu",
+        "hint": "Cette exécution a enregistré une vérification que cette version ne connaît plus. Relisez la tâche à la main avant de continuer."
+      }
     }
   },
   "requirements": {

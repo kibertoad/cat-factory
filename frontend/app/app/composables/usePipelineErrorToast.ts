@@ -80,6 +80,10 @@ const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason>, Conf
     titleKey: 'errors.conflict.title.dependencies_unmet',
     descriptionKey: 'errors.conflict.description.dependencies_unmet',
   },
+  input_gate_not_parked: {
+    titleKey: 'errors.conflict.title.input_gate_not_parked',
+    descriptionKey: 'errors.conflict.description.input_gate_not_parked',
+  },
   task_limit_reached: {
     titleKey: 'errors.conflict.title.task_limit_reached',
     descriptionKey: 'errors.conflict.description.task_limit_reached',

@@ -30,6 +30,7 @@ describe('document context injection', () => {
     })
     const task = await app.call<Block>('POST', `/workspaces/${ws}/blocks/${frame.body.id}/tasks`, {
       title: 'Implement limiter',
+      description: 'Add a per-tenant token-bucket rate limiter in front of the gateway.',
     })
 
     // Connect, import the RFC and attach it to the task as context.
@@ -79,6 +80,7 @@ describe('document context injection', () => {
     })
     const task = await app.call<Block>('POST', `/workspaces/${ws}/blocks/${frame.body.id}/tasks`, {
       title: 'Implement limiter',
+      description: 'Add a per-tenant token-bucket rate limiter in front of the gateway.',
     })
     await app.call('POST', `/workspaces/${ws}/document-sources/notion/connect`, {
       credentials: { apiToken: 'ntn_secret' },

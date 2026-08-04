@@ -877,6 +877,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
         title: 'Ralph task',
+        description: 'Keep iterating on the session module until the build and tests both pass.',
         taskType: 'ralph',
         agentConfig: {
           'ralph.validationCommand': 'echo build && echo test',
@@ -918,6 +919,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
         title: 'Ralph never-passes',
+        description: 'Loop on the session module until its validation command succeeds.',
         taskType: 'ralph',
         agentConfig: {
           'ralph.validationCommand': 'exit 1',
@@ -985,6 +987,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
         title: 'Ralph stalled',
+        description: 'Loop on the session module until its validation command succeeds.',
         taskType: 'ralph',
         agentConfig: {
           'ralph.validationCommand': 'exit 1',
@@ -1029,6 +1032,7 @@ function registerRalphLoopTests(harness: ConformanceHarness): void {
       const wsId = workspace.id
       const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
         title: 'Ralph retried',
+        description: 'Loop on the session module until its validation command succeeds.',
         taskType: 'ralph',
         agentConfig: {
           'ralph.validationCommand': 'exit 1',

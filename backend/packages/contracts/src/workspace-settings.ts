@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { manifestIdSchema, provisionTypeSchema } from './environments.js'
 import { createTaskTypeSchema } from './primitives.js'
+import { inputGateModeSchema } from './input-gate.js'
 
 // ---------------------------------------------------------------------------
 // Per-workspace runtime settings. A single settings object per workspace (lazily
@@ -201,6 +202,18 @@ export const workspaceSettingsSchema = v.object({
    * inert there. Enabling it with no runner pool registered fails the run loudly.
    */
   delegateAgentsToRunnerPool: v.boolean(),
+  /**
+   * Whether/how the PRE-TOKEN INPUT GATE applies to this workspace's runs: the deterministic
+   * structural check of a task's authored input, run before the first agent step is dispatched
+   * so a task nobody could act on parks having spent nothing.
+   *
+   * `standard` (the default) parks a run on a blocking finding: an empty or placeholder-only
+   * description, a `bug` with no reproduction context, a `review` task naming no pull request.
+   * Each of those is unambiguous: no model reading them could produce work, so buying that
+   * verdict from the requirements reviewer costs a call to be told what a string comparison
+   * already knew. `advisory` records the same findings and never parks; `off` skips the check.
+   */
+  inputGateMode: inputGateModeSchema,
   /** Whether/how review-debt friction is applied when authoring a new task. */
   reviewFrictionMode: reviewFrictionModeSchema,
   /**
@@ -290,6 +303,7 @@ export const updateWorkspaceSettingsSchema = v.object({
   ),
   kaizenEnabled: v.optional(v.boolean()),
   delegateAgentsToRunnerPool: v.optional(v.boolean()),
+  inputGateMode: v.optional(inputGateModeSchema),
   reviewFrictionMode: v.optional(reviewFrictionModeSchema),
   reviewFrictionWarnCount: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(1000)),
