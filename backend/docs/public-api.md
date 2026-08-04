@@ -402,8 +402,8 @@ interactive user. A pipeline can be startable on a board task without being eith
 
 ### Parked decisions (`/api/v1/runs/:runId/decisions`)
 
-The external counterpart of the SPA's requirements-review, fork and judge windows. Keyed by **run
-id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
+The external counterpart of the SPA's requirements-review, fork and judge windows, plus the
+pre-token input gate's notice. Keyed by **run id** so it serves both surfaces: a headless initiative job and an ordinary board task run (very
 possibly started by a human in the SPA). Reading needs `read`; **answering needs `decide`**.
 
 Every action returns the run's **whole decision list**, re-read after the action:
@@ -422,8 +422,9 @@ run is waiting on a park type this surface cannot answer yet
 | `POST …/requirements/resolve-exceeded`                | `decide` | Body `{ choice: "extra-round" \| "proceed" \| "stop-reset" }`; resolve a review that hit its iteration cap.                                                                  |
 | `POST …/fork/choose`                                  | `decide` | Body: exactly one of `{ forkId }` or `{ custom (≤8000) }`, plus optional `note (≤4000)`; choose the implementation approach.                                                 |
 | `POST …/judge/resolve`                                | `decide` | Resolve a parked judge verdict: proceed anyway / bounce for rework / stop the run (same body the SPA sends).                                                                 |
+| `POST …/input-gate/resolve`                           | `decide` | Body `{ choice: "recheck" \| "proceed" }`; answer the task's input check. `recheck` re-evaluates the task as it now stands, `proceed` waives the findings.                   |
 
-Three decision kinds appear in `decisions[]`, discriminated by `kind`:
+Four decision kinds appear in `decisions[]`, discriminated by `kind`:
 
 - **`requirements-review`**: the clarification loop. Findings carry a stable `itemId`, category,
   severity, status and any recorded `reply`; the decision carries `iteration` / `maxIterations` and
@@ -434,6 +435,17 @@ Three decision kinds appear in `decisions[]`, discriminated by `kind`:
   with its full approach / trade-offs / risk text. Pick one or supply your own.
 - **`judge`**: a rubric scored the work below the task's threshold: score, threshold, findings,
   and the `bounces` / `maxBounces` budget, resolved with proceed / bounce / stop.
+- **`input-gate`**: the run stopped **before its first agent step** because the task states nothing
+  an agent could act on, having spent nothing. The `issues[]` are machine-readable codes
+  (`description_missing`, `description_placeholder`, `reproduction_missing`,
+  `review_target_missing`, and the advisory `description_thin` / `success_criteria_missing`), so map
+  them to your own copy rather than parsing prose. To clear it, **fix the task first**
+  (`PATCH /api/v1/tasks/:taskId`) and then `recheck`: the fix is verified, never taken on trust, and
+  a still-blocked recheck comes back as an ordinary `200` with refreshed findings because nothing
+  went wrong. `proceed` waives the findings, which stay on the run under an `overridden` verdict.
+  This is the one park that depends on the **task** rather than the pipeline, which is why a
+  `write`-scope key is refused at start (`pipeline_requires_decide_scope`) for a task it would
+  hold, rather than being handed a run it cannot answer.
 
 Answers ride the **same service methods** the SPA calls, so racing surfaces (a human in the app and
 your integration) are already arbitrated: whoever answers first wins, no locking needed on your

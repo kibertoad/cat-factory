@@ -11,7 +11,7 @@
 // standalone modals).
 import { reactive, ref, watch } from 'vue'
 import { useReactiveSlots } from '@modular-vue/runtime'
-import type { ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
+import type { InputGateMode, ReviewFrictionMode, TaskLimitMode } from '~/types/domain'
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
@@ -151,6 +151,12 @@ const MODES = computed<{ value: TaskLimitMode; label: string }[]>(() => [
   { value: 'per_type', label: t('settings.workspaceSettings.taskLimit.modes.per_type') },
 ])
 
+const INPUT_GATE_MODES = computed<{ value: InputGateMode; label: string }[]>(() => [
+  { value: 'standard', label: t('settings.workspaceSettings.inputGate.modes.standard') },
+  { value: 'advisory', label: t('settings.workspaceSettings.inputGate.modes.advisory') },
+  { value: 'off', label: t('settings.workspaceSettings.inputGate.modes.off') },
+])
+
 const REVIEW_FRICTION_MODES = computed<{ value: ReviewFrictionMode; label: string }[]>(() => [
   { value: 'off', label: t('settings.workspaceSettings.reviewFriction.modes.off') },
   { value: 'warn', label: t('settings.workspaceSettings.reviewFriction.modes.warn') },
@@ -175,6 +181,7 @@ const draft = reactive({
   artifactRetentionDays: 14,
   kaizenEnabled: true,
   allowInitiatorPat: true,
+  inputGateMode: 'standard' as InputGateMode,
   reviewFrictionMode: 'off' as ReviewFrictionMode,
   reviewFrictionWarnCount: 3,
   reviewFrictionBlockCountEnabled: false,
@@ -195,6 +202,7 @@ function hydrate() {
   draft.artifactRetentionDays = s.artifactRetentionDays
   draft.kaizenEnabled = s.kaizenEnabled
   draft.allowInitiatorPat = s.allowInitiatorPat
+  draft.inputGateMode = s.inputGateMode
   draft.reviewFrictionMode = s.reviewFrictionMode
   draft.reviewFrictionWarnCount = s.reviewFrictionWarnCount
   // The hard-block knobs are nullable (null ⇒ that trigger is off); a per-trigger checkbox is
@@ -252,6 +260,7 @@ async function save() {
       artifactRetentionDays: draft.artifactRetentionDays,
       kaizenEnabled: draft.kaizenEnabled,
       allowInitiatorPat: draft.allowInitiatorPat,
+      inputGateMode: draft.inputGateMode,
       reviewFrictionMode: draft.reviewFrictionMode,
       reviewFrictionWarnCount: draft.reviewFrictionWarnCount,
       reviewFrictionBlockCount: blockCount,
@@ -357,6 +366,30 @@ async function save() {
                   />
                 </label>
               </div>
+            </section>
+
+            <!-- The pre-token input gate: the structural check of a task's own wording, run
+                 before a run's first agent step is dispatched. -->
+            <section class="space-y-2">
+              <h3 class="text-sm font-semibold text-slate-200">
+                {{ t('settings.workspaceSettings.inputGate.heading') }}
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                {{ t('settings.workspaceSettings.inputGate.body') }}
+              </p>
+              <label class="block w-64">
+                <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">{{
+                  t('settings.workspaceSettings.inputGate.mode')
+                }}</span>
+                <USelect
+                  v-model="draft.inputGateMode"
+                  :items="INPUT_GATE_MODES"
+                  value-key="value"
+                  size="sm"
+                  class="w-full"
+                  data-testid="input-gate-mode"
+                />
+              </label>
             </section>
 
             <!-- Review-debt friction on task creation -->

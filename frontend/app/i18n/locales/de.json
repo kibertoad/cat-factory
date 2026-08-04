@@ -949,6 +949,16 @@
         "saveFailed": "Einstellungen konnten nicht gespeichert werden",
         "budgetSaved": "Budget gespeichert",
         "budgetSaveFailed": "Budget konnte nicht gespeichert werden"
+      },
+      "inputGate": {
+        "heading": "Eingabeprüfung vor dem Start eines Laufs",
+        "body": "Prüft den Wortlaut einer Aufgabe, bevor der erste Agentenschritt startet, damit eine unbearbeitbare Aufgabe ohne Verbrauch stoppt. Standard hält den Lauf an bei leerer oder Platzhalter-Beschreibung, einem Fehler ohne Reproduktionskontext oder einer Review-Aufgabe ohne Pull Request.",
+        "mode": "Modus",
+        "modes": {
+          "standard": "Standard (bei blockierender Lücke anhalten)",
+          "advisory": "Hinweis (erfassen, nie anhalten)",
+          "off": "Aus (Prüfung überspringen)"
+        }
       }
     },
     "localModelEndpoints": {
@@ -5142,6 +5152,8 @@
         "binary_output_service_invalid": "Dienst für Binärausgaben nicht auflösbar",
         "binary_output_generator_invalid": "Generator für Binärausgaben nicht auflösbar",
         "foundational_service_not_inherited": "Dieses Board hat den Dienst registriert",
+        "input_gate_not_parked": "Nichts zu beantworten",
+        "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
       },
@@ -5176,6 +5188,8 @@
         "binary_output_service_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt einen Basisdienst aus, den der Katalog dieses Workspace nicht auflösen kann: Die ID ist unbekannt, oder der gewählte Speicherdienst trägt nicht die Fähigkeit asset-storage. Korrigieren Sie die Auswahl des Schritts oder registrieren Sie den Dienst und starten Sie erneut.",
         "binary_output_generator_invalid": "Ein Schritt, der Binärausgaben erzeugt, wählt eine generative Integration aus, die diese Installation nicht registriert, oder keine der gewählten Integrationen erzeugt einen Inhaltstyp, den der Schritt liefern muss. Generative Integrationen werden im Code der Installation registriert, nicht in diesem Workspace: registrieren Sie sie oder korrigieren Sie die Auswahl des Schritts und starten Sie erneut.",
         "foundational_service_not_inherited": "Abwählen gilt für einen vom Konto geerbten Dienst. Diese ID ist von diesem Board registriert, es gibt also nichts abzuwählen - lösche stattdessen den eigenen Eintrag des Boards.",
+        "input_gate_not_parked": "Dieser Lauf wartet nicht mehr auf seine Eingabeprüfung. Möglicherweise hat sie jemand schon beantwortet oder der Lauf ist weitergelaufen.",
+        "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
@@ -5412,6 +5426,51 @@
       "park": "Nachfrage an einen Menschen",
       "bounce": "Zur Überarbeitung zurückgeschickt",
       "fail": "Lauf fehlgeschlagen"
+    }
+  },
+  "inputGate": {
+    "blockedTitle": "Diese Aufgabe braucht mehr Details, bevor sie laufen kann",
+    "blockedBody": "Der Lauf wurde vor dem ersten Agentenschritt gestoppt, es wurde also nichts verbraucht. Ergänze das Fehlende an der Aufgabe und prüfe erneut.",
+    "waivedTitle": "Trotz unvollständiger Aufgabe gestartet",
+    "waivedBody": "Jemand hat entschieden, diese Aufgabe mit den unten offenen Lücken auszuführen. Sie bleiben als Teil der Laufhistorie erhalten.",
+    "advisoryTitle": "Einige Lücken wurden notiert, der Lauf lief weiter",
+    "advisoryBody": "Die Eingabeprüfung der Aufgabe hat diese Punkte beim Start gefunden. Keiner davon stoppt die Arbeit, daher wurde nichts angehalten. Wer sie ergänzt, erleichtert den nächsten Lauf.",
+    "severity": {
+      "blocking": "Blockierend",
+      "advisory": "Hinweis"
+    },
+    "recheck": "Aufgabe erneut prüfen",
+    "proceed": "Trotzdem ausführen",
+    "recheckHint": "Die erneute Prüfung liest die Aufgabe im aktuellen Stand, bearbeite sie also zuerst.",
+    "issue": {
+      "description_missing": {
+        "title": "Keine Beschreibung",
+        "hint": "Der Titel benennt die Aufgabe, die Beschreibung ist die Arbeitsgrundlage des Agenten. Schreibe, was sich ändern soll und warum."
+      },
+      "description_placeholder": {
+        "title": "Platzhalter-Beschreibung",
+        "hint": "Die Beschreibung ist ein Platzhalter (\"TBD\", \"n/a\", \"fix it\") statt einer Beschreibung der Arbeit."
+      },
+      "description_thin": {
+        "title": "Sehr kurze Beschreibung",
+        "hint": "Wenige Worte legen selten fest, was \"fertig\" heißt. Mehr Details hier sparen später eine Rückfragerunde."
+      },
+      "reproduction_missing": {
+        "title": "Kein Reproduktionskontext",
+        "hint": "Ein Fehler ohne Schritte, ohne Soll-Ist-Vergleich und ohne Stacktrace lässt den Behebenden nicht erkennen, wann er behoben ist."
+      },
+      "review_target_missing": {
+        "title": "Kein Pull Request zum Prüfen",
+        "hint": "Eine Review-Aufgabe braucht die Nummer oder URL des Pull Requests, den sie lesen soll."
+      },
+      "success_criteria_missing": {
+        "title": "Keine Erfolgskriterien",
+        "hint": "Nenne die Frage, die der Spike beantwortet, oder wie ein gutes Ergebnis aussieht, damit die Zeitbox ein Ziel hat."
+      },
+      "unknown": {
+        "title": "Unbekannter Befund",
+        "hint": "Dieser Lauf hat eine Prüfung erfasst, die diese Version nicht mehr kennt. Sieh die Aufgabe von Hand durch, bevor du fortfährst."
+      }
     }
   },
   "consensus": {

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_settings" ADD COLUMN "input_gate_mode" text DEFAULT 'standard' NOT NULL;

@@ -137,6 +137,7 @@ function registerRequirementsGateTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
       title: 'Fork task',
+      description: 'Rework the session store so refresh tokens rotate on every use.',
       agentConfig: { 'coder.forkDecision': 'always' },
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
@@ -209,6 +210,7 @@ function registerRequirementsGateTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
       title: 'Trivial fork task',
+      description: 'Rename the session cookie constant so it matches the documented name.',
       agentConfig: { 'coder.forkDecision': 'always' },
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
@@ -257,6 +259,7 @@ function registerRequirementsGateTests(harness: ConformanceHarness): void {
     const wsId = workspace.id
     const task = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/mod_sessions/tasks`, {
       title: 'Fork chat task',
+      description: 'Split the session refresh path so the rotation policy is testable on its own.',
       agentConfig: { 'coder.forkDecision': 'always' },
     })
     const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {

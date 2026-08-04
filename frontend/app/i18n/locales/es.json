@@ -567,6 +567,8 @@
         "binary_output_service_invalid": "No se puede resolver el servicio de salidas binarias",
         "binary_output_generator_invalid": "No se puede resolver el generador de salidas binarias",
         "foundational_service_not_inherited": "Este tablero registró ese servicio",
+        "input_gate_not_parked": "Nada que responder",
+        "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
         "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
       },
@@ -601,6 +603,8 @@
         "binary_output_service_invalid": "Un paso que genera salidas binarias selecciona un servicio fundacional que el catálogo de este espacio de trabajo no puede resolver: el identificador es desconocido, o el servicio de almacenamiento elegido no tiene la capacidad asset-storage. Corrige la selección del paso o registra el servicio y vuelve a iniciarlo.",
         "binary_output_generator_invalid": "Un paso que genera salidas binarias selecciona una integración generativa que esta instalación no registra, o ninguna de las integraciones seleccionadas produce un tipo de contenido que el paso debe entregar. Las integraciones generativas se registran en el código de la instalación, no en este espacio de trabajo: regístrala o corrige la selección del paso y vuelve a iniciar.",
         "foundational_service_not_inherited": "La exclusión se aplica a un servicio heredado de la cuenta. Este id está registrado por este tablero, así que no hay nada que excluir: elimina la entrada propia del tablero.",
+        "input_gate_not_parked": "Esta ejecución ya no espera su comprobación de entrada. Puede que alguien la haya respondido o que la ejecución haya avanzado.",
+        "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
         "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
@@ -3160,6 +3164,16 @@
         "saveFailed": "No se pudo guardar la configuración",
         "budgetSaved": "Presupuesto guardado",
         "budgetSaveFailed": "No se pudo guardar el presupuesto"
+      },
+      "inputGate": {
+        "heading": "Comprobación de entrada antes de iniciar una ejecución",
+        "body": "Revisa la redacción de la tarea antes de lanzar el primer paso del agente, para que una tarea inabordable se detenga sin gastar nada. Estándar detiene la ejecución ante una descripción vacía o de relleno, un error sin contexto de reproducción, o una tarea de revisión sin pull request.",
+        "mode": "Modo",
+        "modes": {
+          "standard": "Estándar (detener ante una carencia bloqueante)",
+          "advisory": "Aviso (registrar, nunca detener)",
+          "off": "Desactivado (omitir la comprobación)"
+        }
       }
     },
     "localModelEndpoints": {
@@ -4542,6 +4556,51 @@
       "park": "Consultó a una persona",
       "bounce": "Devuelto para revisión",
       "fail": "Ejecución fallida"
+    }
+  },
+  "inputGate": {
+    "blockedTitle": "Esta tarea necesita más detalle antes de ejecutarse",
+    "blockedBody": "La ejecución se detuvo antes del primer paso del agente, así que no se ha gastado nada. Completa lo que falta en la tarea y vuelve a comprobar.",
+    "waivedTitle": "Iniciada pese a una tarea incompleta",
+    "waivedBody": "Alguien decidió ejecutar esta tarea con las carencias de abajo aún abiertas. Se conservan como parte del historial de la ejecución.",
+    "advisoryTitle": "Se anotaron algunas carencias y la ejecución continuó",
+    "advisoryBody": "La comprobación de entrada de la tarea encontró esto al iniciar la ejecución. Nada de ello detiene el trabajo, así que no se detuvo nada; completarlo facilita acertar en la próxima ejecución.",
+    "severity": {
+      "blocking": "Bloqueante",
+      "advisory": "Aviso"
+    },
+    "recheck": "Volver a comprobar",
+    "proceed": "Ejecutar igualmente",
+    "recheckHint": "La comprobación lee la tarea tal como está ahora, así que edítala primero.",
+    "issue": {
+      "description_missing": {
+        "title": "Sin descripción",
+        "hint": "El título nombra la tarea; la descripción es con lo que trabaja un agente. Di qué debe cambiar y por qué."
+      },
+      "description_placeholder": {
+        "title": "Descripción de relleno",
+        "hint": "La descripción es un marcador (\"TBD\", \"n/a\", \"arreglarlo\") en vez de una descripción del trabajo."
+      },
+      "description_thin": {
+        "title": "Descripción muy breve",
+        "hint": "Unas pocas palabras rara vez definen qué significa \"terminado\". Más detalle aquí ahorra una ronda de preguntas después."
+      },
+      "reproduction_missing": {
+        "title": "Sin contexto de reproducción",
+        "hint": "Un error sin pasos, sin observado frente a esperado y sin traza no permite saber cuándo queda corregido."
+      },
+      "review_target_missing": {
+        "title": "Sin pull request que revisar",
+        "hint": "Una tarea de revisión necesita el número o la URL del pull request que debe leer."
+      },
+      "success_criteria_missing": {
+        "title": "Sin criterios de éxito",
+        "hint": "Indica la pregunta que responde el spike, o cómo sería un buen resultado, para que el tiempo acotado tenga un objetivo."
+      },
+      "unknown": {
+        "title": "Hallazgo no reconocido",
+        "hint": "Esta ejecución registró una comprobación que esta versión ya no conoce. Revisa la tarea a mano antes de continuar."
+      }
     }
   },
   "requirements": {

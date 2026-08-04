@@ -2,6 +2,7 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import {
   publicChooseForkSchema,
+  publicResolveInputGateSchema,
   publicResolveJudgeSchema,
   publicDecisionListSchema,
   publicIncorporateSchema,
@@ -118,5 +119,26 @@ export const resolvePublicRunJudgeContract = defineApiContract({
   requestPathParamsSchema: runIdParams,
   pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/judge/resolve`,
   requestBodySchema: publicResolveJudgeSchema,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+// ---- pre-token input gate ---------------------------------------------------
+
+/**
+ * Resolve a run parked on the PRE-TOKEN INPUT GATE: `recheck` re-evaluates the task as it now
+ * stands, `proceed` waives the findings.
+ *
+ * The one park that is a property of the TASK rather than the pipeline, so unlike the three above
+ * it can hold a run whose pipeline `canParkOnHuman` calls unparking. Without this route such a run
+ * reported `parked: true` with nothing to answer and `POST /api/v1/jobs/:id/cancel` as its only
+ * exit. A caller that means to FIX the task edits it over `PATCH /api/v1/tasks/:taskId` first;
+ * `recheck` then verifies rather than takes the claim on trust, and a still-blocked verdict comes
+ * back as an ordinary 200 with refreshed findings, because nothing went wrong.
+ */
+export const resolvePublicRunInputGateContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/input-gate/resolve`,
+  requestBodySchema: publicResolveInputGateSchema,
   responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
 })

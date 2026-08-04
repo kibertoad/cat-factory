@@ -1,5 +1,6 @@
 import type { WorkspaceSettingsRepository } from '@cat-factory/kernel'
 import type {
+  InputGateMode,
   ProvisionType,
   ReviewFrictionMode,
   TaskLimitMode,
@@ -21,6 +22,7 @@ interface WorkspaceSettingsRow {
   artifact_retention_days: number
   kaizen_enabled: number
   delegate_agents_to_runner_pool: number
+  input_gate_mode: string
   review_friction_mode: string
   review_friction_warn_count: number
   review_friction_block_count: number | null
@@ -53,6 +55,7 @@ function rowToSettings(row: WorkspaceSettingsRow): WorkspaceSettings {
     artifactRetentionDays: row.artifact_retention_days,
     kaizenEnabled: row.kaizen_enabled === 1,
     delegateAgentsToRunnerPool: row.delegate_agents_to_runner_pool === 1,
+    inputGateMode: row.input_gate_mode as InputGateMode,
     reviewFrictionMode: row.review_friction_mode as ReviewFrictionMode,
     reviewFrictionWarnCount: row.review_friction_warn_count,
     reviewFrictionBlockCount: row.review_friction_block_count,
@@ -110,11 +113,12 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            (workspace_id, waiting_escalation_minutes, task_limit_mode, task_limit_shared,
             task_limit_per_type, store_agent_context, publish_pr_verification_report,
             artifact_retention_days, kaizen_enabled,
-            delegate_agents_to_runner_pool, review_friction_mode, review_friction_warn_count,
+            delegate_agents_to_runner_pool, input_gate_mode, review_friction_mode,
+            review_friction_warn_count,
             review_friction_block_count, review_friction_block_stuck_minutes, spend_currency,
             spend_monthly_limit, default_provision_type, default_provision_manifest_id,
             allow_initiator_pat, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id) DO UPDATE SET
            waiting_escalation_minutes = excluded.waiting_escalation_minutes,
            task_limit_mode = excluded.task_limit_mode,
@@ -125,6 +129,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
            artifact_retention_days = excluded.artifact_retention_days,
            kaizen_enabled = excluded.kaizen_enabled,
            delegate_agents_to_runner_pool = excluded.delegate_agents_to_runner_pool,
+           input_gate_mode = excluded.input_gate_mode,
            review_friction_mode = excluded.review_friction_mode,
            review_friction_warn_count = excluded.review_friction_warn_count,
            review_friction_block_count = excluded.review_friction_block_count,
@@ -147,6 +152,7 @@ export class D1WorkspaceSettingsRepository implements WorkspaceSettingsRepositor
         settings.artifactRetentionDays,
         settings.kaizenEnabled ? 1 : 0,
         settings.delegateAgentsToRunnerPool ? 1 : 0,
+        settings.inputGateMode,
         settings.reviewFrictionMode,
         settings.reviewFrictionWarnCount,
         settings.reviewFrictionBlockCount,

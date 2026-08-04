@@ -30,6 +30,7 @@ import { HumanTestController } from './HumanTestController.js'
 import { VisualConfirmationController } from './VisualConfirmationController.js'
 import { ReviewGateController, type ReviewGateControllerDeps } from './ReviewGateController.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
+import { InputGateController } from './InputGateController.js'
 import { PrReviewController } from './PrReviewController.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
@@ -329,4 +330,32 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     initiativeInterviewController,
     docInterviewController,
   }
+}
+
+/**
+ * The PRE-TOKEN INPUT GATE, built from the SAME whole dependency object the sibling factories
+ * above are handed, plus the two collaborators `ExecutionService` builds for itself.
+ *
+ * It is deliberately not one of the gate windows: it guards the run's FIRST dispatch and has no
+ * pipeline step of its own, which is why it is a separate factory rather than another field on
+ * `buildGateWindowControllers`' result. It lives in this module for the reason
+ * `buildReviewSubjects` does: this is where an engine collaborator is assembled out of the
+ * dependency bag. Taking the bag rather than eight named fields is the point — a hand-forwarded
+ * list is how `agentPromptRepository` was once silently dropped (see the constructor's note), and
+ * doing it inline was what pushed that constructor over its size budget.
+ */
+export function buildInputGateController(
+  dependencies: ExecutionServiceDependencies,
+  runtime: { stateMachine: RunStateMachine; stepGraph: StepGraph },
+): InputGateController {
+  return new InputGateController({
+    blockRepository: dependencies.blockRepository,
+    executionRepository: dependencies.executionRepository,
+    workRunner: dependencies.workRunner,
+    stateMachine: runtime.stateMachine,
+    stepGraph: runtime.stepGraph,
+    clock: dependencies.clock,
+    workspaceSettingsService: dependencies.workspaceSettingsService,
+    logger: dependencies.logger,
+  })
 }

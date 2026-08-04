@@ -95,7 +95,13 @@ export async function addServiceFromRepo(
   )
 }
 
-/** Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls). */
+/**
+ * Add a task under a frame/module (the `POST /blocks/:id/tasks` the add-task modal calls).
+ *
+ * The default DESCRIPTION is not decoration: the pre-token input gate parks a run whose task
+ * states nothing to act on, so a title-only fixture would park every spec that starts a run
+ * before its first step. A spec that wants to exercise the gate passes `description: ''`.
+ */
 export async function createTask(
   request: APIRequestContext,
   workspaceId: string,
@@ -107,12 +113,17 @@ export async function createTask(
     taskType?: string
     /** The sparse per-type fields bag (e.g. `{ custom: { severity: 'sev1' } }`). */
     taskTypeFields?: Record<string, unknown>
+    /** Override the default description (pass `''` to drive the pre-token input gate). */
+    description?: string
   } = {},
 ): Promise<Block> {
   return json<Block>(
     await request.post(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${parentId}/tasks`, {
       data: {
         title,
+        description:
+          opts.description ??
+          'End-to-end fixture task: exercise the pipeline against this service and report back.',
         ...(opts.agentConfig ? { agentConfig: opts.agentConfig } : {}),
         ...(opts.taskType ? { taskType: opts.taskType } : {}),
         ...(opts.taskTypeFields ? { taskTypeFields: opts.taskTypeFields } : {}),

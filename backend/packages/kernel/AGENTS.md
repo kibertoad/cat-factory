@@ -87,6 +87,11 @@ else imports its **ports** and domain types from here.
   because the reference can vanish in two different layers (the engine's `resolveLinkedContext`
   and the container's `buildContextFiles`) and both must refuse in the same words. See
   `backend/docs/document-sources.md`.
+- `domain/input-gate.ts`: the **pre-token input gate**'s pure check (`evaluateInputGate` plus the
+  one `inputGateInputOf` block mapping the three evaluation sites share). Fields in, findings out,
+  no I/O. `describesAuthoredTaskInput` is the `not_applicable` rule: only a `level: 'task'` block
+  that is not a platform-authored TYPE carries a description the gate may judge, so a run against a
+  frame, module, epic or initiative ANCHOR is never parked on a caption.
 - `domain/pr-report.ts`: the marker-delimited `spliceManagedSection` / `readManagedSection`
   behind the engine's **PR verification report** (the pure half; the `PrVerificationReportPublisher`
   port is in `ports/pr-report.ts`, the composer in orchestration).

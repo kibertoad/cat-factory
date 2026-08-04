@@ -624,6 +624,8 @@
         "binary_output_service_invalid": "Binary output service can't be resolved",
         "binary_output_generator_invalid": "Binary output generator can't be resolved",
         "foundational_service_not_inherited": "This board registered that service",
+        "input_gate_not_parked": "Nothing to answer",
+        "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task",
         "dry_run_not_mergeable": "Dry run cannot be merged"
       },
@@ -661,6 +663,8 @@
         "binary_output_service_invalid": "A step that generates binary outputs selects a foundational service this workspace's catalog can't resolve: the id is unknown, or the chosen storage service doesn't carry the asset-storage capability. Fix the step's selection or register the service, then start again.",
         "binary_output_generator_invalid": "A step that generates binary outputs selects a generative integration this deployment doesn't register, or none of the selected integrations produces a content type the step must deliver. Generative integrations are registered in the deployment's code, not in this workspace: register it or fix the step's selection, then start again.",
         "foundational_service_not_inherited": "Opting out applies to a service inherited from the account. This id is registered by this board, so there is nothing to opt out of - delete the board's own entry instead.",
+        "input_gate_not_parked": "This run is not waiting on its input check any more. Someone may have answered it already, or the run has moved on.",
+        "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
       },
@@ -3399,6 +3403,16 @@
         "saveFailed": "Could not save settings",
         "budgetSaved": "Budget saved",
         "budgetSaveFailed": "Could not save budget"
+      },
+      "inputGate": {
+        "heading": "Input check before a run starts",
+        "body": "Check a task's own wording before the first agent step is dispatched, so a task nobody could act on stops without spending anything. Standard parks the run on an empty or placeholder description, a bug with no reproduction context, or a review task naming no pull request.",
+        "mode": "Mode",
+        "modes": {
+          "standard": "Standard (park on a blocking gap)",
+          "advisory": "Advisory (record, never park)",
+          "off": "Off (skip the check)"
+        }
       }
     },
     "localModelEndpoints": {
@@ -4747,6 +4761,51 @@
       "park": "Asked a human",
       "bounce": "Sent back for rework",
       "fail": "Failed the run"
+    }
+  },
+  "inputGate": {
+    "blockedTitle": "This task needs more detail before it can run",
+    "blockedBody": "The run stopped before its first agent step, so nothing has been spent. Fill in what is missing on the task, then re-check.",
+    "waivedTitle": "Started despite an incomplete task",
+    "waivedBody": "Someone chose to run this task with the gaps below still open. They are kept here as part of the run's record.",
+    "advisoryTitle": "Some gaps were noted, and the run continued",
+    "advisoryBody": "The task's input check found these while starting the run. None of them stops the work, so nothing was parked; filling them in makes the next run easier to get right.",
+    "severity": {
+      "blocking": "Blocking",
+      "advisory": "Advisory"
+    },
+    "recheck": "Re-check the task",
+    "proceed": "Run anyway",
+    "recheckHint": "Re-check reads the task as it stands now, so edit it first.",
+    "issue": {
+      "description_missing": {
+        "title": "No description",
+        "hint": "The title names the task; the description is what an agent works from. Say what should change and why."
+      },
+      "description_placeholder": {
+        "title": "Placeholder description",
+        "hint": "The description is a stand-in (\"TBD\", \"n/a\", \"fix it\") rather than a statement of the work."
+      },
+      "description_thin": {
+        "title": "Very short description",
+        "hint": "A few words rarely pin down what \"done\" means. More detail here saves a round of questions later."
+      },
+      "reproduction_missing": {
+        "title": "No reproduction context",
+        "hint": "A bug with no steps, no observed-versus-expected and no stack trace gives its fixer no way to tell when it is fixed."
+      },
+      "review_target_missing": {
+        "title": "No pull request to review",
+        "hint": "A review task needs the number or URL of the pull request it should read."
+      },
+      "success_criteria_missing": {
+        "title": "No success criteria",
+        "hint": "State the question the spike answers, or what a good outcome looks like, so the timebox has a target."
+      },
+      "unknown": {
+        "title": "Unrecognised finding",
+        "hint": "This run recorded a check this version no longer knows about. Review the task by hand before continuing."
+      }
     }
   },
   "requirements": {

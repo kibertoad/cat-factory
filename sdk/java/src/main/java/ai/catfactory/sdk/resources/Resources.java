@@ -64,7 +64,7 @@ public abstract class Resources {
         return usage;
     }
 
-    /** A parked run's human decisions — requirement findings, forks and judge verdicts. */
+    /** A parked run's human decisions — requirement findings, forks, judge verdicts and the pre-token input gate. */
     public DecisionsClient decisions() {
         return decisions;
     }
