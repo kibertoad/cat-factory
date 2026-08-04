@@ -1,9 +1,16 @@
-import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+  assertFound,
+  noopAuditRecorder,
+} from '@cat-factory/kernel'
 import type { AccountInvitation, AccountRole } from '@cat-factory/contracts'
 import type {
   AccountInvitationRecord,
   AccountInvitationRepository,
   AccountRepository,
+  AuditRecorder,
   Clock,
   EmailSender,
   IdGenerator,
@@ -43,6 +50,12 @@ export interface InvitationServiceDependencies {
    * access). Absent (tests / no cache) ⇒ resolution reads live.
    */
   onAccountMembershipChanged?: (accountId: string) => void | Promise<void>
+  /**
+   * Where invitation lifecycle actions are recorded for an account admin to read back. Optional
+   * so the service stays unit-testable standalone (normalised once to `noopAuditRecorder`);
+   * REQUIRED on `CoreDependencies`, so a facade cannot silently run unaudited.
+   */
+  audit?: AuditRecorder
 }
 
 /** SHA-256 hex digest — Web Crypto, runs on both runtimes. */
@@ -74,7 +87,11 @@ export interface CreatedInvitation {
 }
 
 export class InvitationService {
-  constructor(private readonly deps: InvitationServiceDependencies) {}
+  private readonly audit: AuditRecorder
+
+  constructor(private readonly deps: InvitationServiceDependencies) {
+    this.audit = deps.audit ?? noopAuditRecorder
+  }
 
   /** Invite a teammate by email. Admin-only, org accounts only. */
   async invite(
@@ -100,6 +117,11 @@ export class InvitationService {
     const normalizedEmail = email.toLowerCase().trim()
     // Supersede any still-pending invite to the same address in this account, so only
     // the freshly-minted token stays live (no pile-up of redeemable links per email).
+    //
+    // A supersession is deliberately NOT audited as `invitation_revoked`. That action means an
+    // admin decided to withdraw an invitation, and recording an automatic re-invite as one would
+    // make the two indistinguishable in the log. The `invitation_created` event for the same
+    // address, adjacent in time, is what explains these.
     const pending = await this.deps.invitationRepository.listByAccount(accountId)
     for (const prior of pending) {
       if (prior.status === 'pending' && prior.email === normalizedEmail) {
@@ -119,6 +141,17 @@ export class InvitationService {
       createdAt: this.deps.clock.now(),
     }
     await this.deps.invitationRepository.create(record)
+    // Audited on the CREATE, not after the send: the invitation is redeemable from here, so an
+    // event withheld until the email went out would omit exactly the invitations that were
+    // shared by hand. The raw token never appears in the summary (it is the credential).
+    this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.invitation_created',
+      targetType: 'invitation',
+      targetId: record.id,
+      summary: `Invited ${normalizedEmail} with role(s) ${record.roles.join(', ')}`,
+    })
 
     const acceptUrl = this.deps.appBaseUrl
       ? `${this.deps.appBaseUrl.replace(/\/$/, '')}/invite?token=${token}`
@@ -156,6 +189,14 @@ export class InvitationService {
     )
     if (invitation.accountId !== accountId) throw new NotFoundError('Invitation', invitationId)
     await this.deps.invitationRepository.setStatus(invitationId, 'revoked')
+    this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.invitation_revoked',
+      targetType: 'invitation',
+      targetId: invitationId,
+      summary: `Revoked the pending invitation to ${invitation.email}`,
+    })
   }
 
   /**
@@ -201,6 +242,17 @@ export class InvitationService {
     // The new membership grants board access across the account, so drop the workspace-access
     // cache (workspace-rbac). After the writes commit.
     await this.deps.onAccountMembershipChanged?.(record.accountId)
+    // The actor is the person ACCEPTING, not the admin who invited them: this event records that
+    // a membership came into existence, and the invitation's own event already records who
+    // offered it. `invitedBy` stays in the summary so the pair reads as one story.
+    this.audit.record({
+      accountId: record.accountId,
+      actor: { kind: 'user', userId },
+      action: 'account.invitation_accepted',
+      targetType: 'invitation',
+      targetId: record.id,
+      summary: `Accepted the invitation to ${record.email} (invited by ${record.invitedBy}), joining with role(s) ${record.roles.join(', ')}`,
+    })
     return record.accountId
   }
 }

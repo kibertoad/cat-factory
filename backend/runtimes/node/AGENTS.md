@@ -18,8 +18,8 @@ transport, and Node model provisioning.
 - `db/schema.ts` + `db/tables/*` + `drizzle/` (generated migrations): the Postgres schema.
   `schema.ts` is the single entry point every repo imports; the VCS/projection tables live in
   `db/tables/vcs.ts` and the tenancy & identity ones (the `workspaces`/`users` roots, login
-  identities, the account + membership graph, invitations / password resets and the per-account
-  rows) in `db/tables/identity.ts`, and the observability group (the `telemetry` Postgres schema
+  identities, the account + membership graph, invitations / password resets, the per-account
+  rows and the append-only `audit_events` log) in `db/tables/identity.ts`, and the observability group (the `telemetry` Postgres schema
   with its three append-heavy sinks, plus the two main-schema projections the operator dashboard
   aggregates) in `db/tables/observability.ts`, all re-exported from it (size-budget splits, so
   drizzle-kit and every importer still see one module). `identity.ts` is also where the schema's only two FK

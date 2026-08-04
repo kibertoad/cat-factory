@@ -12,8 +12,14 @@ import type {
   MembershipRepository,
   UserRepository,
 } from '@cat-factory/kernel'
-import type { Clock, IdGenerator } from '@cat-factory/kernel'
-import { ConflictError, NotFoundError, ValidationError, assertFound } from '@cat-factory/kernel'
+import type { AuditRecorder, Clock, IdGenerator } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  NotFoundError,
+  ValidationError,
+  assertFound,
+  noopAuditRecorder,
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // AccountService: the tenancy layer. An account is the owner of workspaces —
@@ -53,6 +59,12 @@ export interface AccountServiceDependencies {
    * A late-bound getter so it tracks the live pricing config.
    */
   resolveAccountBudgetCap?: () => number | null | undefined
+  /**
+   * Where privileged tenancy actions are recorded for an account admin to read back. Optional
+   * so the service stays unit-testable standalone (normalised once to `noopAuditRecorder`);
+   * REQUIRED on `CoreDependencies`, so a facade cannot silently run unaudited.
+   */
+  audit?: AuditRecorder
 }
 
 /** The signed-in identity the tenancy decisions are made against. */
@@ -82,7 +94,11 @@ function toMember(m: Membership): AccountMember {
 }
 
 export class AccountService {
-  constructor(private readonly deps: AccountServiceDependencies) {}
+  private readonly audit: AuditRecorder
+
+  constructor(private readonly deps: AccountServiceDependencies) {
+    this.audit = deps.audit ?? noopAuditRecorder
+  }
 
   /**
    * Ensure a user has a personal account (account-of-one) with an owner
@@ -247,10 +263,22 @@ export class AccountService {
     input: UpdateAccountInput,
   ): Promise<Account> {
     const acting = await this.requireAdmin(accountId, actingUserId)
-    // An explicit key (even `undefined`) means "clear"; an absent key leaves it.
+    // An explicit key (even `undefined`) means "clear"; an absent key leaves it. Each key that
+    // was actually present is audited SEPARATELY after its own write commits, so the log states
+    // what changed rather than that "settings were edited" — a single event for a two-key patch
+    // would make a budget raise unreadable next to a cloud-provider switch.
     if ('defaultCloudProvider' in input) {
+      const provider = input.defaultCloudProvider ?? null
       await this.deps.accountRepository.updateSettings(accountId, {
-        defaultCloudProvider: input.defaultCloudProvider ?? null,
+        defaultCloudProvider: provider,
+      })
+      this.audit.record({
+        accountId,
+        actor: { kind: 'user', userId: actingUserId },
+        action: 'account.settings_changed',
+        targetType: 'account',
+        targetId: accountId,
+        summary: `Default cloud provider set to ${provider ?? 'none'}`,
       })
     }
     if ('spendMonthlyLimit' in input) {
@@ -264,6 +292,17 @@ export class AccountService {
       await this.deps.accountRepository.updateSettings(accountId, { spendMonthlyLimit: limit })
       // Drop the spend service's cached account limit so the new ceiling takes effect now.
       await this.deps.onAccountBudgetChanged?.(accountId)
+      this.audit.record({
+        accountId,
+        actor: { kind: 'user', userId: actingUserId },
+        action: 'account.budget_changed',
+        targetType: 'account',
+        targetId: accountId,
+        summary:
+          limit == null
+            ? 'Monthly spend limit cleared'
+            : `Monthly spend limit set to ${String(limit)}`,
+      })
     }
     const account = assertFound(
       await this.deps.accountRepository.get(accountId),
@@ -304,6 +343,14 @@ export class AccountService {
     // A new account membership grants access to every non-restricted board in the account, so drop
     // the workspace-access cache (workspace-rbac). After the write commits.
     await this.deps.onAccountMembershipChanged?.(accountId)
+    this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_added',
+      targetType: 'user',
+      targetId: userId,
+      summary: `Added to the account with role(s) ${membership.roles.join(', ')}`,
+    })
     return toMember(membership)
   }
 
@@ -325,6 +372,16 @@ export class AccountService {
     // An account-role change (e.g. gaining/losing `admin`) changes the workspace-access escape
     // hatch, so drop the workspace-access cache (workspace-rbac). After the write commits.
     await this.deps.onAccountMembershipChanged?.(accountId)
+    // Both role sets, because the interesting question about a role change is what it was
+    // before: a log that records only the new value cannot tell a promotion from a demotion.
+    this.audit.record({
+      accountId,
+      actor: { kind: 'user', userId: actingUserId },
+      action: 'account.member_roles_changed',
+      targetType: 'user',
+      targetId: targetUserId,
+      summary: `Account role(s) changed from ${target.roles.join(', ')} to ${next.join(', ')}`,
+    })
     return toMember(membership)
   }
 
