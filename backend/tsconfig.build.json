@@ -37,6 +37,10 @@
     // clients under `sdk/`) but is an ordinary published workspace package, so it belongs in the
     // build graph like any other — a package reachable only transitively drops out the moment
     // that reference goes away.
-    { "path": "../sdk/typescript/tsconfig.build.json" }
+    { "path": "../sdk/typescript/tsconfig.build.json" },
+    // The MCP facade over that same surface, for the same reason. It depends on the SDK above,
+    // so it is reachable transitively today — which is exactly the state that silently drops a
+    // package out of the build the day that dependency changes.
+    { "path": "../sdk/mcp/tsconfig.build.json" }
   ]
 }

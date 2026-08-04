@@ -43,6 +43,7 @@ import type {
 } from '@cat-factory/kernel'
 import {
   parseNotificationWebhookTypes,
+  parsePlatformAlertEvents,
   parseProviderPreferenceColumn,
   parseRunLifecycleEvents,
   serializeProviderPreferenceColumn,
@@ -354,7 +355,7 @@ export class DrizzleTrackerSettingsRepository implements TrackerSettingsReposito
 /**
  * A workspace's outbound notification webhook — one row per workspace in `notification_webhooks`
  * (mirror of the D1 `D1NotificationWebhookRepository`). The `types` filter is a JSON array decoded
- * through the SHARED `parseNotificationWebhookTypes` both runtimes use, so the column can't drift.
+ * through the SHARED parsers both runtimes use, so the columns can't drift.
  */
 export class DrizzleNotificationWebhookRepository implements NotificationWebhookRepository {
   constructor(private readonly db: DrizzleDb) {}
@@ -370,6 +371,7 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
       url: row.url,
       types: parseNotificationWebhookTypes(row.types),
       runEvents: parseRunLifecycleEvents(row.run_events),
+      alertEvents: parsePlatformAlertEvents(row.alert_events),
       enabled: row.enabled === 1,
       secretSealed: row.secret_sealed,
       updatedAt: row.updated_at,
@@ -381,6 +383,7 @@ export class DrizzleNotificationWebhookRepository implements NotificationWebhook
       url: record.url,
       types: JSON.stringify(record.types),
       run_events: JSON.stringify(record.runEvents),
+      alert_events: JSON.stringify(record.alertEvents),
       enabled: record.enabled ? 1 : 0,
       secret_sealed: record.secretSealed,
       updated_at: record.updatedAt,

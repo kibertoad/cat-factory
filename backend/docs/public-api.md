@@ -223,6 +223,29 @@ status class with the machine-readable `code` exposed verbatim.
 Details, the design rules the four share, and the Java/Kotlin story:
 [`sdk/README.md`](../../sdk/README.md).
 
+### From an MCP host
+
+`@cat-factory/mcp-server` exposes this surface as **Model Context Protocol tools**, so a model in an
+MCP host can plan work on the board, start and watch runs, answer parked decisions and read a run's
+telemetry. It is a thin facade over the TypeScript client with its tool table generated from the
+same spec, so it inherits every convention on this page rather than re-stating them.
+
+```jsonc
+{
+  "mcpServers": {
+    "cat-factory": {
+      "command": "npx",
+      "args": ["-y", "@cat-factory/mcp-server"],
+      "env": { "CAT_FACTORY_BASE_URL": "$BASE", "CAT_FACTORY_API_KEY": "cf_live_..." },
+    },
+  },
+}
+```
+
+The key's SCOPE is what decides what the model may do — mint the narrowest one that does the job.
+The two SSE endpoints are deliberately not tools (a tool call has no streaming channel; see
+[`sdk/mcp/README.md`](../../sdk/mcp/README.md)).
+
 Everything below still applies: the SDKs are a typed skin over exactly these endpoints, and the
 error codes, scopes and paging rules are the same whichever you use.
 
@@ -452,12 +475,14 @@ searches and provisioning logs. Same keys, `read` scope. Fully documented in
 
 Polling has no answer for the two cases that matter most: a parked run waits **indefinitely**, and a
 fully-successful run raises no notification at all. A workspace can register **one** outbound HTTPS
-endpoint and subscribe it to either or both delivery families:
+endpoint and subscribe it to any of three delivery families:
 
 - **Notification cards**: the same cards as `GET /api/v1/notifications`, pushed as they are raised
   and again as they are resolved.
 - **Run-lifecycle events**: `run.started` / `run.completed` / `run.failed`, one delivery per
   transition, including the happy path that raises no card.
+- **Platform-health alerts**: `platform_health.firing` / `platform_health.resolved`, the deployment
+  watching **itself**. This is the family to wire an on-call rotation to.
 
 ### Register the endpoint
 
@@ -472,6 +497,7 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
     "secret": "<16-200 chars, used to sign deliveries>",
     "types": [],
     "runEvents": ["run.started", "run.completed", "run.failed"],
+    "alertEvents": ["platform_health.firing", "platform_health.resolved"],
     "enabled": true
   }' \
   "$BASE/workspaces/$WS/notification-webhook"
@@ -481,7 +507,8 @@ curl -s -X PUT -H "Authorization: Bearer <session token>" -H 'content-type: appl
 at rest, never readable back. Omitting `secret` on a later `PUT` keeps the stored one, supplying it
 rotates. `DELETE` unregisters (idempotent, `204`).
 
-Two filters with **opposite** empty semantics, both deliberate:
+Three filters, and the first has the **opposite** empty semantics to the other two. All three are
+deliberate:
 
 - `types: []` (or unset) means **the default card types**: the parked-decision and merge/CI tails
   (`requirement_review`, `clarity_review`, `decision_required`, `fork_decision_pending`,
@@ -490,6 +517,15 @@ Two filters with **opposite** empty semantics, both deliberate:
   defaults but nameable).
 - `runEvents: []` (or unset) means **none**: lifecycle events are opt-in per event, so a receiver
   registered for parked decisions does not silently start hearing about every run.
+- `alertEvents: []` (or unset) means **none**, for the same reason and a sharper one: this family
+  pages people.
+
+**Alerts vs the `platform_health` card.** The card can also be named in `types`, and for a human
+overseer it should be. Do not page on it: a card is delivered on every content change **and again
+when a human acts on it or dismisses it**, and on the wire that dismissal is indistinguishable from
+the sweep clearing the card because the deployment recovered — so an integration built on it closes
+its incident whenever somebody tidies their inbox. The `alertEvents` family is produced by the
+health sweep's own verdict, so `platform_health.resolved` means the platform observed recovery.
 
 The URL must be public `https://`: loopback, RFC 1918, link-local, `.internal`/`.local` hosts and
 embedded credentials are refused at registration **and re-checked on every delivery hop** (redirects
@@ -501,7 +537,8 @@ headers). For local development, a deployment can relax this with
 ### Delivery contract
 
 Every delivery is a `POST` with `content-type: application/json` and `user-agent: cat-factory`. The
-two families share the endpoint and are told apart by shape:
+three families share the endpoint and are told apart by shape: `notification`, `run` and `alert`
+respectively.
 
 ```jsonc
 // Notification card (carries `notification`)
@@ -528,6 +565,26 @@ two families share the endpoint and are told apart by shape:
     "failure": { "kind": "…", "message": "…", "reason": null }   // run.failed only; null otherwise
   }
 }
+
+// Platform-health alert (carries `event` + `alert`)
+{
+  "deliveryId": "ntf_77:platform_health.firing:2:failure_rate_high",  // <cardId>:<event>:<transition>[:<reasons>]
+  "sentAt": 1722600000000,
+  "workspaceId": "ws_1",
+  "event": "platform_health.firing",
+  "alert": {
+    "accountId": "acc_1",                 // health is aggregated per ACCOUNT - group on this
+    "window": "1h",
+    "occurredAt": 1722600000000,          // when the sweep observed THIS transition, not when the incident opened
+    "conditions": [
+      { "reason": "failure_rate_high", "value": 0.8, "threshold": 0.5 }
+    ],
+    "failingRuns": [                      // capped sample, THIS workspace only; [] when there is no run evidence
+      { "executionId": "exec_9", "blockId": "blk_4", "failureKind": "agent", "createdAt": 1722599000000 }
+    ],
+    "failedTotal": 23                     // what the sample left out; null when it could not be read
+  }
+}
 ```
 
 Semantics your receiver must honour:
@@ -544,6 +601,34 @@ Semantics your receiver must honour:
   run, but it also means missed deliveries are possible, so treat the webhook as a trigger and the
   API as the source of truth. Failures are logged on the platform side for diagnosis.
 - Answer fast (2xx) and process async: the 5-second per-attempt timeout includes your handler.
+
+Three more that apply to platform-health alerts specifically, because an on-call integration is
+built differently depending on them:
+
+- **Edges only, and only when the firing set CHANGES.** The sweep runs every couple of minutes for
+  the length of an incident and does not repeat itself, so silence means "nothing changed", never
+  "recovered". One condition escalating to two is a change and pages again (with a new
+  `deliveryId`); the same conditions still firing is not.
+- **Dedupe an alert on `deliveryId` alone, not on the conditions and not on `occurredAt`.** The id
+  carries a transition ordinal that counts the edges within one incident, because neither obvious
+  substitute works: a condition set RECURS (escalating from `{A}` to `{A,B}` and subsiding to
+  `{A}` is three transitions over two distinct sets, and keying on the set would drop the page
+  saying it had subsided), while `occurredAt` over-separates, since the deployment may run several
+  sweepers and two of them observing one transition stamp different times for it. The ordinal is
+  derived from the platform's own record of the incident, so it is identical for a duplicate
+  delivery and distinct for a real transition.
+- **One account-level condition fans out per subscribed workspace.** Health is aggregated per
+  account while endpoints are registered per workspace, so a receiver watching several workspaces of
+  one account gets one delivery each. Group on `alert.accountId`.
+- **The resolved edge follows the platform's own open card.** If a human dismisses the
+  `platform_health` card from the in-app inbox while the condition is still firing, the sweep has
+  nothing left to clear, so a later recovery emits no `platform_health.resolved` (the next change to
+  the firing set raises a fresh card and delivers `firing` again). A receiver that cannot tolerate a
+  hanging incident should auto-resolve on its own timer rather than wait for an edge the platform
+  may have no state to produce.
+- `reason` and `window` are plain strings, not closed enums: both vocabularies grow additively, and
+  a deployment one release ahead of its receiver must still be able to page it. Route on the values
+  you know and treat the rest as an unrecognised condition rather than as no condition.
 
 ### Verify signatures
 

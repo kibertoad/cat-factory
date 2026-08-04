@@ -1,8 +1,8 @@
 {
   "dialect": "postgres",
-  "id": "79fba63b-5640-4984-ac2b-579e49cf05ea",
+  "id": "5bc2a5a2-4496-4626-ba78-ef272b674002",
   "prevIds": [
-    "0d57f185-538c-4562-90c2-081d4ba0db5f",
+    "994e8f95-b4d5-4d2a-b38e-b0cec7865a8b",
     "5ce257b5-b893-4f5f-a213-72cadd6d4cfc"
   ],
   "version": "8",
@@ -8424,6 +8424,19 @@
       "generated": null,
       "identity": null,
       "name": "run_events",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "notification_webhooks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "alert_events",
       "entityType": "columns",
       "schema": "public",
       "table": "notification_webhooks"

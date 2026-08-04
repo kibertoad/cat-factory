@@ -1,0 +1,18 @@
+{
+  "extends": "../../backend/tsconfig.base.json",
+  "compilerOptions": {
+    // Same shape as the TypeScript SDK's: this is a published library, resolved and emitted for
+    // Node's ESM resolver rather than for this repo's build graph.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2022"],
+    // Unlike the SDK next door, this one is a Node PROCESS: it reads the environment, writes to
+    // stderr and speaks a stdio transport, so `@types/node` belongs in the shipped config rather
+    // than only in the dev one. The SDK's `types: []` assertion is about code that must also run
+    // in a browser and a worker isolate; an MCP stdio server never does.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"]
+}

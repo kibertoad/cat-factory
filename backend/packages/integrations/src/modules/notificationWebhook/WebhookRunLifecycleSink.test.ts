@@ -34,6 +34,7 @@ function webhook(overrides: Partial<NotificationWebhookRecord> = {}): Notificati
     url: 'https://example.test/hook',
     types: [],
     runEvents: ['run.started', 'run.completed', 'run.failed'],
+    alertEvents: [],
     enabled: true,
     secretSealed: null,
     updatedAt: 1,

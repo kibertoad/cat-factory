@@ -4293,6 +4293,7 @@
       "binaryOutputMediaTypeUnverifiable": "Żadna wybrana integracja nie deklaruje {formats}, ale jedna z nich nie deklaruje żadnych formatów, więc nie dało się tego sprawdzić. Krok i tak wystartuje; potwierdź w API integracji, że potrafi to wytworzyć.",
       "binaryOutputMediaTypeUnusable": "Nie zapisano, bo to nie są typy mediów: {entries}. Zapisz każdy jako type/subtype.",
       "binaryOutputGeneratorMissing": "Ta instalacja nie rejestruje tych integracji generatywnych: {ids}. Rejestruje się je w kodzie instalacji, a nie w tym obszarze roboczym.",
+      "binaryOutputGeneratorOverlap": "Więcej niż jedna wybrana integracja tworzy ten sam typ treści ({overlaps}). Nie ma w tym nic złego, ale typ treści nie decyduje już, którą wywoła agent: napisz w promptcie tego kroku, której użyć i do czego, bo inaczej wybierze jedną i będzie jej używał dalej.",
       "binaryOutputModalityUncovered": "Żadna wybrana integracja nie tworzy {modalities}, które ten krok ma dostarczyć.",
       "binaryOutputModalityRetired": "{modality} (już niedostępne — wybierz ponownie typy treści tego kroku)",
       "binaryOutputModality": {
