@@ -28,12 +28,15 @@ export {
   providerCachesPrompts,
 } from './domain/cache-policy.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
+// `narrowMergeClassRule` is NOT re-exported from here: it moved to `@cat-factory/contracts` beside
+// the rule maps it composes, so the preset editor in the SPA narrows by the same implementation the
+// engine applies. A convenience re-export would put two import paths on one rule, which is the
+// shape that lets a second hand-written copy exist.
 export {
   CHANGE_CLASS_RANK,
   classifyChangedPath,
   classifyChangedFiles,
   resolveMergeClassRule,
-  narrowMergeClassRule,
   resolveRoleScopedMergeClassRule,
   type ChangeClassification,
   type RoleScopedMergeClassRule,

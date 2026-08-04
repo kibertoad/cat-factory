@@ -1,9 +1,11 @@
 import * as v from 'valibot'
+import { intakeOriginSchema, runDiagnosticsSchema, runModeSchema } from './run-provenance.js'
 import { testConcernSchema, testReportSchema, testerInfraSetupSchema } from './testing.js'
 import { consensusStepConfigSchema, stepGatingSchema } from './consensus.js'
 import { followUpsStepStateSchema } from './followUp.js'
 import { forkDecisionStepStateSchema } from './forkDecision.js'
 import { judgeStepStateSchema } from './judge.js'
+import { agentFailureKindSchema } from './agent-failure-kinds.js'
 import { ralphStepStateSchema } from './ralph.js'
 import { validationReportSchema } from './validation-checks.js'
 import { reproductionReportSchema } from './reproduction.js'
@@ -168,47 +170,6 @@ export type StepApproval = v.InferOutput<typeof stepApprovalSchema>
  */
 export const agentRunKindSchema = v.picklist(['bootstrap', 'execution', 'env-config-repair'])
 export type AgentRunKind = v.InferOutput<typeof agentRunKindSchema>
-
-/**
- * How an agent run faulted, so the board can classify the failure (and hint
- * whether a retry is likely to help). The union spans both flows; a given flow
- * only ever produces a subset:
- *   - `preflight`        — rejected before dispatch (repo missing/not empty, not connected). [bootstrap]
- *   - `dispatch`         — the container accept-request itself failed (HTTP / network). [bootstrap]
- *   - `evicted`          — the container vanished mid-run (eviction/crash). Retrying spins a fresh one.
- *   - `timeout`          — a container watchdog fired (inactivity or max-duration).
- *   - `agent`            — the agent / git push reported a failure.
- *   - `job_failed`       — an async container job came back failed. [execution]
- *   - `rejected`         — a human rejected a gated proposal, stopping the run. [execution]
- *   - `cancelled`        — the user (or an orphan sweep) explicitly stopped the run.
- *   - `unknown`          — anything not otherwise classified.
- */
-export const agentFailureKindSchema = v.picklist([
-  'preflight',
-  'dispatch',
-  // A `deployer` step's ephemeral-environment provisioning failed (the EnvironmentProvider
-  // threw or returned `status:'failed'`) — distinct from `dispatch` (a container/runner
-  // never accepting the job). The provider's verbatim error rides the failure `detail`.
-  'environment',
-  'evicted',
-  'timeout',
-  'agent',
-  'job_failed',
-  'rejected',
-  // A companion agent could not return a parseable quality assessment (truncated /
-  // malformed) even after a repair retry, so the run was failed for human attention.
-  // (Exhausting the automatic rework budget no longer fails the run — it parks on the
-  // companion iteration-cap gate for a human; see `companion.exceeded`.)
-  'companion_rejected',
-  // The run was still `running` in storage but its durable driver was gone (a crashed /
-  // restarted orchestrator left the advance job orphaned), and the stale-run sweeper could
-  // not recover it within the hard-stall deadline — so it is failed for human attention
-  // instead of spinning `running` forever with no progress. Retry spins a fresh run.
-  'stalled',
-  'cancelled',
-  'unknown',
-])
-export type AgentFailureKind = v.InferOutput<typeof agentFailureKindSchema>
 
 /**
  * Structured diagnostics captured when an agent run fails, stored on the run and
@@ -1260,89 +1221,6 @@ export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 export const executionStatusSchema = v.picklist(['running', 'blocked', 'done', 'paused', 'failed'])
 export type ExecutionStatus = v.InferOutput<typeof executionStatusSchema>
 
-/**
- * Per-run diagnostic context captured for AFTER-THE-FACT investigation of a run (esp. a
- * failure) — the "where/what did this run actually execute on" facts that were previously
- * spread across the DB (repo↔service↔installation joins), the harness transcript (model), or
- * lost entirely (which backend a step ran on). Stamped by the engine at dispatch and refined
- * on the first poll; it reflects the MOST RECENT container-step dispatch (the step most likely
- * relevant to a failure), not a per-step history. Rides in the run's `detail` JSON (no dedicated
- * column), like {@link ExecutionInstance.notes}/`frontendBindings`. Absent on legacy runs and on
- * runs with no container step (pure inline/gate pipelines). NEVER carries a token or secret.
- */
-/**
- * How a run entered the system. `ui` is every in-app surface (the SPA board, an initiative
- * spawn, a recurring schedule fire) and is the DEFAULT for anything that doesn't say
- * otherwise; `public-api` is a run started headlessly through the `/api/v1` surface, where
- * there is no human in the app to answer a park. See {@link ExecutionInstance.intakeOrigin}.
- */
-export const intakeOriginSchema = v.picklist(['ui', 'public-api'])
-export type IntakeOrigin = v.InferOutput<typeof intakeOriginSchema>
-
-/**
- * Whether a run may LAND its work. `live` (the default, and every run before this existed) is the
- * historical behaviour. `dry_run` is the sandboxed mode: the pipeline runs in full and opens its
- * pull request, so the human sees a real diff on a real branch, but nothing merges — neither the
- * `merger` step's auto-merge nor the manual merge endpoint.
- *
- * The PR is deliberately still opened. The deliverable a non-developer initiator needs to SEE is the diff,
- * and withholding the push would leave them reading prose about work they cannot inspect; what
- * makes the mode a sandbox is that the change cannot reach the default branch, not that it stays
- * invisible.
- *
- * Requested per run at start, and FORCED for the roles a task's merge preset lists in
- * `dryRunRoles`. The two compose one way only: a live request from a sandboxed role is a dry run,
- * and there is no way to ask out of it, or the setting would be advisory.
- */
-export const runModeSchema = v.picklist(['live', 'dry_run'])
-export type RunMode = v.InferOutput<typeof runModeSchema>
-
-export const runDiagnosticsSchema = v.object({
-  /** Context of the most recent container-step dispatch. */
-  lastDispatch: v.optional(
-    v.object({
-      /** Index of the dispatched step within the pipeline. */
-      stepIndex: v.number(),
-      /** The step's agent kind (`coder`, `merger`, a custom kind, …). */
-      agentKind: v.string(),
-      /** Resolved model ref `provider:model` (e.g. `anthropic:claude-opus-4-8`); null if unresolved. */
-      model: v.optional(v.nullable(v.string())),
-      /**
-       * Which runner backend the step actually ran on — the datum that distinguishes a native
-       * host-process run from a sandboxed container: `local-native` | `local-container` |
-       * `runner-pool` | `cloudflare-container`. Filled on the first poll (the transport reports
-       * it); absent until then or on an older runtime.
-       */
-      executionBackend: v.optional(v.string()),
-      /** The repo the step operated on. */
-      repo: v.optional(
-        v.object({
-          owner: v.string(),
-          name: v.string(),
-          /** The base branch the work branched from. */
-          baseBranch: v.optional(v.string()),
-          /** VCS provider (`github` | `gitlab`), resolved from the run's repo origin. */
-          provider: v.optional(v.string()),
-        }),
-      ),
-      /** Epoch ms the dispatch was recorded. */
-      at: v.number(),
-    }),
-  ),
-  /**
-   * The control-plane (orchestrator) host running the engine — NOT necessarily where the agent
-   * ran (a container step runs elsewhere; see `lastDispatch.executionBackend`). `platform` is the
-   * orchestrator's `process.platform` (e.g. `win32` pins a Windows local deployment — the class
-   * of host that surfaced the native-Windows git-auth break). Best-effort.
-   */
-  host: v.optional(
-    v.object({
-      platform: v.optional(v.string()),
-    }),
-  ),
-})
-export type RunDiagnostics = v.InferOutput<typeof runDiagnosticsSchema>
-
 export const executionInstanceSchema = v.object({
   id: v.string(),
   blockId: v.string(),
@@ -1429,15 +1307,15 @@ export const executionInstanceSchema = v.object({
    */
   mode: v.optional(runModeSchema),
   /**
-   * HOW this run entered the system — `ui` (the SPA / any in-app surface, the default) or
-   * `public-api` (started headlessly through `/api/v1`). Distinct from `initiatedBy`, which is
-   * `null` for a public-API run, a recurring-schedule fire AND auth-disabled dev alike, and
-   * from the launch-time `RunOrigin` (`manual`/`recurring`), which gates pipeline availability
-   * and is not persisted. Recorded because clarification behaviour diverges by intake: a
-   * headless run may push its parked questions out to the task's linked tracker issue, whereas
-   * a UI-started task's overseer is in the SPA and must keep behaving exactly as before.
-   * Carried forward across retry/restart. Absent on legacy runs ⇒ treated as `ui` (the safe
-   * reading: no outbound question writeback for a run whose intake we can't prove was headless).
+   * HOW this run entered the system (`intakeOriginSchema`, which documents each member).
+   * Distinct from `initiatedBy`, which is `null` for a public-API run, a recurring-schedule fire
+   * AND auth-disabled dev alike, and from the launch-time `RunOrigin` (`manual`/`recurring`),
+   * which gates pipeline availability and is not persisted. Recorded because clarification
+   * behaviour diverges by intake: a headless run ({@link isHeadlessIntake}) pushes its parked
+   * questions out to the task's linked tracker issue, whereas a UI-started task's overseer is in
+   * the SPA and must keep behaving exactly as before. Carried forward across retry/restart.
+   * Absent on legacy runs ⇒ treated as `ui` (the safe reading: no outbound question writeback
+   * for a run whose intake we can't prove was headless).
    */
   intakeOrigin: v.optional(intakeOriginSchema),
   /**

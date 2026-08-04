@@ -24,6 +24,7 @@ import {
 } from '@cat-factory/server'
 import { bootPersistence } from './bootPersistence.js'
 import { installProcessFailureGuards } from './processGuards.js'
+import { startOtelLogExport } from './logExport.js'
 import { startBootClock } from './bootTimings.js'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
@@ -717,6 +718,12 @@ async function bootServer(
     seedSharedStacks: options.seedSharedStacks,
   })
   bootClock.mark('container')
+  // Install the OTLP log export as soon as config is resolved (a no-op unless `OTEL_LOGS=true`
+  // on top of a configured exporter), so everything from here on (registration validation, the
+  // sweepers, every request) reaches the operator's log backend as well as stdout. It
+  // cannot start earlier: the endpoint is config, and config is what the boot before this
+  // point is busy resolving.
+  const logExport = startOtelLogExport(container.config.otel, logger)
   // ADR 0026 D6.2: a one-shot drift sweep at boot — attempt to decrypt every sealed credential
   // and raise ONE `key_drift` card per affected workspace (or clear a stale one), so drift is a
   // single legible issue instead of a stream of opaque per-request errors. Runs after the
@@ -876,6 +883,10 @@ async function bootServer(
     } catch (err) {
       logger.error('onShutdown error', { err: err instanceof Error ? err.message : String(err) })
     }
+    // LAST, and after every other stop: detach the log sink and deliver what it still holds,
+    // so the shutdown's own lines (including the two errors above, which are exactly the ones
+    // worth having) leave the process before it does. A no-op when the export is not wired.
+    await logExport.stop()
     process.exit(0)
   }
   process.once('SIGTERM', () => void shutdown('SIGTERM'))

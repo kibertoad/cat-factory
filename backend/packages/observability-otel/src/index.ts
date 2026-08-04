@@ -23,6 +23,7 @@ import {
   toUnixNano,
 } from './mapping.js'
 import { type KeyValue, keyValues, postOtlp } from './otlp.js'
+import { DEFAULT_LOG_BATCH_SIZE } from './logs.js'
 
 // A fetch-based OpenTelemetry exporter that speaks OTLP/HTTP with the **JSON** encoding
 // (`POST {endpoint}/v1/traces` and `/v1/metrics`) using only the global `fetch`/`crypto`.
@@ -224,6 +225,17 @@ export {
   createPlatformMetricsOtelExporter,
 } from './platform.js'
 
+// The LOG exporter (`/v1/logs`): the kernel `LogSink` the server's logging adapter fans
+// emitted lines into. Fetch-based on both runtimes like the platform exporter (see `./logs`),
+// so it too lives in this workerd-safe entry rather than the SDK `./node` one.
+export {
+  DEFAULT_LOG_BATCH_SIZE,
+  OtelLogExporter,
+  type OtelLogExporterConfig,
+  SELF_LOG_FIELD,
+  createOtelLogExporter,
+} from './logs.js'
+
 /**
  * Parse the OTLP `OTEL_EXPORTER_OTLP_HEADERS` convention — comma-separated `key=value`
  * pairs (e.g. `x-api-key=abc,x-tenant=42`) — into a header map, or undefined when
@@ -270,4 +282,34 @@ export function parsePlatformMetricsIntervalMs(raw: string | undefined): number 
 export function parsePlatformMetricsWindow(raw: string | undefined): PlatformMetricsWindow {
   const w = raw?.trim()
   return w === '24h' || w === '7d' ? w : '1h'
+}
+
+// ---- log-export config parsing (shared by both facades) -------------------
+
+/**
+ * Default log-export flush cadence (Node timer). Short enough that a line is queryable while
+ * an operator is still watching the incident that produced it, long enough that a busy
+ * deployment batches rather than posting per line. The Worker flushes per invocation instead,
+ * so this does not apply there.
+ */
+export const LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS = 5_000
+
+/**
+ * Parse `OTEL_LOGS_FLUSH_INTERVAL_MS` into a positive integer ms, falling back to
+ * {@link LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS} for unset / non-numeric / non-positive values.
+ */
+export function parseLogExportFlushIntervalMs(raw: string | undefined): number {
+  const n = Number(raw?.trim())
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : LOG_EXPORT_DEFAULT_FLUSH_INTERVAL_MS
+}
+
+/**
+ * Parse `OTEL_LOGS_MAX_BATCH_SIZE` into a positive integer, falling back to
+ * {@link DEFAULT_LOG_BATCH_SIZE}. It bounds both the POST size and (with the exporter's queue
+ * multiplier) how much a collector outage may hold in memory, so an operator turning it up
+ * for a chatty deployment is raising both together, deliberately.
+ */
+export function parseLogExportBatchSize(raw: string | undefined): number {
+  const n = Number(raw?.trim())
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_LOG_BATCH_SIZE
 }

@@ -242,7 +242,8 @@ runner backend are unprobed. The embedded/mothership variant returns a permanent
 (D1, TELEMETRY_DB, queues, containers all unprobed).
 
 **C5: `platform_health` cannot see a dead deployment. (P2)**
-_(FIXED in Phase 4.2: `throughput_stalled`, `failure_kind_dominant`, `sweep_degraded`.)_
+_(FIXED in Phase 4.2: `throughput_stalled`, `failure_kind_dominant`, `sweep_degraded`; the
+per-kind half completed later by `failure_kind_rate_high`, see the Phase 4 notes.)_
 Exactly three conditions (failure rate, p99 duration, backlog). If run creation stops entirely,
 `total = 0` → all three silent: a fully dead platform reads identically to a quiet healthy one.
 No absolute failure counts, no failure-kind-specific condition (100% `evicted` reads the same as
@@ -777,6 +778,16 @@ where they became countable.
   from being muted before the night it matters. `failure_kind_dominant` splits 100% `evicted`
   from 100% `agent` (identical failure rate, opposite fixes). `sweep_degraded` alerts on the
   WATCHER, off a `SweepHealthTracker` streak the caller supplies.
+- **`failure_kind_rate_high` completes the taxonomy half** (a later slice on the same read):
+  per-kind rules an operator configures, `PLATFORM_ALERTS_FAILURE_KIND_RATES=evicted=0.05:3` or
+  the same list per account. The dominant condition asks whether one cause is swamping the rest,
+  which is a question about the SHAPE of the distribution; a per-kind rule asks whether a NAMED
+  cause reached what a deployment tolerates from it, and 20% evictions never approaches
+  dominance while being one run in five lost to the substrate. Two traps, both about identity:
+  the reason code is SHARED by every rule, so the firing KINDS ride the card beside the reasons
+  and are the other half of its dedup identity (evictions subsiding while timeouts take over is
+  otherwise an unchanged firing set), and the rule's per-rule `minCount` is what makes a low
+  ceiling usable at all, since `minRuns`'s five terminal runs with one eviction is already 20%.
 - **Retention pruning is isolated per table** (4.4) through one shared `createRetentionPass`,
   because the passes were a chain of bare `await`s: the first failing `deleteOlderThan` aborted
   every later one, indefinitely, and the heaviest tables sit late in the chain. Isolation alone

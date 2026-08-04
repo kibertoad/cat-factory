@@ -16,6 +16,7 @@ import {
   serveMisconfigured,
   start,
   startBootClock,
+  startOtelLogExport,
 } from '@cat-factory/node-server'
 import {
   DOCS,
@@ -402,6 +403,11 @@ async function startLocalMothership(
     seedSharedStacks,
   })
 
+  // Export logs to the OTLP endpoint (a no-op unless `OTEL_LOGS=true` on top of a configured
+  // exporter). Wired here as well as in `start()` because this path never runs `bootServer`:
+  // without it, mothership mode would be the one Node-hosted shape whose logs stop at stdout.
+  const logExport = startOtelLogExport(container.config.otel, logger)
+
   // Validate registered gates / agent kinds once before serving (parity with `start()`). The
   // foundational-service definitions are still validated here even though this node resolves the
   // tier remotely (below): they are the SAME code the mothership boots, so a malformed one is a
@@ -475,6 +481,9 @@ async function startLocalMothership(
     await new Promise<void>((resolve) => server.close(() => resolve()))
     // Release the local credential SQLite handle (mothership mode owns it).
     await container.onShutdown?.()
+    // LAST: detach the log sink and deliver what it still holds, so the shutdown's own lines
+    // leave the process before it does (same ordering as the Node facade's shutdown).
+    await logExport.stop()
     process.exit(0)
   }
   process.once('SIGTERM', () => void shutdown('SIGTERM'))

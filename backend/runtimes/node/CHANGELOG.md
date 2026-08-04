@@ -1,5 +1,138 @@
 # @cat-factory/node-server
 
+## 0.167.1
+
+### Patch Changes
+
+- Updated dependencies [ee6601e]
+  - @cat-factory/contracts@0.233.0
+  - @cat-factory/orchestration@0.201.1
+  - @cat-factory/server@0.212.1
+  - @cat-factory/agents@0.110.3
+  - @cat-factory/consensus@0.14.12
+  - @cat-factory/eks@0.1.222
+  - @cat-factory/gates@0.8.68
+  - @cat-factory/gitlab@0.15.27
+  - @cat-factory/integrations@0.124.1
+  - @cat-factory/kernel@0.234.1
+  - @cat-factory/observability-otel@0.9.2
+  - @cat-factory/prompt-fragments@0.15.59
+  - @cat-factory/spend@0.14.10
+  - @cat-factory/provider-bedrock@0.7.373
+  - @cat-factory/provider-cloudflare@0.7.374
+  - @cat-factory/caching@0.14.12
+  - @cat-factory/observability-langfuse@0.9.65
+  - @cat-factory/provider-s3@0.2.293
+
+## 0.167.0
+
+### Minor Changes
+
+- 937d4af: Alert on a NAMED failure kind crossing its own rate, not just on one kind swamping the rest.
+
+  `platform_health` could already say "nearly every failure shares one cause" (`failure_kind_dominant`,
+  80% by default), which is a question about the shape of the distribution. It could not say "5% or
+  more of failures are evictions", and no single ceiling can: 5% evictions is the container
+  substrate failing one run in twenty, while 40% `rejected` is the product working as designed. Which
+  kinds deserve their own ceiling, and where each sits, is a judgement about a particular deployment,
+  so it is configuration rather than a threshold the platform picks: `PLATFORM_ALERTS_FAILURE_KIND_RATES`
+  (`evicted=0.05:3,timeout=0.2`) sets the deployment's rules, and an account can replace them from the
+  platform-alert settings panel. Nothing fires until an operator names a kind, so a deployment that
+  configures none is byte-for-byte unchanged.
+
+  Two things about the new condition are worth reviewing carefully. Its reason code is SHARED by every
+  rule, so the firing KINDS now ride the `platform_health` card beside the reasons and are the other
+  half of the card's dedup identity: without them, evictions subsiding while timeouts crossed the same
+  rule is an unchanged firing set, and the card goes on naming the incident that ended. And each rule
+  carries its own `minCount` (default 1), because the shared `minRuns` sample stops protecting anything
+  at a low ceiling: five terminal runs with a single eviction is already 20%.
+
+  A rule naming a kind the build does not produce is KEPT and reported, never dropped and never
+  silently ignored: a typo and a retired kind are the same string, nothing can tell them apart, and
+  either way an operator has armed a pager that reads exactly like a kind that never occurred. The
+  same reasoning runs through the settings editor, which offers the current vocabulary, marks a
+  stored unrecognised kind as such, and stops offering to add rules once every kind carries one.
+  Config warnings are now emitted once per process rather than once per read, because the Worker
+  re-derives its whole config on every invocation and a standing typo would otherwise log on each.
+
+  Additive on `/api/v1`: OpenAPI `info.version` 1.4.0, a `failure_kind_rate_high` member on the
+  notification payload's alert reasons, a `platformAlertFailureKinds` field beside it, and an optional
+  `kind` on the platform-health webhook's conditions (the delivery id names it, so several rules firing
+  at once no longer read as one code repeated). A stored rule names its kind as a plain string rather
+  than the closed failure-kind picklist, deliberately: a rule surviving a kind's retirement must still
+  parse, or one stale rule would take the account's whole settings row down with it and silently
+  discard the model policy beside it. The settings panel offers the current vocabulary and marks an
+  unrecognised stored kind as such rather than re-pointing it.
+
+### Patch Changes
+
+- Updated dependencies [937d4af]
+  - @cat-factory/contracts@0.232.0
+  - @cat-factory/kernel@0.234.0
+  - @cat-factory/orchestration@0.201.0
+  - @cat-factory/server@0.212.0
+  - @cat-factory/integrations@0.124.0
+  - @cat-factory/agents@0.110.2
+  - @cat-factory/consensus@0.14.11
+  - @cat-factory/eks@0.1.221
+  - @cat-factory/gates@0.8.67
+  - @cat-factory/gitlab@0.15.26
+  - @cat-factory/observability-otel@0.9.1
+  - @cat-factory/prompt-fragments@0.15.58
+  - @cat-factory/spend@0.14.9
+  - @cat-factory/caching@0.14.11
+  - @cat-factory/observability-langfuse@0.9.64
+  - @cat-factory/provider-bedrock@0.7.372
+  - @cat-factory/provider-cloudflare@0.7.373
+  - @cat-factory/provider-s3@0.2.292
+
+## 0.166.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/observability-otel@0.9.0
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/server@0.211.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/caching@0.14.10
+  - @cat-factory/consensus@0.14.10
+  - @cat-factory/eks@0.1.220
+  - @cat-factory/gates@0.8.66
+  - @cat-factory/gitlab@0.15.25
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/observability-langfuse@0.9.63
+  - @cat-factory/provider-bedrock@0.7.371
+  - @cat-factory/provider-cloudflare@0.7.372
+  - @cat-factory/provider-s3@0.2.291
+  - @cat-factory/spend@0.14.8
+  - @cat-factory/prompt-fragments@0.15.57
+
 ## 0.165.1
 
 ### Patch Changes
