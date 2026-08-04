@@ -505,11 +505,13 @@ describe('post-release-health settings surface (observability / release-health /
     { repo: 'releaseHealthConfigRepository', method: 'delete', args: ['blk_1'] },
     { repo: 'incidentEnrichmentConnectionRepository', method: 'get', args: [], echoes: true },
     { repo: 'incidentEnrichmentConnectionRepository', method: 'delete', args: [] },
-    // The per-workspace capability-credential store rides this same shape: sealed blob, three
-    // methods, workspace-scoped. It is `remote` rather than `local-sqlite` because a RUN resolves
+    // The per-workspace capability-credential store rides this same shape: sealed blob,
+    // workspace-scoped. It is `remote` rather than `local-sqlite` because a RUN resolves
     // it — a mothership-mode node has no `db`, and a credential the operator set on the mothership
-    // must reach the dispatch that needs it.
+    // must reach the dispatch that needs it. `deleteIfRev` is the rev-guarded delete behind the
+    // checklist's per-key remove (the stub echoes the workspace; the real method returns a boolean).
     { repo: 'capabilityCredentialRepository', method: 'get', args: [], echoes: true },
+    { repo: 'capabilityCredentialRepository', method: 'deleteIfRev', args: [3], echoes: true },
     { repo: 'capabilityCredentialRepository', method: 'delete', args: [] },
   ]
 
@@ -575,6 +577,24 @@ describe('post-release-health settings surface (observability / release-health /
       })
     }
   }
+
+  it('forwards capabilityCredentialRepository.compareAndSwap for an in-scope workspace and refuses another', async () => {
+    // Same `workspaceField` rule as the upserts above, under the rev-guarded method the
+    // checklist's per-key save rides. The boolean verdict must survive the hop, because the
+    // service's retry loop keys off it.
+    await expect(
+      remoteRegistry().capabilityCredentialRepository!.compareAndSwap!({ workspaceId: 'ws_in' }, 1),
+    ).resolves.toBe(true)
+    await expect(
+      remoteRegistry().capabilityCredentialRepository!.compareAndSwap!(
+        { workspaceId: 'ws_out' },
+        1,
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      remoteRegistry().capabilityCredentialRepository!.compareAndSwap!({}, 1),
+    ).rejects.toMatchObject({ code: 'not_found' })
+  })
 })
 
 describe('environment-connection management surface (workspace-scoped)', () => {
