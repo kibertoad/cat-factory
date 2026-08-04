@@ -2386,7 +2386,8 @@
         "deleteTitle": "Delete preset",
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} overrides",
-        "empty": "No presets yet. Create one to map models to your agents."
+        "empty": "No presets yet. Create one to map models to your agents.",
+        "customRouteOrder": "custom route order"
       },
       "editor": {
         "useBaseModel": "Use base model",
@@ -2407,6 +2408,28 @@
         "nameRequiredTitle": "Name required",
         "nameRequiredBody": "Give the preset a name.",
         "saveFailed": "Could not save the preset"
+      },
+      "routes": {
+        "direct": "The model's own provider API",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter gateway",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Subscription (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Needs an API key for that provider.",
+        "bedrock": "Runs in your AWS Region, on the models your account allows.",
+        "openrouter": "One key, many vendors, resold at a margin.",
+        "cloudflare": "Always available, no prompt caching.",
+        "subscription": "Flat-rate quota on a connected plan."
+      },
+      "routeOrder": {
+        "label": "Route order",
+        "defaultHint": "This preset follows the deployment default. Move a route up to prefer it instead.",
+        "customHint": "This preset prefers routes in this order. A model reachable only on a lower route still runs, it is just tried later.",
+        "reset": "Use default order",
+        "moveUp": "Prefer this route more",
+        "moveDown": "Prefer this route less"
       }
     },
     "account": {

@@ -151,6 +151,10 @@ export function loadAgentsConfig(env: Env, caps: ProviderCapabilities): AgentsCo
       default: defaultConfig,
       byKind,
     },
-    resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
+    // The preset's route order is folded ONTO the deployment capabilities rather than replacing
+    // them: which routes EXIST is a deployment fact (keys, the Bedrock allow-list, the CF binding),
+    // and the preset only reorders how they are preferred.
+    resolveBlockModel: (modelId, providerPreference) =>
+      resolveModelRef(modelId, providerPreference?.length ? { ...caps, providerPreference } : caps),
   }
 }

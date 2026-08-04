@@ -602,6 +602,58 @@ export const modelFlavorSchema = v.picklist([
 export type ModelFlavor = v.InferOutput<typeof modelFlavorSchema>
 
 /**
+ * The order a model's routes are preferred in when a preset states none. The PICKLIST order IS
+ * this order (kernel's `DEFAULT_PROVIDER_PREFERENCE` is it, pinned both ways by
+ * `model-flavors.test.ts`), so changing which route wins by default means reordering the picklist
+ * above rather than adding a second list here that could disagree with it.
+ *
+ * It lives in contracts because BOTH sides need it: the resolver walks it, and the preset editor
+ * renders it as the order a preset inherits. A copy in the SPA would let the picker display an
+ * order the run does not take.
+ */
+export const DEFAULT_MODEL_FLAVOR_ORDER: readonly ModelFlavor[] = modelFlavorSchema.options
+
+/**
+ * The full order a resolution walks given a preset's own preference: the routes it named, in the
+ * order it named them, then every route it OMITTED in {@link DEFAULT_MODEL_FLAVOR_ORDER} order.
+ *
+ * A preference REORDERS, it never filters. A preset naming three routes must not make a model whose
+ * only route is the fourth unresolvable — that route should merely be tried last. Returning a total
+ * order over every route rather than the caller's list is what makes that structural, and it is why
+ * the editor has no "remove" affordance: there is nothing to remove.
+ *
+ * A repeat keeps its FIRST position (the caller's own statement of where the route belongs); the
+ * write boundary refuses one, so this only ever tolerates rather than trusts.
+ */
+export function orderedModelFlavorPreference(
+  preference?: readonly ModelFlavor[],
+): readonly ModelFlavor[] {
+  if (!preference?.length) return DEFAULT_MODEL_FLAVOR_ORDER
+  const named = new Set(preference)
+  return [...named, ...DEFAULT_MODEL_FLAVOR_ORDER.filter((flavor) => !named.has(flavor))]
+}
+
+const MODEL_FLAVOR_SET: ReadonlySet<string> = new Set(modelFlavorSchema.options)
+
+/**
+ * Whether a stored value is still a route this build can reach — DERIVED from the picklist, so
+ * it cannot drift from it the way a hand-written second list would.
+ *
+ * The vocabulary is closed but PERSISTED (`ModelPreset.providerPreference`), so a route retired
+ * from the union goes on existing in saved preset rows and every `Record<ModelFlavor, …>` over it
+ * is total against the TYPE and partial against the DATA. Narrow with this at the read boundary.
+ *
+ * A retired member here is DROPPED rather than named, which is the opposite disposition from
+ * `isBinaryModality` and deliberately so: this value names a ROUTE, not a requirement. Once the
+ * route is gone there is no current member a human could re-pick it as, and the surviving entries
+ * keep their relative order, so the preference still says exactly what it said about every route
+ * that still exists. What a stale entry must never do is reach a `Record` lookup.
+ */
+export function isModelFlavor(value: string): value is ModelFlavor {
+  return MODEL_FLAVOR_SET.has(value)
+}
+
+/**
  * A selectable LLM model, resolved to the flavour actually in use for this
  * deployment (`GET /models`). `provider`/`model` are the effective {@link ModelRef}
  * parts the agent will run with; the picker stores only `id`.

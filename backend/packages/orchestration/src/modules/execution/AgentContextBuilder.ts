@@ -20,6 +20,7 @@ import type {
   InitiativePresetRegistry,
   InitiativeRepository,
   Logger,
+  ModelPresetRepository,
   PipelineStep,
   RequirementReviewRepository,
   ResolvedSkill,
@@ -46,10 +47,7 @@ import {
   standardsVerbosityFor,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import {
-  resolveDispatchMaxOutputTokens,
-  resolveDispatchSystemPrompt,
-} from './dispatchPromptSettings.js'
+import { resolveDispatchSettings } from './dispatchPromptSettings.js'
 import {
   boundServiceFrameIds,
   buildFrontendRunNotes,
@@ -231,6 +229,14 @@ export interface AgentContextBuilderDeps {
    */
   agentSettings?: WorkspaceAgentSettingsRepository
   /**
+   * Optional: the workspace's model-preset library, read for the ROUTE ORDER the block's preset
+   * states (`providerPreference`). Resolved here — once per dispatch — for the same reason the
+   * prompt override and the output budget are: the container, inline and consensus paths must not
+   * disagree about which route a step ran on. Absent (or a preset stating none) ⇒ the deployment's
+   * default order, unchanged.
+   */
+  modelPresets?: ModelPresetRepository
+  /**
    * Optional: the workspace's consensus-GROUP library. When wired, a consensus step naming a
    * tier set (`consensus.groupIds`) resolves it here — ONE batched read per dispatch — and the
    * group the task's estimate earns is materialised onto the context. Absent (or the step names
@@ -410,14 +416,11 @@ export class AgentContextBuilder {
       // that picked none skip it entirely (no extra read). Throws when a REQUIRED skill can't
       // resolve — a step asked to apply a skill must never run against nothing.
       runSkills,
-      // The workspace's own system prompt for the kind being dispatched, when it edited one
-      // from the pipeline builder. Resolved HERE — once per dispatch, in the engine — rather
-      // than in each executor, so the container / inline / consensus paths cannot disagree
-      // about which prompt a step ran under.
-      systemPromptOverride,
-      // The output-token ceiling this dispatch runs under: the step's own option, else the
-      // workspace's per-kind setting, else nothing (⇒ the deployment routing ceiling stands).
-      maxOutputTokens,
+      // The three per-dispatch GENERATION settings — the workspace's own system prompt for the
+      // kind, the output-token ceiling, and the ROUTE order the block's preset prefers. Resolved
+      // HERE, once per dispatch in the engine, rather than in each executor, so the container /
+      // inline / consensus paths cannot disagree about what a step ran under.
+      dispatchSettings,
       // The consensus config this dispatch actually runs under: the step's own config when it
       // authored inline participants, the workspace group its estimate earned when it named a
       // tier set, or nothing at all when no tier cleared (⇒ the standard single-actor agent).
@@ -448,8 +451,7 @@ export class AgentContextBuilder {
       this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame, instance.id),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
-      this.resolveSystemPromptOverride(workspaceId, agentKind, step),
-      this.resolveMaxOutputTokens(workspaceId, agentKind, step),
+      resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block),
       // A consensus step's TIER SET: resolve the named groups and materialise the one this
       // task's estimate earns. In the same read wave as the rest of the context, so a tiered
       // step costs one extra batched query and nothing else.
@@ -484,8 +486,7 @@ export class AgentContextBuilder {
       // dispatched once has neither and stays at epoch 0 (unsuffixed id, unchanged behaviour).
       ...(dispatchEpochFor(step) > 0 ? { dispatchEpoch: dispatchEpochFor(step) } : {}),
       isFinalStep,
-      ...systemPromptOverride,
-      ...maxOutputTokens,
+      ...dispatchSettings,
       // The future-looking Follow-up companion is enabled for this (coder) step: the
       // container executor appends the follow-up guidance + sets the harness to stream items.
       // Gated on the EFFECTIVE dispatched kind matching the step's own kind, so a HELPER
@@ -1178,31 +1179,6 @@ export class AgentContextBuilder {
       step.selectedFragmentIds = undefined
       return null
     }
-  }
-
-  /**
-   * The base system prompt this dispatch replaces the shipped one with (the workspace's edited
-   * prompt for the kind, folded with the step's registered agent-kind VARIANT), and the pins it
-   * leaves on the step. Thin delegate — see {@link resolveDispatchSystemPrompt}.
-   */
-  private resolveSystemPromptOverride(
-    workspaceId: string,
-    agentKind: string,
-    step: PipelineStep,
-  ): Promise<{ systemPromptOverride?: string }> {
-    return resolveDispatchSystemPrompt(this.deps, workspaceId, agentKind, step)
-  }
-
-  /**
-   * The output-token ceiling this dispatch runs under. Thin delegate — see
-   * {@link resolveDispatchMaxOutputTokens}.
-   */
-  private resolveMaxOutputTokens(
-    workspaceId: string,
-    agentKind: string,
-    step: PipelineStep,
-  ): Promise<{ maxOutputTokens?: number }> {
-    return resolveDispatchMaxOutputTokens(this.deps, workspaceId, agentKind, step)
   }
 
   /**

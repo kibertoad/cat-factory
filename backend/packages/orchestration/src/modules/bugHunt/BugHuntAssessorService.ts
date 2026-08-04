@@ -6,19 +6,16 @@ import type {
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
+  ModelPresetRepository,
 } from '@cat-factory/kernel'
-import {
-  extractJson,
-  inlineModelRef,
-  resolveScopedModelProvider,
-  ValidationError,
-} from '@cat-factory/kernel'
+import { extractJson, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
 import {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,
   catFactoryObservability,
   renderBugHuntPrompt,
 } from '@cat-factory/agents'
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
 // The default {@link BugHuntAssessor}: the INLINE LLM call behind the bug hunt's ranking.
@@ -45,15 +42,17 @@ export interface BugHuntAssessorServiceDeps {
   modelProvider?: ModelProvider
   /** Routing-default model ref. */
   modelRef?: ModelRef
-  /** Resolve a model catalog id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a model catalog id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /** Keep an ambient-eligible harness ref inline (local mode) instead of degrading it. */
   runsInline?: (ref: ModelRef) => boolean
   /** Resolve the workspace's default model for the `bug-hunter` kind. */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-  ) => Promise<string | undefined>
+  resolveWorkspaceModelDefault?: InlineBlockModelDeps['resolveWorkspaceModelDefault']
+  /**
+   * The workspace's model-preset library, read for the ROUTE order the DEFAULT preset states (a
+   * hunt selects none). Absent ⇒ the deployment's default order.
+   */
+  modelPresets?: ModelPresetRepository
   /** Current time, injected so the rendered candidate ages are deterministic under test. */
   now?: () => number
   /** Facade logger; a swallowed ranking failure with no trace is an unowned bug. */
@@ -143,17 +142,9 @@ export class BugHuntAssessorService implements BugHuntAssessor {
   }
 
   /** Workspace per-kind default > routing default (subscription refs degrade inline). */
-  private async modelFor(workspaceId: string): Promise<ModelRef | undefined> {
-    const fallback = this.deps.modelRef
-    const runsInline = this.deps.runsInline
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
-      workspaceId,
-      BUG_HUNT_AGENT_KIND,
-    )
-    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) {
-      return inlineModelRef(fromDefault, fallback ?? fromDefault, runsInline ? { runsInline } : {})
-    }
-    return fallback
+  private modelFor(workspaceId: string): Promise<ModelRef | undefined> {
+    // An EMPTY selection: a hunt rates a tracker board, not a task, so nothing pins a model or
+    // picks a preset and the workspace DEFAULT preset supplies both the model and the route order.
+    return resolveInlineBlockModelRef(this.deps, workspaceId, BUG_HUNT_AGENT_KIND, {})
   }
 }

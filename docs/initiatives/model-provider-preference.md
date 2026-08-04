@@ -1,8 +1,8 @@
 # Per-model Bedrock enablement + per-preset provider preference
 
-**Status:** slice 1 (Bedrock as a selectable flavour, on a preference-driven resolver) landed.
-Slices 2 (per-preset preference) and 3 (the subscription-first reorder) outstanding. Tracker
-landed with [#1602](https://github.com/kibertoad/cat-factory/pull/1602).
+**Status:** slices 1 (Bedrock as a selectable flavour, on a preference-driven resolver) and 2
+(the per-preset preference) landed. Slice 3 (the subscription-first reorder) outstanding.
+Tracker landed with [#1602](https://github.com/kibertoad/cat-factory/pull/1602).
 
 ## Slicing (REDIRECTED after scoping slice 1)
 
@@ -133,6 +133,14 @@ that sets it (an unwired capability field would read as a knob nobody can turn).
 order, which decides between two inference profiles for one model), so it is built from the env
 string once and never rebuilt from an unordered source.
 
+Slice 2 landed `providerPreference` on that interface and added a second travel path beside it,
+because a capability set is resolved at two different times: the START GUARD resolves one per
+run (so `resolveProviderCapabilities` gained the block's `modelPresetId`), while a DISPATCH has
+no capability set of its own — the facade's `resolveBlockModel` closes over the boot-time one. So
+the order reaches a dispatch through `AgentRunContext.providerPreference`, resolved once by the
+engine exactly like the prompt override, and the facade folds it onto its closed-over
+capabilities per call. Both ends read one preset row; neither can differ from the other.
+
 ## Work items
 
 ### Slice 1: Bedrock as a selectable flavour (LANDED)
@@ -188,26 +196,61 @@ Gotchas this slice surfaced, for whoever takes the next two:
   `contextWindowFor` now uses, then price the Bedrock models individually, which also stops a
   cheap model (`openai.gpt-oss-120b`) being metered at the frontier rate.
 
-### Slice 2: per-preset provider preference
+### Slice 2: per-preset provider preference (LANDED)
 
-- [ ] `contracts`: `ModelPreset.providerPreference` (+ create/update bodies, duplicate check).
-- [ ] Persistence, **both runtimes**: `provider_preference` on `model_presets`, a D1
+- [x] `contracts`: `ModelPreset.providerPreference` (+ create/update bodies, duplicate check),
+      plus `DEFAULT_MODEL_FLAVOR_ORDER` / `orderedModelFlavorPreference` / `isModelFlavor`.
+- [x] Persistence, **both runtimes**: `provider_preference` on `model_presets`, a D1
       migration ⇄ Drizzle schema + `pnpm db:generate` + mappers + repos. Stored as a JSON
       array; NULL ⇒ default.
-- [ ] `kernel`: `ProviderCapabilities.providerPreference`, and `effectiveVariant` walking it
+- [x] `kernel`: `ProviderCapabilities.providerPreference`, and `effectiveVariant` walking it
       with the omitted flavours appended in default order (a preference REORDERS, never
-      filters). The walk is already a single loop over an ordered tuple, so this is where it
-      plugs in; deliberately NOT added in slice 1, since nothing would have set it.
-- [ ] Capability wiring, **both runtimes**: the resolved preset's order →
+      filters).
+- [x] Capability wiring, **both runtimes**: the resolved preset's order →
       `caps.providerPreference`. `resolveWorkspaceCapabilities` is the join point.
-- [ ] `server`: `ModelRouter` / `ContainerAgentExecutor` resolve the preference from the
+- [x] `server`: `ModelRouter` / `ContainerAgentExecutor` resolve the preference from the
       preset in force, once per dispatch (same rule as the prompt override).
-- [ ] Frontend: preference editor in `ModelConfigurationPanel.vue` (ordered list, reset to
-      default), **and `en.json` + all 9 other locales**; the parity gate is change-coupled, and
-      a verbatim English value is a bug. (The flavour BADGE needed no change: it renders the
-      backend's `providerLabel`, so `AWS Bedrock` arrived with slice 1.)
-- [ ] Conformance: a `defineConformanceSuite` assertion that a preset's stored preference
+- [x] Frontend: `ProviderPreferenceEditor.vue` in the preset editor (ordered list, reset to
+      default), **and `en.json` + all 9 other locales**.
+- [x] Conformance: a `defineConformanceSuite` assertion that a preset's stored preference
       round-trips and changes which flavour a model resolves to on BOTH runtimes.
+
+Gotchas this slice surfaced, for whoever takes slice 3:
+
+- **`resolveBlockModel` is where the order has to arrive, and it is a CLOSURE over boot-time
+  capabilities.** Widening it to `(modelId, providerPreference?)` is additive, so no existing
+  call site broke, but note the shape it forces: the facade folds the order onto its captured
+  caps per call rather than the caller passing a whole capability set. That is deliberate —
+  which routes EXIST is a deployment fact and only the ORDER is per preset — and slice 3's
+  per-workspace token state cannot use the same trick, because it changes what is usable.
+- **The dispatch and the start guard needed DIFFERENT travel paths** (see "Where the preference
+  travels" above). Adding only the guard's would have left every dispatch on the default order,
+  and adding only the context's would have let a run be admitted against a route it never takes.
+- **Seven inline callers each hand-rolled the step precedence.** The judge, the fork chat, the
+  iterative reviewers (+ the brainstorm/clarity subclasses), the doc/initiative interviewers, the
+  tester QC companion and the bug-hunt assessor carried byte-identical private `modelFor`
+  methods, so the order had to reach seven places. They now share
+  `resolveInlineBlockModelRef` (`orchestration/src/inlineBlockModel.ts`, the model twin of
+  `inlineScope.ts`) and one wiring factory (`container/inline-model-deps.ts`). **Wire the model
+  resolver and the route order TOGETHER** — that is what the factory is for: a site that wires
+  the first and forgets the second resolves a preset's model onto the deployment's default route,
+  and nothing fails, so it can only be caught by reading.
+- **"Equals the default order" must be stored as ABSENT.** The editor emits `undefined` when a
+  reordering lands back on the default, and an empty list on the wire is the reset. Otherwise a
+  preset would pin a copy of today's order and silently stop following it — which is exactly what
+  slice 3 changes, so this is the one normalisation slice 3 depends on.
+- **The default order lives in contracts, not kernel**, because the editor renders the same fold
+  the resolver walks. Slice 3's reorder is therefore ONE edit: the `modelFlavorSchema` picklist
+  order IS `DEFAULT_MODEL_FLAVOR_ORDER` (pinned both ways by `model-flavors.test.ts`).
+- **A retired route is DROPPED at the persistence boundary**, not named — the opposite
+  disposition from `isBinaryModality`, and deliberately: the value names a ROUTE, so once the
+  route is gone there is no current member a human could re-pick it as, and the surviving entries
+  keep their relative order. What it must never do is reach a `Record<ModelFlavor, …>` lookup,
+  which is why `parseProviderPreferenceColumn` narrows with `isModelFlavor` first.
+- **Not verified against live databases in the authoring session** (no Docker/Postgres, and the
+  Worker tests don't run on Windows). The migration pair, the mappers and the conformance
+  assertion are typechecked and the pure-logic suites are green; CI's real-D1 + real-Postgres
+  conformance run is the actual proof.
 
 ### Slice 3: the subscription-first reorder
 

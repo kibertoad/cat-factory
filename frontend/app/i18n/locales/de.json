@@ -22,7 +22,8 @@
         "deleteTitle": "Preset löschen",
         "basePrefix": "Basis:",
         "overrideCount": "{count} Override | {count} Overrides",
-        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen."
+        "empty": "Noch keine Presets. Erstelle eines, um Modelle deinen Agenten zuzuordnen.",
+        "customRouteOrder": "eigene Routen-Reihenfolge"
       },
       "editor": {
         "useBaseModel": "Basismodell verwenden",
@@ -43,6 +44,28 @@
         "nameRequiredTitle": "Name erforderlich",
         "nameRequiredBody": "Gib dem Preset einen Namen.",
         "saveFailed": "Preset konnte nicht gespeichert werden"
+      },
+      "routes": {
+        "direct": "Die eigene Provider-API des Modells",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "OpenRouter-Gateway",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abo (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Benötigt einen API-Schlüssel für diesen Provider.",
+        "bedrock": "Läuft in Ihrer AWS-Region, mit den für Ihr Konto freigegebenen Modellen.",
+        "openrouter": "Ein Schlüssel, viele Anbieter, mit Aufschlag weiterverkauft.",
+        "cloudflare": "Immer verfügbar, ohne Prompt-Caching.",
+        "subscription": "Pauschales Kontingent eines verbundenen Tarifs."
+      },
+      "routeOrder": {
+        "label": "Routen-Reihenfolge",
+        "defaultHint": "Diese Voreinstellung folgt dem Standard des Deployments. Verschieben Sie eine Route nach oben, um sie zu bevorzugen.",
+        "customHint": "Diese Voreinstellung bevorzugt Routen in dieser Reihenfolge. Ein Modell, das nur über eine niedrigere Route erreichbar ist, läuft weiterhin und wird nur später versucht.",
+        "reset": "Standardreihenfolge verwenden",
+        "moveUp": "Diese Route stärker bevorzugen",
+        "moveDown": "Diese Route weniger bevorzugen"
       }
     },
     "account": {

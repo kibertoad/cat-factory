@@ -12,6 +12,7 @@
 // base-model picker plus a filterable per-agent override list.
 import { computed, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import type { ModelFlavor } from '@cat-factory/contracts'
 import type { AgentKind } from '~/types/domain'
 import type { ModelPreset } from '~/types/model-presets'
 import AgentTierSelect from '~/components/palettes/AgentTierSelect.vue'
@@ -19,9 +20,12 @@ import { filterByAgentTierKeeping } from '~/utils/agentTier'
 import { MODEL_CONFIGURABLE_SYSTEM_KINDS } from '~/utils/catalog'
 import { cachingLabel, contextLabel, costLabel, displayFlavor, isSelectable } from '~/stores/models'
 import ConsensusGroupsSection from '~/components/settings/ConsensusGroupsSection.vue'
+import ProviderPreferenceEditor from '~/components/settings/ProviderPreferenceEditor.vue'
+import { showOverrideField } from '~/utils/uiMode'
 
 const { t } = useI18n()
 const ui = useUiStore()
+const uiMode = useUiModeStore()
 const models = useModelsStore()
 const presets = useModelPresetsStore()
 const agents = useAgentsStore()
@@ -43,6 +47,8 @@ interface EditorState {
   baseModelId: string
   overrides: Record<string, string>
   isDefault: boolean
+  /** The preset's route order; undefined ⇒ it inherits the deployment's default order. */
+  providerPreference: ModelFlavor[] | undefined
 }
 const editor = ref<EditorState | null>(null)
 const busy = ref(false)
@@ -144,6 +150,7 @@ function startCreate() {
     baseModelId: selectableModels.value[0]?.id ?? 'kimi-k2.7',
     overrides: {},
     isDefault: false,
+    providerPreference: undefined,
   }
   filter.value = ''
 }
@@ -154,9 +161,18 @@ function startEdit(p: ModelPreset) {
     baseModelId: p.baseModelId,
     overrides: { ...p.overrides },
     isDefault: p.isDefault,
+    providerPreference: p.providerPreference ? [...p.providerPreference] : undefined,
   }
   filter.value = ''
 }
+
+// The route order is an OVERRIDE of the deployment's default, so basic mode hides it — but only
+// while this preset states none. A preset that already carries one (written by a teammate, by the
+// API, or here at the advanced tier) keeps the control, or a basic-mode user would be looking at a
+// preset whose routes they can neither read nor reset.
+const showRouteOrder = computed(() =>
+  showOverrideField(uiMode.isAdvanced, editor.value?.providerPreference),
+)
 
 async function setDefault(p: ModelPreset) {
   if (p.isDefault) return
@@ -249,6 +265,9 @@ async function save() {
         baseModelId: e.baseModelId,
         overrides: e.overrides,
         isDefault: e.isDefault,
+        // Always sent on a patch, `[]` included: an absent field means "leave the stored order
+        // alone", so a reset has to arrive as the empty list that clears it.
+        providerPreference: e.providerPreference ?? [],
       })
     } else {
       await presets.create({
@@ -256,6 +275,7 @@ async function save() {
         baseModelId: e.baseModelId,
         overrides: e.overrides,
         isDefault: e.isDefault,
+        ...(e.providerPreference ? { providerPreference: e.providerPreference } : {}),
       })
     }
     editor.value = null
@@ -422,6 +442,12 @@ function fail(title: string, e: unknown) {
                         )
                       }}
                     </span>
+                    <!-- A custom route order changes which provider the same model runs on, so the
+                         list says so rather than leaving it visible only inside the editor (which
+                         basic mode hides). -->
+                    <span v-if="p.providerPreference?.length" class="text-slate-300">
+                      · {{ t('settings.modelConfiguration.list.customRouteOrder') }}
+                    </span>
                   </div>
                 </div>
                 <p
@@ -482,6 +508,12 @@ function fail(title: string, e: unknown) {
                   {{ t('settings.modelConfiguration.editor.makeDefault') }}
                 </label>
               </div>
+
+              <!-- Which of a model's ROUTES this preset's runs prefer: a compliance preset can put
+                   AWS Bedrock ahead of a model's own provider API, an everyday preset a flat-rate
+                   subscription first. An override of the deployment default, so basic mode hides it
+                   until the preset actually carries one. -->
+              <ProviderPreferenceEditor v-if="showRouteOrder" v-model="editor.providerPreference" />
 
               <div>
                 <div class="mb-1 flex items-start justify-between gap-3">

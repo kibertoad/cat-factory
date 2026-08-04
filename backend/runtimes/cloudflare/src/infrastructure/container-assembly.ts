@@ -48,6 +48,7 @@ import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
+import { buildResolvePresetProviderPreference } from './container-model-resolver.js'
 import type { ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import { DoRealtimeGateway } from './gateways/DoRealtimeGateway'
 import {
@@ -259,7 +260,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     idGenerator,
     caches,
     overrides,
-    cloudflareModelsEnabled,
     registries,
     provisioningLogRepository,
     resolveTransport,
@@ -267,9 +267,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     testSecretsService,
     validationConfigService,
     personalSubscriptions,
-    apiKeys,
     notificationWebhookSupport,
-    localModelEndpoints,
     openRouterCatalog,
     eventPublisher,
     agentContextObservability,
@@ -474,32 +472,50 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // it). Distributed invalidation is a genuine Node-only concern, not a facade-parity gap: the
     // Worker's cross-instance state already lives in globally-addressed DOs / D1.
     caches,
-    // The pipeline-start guard resolves what's configured for a workspace + initiator.
-    resolveProviderCapabilities: (workspaceId, initiatedBy) =>
-      resolveWorkspaceCapabilities(
-        {
-          apiKeys,
-          subscriptions,
-          personalSubscriptions,
-          cloudflareModelsEnabled,
-          ...(bedrockModels ? { bedrockModels } : {}),
-          baseUrlFor: (provider) => baseUrlFor(provider, env),
-          localModelEndpoints,
-          openRouterCatalog,
-          accountSettings,
-          workspaceAccountOf: (workspaceId) =>
-            new D1WorkspaceRepository({ db }).accountOf(workspaceId),
-          modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
-          caches,
-        },
-        workspaceId,
-        initiatedBy,
-      ),
+    // What is configured for a workspace + initiator + the run's model preset (see the factory).
+    resolveProviderCapabilities: buildWorkerProviderCapabilities(input, bedrockModels),
     // Run the engine's gate-probe / merge GitHub reads under the run initiator's ambient
     // context, so a per-user PAT (when set) is preferred over the App token.
     runInitiatorScope: runWithInitiator,
     ...overrides,
   }
+}
+
+/**
+ * The Worker's `resolveProviderCapabilities`: what a workspace (+ its account, the run initiator
+ * and the run's model PRESET) actually has configured, which the pipeline-start guard gates on and
+ * the model catalog is projected through.
+ *
+ * Its own factory rather than a closure inside {@link buildWorkerCoreDependencies} purely for that
+ * function's line budget; the Node facade draws the same seam. `bedrockModels` is passed in because
+ * the caller already derived it (one deployment-level env read) for the resolver registration.
+ */
+function buildWorkerProviderCapabilities(
+  input: WorkerContainerAssemblyInput,
+  bedrockModels: Set<string> | undefined,
+): NonNullable<CoreDependencies['resolveProviderCapabilities']> {
+  const { env, config, db, caches, cloudflareModelsEnabled } = input
+  return (workspaceId, initiatedBy, modelPresetId) =>
+    resolveWorkspaceCapabilities(
+      {
+        apiKeys: input.apiKeys,
+        subscriptions: input.subscriptions,
+        personalSubscriptions: input.personalSubscriptions,
+        cloudflareModelsEnabled,
+        ...(bedrockModels ? { bedrockModels } : {}),
+        baseUrlFor: (provider) => baseUrlFor(provider, env),
+        localModelEndpoints: input.localModelEndpoints,
+        openRouterCatalog: input.openRouterCatalog,
+        accountSettings: input.accountSettings,
+        workspaceAccountOf: (ws) => new D1WorkspaceRepository({ db }).accountOf(ws),
+        modelPolicySupported: config.infrastructure?.modelPolicy?.supported ?? false,
+        caches,
+        resolvePresetProviderPreference: buildResolvePresetProviderPreference(db),
+      },
+      workspaceId,
+      initiatedBy,
+      modelPresetId,
+    )
 }
 
 export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): ServerContainer {

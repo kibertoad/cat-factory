@@ -2300,7 +2300,8 @@
         "deleteTitle": "Eliminar ajuste",
         "basePrefix": "Base:",
         "overrideCount": "{count} anulación | {count} anulaciones",
-        "empty": "Aún no hay ajustes. Crea uno para asignar modelos a tus agentes."
+        "empty": "Aún no hay ajustes. Crea uno para asignar modelos a tus agentes.",
+        "customRouteOrder": "orden de rutas personalizado"
       },
       "editor": {
         "useBaseModel": "Usar el modelo base",
@@ -2325,6 +2326,28 @@
       "confirmDelete": {
         "title": "¿Eliminar este preset de modelo?",
         "body": "Se eliminará \"{name}\". Las tareas que lo usan volverán al valor predeterminado del espacio de trabajo."
+      },
+      "routes": {
+        "direct": "La API propia del proveedor del modelo",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "Pasarela OpenRouter",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Suscripción (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Requiere una clave de API para ese proveedor.",
+        "bedrock": "Se ejecuta en tu región de AWS, con los modelos que tu cuenta permite.",
+        "openrouter": "Una clave, muchos proveedores, revendidos con margen.",
+        "cloudflare": "Siempre disponible, sin caché de prompts.",
+        "subscription": "Cuota de tarifa plana en un plan conectado."
+      },
+      "routeOrder": {
+        "label": "Orden de rutas",
+        "defaultHint": "Este preajuste sigue el valor predeterminado del despliegue. Sube una ruta para preferirla.",
+        "customHint": "Este preajuste prefiere las rutas en este orden. Un modelo accesible solo por una ruta inferior sigue funcionando, solo se intenta más tarde.",
+        "reset": "Usar el orden predeterminado",
+        "moveUp": "Preferir más esta ruta",
+        "moveDown": "Preferir menos esta ruta"
       }
     },
     "account": {

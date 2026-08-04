@@ -81,10 +81,8 @@ import { PreviewService } from '../modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from '../modules/incidentEnrichment/IncidentEnrichmentService.js'
 import { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
-import {
-  ModelPresetService,
-  resolvePresetModelForKind,
-} from '../modules/modelPresets/ModelPresetService.js'
+import { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
+import { inlineModelResolutionDeps } from './inline-model-deps.js'
 import { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
 import { ServiceFragmentDefaultsService } from '../modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
 import { RecurringPipelineService } from '../modules/recurring/RecurringPipelineService.js'
@@ -414,13 +412,9 @@ function createBugHuntAssessor(deps: CoreDependencies): BugHuntAssessor | undefi
   return new BugHuntAssessorService({
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind) =>
-          resolvePresetModelForKind(deps.modelPresetRepository!, workspaceId, agentKind)
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     ...(deps.logger ? { logger: deps.logger } : {}),
   })
 }
@@ -629,18 +623,9 @@ export function createTesterQualityReviewer(
   return new TesterQualityReviewService({
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
 }
@@ -662,18 +647,9 @@ export function createDocInterviewService(deps: CoreDependencies): DocInterviewS
     clock: deps.clock,
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
 }
@@ -699,18 +675,9 @@ export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | und
   return new JudgeService({
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
 }
@@ -720,18 +687,9 @@ export function createForkChatService(deps: CoreDependencies): ForkChatService |
   return new ForkChatService({
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })
 }
@@ -770,20 +728,9 @@ export function createKaizenModule(deps: CoreDependencies): KaizenModule | undef
     events: deps.executionEventPublisher,
     modelProviderResolver: deps.modelProviderResolver,
     modelProvider: deps.modelProvider,
-    // Reuse the reviewer's routing default ref + block-model resolver (the agents' default).
-    modelRef: deps.requirementReviewModel ?? deps.documentPlannerModel,
-    resolveBlockModel: deps.requirementReviewResolveModel,
-    ...(deps.inlineHarnessRef ? { runsInline: deps.inlineHarnessRef } : {}),
-    // Resolve the workspace's per-kind default for `kaizen`, like a pipeline step.
-    resolveWorkspaceModelDefault: deps.modelPresetRepository
-      ? (workspaceId, agentKind, modelPresetId) =>
-          resolvePresetModelForKind(
-            deps.modelPresetRepository!,
-            workspaceId,
-            agentKind,
-            modelPresetId,
-          )
-      : undefined,
+    // The routing default, the block-model resolver, the local-mode inline predicate, and the
+    // preset's per-kind default model + route order — wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
   })
   return { service }
 }

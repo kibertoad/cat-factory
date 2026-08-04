@@ -11,6 +11,7 @@ import {
   defaultJudgeRegistry,
   defaultStepResolverRegistry,
   resolvePresetModelForKind,
+  resolvePresetProviderPreference,
 } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -223,6 +224,12 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
     modelPresetId?: string,
   ) => resolvePresetModelForKind(repos.modelPresetRepository, workspaceId, agentKind, modelPresetId)
 
+  // Its sibling: the ORDER that preset prefers a model's routes in. Read from the same repo (and,
+  // inside the helper, the same row) so a preset cannot pick the model on one surface and the
+  // route order on another.
+  const resolvePresetPreference = (workspaceId: string, modelPresetId?: string) =>
+    resolvePresetProviderPreference(repos.modelPresetRepository, workspaceId, modelPresetId)
+
   return {
     env,
     config,
@@ -235,8 +242,12 @@ export function resolveNodeContainerFoundation(options: NodeContainerOptions) {
     registries,
     gitlabEngineClient,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference: resolvePresetPreference,
   }
 }
 
 /** The app-owned registry set {@link resolveNodeAppRegistries} produces. */
 export type NodeAppRegistriesResult = ReturnType<typeof resolveNodeAppRegistries>
+
+/** Everything {@link resolveNodeContainerFoundation} hands the composition root. */
+export type NodeContainerFoundation = ReturnType<typeof resolveNodeContainerFoundation>

@@ -22,7 +22,8 @@
         "deleteTitle": "Elimina preset",
         "basePrefix": "Base:",
         "overrideCount": "{count} override | {count} override",
-        "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti."
+        "empty": "Ancora nessun preset. Creane uno per associare i modelli ai tuoi agenti.",
+        "customRouteOrder": "ordine rotte personalizzato"
       },
       "editor": {
         "useBaseModel": "Usa il modello di base",
@@ -43,6 +44,28 @@
         "nameRequiredTitle": "Nome obbligatorio",
         "nameRequiredBody": "Assegna un nome al preset.",
         "saveFailed": "Impossibile salvare il preset"
+      },
+      "routes": {
+        "direct": "L'API propria del fornitore del modello",
+        "bedrock": "AWS Bedrock",
+        "openrouter": "Gateway OpenRouter",
+        "cloudflare": "Cloudflare Workers AI",
+        "subscription": "Abbonamento (Claude Code / Codex)"
+      },
+      "routeHints": {
+        "direct": "Richiede una chiave API per quel fornitore.",
+        "bedrock": "Viene eseguito nella tua region AWS, sui modelli consentiti dal tuo account.",
+        "openrouter": "Una chiave, molti fornitori, rivenduti con un margine.",
+        "cloudflare": "Sempre disponibile, senza cache dei prompt.",
+        "subscription": "Quota forfettaria su un piano collegato."
+      },
+      "routeOrder": {
+        "label": "Ordine delle rotte",
+        "defaultHint": "Questo preset segue il valore predefinito del deployment. Sposta una rotta in alto per preferirla.",
+        "customHint": "Questo preset preferisce le rotte in questo ordine. Un modello raggiungibile solo su una rotta inferiore funziona comunque, viene solo provato dopo.",
+        "reset": "Usa l'ordine predefinito",
+        "moveUp": "Preferisci di più questa rotta",
+        "moveDown": "Preferisci di meno questa rotta"
       }
     },
     "account": {

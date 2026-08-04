@@ -1,4 +1,9 @@
-import type { AgentRunContext, ModelRef, SubscriptionVendor } from '@cat-factory/kernel'
+import type {
+  AgentRunContext,
+  ModelFlavor,
+  ModelRef,
+  SubscriptionVendor,
+} from '@cat-factory/kernel'
 import { isIndividualVendor, subscriptionOptionFor } from '@cat-factory/kernel'
 import { type AgentRouting, resolveStepModelRef } from '@cat-factory/agents'
 
@@ -6,8 +11,11 @@ import { type AgentRouting, resolveStepModelRef } from '@cat-factory/agents'
 export interface ModelRouterDependencies {
   /** Default model routing; used when the block pins no (usable) model. */
   agentRouting: AgentRouting
-  /** Resolve a block's selected model id to a concrete ref (direct flavour). */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a concrete ref, under a preset's route order. */
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Resolve the workspace's per-agent-kind default model id, consulted when the
    * block pins no model. Optional: absent → the env routing for the kind is used.
@@ -61,6 +69,10 @@ export class ModelRouter {
         blockModelId: context.block.modelId,
         modelPresetId: context.block.modelPresetId,
         workspaceId: context.workspaceId,
+        // The route order the preset in force states, resolved once per dispatch by the engine.
+        // Read off the CONTEXT rather than re-derived here, so this router, the inline executor
+        // and the consensus panel cannot disagree about which provider a step ran on.
+        ...(context.providerPreference ? { providerPreference: context.providerPreference } : {}),
       },
     )
   }

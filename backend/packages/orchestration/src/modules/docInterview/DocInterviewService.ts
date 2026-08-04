@@ -8,16 +8,17 @@ import type {
   ModelProvider,
   ModelProviderResolver,
   ModelRef,
+  ModelPresetRepository,
 } from '@cat-factory/kernel'
 import {
   DOC_INTERVIEWER_AGENT_KIND,
   extractJson,
-  inlineModelRef,
   resolveScopedModelProvider,
   ValidationError,
 } from '@cat-factory/kernel'
 import { catFactoryObservability, FINAL_ANSWER_IN_REPLY } from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
+import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
 import {
   answeredDigest,
   applyDocInterviewAnswer,
@@ -76,16 +77,17 @@ export interface DocInterviewDeps {
   modelProvider?: ModelProvider
   /** Routing-default model ref when the block pins none. */
   modelRef?: ModelRef
-  /** Resolve a block's selected model id to a ref (the deployment-aware resolver). */
-  resolveBlockModel?: (modelId: string | undefined) => ModelRef | undefined
+  /** Resolve a block's selected model id to a ref, under the preset's route order. */
+  resolveBlockModel?: InlineBlockModelDeps['resolveBlockModel']
   /** Keep an ambient-eligible harness ref inline (local mode) instead of degrading it. */
   runsInline?: (ref: ModelRef) => boolean
   /** Resolve the workspace's per-agent-kind default model id (block pins none). */
-  resolveWorkspaceModelDefault?: (
-    workspaceId: string,
-    agentKind: string,
-    modelPresetId?: string,
-  ) => Promise<string | undefined>
+  resolveWorkspaceModelDefault?: InlineBlockModelDeps['resolveWorkspaceModelDefault']
+  /**
+   * The workspace's model-preset library, read for the ROUTE order the block's preset states.
+   * Absent ⇒ the deployment's default order.
+   */
+  modelPresets?: ModelPresetRepository
   /** Resolve the block's run/execution + initiator, folded into the inline model scope. */
   resolveRunContext?: ResolveBlockRunContext
 }
@@ -277,20 +279,7 @@ export class DocInterviewService {
   }
 
   /** Block pin > workspace per-kind default > routing default (subscription refs degrade). */
-  private async modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
-    const fallback = this.deps.modelRef
-    const runsInline = this.deps.runsInline
-    const resolve = (ref: ModelRef): ModelRef =>
-      inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
-    const fromBlock = this.deps.resolveBlockModel?.(block.modelId)
-    if (fromBlock) return resolve(fromBlock)
-    const defaultId = await this.deps.resolveWorkspaceModelDefault?.(
-      workspaceId,
-      DOC_INTERVIEWER_AGENT_KIND,
-      block.modelPresetId,
-    )
-    const fromDefault = this.deps.resolveBlockModel?.(defaultId)
-    if (fromDefault) return resolve(fromDefault)
-    return fallback
+  private modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
+    return resolveInlineBlockModelRef(this.deps, workspaceId, DOC_INTERVIEWER_AGENT_KIND, block)
   }
 }

@@ -25,6 +25,7 @@ import type {
   JudgeAssessor,
   JudgeRegistry,
   Logger,
+  ModelPresetRepository,
   ModelRef,
   PipelineRepository,
   ProviderCapabilities,
@@ -156,6 +157,13 @@ export interface ExecutionServiceDependencies {
    * ceiling (the feature is simply off).
    */
   workspaceAgentSettingsRepository?: WorkspaceAgentSettingsRepository
+  /**
+   * Optional: the workspace's model-preset library, threaded into the context builder so each
+   * dispatch resolves the ROUTE order the block's preset states (`providerPreference`) once and
+   * every executor reads it off the context. Absent ⇒ every dispatch walks the deployment's
+   * default route order (the feature is simply off).
+   */
+  modelPresetRepository?: ModelPresetRepository
   /**
    * Optional: the workspace's consensus-GROUP library, threaded into the context builder so a
    * consensus step naming a tier set resolves the group its task's estimate earned. Absent ⇒ a
@@ -314,11 +322,14 @@ export interface ExecutionServiceDependencies {
    * subscription vendors + whether Cloudflare AI is enabled) for a workspace and the
    * run initiator. The start guard uses it to block a pipeline whose steps' canonical
    * models have no usable provider. Absent → the guard is skipped (tests / unconfigured
-   * facades), exactly like the existing optional engine deps.
+   * facades), exactly like the existing optional engine deps. `modelPresetId` carries the
+   * preset's route `providerPreference` onto the capability set, so the guard walks a model's
+   * routes in the same order the dispatch will.
    */
   resolveProviderCapabilities?: (
     workspaceId: string,
     initiatedBy?: string | null,
+    modelPresetId?: string,
   ) => Promise<ProviderCapabilities>
   /**
    * Optional: whether a container-only subscription harness ref (`claude-code` / `codex`)

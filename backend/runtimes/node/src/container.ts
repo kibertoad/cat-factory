@@ -56,6 +56,7 @@ import { assembleNodeCoreDependencies } from './container-core-deps.js'
 import {
   resolveNodeContainerFoundation,
   type NodeAppRegistriesResult,
+  type NodeContainerFoundation,
 } from './container-foundation.js'
 // Re-exported for the mothership routing-seam test + any facade that sources its own repos.
 export { pickRepoSource } from './container-foundation.js'
@@ -574,6 +575,7 @@ interface NodeContainerFinalizeBundle {
   resolveWorkspaceModelDefault: Parameters<
     typeof buildNodeRealtimeDeps
   >[0]['resolveWorkspaceModelDefault']
+  resolvePresetProviderPreference: NodeContainerFoundation['resolvePresetProviderPreference']
   agentKindRegistry: NodeAppRegistriesResult['agentKindRegistry']
   providerRegistry: NodeAppRegistriesResult['providerRegistry']
   packageRegistrySecretCipher: NodeRunServicesResult['packageRegistrySecretCipher']
@@ -635,6 +637,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     standardAgentExecutor,
     modelProviderResolver,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
     agentKindRegistry,
     providerRegistry,
     packageRegistrySecretCipher,
@@ -800,6 +803,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     incidentEnrichmentDeps,
     accountSettings,
     resolveBinaryArtifactStore,
+    resolvePresetProviderPreference,
   })
 
   // Browsable frontend preview (slice 5c): wire the preview module when a per-runtime preview
@@ -889,6 +893,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     sourced,
     registries,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
   } = foundation
   const {
     environmentBackendRegistry,
@@ -962,6 +967,7 @@ export function buildNodeContainer(options: NodeContainerOptions): ServerContain
     clock,
     modelProviderResolver,
     resolveWorkspaceModelDefault,
+    resolvePresetProviderPreference,
     agentKindRegistry,
     providerRegistry,
     environmentBackendRegistry,

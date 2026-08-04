@@ -2,6 +2,7 @@ import type { AgentRouting } from '@cat-factory/agents'
 import type {
   InfrastructureCapabilities,
   LocalModeConfig,
+  ModelFlavor,
   ModelOption,
   PlatformObservabilityWindow,
 } from '@cat-factory/contracts'
@@ -20,8 +21,14 @@ export interface AgentsConfig {
   /**
    * Resolve a block's selected model id to a concrete ref, honouring the
    * direct/Cloudflare fallback based on which provider keys are configured.
+   *
+   * `providerPreference` is the route order the model PRESET in force states, folded onto the
+   * deployment capabilities this closure was built from. Omitted ⇒ the deployment's default order.
    */
-  resolveBlockModel: (modelId: string | undefined) => ModelRef | undefined
+  resolveBlockModel: (
+    modelId: string | undefined,
+    providerPreference?: readonly ModelFlavor[],
+  ) => ModelRef | undefined
   /**
    * Whether this deployment can run a container-only subscription HARNESS ref
    * (`claude-code` / `codex`) as an INLINE LLM call — true only in local mode, where the

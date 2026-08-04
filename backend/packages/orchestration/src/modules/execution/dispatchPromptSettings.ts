@@ -1,38 +1,74 @@
 import type {
   AgentPromptRepository,
+  Block,
   Logger,
+  ModelFlavor,
+  ModelPresetRepository,
   PipelineStep,
   WorkspaceAgentSettingsRepository,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import { applyAgentVariant, shippedBasePromptFor } from '@cat-factory/agents'
+import { resolvePresetProviderPreference } from '../modelPresets/ModelPresetService.js'
 
-// The per-kind GENERATION settings one dispatch runs under: which system prompt, and what output
-// budget. Extracted from `AgentContextBuilder` so it stays the context ASSEMBLER while this
-// cohesive concern — three tiers of "what was this agent told to be, and how much may it say",
-// plus the two facts that must be PINNED on the step because they cannot be re-derived later —
-// lives in one place.
+// The per-dispatch GENERATION settings one dispatch runs under: which system prompt, how much the
+// agent may say, and which of a model's ROUTES it is preferred to run on. Extracted from
+// `AgentContextBuilder` so it stays the context ASSEMBLER while this cohesive concern — the tiers of
+// "what was this agent told to be, how much may it say, and where does it run", plus the two facts
+// that must be PINNED on the step because they cannot be re-derived later — lives in one place.
 //
-// The pair belongs together: both are resolved exactly ONCE per dispatch, by the engine rather than
+// The family belongs together: each is resolved exactly ONCE per dispatch, by the engine rather than
 // each executor, so the container, inline and consensus paths cannot disagree about what a step ran
-// under. Both are keyed on the EFFECTIVE dispatched kind, so a helper dispatched off another step
-// (a gate's fixer, the fork proposer) gets what is configured for the kind actually running instead
-// of inheriting the hosting step's. And both return a SPREAD-READY slice rather than a nullable
-// value, so the context literal stays a flat spread instead of gaining another conditional.
+// under. Each returns a SPREAD-READY slice rather than a nullable value, so the context literal stays
+// a flat spread instead of gaining another conditional.
 //
-// They differ in one instructive way, which is why the precedence is stated per resolver and never
-// assumed: the output budget lets the STEP's own option win over the workspace's setting, while for
-// prompt TEXT the workspace wins over the step's selected variant. A budget is a number someone
-// retypes; a prompt is authored text, and a workspace that edited its own must not have that edit
-// silently displaced by a pipeline option.
+// They differ in instructive ways, which is why the precedence and the KEY are stated per resolver
+// and never assumed. The output budget lets the STEP's own option win over the workspace's setting,
+// while for prompt TEXT the workspace wins over the step's selected variant: a budget is a number
+// someone retypes; a prompt is authored text, and a workspace that edited its own must not have that
+// edit silently displaced by a pipeline option. And the first two are keyed on the EFFECTIVE
+// dispatched kind — so a helper dispatched off another step (a gate's fixer, the fork proposer) gets
+// what is configured for the kind actually running rather than the hosting step's — while the route
+// order is keyed on the BLOCK, because a preset states one order for every step it covers.
 
-/** The narrow slice of the builder's dependencies these two resolvers need. */
+/** The three settings one dispatch runs under, as a spread-ready slice of the run context. */
+export interface DispatchPromptSettings {
+  systemPromptOverride?: string
+  maxOutputTokens?: number
+  providerPreference?: readonly ModelFlavor[]
+}
+
+/**
+ * Resolve all three at once, concurrently. The ENTRY POINT the context builder uses: they are one
+ * family (each resolved exactly once per dispatch, by the engine rather than any executor), and
+ * asking for them together is what keeps a new member from being added here and forgotten at the
+ * call site. Each is documented on its own resolver below, because the precedence and the KEY
+ * differ per setting.
+ */
+export async function resolveDispatchSettings(
+  deps: DispatchPromptSettingsDeps,
+  workspaceId: string,
+  agentKind: string,
+  step: PipelineStep,
+  block: Block,
+): Promise<DispatchPromptSettings> {
+  const [prompt, budget, routes] = await Promise.all([
+    resolveDispatchSystemPrompt(deps, workspaceId, agentKind, step),
+    resolveDispatchMaxOutputTokens(deps, workspaceId, agentKind, step),
+    resolveDispatchProviderPreference(deps, workspaceId, block),
+  ])
+  return { ...prompt, ...budget, ...routes }
+}
+
+/** The narrow slice of the builder's dependencies these resolvers need. */
 export interface DispatchPromptSettingsDeps {
   agentKindRegistry: AgentKindRegistry
   /** The append-only per-workspace prompt log. Absent ⇒ the override feature is not wired. */
   agentPrompts?: AgentPromptRepository
   /** The per-workspace, per-kind generation settings. Absent ⇒ the feature is not wired. */
   agentSettings?: WorkspaceAgentSettingsRepository
+  /** The workspace's model-preset library, read for the block's route order. */
+  modelPresets?: ModelPresetRepository
   logger?: Logger
 }
 
@@ -125,4 +161,33 @@ export async function resolveDispatchMaxOutputTokens(
   if (fromStep != null) return { maxOutputTokens: fromStep }
   const configured = await deps.agentSettings?.get(workspaceId, agentKind)
   return configured?.maxOutputTokens != null ? { maxOutputTokens: configured.maxOutputTokens } : {}
+}
+
+/**
+ * The order this dispatch prefers a model's ROUTES in, or undefined to walk the deployment's
+ * default order.
+ *
+ * Read from the block's model preset (its selected one, else the workspace default), which is the
+ * SAME row the block's model id comes from — so a preset cannot pick the model on one surface and
+ * the route on another. Keyed on the BLOCK rather than the dispatched kind, unlike its two
+ * siblings: a preset states one order for every step it covers, so a helper dispatched off another
+ * step runs on the same routes as the step hosting it. Absent library ⇒ the default order,
+ * unchanged.
+ *
+ * NOT pinned onto the step, again unlike the prompt revision: a preset row is mutable rather than
+ * append-only, so a pin here would be a stale copy pretending to be evidence. What a step actually
+ * ran on is already recorded per dispatch as the resolved model on its telemetry.
+ */
+export async function resolveDispatchProviderPreference(
+  deps: DispatchPromptSettingsDeps,
+  workspaceId: string,
+  block: Block,
+): Promise<{ providerPreference?: readonly ModelFlavor[] }> {
+  if (!deps.modelPresets) return {}
+  const preference = await resolvePresetProviderPreference(
+    deps.modelPresets,
+    workspaceId,
+    block.modelPresetId,
+  )
+  return preference?.length ? { providerPreference: preference } : {}
 }

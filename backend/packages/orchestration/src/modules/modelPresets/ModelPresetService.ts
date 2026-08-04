@@ -2,6 +2,7 @@ import type {
   Clock,
   CreateModelPresetInput,
   IdGenerator,
+  ModelFlavor,
   ModelPreset,
   ModelPresetRepository,
   UpdateModelPresetInput,
@@ -68,6 +69,18 @@ export class ModelPresetService {
       : DEFAULT_MODEL_PRESET_ID
   }
 
+  /**
+   * The route order the preset in force states, for a caller that holds the service rather than
+   * the repository (the `/models` catalog). Side-effect-free and never seeds, like the free
+   * function it delegates to — see {@link resolvePresetProviderPreference}.
+   */
+  providerPreferenceFor(
+    workspaceId: string,
+    modelPresetId?: string,
+  ): Promise<readonly ModelFlavor[] | undefined> {
+    return resolvePresetProviderPreference(this.presets, workspaceId, modelPresetId)
+  }
+
   /** List a workspace's presets, seeding the built-in presets if none exist yet. */
   async list(workspaceId: string): Promise<ModelPreset[]> {
     await requireWorkspace(this.workspaceRepository, workspaceId)
@@ -86,6 +99,9 @@ export class ModelPresetService {
       overrides: input.overrides,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
+      // An empty list is the same statement as no list — "use the default order" — so it is
+      // normalised away here rather than persisted as an order over no routes.
+      ...(input.providerPreference?.length ? { providerPreference: input.providerPreference } : {}),
       createdAt: this.clock.now(),
     }
     await this.presets.upsert(workspaceId, preset)
@@ -109,6 +125,17 @@ export class ModelPresetService {
       ...(patch.baseModelId !== undefined ? { baseModelId: patch.baseModelId } : {}),
       ...(patch.overrides !== undefined ? { overrides: patch.overrides } : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
+      // Three distinct patches, and the empty one is the reason this is not a plain spread: an
+      // ABSENT `providerPreference` leaves the stored order alone, a non-empty one replaces it,
+      // and an EMPTY one resets the preset to the default order (so "reset" needs no route of
+      // its own). `undefined` is written, not omitted, so the reset actually clears the column.
+      ...(patch.providerPreference !== undefined
+        ? {
+            providerPreference: patch.providerPreference.length
+              ? patch.providerPreference
+              : undefined,
+          }
+        : {}),
     }
     await this.presets.upsert(workspaceId, updated)
     return updated
@@ -131,6 +158,9 @@ export class ModelPresetService {
    * old presets but not the new one). The canonical base model / overrides / `version`
    * overwrite (or create) the stored row; an existing copy's `isDefault` + `createdAt` are
    * preserved so reseeding never silently changes which preset is the default or its ordering.
+   * A built-in declares no route preference, so a reseed also RESETS one the workspace had set on
+   * it — the same disposition as its base model and overrides, which is what "restore the canonical
+   * definition" means (a workspace wanting to keep a route order copies the preset instead).
    * When re-materialising a built-in the workspace had deleted, it only (re)claims the default
    * if the seed is THIS deployment's default preset AND the workspace currently has none — so
    * reseeding never steals the default away from the user's chosen preset. Rejects an id not in
@@ -211,8 +241,36 @@ export async function resolvePresetModelForKind(
   agentKind: string,
   modelPresetId?: string,
 ): Promise<string> {
-  const preset =
+  return modelForKindFromPreset(await presetInForce(repo, workspaceId, modelPresetId), agentKind)
+}
+
+/**
+ * The route order the preset in force states, or undefined for the deployment's default order.
+ * The `providerPreference` sibling of {@link resolvePresetModelForKind}: same preset selection
+ * (selected id else the workspace default), same side-effect-free contract, so the hot dispatch
+ * path and the start guard resolve the order from the same row the model id came from.
+ *
+ * Undefined covers three facts that need no distinguishing, because all three mean "nothing
+ * reorders the routes": the preset states no preference, the library is not yet seeded, and the
+ * selected id no longer exists.
+ */
+export async function resolvePresetProviderPreference(
+  repo: ModelPresetRepository,
+  workspaceId: string,
+  modelPresetId?: string,
+): Promise<readonly ModelFlavor[] | undefined> {
+  const preference = (await presetInForce(repo, workspaceId, modelPresetId))?.providerPreference
+  return preference?.length ? preference : undefined
+}
+
+/** The preset a block resolves under: its selected one, else the workspace default. */
+async function presetInForce(
+  repo: ModelPresetRepository,
+  workspaceId: string,
+  modelPresetId?: string,
+): Promise<ModelPreset | null> {
+  return (
     (modelPresetId ? await repo.get(workspaceId, modelPresetId) : null) ??
     (await repo.getDefault(workspaceId))
-  return modelForKindFromPreset(preset, agentKind)
+  )
 }

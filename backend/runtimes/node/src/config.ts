@@ -307,7 +307,11 @@ function buildAgentRouting(
         'doc-outliner': docOutlinerDefault,
       },
     },
-    resolveBlockModel: (modelId) => resolveModelRef(modelId, caps),
+    // The preset's route order is folded ONTO the deployment capabilities rather than replacing
+    // them: which routes EXIST is a deployment fact (keys, the Bedrock allow-list, the CF lib),
+    // and the preset only reorders how they are preferred.
+    resolveBlockModel: (modelId, providerPreference) =>
+      resolveModelRef(modelId, providerPreference?.length ? { ...caps, providerPreference } : caps),
   }
 }
 
