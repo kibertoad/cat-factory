@@ -25,6 +25,7 @@ import { useSharedStacksStore } from '~/stores/sharedStacks'
 import { useSkillsStore } from '~/stores/skills'
 import { useTaskTypesStore } from '~/stores/taskTypes'
 import { useTrackerStore } from '~/stores/tracker'
+import { useTutorialStore } from '~/stores/tutorial'
 import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 import { buildWorkspaceCapabilitiesManifest } from '~/modular/capabilities'
 
@@ -60,6 +61,10 @@ export function resetPerBoardCaches() {
  */
 export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: number) {
   useUserSettingsStore().hydrate(snapshot.userSettings ?? null)
+  // The signed-in user's tutorial progress MERGES rather than replaces (see the store): both id
+  // lists are grow-only sets, so a snapshot must never un-say a walkthrough this browser finished
+  // while the mirror write was failing. Absent ⇒ no server copy, and the local one stands.
+  useTutorialStore().mergeServerProgress(snapshot.tutorialProgress ?? null)
   useBoardStore().hydrate(snapshot.blocks, boardSince)
   useBoardStore().hydrateArchived(snapshot.archivedServices ?? [])
   usePipelinesStore().hydrate(

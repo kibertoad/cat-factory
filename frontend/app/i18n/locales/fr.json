@@ -6417,7 +6417,10 @@
       "finishedRun": "Une exécution terminée avec succès",
       "integrationsManage": "L'autorisation de gérer les intégrations",
       "settingsManage": "L'autorisation de gérer les paramètres de l'espace de travail",
-      "library": "La bibliothèque de fragments de contexte activée sur ce déploiement"
+      "library": "La bibliothèque de fragments de contexte activée sur ce déploiement",
+      "failedRun": "Une exécution en échec",
+      "infrastructure": "Un backend d’exécution connecté à cet espace de travail",
+      "advancedTier": "Le mode d’interface avancé"
     },
     "overlay": {
       "next": "Suivant",
@@ -6429,7 +6432,9 @@
       "announcement": "Étape {current} sur {total}. {title}. {body}",
       "abridged": "1 étape a été ignorée : ce contrôle ne fait pas partie de ce tableau. | {count} étapes ont été ignorées : ces contrôles ne font pas partie de ce tableau.",
       "searching": "Recherche du contrôle mis en évidence...",
-      "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer"
+      "clickHint": "Cliquez sur le contrôle mis en évidence pour continuer",
+      "nextUp": "Ensuite",
+      "takeNext": "Faire celle-ci"
     },
     "tours": {
       "boardBasics": {
@@ -6552,7 +6557,7 @@
           },
           "finish": {
             "title": "Voilà la boucle",
-            "body": "Planifier une tâche, choisir un pipeline, la lancer, la suivre. Quand une exécution a besoin de vous, elle s'arrête et le dit, ce que couvre la visite suivante."
+            "body": "Planifier une tâche, choisir un pipeline, la lancer, la suivre. Les visites suivantes lisent une exécution réelle : elles se débloquent dès que vous en avez lancé une pour de vrai."
           }
         }
       },
@@ -6707,7 +6712,100 @@
             "body": "Certaines entrées vous appartiennent plutôt qu'au tableau, comme un jeton d'accès personnel ou un abonnement, et ne servent qu'aux exécutions que vous lancez. Le hub indique lesquelles, et Ma configuration rassemble les vôtres."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Lire un échec",
+        "description": "Une exécution s’est arrêtée sur une erreur. Comprenez ce qui a cassé, et quoi y faire.",
+        "steps": {
+          "intro": {
+            "title": "Les exécutions échouent, c’est normal",
+            "body": "Une exécution en échec n’est pas une impasse. Le tableau conserve l’erreur, la cause tient souvent en une ligne, et la plupart des causes se corrigent par un réglage plutôt qu’en réécrivant la tâche."
+          },
+          "banner": {
+            "title": "Ce qui s’est mal passé",
+            "body": "La carte remplace sa barre de progression par ce bandeau. Il nomme la cause, les détails contiennent la sortie brute, et certaines causes proposent un bouton menant droit au réglage qui les corrige."
+          },
+          "retry": {
+            "title": "Relancer",
+            "body": "Réessayer relance le travail. Les erreurs précédentes restent sur la tâche, sous « Erreurs précédentes », pour comparer les tentatives au lieu de perdre la trace."
+          },
+          "finish": {
+            "title": "Un échec est une information",
+            "body": "Corriger la cause, réessayer, comparer. Si la même erreur revient sans cesse, les détails sont ce qu’il faut apporter à la personne qui peut élargir une autorisation ou brancher ce qui manque."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Où les exécutions ont lieu",
+        "description": "Les machines où tournent les agents, les environnements où ils testent, et les identifiants qu’ils peuvent utiliser.",
+        "steps": {
+          "intro": {
+            "title": "Les agents ont besoin d’un endroit pour tourner",
+            "body": "Chaque étape en conteneur tourne sur un backend d’exécution, les tests se lèvent dans un environnement, et certaines capacités demandent un identifiant. Les trois se configurent dans une seule fenêtre."
+          },
+          "open": {
+            "title": "Ouvrir Infrastructure",
+            "body": "Tout ce qui concerne où et comment les exécutions se déroulent est ici."
+          },
+          "tabs": {
+            "title": "Un onglet par sujet",
+            "body": "Conteneurs d’agents, c’est là que le travail s’exécute. Environnements de test, c’est à partir de quoi un service est levé. La liste des identifiants montre quelles clés les capacités utilisées par vos agents peuvent réellement résoudre, et lesquelles manquent encore."
+          },
+          "finish": {
+            "title": "Les échecs renvoient ici",
+            "body": "Quand une exécution échoue au provisionnement, c’est la fenêtre que son bandeau vous demande d’ouvrir. Mieux vaut le savoir avant que cela arrive qu’après."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Relecture par comité",
+        "description": "Faites relire le même travail par plusieurs modèles au lieu d’un seul, sur les tâches qui le justifient.",
+        "steps": {
+          "intro": {
+            "title": "Un relecteur, ou plusieurs",
+            "body": "Une étape de relecture exécute normalement un agent. Elle peut à la place exécuter un comité de plusieurs modèles et comparer ce qu’ils disent, ce qui rattrape ce qu’un relecteur unique laisse passer sur les travaux lourds."
+          },
+          "open": {
+            "title": "Ouvrir Configuration des modèles",
+            "body": "Les comités sont faits de modèles : ils se configurent juste à côté."
+          },
+          "groups": {
+            "title": "Définir un comité",
+            "body": "Un groupe nomme les modèles du comité et le niveau d’exigence qu’une tâche doit atteindre pour qu’il serve. Une étape choisit ensuite un groupe au lieu de nommer les modèles un par un."
+          },
+          "finish": {
+            "title": "Le coût suit l’effort",
+            "body": "Un comité coûte autant d’appels de modèle qu’il a de membres, d’où la possibilité de limiter un groupe aux tâches dont l’estimation dépasse son seuil. Le petit travail garde un seul relecteur."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Les services que vous avez déjà",
+        "description": "Dites aux agents quels systèmes partagés existent, et à quoi ressemblent leurs API.",
+        "steps": {
+          "intro": {
+            "title": "Ne reconstruisez pas ce que vous avez",
+            "body": "Les agents conçoivent à l’aveugle s’ils ignorent ce que votre organisation fait déjà tourner. Ce catalogue nomme ces systèmes et porte leurs contrats d’API."
+          },
+          "open": {
+            "title": "Ouvrir Services fondamentaux",
+            "body": "Le catalogue des capacités partagées disponible pour tous les tableaux de cet espace de travail."
+          },
+          "catalog": {
+            "title": "Enregistrer, déposer ou synchroniser",
+            "body": "Ajoutez un service à la main, déposez ses documents d’API, ou reliez un dépôt et laissez-les se synchroniser. Les conceptions référencent alors ce qui est enregistré ici au lieu d’inventer une interface."
+          },
+          "finish": {
+            "title": "Les étapes de conception lisent ceci",
+            "body": "Une conception qui déclare lesquels elle utilise reçoit leurs contrats complets à l’étape suivante. Celle qui ne déclare rien ne reçoit rien : tenir ceci à jour est ce qui fait que cela marche."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Nouvelle visite disponible",
+      "start": "Montrez-moi",
+      "dismiss": "Masquer"
     }
   },
   "externalTools": {

@@ -6429,7 +6429,10 @@
       "finishedRun": "Ein erfolgreich abgeschlossener Lauf",
       "integrationsManage": "Berechtigung, Integrationen zu verwalten",
       "settingsManage": "Berechtigung, Workspace-Einstellungen zu verwalten",
-      "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek"
+      "library": "Eine in diesem Deployment aktivierte Kontextfragment-Bibliothek",
+      "failedRun": "Ein fehlgeschlagener Lauf",
+      "infrastructure": "Ein mit diesem Workspace verbundenes Ausführungs-Backend",
+      "advancedTier": "Der erweiterte Oberflächenmodus"
     },
     "overlay": {
       "next": "Weiter",
@@ -6441,7 +6444,9 @@
       "announcement": "Schritt {current} von {total}. {title}. {body}",
       "abridged": "1 Schritt wurde übersprungen: dieses Element gehört nicht zu diesem Board. | {count} Schritte wurden übersprungen: diese Elemente gehören nicht zu diesem Board.",
       "searching": "Suche das hervorgehobene Element...",
-      "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren"
+      "clickHint": "Klicke auf das hervorgehobene Element, um fortzufahren",
+      "nextUp": "Als Nächstes",
+      "takeNext": "Diese Tour starten"
     },
     "tours": {
       "boardBasics": {
@@ -6564,7 +6569,7 @@
           },
           "finish": {
             "title": "Das ist der Kreislauf",
-            "body": "Aufgabe planen, Pipeline wählen, starten, zusehen. Wenn ein Lauf etwas von dir braucht, hält er an und sagt es, was die nächste Tour behandelt."
+            "body": "Aufgabe planen, Pipeline wählen, starten, zusehen. Die Touren nach dieser lesen einen echten Lauf, sie werden also frei, sobald du wirklich einen gestartet hast."
           }
         }
       },
@@ -6719,7 +6724,100 @@
             "body": "Manche Einträge gehören dir und nicht dem Board, etwa ein persönliches Zugriffstoken oder ein persönlicher Plan, und werden nur für Läufe genutzt, die du startest. Der Hub markiert, was was ist, und Meine Einrichtung sammelt das, was dir gehört."
           }
         }
+      },
+      "diagnoseFailure": {
+        "title": "Einen Fehler lesen",
+        "description": "Ein Lauf ist mit einem Fehler stehen geblieben. Finde heraus, was kaputt ist und was dagegen zu tun ist.",
+        "steps": {
+          "intro": {
+            "title": "Läufe scheitern, das ist normal",
+            "body": "Ein fehlgeschlagener Lauf ist keine Sackgasse. Das Board behält den Fehler, die Ursache ist meist eine Zeile, und die meisten Ursachen behebt eine Einstellung und nicht eine neu geschriebene Aufgabe."
+          },
+          "banner": {
+            "title": "Was schiefgegangen ist",
+            "body": "Die Karte tauscht ihren Fortschrittsbalken gegen dieses Banner. Es nennt die Ursache, die Details enthalten die Rohausgabe, und manche Ursachen bieten einen Knopf direkt zu der Einstellung, die sie behebt."
+          },
+          "retry": {
+            "title": "Noch einmal ausführen",
+            "body": "Wiederholen führt die Arbeit erneut aus. Frühere Fehler bleiben unter „Frühere Fehler“ an der Aufgabe, du kannst Versuche also vergleichen, statt die Spur zu verlieren."
+          },
+          "finish": {
+            "title": "Ein Fehler ist eine Information",
+            "body": "Ursache beheben, wiederholen, vergleichen. Wenn derselbe Fehler immer wiederkommt, sind die Details das, was du der Person zeigst, die eine Berechtigung erweitern oder das Fehlende verbinden kann."
+          }
+        }
+      },
+      "prepareInfrastructure": {
+        "title": "Wo Läufe stattfinden",
+        "description": "Die Maschinen, auf denen Agenten laufen, die Umgebungen, in denen sie testen, und die Zugangsdaten, die sie nutzen dürfen.",
+        "steps": {
+          "intro": {
+            "title": "Agenten brauchen einen Ort zum Laufen",
+            "body": "Jeder Container-Schritt läuft auf einem Ausführungs-Backend, Tests kommen in einer Umgebung hoch, und manche Fähigkeiten brauchen Zugangsdaten. Alle drei werden in einem Fenster konfiguriert."
+          },
+          "open": {
+            "title": "Infrastruktur öffnen",
+            "body": "Alles darüber, wo und wie Läufe ausgeführt werden, steht hier."
+          },
+          "tabs": {
+            "title": "Ein Tab pro Thema",
+            "body": "Agent-Container ist der Ort, an dem die Arbeit ausgeführt wird. Testumgebungen ist das, woraus ein Service hochgefahren wird. Die Liste der Zugangsdaten zeigt, welche Schlüssel die Fähigkeiten deiner Agenten tatsächlich auflösen können und welche noch fehlen."
+          },
+          "finish": {
+            "title": "Fehler verweisen hierher",
+            "body": "Wenn ein Lauf beim Bereitstellen scheitert, ist das das Fenster, das sein Banner dich zu öffnen bittet. Besser vorher zu wissen als danach."
+          }
+        }
+      },
+      "panelReviews": {
+        "title": "Review durch ein Gremium",
+        "description": "Lass mehrere Modelle dieselbe Arbeit prüfen statt nur eines, bei den Aufgaben, die es wert sind.",
+        "steps": {
+          "intro": {
+            "title": "Ein Reviewer oder mehrere",
+            "body": "Ein Review-Schritt führt normalerweise einen Agenten aus. Er kann stattdessen ein Gremium mehrerer Modelle ausführen und ihre Aussagen vergleichen, was bei schwererer Arbeit findet, was ein einzelner Reviewer übersieht."
+          },
+          "open": {
+            "title": "Modellkonfiguration öffnen",
+            "body": "Gremien bestehen aus Modellen, also werden sie direkt daneben eingerichtet."
+          },
+          "groups": {
+            "title": "Ein Gremium definieren",
+            "body": "Eine Gruppe nennt die Modelle im Gremium und wie anspruchsvoll eine Aufgabe sein muss, bevor es eingesetzt wird. Ein Schritt wählt dann eine Gruppe, statt Modelle einzeln zu nennen."
+          },
+          "finish": {
+            "title": "Kosten folgen dem Aufwand",
+            "body": "Ein Gremium kostet so viele Modellaufrufe, wie es Mitglieder hat. Deshalb kann eine Gruppe auf die Aufgaben begrenzt werden, deren Schätzung ihre Schwelle erreicht. Kleine Arbeit behält einen einzelnen Reviewer."
+          }
+        }
+      },
+      "shareServices": {
+        "title": "Die Services, die du schon betreibst",
+        "description": "Sag den Agenten, welche gemeinsam genutzten Systeme es gibt und wie ihre APIs aussehen.",
+        "steps": {
+          "intro": {
+            "title": "Baue nicht neu, was du hast",
+            "body": "Agenten entwerfen im Dunkeln, solange sie nicht wissen, was deine Organisation schon betreibt. Dieser Katalog nennt diese Systeme und trägt ihre API-Kontrakte."
+          },
+          "open": {
+            "title": "Grundlegende Services öffnen",
+            "body": "Der Katalog gemeinsamer Fähigkeiten, der jedem Board in diesem Workspace zur Verfügung steht."
+          },
+          "catalog": {
+            "title": "Registrieren, hochladen oder synchronisieren",
+            "body": "Füge einen Service von Hand hinzu, lade seine API-Dokumente hoch, oder verknüpfe ein Repository und lass sie synchronisieren. Entwürfe verweisen dann auf das hier Registrierte, statt eine Schnittstelle zu erfinden."
+          },
+          "finish": {
+            "title": "Entwurfsschritte lesen das",
+            "body": "Ein Entwurf, der angibt, welche davon er nutzt, bekommt im nächsten Schritt ihre vollen Kontrakte. Einer, der nichts angibt, bekommt nichts: dass das hier aktuell bleibt, ist also die Bedingung dafür, dass es funktioniert."
+          }
+        }
       }
+    },
+    "nudge": {
+      "label": "Neue Tour verfügbar",
+      "start": "Zeig mir",
+      "dismiss": "Ausblenden"
     }
   },
   "externalTools": {

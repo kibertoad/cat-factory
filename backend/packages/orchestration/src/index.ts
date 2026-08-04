@@ -164,6 +164,16 @@ export {
   type WorkspaceSettingsServiceDependencies,
 } from './modules/settings/WorkspaceSettingsService.js'
 export {
+  TutorialProgressService,
+  type TutorialProgressServiceDependencies,
+} from './modules/tutorial/TutorialProgressService.js'
+export {
+  MAX_DISTINCT_TOURS,
+  OTHER_TOUR,
+  TutorialTelemetryService,
+  type TutorialTelemetryServiceDependencies,
+} from './modules/tutorial/TutorialTelemetryService.js'
+export {
   ReleaseHealthService,
   type ReleaseHealthServiceDependencies,
 } from './modules/releaseHealth/ReleaseHealthService.js'

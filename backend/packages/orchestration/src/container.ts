@@ -92,6 +92,8 @@ import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
 import { BoardScanService } from './modules/boardScan/BoardScanService.js'
+import { TutorialProgressService } from './modules/tutorial/TutorialProgressService.js'
+import { TutorialTelemetryService } from './modules/tutorial/TutorialTelemetryService.js'
 import { UserSettingsService } from './modules/settings/UserSettingsService.js'
 import { type AgentKindRegistry } from '@cat-factory/agents'
 import type {
@@ -235,6 +237,7 @@ import type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  TutorialProgressModule,
   UserSettingsModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
@@ -264,6 +267,7 @@ export type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  TutorialProgressModule,
   UserSettingsModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
@@ -377,6 +381,17 @@ export interface CoreSpine {
    * present (`CoreDependencies.operationalMetrics` is required).
    */
   operationalMetrics: OperationalMetrics
+  /**
+   * Counts in-app tutorial funnel events. On the SPINE rather than in the optional set, and
+   * unconditional, for the same reason `operationalMetrics` is required: an un-wired counter
+   * reports a permanent zero, which reads as "nobody takes the tutorial" instead of as "nobody
+   * wired this". It needs no repository — the events are counted and discarded — so it is
+   * available even on a facade with no per-user progress store.
+   *
+   * A single instance per container because it holds the per-process distinct-dimension cap that
+   * keeps a browser-supplied tour id from minting unbounded metric series.
+   */
+  tutorialTelemetry: TutorialTelemetryService
 }
 
 /**
@@ -481,6 +496,12 @@ export interface OptionalCoreModules {
   settings?: WorkspaceSettingsModule
   /** Present only when the per-user-settings repository is wired (see CoreDependencies). */
   userSettings?: UserSettingsModule
+  /**
+   * Per-user in-app tutorial progress. Present only when its repository is wired; absent ⇒ the
+   * controller reports 503 and the SPA keeps running on its browser-persisted copy alone, which
+   * is the pre-existing behaviour rather than a broken feature.
+   */
+  tutorialProgress?: TutorialProgressModule
   /** Present only when the model-preset repository is wired (see CoreDependencies). */
   modelPresets?: ModelPresetsModule
   /** Present only when the consensus-group repository is wired (see CoreDependencies). */
@@ -564,6 +585,10 @@ export function createCore(injected: CoreDependencies): Core {
   // bag here keeps the rest of this function reading against one name and makes it explicit that
   // every service below is threaded the SAME resolved instance.
   const dependencies: CoreDependencies = injected
+  // Built here rather than per request: it holds the per-process cap that keeps a
+  // browser-supplied tour id from minting an unbounded number of metric series, and a cap with a
+  // request-scoped lifetime would bound nothing.
+  const tutorialTelemetry = new TutorialTelemetryService({ metrics: operationalMetrics, logger })
   // The optional-module registry: every feature that is wired only when its prerequisites are
   // configured is `build`-declared through this, instead of a scattered `const x = createX(...)`
   // + a matching `...(x ? { x } : {})` return spread. Registration order below IS dependency
@@ -623,6 +648,15 @@ export function createCore(injected: CoreDependencies): Core {
     userBudgetLimitCache: caches.userBudgetLimit,
   })
   spendServiceRef = spendService
+  modules.build('tutorialProgress', () =>
+    dependencies.tutorialProgressRepository
+      ? {
+          service: new TutorialProgressService({
+            tutorialProgressRepository: dependencies.tutorialProgressRepository,
+          }),
+        }
+      : undefined,
+  )
   modules.build('userSettings', () =>
     dependencies.userSettingsRepository
       ? {
@@ -730,6 +764,7 @@ export function createCore(injected: CoreDependencies): Core {
     // per-invocation flush need the SAME collector the services count into, and reaching it
     // off the container is what guarantees it is the same one.
     operationalMetrics,
+    tutorialTelemetry,
     workspaceService,
     accountService,
     userService,
