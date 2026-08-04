@@ -13,11 +13,8 @@ import type {
   PriorStepOutput,
   ResolvedFrontendBinding,
   RunDiagnostics,
-<<<<<<< HEAD
   RunInputGate,
-=======
   RunMode,
->>>>>>> origin/main
   Workspace,
   WorkspaceRole,
 } from '@cat-factory/contracts'
@@ -35,11 +32,8 @@ import {
   priorStepOutputSchema,
   resolvedFrontendBindingSchema,
   runDiagnosticsSchema,
-<<<<<<< HEAD
   runInputGateSchema,
-=======
   workspaceRoleSchema,
->>>>>>> origin/main
 } from '@cat-factory/contracts'
 import { array, is, string, type GenericSchema } from 'valibot'
 import { DataIntegrityError, decodeEnum, decodeJson } from './decode.js'

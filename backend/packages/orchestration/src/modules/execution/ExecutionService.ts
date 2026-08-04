@@ -48,9 +48,13 @@ import { MergeResolver, type FinalizeMergeResult } from './MergeResolver.js'
 import { PostMergeBoardController, type PostMergeBoardHost } from './PostMergeBoardController.js'
 import { orderPrsForMerge } from './mergeOrder.logic.js'
 import { type ReviewGateController, type ReviewKind } from './ReviewGateController.js'
-import { InputGateController } from './InputGateController.js'
 import { runStepPreamble, type StepPreambleDeps } from './stepPreamble.js'
-import { buildGateWindowControllers, buildReviewSubjects } from './gate-window-controllers.js'
+import type { InputGateController } from './InputGateController.js'
+import {
+  buildGateWindowControllers,
+  buildInputGateController,
+  buildReviewSubjects,
+} from './gate-window-controllers.js'
 import { buildRunContextAndAdmission } from './run-context-admission.js'
 import { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController } from './PrReviewController.js'
@@ -309,7 +313,6 @@ export class ExecutionService {
       issueWriteback,
       subscriptionActivationRepository,
       resolveWorkspaceModelDefault,
-      workspaceSettingsService,
       runInitiatorScope,
       pokeInitiativeLoop,
       agentKindRegistry,
@@ -416,19 +419,13 @@ export class ExecutionService {
     this.visualConfirmationController = gateWindows.visualConfirmationController
     this.reviewGate = gateWindows.reviewGate
     this.forkDecisionController = gateWindows.forkDecisionController
-    // The pre-token input gate. Built here rather than in the gate-window factory because it is
-    // not a window: it guards the run's FIRST dispatch and has no pipeline step of its own.
-    this.inputGate = new InputGateController({
-      blockRepository,
-      executionRepository,
-      workRunner,
+    this.prReviewController = gateWindows.prReviewController
+    // The pre-token input gate: not a gate WINDOW (it guards the run's first dispatch and has no
+    // pipeline step of its own), so it has its own factory over the same dependency bag.
+    this.inputGate = buildInputGateController(dependencies, {
       stateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
-      clock,
-      workspaceSettingsService,
-      logger,
     })
-    this.prReviewController = gateWindows.prReviewController
     // The review-gate subjects + the two interactive interview gates, built by the sibling
     // factory over the same collaborators (see gate-window-controllers.ts).
     const reviewSubjects = buildReviewSubjects({
