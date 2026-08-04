@@ -1,5 +1,14 @@
 # @cat-factory/contracts
 
+## 0.230.1
+
+### Patch Changes
+
+- 1f14793: Documentation cleanup and consistency: neutral naming across docs, code comments,
+  example fixtures and historical changelog entries, with the OpenAPI spec and
+  generated SDK clients regenerated so their description strings match. No behaviour
+  or API change.
+
 ## 0.230.0
 
 ### Minor Changes
