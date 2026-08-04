@@ -65,7 +65,10 @@ function fakeRegistry(record: EnvironmentRecord): EnvironmentRegistryRepository 
 }
 
 /** Records what reached the log, in order, so the hook's ordering can be asserted against it. */
-function fakeLog(): { rows: { operation: string; outcome: string }[]; log: ProvisioningLogRecorder } {
+function fakeLog(): {
+  rows: { operation: string; outcome: string }[]
+  log: ProvisioningLogRecorder
+} {
   const rows: { operation: string; outcome: string }[] = []
   const writes: Pick<ProvisioningLogRecorder, 'record'> = {
     async record(row) {

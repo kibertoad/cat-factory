@@ -57,8 +57,17 @@ export function defineAuthAttemptSuite(name: string, makeRepo: () => AuthAttempt
       await repo.record({ key, ip, at: 5_000 })
 
       const removed = await repo.deleteOlderThan(2_000)
-      expect(removed).toBe(1)
+      // `deleteOlderThan` is the retention SWEEP: unscoped by design, so the number it returns
+      // counts every row in the store past the cutoff, including whatever the cases above left
+      // behind. Asserting an exact total therefore pins test ORDER rather than behaviour (it
+      // read 3 on both runtimes once the earlier cases seeded their own old rows). What the
+      // contract actually promises is which rows survive, so assert that on this case's own key
+      // and require only that the sweep removed something.
+      expect(removed).toBeGreaterThanOrEqual(1)
       expect(await repo.countByKeySince(key, 0)).toBe(1)
+      // The survivor is the NEWER attempt: the cutoff is exclusive of rows at or after it.
+      expect(await repo.countByKeySince(key, 5_000)).toBe(1)
+      expect(await repo.countByIpSince(ip, 0)).toBe(1)
     })
   })
 }
