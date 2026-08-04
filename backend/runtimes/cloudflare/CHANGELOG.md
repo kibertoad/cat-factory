@@ -1,5 +1,50 @@
 # @cat-factory/worker
 
+## 0.149.0
+
+### Minor Changes
+
+- 2580fee: Add OTLP log export: the platform's own structured log lines can now be shipped to the same
+  OpenTelemetry endpoint as its traces and metrics.
+
+  A new kernel `LogSink` port lets a facade install a second destination on the logging adapter,
+  and `@cat-factory/observability-otel` implements it as a fetch-based exporter POSTing OTLP log
+  records to `{endpoint}/v1/logs`. Lines keep their field names, carry their `child`-bound
+  correlation ids, and a line naming an `executionId` is stamped (through the same `deriveTraceId`
+  the spans go through, not a second copy of it) with that run's trace id and a sampled flag, so
+  logs and traces join in the backend.
+
+  Observability may not become a new failure class, so the drain path is total and the send chain
+  is terminated: a field that cannot be read or serialised is reported in place of its value rather
+  than escaping into the chain, where a rejection would have silenced the exporter permanently and,
+  on Node, exited the process through the unhandled-rejection guard. The shutdown flush is bounded
+  so it cannot outlast a SIGTERM grace period.
+
+  Opt-in on top of the existing exporter: `OTEL_LOGS=true` plus `OTEL_ENABLED=true` and an
+  endpoint, with `OTEL_LOGS_MAX_BATCH_SIZE` and (Node only) `OTEL_LOGS_FLUSH_INTERVAL_MS`.
+  `LOG_LEVEL` governs what is exported. Nothing changes for a deployment that has not opted in.
+
+### Patch Changes
+
+- Updated dependencies [2580fee]
+- Updated dependencies [eb4ca17]
+  - @cat-factory/observability-otel@0.9.0
+  - @cat-factory/kernel@0.233.0
+  - @cat-factory/server@0.211.0
+  - @cat-factory/contracts@0.231.0
+  - @cat-factory/orchestration@0.200.0
+  - @cat-factory/agents@0.110.1
+  - @cat-factory/caching@0.14.10
+  - @cat-factory/consensus@0.14.10
+  - @cat-factory/eks@0.1.220
+  - @cat-factory/gates@0.8.66
+  - @cat-factory/gitlab@0.15.25
+  - @cat-factory/integrations@0.123.6
+  - @cat-factory/observability-langfuse@0.9.63
+  - @cat-factory/provider-cloudflare@0.7.372
+  - @cat-factory/spend@0.14.8
+  - @cat-factory/prompt-fragments@0.15.57
+
 ## 0.148.1
 
 ### Patch Changes
