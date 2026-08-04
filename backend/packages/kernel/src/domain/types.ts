@@ -20,6 +20,10 @@ export type {
   TaskType,
   CreateTaskType,
   TaskTypeFields,
+  // The wire shape of a deployment-registered task type (the `TaskTypeRegistry`'s currency),
+  // re-exported here so an org package registering one imports its whole vocabulary from kernel.
+  CustomTaskType,
+  TaskTypeFieldDescriptor,
   DocKind,
   Decision,
   EnvConfigRepairJob,

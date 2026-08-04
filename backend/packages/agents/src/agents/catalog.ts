@@ -18,6 +18,7 @@ import { traitGuidanceFor } from './kinds/traits.js'
 import { roleSystemPrompt } from './prompts/roles.js'
 import { FINAL_ANSWER_IN_REPLY, PLATFORM_IS_NOT_THE_PRODUCT } from './prompts/shared.js'
 import {
+  customTaskTypeSection,
   environmentSection,
   initiativePresetSection,
   involvedServicesSection,
@@ -349,10 +350,17 @@ function buildBaseUserPrompt(
   // initiative-spawned custom kind's standing org methodology frames its role before its own
   // task text — so the preset addition reaches a custom kind however it builds its prompt.
   // Empty on every non-initiative run ⇒ the custom prompt is byte-for-byte unchanged.
+  //
+  // The operation's per-case PARAMETERS ride the same prepend, and this is the emit point that
+  // matters most for them: an org's reusable operation typically runs on that org's OWN kinds,
+  // which are exactly the kinds that author their own user prompt. Miss it and the parameters
+  // vanish for the runs the whole feature exists to serve.
   const registered = registry.userPrompt(context)
   if (registered !== undefined) {
-    const presetSection = initiativePresetSection(context)
-    return presetSection ? `${presetSection.trimStart()}\n\n${registered}` : registered
+    const prepended = [initiativePresetSection(context), customTaskTypeSection(context)]
+      .filter(Boolean)
+      .map((section) => section.trimStart())
+    return prepended.length ? `${prepended.join('\n\n')}\n\n${registered}` : registered
   }
 
   const { block, pipelineName, priorOutputs, decisions, resolvedDecision } = context
@@ -369,6 +377,9 @@ function buildBaseUserPrompt(
   // linked context, which it frames.
   const ownService = ownServiceSection(context)
   if (ownService) lines.push(ownService)
+  // The operation's per-case parameters, in the same position the standard prompt puts them.
+  const taskParams = customTaskTypeSection(context)
+  if (taskParams) lines.push(taskParams)
   // A companion grades a specific preceding producer; name it explicitly so the
   // model rates the right output rather than guessing among the prior-agent sections.
   const companionTarget = companionTargetSection(context)

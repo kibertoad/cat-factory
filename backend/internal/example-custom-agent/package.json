@@ -22,6 +22,7 @@
   "dependencies": {
     "@cat-factory/agents": "workspace:*",
     "@cat-factory/kernel": "workspace:*",
+    "@cat-factory/prompt-fragments": "workspace:*",
     "valibot": "^1.4.2"
   },
   "devDependencies": {

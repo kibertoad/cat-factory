@@ -20,8 +20,10 @@ import {
   stubGateContext,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
+import { universalFragments } from '@cat-factory/prompt-fragments'
 import {
   type BinaryGeneratorDefinition,
+  type CustomTaskType,
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
@@ -713,17 +715,50 @@ function checkPipelineRetirements(opts: ValidateRegistrationsOptions): Registrat
 }
 
 /**
+ * A registered task type's `defaultFragmentIds` that the CODE pool cannot resolve, reported as a
+ * WARN rather than an error, and the severity is the whole point. The pool visible at boot is the
+ * built-in catalog plus whatever `registerPromptFragments` added; an account- or workspace-tier
+ * fragment row merges per WORKSPACE at run time, so boot structurally cannot see one and refusing
+ * would reject a legitimate tenant-tier reference. The message therefore names both causes rather
+ * than asserting the typo it cannot distinguish. Run-time behaviour is unchanged either way: an
+ * id that resolves against nothing is skipped when bodies are composed.
+ */
+function checkTaskTypeFragments(
+  taskType: CustomTaskType,
+  pool: Set<string>,
+): RegistrationProblem[] {
+  const unresolved = (taskType.defaultFragmentIds ?? []).filter((id) => !pool.has(id))
+  if (unresolved.length === 0) return []
+  return [
+    {
+      severity: 'warn',
+      code: 'task_type_unknown_fragment',
+      message:
+        `Custom task type "${taskType.taskType}" declares defaultFragmentIds ` +
+        `${unresolved.map((id) => `"${id}"`).join(', ')}, which the code fragment pool (built-in ` +
+        `catalog + registerPromptFragments) does not resolve. Either the id is a typo (a task of ` +
+        `this type would then be seeded with a fragment that folds nothing), or it names an ` +
+        `account/workspace-tier fragment, which merges per workspace at run time and is invisible ` +
+        `here. Check the id if you meant a code-registered fragment.`,
+    },
+  ]
+}
+
+/**
  * Section 5 of {@link collectRegistrationProblems}: each custom task type must carry a NAMESPACED
  * id (`<ns>:<name>`) and, if set, a well-formed namespaced `formPanel` id; a `defaultPipelineId`
  * must resolve against the built-in + registered pipeline catalog (else the created task would
- * silently fall back to the positional default). Only run when a task-type registry is supplied.
- * Split out to keep the collector under the complexity ceiling.
+ * silently fall back to the positional default), and its `defaultFragmentIds` are checked against
+ * the code fragment pool (see {@link checkTaskTypeFragments}). Only run when a task-type registry
+ * is supplied. Split out to keep the collector under the complexity ceiling.
  */
 function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
   if (!opts.taskTypeRegistry) return problems
   const knownPipelineIds = new Set(seedPipelines(opts.pipelineRegistry).map((p) => p.id))
+  const fragmentPool = new Set(universalFragments().map((fragment) => fragment.id))
   for (const taskType of opts.taskTypeRegistry.all()) {
+    problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
     if (!isNamespacedId(taskType.taskType)) {
       problems.push({
         severity: 'error',

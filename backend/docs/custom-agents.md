@@ -521,7 +521,16 @@ registers:
 - **`scope-adherence`**: a rubric **judge** (`registerExampleScopeJudge`) that scores the Coder's
   work against "implement what was asked and nothing else", sends it back to the Coder with the
   findings as its rework brief on a miss, and parks a human once the task's rework budget is spent.
-- the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`** and **`pl_org_apply`** pipelines chaining them, plus
+- **`org:introduce-api`**: a REUSABLE OPERATION (`src/introduce-api.ts`), the vehicle for canned
+  work an org runs again and again with per-case input. It is a custom TASK TYPE carrying the
+  whole bundle: the small create form whose values reach every agent's prompt, the standing
+  context (`defaultFragmentIds`: the org's API guidelines, auth requirements and shared-services
+  map), and `defaultPipelineId: pl_org_introduce_api`, whose design + build steps run under the
+  `org:architect-api` / `org:coder-api` variants. Design and the boundary against initiative
+  presets (which are the vehicle when the work must be PLANNED and decomposed):
+  [`../../docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
+- the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`**, **`pl_org_apply`** and
+  **`pl_org_introduce_api`** pipelines chaining them, plus
   the **`preset_org_audit`** and **`preset_org_research`** initiative presets (see
   [`initiative-presets.md`](./initiative-presets.md)).
 

@@ -1,6 +1,6 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** design settled, slices pending (slice 0 = this tracker) · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slice 1 landed (the fold + the bundle); slices 2-8 pending · **Owner:** orchestration · **Started:** 2026-08-04
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -59,12 +59,12 @@ registry or the wire fields would churn `TaskTypeRegistry`, the snapshot's
 `customTaskTypes`, and the persisted `taskTypeFields.custom` for zero mechanism gain, and
 would push a product word into the public API surface, which is frozen forever (ADR 0032).
 
-| Vehicle                | When                                                                                              | Shape                                                                                                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plain custom task type | A first-class work-item CLASSIFICATION (an "incident" card, a badge, a small form)                | Presentation + fields only; no bundled pipeline or fragments required                                                                                           |
-| **Reusable operation** | A human fills a small per-case form and ONE canned pipeline delivers one outcome                  | A task type carrying the full bundle: fields + `defaultFragmentIds` + `defaultPipelineId` naming a registered read-only pipeline. One invocation = one typed task |
-| Initiative preset      | The work must be PLANNED and decomposed: phases, many spawned items, checkpoints between phases   | `InitiativePresetRegistration` (stays the only multi-phase vehicle)                                                                                             |
-| Recurring schedule     | Time (or a webhook) is the trigger, not a human with per-case input                               | A schedule pointing at a pipeline                                                                                                                               |
+| Vehicle                | When                                                                                            | Shape                                                                                                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plain custom task type | A first-class work-item CLASSIFICATION (an "incident" card, a badge, a small form)              | Presentation + fields only; no bundled pipeline or fragments required                                                                                             |
+| **Reusable operation** | A human fills a small per-case form and ONE canned pipeline delivers one outcome                | A task type carrying the full bundle: fields + `defaultFragmentIds` + `defaultPipelineId` naming a registered read-only pipeline. One invocation = one typed task |
+| Initiative preset      | The work must be PLANNED and decomposed: phases, many spawned items, checkpoints between phases | `InitiativePresetRegistration` (stays the only multi-phase vehicle)                                                                                               |
+| Recurring schedule     | Time (or a webhook) is the trigger, not a human with per-case input                             | A schedule pointing at a pipeline                                                                                                                                 |
 
 Litmus: when the create-form answers ARE the whole per-case brief and one pipeline delivers
 one outcome, it is an operation. The moment the work needs "research first, then apply", it
@@ -110,7 +110,7 @@ Verified against the code (files cited are the authorities):
    advisory (`usePipelineHealth.newPipelines` offers any catalog id with no stored row) and
    one-click materialisation (`PipelineService.reseed` INSERTS when absent); a version bump
    flags every workspace `outdated`; withdrawal is `PipelineRegistry.retire(id,
-   { replacedBy })`. A VERSIONLESS (non-builtin) registration is one-shot insertable and
+{ replacedBy })`. A VERSIONLESS (non-builtin) registration is one-shot insertable and
    permanently un-updatable (`reseed` refuses the stored copy, and the `outdated` check
    requires `pipeline.builtin`). Known nit: the advisory humanises an unmaterialised id
    (`builtinPipelineName` mangles `pl_org_introduce_api` into "org introduce api").
@@ -189,7 +189,7 @@ The engine resolves a labeled projection once per dispatch; the agents package r
 the VALUES are authoritative and the descriptor only enriches.
 
 - New `AgentRunContext.customTaskType?: { taskType: string; label: string; fields:
-  Array<{ key: string; label?: string; value: string }> }` beside `taskTypeFields`.
+Array<{ key: string; label?: string; value: string }> }` beside `taskTypeFields`.
   `AgentContextBuilder` resolves it when `block.taskTypeFields?.custom` is non-empty:
   look the type up on `CoreDependencies.taskTypeRegistry`, order declared fields first
   (descriptor order), render each value through the shared render helper (option labels,
@@ -427,23 +427,51 @@ else could offer the way back). Mechanics:
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                                                                                                                                | Scope  | Depends on | Status  | PR  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
-| 0   | This tracker doc                                                                                                                                                                                                                                                                    | —      | —          | ⬜ todo |     |
-| 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ⬜ todo |     |
-| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select | BOTH   | 1          | ⬜ todo |     |
-| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                            | SPA    | 2          | ⬜ todo |     |
-| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                       | SYSTEM | 1          | ⬜ todo |     |
-| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                      | DOCS   | 2          | ⬜ todo |     |
-| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                              | DOCS   | 1          | ⬜ todo |     |
-| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                | SYSTEM | 2          | ⬜ todo |     |
-| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                | SYSTEM | 2          | ⬜ todo |     |
-| 9   | (deferred) **Prefill probe (D6)**: the preset `detect` mirror                                                                                                                                                                                                                       | SYSTEM | warrant    | ⬜ todo |     |
+| #   | Slice (each one PR)                                                                                                                                                                                                                                                                                                                                   | Scope  | Depends on | Status  | PR                                                          |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ----------------------------------------------------------- |
+| 0   | This tracker doc                                                                                                                                                                                                                                                                                                                                      | —      | —          | ✅ done | [#1650](https://github.com/kibertoad/cat-factory/pull/1650) |
+| 1   | **Pilot: the fold + the bundle (D1, D3, D4)**: `AgentRunContext.customTaskType` + builder resolution; `customTaskTypeSection` in all three emit points; `defaultFragmentIds` + `presentation.category` on the descriptor; addTask fragment union; boot WARN; worked example v1; conformance (fold + fragment seeding + byte-identical-without-fields) | SYSTEM | 0          | ✅ done |                                                             |
+| 2   | **Shared field vocabulary (D2, D8)**: `contracts/src/form-fields.ts` extraction; preset schema re-based; task-type picklist (minus password); `taskTypeFields.custom` widened; creation validation; shared `DescriptorFields.vue` in AddTaskModal + preset form; example gains checkbox-group/select                                                  | BOTH   | 1          | ⬜ todo |                                                             |
+| 3   | **Picker grouping (D7)**: category captions in the type picker; chrome i18n keys if any                                                                                                                                                                                                                                                               | SPA    | 2          | ⬜ todo |                                                             |
+| 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                         | SYSTEM | 1          | ⬜ todo |                                                             |
+| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                        | DOCS   | 2          | ⬜ todo |                                                             |
+| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                | DOCS   | 1          | ⬜ todo |                                                             |
+| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
+| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                  | SYSTEM | 2          | ⬜ todo |                                                             |
+| 9   | (deferred) **Prefill probe (D6)**: the preset `detect` mirror                                                                                                                                                                                                                                                                                         | SYSTEM | warrant    | ⬜ todo |                                                             |
 
 Pilot ordering: slice 1 establishes the fold and the bundle with the smallest blast radius
 and proves the worked example end to end on the existing 4-type form vocabulary. Slices 3,
 4, 5, 6 parallelize after their stated dependency; 7 and 8 wait for the vocabulary to be
 final so neither ships a shape that changes a slice later.
+
+### What slice 1 surfaced (carry into the rest)
+
+- **The projection is a KERNEL domain helper, not builder code.**
+  `describeCustomTaskType` (`kernel/src/domain/task-type-context.ts`, the `describeOwnService`
+  sibling) does the descriptor join; `AgentContextBuilder` only calls it. Both that file and
+  `BoardService` sit within ~25 lines of the size ratchet, so anything a later slice adds to
+  either belongs in a collaborator from the start.
+- **The registry reaches the builder through FOUR edits**, and missing any one compiles fine
+  while the fold silently never resolves: `ExecutionServiceDependencies.taskTypeRegistry`, the
+  `RunContextAdmissionDeps` `Pick`, the `AgentContextBuilder` deps literal in
+  `run-context-admission.ts`, and `container/execution-service.ts` reading
+  **`runtime.taskTypeRegistry`** rather than `injected` (a facade may pass none and
+  `resolveCoreRuntime` supplies the empty default, so the engine and `BoardService` must read the
+  same instance).
+- **Kernel now re-exports `CustomTaskType` + `TaskTypeFieldDescriptor`** (`domain/types.ts`), so
+  an org package registering an operation imports its whole vocabulary from kernel and needs no
+  contracts dependency.
+- **`registerExampleCustomAgents` takes a 7th positional registry** (`taskTypeRegistry`). If an
+  eighth is ever needed, convert the whole signature to a deps object in that slice rather than
+  extending the list again.
+- **The example's `operations` field ships as `text` in slice 1** and becomes a `checkbox-group`
+  in slice 2, changing its value type from `string` to `string[]`. Internals are pre-1.0 and this
+  is the worked example, so no migration; just do not treat the slice-1 shape as settled.
+- **Conformance asserts the CONTEXT, not the prompt**: `FakeAgentOptions.echoTaskParams` echoes
+  the resolved projection (`[params]label|key=value;…[/params]`) the way `echoPreset` does, since
+  what needs proving per runtime is that the sparse `custom` bag survives persistence and reaches
+  dispatch. The rendering itself is pure and unit-tested in `@cat-factory/agents`.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 
@@ -458,13 +486,13 @@ backend package registered from its deployment's composition root (the
 2. **Steering**: `registerVariant` for `org:architect-api` and `org:coder-api`
    (`promptAddition`s with the org's conventions).
 3. **The canned pipeline**: `pipelineRegistry.register({ id: 'pl_org_introduce_api',
-   builtin: true, version: 1, agentKinds: ['architect', 'coder', 'tester-api', 'conflicts',
-   'ci', 'merger'], stepOptions: [{ agentVariantId: 'org:architect-api' },
-   { agentVariantId: 'org:coder-api' }, null, null, null, null] })`. Read-only in
+builtin: true, version: 1, agentKinds: ['architect', 'coder', 'tester-api', 'conflicts',
+'ci', 'merger'], stepOptions: [{ agentVariantId: 'org:architect-api' },
+{ agentVariantId: 'org:coder-api' }, null, null, null, null] })`. Read-only in
    workspaces; updates roll out by bumping `version`.
 4. **The operation**: `taskTypeRegistry.register({ taskType: 'org:introduce-api',
-   presentation: { label: 'Introduce API', category: 'API delivery', ... }, fields: [...],
-   defaultFragmentIds: [...], defaultPipelineId: 'pl_org_introduce_api' })`.
+presentation: { label: 'Introduce API', category: 'API delivery', ... }, fields: [...],
+defaultFragmentIds: [...], defaultPipelineId: 'pl_org_introduce_api' })`.
 5. **The run**: a user picks "Introduce API" in the create-task form on a service, fills
    entity/operations/auth, creates. The task carries the frozen field bag + the seeded
    fragment ids + the pinned pipeline. Start dispatches architect (variant-steered, sees

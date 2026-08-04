@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Block } from '@cat-factory/kernel'
+import type { Block, TaskTypeRegistry } from '@cat-factory/kernel'
+import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import {
   clearRegisteredTaskTypeDefaultFragments,
   DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
@@ -18,7 +19,7 @@ describe('BoardService fragment pinning at creation', () => {
 
   afterEach(() => clearRegisteredTaskTypeDefaultFragments())
 
-  function build(serviceFragmentIds?: string[]) {
+  function build(serviceFragmentIds?: string[], taskTypeRegistry?: TaskTypeRegistry) {
     const frame: Block = {
       id: 'frame_svc',
       title: 'Service',
@@ -42,6 +43,7 @@ describe('BoardService fragment pinning at creation', () => {
         insert: async () => {},
       },
       serviceRepository: { getByFrameBlock: async () => null },
+      ...(taskTypeRegistry ? { taskTypeRegistry } : {}),
       idGenerator: { next: (prefix: string) => `${prefix}_new` },
       clock: { now: () => 0 },
       executionEventPublisher: {
@@ -127,5 +129,70 @@ describe('BoardService fragment pinning at creation', () => {
       fragmentIds: [],
     })
     expect(task.fragmentIds).toBeUndefined()
+  })
+
+  // A REUSABLE OPERATION's standing context: the registered type's own `defaultFragmentIds`. This
+  // is what makes the operation consistent invocation after invocation, and it is a DESCRIPTOR
+  // field rather than the module-global `registerTaskTypeDefaultFragments` seam, so the whole
+  // bundle (form + standing context + pipeline) is declared in one place.
+  describe("a registered custom type's own defaultFragmentIds", () => {
+    function withOperation(serviceFragmentIds?: string[]) {
+      const registry = defaultTaskTypeRegistry()
+      registry.register({
+        taskType: 'org:introduce-api',
+        presentation: {
+          label: 'Introduce API',
+          icon: 'i-lucide-plug',
+          color: '#0ea5e9',
+          description: 'Expose functionality over HTTP.',
+        },
+        defaultFragmentIds: ['org.api-guidelines', 'org.api-auth-requirements'],
+      })
+      return build(serviceFragmentIds, registry)
+    }
+
+    it('seeds them onto a new task of that type', async () => {
+      const task = await withOperation().addTask(WS, 'frame_svc', {
+        title: 'Expose orders',
+        taskType: 'org:introduce-api',
+      })
+      expect(task.fragmentIds).toEqual(['org.api-guidelines', 'org.api-auth-requirements'])
+    })
+
+    it('unions them with the inherited service standards, deduped', async () => {
+      const task = await withOperation(['node.best-practices', 'org.api-guidelines']).addTask(
+        WS,
+        'frame_svc',
+        { title: 'Expose orders', taskType: 'org:introduce-api' },
+      )
+      expect(task.fragmentIds).toEqual([
+        'node.best-practices',
+        'org.api-guidelines',
+        'org.api-auth-requirements',
+      ])
+    })
+
+    it('applies them even when the create form pins its own picks', async () => {
+      // An explicit list is authoritative over what the task INHERITS, but the operation's
+      // standing context is part of the type, not something a picker chose to include.
+      const task = await withOperation().addTask(WS, 'frame_svc', {
+        title: 'Expose orders',
+        taskType: 'org:introduce-api',
+        fragmentIds: ['react.hooks'],
+      })
+      expect(task.fragmentIds).toEqual([
+        'react.hooks',
+        'org.api-guidelines',
+        'org.api-auth-requirements',
+      ])
+    })
+
+    it('leaves a task of any other type untouched', async () => {
+      const task = await withOperation().addTask(WS, 'frame_svc', {
+        title: 'Feature',
+        taskType: 'feature',
+      })
+      expect(task.fragmentIds).toBeUndefined()
+    })
   })
 })

@@ -700,9 +700,17 @@ export class BoardService {
     // inherits its service's standards). Every task additionally always carries its TASK-TYPE
     // defaults (`defaultFragmentIdsForTaskType` — the built-in document writing-style set plus any
     // deployment-registered per-type defaults, e.g. custom documentation/review guidance). Deduped.
+    // A REGISTERED type's own `defaultFragmentIds` join that union: an operation's standing
+    // context (an org's API guidelines, its auth requirements) is part of the bundle, so every
+    // invocation carries it without per-task picking. Only the id SET freezes here: bodies
+    // live-resolve per run, so editing the guideline reaches tasks created before the edit.
     const inheritedFragmentIds = input.fragmentIds ?? service?.serviceFragmentIds ?? []
     const fragmentIds = [
-      ...new Set([...inheritedFragmentIds, ...defaultFragmentIdsForTaskType(taskType)]),
+      ...new Set([
+        ...inheritedFragmentIds,
+        ...defaultFragmentIdsForTaskType(taskType),
+        ...(this.taskTypeRegistry?.get(taskType)?.defaultFragmentIds ?? []),
+      ]),
     ]
     if (fragmentIds.length) {
       block.fragmentIds = fragmentIds

@@ -179,6 +179,10 @@ export { PipelineRegistry, defaultPipelineRegistry } from './domain/pipeline-reg
 // `TaskTypeRegistry` at startup; the server projects them into the snapshot (`customTaskTypes`)
 // and `defaultPipelineIdForTaskType` consults it after the built-in map.
 export { TaskTypeRegistry, defaultTaskTypeRegistry } from './domain/task-type-registry.js'
+// The run-time half of that seam: a custom type's collected form values joined with its
+// descriptor's labels, once per dispatch, for every prompt-assembling path to render.
+export { describeCustomTaskType } from './domain/task-type-context.js'
+export type { CustomTaskFieldContext, CustomTaskTypeContext } from './domain/task-type-context.js'
 
 // Installation-level extension point for initiative PRESETS (mirrors the pipeline / gate
 // registry seams): a preset bundles a create-time form descriptor + planning-pipeline binding

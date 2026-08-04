@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -6,16 +6,21 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import {
+  clearRegisteredPromptFragments,
+  registerPromptFragment,
+} from '@cat-factory/prompt-fragments'
+import {
   collectRegistrationProblems,
   validateRegistrations,
 } from './validation/validateRegistrations.js'
-import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
+import type { AgentRunContext, CustomTaskType, GateRegistry } from '@cat-factory/kernel'
 import {
   defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
   defaultPipelineRegistry,
   defaultStepResolverRegistry,
+  defaultTaskTypeRegistry,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -969,5 +974,91 @@ describe('generative binary integration registry validation', () => {
 
   it('requires at least one content type — a generator that produces nothing is not one', () => {
     expect(problemsFor([{ ...valid, modalities: [] }])).toHaveLength(1)
+  })
+})
+
+describe('custom task types (reusable operations)', () => {
+  const base = {
+    presentation: {
+      label: 'Introduce API',
+      icon: 'i-lucide-plug',
+      color: '#0ea5e9',
+      description: 'Expose functionality over HTTP.',
+    },
+  }
+  const problemsFor = (taskType: CustomTaskType) => {
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register(taskType)
+    return collectRegistrationProblems({
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      taskTypeRegistry,
+    })
+  }
+
+  afterEach(() => clearRegisteredPromptFragments())
+
+  it('resolves defaultFragmentIds against the code pool without complaint', () => {
+    registerPromptFragment({
+      id: 'org.api-guidelines',
+      version: '1.0.0',
+      title: 'Org API guidelines',
+      category: 'Org',
+      summary: 'How this org shapes APIs.',
+      body: 'Plural nouns.',
+    })
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        defaultFragmentIds: ['org.api-guidelines'],
+      }),
+    ).toEqual([])
+  })
+
+  it('WARNS on an unresolvable fragment id, naming both causes it cannot tell apart', () => {
+    // A workspace/account-tier fragment merges per workspace at RUN time, so boot structurally
+    // cannot see one: refusing would reject a legitimate tenant-tier reference, and staying
+    // silent leaves a typo'd id folding nothing for the life of the deployment.
+    const problems = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelnes'],
+    })
+    expect(problems).toHaveLength(1)
+    expect(problems[0]?.severity).toBe('warn')
+    expect(problems[0]?.code).toBe('task_type_unknown_fragment')
+    expect(problems[0]?.message).toContain('org.api-guidelnes')
+    expect(problems[0]?.message).toContain('account/workspace-tier')
+    // A warn never aborts boot; it is reported through `onWarn`.
+    const warned: string[] = []
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelnes'],
+    })
+    expect(() =>
+      validateRegistrations({
+        agentKindRegistry: defaultAgentKindRegistry(),
+        gateRegistry: defaultGateRegistry(),
+        taskTypeRegistry,
+        onWarn: (p) => warned.push(p.code),
+      }),
+    ).not.toThrow()
+    expect(warned).toContain('task_type_unknown_fragment')
+  })
+
+  it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
+    // The pipeline reference is a different bar from the fragment one: an unknown id means the
+    // created task silently falls back to the workspace's positional default pipeline, and
+    // nothing at run time can tell that apart from a deliberate choice.
+    const problems = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultPipelineId: 'pl_nope',
+    })
+    expect(problems[0]?.severity).toBe('error')
+    expect(problems[0]?.code).toBe('task_type_unknown_pipeline')
   })
 })

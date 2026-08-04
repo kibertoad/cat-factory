@@ -47,6 +47,14 @@ else imports its **ports** and domain types from here.
   board snapshot (`WorkspaceService.composeBoard`) and every frame-returning `BoardService`
   mutation project through it; a response that skips it hands the SPA coordinates no board shows
   the frame at, and the SPA upserts them.
+- `domain/task-type-registry.ts` + `domain/task-type-context.ts`: the two halves of the CUSTOM
+  TASK TYPE seam. The registry is what a deployment registers its namespaced types on (the
+  vehicle for a REUSABLE OPERATION: a per-case form, its standing-context `defaultFragmentIds`
+  and its canned `defaultPipelineId`); `describeCustomTaskType` is the run-time projection that
+  joins a block's collected `taskTypeFields.custom` bag with that descriptor's labels for the
+  prompt. The join is VALUE-AUTHORITATIVE on purpose: descriptor and row drift by construction (a
+  node one build behind, a withdrawn type), so an undeclared key renders under its raw key rather
+  than being dropped. See `docs/initiatives/reusable-operations.md`.
 - `domain/llm-phase.ts`: `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
   **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
   free-form and comes from producers the platform does not fully author (a proxy request path, a
