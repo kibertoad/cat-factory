@@ -74,6 +74,18 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicTaskTicketSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicTaskSourceDocument,
+  v.InferOutput<typeof contracts.publicTaskSourceDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskUploadedDocument,
+  v.InferOutput<typeof contracts.publicTaskUploadedDocumentSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicTaskDocument,
+  v.InferOutput<typeof contracts.publicTaskDocumentSchema>
+>()
+expectMutuallyAssignable<
   sdk.StartPublicTask,
   v.InferOutput<typeof contracts.startPublicTaskSchema>
 >()
@@ -155,6 +167,9 @@ const ASSERTED_COMPONENTS = [
   'PublicTask',
   'PublicTaskList',
   'PublicTaskTicket',
+  'PublicTaskSourceDocument',
+  'PublicTaskUploadedDocument',
+  'PublicTaskDocument',
   'CreatePublicTask',
   'StartPublicTask',
   'UpdatePublicTask',
