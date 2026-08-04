@@ -189,6 +189,7 @@
       "title": "הוסף משימה",
       "newTaskIn": "משימה חדשה ב-{container}",
       "typeLabel": "סוג",
+      "typeOther": "אחרים",
       "types": {
         "feature": "תכונה",
         "bug": "באג",

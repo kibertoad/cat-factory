@@ -189,6 +189,7 @@
       "title": "Додати завдання",
       "newTaskIn": "Нове завдання в {container}",
       "typeLabel": "Тип",
+      "typeOther": "Інші",
       "types": {
         "feature": "Функція",
         "bug": "Помилка",

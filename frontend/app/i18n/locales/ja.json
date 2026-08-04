@@ -189,6 +189,7 @@
       "title": "タスクを追加",
       "newTaskIn": "{container} 内の新しいタスク",
       "typeLabel": "種類",
+      "typeOther": "その他",
       "types": {
         "feature": "機能",
         "bug": "バグ",
