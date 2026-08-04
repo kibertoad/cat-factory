@@ -467,8 +467,9 @@ GitLab deployments.
 ## Public-API SDK clients: generated from the spec, never hand-edited
 
 Four official clients for `/api/v1` live under `sdk/` (TypeScript, Python, Go, and Java, which also
-serves Kotlin). The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at any
-link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
+serves Kotlin), plus `sdk/mcp`, an MCP facade projecting the same operations as tools over the
+TypeScript client. The chain is **contracts → `docs/openapi.json` → `sdk/*`** with no hand-editing at
+any link: `pnpm gen:sdk` renders the committed spec, and `pnpm check:sdk` fails CI on drift and version
 skew. Design, the shared client invariants, and the Java/Kotlin trade: [`sdk/README.md`](./sdk/README.md).
 Two rules bite from outside that tree:
 
@@ -476,7 +477,9 @@ Two rules bite from outside that tree:
   and operations are generated; each transport is hand-written beside them.
 - **Adding a `/api/v1` endpoint means adding an entry to `scripts/sdk/surface.mjs`** naming its resource
   group and method. Generation FAILS without one, so a new endpoint cannot ship as an un-callable hole
-  in four clients. `backend/internal/sdk-smoketest` is the only check that can see the four clients
+  in four clients. The same entry becomes an MCP tool with no second decision, except a STREAMING
+  endpoint, which must be named in `MCP_OMITTED_OPERATIONS` with the reason (generation fails on an
+  unclassified one). `backend/internal/sdk-smoketest` is the only check that can see the four clients
   DISAGREE; a scenario step added to one must be added to all four.
 
 ## Migrations

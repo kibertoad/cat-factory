@@ -332,7 +332,7 @@ is SUPPRESSED rather than unmounted, because it holds the running tour's resolve
 remount would re-resolve it against gates that may have flipped since the tour started.
 
 The decisions behind this surface, and why each alternative was rejected, are recorded in
-[ADR 0033](../../backend/docs/adr/0033-in-app-tutorials.md). This section is the authority on how
+[ADR 0036](../../backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
 the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
