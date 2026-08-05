@@ -19,6 +19,7 @@ import type { ChangeClass, ReviewEffort } from '~/types/merge'
 import MergeEffortChips from '~/components/merge/MergeEffortChips.vue'
 import InputGateNotice from '~/components/inputGate/InputGateNotice.vue'
 import { inputGateNoticeFor } from '~/utils/inputGate'
+import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 
 const props = defineProps<{ block: Block }>()
 
@@ -86,6 +87,22 @@ const failedRun = computed(() => {
 // Failures from prior attempts, preserved across retries — shown regardless of the run's
 // CURRENT status, so the error trail stays viewable after a restart clears the top banner.
 const failureHistory = computed(() => agentRuns.byBlock[props.block.id]?.failureHistory ?? [])
+
+/**
+ * Whether this task has a result worth reading in product terms: a pull request, or a step that
+ * recorded evidence. Asked of the shared reduction rather than re-derived here, so the panel and
+ * the board card can never disagree about which runs have an outcome to open.
+ *
+ * The spec is deliberately not loaded for this check: it only ever adds TITLES to requirement
+ * rows, never sections, so nothing about whether there is something to show depends on it. The
+ * window loads it on open.
+ */
+const outcomeReadable = computed(() =>
+  hasOutcomeToShow(composeRunOutcome({ block: props.block, instance: instance.value ?? null })),
+)
+function openOutcome() {
+  ui.openOutcome(props.block.id, instance.value?.id ?? null)
+}
 
 const pr = computed(() => props.block.pullRequest)
 /** A PR is merged once the block is `done`; otherwise it is open awaiting merge. */
@@ -604,6 +621,22 @@ async function mergePr() {
 
     <!-- error trail of prior attempts (survives a retry/restart that cleared the banner) -->
     <AgentFailureHistory :failures="failureHistory" />
+
+    <!-- Read the result: the outcome summary is the way in, and the pull request below is the
+         way to the diff. Offered whenever there is evidence or a PR to read, which includes a
+         merged task whose run instance is long gone. -->
+    <UButton
+      v-if="outcomeReadable"
+      color="primary"
+      variant="soft"
+      size="sm"
+      icon="i-lucide-clipboard-check"
+      block
+      data-testid="inspector-open-outcome"
+      @click="openOutcome"
+    >
+      {{ t('inspector.execution.readOutcome') }}
+    </UButton>
 
     <!-- Open PR: link straight to it on GitHub -->
     <div v-if="pr" class="space-y-2">
