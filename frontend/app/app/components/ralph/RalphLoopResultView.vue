@@ -19,9 +19,6 @@ const { t, d } = useI18n()
 // overlay behaviour.
 const { open, blockId, instanceId, stepIndex, close } = useResultView('ralph-loop')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
-const headerTitle = computed(
-  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
-)
 const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
 
 const instance = computed(() =>
@@ -33,6 +30,9 @@ const step = computed(() => {
 })
 const ralph = computed<RalphStepState | null>(() => step.value?.ralph ?? null)
 const meta = computed(() => agentKindMeta('ralph'))
+const headerTitle = computed(
+  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
+)
 
 // Iterations, newest-first for the timeline.
 const attempts = computed(() => [...(ralph.value?.attemptLog ?? [])].reverse())

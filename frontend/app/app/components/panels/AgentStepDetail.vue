@@ -200,15 +200,10 @@ function openDedicatedWindow() {
   else if (park === 'fork-decision') ui.openForkDecision(c.instanceId, c.stepIndex)
 }
 
-function close() {
-  // Reset the approval-mode sub-states so reopening the same step is clean
-  // (the step-change watch only fires when the step key actually changes).
-  approval.resetForClose()
-  ui.closeStepDetail()
-}
-
 // The GitHub-style approval/review state machine for a pending gate step. A park a
 // dedicated window owns is NOT reviewable here, so it doesn't count as pending.
+// (`close` is passed by hoisted function reference; it's declared below `approval`,
+// which it resets.)
 const approval = useStepApproval({
   step: () => step.value,
   scrollEl: () => scrollEl.value,
@@ -245,6 +240,13 @@ const {
   disarmReject,
   reject,
 } = approval
+
+function close() {
+  // Reset the approval-mode sub-states so reopening the same step is clean
+  // (the step-change watch only fires when the step key actually changes).
+  approval.resetForClose()
+  ui.closeStepDetail()
+}
 
 /**
  * Why the gate refuses this viewer, worded for them. An exhaustive Record over the shared refusal
