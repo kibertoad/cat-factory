@@ -4,6 +4,7 @@ import type {
   ExecutionInstance,
   Logger,
   PrReportIssue,
+  PrReportTarget,
   PrVerificationReportPublisher,
   ProvisioningLogRepository,
   ResolveRunRepoContext,
@@ -14,6 +15,7 @@ import type {
 import { DEFAULT_WORKSPACE_SETTINGS, describeError } from '@cat-factory/kernel'
 import { readServiceSpec } from '@cat-factory/agents'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
+import type { PrVerificationReport } from '@cat-factory/contracts'
 import { composePrVerificationReport, renderPrVerificationReport } from './prReport.logic.js'
 import type { ProvisioningLifecycleRead } from './prReport.environments.js'
 import { isTesterKind } from './ci.logic.js'
@@ -54,6 +56,11 @@ const PROVISIONING_EVENT_LIMIT = 200
  * Every failure mode is a silent no-op: no publisher wired (tests, a no-VCS deployment), no
  * PR yet, an unchanged report, or a transport error. Publishing a report must never fail a
  * run that otherwise succeeded.
+ *
+ * The same composition also answers the public read (`GET /api/v1/runs/:runId/report`) through
+ * {@link PrVerificationReportController.composeForRun}, which is why there is no second
+ * API-shaped projection of these facts: two composers is how a pull request and an API start
+ * disagreeing about what a run proved.
  */
 export interface PrVerificationReportControllerDeps {
   blockRepository: BlockRepository
@@ -92,8 +99,9 @@ export interface PrVerificationReportControllerDeps {
   appBaseUrl?: string
   /**
    * Optional: this deployment's own externally-reachable BACKEND base URL (`PUBLIC_URL` on Node,
-   * `WORKER_PUBLIC_URL` on the Worker), used to build direct links to the bytes of the artifacts
-   * the report lists. Absent ⇒ the rows carry their artifact ids and no link.
+   * `WORKER_PUBLIC_URL` on the Worker), used to build every link a MACHINE follows: the bytes of
+   * the artifacts the report lists, the run's tool-call trajectory, and the report itself served
+   * live. Absent ⇒ those fields are null and the report states the ids alone.
    *
    * Deliberately separate from {@link appBaseUrl}: the two are the same origin on a same-origin
    * deployment and different ones the moment the SPA is served from its own host, and a link built
@@ -154,31 +162,16 @@ export class PrVerificationReportController {
       const target = await publisher.resolveTarget(workspaceId, instance.blockId)
       if (!target) return
 
-      const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
+      const report = await this.compose(workspaceId, instance, target)
       // Only a task carries an implementation PR; a frame/module run has nothing to report on.
-      if (!block) return
+      if (!report) return
 
-      const section = renderPrVerificationReport(
-        composePrVerificationReport(instance, {
-          block,
-          issues: await this.linkedIssues(workspaceId, instance.blockId),
-          repo: target.repo,
-          provider: target.provider,
-          runUrl: this.deepLink(workspaceId, instance, 'observability'),
-          spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
-          environments: {
-            provisioning: await this.provisioningEvents(workspaceId, instance),
-            evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
-            artifactUrl: (artifactId) => this.artifactUrl(workspaceId, artifactId),
-          },
-          now: this.deps.clock.now(),
-        }),
-      )
+      const section = renderPrVerificationReport(report)
       // `generatedAt` changes on every compose, so compare the section with it masked out —
       // otherwise the cache would never hit and every step would edit the PR.
       const fingerprint = section.replaceAll(/"generatedAt": \d+/g, '"generatedAt": 0')
       if (this.lastPublished.get(instance.id) === fingerprint) return
-      await publisher.publish(workspaceId, block.id, section)
+      await publisher.publish(workspaceId, instance.blockId, section)
       this.remember(instance.id, fingerprint)
     } catch (error) {
       // A PR-report write is bookkeeping. A provider outage, a revoked token, or a PR someone
@@ -190,6 +183,82 @@ export class PrVerificationReportController {
         workspaceId,
       })
     }
+  }
+
+  /**
+   * The same report, composed for a READER rather than for the pull request
+   * (`GET /api/v1/runs/:runId/report`). Null when the run's block is gone, which is the only way
+   * a run has nothing to report on.
+   *
+   * Three differences from {@link publishForRun}, each deliberate:
+   *  - **A run with no pull request still gets a report.** The publish path short-circuits on an
+   *    unresolved target because there is nowhere to write; a reader is asking about the RUN, and
+   *    a headless job or a run that failed before it pushed is exactly the case a PR-body-scraping
+   *    consumer could never see. An unresolved target simply leaves `repo`/`provider` null.
+   *  - **The per-workspace opt-out is not consulted.** `publishPrVerificationReport` says whether
+   *    this deployment writes onto someone's pull request, which is a statement about a REMOTE
+   *    surface; it was never a statement about whether the workspace's own evidence may be read
+   *    back over an authenticated, workspace-scoped key.
+   *  - **Failures are not swallowed.** Publishing is bookkeeping that must never fail a run; a
+   *    read that cannot answer must say so rather than hand back a report with holes in it that
+   *    look like findings.
+   *
+   * WHAT A CALLER IS BUYING. Composition is not free and this is the one `/api/v1` read that can
+   * reach OUTSIDE the deployment: a run whose tester reported pulls the service's `spec/` tree off
+   * the run's branch over the VCS API ({@link PrVerificationReportController.serviceSpec}), which
+   * is memoised per run but only within one process, so a Worker isolate that has not seen the run
+   * pays it again. Everything else is a handful of indexed row reads. That cost is accepted rather
+   * than dodged: dropping the spec join on the read path would make the API answer differ from the
+   * pull-request body, and one report with two contents is the exact failure serving the report
+   * verbatim exists to prevent. It is stated in `backend/docs/public-api.md` so an integration
+   * polling every run knows what it is asking for, and left OUT of the app-cache seam on purpose,
+   * since the branch it reads keeps moving and the seam is pass-through for mutable state on the
+   * Worker anyway: a cache there would add a coherence problem without removing the fetch.
+   */
+  async composeForRun(
+    workspaceId: string,
+    instance: ExecutionInstance,
+  ): Promise<PrVerificationReport | null> {
+    const target = (await this.deps.publisher?.resolveTarget(workspaceId, instance.blockId)) ?? null
+    return this.compose(workspaceId, instance, target)
+  }
+
+  /**
+   * Build the report from the run's state plus whatever the publisher resolved about where it
+   * lands. Null when the block is gone.
+   *
+   * The block is read here even though {@link PrVerificationReportPublisher.resolveTarget} has
+   * just read it too, and that second point read is deliberate rather than overlooked: threading
+   * the row through would mean this controller deciding which pull request is the block's, the one
+   * judgement `GitHubPrReportPublisher` re-resolves self-containedly precisely so nothing else
+   * forms a second opinion about it. Duplicating that rule to save one indexed read by primary key
+   * is a bad trade, and it is two reads, never a per-item one.
+   */
+  private async compose(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    target: PrReportTarget | null,
+  ): Promise<PrVerificationReport | null> {
+    const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
+    if (!block) return null
+    return composePrVerificationReport(instance, {
+      block,
+      issues: await this.linkedIssues(workspaceId, instance.blockId),
+      repo: target?.repo ?? null,
+      provider: target?.provider ?? null,
+      runUrl: this.deepLink(workspaceId, instance, 'observability'),
+      trajectoryUrl: this.apiLink(
+        `/api/v1/debug/runs/${encodeURIComponent(instance.id)}/tool-calls?order=trajectory`,
+      ),
+      reportUrl: this.apiLink(`/api/v1/runs/${encodeURIComponent(instance.id)}/report`),
+      spec: await this.serviceSpec(workspaceId, instance, block.pullRequest?.branch),
+      environments: {
+        provisioning: await this.provisioningEvents(workspaceId, instance),
+        evidenceUrl: this.deepLink(workspaceId, instance, 'test-evidence'),
+        artifactUrl: (artifactId) => this.artifactUrl(workspaceId, artifactId),
+      },
+      now: this.deps.clock.now(),
+    })
   }
 
   /** Record the published fingerprint, evicting the oldest entry once the cap is reached. */
@@ -365,9 +434,22 @@ export class PrVerificationReportController {
    * and the same one the app deep link beside it produces.
    */
   private artifactUrl(workspaceId: string, artifactId: string): string | null {
+    return this.apiLink(
+      `/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/blob`,
+    )
+  }
+
+  /**
+   * An absolute link to one of this deployment's own backend endpoints, or null when no public
+   * backend URL is configured (in which case the report states the ids and no link, rather than
+   * a link to nowhere).
+   *
+   * `path` is already-encoded and starts with `/`. Built by hand rather than with `URL`, for the
+   * reason {@link deepLink} gives: orchestration is runtime-neutral and compiles without the DOM.
+   */
+  private apiLink(path: string): string | null {
     const base = this.deps.apiBaseUrl?.trim()
-    if (!base) return null
-    return `${base.replace(/\/$/, '')}/workspaces/${encodeURIComponent(workspaceId)}/artifacts/${encodeURIComponent(artifactId)}/blob`
+    return base ? `${base.replace(/\/$/, '')}${path}` : null
   }
 
   private deepLink(

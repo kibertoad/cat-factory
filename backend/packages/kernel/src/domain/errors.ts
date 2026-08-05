@@ -30,8 +30,19 @@ export class DomainError extends Error {
 
 /** A referenced entity does not exist (→ 404). */
 export class NotFoundError extends DomainError {
-  constructor(entity: string, id: string) {
-    super('not_found', `${entity} '${id}' not found`)
+  constructor(
+    entity: string,
+    id: string,
+    /**
+     * Optional machine-readable context (a `reason` code), mirroring {@link ValidationError} and
+     * {@link UnavailableError}. It earns its place where ONE endpoint answers 404 for causes that
+     * need different reactions: the artifact blob route refuses both an id its workspace does not
+     * hold and a row whose bytes are gone from the blob backend, and only a reason tells a caller
+     * whether to stop asking or to report a storage fault.
+     */
+    details?: Record<string, unknown>,
+  ) {
+    super('not_found', `${entity} '${id}' not found`, details)
   }
 }
 

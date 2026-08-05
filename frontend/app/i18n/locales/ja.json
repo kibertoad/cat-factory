@@ -3083,6 +3083,7 @@
         "neverUsed": "未使用",
         "createdBy": "作成者: {user}",
         "createdByYou": "あなた",
+        "createdByKey": "APIキー {id}",
         "revoke": "トークンを取り消す"
       },
       "add": {

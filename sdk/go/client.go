@@ -242,13 +242,24 @@ const (
 	// legitimately outlives any per-request deadline by minutes. Bounding it cut every stream at
 	// Timeout (30s by default) with `context deadline exceeded`, on a run that was fine.
 	streamResponse
+	// bytesResponse is an opaque binary body (an artifact download). Bounded like a unary
+	// response: the body is finite and its exact size was known to the caller before it asked,
+	// because the listing that handed out the id carries each artifact's byteSize.
+	bytesResponse
 )
 
 func (k responseKind) accept() string {
-	if k == streamResponse {
+	switch k {
+	case streamResponse:
 		return "text/event-stream"
+	case bytesResponse:
+		// The endpoint declares SEVERAL media types (the image allow-list plus an
+		// application/octet-stream fallback) and answers with whichever one the stored artifact
+		// is, so naming any single one would disagree with most of what it sends.
+		return "*/*"
+	default:
+		return "application/json"
 	}
-	return "application/json"
 }
 
 // attemptDeadline applies the client Timeout at the scope the responseKind calls for.
@@ -274,7 +285,7 @@ func (c *Client) startAttempt(ctx context.Context, kind responseKind) *attemptDe
 	// caller's cancellation after the fact — which is what lets the error below be classified as
 	// a timeout rather than collapsing into a generic connection failure.
 	deadline.timer = time.AfterFunc(c.timeout, func() { cancel(context.DeadlineExceeded) })
-	if kind == unaryResponse {
+	if kind != streamResponse {
 		return deadline
 	}
 	deadline.stopOnHeaders = true
@@ -407,6 +418,26 @@ func (c *Client) requestNoContent(ctx context.Context, spec requestSpec) error {
 	// Drain, so the connection returns to the pool rather than being dropped.
 	_, _ = io.Copy(io.Discard, response.Body)
 	return nil
+}
+
+// requestBytes performs a request whose success carries BYTES rather than JSON.
+//
+// Read whole rather than handed back as a ReadCloser: the listing endpoint that hands out these
+// ids also carries each artifact's exact byteSize, so a caller decides whether to fetch before
+// issuing the request, and returning an open body would push lifetime management onto every
+// caller for no gain.
+func (c *Client) requestBytes(ctx context.Context, spec requestSpec) ([]byte, error) {
+	response, err := c.do(ctx, spec, bytesResponse, c.maxRetries)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, &ConnectionError{Method: spec.Method, Path: spec.Path, Err: err}
+	}
+	return body, nil
 }
 
 // stream opens a server-sent event stream.

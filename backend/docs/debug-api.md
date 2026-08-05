@@ -54,10 +54,14 @@ searched page spends its `limit` on matches only.
 
 Considered against the more resource-oriented alternatives and kept deliberately:
 
-- **Not `/api/v1/runs/:id/…`**: that prefix belongs to the task-scoped public surface
-  (`PublicDecisionController`), which resolves runs through the narrower `loadScopedRun`. Mounting
-  reads with a _different_ (workspace-wide) authorization rule under the same resource path would
-  put two access semantics behind one name, which is a trap for both callers and reviewers.
+- **Not `/api/v1/runs/:id/…`**: that prefix belongs to the task-scoped public surface (the parked
+  decisions, and the run-evidence reads that later joined them), which resolves runs through the
+  narrower `loadScopedRun`. Mounting reads with a _different_ (workspace-wide) authorization rule
+  under the same resource path would put two access semantics behind one name, which is a trap for
+  both callers and reviewers. That rule is why
+  [`GET /api/v1/runs/:runId/report`](./public-api.md#run-evidence-report--artifacts) took the
+  NARROWER scope rather than this surface's, despite serving a similar audience: what decides a
+  path's authorization model is the path, not the feature.
 - **Not `/observability` or `/telemetry`**: those name the _capture_ subsystems, and this surface
   is neither: the run index and the provisioning log are not telemetry, and what is served here
   is a purpose-built diagnostic **projection** (budgeted slices, derived signals, availability

@@ -2942,6 +2942,7 @@
         "neverUsed": "nigdy nie użyto",
         "createdBy": "utworzone przez {user}",
         "createdByYou": "Ciebie",
+        "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token"
       },
       "add": {

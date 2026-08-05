@@ -61,9 +61,16 @@ language renders it.
 
 **Adding an endpoint to `/api/v1` requires an entry in `surface.mjs`.** Generation fails without
 one, so a new endpoint cannot ship as an un-callable hole in four SDKs. It becomes an MCP tool from
-that same entry, with no second decision — except for a STREAMING endpoint, which a tool call has
-no channel for and which must therefore be named in `MCP_OMITTED_OPERATIONS` with the reason a
-caller should read. Generation fails on an unclassified one.
+that same entry, with no second decision, except for an endpoint whose response a tool call has no
+shape for (a STREAM, or a raw BYTE body), which must be named in `MCP_OMITTED_OPERATIONS` with the
+reason a caller should read. Generation fails on an unclassified one.
+
+**A response body that is not JSON needs a branch in every emitter, not a default.** The IR marks
+each operation `stream` (SSE) or `binary` (an artifact download) from the spec's own media type,
+and each transport hands the body back in its language's idiom (`Uint8Array`, `bytes`, `[]byte`,
+`byte[]`). A media type no emitter knows FAILS generation rather than falling through: the fallback
+was a method that silently returned nothing, which compiles, ships, and discards the body a caller
+asked for.
 
 ## Design rules the four share
 

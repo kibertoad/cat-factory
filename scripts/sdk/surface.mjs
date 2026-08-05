@@ -89,6 +89,16 @@ const SURFACE = {
   approvePublicRunVisualConfirm: { group: 'decisions', method: 'approveVisualConfirmation' },
   requestPublicRunVisualConfirmFix: { group: 'decisions', method: 'requestVisualConfirmationFix' },
 
+  // ---- Run evidence (`read` scope; what a run PROVED, for a consumer that has to judge it) --
+  getPublicRunReport: { group: 'evidence', method: 'getReport' },
+  listPublicRunArtifacts: { group: 'evidence', method: 'listArtifacts' },
+  getPublicArtifactBlob: { group: 'evidence', method: 'downloadArtifact' },
+
+  // ---- Headless key provisioning (`admin` scope) ------------------------------------------
+  listPublicKeys: { group: 'keys', method: 'list' },
+  createPublicKey: { group: 'keys', method: 'create' },
+  revokePublicKey: { group: 'keys', method: 'revoke' },
+
   // ---- Run diagnostics (`read` scope; the surface an operator or an LLM debugs a run with) -
   listDebugRuns: { group: 'debug', method: 'listRuns', paginates: 'runs' },
   getDebugRun: { group: 'debug', method: 'getRun' },
@@ -116,6 +126,10 @@ const SURFACE = {
  * absence reads as an oversight and a caller writes it off as unsupported.
  */
 export const MCP_OMITTED_OPERATIONS = {
+  getPublicArtifactBlob:
+    'A tool result is text or a declared content block, not an arbitrary byte stream, so an ' +
+    'image download has no honest shape here. Call `evidence_list_artifacts` for the ids, sizes ' +
+    'and content types, and fetch the bytes over HTTP (or through an SDK) with the same key.',
   streamPublicJobEvents:
     'A tool call returns one result, so it has no channel to stream an open-ended event feed ' +
     'over. Poll `jobs_get` instead, or consume the SSE endpoint through an SDK.',
@@ -176,6 +190,9 @@ export const GROUP_DOCS = {
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
   debug:
     "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
+  evidence:
+    "What a run proved: the engine's verification report and the artifacts it captured, bytes included.",
+  keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 
 /** The resource groups in emission order. */
