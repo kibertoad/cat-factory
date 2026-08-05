@@ -44,7 +44,7 @@ tool calls to start at, a recorded loop with none in it (so what is left is the 
 trajectory at all — which is unrecorded rather than uneventful, and was previously indistinguishable
 from a clean one.
 
-Public API 1.11.0 → 1.12.0, additive: `?ok=true|false` on `GET /api/v1/debug/runs/:runId/tool-calls`
+Public API 1.12.0 → 1.13.0, additive: `?ok=true|false` on `GET /api/v1/debug/runs/:runId/tool-calls`
 (both orders, applied in SQL, because a caller filtering a page itself has already spent that page's
 `limit` on the calls that worked) and the `toolCalls` block on the run overview. The four SDK clients
 and the MCP facade are regenerated. Worth a reviewer's attention: `countByExecution` is gone from the

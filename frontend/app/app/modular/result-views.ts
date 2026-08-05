@@ -1,6 +1,7 @@
 import type { Component } from 'vue'
 import { defineModule } from '@modular-vue/core'
 import { RESULT_VIEW_IDS, type ResultViewId } from '@cat-factory/contracts'
+import OutcomeSummaryWindow from '~/components/outcome/OutcomeSummaryWindow.vue'
 import RequirementsReviewWindow from '~/components/requirements/RequirementsReviewWindow.vue'
 import ClarityReviewWindow from '~/components/clarity/ClarityReviewWindow.vue'
 import BrainstormWindow from '~/components/brainstorm/BrainstormWindow.vue'
@@ -51,6 +52,9 @@ import type { ResultViewContribution } from './slots'
  * that could ship. Consumer namespaced ids are validated separately by `pairById`.
  */
 const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
+  // The run's non-code outcome summary: what changed in product terms, with the captured
+  // evidence, and the diff one click away. RUN-keyed (no step), opened by `ui.openOutcome`.
+  outcome: OutcomeSummaryWindow,
   'requirements-review': RequirementsReviewWindow,
   'clarity-review': ClarityReviewWindow,
   // Shared by both brainstorm stages (requirements + architecture); the window reads the stage.

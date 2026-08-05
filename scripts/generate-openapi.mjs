@@ -35,10 +35,19 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-// 1.12.0: additive only, on the run-debugging surface — a new `ok` filter on the tool-call list
-// and a `toolCalls` rollup on the run overview. Checked against `origin/main` (1.11.0) rather than
-// bumped on trust, per the collision note above.
-const API_VERSION = '1.12.0'
+// 1.11.0, not 1.10.0: main reached 1.10.0 while this branch was in flight (the run-evidence and
+// key-provisioning operations), and that number is already published against a surface WITHOUT the
+// follow-up and interview operations added here. The same collision the note above describes, the
+// second time in three releases.
+// 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
+// so a consumer built against 1.11.0 keeps parsing.
+// 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
+// tool-call list and a `toolCalls` rollup on the run overview), but main reached 1.12.0 with
+// `configUnreadable` while this branch was in flight. The collision note above, arriving exactly
+// as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
+// only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
+// that clean merge.
+const API_VERSION = '1.13.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
