@@ -22,22 +22,18 @@ type Entry =
 // clock-fallback `occurredAt`).
 const entries = computed<Entry[]>(() =>
   [
-    ...props.failures.map(
-      (failure, i): Entry => ({
-        kind: 'failure',
-        key: `failure-${i}`,
-        occurredAt: failure.occurredAt,
-        failure,
-      }),
-    ),
-    ...props.outputs.map(
-      (output, i): Entry => ({
-        kind: 'success',
-        key: `success-${i}`,
-        occurredAt: output.occurredAt,
-        output,
-      }),
-    ),
+    ...props.failures.map((failure, i): Entry => ({
+      kind: 'failure',
+      key: `failure-${i}`,
+      occurredAt: failure.occurredAt,
+      failure,
+    })),
+    ...props.outputs.map((output, i): Entry => ({
+      kind: 'success',
+      key: `success-${i}`,
+      occurredAt: output.occurredAt,
+      output,
+    })),
   ].sort((a, b) => b.occurredAt - a.occurredAt),
 )
 </script>

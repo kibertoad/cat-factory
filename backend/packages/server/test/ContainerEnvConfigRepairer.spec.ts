@@ -118,12 +118,10 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair maps a running view to a progress update', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'running',
-          progress: { completed: 1, inProgress: 1, total: 3 },
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'running',
+        progress: { completed: 1, inProgress: 1, total: 3 },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -148,12 +146,10 @@ describe('ContainerEnvConfigRepairer', () => {
     // "(container evicted or crashed)" text alone is NOT classified (error-message coverage I5).
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'failed',
-          error: 'container evicted or crashed',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'container evicted or crashed',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -206,12 +202,10 @@ describe('ContainerEnvConfigRepairer', () => {
     // timeout now, so a watchdog-worded error with no cause coarsens to `agent`, not `timeout`.
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'failed',
-          error: 'aborted: no agent activity for too long',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'aborted: no agent activity for too long',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -223,9 +217,10 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair treats a completed job with a structured error as a failure', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({ state: 'done', result: { error: 'push rejected' } }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -238,13 +233,11 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair prefers the harness cause on a completed-with-error view (git push fault)', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'done',
-          result: { error: 'push rejected' },
-          failureCause: 'git',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+        failureCause: 'git',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 

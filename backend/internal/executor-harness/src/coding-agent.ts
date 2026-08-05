@@ -1101,40 +1101,36 @@ export async function runMultiRepoCoding(
       baseSha: '',
       resumed: false,
     },
-    ...peers.map(
-      (peer): RepoLeg => ({
-        repo: peer.repo,
-        dirName: claimDir(peer.repo),
-        dir: '',
-        cloneBranch: peer.repo.baseBranch,
-        // Coding peers always carry `newBranch` (the backend sets the shared work branch);
-        // fall back to the primary's for the type (read-only peers never reach this path).
-        workBranch: peer.newBranch ?? primaryWorkBranch,
-        ghToken: peer.ghToken ?? job.ghToken,
-        ...(peer.pr ? { pr: peer.pr } : {}),
-        ...(peer.frameId ? { frameId: peer.frameId } : {}),
-        primary: false,
-        baseSha: '',
-        resumed: false,
-      }),
-    ),
+    ...peers.map((peer): RepoLeg => ({
+      repo: peer.repo,
+      dirName: claimDir(peer.repo),
+      dir: '',
+      cloneBranch: peer.repo.baseBranch,
+      // Coding peers always carry `newBranch` (the backend sets the shared work branch);
+      // fall back to the primary's for the type (read-only peers never reach this path).
+      workBranch: peer.newBranch ?? primaryWorkBranch,
+      ghToken: peer.ghToken ?? job.ghToken,
+      ...(peer.pr ? { pr: peer.pr } : {}),
+      ...(peer.frameId ? { frameId: peer.frameId } : {}),
+      primary: false,
+      baseSha: '',
+      resumed: false,
+    })),
     // Read-only reference repos (doc-writer): cloned as siblings the agent reads but never writes.
     // `workBranch` is set to the base only to satisfy the type — a read-only leg never branches or
     // pushes (guarded by `readOnly` in both the clone and push phases below).
-    ...references.map(
-      (reference): RepoLeg => ({
-        repo: reference.repo,
-        dirName: claimDir(reference.repo),
-        dir: '',
-        cloneBranch: reference.repo.baseBranch,
-        workBranch: reference.repo.baseBranch,
-        ghToken: reference.ghToken ?? job.ghToken,
-        primary: false,
-        readOnly: true,
-        baseSha: '',
-        resumed: false,
-      }),
-    ),
+    ...references.map((reference): RepoLeg => ({
+      repo: reference.repo,
+      dirName: claimDir(reference.repo),
+      dir: '',
+      cloneBranch: reference.repo.baseBranch,
+      workBranch: reference.repo.baseBranch,
+      ghToken: reference.ghToken ?? job.ghToken,
+      primary: false,
+      readOnly: true,
+      baseSha: '',
+      resumed: false,
+    })),
   ]
 
   return withWorkspace('multi', async (root) => {

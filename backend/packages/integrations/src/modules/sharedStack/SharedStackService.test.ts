@@ -293,16 +293,15 @@ describe('SharedStackService — bring-up and teardown', () => {
       prerequisites: [{ check: 'mkcert-ca' }],
     })
     const { runtime, calls, checkouts } = makeRuntime()
-    const runPreflights = vi.fn(
-      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
-        refs.map((r) => ({
-          check: r.check,
-          title: 'mkcert local CA installed',
-          status: 'fail',
-          required: true,
-          detail: 'CA not in trust store',
-          remediation: 'Run `mkcert -install`.',
-        })),
+    const runPreflights = vi.fn(async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+      refs.map((r) => ({
+        check: r.check,
+        title: 'mkcert local CA installed',
+        status: 'fail',
+        required: true,
+        detail: 'CA not in trust store',
+        remediation: 'Run `mkcert -install`.',
+      })),
     )
     const result = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)
     expect(result.status).toBe('failed')
@@ -320,15 +319,14 @@ describe('SharedStackService — bring-up and teardown', () => {
       prerequisites: [{ check: 'mkcert-ca' }, { check: 'registry-auth', required: false }],
       healthGate: { kind: 'compose-exec', service: 'app', command: ['health'] },
     })
-    const runPreflights = vi.fn(
-      async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
-        refs.map((r) => ({
-          check: r.check,
-          title: r.check,
-          // A non-required check downgrades to an advisory `warn`, which must NOT block.
-          status: r.required === false ? 'warn' : 'pass',
-          required: r.required ?? true,
-        })),
+    const runPreflights = vi.fn(async (refs: PreflightRef[]): Promise<PreflightResult[]> =>
+      refs.map((r) => ({
+        check: r.check,
+        title: r.check,
+        // A non-required check downgrades to an advisory `warn`, which must NOT block.
+        status: r.required === false ? 'warn' : 'pass',
+        required: r.required ?? true,
+      })),
     )
     const { runtime } = makeRuntime()
     const up = await makeService(repo, runtime, { runPreflights }).ensureUp(WS, created.id)

@@ -322,9 +322,12 @@ export function defineValidationChecksConformance(harness: ConformanceHarness): 
       /** An in-memory repo root: one listing plus the manifests the detector asks for. */
       const fakeRepo = (files: Record<string, string>): RepoFiles => ({
         listDirectory: async () =>
-          Object.keys(files).map(
-            (name): RepoContentEntry => ({ path: name, name, type: 'file', sha: `sha-${name}` }),
-          ),
+          Object.keys(files).map((name): RepoContentEntry => ({
+            path: name,
+            name,
+            type: 'file',
+            sha: `sha-${name}`,
+          })),
         getFile: async (path) =>
           files[path] === undefined ? null : { content: files[path], sha: `sha-${path}` },
         headSha: async () => 'base-sha',

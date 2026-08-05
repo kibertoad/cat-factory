@@ -15,20 +15,19 @@ import {
  * the shape a host that omits sizes from its listings produces.
  */
 function treeLister(tree: Record<string, string[]>, sizes: Record<string, number> = {}) {
-  return vi.fn(
-    async (path: string): Promise<RepoContentEntry[]> =>
-      (tree[path] ?? []).map((name) => {
-        const isDir = name.endsWith('/')
-        const base = isDir ? name.slice(0, -1) : name
-        const entryPath = path ? `${path}/${base}` : base
-        return {
-          path: entryPath,
-          name: base,
-          type: isDir ? 'dir' : 'file',
-          sha: `sha-${base}`,
-          size: sizes[entryPath],
-        }
-      }),
+  return vi.fn(async (path: string): Promise<RepoContentEntry[]> =>
+    (tree[path] ?? []).map((name) => {
+      const isDir = name.endsWith('/')
+      const base = isDir ? name.slice(0, -1) : name
+      const entryPath = path ? `${path}/${base}` : base
+      return {
+        path: entryPath,
+        name: base,
+        type: isDir ? 'dir' : 'file',
+        sha: `sha-${base}`,
+        size: sizes[entryPath],
+      }
+    }),
   )
 }
 
