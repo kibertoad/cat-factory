@@ -64,19 +64,16 @@ migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
 # transactional state for that budget. Its schema ships with the worker package under
 # audit-migrations/.
 #
-# ACTION REQUIRED BEFORE THIS MERGES: provision it once and paste the id below.
-#   wrangler d1 create cat_factory_audit
-# (`db:migrate:remote` then applies its lineage, along with the other databases'.)
+# Provision it once with `wrangler d1 create cat_factory_audit` and paste its id here;
+# `db:migrate:remote` then applies its lineage along with the other databases'.
 #
-# The placeholder is not a soft default. `wrangler deploy` validates every D1 id against the API,
-# so leaving it would fail the automated deploy on merge; CI's "Guard deploy placeholders" step
-# refuses it on the PR instead. And a Worker that somehow shipped with the binding ABSENT would
-# not degrade to "unaudited": the container build requires it, so every request would answer the
-# misconfiguration screen (`/ready` names which binding it is).
+# Required means required: a Worker that shipped with this binding ABSENT would not degrade to
+# "unaudited", it would fail to build the container, so every request answers the misconfiguration
+# screen (`/ready` names which binding it is).
 [[d1_databases]]
 binding = "AUDIT_DB"
 database_name = "cat_factory_audit"
-database_id = "REPLACE_WITH_cat_factory_audit_DATABASE_ID"
+database_id = "ba0ae32f-0406-4ecf-8a1a-e0372db1b680"
 migrations_dir = "node_modules/@cat-factory/worker/audit-migrations"
 
 # OPTIONAL: SEPARATE D1 database for the high-churn provisioning event log (its own binding
