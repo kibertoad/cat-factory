@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -15,6 +16,7 @@ import org.jspecify.annotations.Nullable;
  * @param findings the {@code findings} field.
  * @param maxBounces the {@code maxBounces} field.
  * @param model Always present; {@code null} when the server has no value for it.
+ * @param modelPin May be absent entirely.
  * @param rubricName Always present; {@code null} when the server has no value for it.
  * @param rubricOverridden the {@code rubricOverridden} field.
  * @param score Always present; {@code null} when the server has no value for it.
@@ -35,6 +37,9 @@ public record PrReportJudge(
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("model") @Nullable String model,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("modelPin") @Nullable PrReportJudgeModelPin modelPin,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("rubricName") @Nullable String rubricName,
@@ -70,6 +75,7 @@ public record PrReportJudge(
         private @Nullable List<PublicJudgeFinding> findings;
         private @Nullable Double maxBounces;
         private @Nullable String model;
+        private @Nullable PrReportJudgeModelPin modelPin;
         private @Nullable String rubricName;
         private @Nullable Boolean rubricOverridden;
         private @Nullable Double score;
@@ -104,6 +110,12 @@ public record PrReportJudge(
         /** Set {@code model}. */
         public Builder model(@Nullable String model) {
             this.model = model;
+            return this;
+        }
+
+        /** Set {@code modelPin}. */
+        public Builder modelPin(@Nullable PrReportJudgeModelPin modelPin) {
+            this.modelPin = modelPin;
             return this;
         }
 
@@ -145,7 +157,7 @@ public record PrReportJudge(
 
         /** Build the {@link PrReportJudge}. */
         public PrReportJudge build() {
-            return new PrReportJudge(bounces, disposition, findings, maxBounces, model, rubricName, rubricOverridden, score, stepKind, summary, threshold);
+            return new PrReportJudge(bounces, disposition, findings, maxBounces, model, modelPin, rubricName, rubricOverridden, score, stepKind, summary, threshold);
         }
     }
 }

@@ -4665,6 +4665,7 @@
     "threshold": "seuil {threshold}",
     "thresholdHint": "Le score que cette etape devait atteindre, issu de la politique de fusion de la tache. En dessous, le juge renvoie le travail a l'etape qui l'a produit avec ses constats a reprendre, ou met l'execution en attente pour vous quand il ne reste plus de budget de tentatives.",
     "rubricOverridden": "grille de l'espace de travail",
+    "modelPinUnavailable": "Cette revue a été écrite pour le modèle {model}, que ce déploiement ne peut pas exécuter : un autre modèle a donc noté le travail.",
     "reworkRounds": "reprise {spent}/{budget}",
     "findingsHeading": "Ce que la grille a signalé",
     "roundsHeading": "Tours de revue",

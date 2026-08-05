@@ -412,6 +412,9 @@ judgeRegistry.register('scope-adherence', () => ({
   // Optional: your own valibot schema's parser (kernel carries no valibot dep). Defaults to the
   // contract's `judgeVerdictSchema` (score + summary + findings).
   parseVerdict: scopeVerdict.parse,
+  // Optional: the CATALOG MODEL ID this rubric was authored for. A default, not a seizure: a
+  // task's own pinned model and a preset row naming this kind both still win.
+  modelId: 'claude-opus',
   // What a verdict BELOW the task's threshold does: park for a human, bounce the producing step
   // with the findings as its rework brief, or fail the run.
   onFail: 'bounce',
@@ -431,7 +434,7 @@ so a TASK can relax it), the bounce budget (`judgeMaxBounces`), the park + its `
 card, the persistence (all state rides `step.judge`, so it is runtime-symmetric with no table),
 the result window (the shared `judge` view), or the PR-report section.
 
-Three rules worth knowing before you register one:
+Four rules worth knowing before you register one:
 
 - **Unwired is a pass-through.** With no assessment model configured, every judge step records
   `status: 'skipped'` with a note and advances, so adding a judge to a pipeline can never break
@@ -441,6 +444,12 @@ Three rules worth knowing before you register one:
 - **An unreadable assessment is a FAILING verdict**, not a crashed run: a thrown parse or a
   provider outage becomes a score-0 verdict that reaches a human. For a gate that blocks work,
   "I could not tell" must land on the cautious side.
+- **The model resolves under YOUR kind, and your `modelId` is one layer of that**: the task's
+  pinned model, then a workspace preset override naming your kind (your judge is its own row in
+  the model-defaults panel), then your `modelId`, then the preset's base model. An id this
+  deployment cannot serve does not silently become the base model: the assessment runs on the
+  default and `step.judge.modelPin` records `unavailable`, which the judge window and the PR
+  report both call out.
 
 Full design + the deliberate non-goals (the `merger` is NOT rewritten onto this):
 [`../../docs/initiatives/judge-registry.md`](../../docs/initiatives/judge-registry.md).

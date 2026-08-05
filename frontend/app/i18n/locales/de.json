@@ -5523,6 +5523,7 @@
     "threshold": "Schwellenwert {threshold}",
     "thresholdHint": "Der Wert, den dieser Schritt erreichen musste, aus der Merge-Policy der Aufgabe. Darunter schickt der Judge die Arbeit mit seinen Befunden als Nacharbeit an den erzeugenden Schritt zurück oder parkt den Lauf für Sie, wenn kein Versuchsbudget mehr übrig ist.",
     "rubricOverridden": "Raster des Arbeitsbereichs",
+    "modelPinUnavailable": "Diese Prüfung wurde für das Modell {model} geschrieben, das diese Installation nicht ausführen kann. Die Arbeit wurde daher von einem anderen Modell bewertet.",
     "reworkRounds": "Überarbeitung {spent}/{budget}",
     "findingsHeading": "Was das Bewertungsraster beanstandet hat",
     "roundsHeading": "Prüfrunden",

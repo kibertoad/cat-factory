@@ -4665,6 +4665,7 @@
     "threshold": "próg {threshold}",
     "thresholdHint": "Wynik, który ten krok musiał osiągnąć, wzięty z polityki scalania zadania. Poniżej sędzia odsyła pracę do kroku, który ją wytworzył, przekazując swoje uwagi do poprawy, albo wstrzymuje przebieg i czeka na Ciebie, gdy skończy się budżet prób.",
     "rubricOverridden": "rubryka przestrzeni roboczej",
+    "modelPinUnavailable": "Ta ocena została napisana dla modelu {model}, którego to wdrożenie nie może uruchomić, więc pracę ocenił inny model.",
     "reworkRounds": "poprawki {spent}/{budget}",
     "findingsHeading": "Co zgłosiła rubryka",
     "roundsHeading": "Rundy przeglądu",

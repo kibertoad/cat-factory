@@ -4665,6 +4665,7 @@
     "threshold": "umbral {threshold}",
     "thresholdHint": "La puntuacion que este paso tenia que alcanzar, tomada de la politica de fusion de la tarea. Por debajo, el juez devuelve el trabajo al paso que lo produjo con sus hallazgos como retrabajo, o aparca la ejecucion para ti cuando ya no queda presupuesto de intentos.",
     "rubricOverridden": "rúbrica del espacio de trabajo",
+    "modelPinUnavailable": "Esta revisión se escribió para el modelo {model}, que esta instalación no puede ejecutar, así que otro modelo puntuó el trabajo.",
     "reworkRounds": "revisión {spent}/{budget}",
     "findingsHeading": "Lo que señaló la rúbrica",
     "roundsHeading": "Rondas de revisión",

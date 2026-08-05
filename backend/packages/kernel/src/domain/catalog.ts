@@ -376,7 +376,23 @@ export function modelForKindFromPreset(
   agentKind: string,
 ): string {
   const p = preset ?? DEFAULT_MODEL_PRESET
-  return p.overrides[agentKind] ?? p.baseModelId
+  return presetOverrideForKind(p, agentKind) ?? p.baseModelId
+}
+
+/**
+ * The model a preset NAMES for an agent kind, or undefined when it says nothing about that kind
+ * and {@link modelForKindFromPreset} would answer with its base model.
+ *
+ * The distinction the two answers collapse is load-bearing for anything that carries a model
+ * default of its own (a judge registration pins the model its rubric was authored for): a base
+ * model is a blanket statement about every kind, so losing to it would make such a default
+ * unreachable, while an override NAMES the kind and must win.
+ */
+export function presetOverrideForKind(
+  preset: ModelPreset | ModelPresetSeed | null | undefined,
+  agentKind: string,
+): string | undefined {
+  return (preset ?? DEFAULT_MODEL_PRESET).overrides[agentKind]
 }
 
 /** Human-facing label per block type, used when titling freshly dropped frames. */

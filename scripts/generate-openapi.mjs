@@ -35,11 +35,9 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-// 1.11.0, not 1.10.0: main reached 1.10.0 while this branch was in flight (the run-evidence and
-// key-provisioning operations), and that number is already published against a surface WITHOUT the
-// follow-up and interview operations added here. The same collision the note above describes, the
-// second time in three releases.
-const API_VERSION = '1.11.0'
+// 1.12.0: additive only, an optional `modelPin` on the PR verification report's judge verdicts
+// (which model the rubric was authored for, and whether the run got it).
+const API_VERSION = '1.12.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

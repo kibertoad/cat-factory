@@ -5523,6 +5523,7 @@
     "threshold": "soglia {threshold}",
     "thresholdHint": "Il punteggio che questo step doveva raggiungere, preso dalla policy di merge dell'attivita. Al di sotto il giudice rimanda il lavoro allo step che lo ha prodotto, con i suoi rilievi da correggere, oppure mette in pausa l'esecuzione per te quando non resta budget di tentativi.",
     "rubricOverridden": "rubrica dello spazio di lavoro",
+    "modelPinUnavailable": "Questa revisione è stata scritta per il modello {model}, che questa installazione non può eseguire, quindi il lavoro è stato valutato da un altro modello.",
     "reworkRounds": "revisione {spent}/{budget}",
     "findingsHeading": "Cosa ha segnalato la rubrica",
     "roundsHeading": "Cicli di revisione",

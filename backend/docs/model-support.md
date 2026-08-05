@@ -93,6 +93,18 @@ Three rules make it safe:
   through the one shared `resolveInlineBlockModelRef`; the start guard resolves capabilities
   under the block's own preset for the same reason.
 
+### A registration may pin its own model (judges)
+
+A registered **judge** names the catalog model its rubric was authored for
+(`JudgeDefinition.modelId`), and every judge resolves under its OWN agent kind, so each rubric
+is its own row in the model defaults. That adds one layer inside step 2 of §3, resolved by
+`resolveInlineBlockModel`: the task's pin, then a preset override NAMING the kind, then the
+registration's pin, then the preset's base model. It sits between the two halves of the preset
+because a base model is a blanket statement (a pin under it is unreachable) and a named override
+is a specific one (a pin over it is a deployment constant no workspace can relax), which is why
+`PresetRouting` reports `pinnedForKind` alongside the id it resolved. A pin this deployment
+cannot serve is recorded on `step.judge.modelPin` as `unavailable` rather than silently swapped.
+
 The default order itself lives in ONE place, `DEFAULT_MODEL_FLAVOR_ORDER` in
 `@cat-factory/contracts` (the picklist order IS that order), because the preset editor renders
 the same fold the resolver walks — a copy in the SPA would let the picker display an order the

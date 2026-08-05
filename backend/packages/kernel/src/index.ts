@@ -93,6 +93,7 @@ export {
   MODEL_PRESET_SEED_IDS,
   seedModelPresets,
   modelForKindFromPreset,
+  presetOverrideForKind,
   type ModelPresetSeed,
 } from './domain/catalog.js'
 export {
