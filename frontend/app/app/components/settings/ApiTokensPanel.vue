@@ -39,7 +39,7 @@ const store = usePublicApiKeysStore()
 
 /**
  * The minter to attribute a key to. When the minter is the signed-in user we show a localized
- * "you"; for another person, the raw `usr_*` id (the list has no user-name lookup — the audit id
+ * "you"; for another person, the raw `usr_*` id (the list has no user-name lookup, so the audit id
  * is the honest, non-misleading thing to show).
  *
  * A key PROVISIONED HEADLESSLY (`POST /api/v1/keys`) has no user and names the KEY that minted

@@ -562,7 +562,7 @@ export class ExecutionService {
 
   /**
    * The run's verification report, composed for a READER rather than published onto a pull
-   * request — the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
+   * request: the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
    * such run, or when the run's block is gone.
    *
    * The SAME composition the PR body carries (see

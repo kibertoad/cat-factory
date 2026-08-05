@@ -38,7 +38,7 @@ export interface PublicApiKeyRecord {
    * Unlike {@link PublicApiKeyRecord.createdByUserId} this is also a LIFECYCLE link, not only
    * provenance: revoking a key revokes everything it minted, which is what keeps a leaked
    * provisioning key from outliving its own revocation through the keys it left behind. It is
-   * still never an authorization input — what a key may do is its own `scope`, nothing else.
+   * still never an authorization input: what a key may do is its own `scope`, nothing else.
    */
   createdByKeyId: string | null
   createdAt: number

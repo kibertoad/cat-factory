@@ -16,15 +16,15 @@
 Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
 
 Everything the platform captured about a run was reachable only from a browser session. A consumer
-whose job is to JUDGE a run — a trial harness deciding whether to accept a change, an evaluation
-pipeline scoring a fleet — could scrape the fenced JSON block out of a pull-request body and read
+whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
 `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
 pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
 Getting a key at all still needed a browser.
 
 Three additions, all `/api/v1`:
 
-- **`GET /runs/:runId/report`** serves the engine's verification report — the SAME bundle it writes
+- **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
   onto the pull request, composed on read by the same code, so the two can never disagree about
   what a run proved. It answers for runs that never opened a pull request, and it does not consult
   the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
@@ -32,11 +32,18 @@ Three additions, all `/api/v1`:
 - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
   artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
   allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
-  never an empty list.
+  never an empty list. The blob operation declares every media type it can answer with (the image
+  allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+  so a client generated from the spec can switch on the response honestly.
 - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
   that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
   one link long), and revoking a key now revokes every key it minted, on this surface and in the
-  app alike — otherwise a leaked provisioning key would survive its own revocation.
+  app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+outlived its bytes, which is a storage fault rather than a bad request) and
+`binary_artifact_storage_unconfigured`.
 
 The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
 run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,

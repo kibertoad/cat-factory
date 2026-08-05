@@ -365,14 +365,14 @@ are `pending` on the persistence allow-list, so naming `documents` on a node wit
 answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
 is one slice of the mothership tracker, not this one.
 
-### E1: Run EVIDENCE — the verification report + artifacts ✅
+### E1: Run EVIDENCE, the verification report + artifacts ✅
 
 `GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/artifacts` and
 `GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
 CAPTURED about a run was reachable only from a browser session, so a consumer whose job is to judge
 a run (a trial harness deciding whether to accept a change, an evaluation pipeline scoring a fleet)
 had to scrape the fenced JSON block out of a pull-request body for the report and could not reach
-the captured screenshots at all — the caveat A6 recorded against the visual-confirmation gate
+the captured screenshots at all: the caveat A6 recorded against the visual-confirmation gate
 ("approving screenshots it has not seen") was the same hole seen from the other side.
 
 Decisions worth keeping:
@@ -383,7 +383,7 @@ Decisions worth keeping:
   a run proved. The consequence is real and is now stated on the schema: the report shape is part
   of the STABLE surface from here on, so it grows additively.
 - **The read differs from the publish in three ways, all about audience**: it answers for a run
-  with NO pull request (a headless job, a run that failed before it pushed — the exact set a
+  with NO pull request (a headless job, a run that failed before it pushed: the exact set a
   PR-scraping consumer could never see), it does not consult the per-workspace
   `publishPrVerificationReport` opt-out (that is a statement about writing onto someone's PR, not
   about reading your own evidence back), and it does not swallow its failures.
@@ -394,7 +394,7 @@ Decisions worth keeping:
   excluded set (frame/module-anchored runs) has no task and no PR, so no verification story.
 - **The BYTES needed a binary response the SDK chain could not express.** An operation whose
   success media type was neither JSON nor SSE fell through to `result: null`, which every emitter
-  renders as a method returning NOTHING — a published client that reaches the endpoint and
+  renders as a method returning NOTHING: a published client that reaches the endpoint and
   discards its body. The IR now marks `binary` alongside `stream`, each of the four transports
   hands the bytes back in its own idiom, and an UNKNOWN media type fails generation rather than
   falling through. The MCP facade omits it with a stated reason (a tool result has no shape for an
@@ -419,7 +419,7 @@ The security argument is two enforced bounds, not advice:
 - **A minted key can never reach the rung minting requires.** `HEADLESS_MINTABLE_SCOPES` is derived
   from `HEADLESS_KEY_MINT_SCOPE` (`admin`) rather than listed, so the mint chain is exactly one
   link long and a rung inserted later cannot silently widen it. Refused by the contract's own
-  picklist — there is deliberately no hand-written second copy of the rule to drift.
+  picklist, so there is deliberately no hand-written second copy of the rule to drift.
 - **Revocation cascades.** Revoking a key revokes what it minted, on both surfaces. Without it a
   leaked provisioning key would survive its own cleanup: the operator kills the credential they can
   see and the ones an attacker made keep working. This needed a new `created_by_key_id` column
@@ -427,7 +427,7 @@ The security argument is two enforced bounds, not advice:
   rather than a read-then-loop a concurrent mint could slip through.
 
 `createdByKeyId` is also provenance the app renders: a headless mint stores a null user, so without
-a branch in the key panel it would read exactly like a key predating the audit column — "nobody
+a branch in the key panel it would read exactly like a key predating the audit column: "nobody
 knows who made this" shown for the one case the platform knows precisely.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜

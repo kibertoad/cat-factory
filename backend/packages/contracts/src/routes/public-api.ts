@@ -271,7 +271,7 @@ export const getPublicUsageContract = defineApiContract({
 // revoking a key revokes everything it minted (so a leaked provisioning key cannot outlive its
 // own revocation). See `HEADLESS_MINTABLE_SCOPES`.
 
-/** List the workspace's live keys — metadata only; a secret is never readable back. */
+/** List the workspace's live keys: metadata only; a secret is never readable back. */
 export const listPublicKeysContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/api/v1/keys',
@@ -290,8 +290,14 @@ export const createPublicKeyContract = defineApiContract({
 })
 
 /**
- * Revoke a key, and with it every key that key minted. Idempotent, and it may name the CALLING
- * key: a harness that provisioned itself a scratch credential can hand it back.
+ * Revoke a key, and with it every key that key minted. Idempotent.
+ *
+ * It may name the CALLING key, which is how a provisioning credential retires itself at the end of
+ * a run: the request is already authorized by the time it lands, and the cascade takes the keys it
+ * handed out with it. Note which key that can be: revoking needs `admin`, and `admin` is not
+ * mintable here, so the key that retires itself is always one a person minted in the app. A key
+ * provisioned over this API cannot revoke ITSELF (or anything else); its holder hands it back by
+ * asking whoever provisioned it, or the provisioner revokes itself and takes it along.
  */
 export const revokePublicKeyContract = defineApiContract({
   method: 'delete',

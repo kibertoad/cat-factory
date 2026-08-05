@@ -15,7 +15,7 @@ import { memoryBinaryArtifactStore } from './shared.js'
 //
 // What belongs HERE rather than in a unit test is the half a unit test structurally cannot see:
 // that each facade MOUNTS these routes, composes the report from its OWN execution store, resolves
-// the artifact store its own way, and — for the keys — that the provisioning cascade runs against
+// the artifact store its own way, and (for the keys) that the provisioning cascade runs against
 // the real SQL of both stores. A facade that shipped the controller but forgot a wiring answers
 // 404/503 here instead of shipping a surface a trial harness silently cannot use.
 //
@@ -74,7 +74,7 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(report.run.executionId).toBe(runId)
       expect(report.run.blockId).toBe('task_login')
       // No publisher is wired in conformance, so nothing resolved a pull request. The read still
-      // answers — that is the difference from the publish path, and the point of the endpoint for
+      // answers. That is the difference from the publish path, and the point of the endpoint for
       // headless jobs and runs that fail before they push.
       expect(report.run.repo).toBeNull()
       // A pipeline of one `coder` produced no CI verdict and no tester report, and the report
@@ -242,7 +242,7 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(refused.body.error.code).toBe('insufficient_scope')
 
       // `admin` is not mintable over the API: a provisioned key can never provision in turn, so
-      // the chain stays one link long. Refused by the contract's own picklist — the request never
+      // the chain stays one link long. Refused by the contract's own picklist, so the request never
       // reaches the handler, which is exactly why there is no hand-written second copy of the rule
       // for the two to drift apart on.
       const escalating = await app.call<{ error: { code: string } }>(
@@ -310,7 +310,7 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect((await app.call('GET', '/api/v1/services', undefined, childAuth)).status).toBe(401)
     })
 
-    it('lists and revokes through the key alone, and lets a key hand itself back', async () => {
+    it('lists and revokes a provisioned key through the key alone', async () => {
       const app = harness.makeApp()
       const { workspace } = await app.createOrgWorkspace({ seed: true })
       const wsId = workspace.id
@@ -334,15 +334,19 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       // A secret is never readable back, on any surface.
       expect(JSON.stringify(listed.body)).not.toContain('cf_live_')
 
-      // A harness handing back the credential it provisioned for itself.
+      // The provisioner retiring what it handed out. A provisioned key cannot do this itself:
+      // revoking needs `admin`, which is precisely the rung this surface refuses to mint.
       const scratchAuth = { authorization: `Bearer ${minted.body.secret}` }
-      const selfRevoke = await app.call(
+      expect((await app.call('DELETE', '/api/v1/keys/pak_x', undefined, scratchAuth)).status).toBe(
+        403,
+      )
+      const revoked = await app.call(
         'DELETE',
         `/api/v1/keys/${minted.body.key.id}`,
         undefined,
         adminAuth,
       )
-      expect(selfRevoke.status).toBe(204)
+      expect(revoked.status).toBe(204)
       expect((await app.call('GET', '/api/v1/services', undefined, scratchAuth)).status).toBe(401)
 
       // Idempotent, and not an oracle: revoking an id that does not exist answers the same 204.
@@ -355,6 +359,46 @@ export function definePublicEvidenceConformance(harness: ConformanceHarness): vo
       expect(again.status).toBe(204)
       const never = await app.call('DELETE', '/api/v1/keys/pak_nope', undefined, adminAuth)
       expect(never.status).toBe(204)
+    })
+
+    it('lets a provisioner revoke ITSELF, taking the keys it minted with it', async () => {
+      const app = harness.makeApp()
+      const { workspace } = await app.createOrgWorkspace({ seed: true })
+      const wsId = workspace.id
+      // An app-minted `admin` key: the only kind that can name itself here, since revoking needs
+      // the rung this surface will not mint.
+      const provisioner = await app.call<{ key: PublicApiKey; secret: string }>(
+        'POST',
+        `/workspaces/${wsId}/public-api-keys`,
+        { label: 'provisioner', scope: 'admin' },
+      )
+      expect(provisioner.status).toBe(201)
+      const auth = { authorization: `Bearer ${provisioner.body.secret}` }
+
+      const child = await app.call<{ key: PublicApiKey; secret: string }>(
+        'POST',
+        '/api/v1/keys',
+        { label: 'child', scope: 'read' },
+        auth,
+      )
+      expect(child.status).toBe(201)
+      const childAuth = { authorization: `Bearer ${child.body.secret}` }
+
+      // Naming its own id. The request is authorized before the write, so this settles rather
+      // than 401-ing on the credential it is in the middle of destroying.
+      const selfRevoke = await app.call(
+        'DELETE',
+        `/api/v1/keys/${provisioner.body.key.id}`,
+        undefined,
+        auth,
+      )
+      expect(selfRevoke.status).toBe(204)
+
+      // Both are dead: the cascade does not care which door the revocation came through, which is
+      // the whole point: an operator killing a compromised credential wants its offspring gone
+      // whether they reach for the app or the API.
+      expect((await app.call('GET', '/api/v1/services', undefined, auth)).status).toBe(401)
+      expect((await app.call('GET', '/api/v1/services', undefined, childAuth)).status).toBe(401)
     })
   })
 }

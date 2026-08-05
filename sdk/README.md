@@ -61,7 +61,7 @@ language renders it.
 
 **Adding an endpoint to `/api/v1` requires an entry in `surface.mjs`.** Generation fails without
 one, so a new endpoint cannot ship as an un-callable hole in four SDKs. It becomes an MCP tool from
-that same entry, with no second decision — except for an endpoint whose response a tool call has no
+that same entry, with no second decision, except for an endpoint whose response a tool call has no
 shape for (a STREAM, or a raw BYTE body), which must be named in `MCP_OMITTED_OPERATIONS` with the
 reason a caller should read. Generation fails on an unclassified one.
 

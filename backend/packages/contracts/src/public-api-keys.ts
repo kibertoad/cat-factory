@@ -64,7 +64,7 @@ export const publicApiKeySchema = v.object({
    * The KEY that minted this one (`pak_*`), set only for a key provisioned headlessly through
    * `POST /api/v1/keys`; `null` for a key a person minted in the app.
    *
-   * Provenance, not authorization — but unlike {@link publicApiKeySchema.entries.createdByUserId}
+   * Provenance, not authorization, but unlike {@link publicApiKeySchema.entries.createdByUserId}
    * it is also a lifecycle link: revoking a key revokes everything it minted, so a leaked
    * provisioning key cannot outlive its own revocation through the keys it left behind.
    */
@@ -134,7 +134,7 @@ type TopScopeRung = typeof PUBLIC_API_SCOPES extends readonly [...infer _Rest, i
 const _mintGateIsTopRung: TopScopeRung = HEADLESS_KEY_MINT_SCOPE
 
 /**
- * Mint a key HEADLESSLY, over `/api/v1` — the same body as the session-authed create, minus the
+ * Mint a key HEADLESSLY, over `/api/v1`: the same body as the session-authed create, minus the
  * rung it may not reach.
  *
  * `scope` carries no schema-level DEFAULT where its session-authed twin does, deliberately: this

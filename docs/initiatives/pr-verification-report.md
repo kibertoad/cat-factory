@@ -248,13 +248,13 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 
 The report told a reader what happened and, for a person, where to browse it (`runUrl`, the app's
 observability panel). It named nothing a MACHINE could follow, so a consumer holding the report had
-to already know the debug API exists — and how to address a run on it — to reach the record behind
+to already know the debug API exists (and how to address a run on it) to reach the record behind
 any claim in it. `observability` now carries two more links, both built from `apiBaseUrl` (the
 BACKEND url, like the artifact byte links, never the SPA one beside it):
 
 - **`trajectoryUrl`** → `/api/v1/debug/runs/:runId/tool-calls?order=trajectory`: what the run's
   agents actually did, in the order they did it. This is the link that makes the report auditable
-  rather than merely informative — every other section is a verdict somebody produced, and this is
+  rather than merely informative: every other section is a verdict somebody produced, and this is
   the record those verdicts are about.
 - **`reportUrl`** → `/api/v1/runs/:runId/report`: this same report, served live. The fenced block in
   the PR body is a snapshot from the last publish; a consumer that wants the current one (or that is

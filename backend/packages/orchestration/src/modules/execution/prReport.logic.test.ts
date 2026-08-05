@@ -293,7 +293,7 @@ describe('composePrVerificationReport', () => {
     expect(linked.observability.trajectoryUrl).toContain('order=trajectory')
     expect(linked.observability.reportUrl).toContain('/report')
 
-    // A deployment with no public backend URL emits no link rather than one to nowhere — the
+    // A deployment with no public backend URL emits no link rather than one to nowhere. The
     // same rule the artifact byte links follow.
     const unconfigured = composePrVerificationReport(
       instance([step({ agentKind: 'coder' })]),

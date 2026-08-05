@@ -202,6 +202,18 @@ export class PrVerificationReportController {
    *  - **Failures are not swallowed.** Publishing is bookkeeping that must never fail a run; a
    *    read that cannot answer must say so rather than hand back a report with holes in it that
    *    look like findings.
+   *
+   * WHAT A CALLER IS BUYING. Composition is not free and this is the one `/api/v1` read that can
+   * reach OUTSIDE the deployment: a run whose tester reported pulls the service's `spec/` tree off
+   * the run's branch over the VCS API ({@link PrVerificationReportController.serviceSpec}), which
+   * is memoised per run but only within one process, so a Worker isolate that has not seen the run
+   * pays it again. Everything else is a handful of indexed row reads. That cost is accepted rather
+   * than dodged: dropping the spec join on the read path would make the API answer differ from the
+   * pull-request body, and one report with two contents is the exact failure serving the report
+   * verbatim exists to prevent. It is stated in `backend/docs/public-api.md` so an integration
+   * polling every run knows what it is asking for, and left OUT of the app-cache seam on purpose,
+   * since the branch it reads keeps moving and the seam is pass-through for mutable state on the
+   * Worker anyway: a cache there would add a coherence problem without removing the fetch.
    */
   async composeForRun(
     workspaceId: string,
@@ -214,6 +226,13 @@ export class PrVerificationReportController {
   /**
    * Build the report from the run's state plus whatever the publisher resolved about where it
    * lands. Null when the block is gone.
+   *
+   * The block is read here even though {@link PrVerificationReportPublisher.resolveTarget} has
+   * just read it too, and that second point read is deliberate rather than overlooked: threading
+   * the row through would mean this controller deciding which pull request is the block's, the one
+   * judgement `GitHubPrReportPublisher` re-resolves self-containedly precisely so nothing else
+   * forms a second opinion about it. Duplicating that rule to save one indexed read by primary key
+   * is a bad trade, and it is two reads, never a per-item one.
    */
   private async compose(
     workspaceId: string,

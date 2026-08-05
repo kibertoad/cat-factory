@@ -147,10 +147,10 @@ public final class Transport {
      * BEFORE issuing the request, and every artifact is bounded by the platform's own upload
      * ceiling.
      *
-     * <p>The Accept header is the wildcard rather than the spec's declared
-     * {@code application/octet-stream}: the server answers with the artifact's RECORDED type
-     * ({@code image/png} and friends) and falls back to octet-stream only for a row it does not
-     * recognise.
+     * <p>The Accept header is the wildcard because the endpoint declares SEVERAL media types
+     * (the image allow-list plus an {@code application/octet-stream} fallback) and answers with
+     * whichever one the stored artifact is; naming any single one would disagree with most of
+     * what it sends.
      */
     public byte[] requestBytes(
             String method, String path, @Nullable Object body, Map<String, String> query) {

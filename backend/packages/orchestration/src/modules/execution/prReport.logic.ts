@@ -778,7 +778,7 @@ function renderRun(
   // The two machine links are rendered in the PROSE as well as carried in the JSON block, and
   // that is the point of the feature rather than a duplication: the reader who needs to check a
   // claim in this report is often a person, and a trajectory nobody can find is not an audit
-  // trail. Both endpoints are key-authenticated, so a reader without a credential gets a 401 —
+  // trail. Both endpoints are key-authenticated, so a reader without a credential gets a 401,
   // the same honest refusal the app link beside them produces.
   if (observability.trajectoryUrl) {
     out.push(`**Trajectory (API):** [Every tool call, in order](${observability.trajectoryUrl})`)

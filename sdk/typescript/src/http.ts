@@ -154,10 +154,9 @@ export class Transport {
    * A reader would buy nothing here and would push lifetime management onto every caller.
    */
   async bytes(spec: RequestSpec): Promise<Uint8Array> {
-    // `*/*`, not the spec's declared `application/octet-stream`: the server answers with the
-    // artifact's RECORDED type (`image/png`, …) and falls back to octet-stream only for a row it
-    // does not recognise. Naming one of those would be an Accept header that disagrees with what
-    // the endpoint sends, which is the one thing this transport's header precedence forbids.
+    // `*/*`, because the endpoint declares SEVERAL media types (the image allow-list plus an
+    // octet-stream fallback) and answers with whichever one the stored artifact is. Naming any
+    // single one would be an Accept header that disagrees with most of what the endpoint sends.
     const response = await this.send(spec, '*/*')
     return new Uint8Array(await response.arrayBuffer())
   }

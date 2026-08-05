@@ -44,7 +44,7 @@ public final class EvidenceClient {
      * the platform’s own run of the service’s lint/test/build commands (with the failing output),
      * the red-then-green reproduction proof for a bugfix, the tester’s structured report,
      * requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge
-     * decision. Byte-for-byte the JSON block the pull-request body carries, composed on read — so
+     * decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so
      * it also answers for a run that never opened a pull request. Each section states `reported`
      * or `absent` with a note, so a step that did not run never looks like a step that found
      * nothing.
@@ -57,7 +57,7 @@ public final class EvidenceClient {
     /**
      * List a run's captured artifacts
      * The binary artifacts the run captured (UI screenshots) plus the reference images they were
-     * reviewed against — id, kind, view, content type, exact byte size and content hash. Unpaged:
+     * reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged:
      * the capture path caps how many one run may store, so the response size is bounded before the
      * request. Fetch the bytes with the blob endpoint.
      * {@code GET /api/v1/runs/{runId}/artifacts} (operation {@code listPublicRunArtifacts}).

@@ -130,9 +130,9 @@ class Transport:
         BEFORE issuing the request, and every artifact is bounded by the platform's own upload
         ceiling.
 
-        ``*/*``, not the spec's declared ``application/octet-stream``: the server answers with the
-        artifact's RECORDED type (``image/png``, ...) and falls back to octet-stream only for a
-        row it does not recognise.
+        ``*/*``, because the endpoint declares SEVERAL media types (the image allow-list plus an
+        octet-stream fallback) and answers with whichever one the stored artifact is; naming any
+        single one would disagree with most of what it sends.
         """
         return self._send(method, path, body, query, timeout, "*/*")
 

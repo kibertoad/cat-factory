@@ -4382,6 +4382,30 @@
                   "format": "binary",
                   "type": "string"
                 }
+              },
+              "image/gif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
             "description": "The artifact bytes"
@@ -7999,7 +8023,7 @@
     },
     "/api/v1/keys": {
       "get": {
-        "description": "The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.",
+        "description": "The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.",
         "operationId": "listPublicKeys",
         "responses": {
           "200": {
@@ -8039,7 +8063,7 @@
         ]
       },
       "post": {
-        "description": "Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE — store it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
+        "description": "Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
         "operationId": "createPublicKey",
         "requestBody": {
           "content": {
@@ -8449,7 +8473,7 @@
     },
     "/api/v1/runs/{runId}/artifacts": {
       "get": {
-        "description": "The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against — id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.",
+        "description": "The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.",
         "operationId": "listPublicRunArtifacts",
         "parameters": [
           {
@@ -10685,7 +10709,7 @@
     },
     "/api/v1/runs/{runId}/report": {
       "get": {
-        "description": "The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read — so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.",
+        "description": "The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.",
         "operationId": "getPublicRunReport",
         "parameters": [
           {
@@ -11405,7 +11429,7 @@
       "name": "Decisions"
     },
     {
-      "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run — accept the change, score the fleet — rather than debug one. Read-only (`read` scope).",
+      "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).",
       "name": "Evidence"
     },
     {

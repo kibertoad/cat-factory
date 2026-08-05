@@ -253,9 +253,9 @@ func (k responseKind) accept() string {
 	case streamResponse:
 		return "text/event-stream"
 	case bytesResponse:
-		// Not the spec's declared application/octet-stream: the server answers with the
-		// artifact's RECORDED type (image/png, …) and falls back to octet-stream only for a row
-		// it does not recognise.
+		// The endpoint declares SEVERAL media types (the image allow-list plus an
+		// application/octet-stream fallback) and answers with whichever one the stored artifact
+		// is, so naming any single one would disagree with most of what it sends.
 		return "*/*"
 	default:
 		return "application/json"
@@ -424,7 +424,7 @@ func (c *Client) requestNoContent(ctx context.Context, spec requestSpec) error {
 //
 // Read whole rather than handed back as a ReadCloser: the listing endpoint that hands out these
 // ids also carries each artifact's exact byteSize, so a caller decides whether to fetch before
-// issuing the request — and returning an open body would push lifetime management onto every
+// issuing the request, and returning an open body would push lifetime management onto every
 // caller for no gain.
 func (c *Client) requestBytes(ctx context.Context, spec requestSpec) ([]byte, error) {
 	response, err := c.do(ctx, spec, bytesResponse, c.maxRetries)

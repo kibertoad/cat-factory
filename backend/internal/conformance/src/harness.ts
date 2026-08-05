@@ -108,7 +108,7 @@ export interface ConformanceApp {
    * A separate method rather than a flag on {@link ConformanceApp.call}: that one JSON-decodes
    * every body, so a PNG reaches it as a parse error rather than a response. Returns the recorded
    * content type beside the bytes, because clamping it to the image allow-list is half of what
-   * the endpoint promises — an artifact served as something a browser would execute is the bug.
+   * the endpoint promises: an artifact served as something a browser would execute is the bug.
    */
   callBinary(
     method: string,

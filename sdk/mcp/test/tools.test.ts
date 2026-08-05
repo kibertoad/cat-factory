@@ -29,13 +29,13 @@ function specOperationIds(): string[] {
 }
 
 /**
- * The operations whose SUCCESS body is not JSON — an SSE stream or an opaque blob.
+ * The operations whose SUCCESS body is not JSON: an SSE stream or an opaque blob.
  *
  * These are exactly the ones a tool call has no shape for: its result is text or a declared
  * content block, so neither an open-ended event feed nor an arbitrary byte stream can be handed
  * back honestly. Derived from the spec rather than listed, so the assertion below states the RULE
  * ("a tool is omitted only when the protocol cannot carry its response") instead of re-pinning
- * whichever set happened to be true the day it was written — a list that goes stale silently, and
+ * whichever set happened to be true the day it was written, a list that goes stale silently and
  * whose staleness reads as an oversight rather than a decision.
  */
 function nonJsonOperationIds(): string[] {

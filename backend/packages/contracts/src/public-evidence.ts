@@ -7,8 +7,8 @@ import * as v from 'valibot'
 // The platform already captures everything a reviewer needs to believe a run: the engine's
 // verification report (the same bundle it maintains on the pull request) and the binary
 // artifacts its agents captured. Both were reachable only from a browser session, so a
-// headless consumer — a trial harness deciding whether to accept a change, an evaluation
-// pipeline scoring a fleet of runs — had to scrape the PR body for one and could not reach
+// headless consumer (a trial harness deciding whether to accept a change, an evaluation
+// pipeline scoring a fleet of runs) had to scrape the PR body for one and could not reach
 // the other at all.
 //
 // Two rules shape these shapes specifically:
@@ -43,7 +43,7 @@ export const publicRunArtifactSchema = v.object({
   contentType: v.string(),
   /**
    * Exact size of the bytes, so a consumer can size the fetch (or decline it) BEFORE issuing
-   * it — the same discipline every `/api/v1/debug` read follows.
+   * it: the same discipline every `/api/v1/debug` read follows.
    */
   byteSize: v.number(),
   /** Content hash (sha-256 hex): two runs that captured the same pixels share one value. */

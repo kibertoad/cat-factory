@@ -1862,7 +1862,7 @@ func (s *EvidenceService) DownloadArtifact(ctx context.Context, artifactID strin
 // the platform’s own run of the service’s lint/test/build commands (with the failing output), the
 // red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement
 // coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision.
-// Byte-for-byte the JSON block the pull-request body carries, composed on read — so it also
+// Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also
 // answers for a run that never opened a pull request. Each section states `reported` or `absent`
 // with a note, so a step that did not run never looks like a step that found nothing.
 // GET /api/v1/runs/{runId}/report (operation getPublicRunReport).
@@ -1880,7 +1880,7 @@ func (s *EvidenceService) GetReport(ctx context.Context, runID string) (*PrVerif
 
 // ListArtifacts list a run's captured artifacts
 // The binary artifacts the run captured (UI screenshots) plus the reference images they were
-// reviewed against — id, kind, view, content type, exact byte size and content hash. Unpaged: the
+// reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the
 // capture path caps how many one run may store, so the response size is bounded before the
 // request. Fetch the bytes with the blob endpoint.
 // GET /api/v1/runs/{runId}/artifacts (operation listPublicRunArtifacts).
@@ -1903,8 +1903,8 @@ type KeysService struct {
 }
 
 // Create provision an API key
-// Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE — store
-// it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted
+// Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store
+// it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted
 // here: a key provisioned over the API can never itself provision, which keeps the chain one link
 // long. Requires an `admin`-scope key.
 // POST /api/v1/keys (operation createPublicKey).
@@ -1922,7 +1922,7 @@ func (s *KeysService) Create(ctx context.Context, body CreateHeadlessPublicApiKe
 }
 
 // List list the workspace's API keys
-// The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is never
+// The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never
 // readable back. `createdByKeyId` names the key that provisioned a key headlessly;
 // `createdByUserId` names the person who minted one in the app.
 // GET /api/v1/keys (operation listPublicKeys).

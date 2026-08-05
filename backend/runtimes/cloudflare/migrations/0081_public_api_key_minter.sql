@@ -8,7 +8,7 @@
 --
 -- No FK, for the same reason `created_by_user_id` has none: a key is a workspace-scoped SERVICE
 -- credential and the row has to survive whatever minted it being deleted. It is NOT an
--- authorization input — what a key may do is its own `scope`. Mirrored on Node by the
+-- authorization input: what a key may do is its own `scope`. Mirrored on Node by the
 -- `created_by_key_id` column on the Drizzle `public_api_keys` table.
 ALTER TABLE public_api_keys ADD COLUMN created_by_key_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_public_api_keys_minter ON public_api_keys(created_by_key_id);

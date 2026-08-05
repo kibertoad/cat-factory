@@ -26,8 +26,8 @@ public final class KeysClient {
 
     /**
      * Provision an API key
-     * Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE —
-     * store it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be
+     * Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so
+     * store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be
      * minted here: a key provisioned over the API can never itself provision, which keeps the
      * chain one link long. Requires an `admin`-scope key.
      * {@code POST /api/v1/keys} (operation {@code createPublicKey}).
@@ -38,7 +38,7 @@ public final class KeysClient {
 
     /**
      * List the workspace's API keys
-     * The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is
+     * The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is
      * never readable back. `createdByKeyId` names the key that provisioned a key headlessly;
      * `createdByUserId` names the person who minted one in the app.
      * {@code GET /api/v1/keys} (operation {@code listPublicKeys}).

@@ -6,7 +6,7 @@ import { publicApiKeys } from '../db/schema.js'
 
 // Postgres-backed store of the inbound public-API keys (mirror of D1 migrations 0034 + 0053 +
 // 0054 + 0081 / D1PublicApiKeyRepository, column-for-column, `scope` and `created_by_key_id`
-// included). The secret is stored ONLY as a one-way peppered hash — this repo never sees the raw
+// included). The secret is stored ONLY as a one-way peppered hash: this repo never sees the raw
 // key.
 
 type Row = typeof publicApiKeys.$inferSelect

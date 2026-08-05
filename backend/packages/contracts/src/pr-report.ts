@@ -26,7 +26,7 @@ import { vcsProviderSchema } from './routes/auth.js'
 // SINCE THIS SHAPE IS ALSO SERVED AT `GET /api/v1/runs/:runId/report`, it is part of the STABLE
 // public surface: it grows by ADDITION (a new section, a new optional field, a new enum member)
 // and never by renaming, retyping or removing in place. That is a tighter rule than the one this
-// schema shipped under, and deliberately so — a consumer that was scraping the fenced block out
+// schema shipped under, and deliberately so: a consumer that was scraping the fenced block out
 // of a PR body was already depending on it, and publishing the endpoint only made that
 // dependency honest.
 // ---------------------------------------------------------------------------
@@ -535,7 +535,7 @@ export type PrReportMerge = v.InferOutput<typeof prReportMergeSchema>
  * `runUrl` is for a person: the run's observability panel (Model activity / Provided context),
  * built from the deployment's public app URL (`appBaseUrl`). The other two are for a machine
  * and are built from the deployment's public BACKEND url (`apiBaseUrl`), the same config the
- * artifact byte links use — the two coincide on a same-origin deployment and diverge the moment
+ * artifact byte links use. The two coincide on a same-origin deployment and diverge the moment
  * the SPA is served from its own host, and a link built from the wrong one is worse than none.
  *
  * Each is null when its base URL is unconfigured, so the report never emits a link to nowhere.
@@ -554,8 +554,8 @@ export const prReportObservabilitySchema = v.object({
   trajectoryUrl: v.nullable(v.string()),
   /**
    * THIS report, served live as JSON. What the fenced block below carries is a snapshot taken
-   * when the report was last published; a consumer that wants the current one — or that is
-   * reading a run whose PR body it does not have — fetches it here.
+   * when the report was last published; a consumer that wants the current one (or that is
+   * reading a run whose PR body it does not have) fetches it here.
    */
   reportUrl: v.nullable(v.string()),
 })

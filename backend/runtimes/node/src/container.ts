@@ -573,7 +573,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     // Read off `dependencies`, NOT the account-composed value beside it: an override supplied to
     // the container (a deployment swapping the backend, the conformance harness driving the
     // public artifact reads) is applied to the engine's deps and would otherwise reach the ENGINE
-    // and not the HTTP layer — two answers to "where do this workspace's artifacts live", which
+    // and not the HTTP layer, leaving two answers to "where do this workspace's artifacts live", which
     // is a split nothing above this line could see.
     resolveBinaryArtifactStore:
       dependencies.resolveBinaryArtifactStore ?? resolveBinaryArtifactStore,

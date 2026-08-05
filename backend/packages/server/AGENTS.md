@@ -19,8 +19,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
   an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicEvidenceController`
   (the `read`-scoped run **evidence** reads for a consumer that has to JUDGE a run rather than debug
-  one: the engine's verification report composed on read — the same bundle the pull request carries,
-  so there is no second projection to disagree with it — plus the run's captured artifacts and their
+  one: the engine's verification report composed on read (the same bundle the pull request carries,
+  so there is no second projection to disagree with it) plus the run's captured artifacts and their
   BYTES, the one route on this surface that is hand-mounted because an image response cannot be a
   contract; its run-scoped reads take `decisions/scope.ts`'s NARROWER rule, because one path prefix
   carries one authorization model), `PublicKeyController` (HEADLESS key provisioning at `admin`

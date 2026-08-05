@@ -36,7 +36,7 @@ import { authorize, refuse } from './publicApiAuth.js'
 //     keep working.
 //
 // What this surface still cannot do, deliberately: mint an `admin` key (that needs a human
-// session and the `secrets.manage` workspace permission), or reach another workspace — every
+// session and the `secrets.manage` workspace permission), or reach another workspace: every
 // route is bound to the calling key's own.
 
 /** Project a stored record onto the secret-free wire type. */
@@ -94,7 +94,7 @@ export function publicKeyController(): Hono<AppEnv> {
         accountId: gate.auth.accountId,
         workspaceId: gate.auth.workspaceId,
         // No user minted this one. Attributing it to the human who minted the PARENT key would
-        // be a guess dressed as provenance — the key is what acted, so the key is what is
+        // be a guess dressed as provenance. The key is what acted, so the key is what is
         // recorded, and that is also what the revocation cascade follows.
         createdByUserId: null,
         createdByKeyId: gate.auth.keyId,
@@ -110,8 +110,12 @@ export function publicKeyController(): Hono<AppEnv> {
     if ('fail' in gate) return refuse(c, gate.fail)
     // Scoped to the caller's workspace by the service, and idempotent, so an unknown id is a 204
     // rather than a 404: this surface must not become an oracle for which key ids exist.
-    // Revoking the CALLING key is allowed on purpose — a harness handing back a scratch
-    // credential is the case, and the request has already been authorized by the time it lands.
+    //
+    // Revoking the CALLING key is allowed on purpose: a provisioning credential retiring itself at
+    // the end of a run is the case, and the request is already authorized by the time it lands.
+    // That key is always an app-minted `admin` one, since revoking needs the rung this surface
+    // cannot mint. Self-revocation is the PROVISIONER standing down (taking everything it
+    // handed out with it), never a provisioned key handing itself back.
     await keyStore(c).revoke(gate.auth.workspaceId, c.req.valid('param').keyId)
     return c.body(null, 204)
   })

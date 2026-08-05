@@ -38,6 +38,27 @@ const API_PREFIX = '/api/v1'
 const API_VERSION = '1.9.0'
 
 /**
+ * The media types the artifact-blob route can answer with: the image allow-list it clamps a
+ * stored content type to, plus the octet-stream it falls back to for a row it does not recognise
+ * (which it also serves as an attachment, so nothing executes).
+ *
+ * Stated here because the blob endpoint is documented by hand rather than from a route contract,
+ * and kept honest by `blobMediaTypes.spec.ts`, which asserts this set IS the server's own
+ * allow-list. A spec that names one type while the server sends another is a lie a third-party
+ * client generated from this document would act on.
+ */
+const BLOB_MEDIA_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/octet-stream',
+]
+
+/** OpenAPI's spelling of "opaque bytes". */
+const BINARY_SCHEMA = { type: 'string', format: 'binary' }
+
+/**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
  * shared schemas aren't inlined N times): OpenAPI component name → the exported Valibot
  * schema's name in `@cat-factory/contracts`.
@@ -104,15 +125,15 @@ const COMPONENT_SCHEMAS = {
   PublicResolvePrReview: 'publicResolvePrReviewSchema',
   PublicChallengePrReviewFinding: 'publicChallengePrReviewFindingSchema',
   PublicRequestGateFix: 'publicRequestGateFixSchema',
-  // Run EVIDENCE. The verification report is served VERBATIM — the same shape the engine writes
-  // into the pull-request body — so its sections are hoisted individually rather than left to be
+  // Run EVIDENCE. The verification report is served VERBATIM (the same shape the engine writes
+  // into the pull-request body), so its sections are hoisted individually rather than left to be
   // named positionally: these types are what a consumer of this API writes its code against, and
   // `PrVerificationReportRunStepsItem` is not a name anyone should have to read. Every one of
   // them is an exported schema in `@cat-factory/contracts`, so the names are chosen once here and
   // the shapes cannot drift from what the engine composes.
   // The key resource, hoisted for the same reason every other DTO here is: un-hoisted, the
   // provisioning surface ships as `ListPublicKeysResponseKey` and `CreatePublicKeyRequestScope`
-  // in four languages — positional names that also RENUMBER if an operation is added ahead of
+  // in four languages: positional names that also RENUMBER if an operation is added ahead of
   // them.
   PublicApiKey: 'publicApiKeySchema',
   PublicApiKeyList: 'publicApiKeyListResultSchema',
@@ -534,25 +555,25 @@ const OPERATION_DOCS = {
     tag: 'Evidence',
     summary: "Get a run's verification report",
     description:
-      'The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read — so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.',
+      'The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.',
   },
   listPublicRunArtifacts: {
     tag: 'Evidence',
     summary: "List a run's captured artifacts",
     description:
-      'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against — id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
+      'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
   },
   listPublicKeys: {
     tag: 'Keys',
     summary: "List the workspace's API keys",
     description:
-      'The live (non-revoked) keys for the calling key’s workspace, metadata only — a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
+      'The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
   },
   createPublicKey: {
     tag: 'Keys',
     summary: 'Provision an API key',
     description:
-      'Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE — store it now, it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
+      'Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
   },
   revokePublicKey: {
     tag: 'Keys',
@@ -581,7 +602,7 @@ const TAG_DESCRIPTIONS = {
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
   Evidence:
-    'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run — accept the change, score the fleet — rather than debug one. Read-only (`read` scope).',
+    'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
   Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',
   Debug:
     'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
@@ -843,7 +864,15 @@ export async function buildOpenApiDoc() {
       responses: {
         200: {
           description: 'The artifact bytes',
-          content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
+          // Every type the route can actually answer with, not one standing in for the rest: the
+          // handler serves the artifact's RECORDED type clamped to the image allow-list, and
+          // falls back to octet-stream only for a stored row it does not recognise. Declaring a
+          // single type would tell anyone generating a client from this document to expect a
+          // media type the endpoint never sends. `blobMediaTypes.spec.ts` pins this set to the
+          // server's own allow-list, so the two cannot drift.
+          content: Object.fromEntries(
+            BLOB_MEDIA_TYPES.map((media) => [media, { schema: BINARY_SCHEMA }]),
+          ),
         },
         '4XX': {
           description: STATUS_DESCRIPTIONS['4XX'],

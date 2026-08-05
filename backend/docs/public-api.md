@@ -50,7 +50,7 @@ optional and **defaults to `write`**. A workspace holds at most **50** keys (409
 one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `createdAt`, `lastUsedAt`
 (updated at most once a minute) and `revokedAt`.
 
-An operator with no browser can do the same over `/api/v1` itself — see
+An operator with no browser can do the same over `/api/v1` itself: see
 [Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
 either way is listed and revoked by both.
 
@@ -207,7 +207,7 @@ curl -sN -H "$AUTH" "$BASE/api/v1/tasks/$TASK_ID/events"   # SSE
 # 6. If the run parks on a decision (SSE `decision` event / run status `blocked`):
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 
-# 7. Once it finishes, the EVIDENCE — the same bundle the pull request carries:
+# 7. Once it finishes, the EVIDENCE, the same bundle the pull request carries:
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/report"
 
 # 8. The period's spend + budget position, for a dashboard:
@@ -702,12 +702,12 @@ deciding whether to accept a change, an evaluation pipeline scoring a fleet of r
 A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
 that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
 `GET /api/v1/jobs/:id` or `GET /api/v1/tasks/:taskId/run`. That is NARROWER than the
-[`/debug` surface](./debug-api.md), which resolves any run in the workspace, and deliberately so —
+[`/debug` surface](./debug-api.md), which resolves any run in the workspace, and deliberately so:
 one path prefix carries one authorization model. What it excludes is runs anchored on a frame or
 module (a blueprint, a bug-intake sweep), which carry no task and no pull request and so have no
 verification story to tell.
 
-**The report is the same bundle the pull request carries** — byte-for-byte the shape inside the
+**The report is the same bundle the pull request carries**, byte-for-byte the shape inside the
 `cat-factory:verification-report` fenced JSON block, so a consumer that was scraping PR bodies can
 stop. It is composed on read from the run's stored state, which is what lets it answer for a run
 that never opened a pull request at all (a headless job, or a run that failed before it pushed);
@@ -726,16 +726,31 @@ decision. `truncations` names anything a per-list cap left out.
 
 The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
-for it to be judged against); `view` pairs the two. The list is deliberately unpaged — the capture
+for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
 path caps how many artifacts one run may store, so the response size is bounded before the request,
 and `byteSize` lets a caller decide whether to fetch the bytes at all.
 
 The blob endpoint answers the artifact's stored image content type with `nosniff`, and is
 **authenticated like everything else**: a report on a public repository can link to it without
-making the bytes public. Two distinct 404s: the id is unknown to the key's workspace, or the
-metadata row survives but its bytes are gone from the blob backend. Both artifact endpoints answer
-`503 unavailable` when the account configured no blob backend — never an empty list, which would
-say something false about the run.
+making the bytes public. It declares every type it can send (the image allow-list plus an
+`application/octet-stream` fallback for a stored row it does not recognise, which it serves as an
+attachment), so a generated client can switch on the response honestly.
+
+Refusals on these three carry `error.details.reason`, which is what separates causes that need
+different reactions: `run_not_found` (the id names no run this key may read),
+`artifact_not_found` (the id is unknown to the key's workspace), `artifact_blob_missing` (the
+metadata row survives but its bytes are gone from the blob backend, a storage fault worth
+reporting, not a request to stop making), and `binary_artifact_storage_unconfigured` on the
+`503` both artifact endpoints answer when the account configured no blob backend. That 503 is
+never an empty list, which would say something false about the run.
+
+**What the report costs.** It is composed per request, and for a run whose tester reported it also
+reads the service's `spec/` tree off the run's branch over the VCS API, the only `/api/v1` read
+that reaches outside the deployment. The result is memoised per run inside one process, so a
+scaled Node deployment or a cold Worker isolate can repeat it. That is the price of serving the
+pull request's bundle verbatim rather than a second projection that could disagree with it. An
+integration sweeping a fleet should poll per run on settlement rather than on a tight loop; there
+is no separate rate limit on this endpoint beyond the key itself.
 
 ```sh
 # The report a trial harness ingests, and the evidence behind it.
@@ -768,7 +783,7 @@ Two bounds are what make this safe to offer, and both are enforced, not advisory
   alike. Without that, a leaked provisioning key would survive its own cleanup: the operator kills
   the credential they can see and the ones an attacker made keep working.
 
-A provisioned key records `createdByKeyId` (and no `createdByUserId` — no person minted it), which
+A provisioned key records `createdByKeyId` (and no `createdByUserId`, since no person minted it), which
 is what the app's key list shows and what the cascade follows. Revoking the **calling** key is
 allowed: a harness handing back a scratch credential is the case it exists for.
 
