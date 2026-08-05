@@ -22,7 +22,7 @@ import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -61,25 +61,24 @@ function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
  */
 export function documentSourceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  // Mounted on this controller's OWN path patterns rather than `'*'`: a `'*'` mount becomes
-  // `ALL /workspaces/:workspaceId/*` on the shared app and would gate every SIBLING controller's
-  // route registered after this one (see the warning on `requireWorkspacePermission`). Now that the
-  // controller mixes tiers it could not stay `'*'` in any case: the wildcard cannot express "these
-  // two paths only".
-  const manageIntegrations = requireWorkspacePermission('integrations.manage')
-  // Connect/disconnect write and clear the per-workspace source CREDENTIAL, which is integration
-  // management by definition. Gated at the mount rather than per-handler so the refusal lands
-  // before body validation: a member is refused whether or not their payload is well-formed, and
-  // never learns which sources this deployment configured.
-  app.use('/document-sources/:source/connect', manageIntegrations)
-  app.use('/document-sources/:source/connection', manageIntegrations)
-  // The per-DocKind template / exemplar tags are workspace-wide authoring CONFIG, not one task's
-  // context: one tag decides what EVERY doc run in the board writes from, the same blast radius
-  // that keeps the fragment library and the agent-prompt overrides at the admin tier. Both patterns
-  // are needed (Hono's `*` does not match the bare prefix), and the writes-only gate leaves the GET
-  // open, so the management panel still renders for anyone who can read the board.
-  app.use('/document-role-links', manageIntegrations)
-  app.use('/document-role-links/*', manageIntegrations)
+  // The admin-tier half, named path by path rather than as a whole-controller mount:
+  //
+  // - connect/disconnect write and clear the per-workspace source CREDENTIAL, which is integration
+  //   management by definition. Gating at the mount rather than per-handler keeps the refusal ahead
+  //   of body validation, so a member is refused whether or not their payload is well-formed and
+  //   never learns which sources this deployment configured;
+  // - the per-DocKind template / exemplar tags are workspace-wide authoring CONFIG, not one task's
+  //   context. One tag decides what EVERY doc run in the board writes from, the same blast radius
+  //   that keeps the fragment library and the agent-prompt overrides at the admin tier. The
+  //   writes-only gate leaves the GET open, so the management panel still renders for anyone who
+  //   can read the board.
+  //
+  // Everything else this controller serves is the member half, and mounts nothing.
+  mountWorkspacePermission(app, 'integrations.manage', [
+    '/document-sources/:source/connect',
+    '/document-sources/:source/connection',
+    '/document-role-links',
+  ])
 
   // ---- source discovery ---------------------------------------------------
 

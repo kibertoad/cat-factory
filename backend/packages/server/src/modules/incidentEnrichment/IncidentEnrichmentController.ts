@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { IncidentEnrichmentModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -27,7 +27,7 @@ function requireIncidentEnrichment<E extends AppEnv>(c: Context<E>): IncidentEnr
  */
 export function incidentEnrichmentController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('settings.manage'))
+  mountWorkspacePermission(app, 'settings.manage', ['/incident-enrichment'])
 
   buildHonoRoute(app, getIncidentEnrichmentContract, async (c) => {
     const ie = requireIncidentEnrichment(c)

@@ -26,7 +26,7 @@ import type { Context } from 'hono'
 import type { FragmentLibraryModule } from '@cat-factory/orchestration'
 import type { AppEnv, ServerContainer } from '../../http/env.js'
 import { param } from '../../http/params.js'
-import { loadWorkspaceAccess, requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { loadWorkspaceAccess, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { assertCapability, requireCapability } from '../../http/guards.js'
 
 type Scope = 'account' | 'workspace'
@@ -59,6 +59,9 @@ function assertDocumentsWired<E extends AppEnv>(c: Context<E>): void {
   )
 }
 
+/** Every TOP-LEVEL path this controller serves, gated at whichever tier owns the scope. */
+const GUARDED_RESOURCES = ['/prompt-fragments', '/document-fragments', '/fragment-sources'] as const
+
 /**
  * The prompt-fragment library API (ADR 0006 §8), mounted twice — once under
  * `/accounts/:accountId` and once under `/workspaces/:workspaceId` — so a tier's
@@ -76,19 +79,21 @@ export function fragmentLibraryController(scope: Scope): Hono<AppEnv> {
 
   // Account-scoped routes are an authenticated concept: require sign-in and
   // membership in the addressed account (404 hides existence, mirroring boards).
-  if (scope === 'account') {
-    app.use('/prompt-fragments', accountGuard)
-    app.use('/prompt-fragments/*', accountGuard)
-    app.use('/document-fragments', accountGuard)
-    app.use('/fragment-sources', accountGuard)
-    app.use('/fragment-sources/*', accountGuard)
-  }
-
+  //
   // Workspace-scoped fragment WRITES are an admin-tier action (`settings.manage` — the
   // prompt-fragment library is workspace configuration); reads stay open to any resolved role.
-  // The global gate already resolved the caller's access; account scope is authorized above.
-  if (scope === 'workspace') {
-    app.use('*', requireWorkspacePermission('settings.manage'))
+  // The global gate already resolved the caller's access.
+  //
+  // Both mounts name this controller's OWN paths, from one list so neither can name a subset the
+  // other doesn't: each shared mount prefix carries sibling controllers, and a `use('*')` inside a
+  // sub-app lands on `<prefix>/*` and would authorize their routes too.
+  if (scope === 'account') {
+    for (const resource of GUARDED_RESOURCES) {
+      app.use(resource, accountGuard)
+      app.use(`${resource}/*`, accountGuard)
+    }
+  } else {
+    mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
 
   // ---- fragments (this tier, raw — not merged) ----------------------------

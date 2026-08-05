@@ -8,7 +8,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -33,7 +33,7 @@ function requireWebhooks<E extends AppEnv>(c: Context<E>): NotificationWebhookSe
  */
 export function notificationWebhookController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/notification-webhook'])
 
   buildHonoRoute(app, getNotificationWebhookContract, async (c) => {
     const webhooks = requireWebhooks(c)

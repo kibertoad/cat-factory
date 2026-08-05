@@ -9,7 +9,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { CapabilityCredentialsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 import {
@@ -71,21 +71,14 @@ async function viewFor(
  * learning which environment variables the deployment sets"). Moving the value into a row does
  * not change that judgement.
  *
- * Which is why the mount is `requireWorkspacePermissionIncludingReads` and not the usual
- * `requireWorkspacePermission`: that one passes GET/HEAD straight through, so for a release this
+ * Which is why the mount is `mountWorkspacePermissionIncludingReads` and not the usual
+ * `mountWorkspacePermission`: that one passes GET/HEAD straight through, so for a release this
  * controller documented a gated read (here, in the SPA's tab gate, and in the store's 403 branch)
  * while every member's GET was answered in full.
  */
 export function capabilityCredentialsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  // Mounted on this controller's OWN patterns rather than `'*'`, and both are needed (Hono's `*`
-  // does not match the bare prefix). A `'*'` mount becomes `ALL /workspaces/:workspaceId/*` on the
-  // shared app, so it would refuse a SIBLING controller's routes too: harmless while the gate let
-  // GETs through, and an outage for every member-readable GET registered after this one once it
-  // stopped.
-  const gate = requireWorkspacePermissionIncludingReads('secrets.manage')
-  app.use('/capability-credentials', gate)
-  app.use('/capability-credentials/*', gate)
+  mountWorkspacePermissionIncludingReads(app, 'secrets.manage', ['/capability-credentials'])
 
   buildHonoRoute(app, getCapabilityCredentialsContract, async (c) => {
     const svc = requireCapabilityCredentials(c)

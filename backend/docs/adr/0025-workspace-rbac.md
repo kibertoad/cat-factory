@@ -62,18 +62,30 @@ NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration)
   2. **The viewer write floor**, also in the gate: any non-GET/HEAD method requires `≥ member`,
      covering the whole member tier (`board.write` + `runs.execute`) with zero per-controller code.
      Its sole exemption is the read-only WS-ticket mint.
-  3. **The admin-tier permission gate** `requireWorkspacePermission(perm)`
-     (`server/src/http/workspaceAccess.ts`): a method-shaped Hono middleware mounted ONCE at the top
-     of each admin controller. It gates every write the controller serves (now and future) with that
-     one permission while letting reads through, and runs before the handler's 503/lookup so an
-     unauthorized member gets a clean 403 without learning whether the integration is wired. Each
-     admin controller maps to exactly ONE permission (whole-controller). Two mixed controllers
-     (`WorkspaceController`, `WorkspaceMemberController`) use the imperative `requirePermission(c,
-perm)` helper per-handler instead. A third shape landed later for a controller whose routes split
-     by TIER rather than by permission: `DocumentSourceController` mounts `integrations.manage` on
-     its own credential and role-link PATH PATTERNS and leaves its authoring writes to the viewer
-     floor (see [`document-sources.md`](../document-sources.md)). A resolved-but-insufficient caller gets **403 `ForbiddenError`**
-     (`DomainErrorCode 'forbidden'`); an unresolved board gets **404** (invisibility vs insufficiency).
+  3. **The admin-tier permission gate** `mountWorkspacePermission(app, perm, prefixes)`
+     (`server/src/http/workspaceAccess.ts`): a method-shaped Hono middleware mounted on each admin
+     controller's OWN top-level path prefixes. It gates every write served under them (now and
+     future) with that one permission while letting reads through, and runs before body validation
+     and before the handler's 503/lookup, so an unauthorized member gets a clean 403 without
+     learning whether the integration is wired. Each admin controller maps to exactly ONE
+     permission. Two mixed controllers (`WorkspaceController`, `WorkspaceMemberController`) use the
+     imperative `requirePermission(c, perm)` helper per-handler instead, and one
+     (`DocumentSourceController`) splits by TIER: it gates its credential and role-link prefixes and
+     leaves its authoring writes to the viewer floor (see
+     [`document-sources.md`](../document-sources.md)). A resolved-but-insufficient caller gets
+     **403 `ForbiddenError`** (`DomainErrorCode 'forbidden'`); an unresolved board gets **404**
+     (invisibility vs insufficiency).
+
+     **The mount takes prefixes because `'*'` did not scope to the controller.** Every gate was
+     originally `app.use('*', …)`, which `app.route(prefix, sub)` re-registers as `ALL <prefix>/*` on
+     the shared app; Hono runs a matching middleware for every route registered after it, so each
+     admin gate also refused the writes of every SIBLING controller mounted later in `app.ts`. With
+     the admin document and task-source controllers registered ahead of the human-gate ones, a plain
+     `member` was refused their own review decisions, requirement answers and initiative writes with
+     `integrations.manage`; nothing caught it because an account admin resolves as a workspace admin,
+     which is who develops. No gate middleware factory is exported any more, so a `'*'` mount is
+     unrepresentable, and `http/permissionMounts.test.ts` drives `WORKSPACE_CONTROLLERS` against the
+     composed app to assert a member is refused exactly the writes their own controller gates.
 
 - **Caching.** Resolution runs on every workspace request (3 reads folded into one load), so it
   routes through the `workspaceAccess` AppCaches slice (group = workspace id, key = user id, negative

@@ -2,7 +2,7 @@ import { listVcsConnectOptionsContract, type VcsConnectOption } from '@cat-facto
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 
 /**
  * Provider-neutral VCS connect capability: which connect surfaces this deployment can actually
@@ -18,7 +18,7 @@ import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
  */
 export function vcsConnectController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/vcs'])
 
   buildHonoRoute(app, listVcsConnectOptionsContract, (c) => {
     const container = c.get('container')
