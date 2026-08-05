@@ -170,6 +170,17 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
           </span>
         </div>
 
+        <!-- The rubric asked for a model this deployment cannot serve, so something else scored
+             the work. Only this case is shown: a pin that was honoured says nothing the model
+             name doesn't, and being overridden by the task's own choice is the normal outcome. -->
+        <p
+          v-if="judge.modelPin?.status === 'unavailable'"
+          class="mt-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] leading-relaxed text-amber-200"
+          data-testid="judge-model-pin"
+        >
+          {{ t('judge.modelPinUnavailable', { model: judge.modelPin.requested }) }}
+        </p>
+
         <!-- Why the judge did nothing, when it did nothing. A skipped judge must never read
              like a clean pass. -->
         <p

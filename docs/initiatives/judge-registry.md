@@ -151,6 +151,38 @@ host-parsed, often public surface**. Every hole goes through `hostMarkdown` + `r
 exactly like the rest of the report. A judge step that did not run records
 `status: 'absent'` with a note: a silently missing section reads like a clean one.
 
+### D9: The judge's MODEL is a registration pin, resolved under the judge's OWN kind
+
+**Decision: `JudgeDefinition.modelId` names a CATALOG MODEL ID, and every judge resolves its
+model under its own `kind` rather than a shared `judge` key.** Precedence, most specific first:
+the task's pinned model, a workspace preset override NAMING the judge's kind, this pin, the
+preset's base model, the deployment's routing default.
+
+Two things were wrong before, and both were silent. The model-defaults panel already lists every
+registered judge as its own row (a judge reaches the palette through `customAgentKinds`), while
+the engine resolved every judge under the constant `judge`, so a workspace could author a
+per-judge default the run would never read. And a registration could state the rubric and the
+verdict schema but not the model the rubric was written for, which is the one thing the
+deployment knows and the workspace does not: scoring a security rubric is not the same ask as
+scoring doc completeness.
+
+The pin's POSITION is the whole design. Above the preset's base model, because a base is a
+blanket statement about every kind and a pin placed under it could never be reached. Below an
+override that names the kind, for the same reason the threshold lives on the merge preset (D3): a
+deployment-global constant no workspace can relax is not a policy. That split needs the two
+halves of a preset kept apart, hence `PresetRouting.pinnedForKind` and kernel's
+`presetOverrideForKind`, where `modelForKindFromPreset` collapses them.
+
+A **catalog id, never a `ModelRef`**: an id resolves through the deployment's own catalog under
+the route order the task's preset states, so a pinned judge still honours a residency-constrained
+preset, where a `provider:model` pair would bypass both.
+
+An id this deployment cannot serve is **stated, not swapped**: `step.judge.modelPin` records
+`applied` / `overridden` / `unavailable`, and the unavailable case is called out in the judge
+window and the PR report. A rubric scored by a model its author rejected otherwise reads exactly
+like one it approved. Telemetry follows the same key, so each rubric's spend is its own line in
+the `(agentKind, phase)` rollup instead of every judge's landing on `judge`.
+
 ## Conventions & gotchas carried between iterations
 
 - **The assessment rides an injectable `JudgeAssessor` seam, not a direct `generateText`.**
@@ -194,6 +226,7 @@ exactly like the rest of the report. A judge step that did not run records
 | 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
 | 12a | E2E: the bounce loop + the parked verdict answered from the judge window (`judge-gate.spec.ts`), driving the worked example of slice 10                | done   | —       |
 | 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
+| 14  | Per-judge model pin (D9): `JudgeDefinition.modelId`, resolution under the judge's own kind, `step.judge.modelPin` on the window + PR report            | done   | this PR |
 
 ## Deliberately NOT pursued
 

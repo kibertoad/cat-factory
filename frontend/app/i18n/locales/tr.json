@@ -4709,6 +4709,7 @@
     "threshold": "eşik {threshold}",
     "thresholdHint": "Bu adımın ulaşması gereken puan; görevin birleştirme politikasından alınır. Altında kaldığında hakem, bulgularını yeniden çalışma olarak ekleyip işi üreten adıma geri gönderir; deneme bütçesi kalmadıysa çalıştırmayı sizin için beklemeye alır.",
     "rubricOverridden": "çalışma alanı ölçütü",
+    "modelPinUnavailable": "Bu inceleme {model} modeli için yazıldı ancak bu kurulum onu çalıştıramıyor, bu yüzden işi başka bir model puanladı.",
     "reworkRounds": "yeniden çalışma {spent}/{budget}",
     "findingsHeading": "Ölçütün işaretledikleri",
     "roundsHeading": "İnceleme turları",

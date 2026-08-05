@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { mergeAssessmentSchema } from './merge.js'
-import { judgeDispositionSchema, judgeFindingSchema } from './judge.js'
+import { judgeDispositionSchema, judgeFindingSchema, judgeModelPinSchema } from './judge.js'
 import { requirementPrioritySchema, requirementStateSchema } from './spec.js'
 import { reproductionStatusSchema } from './reproduction.js'
 import { requirementVerdictStatusSchema, testEnvironmentSchema } from './testing.js'
@@ -625,6 +625,12 @@ export const prReportJudgeSchema = v.object({
   maxBounces: v.number(),
   /** The model that produced the verdict. */
   model: v.nullable(v.string()),
+  /**
+   * The model the judge's REGISTRATION pinned for its rubric, and what became of it. Present
+   * only when the registration named one; `unavailable` is the case a reviewer must see, since
+   * a rubric authored for one model and scored by another reads like a verdict that model gave.
+   */
+  modelPin: v.optional(v.nullable(judgeModelPinSchema)),
 })
 export type PrReportJudge = v.InferOutput<typeof prReportJudgeSchema>
 
