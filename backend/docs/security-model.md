@@ -157,7 +157,19 @@ This is the hard bound on a _fully_ compromised run. What the token is varies by
 | -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
 | Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Repo-scoped** (`repository_ids`): the repos THIS run resolved (primary + fan-out peers + conflict/merger siblings + reference repos), at the permissions the install granted | ~1h, cached per scope   |
 | Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped**: the dispatch's own repos, intersected server-side with the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged             | ~1h, minted per request |
-| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own           |
+| Local mode (PAT)           | The deployment's own source-control token                               | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own           |
+
+**Where local mode's own token comes from, and who may set it.** `GITHUB_PAT` / `GITLAB_PAT` in
+the environment WIN; with neither set, the token is the one a developer pasted on the sign-in
+screen, sealed on that machine under `ENCRYPTION_KEY` (`sqlite/vcsCredentialStore.ts`). That
+install is reachable by an UNAUTHENTICATED caller by construction: it happens during sign-in,
+before any session exists. It grants nothing on a correctly-run local deployment and is not a new
+door: whoever can reach that screen can already sign in one click with the token the deployment
+holds, and the flow closes the moment the environment names one. What it does mean is that local
+mode's existing boot warning is the real control — **the auth gate defaults open and the listener
+binds to all interfaces, so anyone on your network can reach the API** (`AUTH_DEV_OPEN=false`, or
+`HOST=127.0.0.1`). On a deployment reachable by people you do not trust, set the token in `.env`,
+which shuts the browser flow off entirely.
 
 **The App rows are narrowed by the ENGINE, at dispatch.** `jobTokenRepoIds` collects the repos one
 job body names and `buildDispatchTokenMint` turns them into GitHub's `repository_ids`. A leg on a

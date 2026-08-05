@@ -1789,7 +1789,9 @@
       "continueWithConfigured": "Zaloguj się skonfigurowanym tokenem PAT {provider}",
       "noPatTitle": "Nie skonfigurowano tokenu systemu kontroli wersji",
       "noPatBody": "Ustaw GITHUB_PAT lub GITLAB_PAT w pliku .env, aby zalogować się za pomocą osobistego tokenu dostępu, a następnie zrestartuj serwer.",
+      "setupBody": "Utwórz osobisty token dostępu i wklej go poniżej. Zaloguje Cię i stanie się tokenem, którym ta instalacja klonuje, wypycha zmiany i scala.",
       "createToken": "Utwórz token {provider} ↗",
+      "tokenBecomesCredential": "Token jest zapisywany na tym komputerze i używany przy każdym klonowaniu, wypchnięciu, PR i scaleniu wykonywanym przez agentów.",
       "orDivider": "lub",
       "failed": "Logowanie nie powiodło się. Sprawdź, czy skonfigurowany token jest prawidłowy, i spróbuj ponownie."
     },

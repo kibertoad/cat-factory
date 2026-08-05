@@ -27,7 +27,20 @@ import {
   isMothershipMode,
 } from './mothership.js'
 import { startMothershipTelemetrySweeps } from './telemetrySweeps.js'
-import { ConflictError, MODEL_PRESET_SEED_IDS, runBestEffort } from '@cat-factory/kernel'
+import {
+  ConflictError,
+  MODEL_PRESET_SEED_IDS,
+  defaultProviderRegistry,
+  runBestEffort,
+} from '@cat-factory/kernel'
+import type { ProviderRegistry, ProviderToken } from '@cat-factory/kernel'
+import {
+  CI_STATUS_PROVIDER,
+  DOC_QUALITY_PROVIDER,
+  MERGEABILITY_PROVIDER,
+  PULL_REQUEST_REVIEW_PROVIDER,
+  warnUnwiredGates,
+} from '@cat-factory/gates'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
 import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
@@ -60,9 +73,15 @@ import {
   fetchPatAccount,
   githubPatCreationUrl,
   gitlabPatCreationUrl,
-  gitlabVcsHost,
+  noVcsCredentialError,
 } from './github.js'
-import type { GitHubClient, VcsProvider } from '@cat-factory/kernel'
+import {
+  type LocalVcsCredentialSource,
+  createLocalVcsCredentialSource,
+  gitlabVcsHost,
+} from './vcsCredential.js'
+import { credentialRoutedGitHubClient } from './vcsClientRouter.js'
+import type { GitHubClient, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
 import type { ResolveRepoOrigin } from '@cat-factory/server'
 import { AutoProvisioningInstallationRepository, type PatAccount } from './installations.js'
 import {
@@ -125,57 +144,174 @@ function resolveLocalPersistence(
 }
 
 /**
- * Resolve local mode's provider-agnostic source-control wiring from env + the (optional) mothership
- * delegation: the git push/clone token, the `VcsClient`→`GitHubClient` the gates/merger/repo-link
- * read through, the single deployment provider, and the GitLab-aware repo-origin resolver. Prefers a
- * GitHub PAT, then a GitLab PAT, then mothership-delegated GitHub. Extracted from
- * {@link buildLocalContainer} to keep it under the complexity ceiling.
+ * Resolve local mode's provider-agnostic source-control wiring from the deployment credential +
+ * the (optional) mothership delegation: the git push/clone token, the `VcsClient`→`GitHubClient`
+ * the gates/merger/repo-link read through, the deployment provider, and the GitLab-aware
+ * repo-origin resolver. Extracted from {@link buildLocalContainer} to keep it under the complexity
+ * ceiling.
+ *
+ * Every member is a FUNCTION of the credential rather than a value derived from it, because the
+ * credential is installable from the sign-in screen while the server runs (`vcsCredential.ts`).
+ * The clients are therefore always built and always handed on: "this deployment has no token" is
+ * a refusal each of them raises with a named cause, never an absent client — an absent one would
+ * make the layers above wire NOTHING (no `github` module, no gate providers, no repo picker), and
+ * that decision is taken once at build time and could never be revisited.
  */
 function resolveLocalVcs(
   env: NodeJS.ProcessEnv,
   mothership: ReturnType<typeof resolveLocalPersistence>['mothership'],
   options: NodeContainerOptions,
+  credentials: LocalVcsCredentialSource,
 ) {
-  const pat = env.GITHUB_PAT?.trim()
-  const gitlabPat = env.GITLAB_PAT?.trim()
-  // The push/clone token and the VCS client are provider-agnostic. Prefer a GitHub PAT, else
-  // fall back to a GitLab PAT, so a GitLab-only local deployment still (a) authenticates the
-  // agent containers' git clone/push — the harness uses a host-neutral GIT_ASKPASS credential,
-  // so the same token drives github.com or gitlab.com — and (b) gates on CI + merges through
-  // the GitLab API via the VcsClient→GitHubClient adapter. `gitToken` is what the harness
-  // pushes with; `vcsClient` is what the gates/merger/repo-link read through.
-  const gitToken = pat ?? gitlabPat
-  // Mothership-mode GitHub delegation: with NO local PAT, GitHub is reached on installation
+  // The push/clone token is provider-agnostic: the harness uses a host-neutral GIT_ASKPASS
+  // credential, so the same token drives github.com or gitlab.com.
+  const gitToken = () => credentials.current()?.token
+  const tokenFor = (provider: VcsProvider) => () => {
+    const current = credentials.current()
+    return current?.provider === provider ? current.token : undefined
+  }
+  // Mothership-mode GitHub delegation: with NO local credential, GitHub is reached on installation
   // tokens the MOTHERSHIP mints over the machine API (`/internal/github/installation-token`) —
   // the org's GitHub App backs the laptop's agent containers, gates/merge, RepoFiles ops and
-  // the environment self-test, with no App key or long-lived credential on this machine. An
-  // explicitly configured PAT (GitHub or GitLab) wins; delegation is the no-PAT default.
-  const delegatedGitHub = mothership && !gitToken ? mothership.githubTokenSource : undefined
-  const vcsClient: GitHubClient | undefined = pat
-    ? // The picker-typeahead enumeration cache (`AppCaches.patInstallationRepos`). `start()`
-      // passes the process cache bag through; a mothership boot / test harness without one
-      // degrades to a live enumeration per search, unchanged.
-      createLocalGitHubClient(env, options.caches?.patInstallationRepos)
-    : gitlabPat
-      ? createLocalGitLabClient(env)
-      : delegatedGitHub
-        ? createDelegatedGitHubClient(env, delegatedGitHub)
-        : undefined
-  // When GitLab is the active backend (no GitHub PAT), the agent containers must clone the
-  // GitLab host and open merge requests — not github.com. The repo projection carries no host,
-  // so build the clone URL + provider from the configured GitLab host here. Same host the
-  // harness allow-list is widened to (`harnessAllowedHosts`), so they can't disagree.
-  const gitlabHost = pat ? undefined : gitlabPat ? gitlabVcsHost(env) : undefined
-  // Local mode is single-provider: GitLab when a GitLab host was resolved, GitHub otherwise
-  // (GitHub PAT or mothership delegation). The synthetic connection is stamped with it.
-  const deploymentProvider: VcsProvider = gitlabHost ? 'gitlab' : 'github'
-  const resolveRepoOrigin: ResolveRepoOrigin | undefined = gitlabHost
-    ? (repo) => ({
-        cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
-        provider: 'gitlab',
-      })
+  // the environment self-test, with no App key or long-lived credential on this machine. A
+  // configured PAT (GitHub or GitLab) wins; delegation is the no-PAT default, decided per call so
+  // a PAT installed later takes over.
+  const delegatedGitHub = mothership?.githubTokenSource
+  // The picker-typeahead enumeration cache (`AppCaches.patInstallationRepos`). `start()` passes
+  // the process cache bag through; a mothership boot / test harness without one degrades to a
+  // live enumeration per search, unchanged.
+  const githubClient = createLocalGitHubClient(
+    env,
+    tokenFor('github'),
+    options.caches?.patInstallationRepos,
+  )
+  const gitlabClient = createLocalGitLabClient(env, tokenFor('gitlab'))
+  const delegatedClient = delegatedGitHub
+    ? createDelegatedGitHubClient(env, delegatedGitHub)
     : undefined
+  const vcsClient: GitHubClient = credentialRoutedGitHubClient(() => {
+    const provider = credentials.current()?.provider
+    if (provider === 'gitlab') return gitlabClient
+    if (provider === 'github') return githubClient
+    // No credential: mothership delegation if this node has it, else the GitHub client, whose
+    // refusal names the missing token (rather than an absent client, which reads as "this
+    // deployment does not do source control").
+    return delegatedClient ?? githubClient
+  })
+  // Local mode is single-provider: whichever the credential is, GitHub when there is none (the
+  // mothership-delegated shape). The synthetic connection is stamped with it.
+  const deploymentProvider = (): VcsProvider => credentials.current()?.provider ?? 'github'
+  // When GitLab is the active backend, the agent containers must clone the GitLab host and open
+  // merge requests — not github.com. The repo projection carries no host, so build the clone URL
+  // + provider from the configured GitLab host here. Same host the harness allow-list is widened
+  // to (`harnessAllowedHosts`), so they can't disagree. The GitHub branch reproduces the engine's
+  // own default (`githubRepoOrigin`), which this resolver now displaces on every local build.
+  const resolveRepoOrigin: ResolveRepoOrigin = (repo) => {
+    const gitlabHost = gitlabVcsHost(env, credentials.current())
+    return gitlabHost
+      ? {
+          cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
+          provider: 'gitlab',
+        }
+      : { cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`, provider: 'github' }
+  }
   return { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin }
+}
+
+/**
+ * The two surfaces that turn the deployment credential into an IDENTITY: the sign-in registry
+ * (`/auth/pat` + what the login screen renders), and the synthetic per-workspace installation the
+ * shared GitHub integration is built around. Both read the credential live, so a token installed
+ * from the sign-in screen makes the deployment connected without a restart.
+ */
+function resolveLocalVcsIdentity(params: {
+  env: NodeJS.ProcessEnv
+  db: NodeContainerOptions['db']
+  credentials: LocalVcsCredentialSource
+  gitToken: ReturnType<typeof resolveLocalVcs>['gitToken']
+  deploymentProvider: ReturnType<typeof resolveLocalVcs>['deploymentProvider']
+}): {
+  vcsIdentity: VcsIdentityRegistry
+  githubInstallationRepository: NodeContainerOptions['githubInstallationRepository']
+} {
+  const { env, db, credentials, gitToken, deploymentProvider } = params
+  // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically.
+  // A provider whose token the deployment holds offers a "Sign in with configured <provider> PAT"
+  // button; the rest take a pasted token, which local mode then adopts as its own credential.
+  // Advertised on `localMode.patLogin` so the login screen renders the right controls, and
+  // exposed on the container for the `/auth/pat` endpoint.
+  const vcsIdentity = buildVcsIdentityRegistry(env, credentials.current)
+  // Local mode has no GitHub-App connect flow, so a workspace's installation is conjured
+  // from the PAT on first read (see AutoProvisioningInstallationRepository): the synthetic
+  // row makes `getConnection` report connected and gives the sync service an installation
+  // id to list/link repos under. The PAT account is fetched once PER TOKEN and shared across
+  // workspaces (a single developer's token) — keyed by the token so installing a new one
+  // re-attributes the synthetic connection instead of serving the previous account's login.
+  let account: { token: string; promise: Promise<PatAccount> } | undefined
+  const resolveAccount = (): Promise<PatAccount | null> => {
+    const token = gitToken()
+    if (!token) return Promise.resolve(null)
+    if (account?.token !== token) account = { token, promise: fetchPatAccount(env, token) }
+    return account.promise
+  }
+  // Wired whenever there is a database to hold the row, NOT only when a credential already
+  // exists: the repository is what makes a workspace report connected, and deciding that at boot
+  // would leave a deployment that gains its token five minutes later permanently disconnected.
+  // With no credential the lazy provision resolves NO account and the row simply isn't written,
+  // so nothing is fabricated in the meantime.
+  return {
+    vcsIdentity,
+    githubInstallationRepository: db
+      ? new AutoProvisioningInstallationRepository(
+          new DrizzleGitHubInstallationRepository(db),
+          resolveAccount,
+          deploymentProvider,
+        )
+      : undefined,
+  }
+}
+
+/**
+ * The built-in gate providers built FROM the VCS client. Each answers a question only a
+ * source-control credential can answer, so each must be wired exactly while the deployment has
+ * one — see {@link followCredentialOnProviderRegistry}. (`release-health` and
+ * `incident-enrichment` are Datadog-shaped and unrelated, so they are deliberately absent.)
+ */
+const VCS_BACKED_GATE_PROVIDERS: readonly ProviderToken<unknown>[] = [
+  CI_STATUS_PROVIDER,
+  MERGEABILITY_PROVIDER,
+  PULL_REQUEST_REVIEW_PROVIDER,
+  DOC_QUALITY_PROVIDER,
+]
+
+/**
+ * Make the VCS-backed gate providers follow the deployment credential.
+ *
+ * A gate probes iff its provider is wired, and local mode now hands the build a VCS client that
+ * always exists (see {@link resolveLocalVcs}) — so the build wires all four regardless. That is
+ * right the moment a credential exists and wrong before it: an unconfigured deployment would probe
+ * CI with nothing to ask and fail runs whose documented behaviour is to pass through. So the
+ * impls the build produced are captured once and re-wired (or cleared) as the credential comes and
+ * goes. This decides only WHETHER they are wired; the impls are the build's own, verbatim.
+ *
+ * `warnUnwiredGates` runs again after clearing, because the build's own call saw them wired and
+ * therefore said nothing — and "CI is never checked, PRs advance as if green" is exactly what an
+ * operator must hear about a deployment with no token.
+ */
+function followCredentialOnProviderRegistry(
+  registry: ProviderRegistry,
+  credentials: LocalVcsCredentialSource,
+): void {
+  const built = new Map(VCS_BACKED_GATE_PROVIDERS.map((token) => [token, registry.get(token)]))
+  const apply = () => {
+    const configured = !!credentials.current()
+    for (const token of VCS_BACKED_GATE_PROVIDERS) {
+      registry.wire(token, configured ? built.get(token) : undefined)
+    }
+    if (!configured) warnUnwiredGates(registry, logger)
+  }
+  apply()
+  credentials.onChange(apply)
 }
 
 /**
@@ -251,6 +387,8 @@ interface LocalNodeOptionsBundle {
   localComposeRuntime: ReturnType<typeof setupLocalComposeRuntime>['localComposeRuntime']
   localPreflightProbes: ReturnType<typeof setupLocalComposeRuntime>['localPreflightProbes']
   inProcessRunner: SqliteWorkRunner | undefined
+  providerRegistry: ProviderRegistry
+  credentials: LocalVcsCredentialSource
 }
 
 /**
@@ -281,6 +419,8 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     localComposeRuntime,
     localPreflightProbes,
     inProcessRunner,
+    providerRegistry,
+    credentials,
   } = bundle
   // How long a HOST-CLI inline run may STALL (`LOCAL_INLINE_CLI_IDLE_TIMEOUT_MS`) and how long it
   // may run at all (`LOCAL_INLINE_CLI_MAX_TIMEOUT_MS`). Resolved beside the `detectHostInlineClis`
@@ -291,6 +431,9 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     env,
     config,
     repos,
+    // The instance the facade holds, so its credential-following re-wiring acts on the very
+    // registry this build wires its gate providers onto.
+    providerRegistry,
     // Override the spread `options.realtimeSink` with the mothership-layered sink (a no-op wrap
     // when not in mothership mode — it stays the injected hub).
     ...(realtimeSink ? { realtimeSink } : {}),
@@ -354,35 +497,33 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     // an account can still switch to S3 in the UI. (Node mode defaults to `off` — storage
     // there requires explicit per-account configuration.)
     contentStorageDefaultBackend: 'fs',
-    // Authenticate git with the developer's PAT when present (GitHub or GitLab — the harness
-    // credential is host-neutral); in mothership mode without a PAT, mint the per-installation
-    // push/clone token from the mothership's GitHub App instead. Absent both → the executor
-    // falls back to the GitHub App path (and is null without it), so container kinds fail
-    // loudly rather than silently mis-running.
-    ...(gitToken
-      ? { mintInstallationToken: async () => gitToken }
-      : delegatedGitHub
-        ? {
-            // Forward the dispatch's repo scope: the mothership intersects it with what it links
-            // for the installation, so a mothership-mode container gets the same narrowed token a
-            // hosted deployment's own dispatch mints.
-            mintInstallationToken: (id: number, opts?: { repositoryIds?: number[] }) =>
-              delegatedGitHub.installationToken(id, opts),
-          }
-        : {}),
-    // The PAT-backed VCS client wires the CI gate + merge / mergeability providers, so a local
-    // pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link
+    // Authenticate git with the deployment's PAT when it has one (GitHub or GitLab — the harness
+    // credential is host-neutral); in mothership mode without one, mint the per-installation
+    // push/clone token from the mothership's GitHub App instead. Neither ⇒ the mint REFUSES,
+    // naming the missing token, so a container kind fails with the one sentence that fixes it
+    // instead of an anonymous auth error from git.
+    mintInstallationToken: async (id: number, opts?: { repositoryIds?: number[] }) => {
+      const token = gitToken()
+      if (token) return token
+      // Forward the dispatch's repo scope: the mothership intersects it with what it links
+      // for the installation, so a mothership-mode container gets the same narrowed token a
+      // hosted deployment's own dispatch mints.
+      if (delegatedGitHub) return delegatedGitHub.installationToken(id, opts)
+      throw noVcsCredentialError()
+    },
+    // The credential-backed VCS client wires the CI gate + merge / mergeability providers, so a
+    // local pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link
     // endpoints. GitHub uses the PAT client (repos via /user/repos); GitLab uses the
-    // FetchGitLabClient adapted to the same GitHubClient port.
-    ...(vcsClient ? { githubClient: vcsClient } : {}),
-    // For a GitLab backend, make agent containers clone the GitLab host + open MRs (without
-    // this the clone URL is always github.com, so a GitLab repo can't be cloned).
-    ...(resolveRepoOrigin ? { resolveRepoOrigin } : {}),
+    // FetchGitLabClient adapted to the same GitHubClient port; the router picks per call.
+    githubClient: vcsClient,
+    // Make agent containers clone the host the current credential belongs to and open PRs/MRs
+    // there (without this the clone URL is always github.com, so a GitLab repo can't be cloned).
+    resolveRepoOrigin,
     // Browsable frontend preview (slice 5c): the local Docker/Apple adapter can publish a served
     // app's port to the host + keep the container alive, so local mode wires the real preview
     // transport (buildNodeContainer builds the job builder from local's PAT-backed seams). The
     // capability was already advertised `frontendPreview.supported: true` above.
-    previewTransport: createLocalPreviewTransportFromEnv(env),
+    previewTransport: createLocalPreviewTransportFromEnv(env, undefined, credentials.current),
     // Serve enabled subscription harness refs (Claude Code / Codex + the non-native
     // claude-code vendors GLM/Kimi/DeepSeek) as INLINE calls: the developer's OWN host CLI
     // when its binary is present (ambient login, unmetered), else a warm CONTAINER on a LEASED
@@ -424,7 +565,8 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
       ...(localPreflightProbes ? { preflightHostProbes: localPreflightProbes } : {}),
       // Clone a shared stack's repo with the same source-control PAT the agent containers push
       // with, so a stack whose `cloneUrl` is a PRIVATE repo can be brought up (else public-only).
-      ...(gitToken ? { sharedStackCloneToken: gitToken } : {}),
+      // Read per call for the same reason the mint above is: the credential can arrive later.
+      sharedStackCloneToken: gitToken,
       ...options.overrides,
       // Mothership mode's in-process work runner (no pg-boss). After `...options.overrides` so an
       // explicit test override still wins; in mothership boot there is no `boss`, so this is the
@@ -434,9 +576,8 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
       // creation URL; GitLab `api` covers it), so the connection isn't missing that grant —
       // report it granted to suppress the advisory banner. (The App-permissions probe this
       // normally uses needs an app JWT, which a single-token connection has no equivalent of.)
-      ...(gitToken
-        ? ({ workflowsGranted: async () => true } satisfies Partial<CoreDependencies>)
-        : {}),
+      // Answers per call, so a deployment with no credential yet does NOT claim the grant.
+      ...({ workflowsGranted: async () => !!gitToken() } satisfies Partial<CoreDependencies>),
       // Per-USER infra handler overrides are a LOCAL-mode feature: only the local facade
       // wires the repository, so the per-user override service + controller assemble here
       // (and stay 503 / inert on the Worker + Node facades). A developer can point a
@@ -464,33 +605,38 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
 function buildLocalAppConfig(params: {
   base: AppConfig
   env: NodeJS.ProcessEnv
-  gitToken: ReturnType<typeof resolveLocalVcs>['gitToken']
+  credentials: LocalVcsCredentialSource
   delegatedGitHub: ReturnType<typeof resolveLocalVcs>['delegatedGitHub']
   nativeAgents: boolean
   nativeHarnesses: HarnessKind[]
   inlineAgents: boolean
   inlineHarnesses: HarnessKind[]
   mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
-  configured: VcsProvider[]
 }): AppConfig {
   const {
     base,
     env,
-    gitToken,
+    credentials,
     delegatedGitHub,
     nativeAgents,
     nativeHarnesses,
     inlineAgents,
     inlineHarnesses,
     mothership,
-    configured,
   } = params
   return {
     ...base,
     // Enable the (provider-neutral) source-control integration for EITHER PAT — or for
     // mothership-delegated GitHub: the read/link endpoints + gates are served through
-    // `vcsClient`, PAT- or delegation-backed alike.
-    ...(gitToken || delegatedGitHub ? { github: { ...base.github, enabled: true } } : {}),
+    // `vcsClient`, PAT- or delegation-backed alike. A GETTER, because a credential installed
+    // from the sign-in screen must turn the integration on for the next request rather than at
+    // the next restart; `VcsConnectController` and the Node github wiring both read it live.
+    github: {
+      ...base.github,
+      get enabled() {
+        return !!credentials.current() || !!delegatedGitHub
+      },
+    },
     ...(nativeAgents ? { nativeAmbientAuth: nativeHarnesses } : {}),
     // Inline LLM steps (requirements reviewer, brainstorm, task-estimator, inline document kinds)
     // run on a subscription model through the developer's ambient `claude`/`codex` CLI — so a
@@ -513,12 +659,27 @@ function buildLocalAppConfig(params: {
       // to the mothership (org/durable state), and (in mothership mode) where to send the user
       // to sign in. Off → the standard siloed-Postgres local mode.
       ...(mothership ? { mothership: true, mothershipUrl: env.LOCAL_MOTHERSHIP_URL?.trim() } : {}),
-      // No "create a PAT" banner when GitHub rides mothership delegation — a PAT is optional there.
-      ...(gitToken || delegatedGitHub ? {} : { githubPatSetupUrl: githubPatCreationUrl() }),
-      // Scopes-preselected "create a PAT" deep links so the "no token configured" notice sends
-      // the developer straight to the right token page (scopes differ per provider).
+      // No "create a PAT" banner once a token is configured, or when GitHub rides mothership
+      // delegation (a PAT is optional there). A getter, like every other credential-derived
+      // field here: the banner has to go away when the token arrives, not at the next restart.
+      get githubPatSetupUrl() {
+        return credentials.current() || delegatedGitHub ? undefined : githubPatCreationUrl()
+      },
       patLogin: {
-        configured,
+        // The provider(s) offering ONE-CLICK sign-in: whichever the deployment already holds a
+        // token for. Local mode operates on exactly one, so this is at most a single entry.
+        get configured() {
+          const current = credentials.current()
+          return current ? [current.provider] : []
+        },
+        // The providers a token may be INSTALLED for from the sign-in screen. Empty once `.env`
+        // owns the credential (it wins, so a pasted one would be ignored) — the screen must not
+        // offer a box whose contents go nowhere.
+        get installable() {
+          return credentials.installable()
+        },
+        // Scopes-preselected "create a PAT" deep links so the notice sends the developer straight
+        // to the right token page (scopes differ per provider).
         setupUrls: { github: githubPatCreationUrl(), gitlab: gitlabPatCreationUrl() },
       },
     },
@@ -548,13 +709,15 @@ function buildLocalAgentTransports(params: {
   mothership: ReturnType<typeof resolveLocalPersistence>['mothership']
   repos: ReturnType<typeof resolveLocalPersistence>['repos']
   nativeAgents: boolean
+  /** The deployment credential, read per container start for the harness host allow-list. */
+  credentials: LocalVcsCredentialSource
 }): {
   localSettingsService: LocalSettingsService | undefined
   resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
   localAgentsResolve: ResolveRunnerTransport
   getNativeProcessTransport: () => LocalProcessRunnerTransport | undefined
 } {
-  const { env, options, mothership, repos, nativeAgents } = params
+  const { env, options, mothership, repos, nativeAgents, credentials } = params
 
   // The local container transport is constructed LAZILY on first dispatch, so the service
   // still boots to serve the board (and inline kinds) even when no container runtime is up.
@@ -608,7 +771,7 @@ function buildLocalAgentTransports(params: {
     : undefined
   const buildServingTransport = async (): Promise<LocalContainerRunnerTransport> => {
     const settings = await localSettingsService?.resolve()
-    const transport = createLocalContainerTransportFromEnv(env, settings)
+    const transport = createLocalContainerTransportFromEnv(env, settings, credentials.current)
     // Boot housekeeping on the SERVING instance: reap exited per-run containers, drain
     // pool members orphaned by a previous process, and pre-warm to poolMinWarm. Best
     // -effort — if the container runtime is down this throws, but a later dispatch then
@@ -683,6 +846,8 @@ function resolveLocalRunnerTransports(params: {
   clock: SystemClock
   idGenerator: CryptoIdGenerator
   nativeAgents: boolean
+  /** The deployment credential, read per container start for the harness host allow-list. */
+  credentials: LocalVcsCredentialSource
 }): {
   resolveTransport: ResolveRunnerTransport
   resolveContainerTransport: () => Promise<LocalContainerRunnerTransport>
@@ -695,15 +860,25 @@ function resolveLocalRunnerTransports(params: {
   localDeployTransport: ReturnType<typeof buildLocalDeployTransport>
   getNativeProcessTransport: () => LocalProcessRunnerTransport | undefined
 } {
-  const { env, options, mothership, repos, wsSettings, config, clock, idGenerator, nativeAgents } =
-    params
+  const {
+    env,
+    options,
+    mothership,
+    repos,
+    wsSettings,
+    config,
+    clock,
+    idGenerator,
+    nativeAgents,
+    credentials,
+  } = params
 
   const {
     localSettingsService,
     resolveContainerTransport,
     localAgentsResolve,
     getNativeProcessTransport,
-  } = buildLocalAgentTransports({ env, options, mothership, repos, nativeAgents })
+  } = buildLocalAgentTransports({ env, options, mothership, repos, nativeAgents, credentials })
 
   // Eagerly kick off the serving transport's boot housekeeping (reap + pre-warm), so a warm
   // pool is ready before the first run rather than warming on first dispatch. The harness image
@@ -938,7 +1113,17 @@ function buildLocalMothershipRuntime(params: {
   return { inProcessRunner, realtimeSink }
 }
 
-export function buildLocalContainer(options: NodeContainerOptions): ServerContainer {
+/** {@link buildLocalContainer}'s options: the Node facade's, plus the local-only seams. */
+export interface LocalContainerOptions extends NodeContainerOptions {
+  /**
+   * The deployment's source-control credential source. Defaults to `.env` layered over the sealed
+   * local store; injected by tests (and by anything that wants the credential in memory rather
+   * than in the developer's home directory).
+   */
+  vcsCredentials?: LocalVcsCredentialSource
+}
+
+export function buildLocalContainer(options: LocalContainerOptions): ServerContainer {
   const env = applyLocalDefaults(options.env ?? process.env)
   // One shared clock/idGenerator, reused by the per-workspace transport chooser below AND
   // threaded into `buildNodeContainer` (which would otherwise build its own) so the chooser
@@ -952,11 +1137,19 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // left undefined, and the in-process work runner replaces pg-boss. Off → the standard
   // siloed-Postgres local mode is unchanged (`repos` is the Drizzle set over the local Postgres).
   const { mothership, repos } = resolveLocalPersistence(options, env, clock)
-  // The provider-agnostic push/clone token + VCS client + repo-origin resolution (GitHub PAT →
-  // GitLab PAT → mothership-delegated GitHub). Extracted to keep `buildLocalContainer` under the
-  // complexity ceiling.
+  // The deployment's source-control credential as ONE live value: `.env` if it names one, else
+  // the sealed local store a developer installs into from the sign-in screen. Everything below
+  // reads it through this, so a token that arrives while the server runs is used by the next
+  // dispatch, gate probe and repo read — there is no restart in this flow.
+  const credentials = options.vcsCredentials ?? createLocalVcsCredentialSource(env)
+  // Owned here rather than left to `buildNodeContainer`'s default, so the same instance the build
+  // wires its gate providers onto is the one this facade re-wires when the credential changes.
+  const providerRegistry = options.providerRegistry ?? defaultProviderRegistry()
+  // The provider-agnostic push/clone token + VCS client + repo-origin resolution (the deployment
+  // credential, else mothership-delegated GitHub). Extracted to keep `buildLocalContainer` under
+  // the complexity ceiling.
   const { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin } =
-    resolveLocalVcs(env, mothership, options)
+    resolveLocalVcs(env, mothership, options, credentials)
   const base = options.config ?? loadNodeConfig(env)
   // Tag the config as local mode and, when no PAT is set, carry the (scopes-preselected)
   // creation URL so the SPA can surface it as a dismissible banner — the server-side warn
@@ -987,40 +1180,26 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     logger.warn(message),
   )
   const inlineAgents = inlineHarnesses.length > 0
-  // The source-control PAT-login registry (GitHub + GitLab), assembled provider-agnostically
-  // from env. `configured` providers (their PAT is set in env) offer a "Sign in with configured
-  // <provider> PAT" button — the only sign-in path, since that env token is also the operational
-  // credential. Advertised on `localMode.patLogin` so the login screen renders the right
-  // buttons, and exposed on the container for the `/auth/pat` endpoint.
-  const { registry: vcsIdentity, configured } = buildVcsIdentityRegistry(env)
+  // The sign-in registry + the synthetic per-workspace installation, both reading the credential
+  // live (see `resolveLocalVcsIdentity`).
+  const { vcsIdentity, githubInstallationRepository } = resolveLocalVcsIdentity({
+    env,
+    db: options.db,
+    credentials,
+    gitToken,
+    deploymentProvider,
+  })
   const config: AppConfig = buildLocalAppConfig({
     base,
     env,
-    gitToken,
+    credentials,
     delegatedGitHub,
     nativeAgents,
     nativeHarnesses,
     inlineAgents,
     inlineHarnesses,
     mothership,
-    configured,
   })
-
-  // Local mode has no GitHub-App connect flow, so a workspace's installation is conjured
-  // from the PAT on first read (see AutoProvisioningInstallationRepository): the synthetic
-  // row makes `getConnection` report connected and gives the sync service an installation
-  // id to list/link repos under. The PAT account is fetched once and shared across
-  // workspaces (a single developer's token).
-  let accountPromise: Promise<PatAccount> | undefined
-  const resolveAccount = () => (accountPromise ??= fetchPatAccount(env))
-  const githubInstallationRepository =
-    gitToken && options.db
-      ? new AutoProvisioningInstallationRepository(
-          new DrizzleGitHubInstallationRepository(options.db),
-          resolveAccount,
-          deploymentProvider,
-        )
-      : undefined
 
   const wsSettings = new WorkspaceSettingsService({
     workspaceSettingsRepository: repos.workspaceSettingsRepository,
@@ -1054,6 +1233,7 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
     clock,
     idGenerator,
     nativeAgents,
+    credentials,
   })
 
   applyLocalInfrastructureCapabilities({ env, config, mothership, nativeAgents })
@@ -1091,6 +1271,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
       localComposeRuntime,
       localPreflightProbes,
       inProcessRunner,
+      providerRegistry,
+      credentials,
     }),
   )
 
@@ -1127,9 +1309,21 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,
   // which is the case on every non-local facade). Also expose the PAT-login registry so the
   // `/auth/pat` endpoint can resolve a GitHub/GitLab identity (local-mode only).
+  // The gate providers the Node build wired off the VCS client follow the CREDENTIAL, because
+  // `wired()` is what makes a gate probe rather than pass through, and the client is now always
+  // present. Without this a credential-less deployment would probe CI/conflicts/human-review with
+  // nothing to ask and fail every run, where the documented behaviour is a pass-through; and a
+  // deployment that gains a credential later would keep passing through, which is the more
+  // dangerous half (a PR advancing as if CI were green). The impls are captured as the build made
+  // them and re-wired verbatim, so this decides only WHETHER they are wired, never how.
+  followCredentialOnProviderRegistry(providerRegistry, credentials)
+
   return {
     ...container,
     vcsIdentity,
+    // First-run source-control setup: the sign-in screen posts the token the developer just
+    // created and it becomes this deployment's credential, live, with no restart.
+    localVcsSetup: credentials,
     ...(localSettingsService ? { localSettings: { service: localSettingsService } } : {}),
     // Mothership-mode login seam (local facade only): the SPA hands the node a mothership session
     // via `POST /local/mothership/connect`, which forwards it to the mothership's mint endpoint and
@@ -1156,6 +1350,8 @@ export function buildLocalContainer(options: NodeContainerOptions): ServerContai
         await stopTelemetrySweeps?.()
         mothership.close()
       }
+      // Release the sealed credential store's SQLite handle (opened lazily, so often a no-op).
+      credentials.close()
       await getNativeProcessTransport()?.shutdown()
       if (localDeployTransport instanceof LocalProcessRunnerTransport) {
         await localDeployTransport.shutdown()

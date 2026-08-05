@@ -118,7 +118,7 @@ interface ProviderConfig {
 
 const github: ProviderConfig = {
   name: 'github',
-  makeClient: () => createLocalGitHubClient({ GITHUB_PAT: 'tok' }),
+  makeClient: () => createLocalGitHubClient({}, () => 'tok'),
   authOk: (h) => h.authorization === 'Bearer tok',
   repoRoute: { method: 'GET', match: '/repos/o/r', body: { id: 1, name: 'r', full_name: 'o/r' } },
   commitsRoute: { method: 'GET', match: '/repos/o/r/commits', body: [{ sha: 'sha1' }] },
@@ -184,7 +184,7 @@ const github: ProviderConfig = {
 
 const gitlab: ProviderConfig = {
   name: 'gitlab',
-  makeClient: () => createLocalGitLabClient({ GITLAB_PAT: 'tok' }),
+  makeClient: () => createLocalGitLabClient({}, () => 'tok'),
   authOk: (h) => h['private-token'] === 'tok',
   // GitLab resolves the project from the path, so no separate repo read is needed; give it a
   // harmless project route in case it is ever consulted.
@@ -427,8 +427,16 @@ defineVcsClientConformance(github)
 defineVcsClientConformance(gitlab)
 
 describe('local VCS client factories', () => {
-  it('return undefined when the provider PAT is absent (gates pass through)', () => {
-    expect(createLocalGitHubClient({})).toBeUndefined()
-    expect(createLocalGitLabClient({})).toBeUndefined()
+  it('REFUSE by naming the missing token when the deployment holds none', async () => {
+    // Both clients are always built (the credential can arrive while the server runs), so an
+    // unconfigured deployment must surface as an actionable refusal on use — not as an absent
+    // client, which the wiring above would read as "this deployment does no source control" and
+    // then never revisit.
+    await expect(
+      createLocalGitHubClient({}, () => undefined).getRepo(1, { owner: 'o', repo: 'r' }),
+    ).rejects.toThrow(/no source-control token yet/)
+    await expect(
+      createLocalGitLabClient({}, () => undefined).getRepo(1, { owner: 'o', repo: 'r' }),
+    ).rejects.toThrow(/no GitLab token yet/)
   })
 })

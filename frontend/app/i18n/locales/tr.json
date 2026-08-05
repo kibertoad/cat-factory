@@ -1789,7 +1789,9 @@
       "continueWithConfigured": "Yapılandırılmış {provider} PAT ile oturum aç",
       "noPatTitle": "Yapılandırılmış kaynak denetimi token'ı yok",
       "noPatBody": "Kişisel erişim token'ı ile oturum açmak için .env dosyanızda GITHUB_PAT veya GITLAB_PAT ayarlayın, ardından sunucuyu yeniden başlatın.",
+      "setupBody": "Bir kişisel erişim token’ı oluşturup aşağıya yapıştırın. Hem oturumunuzu açar hem de bu kurulumun klonlama, push ve birleştirme işlemlerinde kullandığı token olur.",
       "createToken": "{provider} token'ı oluştur ↗",
+      "tokenBecomesCredential": "Bu token bu makinede saklanır ve ajanların yaptığı her klonlama, push, PR ve birleştirmede kullanılır.",
       "orDivider": "veya",
       "failed": "Oturum açma başarısız. Yapılandırılan token'ın geçerli olduğunu kontrol edip tekrar deneyin."
     },

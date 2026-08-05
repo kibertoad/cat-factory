@@ -1124,10 +1124,11 @@ export interface CoreDependencies {
   composeRuntime?: ComposeRuntime
   /**
    * The VCS token a shared stack's bring-up clones its repo with (for a private `cloneUrl`). Wired
-   * on the local facade from the same source-control PAT the agent containers push with; absent ⇒
-   * unauthenticated clone (public repos only).
+   * on the local facade from the same source-control PAT the agent containers push with; absent
+   * (or answering undefined) ⇒ unauthenticated clone (public repos only). Read per bring-up
+   * because the only facade that wires it can have its credential installed while it runs.
    */
-  sharedStackCloneToken?: string
+  sharedStackCloneToken?: () => string | undefined
   /**
    * The host-bound PREFLIGHT probes (docker daemon / disk / RAM / registry login / reachability /
    * mkcert / hosts / secrets marker). Wired ONLY on the local facade (a host daemon); present ⇒ the

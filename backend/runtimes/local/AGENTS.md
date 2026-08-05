@@ -28,7 +28,29 @@ transport + the GitHub token/client seams differ.
   refuses a local-infra Tester run at start.
 - `github.ts`, `link-repo.ts` / `linkRepo.ts`, `installations.ts`: the PAT-backed GitHub
   client (`createLocalGitHubClient`) + the repo-projection seeding (`linkRepo`).
-- `container.ts`: threads the transport + GitHub seams into Node's `buildNodeContainer`.
+- `vcsCredential.ts` + `sqlite/vcsCredentialStore.ts` + `vcsClientRouter.ts`: the deployment's
+  source-control credential as ONE LIVE value. `.env` (`GITHUB_PAT` / `GITLAB_PAT`) wins; else the
+  sealed local store a developer installs into from the SIGN-IN SCREEN (`/auth/pat` with a pasted
+  token, kernel's `LocalVcsSetup`), because local mode's one token is both the identity and what
+  every agent step clones/pushes/merges with, and sending someone to `.env` + a restart is a dead
+  end at exactly the moment they have just created a token. Three rules bind anything reading it:
+  - **Ask at CALL time, never at build time.** The clients, the dispatch token mint, the clone
+    origin and the harness host allow-list are always built and resolve the token per call — so
+    "no credential" is a REFUSAL that names the fix, never an absent client. An absent client is
+    what makes the layers above wire nothing (no `github` module, no gate providers, no repo
+    picker), and that decision is taken once and never revisited.
+  - **What genuinely cannot be per-call FOLLOWS the credential** via `onChange`:
+    `followCredentialOnProviderRegistry` (a gate probes iff its provider is wired, so an
+    unconfigured deployment must pass CI through and a newly-configured one must stop doing so),
+    and the container transport's `resolveEnv`.
+  - **`.env` beating the store is what keeps that file honest**, so the browser flow is offered
+    only while it names nothing (`patLogin.installable`); an already-INSTALLED token can still be
+    replaced, since the sign-in screen is the only surface a locked-out developer can reach.
+    The store seals with a SYNCHRONOUS AES-GCM envelope under the deployment `ENCRYPTION_KEY` rather
+    than the shared `WebCryptoSecretCipher`, so every reader stays synchronous and no boot window
+    can report "unconfigured" while a decrypt is in flight; an envelope it cannot open (a rotated
+    key) reads as NO credential, the state the sign-in screen already knows how to fix.
+- `container.ts`: threads the transport + credential/VCS seams into Node's `buildNodeContainer`.
 - `mothership.ts` + `sqlite/`: **mothership mode** (`LOCAL_MOTHERSHIP_URL`), a third boot shape
   with NO local Postgres, where org/durable state is served by a hosted cat-factory over the
   `/internal/*` machine API and only credentials/settings/the work queue/**telemetry** stay on the

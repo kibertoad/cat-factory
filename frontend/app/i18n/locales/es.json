@@ -1789,7 +1789,9 @@
       "continueWithConfigured": "Inicia sesión con el PAT de {provider} configurado",
       "noPatTitle": "No hay ningún token de control de versiones configurado",
       "noPatBody": "Define GITHUB_PAT o GITLAB_PAT en tu .env para iniciar sesión con un token de acceso personal y reinicia el servidor.",
+      "setupBody": "Crea un token de acceso personal y pégalo abajo. Inicia tu sesión y pasa a ser el token con el que esta instalación clona, publica y fusiona.",
       "createToken": "Crear un token de {provider} ↗",
+      "tokenBecomesCredential": "Este token se guarda en esta máquina y se usa en cada clonado, push, PR y fusión que hacen los agentes.",
       "orDivider": "o",
       "failed": "Error al iniciar sesión. Comprueba que el token configurado sea válido e inténtalo de nuevo."
     },
