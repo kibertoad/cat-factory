@@ -15,7 +15,8 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run
   for the key, `projection.ts` turns a run into the decision list, and one `*Routes.ts` per park
   family answers it — approval gates and agent questions, the three iterative-review loops, the
-  container-backed PR review and human-verdict gates), `PublicDebugController` (the
+  container-backed PR review and human-verdict gates, and `companionRoutes.ts` for follow-up triage
+  plus the interview gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
   an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicEvidenceController`
   (the `read`-scoped run **evidence** reads for a consumer that has to JUDGE a run rather than debug

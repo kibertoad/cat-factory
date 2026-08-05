@@ -2,6 +2,8 @@ import { ContractNoBody, defineApiContract, withObjectKeys } from '@toad-contrac
 import * as v from 'valibot'
 import { brainstormStageSchema } from '../brainstorm.js'
 import {
+  publicAnswerFollowUpSchema,
+  publicAnswerInterviewSchema,
   publicApproveStepSchema,
   publicChallengePrReviewFindingSchema,
   publicChooseForkSchema,
@@ -431,5 +433,106 @@ export const requestPublicRunVisualConfirmFixContract = defineApiContract({
   requestPathParamsSchema: runIdParams,
   pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/visual-confirmation/request-fix`,
   requestBodySchema: publicRequestGateFixSchema,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+// ---- follow-up triage -------------------------------------------------------
+//
+// Per ITEM, because that is the unit of the decision: the Coder streams a handful of loose ends
+// and questions and each is settled on its own terms, with the run held until none is `pending`.
+// Addressed by the item's own id for the reason the approval routes are addressed by `approvalId`:
+// a pipeline may carry more than one follow-up-enabled Coder step, and the engine routes an item
+// to the step that surfaced it, so a call that omitted the id would settle whichever step the
+// server picked.
+//
+// `send-back` is named for what it does rather than for the `queued` status it records: the item
+// is folded into another Coder pass. The two words are one action, and the projection's `status`
+// is what a caller reads back.
+
+/** File a `follow_up` item as a tracker issue, recording the ticket ref on the item. */
+export const filePublicRunFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runItemParams,
+  pathResolver: ({ runId, itemId }) =>
+    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/file`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+/** Send a `follow_up` item back to the Coder: it is folded into another pass (status `queued`). */
+export const sendBackPublicRunFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runItemParams,
+  pathResolver: ({ runId, itemId }) =>
+    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/send-back`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+/** Answer a `question` item; the answer steers the Coder's next pass. */
+export const answerPublicRunFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runItemParams,
+  pathResolver: ({ runId, itemId }) =>
+    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/answer`,
+  requestBodySchema: publicAnswerFollowUpSchema,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+/** Wave one item off without acting on it. Valid for either item kind. */
+export const dismissPublicRunFollowUpContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runItemParams,
+  pathResolver: ({ runId, itemId }) =>
+    `/api/v1/runs/${runId}/decisions/follow-ups/items/${itemId}/dismiss`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+// ---- interview gates --------------------------------------------------------
+//
+// ONE route set for every interview gate, keyed by RUN alone: which interviewer is asking is a
+// property of the parked step, so the server resolves it rather than making the caller name a
+// gate it read out of the same projection a moment earlier. The decision's `stepKind` says which
+// one answered.
+//
+// `answer` records an answer and nothing else: the run stays parked, and a caller answers the
+// whole batch before resuming. That split is the engine's, not this surface's: resuming runs the
+// (slow) interviewer LLM in the durable driver, so a per-answer resume would spend a model call
+// per question.
+//
+// The planning interviewer's in-app extras (dismiss a question as not relevant, ask the
+// interviewer to DRAFT an answer) are deliberately absent. Both exist for a person curating a
+// question list on screen, only one of the two gates has them, and a caller that finds a question
+// irrelevant answers it saying so or proceeds past it.
+
+/** Record an answer to one interview question. Does NOT resume the run. */
+export const answerPublicRunInterviewContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/answer`,
+  requestBodySchema: publicAnswerInterviewSchema,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+/**
+ * Submit the recorded answers and resume: the interviewer runs again and may ask follow-ups.
+ * ASYNCHRONOUS: the pass runs in the durable driver, so the response shows the interview as it
+ * stands and the next round's questions arrive on a later read.
+ */
+export const continuePublicRunInterviewContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/continue`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
+})
+
+/** Stop asking: the interviewer converges on the answers so far and the run advances. */
+export const proceedPublicRunInterviewContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: runIdParams,
+  pathResolver: ({ runId }) => `/api/v1/runs/${runId}/decisions/interview/proceed`,
+  requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: publicDecisionListSchema, ...errorResponses },
 })

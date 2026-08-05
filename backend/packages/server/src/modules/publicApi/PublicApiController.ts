@@ -298,7 +298,7 @@ async function unanswerableParkRefusal(
   gateInput: InputGateInput,
   cancelPath: string,
 ): Promise<string | null> {
-  const surfaces = publicRunParkSurfaces(pipeline, {
+  const surfaces = publicRunParkSurfaces(pipeline, container.agentKindRegistry, {
     inputGateBlocks: await container.executionService.inputGateWouldBlock(
       auth.workspaceId,
       gateInput,

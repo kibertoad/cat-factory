@@ -92,3 +92,36 @@ export function dedicatedParkSurface(
   }
   return null
 }
+
+/**
+ * Whether a step is currently HOLDING the run on a human: parked on the generic decision-wait,
+ * whichever surface owns it. Says nothing about WHOSE park it is (that is
+ * {@link dedicatedParkSurface}'s answer), only that this step is the one stopped.
+ *
+ * Stated once because three callers ask it and each would otherwise spell it out: the interview
+ * gate resolving which of a run's steps its resume acts on, the same gate re-finding that step
+ * inside its CAS callback, and the public decision projection deciding whether a run has an
+ * interview to offer. Two of those three run against a snapshot the third took, so a spelling
+ * that drifted would answer differently about one step.
+ */
+export function stepAwaitsDecision(step: PipelineStep): boolean {
+  return step.state === 'waiting_decision' && step.approval?.status === 'pending'
+}
+
+/**
+ * The step a run is parked on an INTERVIEW gate at, with its index, or null.
+ *
+ * Keyed off the `interview-gate` TRAIT rather than a list of interviewer kinds, exactly as the
+ * dispatcher's own routing is: a deployment that registers its own interviewer carries the trait
+ * and is found here with no edit. A run carries at most one such park at a time (a parked run runs
+ * no other step), so the first match is the answer.
+ */
+export function findParkedInterviewStep(
+  instance: Pick<ExecutionInstance, 'steps'>,
+  registry: AgentKindRegistry,
+): { step: PipelineStep; index: number } | null {
+  const index = instance.steps.findIndex(
+    (s) => hasTrait(s.agentKind, INTERVIEW_GATE_TRAIT, registry) && stepAwaitsDecision(s),
+  )
+  return index < 0 ? null : { step: instance.steps[index]!, index }
+}

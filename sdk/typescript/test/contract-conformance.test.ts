@@ -223,9 +223,37 @@ expectMutuallyAssignable<
   sdk.PublicVisualConfirmDecision,
   v.InferOutput<typeof contracts.publicVisualConfirmDecisionSchema>
 >()
+// Follow-up triage and the interview gates. The two nested item shapes are pinned beside their
+// decisions rather than only through them: both are hoisted DTOs a caller names directly when it
+// writes the triage loop, and a widened `kind`/`status` on an item would otherwise be invisible
+// here while being exactly what a caller branches on.
+expectMutuallyAssignable<
+  sdk.PublicFollowUpItem,
+  v.InferOutput<typeof contracts.publicFollowUpItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicFollowUpsDecision,
+  v.InferOutput<typeof contracts.publicFollowUpsDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewQuestion,
+  v.InferOutput<typeof contracts.publicInterviewQuestionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewDecision,
+  v.InferOutput<typeof contracts.publicInterviewDecisionSchema>
+>()
 expectMutuallyAssignable<
   sdk.PublicRequestGateFix,
   v.InferOutput<typeof contracts.publicRequestGateFixSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerFollowUp,
+  v.InferOutput<typeof contracts.publicAnswerFollowUpSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerInterview,
+  v.InferOutput<typeof contracts.publicAnswerInterviewSchema>
 >()
 
 // Public-API KEYS: the provisioning surface's own resource. `PublicApiKey` is shared with the
@@ -376,7 +404,13 @@ const ASSERTED_COMPONENTS = [
   'PublicHumanTestEnvironment',
   'PublicHumanTestDecision',
   'PublicVisualConfirmDecision',
+  'PublicFollowUpItem',
+  'PublicFollowUpsDecision',
+  'PublicInterviewQuestion',
+  'PublicInterviewDecision',
   'PublicRequestGateFix',
+  'PublicAnswerFollowUp',
+  'PublicAnswerInterview',
   'PublicApiKey',
   'PublicApiKeyList',
   'CreatedPublicApiKey',

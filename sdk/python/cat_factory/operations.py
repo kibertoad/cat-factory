@@ -39,6 +39,8 @@ from .models import (
     Notification,
     NotificationWebhook,
     PrVerificationReport,
+    PublicAnswerFollowUp,
+    PublicAnswerInterview,
     PublicApiKeyList,
     PublicApproveStep,
     PublicChallengePrReviewFinding,
@@ -533,7 +535,8 @@ class UsageResource:
 
 class DecisionsResource:
     """Every way a run stops for a person: approval gates, review and brainstorm loops, forks,
-    judge verdicts, PR review findings and the human-verdict gates.
+    judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the
+    interview gates.
     """
 
     def __init__(self, transport: Transport) -> None:
@@ -551,6 +554,39 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/questions/{_quote(decision_id)}/answer",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def answer_follow_up(self, run_id: str, item_id: str, body: PublicAnswerFollowUp, timeout: float | None = None) -> PublicDecisionList:
+        """Answer a follow-up question
+        Answer one `question` item the Coder raised mid-run; the answer steers its next
+        pass. Refused for a `follow_up` item, which is filed, sent back or dismissed
+        instead. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/answer` (operation
+        `answerPublicRunFollowUp`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/follow-ups/items/{_quote(item_id)}/answer",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def answer_interview_question(self, run_id: str, body: PublicAnswerInterview, timeout: float | None = None) -> PublicDecisionList:
+        """Answer an interview question
+        Record an answer to one question the parked interviewer asked. Does NOT resume the
+        run: answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/interview/answer` (operation
+        `answerPublicRunInterview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/interview/answer",
             body=_encode(body),
             query=None,
             timeout=timeout,
@@ -642,6 +678,38 @@ class DecisionsResource:
         )
         return PublicDecisionList.from_dict(raw)
 
+    def continue_interview(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Continue a parked interview
+        Submit the recorded answers and resume: the interviewer runs again and may ask
+        follow-up questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next
+        round arrives on a later read of the decision list. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/interview/continue` (operation
+        `continuePublicRunInterview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/interview/continue",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def dismiss_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Dismiss a follow-up item
+        Wave one item off without acting on it. Valid for either item kind, and (like every
+        other verb here) releases the park once it is the last undecided item. Requires a
+        `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/dismiss` (operation
+        `dismissPublicRunFollowUp`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/follow-ups/items/{_quote(item_id)}/dismiss",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
     def dismiss_pr_review_finding(self, run_id: str, finding_id: str, timeout: float | None = None) -> PublicDecisionList:
         """Dismiss a PR review finding
         Drop one finding from the parked review entirely. Curation rather than a resolution:
@@ -652,6 +720,23 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/pr-review/findings/{_quote(finding_id)}/dismiss",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def file_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """File a follow-up item as an issue
+        File one `follow_up` item on the workspace's issue tracker, recording the ticket ref
+        on the item. Refused for a `question` item, and for a workspace with no tracker
+        connected. Creating the issue is not idempotent, so a retry after a partial failure
+        files a second one. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/file` (operation
+        `filePublicRunFollowUp`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/follow-ups/items/{_quote(item_id)}/file",
             query=None,
             timeout=timeout,
         )
@@ -763,6 +848,22 @@ class DecisionsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/clarity/proceed",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def proceed_interview(self, run_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Proceed past a parked interview
+        Stop the questions: the interviewer converges on the answers so far and the run
+        advances. Also asynchronous, since converging is itself an interviewer pass.
+        Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/interview/proceed` (operation
+        `proceedPublicRunInterview`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/interview/proceed",
             query=None,
             timeout=timeout,
         )
@@ -1050,6 +1151,22 @@ class DecisionsResource:
             "POST",
             f"/api/v1/runs/{_quote(run_id)}/decisions/approvals/{_quote(approval_id)}/resolve-exceeded",
             body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicDecisionList.from_dict(raw)
+
+    def send_back_follow_up(self, run_id: str, item_id: str, timeout: float | None = None) -> PublicDecisionList:
+        """Send a follow-up item back to the Coder
+        Fold one `follow_up` item into another Coder pass (the item records as `queued`).
+        Once every item is decided the run loops the Coder for the ones sent back, within
+        the `maxLoops` budget the decision reports. Requires a `decide`-scope key.
+        `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/send-back` (operation
+        `sendBackPublicRunFollowUp`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/runs/{_quote(run_id)}/decisions/follow-ups/items/{_quote(item_id)}/send-back",
             query=None,
             timeout=timeout,
         )

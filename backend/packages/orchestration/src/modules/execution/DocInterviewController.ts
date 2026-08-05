@@ -87,6 +87,20 @@ function docInterviewKind(
     },
     current: (workspaceId, blockId) =>
       service ? service.getByBlock(workspaceId, blockId) : Promise.resolve(null),
+    // Never null: the session row exists only because an interview ran, so having one IS having an
+    // interview (the initiative gate, whose entity outlives its runs, is the case that answers
+    // null). No exchange carries a dismissal here, so `answered` is decided by the answer alone.
+    view: (session) => ({
+      status: session.status,
+      round: session.round,
+      maxRounds: session.maxRounds,
+      questions: (session.qa ?? []).map((qa) => ({
+        id: qa.id ?? null,
+        question: qa.question,
+        answer: qa.answer ?? '',
+        status: (qa.answer ?? '').trim() ? 'answered' : 'open',
+      })),
+    }),
   }
 }
 

@@ -88,6 +88,13 @@ const SURFACE = {
   requestPublicRunHumanTestFix: { group: 'decisions', method: 'requestHumanTestFix' },
   approvePublicRunVisualConfirm: { group: 'decisions', method: 'approveVisualConfirmation' },
   requestPublicRunVisualConfirmFix: { group: 'decisions', method: 'requestVisualConfirmationFix' },
+  filePublicRunFollowUp: { group: 'decisions', method: 'fileFollowUp' },
+  sendBackPublicRunFollowUp: { group: 'decisions', method: 'sendBackFollowUp' },
+  answerPublicRunFollowUp: { group: 'decisions', method: 'answerFollowUp' },
+  dismissPublicRunFollowUp: { group: 'decisions', method: 'dismissFollowUp' },
+  answerPublicRunInterview: { group: 'decisions', method: 'answerInterviewQuestion' },
+  continuePublicRunInterview: { group: 'decisions', method: 'continueInterview' },
+  proceedPublicRunInterview: { group: 'decisions', method: 'proceedInterview' },
 
   // ---- Run evidence (`read` scope; what a run PROVED, for a consumer that has to judge it) --
   getPublicRunReport: { group: 'evidence', method: 'getReport' },
@@ -187,7 +194,7 @@ export const GROUP_DOCS = {
     "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
+    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
     "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
   evidence:

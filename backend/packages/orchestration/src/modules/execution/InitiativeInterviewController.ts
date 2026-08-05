@@ -81,6 +81,33 @@ function initiativeInterviewKind(
     recordAnswer: (workspaceId, blockId, questionId, answer) =>
       initiativeService.recordInterviewAnswer(workspaceId, blockId, questionId, answer),
     current: (workspaceId, blockId) => initiativeService.getByBlock(workspaceId, blockId),
+    // The entity outlives its runs, so `interview` absent is the real state "this initiative has
+    // never been interviewed" rather than a converged one: null, not an empty view.
+    //
+    // `qa` carries the bounded DIGEST as well as the live batch (the preset form seeds answered
+    // exchanges into it), so a projected view legitimately shows answered questions nobody asked
+    // this round. That is the entity's own shape and the window renders the same list; dropping
+    // them here would hide the context the pending questions were asked against.
+    view: (initiative) => {
+      const state = initiative.interview
+      if (!state) return null
+      return {
+        status: state.status,
+        round: state.round,
+        maxRounds: state.maxRounds,
+        questions: (initiative.qa ?? []).map((qa) => ({
+          id: qa.id ?? null,
+          question: qa.question,
+          answer: qa.answer ?? '',
+          status:
+            qa.status === 'dismissed'
+              ? 'dismissed'
+              : (qa.answer ?? '').trim()
+                ? 'answered'
+                : 'open',
+        })),
+      }
+    },
   }
 }
 
