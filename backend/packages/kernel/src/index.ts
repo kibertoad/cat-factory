@@ -75,6 +75,18 @@ export {
   priceRollupCells,
   rollupInputTokens,
 } from './domain/llm-rollup.js'
+export type {
+  ToolCallKindRollup,
+  ToolCallRollupTotals,
+  ToolCallToolRollup,
+} from './domain/tool-call-rollup.js'
+export {
+  foldToolCallTotals,
+  foldToolCallsByAgentKind,
+  foldToolCallsByTool,
+  toolCallFailureRate,
+  worstToolCallCell,
+} from './domain/tool-call-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,

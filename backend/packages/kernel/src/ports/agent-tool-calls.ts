@@ -59,6 +59,15 @@ export interface AgentToolCallTrajectoryQuery {
   limit: number
   /** Restrict to one dispatch, so "what did the third ci-fixer round do, in order" composes. */
   jobId?: string
+  /**
+   * Restrict to calls that FAILED (`false`) or succeeded (`true`). Absent ⇒ every call.
+   *
+   * Applied in SQL for the same reason every other narrowing on this surface is: a filter run
+   * after the read has already paid for the rows it discards, and it spends the `limit` on
+   * them — which on a bounded prefix read means the failures a caller asked for can fall off
+   * the end of a page filled with calls that worked.
+   */
+  ok?: boolean
 }
 
 /** A bounded, keyset-paginated query over one run's tool calls. */
@@ -73,6 +82,29 @@ export interface AgentToolCallPageQuery {
    * alone rather than every round interleaved by timestamp.
    */
   jobId?: string
+  /** Restrict to failed (`false`) or successful (`true`) calls; absent ⇒ every call. */
+  ok?: boolean
+}
+
+/**
+ * One cell of the tool-call rollup: a run's calls of ONE tool by ONE agent kind, counted
+ * with how many of them failed.
+ *
+ * The grain is `(agentKind, tool)` because that is the finest cut the store can aggregate
+ * that a reader can act on, and both halves of it are load-bearing: the tool alone cannot
+ * say which agent kept hitting it, and the kind alone cannot separate "the coder's `edit`
+ * failed 34 times" (a stuck loop) from "34 of its calls across nine tools failed once each"
+ * (an agent exploring). Everything coarser is a pure fold over these cells
+ * (`domain/tool-call-rollup.ts`), never a second query, on the same rule the LLM rollup
+ * follows: two aggregates over one population are two chances to disagree about it.
+ */
+export interface AgentToolCallSummary {
+  agentKind: string
+  tool: string
+  /** How many calls of this tool the kind made. */
+  calls: number
+  /** How many of them came back `ok: false` — a tool-EXECUTION failure, not a model error. */
+  failures: number
 }
 
 export interface AgentToolCallRepository {
@@ -124,8 +156,18 @@ export interface AgentToolCallRepository {
    * stored unbounded and sliced at read time), so there is no offset read to serve.
    */
   listPage(workspaceId: string, query: AgentToolCallPageQuery): Promise<AgentToolCall[]>
-  /** How many tool calls the run made — one indexed COUNT, no rows read. */
-  countByExecution(workspaceId: string, executionId: string): Promise<number>
+  /**
+   * The run's tool activity aggregated at the `(agentKind, tool)` grain — one GROUP BY, no
+   * rows and no bodies read.
+   *
+   * Replaces what used to be a bare COUNT, and subsumes it: the total is a fold over these
+   * cells, so the overview's tool-call count and its failure breakdown are computed from ONE
+   * pass over the same rows and cannot disagree. That matters here more than it did for the
+   * count alone, because the number a reader actually needs is a RATIO — a run where 34 of 36
+   * calls failed and one where 34 of 3,600 did are the same absolute failure count and
+   * opposite diagnoses.
+   */
+  summarizeByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallSummary[]>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many were
    * removed. Pruned to the same window as the per-call LLM telemetry.

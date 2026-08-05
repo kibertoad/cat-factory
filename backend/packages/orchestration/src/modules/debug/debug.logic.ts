@@ -1,13 +1,24 @@
 import type {
   AgentContextSnapshot,
   AgentContextSnapshotIndex,
+  AgentToolCallSummary,
   ExecutionInstance,
   LlmCallBodySlice,
   LlmCallMetricPage,
   LlmRollupCell,
   PipelineStep,
+  ToolCallRollupTotals,
 } from '@cat-factory/kernel'
-import { foldRollupTotals, foldRollupsByAgentKind, foldRollupsByPhase } from '@cat-factory/kernel'
+import {
+  foldRollupTotals,
+  foldRollupsByAgentKind,
+  foldRollupsByPhase,
+  foldToolCallTotals,
+  foldToolCallsByAgentKind,
+  foldToolCallsByTool,
+  toolCallFailureRate,
+  worstToolCallCell,
+} from '@cat-factory/kernel'
 import type {
   DebugAgentContextDetail,
   DebugAgentContextEntry,
@@ -17,6 +28,7 @@ import type {
   DebugSignal,
   DebugSinkStatus,
   DebugText,
+  DebugToolCallRollup,
   LlmExportInsight,
   LlmExportTotals,
   LlmPhaseInsight,
@@ -347,6 +359,28 @@ export function foldLlmRollup(summaries: LlmRollupCell[]): {
   }
 }
 
+/**
+ * Fold the store's `(agentKind, tool)` cells into the run's tool-EXECUTION totals and the two
+ * breakdowns the overview reports — the counterpart of {@link foldLlmRollup}, over the sink
+ * that records what an agent DID rather than what its model calls cost.
+ *
+ * Both breakdowns are folds over the same cells (kernel's `foldToolCallsBy*`), so they total
+ * identically to each other and to `totals` by construction, and each row carries the ratio
+ * beside its counts: 34 failures out of 36 calls and out of 3,600 are the same absolute number
+ * and opposite diagnoses, and a caller that has to divide will sometimes not.
+ */
+export function foldToolCallRollup(cells: readonly AgentToolCallSummary[]): DebugToolCallRollup {
+  const withRate = <T extends ToolCallRollupTotals>(row: T) => ({
+    ...row,
+    failureRate: toolCallFailureRate(row),
+  })
+  return {
+    totals: withRate(foldToolCallTotals(cells)),
+    byTool: foldToolCallsByTool(cells).map(withRate),
+    byAgentKind: foldToolCallsByAgentKind(cells).map(withRate),
+  }
+}
+
 /** What {@link deriveSignals} needs beyond the run itself. */
 export interface SignalInput {
   execution: ExecutionInstance
@@ -362,6 +396,12 @@ export interface SignalInput {
   }
   /** Provisioning attempts for this run recorded as failures. */
   provisioningFailures: number
+  /**
+   * The tool-call rollup at its FINEST grain. The cells rather than the folded totals: what
+   * makes tool failures diagnostic is whether they CONCENTRATE, and every coarser view has
+   * folded that away.
+   */
+  toolCells: readonly AgentToolCallSummary[]
 }
 
 /** A cache hit rate below this on a substantial prompt volume is worth flagging. */
@@ -370,6 +410,18 @@ const COLD_CACHE_RATE = 0.1
 const COLD_CACHE_MIN_PROMPT_TOKENS = 50_000
 /** Above this share of latency spent in transport, the proxy is the story, not the model. */
 const HIGH_TRANSPORT_OVERHEAD = 0.5
+
+/**
+ * Failures on ONE `(agentKind, tool)` cell at or above this share of that cell's calls, once
+ * it has made at least {@link RETRY_LOOP_MIN_FAILURES}, read as an agent retrying something
+ * that cannot work rather than meeting the occasional failing command.
+ *
+ * Two conditions rather than one because each alone fires on a healthy run: a share alone
+ * flags the single `bash` call that legitimately returned non-zero, and a count alone flags a
+ * thorough agent that ran hundreds of tests. Both together are the shape a stuck loop makes.
+ */
+const RETRY_LOOP_FAILURE_RATE = 0.5
+const RETRY_LOOP_MIN_FAILURES = 5
 
 /**
  * Precompute the diagnostic hints the overview publishes. Every one of these is derivable by
@@ -383,7 +435,8 @@ const HIGH_TRANSPORT_OVERHEAD = 0.5
  * debugging client than an ordered list of facts.
  */
 export function deriveSignals(input: SignalInput): DebugSignal[] {
-  const { execution, steps, totals, byAgentKind, sinks, provisioningFailures } = input
+  const { execution, steps, totals, byAgentKind, sinks, provisioningFailures, toolCells } = input
+  const toolTotals = foldToolCallTotals(toolCells)
   const signals: DebugSignal[] = []
   const push = (
     code: string,
@@ -391,14 +444,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     message: string,
     extra: Partial<Pick<DebugSignal, 'count' | 'agentKind' | 'stepIndex'>> = {},
   ): void => {
-    signals.push({
-      code,
-      severity,
-      message,
-      count: extra.count ?? null,
-      agentKind: extra.agentKind ?? null,
-      stepIndex: extra.stepIndex ?? null,
-    })
+    signals.push(signal(code, severity, message, extra))
   }
 
   if (execution.status === 'failed') {
@@ -445,12 +491,14 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       )
     }
   }
+  signals.push(...toolCallSignals(toolCells, toolTotals))
   // A run that failed while every MODEL call looks healthy. Tool-EXECUTION errors (malformed
   // arguments, a stuck edit loop) happen inside the container, so each model call still reports
   // `ok` with a clean finish reason and this rollup, computed off the LLM sink alone, sees a
-  // healthy run that inexplicably died. The trajectory sink DOES record those calls, so the
-  // pointer names it first; the delta search stays behind it for the cases it cannot answer (an
-  // engine-side failure, or a workspace whose bodies are withheld).
+  // healthy run that inexplicably died. What the trajectory sink says about that gap decides
+  // where the reader is sent, and its three answers are three different findings: failures to
+  // read, a recorded loop with none in it (so the engine is what is left), or no trajectory at
+  // all, which is not the same as one that recorded nothing.
   if (
     execution.status === 'failed' &&
     sinks.llmCalls.available &&
@@ -461,7 +509,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     push(
       'failure_outside_model_calls',
       'warning',
-      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated: the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine. Read the trajectory for failing tool calls (GET /debug/runs/:runId/tool-calls?order=trajectory), then search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what the engine never recorded, and check each step's firstEvictionDetail plus /logs.`,
+      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated: the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine. ${toolFailurePointer(sinks.toolCalls, toolTotals)}`,
       { count: totals.calls },
     )
   }
@@ -530,6 +578,84 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     )
   }
   return signals
+}
+
+/** Build one signal row, filling in the three scoping fields a signal may leave unset. */
+function signal(
+  code: string,
+  severity: DebugSignal['severity'],
+  message: string,
+  extra: Partial<Pick<DebugSignal, 'count' | 'agentKind' | 'stepIndex'>> = {},
+): DebugSignal {
+  return {
+    code,
+    severity,
+    message,
+    count: extra.count ?? null,
+    agentKind: extra.agentKind ?? null,
+    stepIndex: extra.stepIndex ?? null,
+  }
+}
+
+/**
+ * The signals the tool-call sink produces: what failed, and whether it CONCENTRATED.
+ *
+ * Both are invisible in every LLM rollup beside them, because a rejected edit or a non-zero
+ * command is a perfectly healthy model call whose result came back bad — so without these the
+ * only way to find them is to walk the trajectory reading each row's `ok`.
+ */
+function toolCallSignals(
+  cells: readonly AgentToolCallSummary[],
+  totals: ToolCallRollupTotals,
+): DebugSignal[] {
+  if (totals.failures === 0) return []
+  const signals = [
+    signal(
+      'tool_calls_failed',
+      'warning',
+      `${totals.failures} of the run's ${totals.calls} tool call(s) failed inside the container (${Math.round((toolCallFailureRate(totals) ?? 0) * 100)}%). These are tool-EXECUTION failures, so the model calls around them all report ok. Read them with GET /debug/runs/:runId/tool-calls?ok=false.`,
+      { count: totals.failures },
+    ),
+  ]
+  // The same failures concentrated on ONE tool: an agent re-running something that cannot work,
+  // a different finding from the same count scattered over nine tools and one that needs a
+  // different fix. Its own signal rather than a sharper wording of the one above, because the
+  // two are independently true and only this one names where to look.
+  const worst = worstToolCallCell(cells)
+  if (
+    worst &&
+    worst.failures >= RETRY_LOOP_MIN_FAILURES &&
+    worst.failures / worst.calls >= RETRY_LOOP_FAILURE_RATE
+  ) {
+    signals.push(
+      signal(
+        'tool_retry_loop',
+        'warning',
+        `${worst.agentKind}'s '${worst.tool}' call failed ${worst.failures} of ${worst.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&ok=false.`,
+        { count: worst.failures, agentKind: worst.agentKind },
+      ),
+    )
+  }
+  return signals
+}
+
+/**
+ * Where to look next when a run died with its model side healthy, given what the trajectory
+ * sink can say about the tool loop.
+ *
+ * Three answers, never collapsed, because they need different next actions and two of them are
+ * routinely mistaken for each other: an UNWIRED sink that recorded nothing, and a wired one
+ * that recorded a loop in which nothing failed. Reading "no failing tool calls" off the first
+ * would send a debugger to the engine for a container failure nobody kept the evidence of.
+ */
+function toolFailurePointer(sink: DebugSinkStatus, totals: ToolCallRollupTotals): string {
+  if (!sink.available || sink.count === 0) {
+    return `No tool-call trajectory is retained for this run${sink.available ? '' : ' (the sink is not wired on this deployment)'}, so what the agent did is unrecorded rather than uneventful. Search the bodies (GET /debug/runs/:runId/llm-calls?contains=...), and check each step's firstEvictionDetail plus /logs.`
+  }
+  if (totals.failures > 0) {
+    return `${totals.failures} of the run's ${totals.calls} tool call(s) DID fail, so start there: GET /debug/runs/:runId/tool-calls?ok=false (add &order=trajectory to see them in the order they hit).`
+  }
+  return `None of the run's ${totals.calls} recorded tool calls failed either, which points at the engine rather than the container: search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what no sink recorded, and check each step's firstEvictionDetail plus /logs.`
 }
 
 /** Re-exported so the service and its tests classify a call exactly as the SPA does. */

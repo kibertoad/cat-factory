@@ -259,6 +259,9 @@ export function publicDebugController(): Hono<AppEnv> {
       ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
       ...(query.jobId ? { jobId: query.jobId } : {}),
       ...(query.order ? { order: query.order } : {}),
+      // `ok` is a string on the wire (a query param always is), so the enum is narrowed to the
+      // boolean the port takes here rather than carried as text down to the SQL.
+      ...(query.ok ? { ok: query.ok === 'true' } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
