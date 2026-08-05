@@ -189,6 +189,16 @@ function removeSelected(path: string) {
   if (i >= 0) selectedDirectories.value.splice(i, 1)
 }
 
+// The just-added whole-repo service, kept on the board store so the user can configure it
+// (test infra + fragments) right here — the same controls as the inspector. Only the
+// whole-repo flow surfaces this inline configure step; a monorepo adds several services at
+// once and they're configured later in the inspector. Declared above the watcher and
+// `resetSelection` below, both of which clear it.
+const configuredBlockId = ref<string | undefined>(undefined)
+const configuredBlock = computed(() =>
+  configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
+)
+
 // On repo change, capture the picked repo (from the volatile loaded list, before a later
 // search replaces it), seed the monorepo toggle from its persisted flag, and clear the rest.
 watch(selectedRepoId, (id) => {
@@ -226,15 +236,6 @@ const manageInstallUrl = computed(() => appInstallationManageUrl(github.connecti
 function openManageInstall() {
   if (manageInstallUrl.value) window.open(manageInstallUrl.value, '_blank', 'noopener')
 }
-
-// The just-added whole-repo service, kept on the board store so the user can configure it
-// (test infra + fragments) right here — the same controls as the inspector. Only the
-// whole-repo flow surfaces this inline configure step; a monorepo adds several services at
-// once and they're configured later in the inspector.
-const configuredBlockId = ref<string | undefined>(undefined)
-const configuredBlock = computed(() =>
-  configuredBlockId.value ? board.getBlock(configuredBlockId.value) : undefined,
-)
 
 // On open: ensure we know the connection + which repos the App can access, and
 // the workspace's already-tracked repos (to flag ones already on the board).

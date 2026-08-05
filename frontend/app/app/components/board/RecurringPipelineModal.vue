@@ -22,12 +22,7 @@ const toast = useToast()
 const access = useWorkspaceAccess()
 const { t, te } = useI18n()
 
-const open = computed({
-  get: () => ui.addRecurringFrameId !== null,
-  set: (v: boolean) => {
-    if (!v) void requestClose()
-  },
-})
+const open = computed(() => ui.addRecurringFrameId !== null)
 
 const frame = computed(() =>
   ui.addRecurringFrameId ? board.getBlock(ui.addRecurringFrameId) : undefined,
@@ -240,6 +235,15 @@ const { requestClose } = useUnsavedGuard({
   }),
 })
 
+// The template's v-model binding: dismissal (Escape / backdrop) routes through the guard.
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const modalOpen = computed({
+  get: () => open.value,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
+})
+
 // The board field required for the picked source must be filled before a bug-intake schedule saves.
 const intakeReady = computed(() => {
   if (!showIntake.value) return true
@@ -339,7 +343,7 @@ async function add() {
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('board.recurring.title')">
+  <UModal v-model:open="modalOpen" :title="t('board.recurring.title')">
     <template #body>
       <div class="space-y-4">
         <p v-if="frame" class="text-xs text-slate-400">

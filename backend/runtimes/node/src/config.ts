@@ -608,11 +608,17 @@ function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
       7,
     ),
     commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
-    // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
+    // Heavy full per-call prompt/response, so the window is a trade between disk and how far
+    // back a post-mortem can reach. Default 14 days: the 3 days it replaced expired the record
+    // before most investigations start (a run that failed over a weekend was already gone), and
+    // a post-mortem that cannot read the calls it is about is the same as no telemetry at all.
+    // Bodies are the heavy half and they are double-gated (`LLM_RECORD_PROMPTS` plus the
+    // per-workspace `storeAgentContext`), so a deployment that stores them and wants the old
+    // footprint sets this back to 3.
     llmCallMetricsMs: retentionMs(
       'LLM_CALL_METRICS_RETENTION_DAYS',
       env.LLM_CALL_METRICS_RETENTION_DAYS,
-      3,
+      14,
     ),
     // High-churn provisioning event log; pruned aggressively (default 14 days).
     provisioningLogMs: retentionMs(

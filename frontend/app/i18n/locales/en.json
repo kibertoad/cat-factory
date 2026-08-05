@@ -509,6 +509,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Open {pr} on GitHub",
+      "readOutcome": "Outcome",
+      "readOutcomeHint": "Read what changed, with the evidence behind it",
       "review": "Review",
       "merge": "Merge",
       "mergeConfirm": {
@@ -1134,6 +1136,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Read the outcome",
       "stepState": {
         "pending": "Pending",
         "working": "Working",
@@ -5623,6 +5626,110 @@
     "history": {
       "heading": "History (no rounds) | History ({count} round) | History ({count} rounds)",
       "fixRequested": "Fix requested"
+    }
+  },
+  "outcome": {
+    "title": "Outcome",
+    "subtitle": "What this run changed, and the evidence behind it",
+    "diff": "Open the diff",
+    "diffNumbered": "Open the diff (#{number})",
+    "peerDiff": "Open the diff in {repo}",
+    "disposition": {
+      "merged": "Merged",
+      "awaiting_merge": "Waiting to be merged",
+      "in_flight": "Still running",
+      "needs_attention": "Needs attention",
+      "not_run": "Not run yet",
+      "unknown": "Run not loaded"
+    },
+    "ask": {
+      "title": "What was asked",
+      "none": "This task carries no description, so there is nothing here to compare the result against."
+    },
+    "gap": {
+      "run_unavailable": "This task's run was not loaded, so none of the evidence it recorded can be shown here. That is not the same as a run that recorded nothing."
+    },
+    "requirements": {
+      "title": "Requirements checked",
+      "met": "Met: {count}",
+      "notMet": "Not met: {count}",
+      "notCovered": "Not checked: {count}",
+      "regressions": "Regressions: {count}",
+      "regressionTag": "Regression",
+      "idOnly": "id only",
+      "idOnlyHint": "This id is not in the service specification, so there is no title to show for it.",
+      "spec": {
+        "not_read": "The service specification was not read, so these are the requirement ids the tester reported, without their titles.",
+        "unmatched": "None of these requirement ids appear in the service specification that was read, so only the ids the tester reported are shown."
+      },
+      "verdict": {
+        "met": "Verified",
+        "not_met": "Failed",
+        "not_covered": "Not checked"
+      },
+      "gap": {
+        "no_tester_step": "This pipeline has no tester step, so no requirement was checked.",
+        "tester_not_reported": "The tester has not reported yet, so no requirement has been ruled on.",
+        "no_verdicts": "The tester reported without ruling on any requirement of the service specification."
+      }
+    },
+    "tests": {
+      "title": "How it was tested",
+      "openReport": "Full test report",
+      "summary": "The tester reported: {summary}",
+      "abort": "The tester could not run a meaningful test: {reason}",
+      "counts": "{passed} passed, {failed} failed, {skipped} skipped",
+      "verdict": {
+        "greenlit": "Cleared for release",
+        "concerns": "Concerns raised",
+        "could_not_run": "Could not be tested"
+      },
+      "environment": {
+        "local": "Tested against local dependencies",
+        "ephemeral": "Tested against a preview environment"
+      },
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "gap": {
+        "no_tester_step": "This pipeline has no tester step, so nothing was exercised.",
+        "tester_not_reported": "The tester has not reported yet."
+      }
+    },
+    "visuals": {
+      "title": "What it looks like",
+      "shotAlt": "Screenshot of {view}",
+      "hasReference": "A reference design was supplied for this view",
+      "source": {
+        "visual_confirm": "These views were reviewed against their reference designs.",
+        "tester": "These views were captured while testing. Nobody was asked to review them."
+      },
+      "gap": {
+        "no_visual_step": "Nothing in this pipeline captures the interface, so there is nothing to look at.",
+        "none_captured": "The interface was meant to be captured, but no view was."
+      }
+    },
+    "checks": {
+      "title": "Checks",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Project checks",
+        "reproduction": "Bug reproduction"
+      },
+      "state": {
+        "pass": "passed",
+        "fail": "failed",
+        "pending": "still running",
+        "inconclusive": "inconclusive"
+      }
+    },
+    "empty": {
+      "title": "Nothing to show yet",
+      "body": "This task has produced no result to read."
     }
   },
   "focus": {

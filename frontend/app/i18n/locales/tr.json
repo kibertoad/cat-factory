@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "{pr} öğesini GitHub'da aç",
+      "readOutcome": "Sonuç",
+      "readOutcomeHint": "Neyin değiştiğini, kanıtlarıyla birlikte okuyun",
       "review": "İncele",
       "merge": "Birleştir",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Sonucu oku",
       "stepState": {
         "pending": "Beklemede",
         "working": "Çalışıyor",
@@ -5357,6 +5360,110 @@
     "history": {
       "heading": "Geçmiş (tur yok) | Geçmiş ({count} tur) | Geçmiş ({count} tur)",
       "fixRequested": "Düzeltme istendi"
+    }
+  },
+  "outcome": {
+    "title": "Sonuç",
+    "subtitle": "Bu çalıştırmanın neyi değiştirdiği ve bunun kanıtları",
+    "diff": "Farkı aç",
+    "diffNumbered": "Farkı aç (#{number})",
+    "peerDiff": "{repo} deposundaki farkı aç",
+    "disposition": {
+      "merged": "Birleştirildi",
+      "awaiting_merge": "Birleştirilmeyi bekliyor",
+      "in_flight": "Hâlâ çalışıyor",
+      "needs_attention": "İlgilenilmesi gerekiyor",
+      "not_run": "Henüz çalıştırılmadı",
+      "unknown": "Çalışma yüklenmedi"
+    },
+    "ask": {
+      "title": "Ne istenmişti",
+      "none": "Bu görevin açıklaması yok, dolayısıyla sonucu karşılaştıracak bir şey de yok."
+    },
+    "gap": {
+      "run_unavailable": "Bu görevin çalışması yüklenmediği için kaydettiği kanıtlar burada gösterilemiyor. Bu, hiçbir şey kaydetmemiş bir çalışmayla aynı şey değildir."
+    },
+    "requirements": {
+      "title": "Denetlenen gereksinimler",
+      "met": "Karşılanan: {count}",
+      "notMet": "Karşılanmayan: {count}",
+      "notCovered": "Denetlenmeyen: {count}",
+      "regressions": "Gerilemeler: {count}",
+      "regressionTag": "Gerileme",
+      "idOnly": "yalnızca kimlik",
+      "idOnlyHint": "Bu kimlik servis şartnamesinde yer almadığı için gösterilecek bir başlık yok.",
+      "spec": {
+        "not_read": "Servis şartnamesi okunmadı; bu nedenle burada test edicinin bildirdiği gereksinim kimlikleri, başlıkları olmadan yer alıyor.",
+        "unmatched": "Okunan servis şartnamesinde bu gereksinim kimliklerinin hiçbiri yok; bu nedenle yalnızca test edicinin bildirdiği kimlikler gösteriliyor."
+      },
+      "verdict": {
+        "met": "Doğrulandı",
+        "not_met": "Başarısız",
+        "not_covered": "Denetlenmedi"
+      },
+      "gap": {
+        "no_tester_step": "Bu hatta test adımı yok, bu yüzden hiçbir gereksinim denetlenmedi.",
+        "tester_not_reported": "Testçi henüz rapor vermedi, bu yüzden hiçbir gereksinim karara bağlanmadı.",
+        "no_verdicts": "Testçi rapor verdi ancak belirtimdeki hiçbir gereksinim hakkında karar vermedi."
+      }
+    },
+    "tests": {
+      "title": "Nasıl test edildi",
+      "openReport": "Tam test raporu",
+      "summary": "Testçi şunu bildiriyor: {summary}",
+      "abort": "Testçi anlamlı bir test yapamadı: {reason}",
+      "counts": "{passed} geçti, {failed} başarısız, {skipped} atlandı",
+      "verdict": {
+        "greenlit": "Yayına hazır",
+        "concerns": "Kaygılar bildirildi",
+        "could_not_run": "Test edilemedi"
+      },
+      "environment": {
+        "local": "Yerel bağımlılıklara karşı test edildi",
+        "ephemeral": "Önizleme ortamına karşı test edildi"
+      },
+      "severity": {
+        "low": "Düşük",
+        "medium": "Orta",
+        "high": "Yüksek",
+        "critical": "Kritik"
+      },
+      "gap": {
+        "no_tester_step": "Bu hatta test adımı yok, bu yüzden hiçbir şey çalıştırılmadı.",
+        "tester_not_reported": "Testçi henüz rapor vermedi."
+      }
+    },
+    "visuals": {
+      "title": "Nasıl göründüğü",
+      "shotAlt": "{view} görünümünün ekran görüntüsü",
+      "hasReference": "Bu görünüm için bir referans tasarım verilmiş",
+      "source": {
+        "visual_confirm": "Bu görünümler referans tasarımlarıyla karşılaştırıldı.",
+        "tester": "Bu görünümler test sırasında yakalandı. Kimseden incelemesi istenmedi."
+      },
+      "gap": {
+        "no_visual_step": "Bu hatta arayüzü yakalayan bir şey yok, dolayısıyla bakılacak bir şey de yok.",
+        "none_captured": "Arayüzün yakalanması gerekiyordu ama hiçbir görünüm yakalanmadı."
+      }
+    },
+    "checks": {
+      "title": "Denetimler",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Proje denetimleri",
+        "reproduction": "Hata yeniden üretimi"
+      },
+      "state": {
+        "pass": "geçti",
+        "fail": "başarısız",
+        "pending": "sürüyor",
+        "inconclusive": "sonuçsuz"
+      }
+    },
+    "empty": {
+      "title": "Gösterilecek bir şey yok",
+      "body": "Bu görev henüz okunacak bir sonuç üretmedi."
     }
   },
   "focus": {

@@ -902,11 +902,10 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
-live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
-Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
-The full model, and the authority for anything recording an LLM call:
-[`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`) live in a
+dedicated telemetry store, not the transactional one: a required `TELEMETRY_DB` D1 database on Cloudflare and a
+`telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`. The authority for anything
+recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite:
 
 - **Three producers converge on the ONE `LlmObservabilityService` and a new one must too**: the proxy,
   the subscription harnesses, and inline calls through the kernel `InlineLlmCallRecorder` port. A model
@@ -1072,9 +1071,8 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment:
   some reasoning models emit the whole answer into their private channel and return an empty visible reply,
   which the harness reads as unusable and fails the run. Do NOT append it to side-effect agents whose
-  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright,
-  business-documenter): they legitimately end with no final text. Editing a versioned prompt means bumping
-  its number.
+  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter):
+  they legitimately end with no final text. Editing a versioned prompt means bumping its number.
 - **Frontend extension seams** are all contributed through the one `registerAppModule` registry
   (`app/modular/registry.ts`), the frontend analogue of the backend registries: result views, inspector
   panels (`PanelEntry<Block>` in the `inspectorPanels` slot), overlays (`appOverlays` +
