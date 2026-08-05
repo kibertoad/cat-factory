@@ -1,7 +1,8 @@
 # Security model: agents, prompt injection, and the VCS write path
 
 Agents on this platform read untrusted text (repository contents, issue and tracker text, PR
-comments, web search results) and can open pull requests against real repositories. This document
+comments, web search results, and the results of any MCP tool server wired for the run) and can
+open pull requests against real repositories. This document
 answers one question precisely: **if a prompt injection or a hallucinated argument makes an agent
 try to land malicious code, what actually stands between that decision and your repository?**
 
@@ -354,6 +355,14 @@ Do not lean on any of these; the codebase explicitly refuses to:
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
   agent can read, assume it can also try to exfiltrate through text it writes, which is why
   Layer 5 scrubs at every exit.
+- **The provenance of a wired MCP tool server.** A server's RESULTS are untrusted input like
+  everything else the agent reads (the threat model above), so wiring one extends the set of
+  parties who can attempt injection to that server's operator and its upstreams; and the run
+  container applies no egress bound on which wired servers an already-subverted agent may call
+  with what it has read, so a wired server is also a potential exfiltration channel.
+  `allowedTools` does not contain this (first bullet). The controls that do exist are which
+  servers a deployment wires for which kinds and the scope of the credential each is handed:
+  see `mcp-tool-servers.md` → Security posture.
 
 ## Operator hardening checklist
 

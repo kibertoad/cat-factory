@@ -854,7 +854,8 @@ A deployment ships its own agent kinds without forking and without rebuilding th
 Governing principle: **zero `switch(agentKind)` in the container**. The harness is a generic
 LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Full model:
 [`custom-agents.md`](./backend/docs/custom-agents.md); role authoring:
-[`custom-agent-roles.md`](./backend/docs/custom-agent-roles.md); capabilities:
+[`custom-agent-roles.md`](./backend/docs/custom-agent-roles.md); tool servers (MCP):
+[`mcp-tool-servers.md`](./backend/docs/mcp-tool-servers.md); design record:
 [ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS committing a

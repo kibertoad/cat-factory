@@ -12,6 +12,9 @@ It sits between two neighbouring docs and deliberately restates neither:
 - [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md): provider
   tokens, schema-driven structured output (`defineStructuredOutput`), and boot-time
   registration validation.
+- [`mcp-tool-servers.md`](./mcp-tool-servers.md): the full tool-server (MCP) model:
+  registration, harness support, credentials, the probe, security posture and limits.
+  The "Tool servers" section below is the authoring half of that model.
 
 The design record for capabilities is
 [ADR 0029](./adr/0029-agent-kind-capabilities.md); the worked example every section
@@ -203,8 +206,7 @@ across the two.
 
 A tool server extends what the agent can REACH. The wiring rules (credential resolution,
 drop-and-state behaviour, harness support, the security posture of `allowedTools` and the
-`https`-or-loopback rule) are in
-[`custom-agents.md` → Tool servers](./custom-agents.md#tool-servers-mcp) and ADR 0029.
+`https`-or-loopback rule) are in [`mcp-tool-servers.md`](./mcp-tool-servers.md) and ADR 0029.
 This section is the field-by-field authoring reference for `McpServerDefinition`
 (`packages/kernel/src/domain/agent-capabilities.ts`).
 
