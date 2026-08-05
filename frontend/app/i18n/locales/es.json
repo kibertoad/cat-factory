@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR n.º {number}",
       "openPrOnGithub": "Abrir {pr} en GitHub",
+      "readOutcome": "Resultado",
+      "readOutcomeHint": "Lee qué cambió, con las pruebas que lo respaldan",
       "review": "Revisar",
       "merge": "Fusionar",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR n.º {number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Leer el resultado",
       "stepState": {
         "pending": "Pendiente",
         "working": "Trabajando",
@@ -5367,6 +5370,110 @@
     "history": {
       "heading": "Historial (sin rondas) | Historial ({count} ronda) | Historial ({count} rondas)",
       "fixRequested": "Corrección solicitada"
+    }
+  },
+  "outcome": {
+    "title": "Resultado",
+    "subtitle": "Qué cambió esta ejecución, y las pruebas que lo respaldan",
+    "diff": "Abrir el diff",
+    "diffNumbered": "Abrir el diff (#{number})",
+    "peerDiff": "Abrir el diff en {repo}",
+    "disposition": {
+      "merged": "Fusionado",
+      "awaiting_merge": "Esperando la fusión",
+      "in_flight": "Todavía en curso",
+      "needs_attention": "Requiere atención",
+      "not_run": "Aún sin ejecutar",
+      "unknown": "Ejecución no cargada"
+    },
+    "ask": {
+      "title": "Qué se pidió",
+      "none": "Esta tarea no tiene descripción, así que no hay nada con lo que comparar el resultado."
+    },
+    "gap": {
+      "run_unavailable": "La ejecución de esta tarea no se cargó, así que aquí no pueden mostrarse las pruebas que registró. No es lo mismo que una ejecución que no registró nada."
+    },
+    "requirements": {
+      "title": "Requisitos comprobados",
+      "met": "Cumplidos: {count}",
+      "notMet": "Sin cumplir: {count}",
+      "notCovered": "Sin comprobar: {count}",
+      "regressions": "Regresiones: {count}",
+      "regressionTag": "Regresión",
+      "idOnly": "solo id",
+      "idOnlyHint": "Este identificador no está en la especificación del servicio, así que no hay ningún título que mostrar.",
+      "spec": {
+        "not_read": "No se leyó la especificación del servicio, así que estos son los identificadores de requisito que informó el probador, sin sus títulos.",
+        "unmatched": "Ninguno de estos identificadores de requisito aparece en la especificación del servicio que se leyó, así que solo se muestran los identificadores que informó el probador."
+      },
+      "verdict": {
+        "met": "Verificado",
+        "not_met": "Fallido",
+        "not_covered": "Sin comprobar"
+      },
+      "gap": {
+        "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se comprobó ningún requisito.",
+        "tester_not_reported": "El tester aún no ha informado, así que no se ha resuelto ningún requisito.",
+        "no_verdicts": "El tester informó sin pronunciarse sobre ningún requisito de la especificación del servicio."
+      }
+    },
+    "tests": {
+      "title": "Cómo se probó",
+      "openReport": "Informe completo de pruebas",
+      "summary": "El tester informa: {summary}",
+      "abort": "El tester no pudo realizar una prueba significativa: {reason}",
+      "counts": "{passed} superadas, {failed} fallidas, {skipped} omitidas",
+      "verdict": {
+        "greenlit": "Aprobado para publicar",
+        "concerns": "Con reservas",
+        "could_not_run": "No se pudo probar"
+      },
+      "environment": {
+        "local": "Probado contra dependencias locales",
+        "ephemeral": "Probado contra un entorno de vista previa"
+      },
+      "severity": {
+        "low": "Baja",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Crítica"
+      },
+      "gap": {
+        "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se ejercitó nada.",
+        "tester_not_reported": "El tester aún no ha informado."
+      }
+    },
+    "visuals": {
+      "title": "Qué aspecto tiene",
+      "shotAlt": "Captura de {view}",
+      "hasReference": "Se aportó un diseño de referencia para esta vista",
+      "source": {
+        "visual_confirm": "Estas vistas se compararon con sus diseños de referencia.",
+        "tester": "Estas vistas se capturaron durante las pruebas. No se pidió a nadie que las revisara."
+      },
+      "gap": {
+        "no_visual_step": "Nada en esta canalización captura la interfaz, así que no hay nada que mirar.",
+        "none_captured": "La interfaz debía capturarse, pero no se capturó ninguna vista."
+      }
+    },
+    "checks": {
+      "title": "Comprobaciones",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Comprobaciones del proyecto",
+        "reproduction": "Reproducción del fallo"
+      },
+      "state": {
+        "pass": "superada",
+        "fail": "fallida",
+        "pending": "en curso",
+        "inconclusive": "sin conclusión"
+      }
+    },
+    "empty": {
+      "title": "Todavía no hay nada que mostrar",
+      "body": "Esta tarea aún no ha producido un resultado que leer."
     }
   },
   "focus": {
