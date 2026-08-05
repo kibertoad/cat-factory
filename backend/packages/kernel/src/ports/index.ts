@@ -28,6 +28,8 @@ export type {
   UserIdentityRecord,
   UserRepository,
 } from './user-repositories.js'
+export type { OidcProviderMetadata, SsoDiscoveryDocument } from './sso.js'
+export { oidcIdentitySubject } from './sso.js'
 export type { PasswordHasher } from './password-hasher.js'
 export type {
   EmailMessage,

@@ -120,6 +120,12 @@ else imports its **ports** and domain types from here.
   plain `string` because kernel compiles without Node's ambient types. The executor-harness carries
   a pinned COPY (`src/process-exit.ts`, it can depend on no workspace package), held equal by
   `test/process-exit.conformity.test.ts`: the same arrangement as `host-markdown`.
+- `ports/sso.ts`: the shape of a DISCOVERED enterprise identity provider
+  (`OidcProviderMetadata` / `SsoDiscoveryDocument`, the value `AppCaches.ssoDiscovery` holds) plus
+  **`oidcIdentitySubject`**, the one place the `<issuer>#<sub>` identity key is spelled. The issuer
+  half is not optional: an OIDC `sub` is unique per issuer only, so `sub` alone would let two
+  directories collide on one `user_identities` row. `@cat-factory/server`'s `auth/oidc/` owns the
+  fetch that fills the document.
 - `ports/logging.ts`: the **`Logger` port**: `debug`/`info`/`warn`/`error` (`(msg, fields?)`)
   plus `child(bound)`, with `noopLogger` and the test-facing `createRecordingLogger`. Injected
   like `Clock`/`IdGenerator`, which is what lets the whole domain engine log without depending on

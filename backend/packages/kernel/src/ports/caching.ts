@@ -14,6 +14,7 @@ import type { AccountSkillRecord } from './skill-repositories.js'
 // its wire shapes).
 import type { ResolvedFoundationalService } from '@cat-factory/contracts'
 export type { ResolvedFoundationalService }
+import type { SsoDiscoveryDocument } from './sso.js'
 import type { RepoContentEntry, RepoFileContent } from './github-client.js'
 import type { WorkspaceSettingsRepository } from './workspace-settings-repositories.js'
 import type { WorkspaceAccess } from '../domain/workspace-access.js'
@@ -304,6 +305,23 @@ export interface AppCaches {
    * own mutable D1 state, no cross-isolate bus), so it caches only on the Node/local facades.
    */
   workspaceAccess: GroupCacheHandle<WorkspaceAccessCacheValue>
+  /**
+   * The deployment's discovered enterprise SSO provider — its
+   * `/.well-known/openid-configuration` metadata plus the JWKS its ID tokens verify against,
+   * grouped AND keyed by the configured issuer URL. Read twice per SSO sign-in (once to build
+   * the authorize redirect, once to verify the returned ID token), so without this every login
+   * pays two extra round-trips to the IdP before the user's own request can proceed.
+   *
+   * Unlike the invalidation-driven slices above, the cached SOURCE is an external document we
+   * never write, and it SELF-HEALS rather than needing a bus: an ID token signed with a `kid`
+   * absent from the cached JWKS drops the entry and refetches once (rate-limited by
+   * `fetchedAt`), because providers rotate signing keys with no notice and a rotation must cost
+   * one refetch rather than every login until the TTL lapses. That is the same "bounded by a
+   * probe, not indefinite" property that keeps `fragmentDocumentBody` and `repoFiles` enabled on
+   * the Worker, so this slice stays ENABLED there too — a peer isolate holding a pre-rotation
+   * key set heals on its own next login instead of failing until eviction.
+   */
+  ssoDiscovery: GroupCacheHandle<SsoDiscoveryDocument>
   /** Release notification-bus resources (a no-op for bare in-memory caches). */
   close(): Promise<void>
 }

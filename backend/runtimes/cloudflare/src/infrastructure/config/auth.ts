@@ -1,5 +1,5 @@
-import type { AuthConfig } from '@cat-factory/server'
-import { resolveMachineTokenTtlMs } from '@cat-factory/server'
+import type { AuthConfig, SsoConfig } from '@cat-factory/server'
+import { resolveMachineTokenTtlMs, resolveSsoConfig } from '@cat-factory/server'
 import type { Env } from '../env'
 import { num } from './utils'
 
@@ -34,6 +34,7 @@ function resolveAuthEnablement(env: Env): {
   googleClientSecret: string
   googleEnabled: boolean
   passwordEnabled: boolean
+  sso: SsoConfig | undefined
 } {
   // Enabled when the OAuth credentials and a sufficiently strong session secret
   // are all present, mirroring the GitHub-integration default-off convention.
@@ -58,6 +59,11 @@ function resolveAuthEnablement(env: Env): {
   const googleClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? ''
   const googleEnabled = googleClientId !== '' && googleClientSecret !== '' && strongSecret
   const passwordEnabled = env.AUTH_PASSWORD_ENABLED?.trim() === 'true' && strongSecret
+  // Enterprise SSO: parsed by the SHARED resolver both facades call, so its nine variables and
+  // four boot refusals cannot drift between runtimes. It THROWS on a partial/unsafe combination
+  // (including AUTH_DEV_OPEN alongside SSO) rather than resolving to disabled, and the Worker's
+  // boot turns that into the misconfiguration screen naming the variable.
+  const sso = resolveSsoConfig(env, { strongSessionSecret: strongSecret, devOpen })
   return {
     clientId,
     clientSecret,
@@ -70,6 +76,7 @@ function resolveAuthEnablement(env: Env): {
     googleClientSecret,
     googleEnabled,
     passwordEnabled,
+    sso,
   }
 }
 
@@ -86,10 +93,11 @@ export function loadAuthConfig(env: Env): AuthConfig {
     googleClientSecret,
     googleEnabled,
     passwordEnabled,
+    sso,
   } = resolveAuthEnablement(env)
   return {
     // Enabled when ANY provider is configured (with a strong session secret).
-    enabled: githubEnabled || googleEnabled || passwordEnabled,
+    enabled: githubEnabled || googleEnabled || passwordEnabled || !!sso,
     devOpen,
     testingNoAuth,
     githubEnabled,
@@ -120,6 +128,7 @@ export function loadAuthConfig(env: Env): AuthConfig {
           },
         }
       : {}),
+    ...(sso ? { sso } : {}),
     allowedEmailDomains: (env.AUTH_ALLOWED_EMAIL_DOMAINS ?? '')
       .split(',')
       .map((d) => d.trim().toLowerCase())

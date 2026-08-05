@@ -1820,9 +1820,25 @@
       "signInFailed": "Échec de la connexion. Vérifiez vos informations et réessayez.",
       "genericError": "Une erreur s'est produite. Veuillez réessayer.",
       "notConfiguredTitle": "L'authentification n'est pas configurée",
-      "notConfiguredBody": "Ce déploiement n'a aucune méthode de connexion activée, vous ne pouvez donc pas vous connecter ni accéder à vos espaces de travail. Un administrateur doit configurer un fournisseur d'authentification (OAuth GitHub ou Google, ou connexion par e-mail et mot de passe).",
+      "notConfiguredBody": "Ce déploiement n'a aucune méthode de connexion activée, vous ne pouvez donc pas vous connecter ni accéder à vos espaces de travail. Un administrateur doit configurer un fournisseur d'authentification (authentification unique via le fournisseur d'identité de votre organisation, OAuth GitHub ou Google, ou connexion par e-mail et mot de passe).",
       "patPlaceholder": "Jeton d'accès personnel {provider}",
       "signInWithPat": "Se connecter avec un PAT {provider}"
+    },
+    "sso": {
+      "continueWith": "Continuer avec {provider}",
+      "failedTitle": "L'authentification unique n'a pas abouti",
+      "errors": {
+        "stateInvalid": "Cette tentative de connexion a expiré ou a déjà été utilisée. Recommencez depuis cette page.",
+        "providerDenied": "Votre fournisseur d'identité a refusé la connexion. Si vous ne l'avez pas annulée vous-même, demandez à votre service informatique si cette application vous est attribuée.",
+        "exchangeFailed": "Ce déploiement n'a pas pu finaliser l'échange avec votre fournisseur d'identité. Un administrateur doit vérifier le secret client et l'URL de redirection de l'authentification unique.",
+        "tokenInvalid": "La réponse de votre fournisseur d'identité n'a pas pu être vérifiée. Un administrateur doit vérifier la configuration de l'authentification unique de ce déploiement.",
+        "subjectMissing": "Votre fournisseur d'identité n'a pas renvoyé d'identifiant utilisateur, aucun compte n'a donc pu être résolu. Un administrateur doit vérifier les claims qu'il expose.",
+        "groupRequired": "Votre connexion a réussi, mais vous n'appartenez à aucun groupe de l'annuaire autorisé à utiliser ce déploiement. Demandez à votre service informatique de vous ajouter.",
+        "domainNotAllowed": "Votre domaine de messagerie n'est pas autorisé à se connecter à ce déploiement. Demandez à votre service informatique quel compte utiliser.",
+        "emailRequired": "Ce déploiement limite la connexion à certains domaines de messagerie, mais votre fournisseur d'identité n'a pas transmis d'adresse e-mail vérifiée. Un administrateur doit activer le claim e-mail.",
+        "providerUnreachable": "Votre fournisseur d'identité n'a pas répondu pendant la finalisation de la connexion : lui-même ou le réseau qui y mène est peut-être indisponible. Réessayez dans un instant et prévenez un administrateur si cela persiste.",
+        "unknown": "L'authentification unique a échoué pour une raison que cette version ne reconnaît pas. Réessayez et prévenez un administrateur si le problème persiste."
+      }
     },
     "resetPassword": {
       "title": "Réinitialiser le mot de passe",
