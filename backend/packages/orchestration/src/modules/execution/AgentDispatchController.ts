@@ -100,7 +100,15 @@ export class AgentDispatchController {
       step,
       isFinalStep,
       block,
-      dispatchKind ? { agentKind: dispatchKind } : undefined,
+      {
+        ...(dispatchKind ? { agentKind: dispatchKind } : {}),
+        // A set `jobId` means this call is a RE-ATTACH, not a dispatch: the job that produced the
+        // tree already ran, under an earlier resolution. So the step's per-dispatch observability
+        // (`selectedFragmentIds`, `validationConfigUnreadable`) must keep describing THAT read
+        // rather than this one, or a store that has since recovered silently erases the record
+        // that the shipped job ran with no checks.
+        recordsDispatch: !step.jobId,
+      },
     )
     // A caller re-dispatching this step under an overriding kind can fold extra context in
     // (e.g. the PR-review `fix` resolution points the Fixer at the reviewed PR's head branch and
@@ -293,6 +301,10 @@ export class AgentDispatchController {
    * Best-effort and side-effect-free: an executor without the capability, a missing block,
    * or any resolution error all report false (treated as budget-metered, the prior
    * behaviour). Only consulted on the over-budget path, so it never touches the happy path.
+   * Side-effect-freedom is what `recordsDispatch: false` buys below, and it is load-bearing
+   * rather than tidiness: this probe resolves a context WITHOUT starting a job, so recording
+   * from it would state a dispatch that never happened, and clearing from it would erase the
+   * record of one that did.
    */
   async currentStepIsNonMetered(
     workspaceId: string,
@@ -309,6 +321,7 @@ export class AgentDispatchController {
         step,
         isFinalStep,
         block,
+        { recordsDispatch: false },
       )
       if (
         this.deps.agentExecutor.isQuotaBased &&

@@ -227,12 +227,28 @@ export type PrReportValidationCommand = v.InferOutput<typeof prReportValidationC
  *
  * `absent` splits the causes that need different reactions, per the report's governing rule: a
  * service that configured no checks is a deployment gap, a step that never got that far is a run
- * outcome, and an older runner image that reports nothing is neither.
+ * outcome, an older runner image that reports nothing is neither, and a configuration the
+ * platform could not READ is a fourth (see {@link PrReportValidation.configUnreadable}).
  */
 export const prReportValidationSchema = v.object({
   status: prReportSectionStatusSchema,
   /** Says WHY the section is empty when `status` is `absent` — never a bare blank. */
   note: v.optional(v.nullable(v.string())),
+  /**
+   * Set when a dispatch on this run could not READ the service's validation configuration, so it
+   * ran with no checks and no dependency install without anything being unconfigured.
+   *
+   * It is its own field rather than a shading of `note` because the two readings need different
+   * REACTIONS: "no checks configured" is answered by configuring some, and this is answered by
+   * looking at the config store (or, on a mothership node, at the link to it). Reporting the
+   * second as the first is a fabricated fact about somebody's setup, which is the one thing this
+   * report exists to stop.
+   *
+   * Independent of `status`: a run whose PR-opening dispatch validated normally can still carry a
+   * later dispatch whose read failed, and a reader of a `reported` section deserves to know the
+   * evidence below did not come from every dispatch that followed it.
+   */
+  configUnreadable: v.optional(v.nullable(v.boolean())),
   /** Whether every command in the recorded attempt exited 0 (⇒ the PR was allowed to open). */
   passed: v.optional(v.nullable(v.boolean())),
   /** The agent kind of the step that ran the checks, so a reader knows which dispatch this is. */

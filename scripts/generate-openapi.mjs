@@ -39,10 +39,13 @@ const API_PREFIX = '/api/v1'
 // key-provisioning operations), and that number is already published against a surface WITHOUT the
 // follow-up and interview operations added here. The same collision the note above describes, the
 // second time in three releases.
-// 1.12.0: the run report gained an optional `scope`, naming WHICH of a multi-repo run's pull
-// requests a given copy is written onto. Additive — a consumer written against 1.11 reads every
+// 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
+// so a consumer built against 1.11.0 keeps parsing.
+// 1.13.0, not 1.12.0: main published 1.12.0 for `configUnreadable` while this branch was in
+// flight. The run report gains an optional `scope` here, naming WHICH of a multi-repo run's pull
+// requests a given copy is written onto. Additive — a consumer written against 1.12 reads every
 // field it knows, and an absent `scope` means what it always meant (the own-service PR).
-const API_VERSION = '1.12.0'
+const API_VERSION = '1.13.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

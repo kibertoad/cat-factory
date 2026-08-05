@@ -200,6 +200,24 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   apart from `undeclared` (it did not say). Guessing either way turns an unknown into a claim in
   the one section whose whole job is provenance.
 
+- **A section may only claim an absence it actually observed.** The validation section used to
+  answer "nothing to show" with "this service configures no check commands", which is a fact about
+  somebody's setup that the composer does not have: the dispatch degrades to no-checks when the
+  config-store read FAILS as well, and the two states are byte-identical on the context. The engine
+  now records the difference at the read (`step.validationConfigUnreadable`) and the section carries
+  it as `configUnreadable`, which DISPLACES the unconfigured note rather than qualifying it. It is
+  reported on a `reported` section too: a later dispatch whose read failed ran unvalidated after the
+  evidence was captured, so an unqualified green table would overstate what it covers. Any other
+  section composed from an absence has the same obligation, and the test is whether the producing
+  path can reach that absence by failing.
+
+  The replacement note WITHDRAWS the claim instead of making a second one. `configUnreadable` is
+  scanned across every step (the failing read is by construction on a step that produced no
+  evidence), so the section knows a read failed SOMEWHERE on the run, not that this absence is what
+  it caused. Saying "the read failed, so nothing ran" would be the same over-claim one layer down.
+  Read run-wide, state run-wide: a flag whose scan is broader than the sentence it licenses is the
+  shape to watch for when the next section grows one.
+
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).

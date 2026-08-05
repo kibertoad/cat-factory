@@ -901,11 +901,10 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
-live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
-Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
-The full model, and the authority for anything recording an LLM call:
-[`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`) live in a
+dedicated telemetry store, not the transactional one: a required `TELEMETRY_DB` D1 database on Cloudflare and a
+`telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`. The authority for anything
+recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite:
 
 - **Three producers converge on the ONE `LlmObservabilityService` and a new one must too**: the proxy,
   the subscription harnesses, and inline calls through the kernel `InlineLlmCallRecorder` port. A model

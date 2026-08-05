@@ -109,17 +109,35 @@ export function composeValidation(
     (s) => s.validation != null,
   )
   const report = step?.validation
+  // A dispatch that could not READ the service's configuration ran with no checks, which produces
+  // exactly the state an unconfigured service does. The engine records the difference on the step
+  // (`AgentContextBuilder.validationChecksFor`); reading it here is what keeps this section from
+  // asserting a fact about somebody's setup that it does not know. Scanned across ALL steps, not
+  // just the one carrying evidence: the failing read is by definition on a step that produced none.
+  const configUnreadable = instance.steps.some((s) => s.validationConfigUnreadable === true)
   if (!step || !report) {
     return {
       status: 'absent',
       // The report is only ever published onto an EXISTING pull request, so a PR-opening dispatch
       // has by construction already settled: the absence is about what was configured, not about
-      // how far the run got. Both remaining causes are named, because asserting only the first
+      // how far the run got. Every remaining cause is named, because asserting only the first
       // would be a fabricated fact about somebody's setup (a runner image older than the feature
       // reports nothing either).
-      note:
-        'The platform ran no pre-PR validation on this tree: this service configures no check ' +
-        'commands (a runner image predating the feature also reports none).',
+      //
+      // A failed read WITHDRAWS the "configures none" claim rather than replacing it with an
+      // equally causal one. The flag is scanned run-wide, so all that is known here is that SOME
+      // dispatch could not read the configuration; concluding that THIS absence is the one it
+      // caused would be the same species of over-claim (a run whose coder read fine but ran an
+      // older runner image, then a `ci-fixer` whose read failed, has both facts and neither
+      // explains the other). So the note states what was observed and stops.
+      note: configUnreadable
+        ? 'The platform ran no pre-PR validation on this tree, and cannot say why: a dispatch on ' +
+          "this run could not READ this service's check configuration and fell back to running " +
+          'none. So this is NOT a statement that the service configures none; look at the ' +
+          'configuration store. (A runner image predating the feature also reports none.)'
+        : 'The platform ran no pre-PR validation on this tree: this service configures no check ' +
+          'commands (a runner image predating the feature also reports none).',
+      ...(configUnreadable ? { configUnreadable: true } : {}),
       attempts: 0,
       commands: [],
     }
@@ -142,6 +160,10 @@ export function composeValidation(
     }))
   return {
     status: 'reported',
+    // Carried on a REPORTED section too: a later dispatch whose read failed ran unvalidated after
+    // the evidence below was captured, and a reader who took the table as covering the whole run
+    // would be reading a green verdict about a tree that is no longer the one under review.
+    ...(configUnreadable ? { configUnreadable: true } : {}),
     passed: report.passed,
     stepKind: step.agentKind,
     attempts: report.attempts,
@@ -150,6 +172,17 @@ export function composeValidation(
     commands,
   }
 }
+
+/**
+ * The callout that says a dispatch could not read the service's check configuration, rendered on a
+ * REPORTED section to bound what the evidence below covers. The absent section states the same
+ * thing in its `note` instead, because there it is the whole explanation rather than a
+ * qualification, and a callout beside it would say it twice.
+ */
+const CONFIG_UNREADABLE_LINE =
+  "> ⚠️ A dispatch on this run could not read this service's validation configuration and ran " +
+  'with no checks and no dependency install, so any check the service declares may not have run ' +
+  'against the tree below.'
 
 /** One command's cell: the verdict marker plus what it exited with and how long it took. */
 function commandResult(command: PrReportValidationCommand): string {
@@ -166,7 +199,12 @@ function duration(ms: number | null | undefined): string {
 
 export function renderValidation(validation: PrReportValidation): string[] {
   const out = ['### Pre-PR validation', '']
-  if (validation.status === 'absent') return [...out, absentNote(validation.note), '']
+  if (validation.status === 'absent') {
+    // The note already carries the read failure in this branch (it displaces the "configures no
+    // checks" claim rather than qualifying it), so the callout would only repeat it.
+    return [...out, absentNote(validation.note), '']
+  }
+  if (validation.configUnreadable) out.push(CONFIG_UNREADABLE_LINE, '')
   out.push(
     `**Verdict:** ${validation.passed ? '✅ every check passed' : '❌ checks failed'}` +
       ` · attempt ${validation.attempts}` +

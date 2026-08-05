@@ -30,6 +30,13 @@ comparison (not a work log), see [`vcs-providers.md`](./vcs-providers.md).
   usable `owner/repo/url` per hit. The neutral doc-search box degrades to "no results".
 - **Sub-issues** (`listSubIssues`): GitLab has no parent→child issue hierarchy, so the
   optional method is left unimplemented (the caller degrades gracefully).
+- **GitLab is not a TASK SOURCE** (open, tracked separately). The `VcsClient` issue reads
+  (`getIssue` / `searchIssues` / `listIssueComments` / `createIssue`) are all implemented, but
+  no `TaskSourceProvider` sits above them, so a GitLab-tracker shop cannot import an issue onto
+  a block, run a `bug-intake` schedule or a bug hunt against a GitLab project, or receive push
+  intake. That is a different port from everything in the table above and a multi-slice piece of
+  work, so it has its own tracker:
+  [`gitlab-issues-intake.md`](../../docs/initiatives/gitlab-issues-intake.md).
 - **Per-workspace PAT connect (backend + UI landed; engine-routing pending)**: a workspace
   connects GitLab by pasting a PAT in the UI: `POST /workspaces/:ws/gitlab/connection` validates +
   seals it and writes the `github_installations`/`github_repos` projection (a
