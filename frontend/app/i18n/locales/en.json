@@ -1918,9 +1918,31 @@
       "signInFailed": "Sign-in failed. Check your details and try again.",
       "genericError": "Something went wrong. Please try again.",
       "notConfiguredTitle": "Authentication isn't configured",
-      "notConfiguredBody": "This deployment has no sign-in method enabled, so you can't sign in or access your workspaces. An administrator needs to configure an authentication provider (GitHub or Google OAuth, or email and password login).",
+      "notConfiguredBody": "This deployment has no sign-in method enabled, so you can't sign in or access your workspaces. An administrator needs to configure an authentication provider (single sign-on through your organization's identity provider, GitHub or Google OAuth, or email and password login).",
       "patPlaceholder": "{provider} personal access token",
       "signInWithPat": "Sign in with {provider} PAT"
+    },
+    "sso": {
+      "continueWith": "Continue with {provider}",
+      "@continueWith": {
+        "description": "Sign-in button for the deployment's own identity provider (enterprise SSO). {provider} is the operator-configured label (AUTH_SSO_LABEL) naming their IdP, e.g. \"Acme SSO\" or \"Okta\" - it is a proper noun supplied at runtime, so never translate the interpolated value."
+      },
+      "failedTitle": "Single sign-on didn't complete",
+      "@failedTitle": {
+        "description": "Title of the alert shown when an enterprise single-sign-on round-trip came back without a session. The per-reason detail underneath is the matching `errors.*` message."
+      },
+      "errors": {
+        "stateInvalid": "That sign-in attempt has expired or was already used. Start again from this page.",
+        "providerDenied": "Your identity provider refused the sign-in. If you didn't cancel it yourself, ask your IT team whether this application is assigned to you.",
+        "exchangeFailed": "This deployment couldn't complete the exchange with your identity provider. An administrator needs to check its single sign-on client secret and redirect URL.",
+        "tokenInvalid": "The response from your identity provider couldn't be verified. An administrator needs to check this deployment's single sign-on configuration.",
+        "subjectMissing": "Your identity provider didn't return a user identifier, so no account could be resolved. An administrator needs to check which claims it releases.",
+        "groupRequired": "Your sign-in worked, but you aren't in a directory group that's allowed to use this deployment. Ask your IT team to add you.",
+        "domainNotAllowed": "Your email domain isn't allowed to sign in to this deployment. Ask your IT team which account to use.",
+        "emailRequired": "This deployment restricts sign-in by email domain, but your identity provider didn't release a verified email address. An administrator needs to enable the email claim.",
+        "providerUnreachable": "Your identity provider didn't respond while your sign-in was being completed, so it or the network to it may be down. Try again in a moment, and tell an administrator if it keeps happening.",
+        "unknown": "Single sign-on failed for a reason this version doesn't recognise. Try again, and tell an administrator if it keeps happening."
+      }
     },
     "resetPassword": {
       "title": "Reset password",
@@ -3125,6 +3147,27 @@
       "servableHarnessesNone": "No agent CLI can serve this transport, so this server never applies to any run.",
       "allowedTools": "Narrowed to: {tools}",
       "credentials": "Credentials: {keys}",
+      "oauth": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "machineGrant": "Signs in as this deployment",
+        "connectedBy": "Connected by {user}",
+        "scopes": "Granted: {scopes}",
+        "notRefreshable": "The vendor issued no refresh token, so this connection has to be made again once its access token expires.",
+        "lastError": "The last token renewal failed: {detail}",
+        "connect": "Connect",
+        "reconnect": "Reconnect",
+        "disconnect": "Disconnect",
+        "callback": {
+          "working": "Finishing the connection…",
+          "done": "Connected to {server}",
+          "doneHint": "This board's runs can now use the tool server as the account you signed in with.",
+          "back": "Back to the app",
+          "failedTitle": "The connection could not be finished",
+          "failed": "The authorization could not be completed. Start the connection again from the Infrastructure window.",
+          "missingParams": "This link is missing the values the vendor sends back, so there is nothing to complete. Start the connection again."
+        }
+      },
       "test": "Test",
       "notProbeable": {
         "stdio": "Runs inside the agent's container, so it cannot be tested from here.",
@@ -3135,6 +3178,8 @@
         "ok": "Answered",
         "credentialsMissing": "No credential",
         "credentialRefused": "Credential refused",
+        "oauthNotConnected": "Not connected",
+        "oauthTokenFailed": "Connection stopped working",
         "unreachable": "No answer",
         "httpError": "Rejected the request",
         "protocolError": "Not an MCP server",
@@ -3151,7 +3196,9 @@
       "hideDetails": "Hide details",
       "toast": {
         "loadFailed": "Could not load the tool servers",
-        "probeFailed": "Could not test the tool server"
+        "probeFailed": "Could not test the tool server",
+        "connectFailed": "Could not start the connection",
+        "disconnectFailed": "Could not disconnect the tool server"
       }
     },
     "capabilityCredentials": {

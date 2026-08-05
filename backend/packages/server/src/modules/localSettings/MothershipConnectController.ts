@@ -2,7 +2,7 @@ import { connectMothershipContract } from '@cat-factory/contracts'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { mintSession } from '../auth/AuthController.js'
+import { mintSession } from '../auth/loginFlow.js'
 import { UnavailableError } from '@cat-factory/kernel'
 
 /**

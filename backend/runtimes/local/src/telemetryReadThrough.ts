@@ -10,6 +10,7 @@ import type {
   AgentToolCall,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   LlmCallBodyWindow,
   LlmCallMetric,
@@ -497,10 +498,19 @@ function toolCallsReadThrough(
       return ctx.read<AgentToolCall[]>('agentToolCallRepository', 'listPage', ws, [query])
     },
 
-    async countByExecution(ws, executionId) {
-      const n = await local.countByExecution(ws, executionId)
-      if (ctx.whole(ws, executionId, n)) return n
-      return ctx.read<number>('agentToolCallRepository', 'countByExecution', ws, [executionId])
+    async summarizeByExecution(ws, executionId) {
+      const cells = await local.summarizeByExecution(ws, executionId)
+      // Cell COUNT stands in for row count, exactly as it does for the LLM rollup: an aggregate
+      // over zero rows is zero cells, and a run the prune has taken from produces cells whose
+      // counts are simply too low. Never a merge of the two — nothing in either says which rows
+      // they share, so summing double-counts and taking the larger is a guess.
+      if (ctx.whole(ws, executionId, cells.length)) return cells
+      return ctx.read<AgentToolCallSummary[]>(
+        'agentToolCallRepository',
+        'summarizeByExecution',
+        ws,
+        [executionId],
+      )
     },
   }
 }

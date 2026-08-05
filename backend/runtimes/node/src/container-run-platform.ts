@@ -13,6 +13,7 @@ import {
   type BlockRepository,
   type Clock,
   type GitHubInstallationRepository,
+  type Logger,
   type RepoProjectionRepository,
   type ServiceRepository,
   createInitiatorPatGate,
@@ -24,7 +25,9 @@ import {
   GitHubAppRegistry,
   buildResolveRepoTarget,
   buildResolveRepoTargets,
+  type ToolSecretChain,
   buildToolSecretChain,
+  mcpOAuthExecutorDeps,
   toolSecretContainerFields,
   createResolveRunInitiatorToken,
   logger,
@@ -36,7 +39,10 @@ import type { buildNodeModelDeps } from './container-model-deps.js'
 import { selectNodeGitHubDeps } from './container-github-deps.js'
 import { buildNodeRunServices } from './container-run-services-deps.js'
 import { buildNodeBootstrapper, buildNodeTransportDeploy } from './container-transport-deps.js'
-import { buildNodeContainerExecutor } from './container-executor-deps.js'
+import {
+  type NodeContainerExecutorDeps,
+  buildNodeContainerExecutor,
+} from './container-executor-deps.js'
 import {
   DrizzleGitHubInstallationRepository,
   DrizzleRunnerPoolConnectionRepository,
@@ -248,15 +254,10 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     logger,
   })
 
-  // How a registered capability's declared credentials are resolved at dispatch, composed ONCE
-  // here rather than inside the executor builder: the credential CHECKLIST has to describe the
-  // chain the deployment actually got, and an executor cannot say what it was handed. The chain
-  // travels with its own description for that reason.
-  const toolSecretChain = buildToolSecretChain({
-    custom: options.createToolSecretResolver?.(env),
-    credentials: runServices.capabilityCredentialsService,
+  const { toolSecretChain, executorCapabilityDeps } = buildNodeCapabilityCredentials({
     env,
-    environmentFallback: options.capabilityCredentialEnvironmentFallback,
+    options,
+    runServices,
     logger,
   })
 
@@ -279,7 +280,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     resolveRepoOrigin: options.resolveRepoOrigin,
     resolvePackageRegistries: runServices.resolvePackageRegistries,
     resolveTestSecrets: runServices.resolveTestSecrets,
-    resolveToolSecrets: toolSecretChain.resolver,
+    ...executorCapabilityDeps,
     ...runServices.executorTelemetry,
     recordSubscriptionQuotaUsage: (target, usage) =>
       runServices.subscriptionQuotaProvider.recordUsage(target, usage),
@@ -367,5 +368,52 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     bootstrapJobRepository,
     bootstrapMintInstallationToken,
     repoBootstrapper,
+  }
+}
+
+/**
+ * How a registered capability's credentials are resolved at dispatch, both halves: the composed
+ * `ToolSecretResolver` chain (the per-workspace store in front of this node's environment, or a
+ * deployment's own resolver, which replaces it) and the OAuth token source that mints a remote
+ * server's access token from the sealed grant store.
+ *
+ * Composed HERE rather than inside the executor builder because the credential CHECKLIST has to
+ * describe the chain the deployment actually got, and an executor cannot say what it was handed —
+ * so the chain travels with its own description. The two halves are returned together because the
+ * OAuth source resolves its CLIENT SECRET through that same chain: building them apart is what
+ * would let a deployment's own resolver serve one and not the other.
+ */
+function buildNodeCapabilityCredentials(input: {
+  env: NodeJS.ProcessEnv
+  options: NodeContainerOptions
+  runServices: ReturnType<typeof buildNodeRunServices>
+  logger: Logger
+}): {
+  toolSecretChain: ToolSecretChain
+  executorCapabilityDeps: Pick<
+    NodeContainerExecutorDeps,
+    'resolveToolSecrets' | 'resolveToolServerOAuth'
+  >
+} {
+  const { env, options, runServices, logger } = input
+  const toolSecretChain = buildToolSecretChain({
+    custom: options.createToolSecretResolver?.(env),
+    credentials: runServices.capabilityCredentialsService,
+    env,
+    environmentFallback: options.capabilityCredentialEnvironmentFallback,
+    logger,
+  })
+  return {
+    toolSecretChain,
+    executorCapabilityDeps: {
+      resolveToolSecrets: toolSecretChain.resolver,
+      // Absent when this deployment has no ENCRYPTION_KEY, which is what makes a dispatch state an
+      // OAuth server as `oauth_not_connected` rather than send a request with no token.
+      ...mcpOAuthExecutorDeps({
+        oauth: runServices.mcpOAuthService,
+        resolveToolSecrets: toolSecretChain.resolver,
+        logger,
+      }),
+    },
   }
 }

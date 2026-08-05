@@ -17,6 +17,7 @@ import type {
   AgentToolCall,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   BinaryArtifactMetadataStore,
   BinaryArtifactRecord,
@@ -1014,6 +1015,7 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
       eq(agentToolCalls.execution_id, query.executionId),
     ]
     if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
+    if (query.ok !== undefined) filters.push(eq(agentToolCalls.ok, query.ok ? 1 : 0))
     const rows = await this.db
       .select()
       .from(agentToolCalls)
@@ -1029,6 +1031,7 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
       eq(agentToolCalls.execution_id, query.executionId),
     ]
     if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
+    if (query.ok !== undefined) filters.push(eq(agentToolCalls.ok, query.ok ? 1 : 0))
     if (query.cursor) {
       const { createdAt, id } = query.cursor
       filters.push(
@@ -1047,9 +1050,19 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
     return rows.map(rowToAgentToolCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AgentToolCallSummary[]> {
+    // Mirror of the D1 GROUP BY: one pass over the run's rows, neither body column read, and
+    // the failures summed in SQL beside the count rather than by a second query or a JS reduce.
     const rows = await this.db
-      .select({ n: count() })
+      .select({
+        agentKind: agentToolCalls.agent_kind,
+        tool: agentToolCalls.tool,
+        calls: count(),
+        failures: sql<number>`sum(case when ${agentToolCalls.ok} = 0 then 1 else 0 end)`,
+      })
       .from(agentToolCalls)
       .where(
         and(
@@ -1057,7 +1070,15 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
           eq(agentToolCalls.execution_id, executionId),
         ),
       )
-    return Number(rows[0]?.n ?? 0)
+      .groupBy(agentToolCalls.agent_kind, agentToolCalls.tool)
+    return rows.map((row) => ({
+      agentKind: row.agentKind,
+      tool: row.tool,
+      // Postgres returns COUNT/SUM as bigint strings over the wire; Number() on both keeps the
+      // two runtimes' cells identical rather than one store's numbers arriving as text.
+      calls: Number(row.calls),
+      failures: Number(row.failures ?? 0),
+    }))
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

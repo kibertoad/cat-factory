@@ -624,6 +624,27 @@
       "servableHarnessesNone": "Nessuna CLI di agente può servire questo trasporto, quindi questo server non si applica a nessuna esecuzione.",
       "allowedTools": "Limitato a: {tools}",
       "credentials": "Credenziali: {keys}",
+      "oauth": {
+        "connected": "Collegato",
+        "notConnected": "Non collegato",
+        "machineGrant": "Si autentica come questo deployment",
+        "connectedBy": "Collegato da {user}",
+        "scopes": "Concesso: {scopes}",
+        "notRefreshable": "Il fornitore non ha emesso un token di aggiornamento, quindi il collegamento andrà rifatto alla scadenza del token di accesso.",
+        "lastError": "L’ultimo rinnovo del token non è riuscito: {detail}",
+        "connect": "Collega",
+        "reconnect": "Ricollega",
+        "disconnect": "Scollega",
+        "callback": {
+          "working": "Completamento della connessione…",
+          "done": "Collegato a {server}",
+          "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
+          "back": "Torna all’app",
+          "failedTitle": "Non è stato possibile completare la connessione",
+          "failed": "Non è stato possibile completare l’autorizzazione. Riavvia la connessione dalla finestra Infrastruttura.",
+          "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
+        }
+      },
       "test": "Prova",
       "notProbeable": {
         "stdio": "Gira dentro il container dell’agente, quindi non può essere provato da qui.",
@@ -634,6 +655,8 @@
         "ok": "Ha risposto",
         "credentialsMissing": "Nessuna credenziale",
         "credentialRefused": "Credenziale rifiutata",
+        "oauthNotConnected": "Non collegato",
+        "oauthTokenFailed": "Il collegamento ha smesso di funzionare",
         "unreachable": "Nessuna risposta",
         "httpError": "Richiesta respinta",
         "protocolError": "Non è un server MCP",
@@ -650,7 +673,9 @@
       "hideDetails": "Nascondi dettagli",
       "toast": {
         "loadFailed": "Impossibile caricare i server di strumenti",
-        "probeFailed": "Impossibile provare il server di strumenti"
+        "probeFailed": "Impossibile provare il server di strumenti",
+        "connectFailed": "Impossibile avviare il collegamento",
+        "disconnectFailed": "Impossibile scollegare il server di strumenti"
       }
     },
     "capabilityCredentials": {
@@ -3650,9 +3675,25 @@
       "signInFailed": "Accesso non riuscito. Controlla i tuoi dati e riprova.",
       "genericError": "Qualcosa è andato storto. Riprova.",
       "notConfiguredTitle": "L'autenticazione non è configurata",
-      "notConfiguredBody": "Questo deployment non ha alcun metodo di accesso abilitato, quindi non puoi accedere o utilizzare i tuoi workspace. Un amministratore deve configurare un provider di autenticazione (OAuth GitHub o Google, oppure accesso con email e password).",
+      "notConfiguredBody": "Questo deployment non ha alcun metodo di accesso abilitato, quindi non puoi accedere o utilizzare i tuoi workspace. Un amministratore deve configurare un provider di autenticazione (accesso unico tramite il provider di identità della tua organizzazione, OAuth GitHub o Google, oppure accesso con email e password).",
       "patPlaceholder": "personal access token {provider}",
       "signInWithPat": "Accedi con il PAT {provider}"
+    },
+    "sso": {
+      "continueWith": "Continua con {provider}",
+      "failedTitle": "L'accesso unico non è stato completato",
+      "errors": {
+        "stateInvalid": "Questo tentativo di accesso è scaduto o è già stato usato. Riprova da questa pagina.",
+        "providerDenied": "Il tuo provider di identità ha rifiutato l'accesso. Se non l'hai annullato tu, chiedi al team IT se questa applicazione ti è stata assegnata.",
+        "exchangeFailed": "Questo deployment non ha potuto completare lo scambio con il tuo provider di identità. Un amministratore deve verificare il client secret e l'URL di reindirizzamento dell'accesso unico.",
+        "tokenInvalid": "Non è stato possibile verificare la risposta del tuo provider di identità. Un amministratore deve controllare la configurazione dell'accesso unico di questo deployment.",
+        "subjectMissing": "Il tuo provider di identità non ha restituito un identificatore utente, quindi non è stato possibile risolvere alcun account. Un amministratore deve controllare quali claim vengono esposti.",
+        "groupRequired": "L'accesso è riuscito, ma non appartieni a nessun gruppo della directory autorizzato a usare questo deployment. Chiedi al team IT di aggiungerti.",
+        "domainNotAllowed": "Il tuo dominio email non è autorizzato ad accedere a questo deployment. Chiedi al team IT quale account usare.",
+        "emailRequired": "Questo deployment limita l'accesso per dominio email, ma il tuo provider di identità non ha esposto un indirizzo email verificato. Un amministratore deve abilitare il claim email.",
+        "providerUnreachable": "Il tuo provider di identità non ha risposto durante il completamento dell'accesso, quindi potrebbe non essere raggiungibile. Riprova tra un momento e avvisa un amministratore se il problema persiste.",
+        "unknown": "L'accesso unico è fallito per un motivo che questa versione non riconosce. Riprova e avvisa un amministratore se il problema persiste."
+      }
     },
     "resetPassword": {
       "title": "Reimposta password",

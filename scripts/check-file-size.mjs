@@ -217,8 +217,12 @@ const LEGACY_ALLOWANCES = new Map([
  * ~700 to ~1,850 lines between hand audits; this entry turns that regrowth into a CI failure.
  * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
  * raising the number, and lower the allowance in the same PR when a cleanup lands a win.
+ *
+ * Ratcheted 1100 → 1098 by condensing the role-scoped merge-policy entry back to the charter's
+ * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
+ * restating two ADRs that already own every one of them.
  */
-const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1099]])
+const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1098]])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and

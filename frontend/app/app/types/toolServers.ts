@@ -9,6 +9,8 @@ export type {
   ToolServerAllowedToolsCheck,
   ToolServerCredential,
   ToolServerNotProbeableReason,
+  ToolServerOAuthGrant,
+  ToolServerOAuthStatus,
   ToolServerProbeResult,
   ToolServerProbeStatus,
   ToolServerTransport,

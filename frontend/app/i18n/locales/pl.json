@@ -1820,9 +1820,25 @@
       "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
       "genericError": "Coś poszło nie tak. Spróbuj ponownie.",
       "notConfiguredTitle": "Uwierzytelnianie nie jest skonfigurowane",
-      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
+      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (logowanie jednokrotne przez dostawcę tożsamości Twojej organizacji, OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
       "patPlaceholder": "Osobisty token dostępu {provider}",
       "signInWithPat": "Zaloguj się tokenem PAT {provider}"
+    },
+    "sso": {
+      "continueWith": "Kontynuuj z {provider}",
+      "failedTitle": "Nie udało się ukończyć logowania jednokrotnego",
+      "errors": {
+        "stateInvalid": "Ta próba logowania wygasła lub została już użyta. Zacznij ponownie z tej strony.",
+        "providerDenied": "Twój dostawca tożsamości odrzucił logowanie. Jeśli nie anulowałeś go samodzielnie, zapytaj zespół IT, czy ta aplikacja jest do Ciebie przypisana.",
+        "exchangeFailed": "To wdrożenie nie mogło zakończyć wymiany z dostawcą tożsamości. Administrator musi sprawdzić sekret klienta i adres przekierowania logowania jednokrotnego.",
+        "tokenInvalid": "Nie udało się zweryfikować odpowiedzi dostawcy tożsamości. Administrator musi sprawdzić konfigurację logowania jednokrotnego tego wdrożenia.",
+        "subjectMissing": "Dostawca tożsamości nie zwrócił identyfikatora użytkownika, więc nie udało się ustalić konta. Administrator musi sprawdzić, które oświadczenia (claims) są udostępniane.",
+        "groupRequired": "Logowanie się udało, ale nie należysz do żadnej grupy katalogowej uprawnionej do korzystania z tego wdrożenia. Poproś zespół IT o dodanie Cię.",
+        "domainNotAllowed": "Twoja domena e-mail nie ma uprawnień do logowania w tym wdrożeniu. Zapytaj zespół IT, którego konta użyć.",
+        "emailRequired": "To wdrożenie ogranicza logowanie do wybranych domen e-mail, ale dostawca tożsamości nie udostępnił zweryfikowanego adresu e-mail. Administrator musi włączyć oświadczenie e-mail.",
+        "providerUnreachable": "Twój dostawca tożsamości nie odpowiedział podczas kończenia logowania, więc on sam lub połączenie z nim może być niedostępne. Spróbuj ponownie po chwili, a jeśli problem się powtarza, powiadom administratora.",
+        "unknown": "Logowanie jednokrotne nie powiodło się z powodu, którego ta wersja nie rozpoznaje. Spróbuj ponownie, a jeśli problem się powtarza, powiadom administratora."
+      }
     },
     "resetPassword": {
       "title": "Zresetuj hasło",
@@ -2874,6 +2890,27 @@
       "servableHarnessesNone": "Żadne CLI agenta nie obsługuje tego transportu, więc ten serwer nie dotyczy żadnego przebiegu.",
       "allowedTools": "Zawężone do: {tools}",
       "credentials": "Dane uwierzytelniające: {keys}",
+      "oauth": {
+        "connected": "Połączono",
+        "notConnected": "Niepołączony",
+        "machineGrant": "Loguje się jako to wdrożenie",
+        "connectedBy": "Połączone przez {user}",
+        "scopes": "Przyznano: {scopes}",
+        "notRefreshable": "Dostawca nie wydał tokenu odświeżania, więc połączenie trzeba będzie nawiązać ponownie, gdy token dostępu wygaśnie.",
+        "lastError": "Ostatnie odnowienie tokenu nie powiodło się: {detail}",
+        "connect": "Połącz",
+        "reconnect": "Połącz ponownie",
+        "disconnect": "Rozłącz",
+        "callback": {
+          "working": "Kończenie połączenia…",
+          "done": "Połączono z {server}",
+          "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
+          "back": "Powrót do aplikacji",
+          "failedTitle": "Nie udało się zakończyć połączenia",
+          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
+        }
+      },
       "test": "Testuj",
       "notProbeable": {
         "stdio": "Działa w kontenerze agenta, więc nie można go przetestować z tego miejsca.",
@@ -2884,6 +2921,8 @@
         "ok": "Odpowiedział",
         "credentialsMissing": "Brak danych uwierzytelniających",
         "credentialRefused": "Dane uwierzytelniające odrzucone",
+        "oauthNotConnected": "Niepołączony",
+        "oauthTokenFailed": "Połączenie przestało działać",
         "unreachable": "Brak odpowiedzi",
         "httpError": "Odrzucił żądanie",
         "protocolError": "To nie serwer MCP",
@@ -2900,7 +2939,9 @@
       "hideDetails": "Ukryj szczegóły",
       "toast": {
         "loadFailed": "Nie udało się wczytać serwerów narzędzi",
-        "probeFailed": "Nie udało się przetestować serwera narzędzi"
+        "probeFailed": "Nie udało się przetestować serwera narzędzi",
+        "connectFailed": "Nie udało się rozpocząć łączenia",
+        "disconnectFailed": "Nie udało się rozłączyć serwera narzędzi"
       }
     },
     "capabilityCredentials": {

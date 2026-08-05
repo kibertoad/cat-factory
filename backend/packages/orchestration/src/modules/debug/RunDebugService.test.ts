@@ -260,6 +260,33 @@ describe('RunDebugService overview', () => {
     // The failure count rides the same aggregate pass and drives the top signal.
     expect(overview.signals[0]).toMatchObject({ code: 'provisioning_failed', count: 1 })
   })
+
+  it('folds the tool-call count from the SAME aggregate its failure breakdown comes from', async () => {
+    const summarizeByExecution = vi.fn(async () => [
+      { agentKind: 'coder', tool: 'edit', calls: 6, failures: 5 },
+      { agentKind: 'coder', tool: 'bash', calls: 14, failures: 0 },
+    ])
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      agentToolCallRepository: {
+        summarizeByExecution,
+      } as unknown as AgentToolCallRepository,
+    })
+
+    const overview = await service.overview('ws', run('exec_1', 1))
+
+    // ONE pass over the rows: the sink count is a fold over the cells, never a second COUNT
+    // that could disagree with the breakdown printed beside it.
+    expect(summarizeByExecution).toHaveBeenCalledTimes(1)
+    expect(overview.sinks.toolCalls).toEqual({ available: true, count: 20 })
+    expect(overview.toolCalls.totals).toEqual({ calls: 20, failures: 5, failureRate: 0.25 })
+    // Most-failed first, which is the row a caller opened this for.
+    expect(overview.toolCalls.byTool.map((row) => row.tool)).toEqual(['edit', 'bash'])
+    expect(overview.signals.map((s) => s.code)).toEqual(
+      expect.arrayContaining(['tool_calls_failed', 'tool_retry_loop']),
+    )
+  })
 })
 
 describe('RunDebugService.listToolCalls', () => {
@@ -305,6 +332,33 @@ describe('RunDebugService.listToolCalls', () => {
     expect(listByExecution).not.toHaveBeenCalled()
     // One more than asked: how the shared paginator learns there IS a next page.
     expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
+  })
+
+  it('pushes the outcome filter into BOTH reads rather than filtering a page it fetched', async () => {
+    // Filtering here would have already paid for the successful rows and spent the page's limit
+    // on them, so a run whose failures sit behind a hundred successes would return none.
+    const { service, listPage, listByExecution } = toolCallRepo()
+
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, ok: false })
+    expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21, ok: false })
+
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, order: 'trajectory', ok: false })
+    expect(listByExecution).toHaveBeenCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 20,
+      ok: false,
+    })
+
+    // `ok: true` is a real filter, and an ABSENT one asks for every call — a store handed
+    // `ok: undefined` would narrow to the successes on a truthiness check.
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, ok: true })
+    expect(listPage).toHaveBeenLastCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 21,
+      ok: true,
+    })
+    await service.listToolCalls('ws', 'exec_1', { limit: 20 })
+    expect(listPage).toHaveBeenLastCalledWith('ws', { executionId: 'exec_1', limit: 21 })
   })
 
   it('reports an unwired sink as empty rather than throwing', async () => {

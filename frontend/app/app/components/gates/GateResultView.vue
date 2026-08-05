@@ -25,9 +25,6 @@ const access = useWorkspaceAccess()
 const { open, blockId, instanceId, stepIndex, close } = useResultView('gate')
 const block = computed(() => (blockId.value ? board.getBlock(blockId.value) : undefined))
 const prUrl = computed(() => block.value?.pullRequest?.url ?? null)
-const headerTitle = computed(
-  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
-)
 
 const instance = computed(() =>
   instanceId.value === null ? null : (execution.getInstance(instanceId.value) ?? null),
@@ -42,6 +39,9 @@ const isCi = computed(() => step.value?.agentKind === 'ci')
 const isHumanReview = computed(() => step.value?.agentKind === 'human-review')
 const isDocQuality = computed(() => step.value?.agentKind === 'doc-quality')
 const meta = computed(() => agentKindMeta(step.value?.agentKind ?? 'ci'))
+const headerTitle = computed(
+  () => `${meta.value.label}${block.value ? ` — ${block.value.title}` : ''}`,
+)
 const helperKind = computed(() =>
   isHumanReview.value
     ? 'fixer'

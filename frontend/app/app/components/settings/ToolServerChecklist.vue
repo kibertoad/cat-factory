@@ -40,6 +40,8 @@ const STATUS_LABELS = computed<Record<ToolServerProbeStatus, string>>(() => ({
   ok: t('settings.toolServers.status.ok'),
   credentials_missing: t('settings.toolServers.status.credentialsMissing'),
   credential_refused: t('settings.toolServers.status.credentialRefused'),
+  oauth_not_connected: t('settings.toolServers.status.oauthNotConnected'),
+  oauth_token_failed: t('settings.toolServers.status.oauthTokenFailed'),
   unreachable: t('settings.toolServers.status.unreachable'),
   http_error: t('settings.toolServers.status.httpError'),
   protocol_error: t('settings.toolServers.status.protocolError'),
@@ -52,6 +54,36 @@ const NOT_PROBEABLE_LABELS = computed<Record<ToolServerNotProbeableReason, strin
 }))
 
 const servers = computed<ToolServerView[]>(() => store.view?.servers ?? [])
+
+/**
+ * Whether a row offers the Connect / Disconnect pair.
+ *
+ * Only the INTERACTIVE grant does. A `client_credentials` declaration authenticates as the
+ * deployment's own client and mints its token on the first dispatch that needs one, so there is
+ * nothing for a person to authorise and a button would promise an action that does not exist.
+ */
+function isInteractive(server: ToolServerView): boolean {
+  return server.oauth?.grant === 'authorization_code'
+}
+
+async function connect(id: string) {
+  try {
+    await store.connectOAuth(id)
+  } catch (e) {
+    // Everything that can refuse does so BEFORE the browser leaves the app: an unconfigured
+    // redirect URL, a deployment with no grant store, an authorization server that publishes no
+    // metadata. Each carries a `details.reason` the shared funnel maps to translated copy.
+    present(e, 'settings.toolServers.toast.connectFailed')
+  }
+}
+
+async function disconnect(id: string) {
+  try {
+    await store.disconnectOAuth(id)
+  } catch (e) {
+    present(e, 'settings.toolServers.toast.disconnectFailed')
+  }
+}
 
 function resultFor(id: string) {
   return store.results[id]
@@ -137,6 +169,85 @@ async function runProbe(id: string) {
           })
         }}
       </p>
+
+      <!-- OAuth. Absent for a server that authenticates with a static credential, so the Connect
+           affordance never appears on a row it does not apply to. `connected` and `lastError` are
+           rendered TOGETHER rather than as alternatives: a grant that is on file and no longer
+           producing tokens is exactly the state that reads as working and is not. -->
+      <div
+        v-if="server.oauth"
+        class="space-y-1 rounded-md border border-slate-800 bg-slate-900/40 p-2"
+        :data-testid="`tool-server-oauth-${server.id}`"
+      >
+        <div class="flex flex-wrap items-center gap-2">
+          <UBadge
+            :color="server.oauth.connected ? 'success' : 'neutral'"
+            variant="soft"
+            size="sm"
+            :data-testid="`tool-server-oauth-state-${server.id}`"
+          >
+            {{
+              server.oauth.connected
+                ? t('settings.toolServers.oauth.connected')
+                : isInteractive(server)
+                  ? t('settings.toolServers.oauth.notConnected')
+                  : t('settings.toolServers.oauth.machineGrant')
+            }}
+          </UBadge>
+          <span v-if="server.oauth.connectedBy" class="text-[11px] text-slate-400">
+            {{ t('settings.toolServers.oauth.connectedBy', { user: server.oauth.connectedBy }) }}
+          </span>
+        </div>
+
+        <p v-if="server.oauth.scopes?.length" class="text-[11px] text-slate-400">
+          {{ t('settings.toolServers.oauth.scopes', { scopes: server.oauth.scopes.join(', ') }) }}
+        </p>
+        <!-- A grant with no refresh token works until its access token expires and then needs
+             granting again by hand. Said BEFORE it happens, which is the only time it is useful. -->
+        <p
+          v-if="server.oauth.connected && server.oauth.refreshable === false"
+          class="text-[11px] text-amber-400"
+        >
+          {{ t('settings.toolServers.oauth.notRefreshable') }}
+        </p>
+        <p
+          v-if="server.oauth.lastError"
+          class="text-[11px] text-red-400"
+          :data-testid="`tool-server-oauth-error-${server.id}`"
+        >
+          {{ t('settings.toolServers.oauth.lastError', { detail: server.oauth.lastError }) }}
+        </p>
+
+        <div v-if="isInteractive(server)" class="flex flex-wrap items-center gap-2 pt-1">
+          <UButton
+            size="xs"
+            variant="subtle"
+            icon="i-lucide-link"
+            :loading="store.connecting === server.id"
+            :disabled="store.connecting !== null"
+            :data-testid="`tool-server-connect-${server.id}`"
+            @click="connect(server.id)"
+          >
+            {{
+              server.oauth.connected
+                ? t('settings.toolServers.oauth.reconnect')
+                : t('settings.toolServers.oauth.connect')
+            }}
+          </UButton>
+          <UButton
+            v-if="server.oauth.connected"
+            size="xs"
+            variant="ghost"
+            color="error"
+            :loading="store.connecting === server.id"
+            :disabled="store.connecting !== null"
+            :data-testid="`tool-server-disconnect-${server.id}`"
+            @click="disconnect(server.id)"
+          >
+            {{ t('settings.toolServers.oauth.disconnect') }}
+          </UButton>
+        </div>
+      </div>
 
       <div class="flex flex-wrap items-center gap-2 pt-1">
         <UButton

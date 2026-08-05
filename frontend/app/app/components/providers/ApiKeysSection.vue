@@ -33,6 +33,9 @@ const { confirmAction, toastDone } = useConfirmAction()
 /** Account-wide mode (single account scope) vs the default workspace/user toggle. */
 const isAccount = computed(() => !!props.accountId)
 
+/** Which store the form writes to: the shared workspace keys or the user's own. */
+const scope = ref<'workspace' | 'user'>('workspace')
+
 // "My keys" (user scope) are stored per-user, so they need a signed-in user. Block just
 // that scope when there's none (a deployment without sign-in); workspace/account keys are
 // unaffected. The scope toggle stays enabled so the user can switch back to a shared scope.
@@ -136,7 +139,6 @@ const PROVIDERS = computed(() =>
 )
 const ALL_PROVIDERS = computed(() => [...DIRECT_PROVIDERS.value, ...PROXY_PROVIDERS.value])
 
-const scope = ref<'workspace' | 'user'>('workspace')
 const provider = ref<ApiKeyProvider>(props.category === 'proxy' ? 'openrouter' : 'openai')
 const label = ref('')
 const key = ref('')

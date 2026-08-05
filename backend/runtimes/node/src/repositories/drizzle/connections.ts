@@ -24,6 +24,8 @@ import type {
   TestSecretsRepository,
   CapabilityCredentialRecord,
   CapabilityCredentialRepository,
+  McpOAuthGrantRecord,
+  McpOAuthGrantRepository,
 } from '@cat-factory/kernel'
 import type { SubscriptionVendor } from '@cat-factory/contracts'
 import { subscriptionVendorSchema } from '@cat-factory/contracts'
@@ -39,6 +41,7 @@ import {
   subscriptionQuotaCycles,
   testSecrets,
   capabilityCredentials,
+  mcpOAuthGrants,
 } from '../../db/schema.js'
 
 export class DrizzleObservabilityConnectionRepository implements ObservabilityConnectionRepository {
@@ -678,5 +681,113 @@ export class DrizzleCapabilityCredentialRepository implements CapabilityCredenti
     await this.db
       .delete(capabilityCredentials)
       .where(eq(capabilityCredentials.workspace_id, workspaceId))
+  }
+}
+
+/**
+ * A workspace's OAuth grants against remote MCP tool servers — one row per (workspace, server).
+ * `tokens` is the sealed access/refresh blob the service opens, `summary` the non-secret blob the
+ * connection panel renders. The REFRESH path rides the rev-guarded `compareAndSwap` (an
+ * `UPDATE … WHERE rev = ?` whose row count decides the winner); the blind `upsert` bumps the
+ * stored rev in SQL, so a human completing a grant beats a concurrent refresh's stale base. The
+ * D1 mirror is `D1McpOAuthGrantRepository`.
+ */
+export class DrizzleMcpOAuthGrantRepository implements McpOAuthGrantRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async get(workspaceId: string, serverId: string): Promise<McpOAuthGrantRecord | null> {
+    const rows = await this.db
+      .select()
+      .from(mcpOAuthGrants)
+      .where(
+        and(eq(mcpOAuthGrants.workspace_id, workspaceId), eq(mcpOAuthGrants.server_id, serverId)),
+      )
+      .limit(1)
+    const row = rows[0]
+    return row ? rowToGrant(row) : null
+  }
+
+  async listByWorkspace(workspaceId: string): Promise<McpOAuthGrantRecord[]> {
+    const rows = await this.db
+      .select()
+      .from(mcpOAuthGrants)
+      .where(eq(mcpOAuthGrants.workspace_id, workspaceId))
+      .orderBy(mcpOAuthGrants.server_id)
+    return rows.map(rowToGrant)
+  }
+
+  async upsert(record: McpOAuthGrantRecord): Promise<void> {
+    await this.db
+      .insert(mcpOAuthGrants)
+      .values(grantToRow(record))
+      .onConflictDoUpdate({
+        target: [mcpOAuthGrants.workspace_id, mcpOAuthGrants.server_id],
+        set: {
+          tokens: record.tokens,
+          summary: record.summary,
+          rev: sql`${mcpOAuthGrants.rev} + 1`,
+          updated_at: record.updatedAt,
+        },
+      })
+  }
+
+  async compareAndSwap(record: McpOAuthGrantRecord, expectedRev: number | null): Promise<boolean> {
+    if (expectedRev === null) {
+      const result = await this.db
+        .insert(mcpOAuthGrants)
+        .values(grantToRow(record))
+        .onConflictDoNothing({
+          target: [mcpOAuthGrants.workspace_id, mcpOAuthGrants.server_id],
+        })
+      return (result.rowCount ?? 0) > 0
+    }
+    const result = await this.db
+      .update(mcpOAuthGrants)
+      .set({
+        tokens: record.tokens,
+        summary: record.summary,
+        rev: record.rev,
+        updated_at: record.updatedAt,
+      })
+      .where(
+        and(
+          eq(mcpOAuthGrants.workspace_id, record.workspaceId),
+          eq(mcpOAuthGrants.server_id, record.serverId),
+          eq(mcpOAuthGrants.rev, expectedRev),
+        ),
+      )
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async delete(workspaceId: string, serverId: string): Promise<void> {
+    await this.db
+      .delete(mcpOAuthGrants)
+      .where(
+        and(eq(mcpOAuthGrants.workspace_id, workspaceId), eq(mcpOAuthGrants.server_id, serverId)),
+      )
+  }
+}
+
+function rowToGrant(row: typeof mcpOAuthGrants.$inferSelect): McpOAuthGrantRecord {
+  return {
+    workspaceId: row.workspace_id,
+    serverId: row.server_id,
+    tokens: row.tokens,
+    summary: row.summary,
+    rev: row.rev,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function grantToRow(record: McpOAuthGrantRecord): typeof mcpOAuthGrants.$inferInsert {
+  return {
+    workspace_id: record.workspaceId,
+    server_id: record.serverId,
+    tokens: record.tokens,
+    summary: record.summary,
+    rev: record.rev,
+    created_at: record.createdAt,
+    updated_at: record.updatedAt,
   }
 }

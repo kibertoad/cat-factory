@@ -1,4 +1,8 @@
-import type { AgentToolCall, AgentToolCallRepository } from '@cat-factory/kernel'
+import type {
+  AgentToolCall,
+  AgentToolCallRepository,
+  AgentToolCallSummary,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 
 // Cross-runtime parity for the tool-call TRAJECTORY sink. The capture is runtime-neutral (the
@@ -32,6 +36,16 @@ function call(overrides: Partial<AgentToolCall> & Pick<AgentToolCall, 'id'>): Ag
     createdAt: 1,
     ...overrides,
   }
+}
+
+/** Fold a run's rollup cells the way every consumer does, so a cell grain change fails here. */
+function totalCalls(cells: AgentToolCallSummary[]): number {
+  return cells.reduce((acc, cell) => acc + cell.calls, 0)
+}
+
+/** Index a run's cells by `(agentKind, tool)` — the grain the stores GROUP BY. */
+function cellsByKey(cells: AgentToolCallSummary[]): Map<string, AgentToolCallSummary> {
+  return new Map(cells.map((cell) => [`${cell.agentKind}/${cell.tool}`, cell]))
 }
 
 /**
@@ -208,11 +222,11 @@ export function defineAgentToolCallSuite(
       })
       expect(second.map((c) => c.id)).toEqual([`${ws}-a`])
 
-      expect(await repo.countByExecution(ws, e1)).toBe(3)
-      expect(await repo.countByExecution(ws, e2)).toBe(1)
-      // A run that called no tools counts 0 rather than throwing — the overview reports that
-      // differently from an unwired sink.
-      expect(await repo.countByExecution(ws, 'exec-nothing')).toBe(0)
+      expect(totalCalls(await repo.summarizeByExecution(ws, e1))).toBe(3)
+      expect(totalCalls(await repo.summarizeByExecution(ws, e2))).toBe(1)
+      // A run that called no tools aggregates to NO cells rather than throwing — the overview
+      // reports that differently from an unwired sink.
+      expect(await repo.summarizeByExecution(ws, 'exec-nothing')).toEqual([])
     })
 
     it('narrows a page to ONE dispatch', async () => {
@@ -263,6 +277,100 @@ export function defineAgentToolCallSuite(
         jobId: 'round-2',
       })
       expect(round2.map((c) => c.id)).toEqual([`${ws}-r2a`, `${ws}-r2b`])
+    })
+
+    it('narrows BOTH reads to the calls that failed, in SQL', async () => {
+      // The filter has to be the store's, not the caller's: a page filtered after the read has
+      // already spent its `limit` on the calls that worked, so a run whose failures sit behind
+      // 100 successes returns none of them. Asserted with a limit SMALLER than the successful
+      // rows in front of them, which is what makes that difference visible.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        call({ id: `${ws}-ok1`, workspaceId: ws, executionId: e1, seq: 0, startedAt: 10 }),
+        call({ id: `${ws}-ok2`, workspaceId: ws, executionId: e1, seq: 1, startedAt: 20 }),
+        call({
+          id: `${ws}-bad`,
+          workspaceId: ws,
+          executionId: e1,
+          seq: 2,
+          startedAt: 30,
+          ok: false,
+        }),
+      ])
+
+      const failedPage = await repo.listPage(ws, { executionId: e1, limit: 2, ok: false })
+      expect(failedPage.map((c) => c.id)).toEqual([`${ws}-bad`])
+      const failedTrajectory = await repo.listByExecution(ws, {
+        executionId: e1,
+        limit: 2,
+        ok: false,
+      })
+      expect(failedTrajectory.map((c) => c.id)).toEqual([`${ws}-bad`])
+      // The complement, so a store that matched every row on a truthy filter fails here.
+      const passed = await repo.listByExecution(ws, { executionId: e1, limit: 10, ok: true })
+      expect(passed.map((c) => c.id)).toEqual([`${ws}-ok1`, `${ws}-ok2`])
+      // Absent means every call, not "the ones that worked".
+      expect((await repo.listByExecution(ws, { executionId: e1, limit: 10 })).length).toBe(3)
+    })
+
+    it('composes the outcome filter with the dispatch filter', async () => {
+      // "Did the third ci-fixer round fail anything" is one question, and answering it by
+      // narrowing on either axis alone answers a different one.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        call({ id: `${ws}-r1-bad`, workspaceId: ws, executionId: e1, jobId: 'r1', ok: false }),
+        call({ id: `${ws}-r2-ok`, workspaceId: ws, executionId: e1, jobId: 'r2', seq: 1 }),
+        call({
+          id: `${ws}-r2-bad`,
+          workspaceId: ws,
+          executionId: e1,
+          jobId: 'r2',
+          seq: 2,
+          ok: false,
+        }),
+      ])
+      const page = await repo.listPage(ws, { executionId: e1, limit: 10, jobId: 'r2', ok: false })
+      expect(page.map((c) => c.id)).toEqual([`${ws}-r2-bad`])
+    })
+
+    it('aggregates the run at the (agentKind, tool) grain, counting failures beside calls', async () => {
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.recordMany([
+        // One kind retrying one tool that mostly fails: the concentration the grain exists for.
+        call({ id: `${ws}-e1`, workspaceId: ws, executionId: e1, seq: 0, tool: 'edit', ok: false }),
+        call({ id: `${ws}-e2`, workspaceId: ws, executionId: e1, seq: 1, tool: 'edit', ok: false }),
+        call({ id: `${ws}-e3`, workspaceId: ws, executionId: e1, seq: 2, tool: 'edit' }),
+        // The same TOOL under a different kind is its own cell, or a run's fixer rounds would be
+        // folded into the coder's loop before any reader could tell them apart.
+        call({
+          id: `${ws}-f1`,
+          workspaceId: ws,
+          executionId: e1,
+          seq: 3,
+          agentKind: 'ci-fixer',
+          tool: 'edit',
+        }),
+        call({ id: `${ws}-b1`, workspaceId: ws, executionId: e1, seq: 4, tool: 'bash' }),
+        // Another run's rows must not reach this one's aggregate.
+        call({ id: `${ws}-x`, workspaceId: ws, executionId: e2, seq: 0, tool: 'edit', ok: false }),
+      ])
+
+      const cells = cellsByKey(await repo.summarizeByExecution(ws, e1))
+      expect(cells.size).toBe(3)
+      expect(cells.get('coder/edit')).toMatchObject({ calls: 3, failures: 2 })
+      expect(cells.get('ci-fixer/edit')).toMatchObject({ calls: 1, failures: 0 })
+      expect(cells.get('coder/bash')).toMatchObject({ calls: 1, failures: 0 })
+      // The total is a fold over the cells, which is why the overview needs no second COUNT.
+      expect(totalCalls([...cells.values()])).toBe(5)
+      // A store returning its counts as strings (Postgres does, over the wire) would pass an
+      // equality on the row and fail arithmetic downstream; this pins the type at the port.
+      for (const cell of cells.values()) {
+        expect(typeof cell.calls).toBe('number')
+        expect(typeof cell.failures).toBe('number')
+      }
     })
 
     it('batch-appends calls, ignoring ids it already stored', async () => {

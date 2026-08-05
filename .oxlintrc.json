@@ -15,6 +15,12 @@
   },
   "overrides": [
     {
+      "files": ["frontend/**"],
+      "rules": {
+        "no-use-before-define": ["error", { "functions": false }]
+      }
+    },
+    {
       "files": [
         "**/*.test.ts",
         "**/*.spec.ts",

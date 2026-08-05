@@ -1,5 +1,61 @@
 # @cat-factory/app
 
+## 0.229.0
+
+### Minor Changes
+
+- 4e4d1b4: OAuth for external MCP tool servers, so the OAuth-first hosted ecosystem (Linear, Atlassian,
+  Figma, Slack's remote server) is reachable at all. A remote (`http`) declaration may now carry
+  `oauth`: the `authorization_code` grant, which a `secrets.manage` holder completes once per board
+  from the Infrastructure window, and `client_credentials`, which needs no human and covers an
+  internal or partner server. Endpoints are discovered per the MCP authorization spec (RFC 9728 →
+  RFC 8414 → OIDC discovery) with a declaration override, PKCE and the RFC 8707 `resource` indicator
+  are always used, and the grant is sealed per (workspace, server) and refreshed on the dispatch
+  path. The access token rides the job body's header channel only, never a prompt or the telemetry
+  snapshot.
+
+  Two new unavailability reasons (`oauth_not_connected`, `oauth_token_failed`) and the matching probe
+  verdicts keep "nobody connected", "the connection stopped working" and "no credential configured"
+  apart, since each sends an operator somewhere different. New table `mcp_oauth_grants` on both
+  runtimes (D1 migration 0082 ⇄ a Drizzle migration), in the mothership `remote` bucket and in the
+  workspace-delete cascade. Interactive grants need `MCP_OAUTH_REDIRECT_URL` set to the deployment's
+  public app URL followed by `/mcp-oauth-callback` and `ENCRYPTION_KEY` for the sealed store; without
+  either, an OAuth server is stated to its agent as unavailable rather than dispatched without a
+  token.
+
+  The vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a session-gated
+  `POST /mcp/oauth/complete`. A backend route receiving the redirect directly could not be gated:
+  sessions are bearer tokens and a third-party browser navigation carries none, so it would have to
+  sit outside the default-deny session gate, and the "same user who started the flow" and "still
+  holds `secrets.manage`" checks would never execute. Routing it through the app is what makes both
+  enforceable.
+
+### Patch Changes
+
+- Updated dependencies [ec96387]
+- Updated dependencies [7f5ed08]
+- Updated dependencies [4e4d1b4]
+  - @cat-factory/contracts@0.246.0
+
+## 0.228.1
+
+### Patch Changes
+
+- 5260c74: Fix a white screen on the very first launch, for a user with no saved tutorial answer.
+
+  The board page's tutorial launch offer reads `startupAdvisoryOpen` from a watcher with
+  `immediate: true`, so that getter runs synchronously during `setup()`. Two of the values it folds in
+  (`needsGitHubInstall`, `githubProbePending`) were declared further down the same script block, so the
+  first evaluation hit their temporal dead zone and threw `ReferenceError: can't access lexical
+declaration 'needsGitHubInstall' before initialization`, taking the whole page down. The two
+  `computed`s move above the offer that consumes them; nothing else changes.
+
+  Only a first-ever launch could reach it: any saved decision short-circuits `tutorialOfferSettled()`,
+  so the watcher never registers and the getter never runs early. And only a DEV build shows it,
+  because Vue rethrows an unhandled watcher error in development and merely logs it in production,
+  where the computed recovers on its next evaluation. That pair is why the e2e suite stayed green: it
+  drives a production build, and every spec but the tutorial one pre-answers the prompt.
+
 ## 0.228.0
 
 ### Minor Changes

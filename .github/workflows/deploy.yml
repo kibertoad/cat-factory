@@ -161,8 +161,13 @@ jobs:
           # ancestor of HEAD, so paths-filter's merge-base reduces to base..HEAD.
           base: ${{ steps.base.outputs.sha }}
           filters: |
+            # Every D1 lineage `db:migrate:remote` applies, not just the main one: a schema
+            # change the migrate job never sees is a Worker deployed against a table that does
+            # not have the column its code reads.
             migrations:
               - 'backend/runtimes/cloudflare/migrations/**'
+              - 'backend/runtimes/cloudflare/telemetry-migrations/**'
+              - 'backend/runtimes/cloudflare/audit-migrations/**'
             image:
               - 'backend/internal/executor-harness/src/**'
               - 'backend/internal/executor-harness/Dockerfile'

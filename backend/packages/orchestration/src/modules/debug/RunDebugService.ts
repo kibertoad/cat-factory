@@ -26,6 +26,7 @@ import type {
 import {
   deriveSignals,
   foldLlmRollup,
+  foldToolCallRollup,
   toDebugAgentContextDetail,
   toDebugAgentContextEntry,
   toDebugLlmCall,
@@ -164,11 +165,11 @@ export class RunDebugService {
     const runId = execution.id
     // Independent aggregates over five separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
-    const [summaries, contextCount, searchCount, toolCallCount, logCounts] = await Promise.all([
+    const [summaries, contextCount, searchCount, toolCells, logCounts] = await Promise.all([
       this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
-      this.deps.agentToolCallRepository?.countByExecution(workspaceId, runId) ?? 0,
+      this.deps.agentToolCallRepository?.summarizeByExecution(workspaceId, runId) ?? [],
       // Total + failures in one aggregate pass — the overview always wants both.
       this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? {
         total: 0,
@@ -176,6 +177,7 @@ export class RunDebugService {
       },
     ])
     const { totals, byAgentKind, byPhase } = foldLlmRollup(summaries)
+    const toolCalls = foldToolCallRollup(toolCells)
     const steps = execution.steps.map(toDebugRunStep)
     const sinks = {
       // The LLM call count is FOLDED from the per-kind rollup rather than counted separately:
@@ -187,7 +189,12 @@ export class RunDebugService {
         count: contextCount,
       },
       searchQueries: { available: !!this.deps.agentSearchQueryRepository, count: searchCount },
-      toolCalls: { available: !!this.deps.agentToolCallRepository, count: toolCallCount },
+      // Folded from the same rollup for the same reason the LLM count is: a second COUNT over
+      // the rows the breakdown beside it aggregates could only ever disagree with it.
+      toolCalls: {
+        available: !!this.deps.agentToolCallRepository,
+        count: toolCalls.totals.calls,
+      },
       provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCounts.total },
     }
     return {
@@ -206,6 +213,7 @@ export class RunDebugService {
         // null with a currency would announce a denomination for numbers that are not there.
         costCurrency: this.deps.costCurrency ?? null,
       },
+      toolCalls,
       signals: deriveSignals({
         execution,
         steps,
@@ -213,6 +221,10 @@ export class RunDebugService {
         byAgentKind,
         sinks,
         provisioningFailures: logCounts.failures,
+        // The CELLS, not the folded rollup: a concentration of failures on one
+        // `(agentKind, tool)` pair is the signal, and every coarser view has already folded
+        // the concentration away.
+        toolCells,
       }),
     }
   }
@@ -367,15 +379,26 @@ export class RunDebugService {
   async listToolCalls(
     workspaceId: string,
     runId: string,
-    opts: { limit: number; cursor?: DebugCursor; jobId?: string; order?: ToolCallOrder },
+    opts: {
+      limit: number
+      cursor?: DebugCursor
+      jobId?: string
+      order?: ToolCallOrder
+      /** Narrow to failed (`false`) or successful (`true`) calls; absent ⇒ every call. */
+      ok?: boolean
+    },
   ): Promise<DebugPage<AgentToolCall>> {
     const repo = this.deps.agentToolCallRepository
     if (!repo) return { items: [], nextCursor: null }
+    // The outcome filter rides BOTH orders, because both questions it answers are real: the
+    // page walks a long run's failures, and the trajectory shows them in the order they hit,
+    // which is what tells a retry loop apart from a scatter of unrelated failures.
     if (opts.order === 'trajectory') {
       const items = await repo.listByExecution(workspaceId, {
         executionId: runId,
         limit: opts.limit,
         ...(opts.jobId ? { jobId: opts.jobId } : {}),
+        ...(opts.ok !== undefined ? { ok: opts.ok } : {}),
       })
       return { items, nextCursor: null }
     }
@@ -384,6 +407,7 @@ export class RunDebugService {
       limit: opts.limit + 1,
       ...(opts.cursor ? { cursor: opts.cursor } : {}),
       ...(opts.jobId ? { jobId: opts.jobId } : {}),
+      ...(opts.ok !== undefined ? { ok: opts.ok } : {}),
     })
     return paginate(
       rows,

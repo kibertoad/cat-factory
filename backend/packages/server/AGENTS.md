@@ -59,6 +59,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   really exposes; `mcpProbe.ts` is a hand-rolled Streamable-HTTP client (three POSTs over `fetch`,
   no MCP SDK, so nothing Node-reaching enters a module every facade bundles). A `stdio` server and a
   loopback url are REFUSED by name rather than probed, because the backend is not the run container.
+  `McpOAuthCallbackController.ts` is the vendor's redirect target and is deliberately NOT in this
+  gated mount: it is a third-party browser navigation, so it is mounted at the app ROOT and gates
+  itself on the sealed state, the user who started the flow, and a re-loaded `secrets.manage`.
   See `backend/docs/mcp-tool-servers.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their
@@ -105,7 +108,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`:
   those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
-- `auth/`: HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
+- `auth/`: HMAC signing, GitHub/Google OAuth helpers, WS tickets (`wsTicket.ts`), and
+  `auth/oidc/` — the enterprise-SSO adapter: `discovery.ts` (the cached
+  `/.well-known/openid-configuration` + JWKS read, and the key-rotation refetch),
+  `OidcClient.ts` (Authorization Code + PKCE, ID-token verification via `jose` against an
+  asymmetric-only algorithm allow-list), `claims.ts` (the pure identity/admission rules).
+  ONE adapter serves every OIDC provider; nothing under here branches on which one answered.
+- `modules/auth/loginFlow.ts`: the mechanics EVERY redirecting login provider shares — the
+  cookie-bound CSRF state, the allow-listed post-login redirect (`pickPostLoginRedirect` guards a
+  token-exfiltration primitive), the session mint, the invite handling. A new provider extends
+  this, never a second copy. `modules/auth/ssoRoutes.ts` is the SSO registrar; its round-trip state
+  rides an httpOnly cookie rather than the URL, because PKCE's verifier and OIDC's nonce are
+  secrets. Configuration + admission model: [`backend/docs/auth.md`](../../docs/auth.md).
 - `http/errorHandler.ts`: the ONE `app.onError` both facades mount. A controller signals a
   refusal by THROWING a kernel `DomainError`; the handler maps its `code` to a status and emits
   `{ error: { code, message, details? } }`. **Do not hand-roll that envelope**: a literal
