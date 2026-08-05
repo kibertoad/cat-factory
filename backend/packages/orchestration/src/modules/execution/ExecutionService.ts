@@ -73,6 +73,7 @@ import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGateController } from './InterviewGateController.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type {
   IterationCapChoice,
@@ -686,6 +687,22 @@ export class ExecutionService {
    */
   get docInterview(): DocInterviewController | undefined {
     return this.docInterviewController
+  }
+
+  /**
+   * The interview gate wired for a step's `agentKind`, or undefined when this deployment wired
+   * none. The lookup a caller reaches for when it holds a PARKED STEP rather than a feature: the
+   * public decision surface answers "the interview this run is stopped on" and must not have to
+   * name which gate that is (the getters above are the per-feature reads, for a controller that
+   * already knows).
+   *
+   * The same keying the engine's own dispatch uses, so a deployment that registers its own
+   * interviewer is reachable here the moment its controller is wired, with no edit.
+   */
+  interviewGateFor(agentKind: string): InterviewGateController<unknown> | undefined {
+    return [this.initiativeInterviewController, this.docInterviewController].find(
+      (c) => c?.agentKind === agentKind,
+    )
   }
 
   private requireWorkspace(workspaceId: string) {

@@ -99,8 +99,13 @@ export {
 } from './modules/execution/ci.logic.js'
 export {
   dedicatedParkSurface,
+  findParkedInterviewStep,
   type DedicatedParkSurface,
 } from './modules/execution/step-park.logic.js'
+export type {
+  InterviewGateController,
+  InterviewView,
+} from './modules/execution/InterviewGateController.js'
 export {
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,

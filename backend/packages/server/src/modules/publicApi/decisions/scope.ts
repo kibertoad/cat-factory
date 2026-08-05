@@ -8,9 +8,11 @@ import type {
 import type { GateActor } from '@cat-factory/kernel'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import type { Context } from 'hono'
+import { findParkedInterviewStep } from '@cat-factory/orchestration'
 import type {
   BrainstormModule,
   ClarityModule,
+  InterviewGateController,
   RequirementsModule,
 } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../../http/env.js'
@@ -215,6 +217,48 @@ export async function gateBrainstormAction<E extends AppEnv>(
     return noReview(`This run has no ${stage} brainstorm`)
   }
   return { workspaceId, scoped, brainstorm, stage, review }
+}
+
+/** The settled context an interview route acts on: which gate, and the run it is parked on. */
+export interface InterviewAction {
+  workspaceId: string
+  scoped: ScopedRun
+  gate: InterviewGateController<unknown>
+  /** The parked step's kind, so a refusal can name the interviewer the caller reached for. */
+  stepKind: string
+}
+
+/**
+ * Gate an interview action: the shared {@link gateDecisionAction} preamble, plus the run's PARKED
+ * interview step and the gate wired for its kind.
+ *
+ * Which interviewer is asking is resolved from the RUN rather than taken from the caller, which is
+ * what lets one route set serve every interview gate. Two distinct refusals fall out of that, and
+ * keeping them apart is the point: a run parked on no interview is a 404 (there is nothing to
+ * answer), while a run parked on an interviewer this deployment never wired is a 503 naming the
+ * kind (there is something to answer and this deployment cannot). Collapsing them would tell an
+ * operator staring at a stopped run that it is not stopped.
+ */
+export async function gateInterviewAction<E extends AppEnv>(
+  c: Context<E>,
+  runId: string,
+): Promise<InterviewAction | GateFailure> {
+  const gated = await gateDecisionAction(c, runId)
+  if ('fail' in gated) return gated
+  const { workspaceId, scoped } = gated
+  const container = c.get('container')
+  const parked = findParkedInterviewStep(scoped.execution, container.agentKindRegistry)
+  if (!parked) {
+    return {
+      fail: { status: 404, code: 'no_interview', message: 'This run has no live interview' },
+    }
+  }
+  const stepKind = parked.step.agentKind
+  const gate = container.executionService.interviewGateFor(stepKind)
+  if (!gate) {
+    return moduleUnavailable(`The ${stepKind} interviewer is not configured`)
+  }
+  return { workspaceId, scoped, gate, stepKind }
 }
 
 /** A deployment that never wired the module behind a park cannot answer it: 503, naming what. */

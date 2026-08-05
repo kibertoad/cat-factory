@@ -35,7 +35,7 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.9.0'
+const API_VERSION = '1.10.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -89,6 +89,10 @@ const COMPONENT_SCHEMAS = {
   PublicHumanTestEnvironment: 'publicHumanTestEnvironmentSchema',
   PublicHumanTestDecision: 'publicHumanTestDecisionSchema',
   PublicVisualConfirmDecision: 'publicVisualConfirmDecisionSchema',
+  PublicFollowUpItem: 'publicFollowUpItemSchema',
+  PublicFollowUpsDecision: 'publicFollowUpsDecisionSchema',
+  PublicInterviewQuestion: 'publicInterviewQuestionSchema',
+  PublicInterviewDecision: 'publicInterviewDecisionSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -104,6 +108,8 @@ const COMPONENT_SCHEMAS = {
   PublicResolvePrReview: 'publicResolvePrReviewSchema',
   PublicChallengePrReviewFinding: 'publicChallengePrReviewFindingSchema',
   PublicRequestGateFix: 'publicRequestGateFixSchema',
+  PublicAnswerFollowUp: 'publicAnswerFollowUpSchema',
+  PublicAnswerInterview: 'publicAnswerInterviewSchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -441,6 +447,48 @@ const OPERATION_DOCS = {
     summary: 'Request a fix from a visual-confirmation gate',
     description:
       'Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.',
+  },
+  filePublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'File a follow-up item as an issue',
+    description:
+      "File one `follow_up` item on the workspace's issue tracker, recording the ticket ref on the item. Refused for a `question` item, and for a workspace with no tracker connected. Creating the issue is not idempotent, so a retry after a partial failure files a second one. Requires a `decide`-scope key.",
+  },
+  sendBackPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Send a follow-up item back to the Coder',
+    description:
+      'Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget the decision reports. Requires a `decide`-scope key.',
+  },
+  answerPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Answer a follow-up question',
+    description:
+      'Answer one `question` item the Coder raised mid-run; the answer steers its next pass. Refused for a `follow_up` item, which is filed, sent back or dismissed instead. Requires a `decide`-scope key.',
+  },
+  dismissPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Dismiss a follow-up item',
+    description:
+      'Wave one item off without acting on it. Valid for either item kind, and (like every other verb here) releases the park once it is the last undecided item. Requires a `decide`-scope key.',
+  },
+  answerPublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Answer an interview question',
+    description:
+      'Record an answer to one question the parked interviewer asked. Does NOT resume the run: answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.',
+  },
+  continuePublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Continue a parked interview',
+    description:
+      'Submit the recorded answers and resume: the interviewer runs again and may ask follow-up questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next round arrives on a later read of the decision list. Requires a `decide`-scope key.',
+  },
+  proceedPublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Proceed past a parked interview',
+    description:
+      'Stop the questions: the interviewer converges on the answers so far and the run advances. Also asynchronous, since converging is itself an interviewer pass. Requires a `decide`-scope key.',
   },
 
   // The remote-debugging reads (`/api/v1/debug/*`, `read` scope). A two-level drill-down: the

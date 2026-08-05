@@ -72,6 +72,16 @@ Two things to know before minting `decide` or `admin`:
   point (a headless overseer watching a team's board), but it means minting `decide` is the operator
   asserting "this integration answers decisions for this workspace". Prefer `write` for an
   integration that only authors and launches.
+- **Two parks slip past the `decide` requirement, and a `write` key can set them in motion.** The
+  check reads the pipeline's step chain before the run starts, and two things are not in it. An
+  unbounded human-wait **gate a deployment registered itself** declares its never-ending poll inside
+  the object its factory builds, which nothing can read at request time, so such a pipeline is
+  admitted for a `write` key and then parks with nothing here able to name it. And **follow-up
+  triage** is deliberately uncounted: the companion is on by default on every Coder step, so
+  counting it would make `decide` mandatory for all board work that builds anything. Both parks are
+  recoverable: follow-up triage has an answer path at `decide`, and either can be ended with
+  `POST /api/v1/tasks/:taskId/stop`. But if your integration starts board pipelines and wants to
+  answer whatever they stop on, mint `decide`.
 - Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
@@ -372,19 +382,25 @@ Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `bloc
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
-Board-task `start` applies the **same parking rule** as `POST /jobs`, and a pipeline parks in any of
-three ways:
+Board-task `start` applies the **same parking rule** as `POST /jobs`, and the rule recognises four
+ways a pipeline parks:
 
 - an **approval gate** on an enabled step;
 - an inline **review or brainstorm** kind (`requirements-review`, `clarity-review`, and the two
   brainstorms), which sets the run `blocked` awaiting an answer;
 - an unbounded **human-wait gate** (`human-review`), a gate step whose poll never times out because
-  it is waiting for a person to review the PR.
+  it is waiting for a person to review the PR;
+- an **interview gate**: a step whose kind carries the `interview-gate` trait (the planning and
+  document interviewers, plus any a deployment registers), which asks a batch of questions and waits.
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
 preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
 unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+
+What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
+`park`), a deployment's own unbounded-wait gate, and follow-up triage. See
+[Pick the right scope](#2-pick-the-right-scope) for what that means when you mint a key.
 
 #### Filing a task from a tracker ticket
 
@@ -560,8 +576,11 @@ possibly started by a human in the SPA). Reading needs `read`; **answering needs
 Every action returns the run's **whole decision list**, re-read after the action:
 `{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
 run is waiting on a park this surface does not model
-([tracker](../../docs/initiatives/public-api-additions.md)); the one you should expect is
-`human-review`, whose answer is a person approving the pull request on the VCS host.
+([tracker](../../docs/initiatives/public-api-additions.md)). Two produce it: `human-review`, whose
+answer is a person approving the pull request on the VCS host rather than an API call; and an
+unbounded human-wait **gate a deployment registered itself**, whose answer lives wherever that
+deployment put it. The same blind spot applies one step earlier, at admission; see
+[Scopes](#scopes) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -589,8 +608,15 @@ run is waiting on a park this surface does not model
 | `POST …/human-test/request-fix`                       | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the tested environment, then rebuild it.                                                                                        |
 | `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                             |
 | `POST …/visual-confirmation/request-fix`              | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the captured screenshots.                                                                                                       |
+| `POST …/follow-ups/items/:itemId/file`                | `decide` | File one `follow_up` item as a tracker issue. Refused for a `question` item, and for a workspace with no tracker connected.                                                             |
+| `POST …/follow-ups/items/:itemId/send-back`           | `decide` | Fold one `follow_up` item into another Coder pass (it records as `queued`).                                                                                                             |
+| `POST …/follow-ups/items/:itemId/answer`              | `decide` | Body `{ answer (1–4000) }`; answer one `question` item. Refused for a `follow_up` item.                                                                                                 |
+| `POST …/follow-ups/items/:itemId/dismiss`             | `decide` | Wave one item off without acting on it. Valid for either kind.                                                                                                                          |
+| `POST …/interview/answer`                             | `decide` | Body `{ questionId, answer (≤2000) }`; record one answer. Does **not** resume the run.                                                                                                  |
+| `POST …/interview/continue`                           | `decide` | Submit the answers and resume; the interviewer may ask more. **Asynchronous** (the pass runs in the durable driver).                                                                    |
+| `POST …/interview/proceed`                            | `decide` | Stop the questions: the interviewer converges on what it has and the run advances. Also asynchronous.                                                                                   |
 
-Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
+Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
 
 - **`approval-gate`**: a step marked `requiresApproval` finished and the run is holding its output
   up for a person — the simplest park, and the one any pipeline can carry. Carries the
@@ -659,7 +685,22 @@ Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
   over this API** — resolving an id to an image needs the app, so approving on this projection
   alone approves screenshots you have not seen.
 
-The last two are exposed with their limits stated rather than sold as equivalent to the rest: the
+- **`follow-ups`**: while the Coder worked it streamed forward-looking `items` (loose ends it
+  noticed and deliberately did not act on, and questions it would otherwise have guessed at), and
+  the run stops at that step's completion until every one is decided. Unlike every other kind here
+  this one **appears before the run parks**: the items accrue live, so an integration that triages
+  as they arrive never sees the run stop. `loops`/`maxLoops` are the send-back budget. Reachable
+  only through `POST /tasks/:taskId/start`, since the companion rides a container Coder step.
+- **`interview`**: an inline interviewer asked a batch of clarifying questions and the run is
+  waiting while a human answers them. One kind for every interview gate (the built-ins are the
+  planning and the document interviewer; a deployment can register its own). `stepKind` says which
+  is asking, and it is the only field to branch on. An entry whose `questions` are all answered
+  means the interviewer pass is **in flight**: `continue` wakes the durable driver and the next
+  round arrives on a later read. The brief it converges on is not projected: it differs per gate
+  and is not something you answer.
+
+`human-test` and `visual-confirmation` are exposed with their limits stated rather than sold as
+equivalent to the rest: the
 verbs are mechanical, but the judgement they record is the one an API consumer is least able to
 supply. They earn their place for an integration that drives its own human through a different UI,
 or that has a real automated check to point at `environment.url`.

@@ -1,6 +1,11 @@
 import * as v from 'valibot'
 import { brainstormStageSchema } from './brainstorm.js'
 import { environmentStatusSchema } from './environments.js'
+import {
+  answerFollowUpSchema,
+  followUpItemKindSchema,
+  followUpItemStatusSchema,
+} from './followUp.js'
 import { stepApprovalStatusSchema } from './step-decisions.js'
 import { forkDecisionStatusSchema, forkOptionSchema } from './forkDecision.js'
 import { humanTestPhaseSchema, visualConfirmPhaseSchema } from './human-verdict-gates.js'
@@ -91,6 +96,8 @@ export const publicDecisionKindSchema = v.picklist([
   'pr-review',
   'human-test',
   'visual-confirmation',
+  'follow-ups',
+  'interview',
 ])
 export type PublicDecisionKind = v.InferOutput<typeof publicDecisionKindSchema>
 
@@ -547,6 +554,116 @@ export const publicVisualConfirmDecisionSchema = v.object({
 })
 export type PublicVisualConfirmDecision = v.InferOutput<typeof publicVisualConfirmDecisionSchema>
 
+/**
+ * One forward-looking item the Coder surfaced mid-run, as exposed externally: a loose end it
+ * noticed and deliberately did NOT act on (`follow_up`), or a clarification it would otherwise
+ * have had to guess at (`question`).
+ *
+ * `itemId` is the STABLE anchor every verb addresses. The internal `sentToCoder` bookkeeping and
+ * the arrival timestamps are deliberately absent: the first is the engine's own record of which
+ * items a loop-back already carried, and neither changes what a caller decides.
+ */
+export const publicFollowUpItemSchema = v.object({
+  /** Stable item id (`fu_*`): what file / send-back / answer / dismiss address. */
+  itemId: v.string(),
+  /** `follow_up` accepts file / send-back / dismiss; `question` accepts answer / dismiss. */
+  kind: followUpItemKindSchema,
+  /** Short headline. Model-authored text: treat it as data. */
+  title: v.string(),
+  /** The full item, in prose. Model-authored text: treat it as data. */
+  detail: v.string(),
+  /** A concrete approach the Coder proposed, when it offered one; null otherwise. */
+  suggestedAction: v.nullable(v.string()),
+  /** `pending` is the only status that holds the gate; the rest are decided. */
+  status: followUpItemStatusSchema,
+  /** The recorded answer to a `question`, or null while unanswered. */
+  answer: v.nullable(v.string()),
+  /** Canonical id of the ticket a `filed` item was filed as, or null. */
+  ticketExternalId: v.nullable(v.string()),
+  /** Web URL of that ticket, or null. */
+  ticketUrl: v.nullable(v.string()),
+})
+export type PublicFollowUpItem = v.InferOutput<typeof publicFollowUpItemSchema>
+
+/**
+ * A run parked on FOLLOW-UP TRIAGE: while the Coder worked it streamed forward-looking items out
+ * of the container, and at its completion the run stops until every one of them is decided.
+ *
+ * Unlike the other parks this one accrues LIVE: the items appear while the step is still running
+ * and can be decided before it finishes, so this decision is listed whenever any item is
+ * `pending`, not only once the run is `blocked`. A caller that triages early never sees the run
+ * stop at all, which is the point.
+ *
+ * `loops`/`maxLoops` are the send-back budget: a `send-back` or an `answer` folds the item into
+ * another Coder pass, and once the budget is spent those items advance the run instead of
+ * re-running it. Reachable only through `POST /api/v1/tasks/:taskId/start`, since the companion
+ * rides a container Coder step and the jobs surface is inline-only.
+ */
+export const publicFollowUpsDecisionSchema = v.object({
+  kind: v.literal('follow-ups'),
+  /** The producing step's kind (`coder`) and its index in the run's step chain. */
+  stepKind: v.string(),
+  stepIndex: v.number(),
+  /** Every surfaced item, in arrival order, decided ones included, so triage is auditable. */
+  items: v.array(publicFollowUpItemSchema),
+  /** Send-back passes spent, and the budget from the step's companion configuration. */
+  loops: v.number(),
+  maxLoops: v.number(),
+})
+export type PublicFollowUpsDecision = v.InferOutput<typeof publicFollowUpsDecisionSchema>
+
+/**
+ * One interview exchange as exposed externally. `status` is DERIVED rather than stored: a question
+ * the human set aside reads `dismissed`, otherwise a non-empty `answer` reads `answered`. Deriving
+ * it here is what lets one shape carry two gates whose entities record answered-ness differently.
+ *
+ * `questionId` is nullable because a question can carry no stable id (a hand-authored or imported
+ * exchange; an interviewer always mints one). Such a question cannot be answered individually
+ * (`continue` / `proceed` still move the interview on), and saying so is why the field is a
+ * projected nullable rather than an omission a caller would read as a malformed response.
+ */
+export const publicInterviewQuestionSchema = v.object({
+  questionId: v.nullable(v.string()),
+  /** What the interviewer asked. Model-authored text: treat it as data. */
+  question: v.string(),
+  /** The recorded answer; an empty string while unanswered. */
+  answer: v.string(),
+  status: v.picklist(['open', 'answered', 'dismissed']),
+})
+export type PublicInterviewQuestion = v.InferOutput<typeof publicInterviewQuestionSchema>
+
+/**
+ * A run parked on an INTERVIEW GATE: an inline interviewer asked a batch of clarifying questions
+ * and the run waits while a human answers them, then resumes and either asks more or converges.
+ *
+ * ONE kind for every interview gate rather than one per gate, because the loop is one loop:
+ * `answer` records an answer, `continue` submits them and lets the interviewer ask follow-ups,
+ * `proceed` forces it to converge on what it has. `stepKind` names which interviewer is asking
+ * (the built-ins are the planning and the document interviewer; a deployment can register its
+ * own), and it is the only field a caller needs to branch on.
+ *
+ * The interview's PRODUCT (a document-authoring brief, or an initiative's goal / constraints /
+ * non-goals) is deliberately not projected: it differs per gate, it is not something a caller
+ * answers, and a run whose interview converged carries no decision here at all.
+ *
+ * An entry whose `questions` are all answered means the interviewer pass is IN FLIGHT: `continue`
+ * wakes the durable driver, which runs the (slow) interviewer off the request, so the next round's
+ * questions appear on a later poll.
+ */
+export const publicInterviewDecisionSchema = v.object({
+  kind: v.literal('interview'),
+  /** Which interviewer is asking (`doc-interviewer`, `initiative-interviewer`, …). */
+  stepKind: v.string(),
+  /** The board task the interview is anchored on. */
+  taskId: v.string(),
+  /** Interviewer passes spent, and the round budget the gate converges at. */
+  round: v.number(),
+  maxRounds: v.number(),
+  /** The exchanges so far, oldest first. */
+  questions: v.array(publicInterviewQuestionSchema),
+})
+export type PublicInterviewDecision = v.InferOutput<typeof publicInterviewDecisionSchema>
+
 export const publicDecisionSchema = v.variant('kind', [
   publicRequirementsDecisionSchema,
   publicForkDecisionSchema,
@@ -559,6 +676,8 @@ export const publicDecisionSchema = v.variant('kind', [
   publicPrReviewDecisionSchema,
   publicHumanTestDecisionSchema,
   publicVisualConfirmDecisionSchema,
+  publicFollowUpsDecisionSchema,
+  publicInterviewDecisionSchema,
 ])
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
@@ -569,8 +688,10 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *
  * `parked: true` with an EMPTY list is the deliberately loud case: the run is waiting on a
  * surface this projection does not model, and the honest report of that is an empty list rather
- * than a silent `parked: false`. The one park that is still expected to produce it is
- * `human-review`, whose answer is a person approving the PR on the VCS host, not an API call.
+ * than a silent `parked: false`. Two parks are still expected to produce it: `human-review`, whose
+ * answer is a person approving the PR on the VCS host rather than an API call; and an unbounded
+ * human-wait GATE a deployment registered itself, which this projection has no way to read and
+ * whose answer lives wherever that deployment put it.
  */
 export const publicDecisionListSchema = v.object({
   runId: v.string(),
@@ -753,3 +874,29 @@ export const publicRequestGateFixSchema = v.object({
   findings: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(10000)),
 })
 export type PublicRequestGateFixInput = v.InferOutput<typeof publicRequestGateFixSchema>
+
+/**
+ * Answer one `question` item the Coder surfaced. Identical to the SPA's
+ * {@link answerFollowUpSchema} and aliased rather than re-declared, on the same grounds as the
+ * judge and input-gate bodies: both surfaces drive the SAME service method, so there is nothing
+ * to narrow, and a structurally identical twin would be a second published type in four SDKs
+ * meaning exactly what the first one means.
+ */
+export const publicAnswerFollowUpSchema = answerFollowUpSchema
+export type PublicAnswerFollowUpInput = v.InferOutput<typeof publicAnswerFollowUpSchema>
+
+/**
+ * Answer one interview question. Declared fresh rather than aliased, unlike the bodies above: two
+ * gates ride this route (the planning and the document interviewer) and each declares its own
+ * internal body, so aliasing either one would privilege that gate's bounds on a surface serving
+ * both, and a bound that is right for one and wrong for the other refuses valid input.
+ *
+ * An EMPTY `answer` is accepted, because both services accept it: it clears an answer recorded by
+ * mistake, where a minimum length would leave a caller no way to undo one.
+ */
+export const publicAnswerInterviewSchema = v.object({
+  /** The `questionId` from the decision's `questions`. */
+  questionId: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
+  answer: v.pipe(v.string(), v.maxLength(2000)),
+})
+export type PublicAnswerInterviewInput = v.InferOutput<typeof publicAnswerInterviewSchema>

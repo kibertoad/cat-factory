@@ -10,7 +10,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
  * A {@code PublicDecision} — one of: PublicRequirementsDecision, PublicForkDecision,
  * PublicJudgeDecision, PublicInputGateDecision, PublicApprovalGateDecision, PublicAgentDecision,
  * PublicClarityDecision, PublicBrainstormDecision, PublicPrReviewDecision,
- * PublicHumanTestDecision, PublicVisualConfirmDecision.
+ * PublicHumanTestDecision, PublicVisualConfirmDecision, PublicFollowUpsDecision,
+ * PublicInterviewDecision.
  * Discriminated by {@code kind}. Sealed, so a Java 21 switch pattern and a Kotlin {@code when} are
  * both exhaustive with no default branch.
  */
@@ -30,6 +31,8 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
     @JsonSubTypes.Type(value = PublicBrainstormDecision.class, name = "brainstorm"),
     @JsonSubTypes.Type(value = PublicPrReviewDecision.class, name = "pr-review"),
     @JsonSubTypes.Type(value = PublicHumanTestDecision.class, name = "human-test"),
-    @JsonSubTypes.Type(value = PublicVisualConfirmDecision.class, name = "visual-confirmation")
+    @JsonSubTypes.Type(value = PublicVisualConfirmDecision.class, name = "visual-confirmation"),
+    @JsonSubTypes.Type(value = PublicFollowUpsDecision.class, name = "follow-ups"),
+    @JsonSubTypes.Type(value = PublicInterviewDecision.class, name = "interview")
 })
-public sealed interface PublicDecision permits PublicRequirementsDecision, PublicForkDecision, PublicJudgeDecision, PublicInputGateDecision, PublicApprovalGateDecision, PublicAgentDecision, PublicClarityDecision, PublicBrainstormDecision, PublicPrReviewDecision, PublicHumanTestDecision, PublicVisualConfirmDecision {}
+public sealed interface PublicDecision permits PublicRequirementsDecision, PublicForkDecision, PublicJudgeDecision, PublicInputGateDecision, PublicApprovalGateDecision, PublicAgentDecision, PublicClarityDecision, PublicBrainstormDecision, PublicPrReviewDecision, PublicHumanTestDecision, PublicVisualConfirmDecision, PublicFollowUpsDecision, PublicInterviewDecision {}

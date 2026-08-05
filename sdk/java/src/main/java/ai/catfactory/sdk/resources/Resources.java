@@ -71,7 +71,7 @@ public abstract class Resources {
         return usage;
     }
 
-    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
+    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
     public DecisionsClient decisions() {
         return decisions;
     }

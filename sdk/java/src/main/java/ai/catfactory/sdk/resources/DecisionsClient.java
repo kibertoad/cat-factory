@@ -14,7 +14,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
- * verdicts, PR review findings and the human-verdict gates.
+ * verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.
  * Reached from {@link CatFactoryClient}; not constructed directly.
  */
 public final class DecisionsClient {
@@ -34,6 +34,29 @@ public final class DecisionsClient {
      */
     public PublicDecisionList answerAgentDecision(String runId, String decisionId, PublicResolveAgentDecision body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/questions/" + Transport.pathSegment(decisionId) + "/answer", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Answer a follow-up question
+     * Answer one `question` item the Coder raised mid-run; the answer steers its next pass.
+     * Refused for a `follow_up` item, which is filed, sent back or dismissed instead. Requires a
+     * `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/answer} (operation
+     * {@code answerPublicRunFollowUp}).
+     */
+    public PublicDecisionList answerFollowUp(String runId, String itemId, PublicAnswerFollowUp body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/follow-ups/items/" + Transport.pathSegment(itemId) + "/answer", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Answer an interview question
+     * Record an answer to one question the parked interviewer asked. Does NOT resume the run:
+     * answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/interview/answer} (operation {@code
+     * answerPublicRunInterview}).
+     */
+    public PublicDecisionList answerInterviewQuestion(String runId, PublicAnswerInterview body) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/interview/answer", body, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -98,6 +121,30 @@ public final class DecisionsClient {
     }
 
     /**
+     * Continue a parked interview
+     * Submit the recorded answers and resume: the interviewer runs again and may ask follow-up
+     * questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next round arrives on a
+     * later read of the decision list. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/interview/continue} (operation {@code
+     * continuePublicRunInterview}).
+     */
+    public PublicDecisionList continueInterview(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/interview/continue", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Dismiss a follow-up item
+     * Wave one item off without acting on it. Valid for either item kind, and (like every other
+     * verb here) releases the park once it is the last undecided item. Requires a `decide`-scope
+     * key.
+     * {@code POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/dismiss} (operation
+     * {@code dismissPublicRunFollowUp}).
+     */
+    public PublicDecisionList dismissFollowUp(String runId, String itemId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/follow-ups/items/" + Transport.pathSegment(itemId) + "/dismiss", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
      * Dismiss a PR review finding
      * Drop one finding from the parked review entirely. Curation rather than a resolution: the run
      * stays parked. Requires a `decide`-scope key.
@@ -106,6 +153,19 @@ public final class DecisionsClient {
      */
     public PublicDecisionList dismissPrReviewFinding(String runId, String findingId) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/pr-review/findings/" + Transport.pathSegment(findingId) + "/dismiss", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * File a follow-up item as an issue
+     * File one `follow_up` item on the workspace's issue tracker, recording the ticket ref on the
+     * item. Refused for a `question` item, and for a workspace with no tracker connected. Creating
+     * the issue is not idempotent, so a retry after a partial failure files a second one. Requires
+     * a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/file} (operation {@code
+     * filePublicRunFollowUp}).
+     */
+    public PublicDecisionList fileFollowUp(String runId, String itemId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/follow-ups/items/" + Transport.pathSegment(itemId) + "/file", null, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -186,6 +246,18 @@ public final class DecisionsClient {
      */
     public PublicDecisionList proceedClarity(String runId) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/clarity/proceed", null, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Proceed past a parked interview
+     * Stop the questions: the interviewer converges on the answers so far and the run advances.
+     * Also asynchronous, since converging is itself an interviewer pass. Requires a `decide`-scope
+     * key.
+     * {@code POST /api/v1/runs/{runId}/decisions/interview/proceed} (operation {@code
+     * proceedPublicRunInterview}).
+     */
+    public PublicDecisionList proceedInterview(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/interview/proceed", null, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
@@ -384,6 +456,18 @@ public final class DecisionsClient {
      */
     public PublicDecisionList resolveStepExceeded(String runId, String approvalId, PublicResolveExceeded body) {
         return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/approvals/" + Transport.pathSegment(approvalId) + "/resolve-exceeded", body, Map.of(), new TypeReference<PublicDecisionList>() {});
+    }
+
+    /**
+     * Send a follow-up item back to the Coder
+     * Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every
+     * item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget
+     * the decision reports. Requires a `decide`-scope key.
+     * {@code POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/send-back} (operation
+     * {@code sendBackPublicRunFollowUp}).
+     */
+    public PublicDecisionList sendBackFollowUp(String runId, String itemId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/decisions/follow-ups/items/" + Transport.pathSegment(itemId) + "/send-back", null, Map.of(), new TypeReference<PublicDecisionList>() {});
     }
 
     /**
