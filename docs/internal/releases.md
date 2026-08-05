@@ -42,6 +42,6 @@ Verify with `rm -rf dist && pnpm publish --dry-run --no-git-checks` from the pac
 ## Related
 
 - SDK publishing is gated on a VERSION CHANGE, not a file change; see
-  [`sdk/README.md`](../sdk/README.md) and `.github/workflows/sdk-release.yml`.
+  [`sdk/README.md`](../../sdk/README.md) and `.github/workflows/sdk-release.yml`.
 - The `minimumReleaseAge` supply-chain gate on installs: CLAUDE.md, "Dependencies, releases, new
   packages".

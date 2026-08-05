@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Soft max-lines budget for non-test source files — the re-accretion guard the July 2026
-// code-quality review asked for (docs/code-quality-observability-extensibility-review-2026-07.md
+// code-quality review asked for (docs/internal/code-quality-observability-extensibility-review-2026-07.md
 // §4/#5). The engine god-files have been split repeatedly (ExecutionService → RunDispatcher →
 // RunAdmission / DeployerStepController / FollowUpGateController / review-kinds), and each time
 // the recorded line counts drifted stale while the files silently regrew (RunDispatcher
@@ -229,7 +229,18 @@ const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1100]])
 // under budget; `scripts/check-sdks.mjs` is what guards that tree.
 const SCAN_ROOTS = ['backend/packages', 'backend/runtimes', 'backend/internal', 'frontend/app']
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '.nuxt', '.output', 'coverage'])
+// `.stryker-tmp` is a mutation-testing sandbox: a COPY of a package's source, so scanning it
+// reports every finding twice against a path nobody can fix. It is gitignored, so only a local
+// run (or one killed before it could clean up) leaves one behind.
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  '.turbo',
+  '.nuxt',
+  '.output',
+  'coverage',
+  '.stryker-tmp',
+])
 
 function isTestPath(rel) {
   return (

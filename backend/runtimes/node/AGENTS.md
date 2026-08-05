@@ -14,7 +14,7 @@ transport, and Node model provisioning.
 
 - `repositories/drizzle.ts`: the Drizzle repos implementing the kernel ports (the **twin** of
   the CF D1 repos; a 3.9k-line monolith slated for splitting, see
-  `docs/refactoring-candidates.md` #1).
+  `docs/internal/refactoring-candidates.md` #1).
 - `db/schema.ts` + `db/tables/*` + `drizzle/` (generated migrations): the Postgres schema.
   `schema.ts` is the single entry point every repo imports; the VCS/projection tables live in
   `db/tables/vcs.ts` and the tenancy & identity ones (the `workspaces`/`users` roots, login

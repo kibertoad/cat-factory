@@ -17,7 +17,7 @@ There are two tracks, because the orchestrator's own runtime decides what it can
 | [`cloudflare/`](./cloudflare) | **on Cloudflare** (`@cat-factory/worker`)                             | `cloudflare`     | A per-PR Worker + its own D1 databases + a Pages preview of the SPA      |
 
 Wiring either one into a board (frames, handler, provisioning config, pipeline) is
-[`docs/dogfooding.md`](../../docs/dogfooding.md). This README is about the stacks themselves.
+[`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md). This README is about the stacks themselves.
 
 ## Why these two, and not the others
 
@@ -130,7 +130,7 @@ preview runs unreviewed branch code.
 
 Then, on cat-factory: fill in the built-in **Cloudflare Workers** handler (subdomain + token)
 and set the backend service frame's provisioning type to `cloudflare`; see
-[`docs/dogfooding.md`](../../docs/dogfooding.md).
+[`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
 
 ### Cost and limits
 

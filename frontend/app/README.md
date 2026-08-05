@@ -574,7 +574,7 @@ event left to restore it.
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. This
 layer ships the base `en` locale, and a downstream deployment overrides by dropping its own files
 (the per-layer deep-merge is the override seam, consumer wins key by key). Migration status:
-[`docs/localization.md`](../../docs/localization.md).
+[`docs/internal/localization.md`](../../docs/internal/localization.md).
 
 - `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
 - `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the plural

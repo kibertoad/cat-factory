@@ -28,13 +28,16 @@
     "prepublishOnly": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:mutation": "stryker run"
   },
   "dependencies": {
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "9.6.1",
+    "@stryker-mutator/vitest-runner": "9.6.1",
     "typescript": "7.0.2",
     "vitest": "^4.1.10"
   }

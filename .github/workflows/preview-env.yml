@@ -6,7 +6,7 @@ name: Preview environment (Cloudflare)
 # This is the CLOUDFLARE half of "cat-factory develops cat-factory" — the environment a
 # cat-factory `deployer` step points a tester at when the orchestrator itself runs on Workers
 # and so has no Docker daemon to run the compose stack on (deploy/preview/compose). The whole
-# setup is documented in deploy/preview/README.md and docs/dogfooding.md.
+# setup is documented in deploy/preview/README.md and docs/internal/dogfooding.md.
 #
 # The control plane is the GitHub Deployments API, so cat-factory needs nothing but outbound
 # HTTPS to api.github.com — no bespoke management service, and nothing that assumes a

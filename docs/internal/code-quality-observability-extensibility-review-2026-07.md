@@ -39,9 +39,9 @@ across eleven.
 Companion documents this review builds on (rather than re-deriving):
 [`refactoring-candidates.md`](./refactoring-candidates.md) (the god-file backlog),
 [`race-condition-audit-2026-07.md`](./race-condition-audit-2026-07.md),
-[`initiatives/registry-di-migration.md`](./initiatives/registry-di-migration.md),
-[`initiatives/platform-operator-observability.md`](./initiatives/platform-operator-observability.md),
-and [`initiatives/system-audit-improvements.md`](./initiatives/system-audit-improvements.md).
+[`initiatives/registry-di-migration.md`](../initiatives/registry-di-migration.md),
+[`initiatives/platform-operator-observability.md`](../initiatives/platform-operator-observability.md),
+and [`initiatives/system-audit-improvements.md`](../initiatives/system-audit-improvements.md).
 
 **Repo size as of `0c08604`:** ~261,500 lines of non-test TypeScript + ~96,900 lines of
 backend test TypeScript, ~51,700 lines of Vue across 198 components (+ ~25,000 lines of
