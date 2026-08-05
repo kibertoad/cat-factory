@@ -19,6 +19,21 @@ import { noVcsCredentialError } from './github.js'
 // this one, so it is not the seam to reuse here.)
 
 /**
+ * Property names the no-client branch must answer `undefined` for rather than with a refusing
+ * function, because the LANGUAGE reads them as protocol rather than as a port method.
+ *
+ * `then` is the one that bites: an object with a callable `then` is a thenable, so `await client`
+ * or returning the client from an `async` function makes the promise machinery call it with
+ * `(resolve, reject)`. A function that ignores both and returns a rejected promise leaves the
+ * outer promise PENDING FOREVER and files an unhandled rejection, which is a strictly worse
+ * failure than the refusal it was trying to raise. `toJSON` is the same shape for a serializing
+ * logger, and a symbol key (`Symbol.toPrimitive`, `util.inspect.custom`) is never a port method.
+ */
+function isProtocolKey(property: string | symbol): boolean {
+  return typeof property === 'symbol' || property === 'then' || property === 'toJSON'
+}
+
+/**
  * A `GitHubClient` that forwards every call to `resolve()`'s answer at call time. When `resolve`
  * answers undefined the deployment holds no credential, and every member is a function that
  * REFUSES with {@link noVcsCredentialError} — the named, actionable cause — rather than resolving
@@ -36,6 +51,7 @@ export function credentialRoutedGitHubClient(
     get(_target, property) {
       const client = resolve()
       if (!client) {
+        if (isProtocolKey(property)) return undefined
         // A REJECTED promise, not a synchronous throw: every member of the port is an async
         // method, so callers hold the failure with `await` / `.catch`. Throwing synchronously
         // would escape a `.catch()` chain and surface as an unhandled exception in whatever

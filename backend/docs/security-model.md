@@ -182,9 +182,13 @@ This is the hard bound on a _fully_ compromised run. What the token is varies by
 the environment WIN; with neither set, the token is the one a developer pasted on the sign-in
 screen, sealed on that machine under `ENCRYPTION_KEY` (`sqlite/vcsCredentialStore.ts`). That
 install is reachable by an UNAUTHENTICATED caller by construction: it happens during sign-in,
-before any session exists. It grants nothing on a correctly-run local deployment and is not a new
-door: whoever can reach that screen can already sign in one click with the token the deployment
-holds, and the flow closes the moment the environment names one. What it does mean is that local
+before any session exists. Whoever can reach that screen can already sign in one click with the
+token the deployment holds, so the SESSION is not a new door, and the flow closes the moment the
+environment names a token. What IS new is that the same caller can REPLACE an
+already-installed credential with one of their own, which re-points every subsequent clone, push
+and PR at their account. That is deliberate — a revoked token would otherwise wedge the
+deployment permanently, and the sign-in screen is the only surface a locked-out developer can
+reach — and it is bounded to deployments whose environment names no token. What it does mean is that local
 mode's existing boot warning is the real control — **the auth gate defaults open and the listener
 binds to all interfaces, so anyone on your network can reach the API** (`AUTH_DEV_OPEN=false`, or
 `HOST=127.0.0.1`). On a deployment reachable by people you do not trust, set the token in `.env`,

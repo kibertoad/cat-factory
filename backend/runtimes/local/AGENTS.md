@@ -39,10 +39,11 @@ transport + the GitHub token/client seams differ.
     "no credential" is a REFUSAL that names the fix, never an absent client. An absent client is
     what makes the layers above wire nothing (no `github` module, no gate providers, no repo
     picker), and that decision is taken once and never revisited.
-  - **What genuinely cannot be per-call FOLLOWS the credential** via `onChange`:
-    `followCredentialOnProviderRegistry` (a gate probes iff its provider is wired, so an
-    unconfigured deployment must pass CI through and a newly-configured one must stop doing so),
-    and the container transport's `resolveEnv`.
+  - **What genuinely cannot be per-call FOLLOWS the credential** via `onChange`: the container
+    transport's `resolveEnv`, and `gateProviderFollowing.ts` (a gate probes iff its provider is
+    wired, so a deployment that can reach nothing must pass CI through and one that gains reach
+    must stop doing so). Its predicate is REACH, not the credential: a mothership node holds no
+    token and still gates, on installation tokens the mothership mints.
   - **`.env` beating the store is what keeps that file honest**, so the browser flow is offered
     only while it names nothing (`patLogin.installable`); an already-INSTALLED token can still be
     replaced, since the sign-in screen is the only surface a locked-out developer can reach.

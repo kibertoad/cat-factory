@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { VcsProvider } from '@cat-factory/kernel'
+import { MIN_ENCRYPTION_KEY_BYTES } from '@cat-factory/server'
 import { openSqliteDb } from './db.js'
 
 // The deployment's OWN source-control credential, on the machine that runs it.
@@ -73,14 +74,23 @@ export interface LocalVcsCredentialStore {
 }
 
 /**
- * Derive this store's 32-byte AES key from the deployment master key. `ENCRYPTION_KEY` is
- * base64 (the format every other store reads it in); an unparseable value is a configuration
- * error the caller surfaces, not something to paper over with a weaker key.
+ * Derive this store's 32-byte AES key from the deployment master key. `ENCRYPTION_KEY` is base64
+ * (the format every other store reads it in), and too-weak input is a configuration error the
+ * caller surfaces rather than something to paper over with a weaker key.
+ *
+ * The DECODED LENGTH is the actual check, not the base64 parse: `Buffer.from(x, 'base64')` is
+ * lenient — it skips what it cannot decode rather than throwing — so a garbage value yields a
+ * short buffer, not an empty one, and testing only for empty would silently seal the deployment's
+ * token under a handful of bytes. The floor is the one every facade's config loader already
+ * enforces (`requireEncryptionKey`), shared rather than re-picked so this store can never end up
+ * accepting a key the boot path rejects, or the reverse.
  */
 function deriveKey(masterKeyBase64: string): Buffer {
   const master = Buffer.from(masterKeyBase64, 'base64')
-  if (master.length === 0) {
-    throw new Error('ENCRYPTION_KEY is not valid base64, so the local credential cannot be sealed')
+  if (master.length < MIN_ENCRYPTION_KEY_BYTES) {
+    throw new Error(
+      `ENCRYPTION_KEY decodes to only ${master.length} byte(s); it must decode to at least ${MIN_ENCRYPTION_KEY_BYTES}, so the local credential cannot be sealed`,
+    )
   }
   return Buffer.from(hkdfSync('sha256', master, Buffer.alloc(0), HKDF_INFO, 32))
 }

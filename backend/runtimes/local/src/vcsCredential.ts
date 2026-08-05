@@ -32,8 +32,13 @@ export interface LocalVcsCredential {
   origin: 'env' | 'stored'
 }
 
-/** Why the browser install flow is closed, when it is. */
-export type VcsInstallBlockedReason =
+/**
+ * Why the browser install flow is closed, when it is. Not part of the public source: the two
+ * causes need DIFFERENT refusals, which `install` raises directly (a 409 for a credential owned
+ * elsewhere, a 503 for a capability the deployment never configured), and nothing above needs to
+ * branch on the reason before then — the screen asks only whether a provider is installable.
+ */
+type VcsInstallBlockedReason =
   /** `.env` already names a PAT; it wins, so installing one would change nothing. */
   | 'env_configured'
   /** No `ENCRYPTION_KEY`, so there is nothing to seal a stored credential with. */
@@ -42,10 +47,6 @@ export type VcsInstallBlockedReason =
 export interface LocalVcsCredentialSource extends LocalVcsSetup {
   /** The credential to operate with right now, or undefined when the deployment has none. */
   current(): LocalVcsCredential | undefined
-  /** The providers whose PAT `.env` configures — the one-click sign-in buttons. */
-  envProviders(): VcsProvider[]
-  /** Why {@link installable} is empty, when it is; undefined when the flow is open. */
-  installBlockedReason(): VcsInstallBlockedReason | undefined
   /** Run `fn` after an install changed the resolved credential. */
   onChange(fn: (credential: LocalVcsCredential | undefined) => void): void
   /** Release the underlying store handle (boot never opened one ⇒ a no-op). */
@@ -77,26 +78,33 @@ function envCredential(env: NodeJS.ProcessEnv): LocalVcsCredential | undefined {
  */
 class LazyStore {
   private store: LocalVcsCredentialStore | undefined
-  private failed = false
+  /** Set once the store may not be opened again: an open that failed, or a close. */
+  private sealed = false
 
   constructor(private readonly open: () => LocalVcsCredentialStore) {}
 
   get(): LocalVcsCredentialStore | undefined {
-    if (this.store || this.failed) return this.store
+    if (this.store || this.sealed) return this.store
     try {
       this.store = this.open()
     } catch {
       // silent-catch-ok: an unopenable local store IS "the deployment has no stored credential",
       // which the caller already renders (the sign-in screen offers to install one). The `.env`
       // path is unaffected, so failing the boot over it would be strictly worse.
-      this.failed = true
+      this.sealed = true
     }
     return this.store
   }
 
+  /**
+   * Release the handle, permanently. `close()` is a shutdown (or a throwaway boot-time read), so a
+   * later `get()` must answer "no stored credential" rather than silently re-opening the file on a
+   * source its owner has already torn down.
+   */
   close(): void {
     this.store?.close()
     this.store = undefined
+    this.sealed = true
   }
 }
 
@@ -151,8 +159,6 @@ export function createLocalVcsCredentialSource(
 
   return {
     current: resolve,
-    envProviders: () => INSTALLABLE_PROVIDERS.filter((p) => !!env[PAT_ENV_VAR[p]]?.trim()),
-    installBlockedReason: blockedReason,
     // Open while `.env` names no PAT — INCLUDING when a credential is already stored. The stored
     // one can expire or be revoked, and the sign-in screen is the only surface a locked-out
     // developer can reach, so refusing to replace it would recreate the dead end this exists to

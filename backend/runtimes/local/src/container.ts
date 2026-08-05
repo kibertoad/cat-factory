@@ -33,16 +33,15 @@ import {
   defaultProviderRegistry,
   runBestEffort,
 } from '@cat-factory/kernel'
-import type { ProviderRegistry, ProviderToken } from '@cat-factory/kernel'
-import {
-  CI_STATUS_PROVIDER,
-  DOC_QUALITY_PROVIDER,
-  MERGEABILITY_PROVIDER,
-  PULL_REQUEST_REVIEW_PROVIDER,
-  warnUnwiredGates,
-} from '@cat-factory/gates'
+import type { ProviderRegistry } from '@cat-factory/kernel'
+import { followVcsReachOnProviderRegistry } from './gateProviderFollowing.js'
 import { WorkspaceSettingsService } from '@cat-factory/orchestration'
-import { buildInfrastructureCapabilities, logger, RunnerJobClient } from '@cat-factory/server'
+import {
+  buildInfrastructureCapabilities,
+  githubRepoOrigin,
+  logger,
+  RunnerJobClient,
+} from '@cat-factory/server'
 import type { AppConfig, ResolveRunnerTransport, ServerContainer } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
@@ -204,8 +203,13 @@ function resolveLocalVcs(
   // When GitLab is the active backend, the agent containers must clone the GitLab host and open
   // merge requests — not github.com. The repo projection carries no host, so build the clone URL
   // + provider from the configured GitLab host here. Same host the harness allow-list is widened
-  // to (`harnessAllowedHosts`), so they can't disagree. The GitHub branch reproduces the engine's
-  // own default (`githubRepoOrigin`), which this resolver now displaces on every local build.
+  // to (`harnessAllowedHosts`), so they can't disagree.
+  //
+  // The GitHub branch DELEGATES to the engine's own `githubRepoOrigin` rather than restating its
+  // URL. This resolver is now always wired, so it displaces that default on every local build, and
+  // a second literal `https://github.com/...` here would be a copy that drifts silently the day
+  // the default learns anything (a GitHub Enterprise host from `GITHUB_API_BASE`, which NEITHER
+  // supports today — a GHE local deployment still clones github.com, unchanged by this PR).
   const resolveRepoOrigin: ResolveRepoOrigin = (repo) => {
     const gitlabHost = gitlabVcsHost(env, credentials.current())
     return gitlabHost
@@ -213,7 +217,7 @@ function resolveLocalVcs(
           cloneUrl: `https://${gitlabHost}/${repo.owner}/${repo.name}.git`,
           provider: 'gitlab',
         }
-      : { cloneUrl: `https://github.com/${repo.owner}/${repo.name}.git`, provider: 'github' }
+      : githubRepoOrigin(repo)
   }
   return { gitToken, delegatedGitHub, vcsClient, deploymentProvider, resolveRepoOrigin }
 }
@@ -269,49 +273,6 @@ function resolveLocalVcsIdentity(params: {
         )
       : undefined,
   }
-}
-
-/**
- * The built-in gate providers built FROM the VCS client. Each answers a question only a
- * source-control credential can answer, so each must be wired exactly while the deployment has
- * one — see {@link followCredentialOnProviderRegistry}. (`release-health` and
- * `incident-enrichment` are Datadog-shaped and unrelated, so they are deliberately absent.)
- */
-const VCS_BACKED_GATE_PROVIDERS: readonly ProviderToken<unknown>[] = [
-  CI_STATUS_PROVIDER,
-  MERGEABILITY_PROVIDER,
-  PULL_REQUEST_REVIEW_PROVIDER,
-  DOC_QUALITY_PROVIDER,
-]
-
-/**
- * Make the VCS-backed gate providers follow the deployment credential.
- *
- * A gate probes iff its provider is wired, and local mode now hands the build a VCS client that
- * always exists (see {@link resolveLocalVcs}) — so the build wires all four regardless. That is
- * right the moment a credential exists and wrong before it: an unconfigured deployment would probe
- * CI with nothing to ask and fail runs whose documented behaviour is to pass through. So the
- * impls the build produced are captured once and re-wired (or cleared) as the credential comes and
- * goes. This decides only WHETHER they are wired; the impls are the build's own, verbatim.
- *
- * `warnUnwiredGates` runs again after clearing, because the build's own call saw them wired and
- * therefore said nothing — and "CI is never checked, PRs advance as if green" is exactly what an
- * operator must hear about a deployment with no token.
- */
-function followCredentialOnProviderRegistry(
-  registry: ProviderRegistry,
-  credentials: LocalVcsCredentialSource,
-): void {
-  const built = new Map(VCS_BACKED_GATE_PROVIDERS.map((token) => [token, registry.get(token)]))
-  const apply = () => {
-    const configured = !!credentials.current()
-    for (const token of VCS_BACKED_GATE_PROVIDERS) {
-      registry.wire(token, configured ? built.get(token) : undefined)
-    }
-    if (!configured) warnUnwiredGates(registry, logger)
-  }
-  apply()
-  credentials.onChange(apply)
 }
 
 /**
@@ -601,6 +562,12 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
  * flags (PAT/delegation, the native + inline harness sets, mothership, the PAT-login registry).
  * Extracted from {@link buildLocalContainer} to keep it within the cyclomatic-complexity budget —
  * the spread-conditionals + their rationale comments are moved verbatim.
+ *
+ * Every credential-derived field below is a GETTER, so it answers for the token the deployment
+ * holds NOW rather than the one the process booted with. That makes the fields SPREAD-FRAGILE: a
+ * `{ ...config.github }` or a JSON round-trip downstream evaluates each getter once and freezes
+ * the answer, silently reinstating the boot-time snapshot this whole seam exists to remove. There
+ * is no such copy today; anything that adds one must read through `credentials` instead.
  */
 function buildLocalAppConfig(params: {
   base: AppConfig
@@ -1309,14 +1276,16 @@ export function buildLocalContainer(options: LocalContainerOptions): ServerConta
   // read/write the warm-pool + checkout config (the controller 503s when this is absent,
   // which is the case on every non-local facade). Also expose the PAT-login registry so the
   // `/auth/pat` endpoint can resolve a GitHub/GitLab identity (local-mode only).
-  // The gate providers the Node build wired off the VCS client follow the CREDENTIAL, because
-  // `wired()` is what makes a gate probe rather than pass through, and the client is now always
-  // present. Without this a credential-less deployment would probe CI/conflicts/human-review with
-  // nothing to ask and fail every run, where the documented behaviour is a pass-through; and a
-  // deployment that gains a credential later would keep passing through, which is the more
-  // dangerous half (a PR advancing as if CI were green). The impls are captured as the build made
-  // them and re-wired verbatim, so this decides only WHETHER they are wired, never how.
-  followCredentialOnProviderRegistry(providerRegistry, credentials)
+  // The gate providers the Node build wired off the VCS client follow what can actually ANSWER
+  // them (see `gateProviderFollowing.ts`). The predicate is the router's own fallback — a
+  // credential, ELSE mothership delegation — so a laptop that holds no token but reaches GitHub
+  // through the mothership keeps gating, and one that reaches nothing passes through.
+  followVcsReachOnProviderRegistry({
+    registry: providerRegistry,
+    canReach: () => !!credentials.current() || !!delegatedGitHub,
+    onChange: (fn) => credentials.onChange(fn),
+    logger,
+  })
 
   return {
     ...container,

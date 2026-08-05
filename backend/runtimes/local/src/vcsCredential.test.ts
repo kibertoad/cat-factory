@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ConflictError } from '@cat-factory/kernel'
+import { ConflictError, UnavailableError } from '@cat-factory/kernel'
 import {
   createLocalVcsCredentialSource,
   gitlabVcsHost,
@@ -15,8 +15,6 @@ describe('createLocalVcsCredentialSource', () => {
   it('has no credential when neither env nor the store holds one', () => {
     const source = createLocalVcsCredentialSource({}, memoryStore)
     expect(source.current()).toBeUndefined()
-    expect(source.envProviders()).toEqual([])
-    expect(source.installBlockedReason()).toBeUndefined()
     expect(source.installable()).toEqual(['github', 'gitlab'])
   })
 
@@ -39,9 +37,10 @@ describe('createLocalVcsCredentialSource', () => {
     store.write({ provider: 'gitlab', token: 'glpat_stored', login: null })
     const source = createLocalVcsCredentialSource({ GITHUB_PAT: 'ghp_env' }, () => store)
     expect(source.current()).toEqual({ provider: 'github', token: 'ghp_env', origin: 'env' })
-    expect(source.envProviders()).toEqual(['github'])
     expect(source.installable()).toEqual([])
-    expect(source.installBlockedReason()).toBe('env_configured')
+    // A 409, not the 503 the no-key case raises: the two blocked causes need different refusals
+    // (a credential owned elsewhere vs a capability never configured), which is why the source
+    // exposes no reason enum for a caller to re-map.
     await expect(source.install('github', 'ghp_pasted')).rejects.toBeInstanceOf(ConflictError)
   })
 
@@ -54,12 +53,28 @@ describe('createLocalVcsCredentialSource', () => {
   })
 
   it('cannot install with nothing to seal the token with', async () => {
-    // No ENCRYPTION_KEY and no injected store: the flow closes, and says which of the two
-    // reasons it is so the screen never shows a box that would silently discard the token.
+    // No ENCRYPTION_KEY and no injected store: the flow closes, so the screen never shows a box
+    // that would silently discard the token, and the refusal names the capability that is missing.
     const source = createLocalVcsCredentialSource({})
-    expect(source.installBlockedReason()).toBe('no_encryption_key')
     expect(source.installable()).toEqual([])
+    await expect(source.install('github', 'ghp_x')).rejects.toBeInstanceOf(UnavailableError)
     await expect(source.install('github', 'ghp_x')).rejects.toThrow(/ENCRYPTION_KEY/)
+  })
+
+  it('stays closed after `close()` rather than re-opening a torn-down store', async () => {
+    // `close()` is a shutdown (and the boot path's throwaway read), so a later use must NOT open a
+    // second handle on a source whose owner has already released it. The install path is where
+    // that is observable: it refuses like a deployment with no store at all.
+    let opens = 0
+    const source = createLocalVcsCredentialSource({}, () => {
+      opens += 1
+      return memoryStore()
+    })
+    await source.install('github', 'ghp_first')
+    expect(opens).toBe(1)
+    source.close()
+    await expect(source.install('github', 'ghp_second')).rejects.toBeInstanceOf(UnavailableError)
+    expect(opens).toBe(1)
   })
 })
 
