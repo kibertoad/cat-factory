@@ -695,6 +695,14 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  * - `unwired_interview_gate` — an interviewer this deployment REGISTERED as an agent kind but
  *   never wired a controller for. The run is genuinely parked on its questions and no surface,
  *   here or in the app, can read them; the fix belongs to the operator, not the caller.
+ *
+ * Every member is a wait that is BOTH live and beyond this surface, and both halves are load-
+ * bearing. A run that has finished (`done` / `failed`, the stop included) lists nothing at all: its
+ * steps keep the state they held when it ended, so reading them alone would go on demanding a
+ * reviewer for work that is over. And a wait the SAME response answers is never listed either — a
+ * deployment gate that spent its attempt budget parks on an ordinary approval, which is a
+ * `decisions[]` entry, so naming it here too would send a caller looking for an answer they were
+ * just handed.
  */
 export const publicUnanswerableReasonSchema = v.picklist([
   'human_wait_gate',
@@ -729,7 +737,6 @@ export type PublicUnanswerableWait = v.InferOutput<typeof publicUnanswerableWait
  * - EMPTY list: the run is either still working or waiting on something this surface cannot
  *   answer. `unanswerable` is what tells the two apart — see below.
  */
-
 export const publicDecisionListSchema = v.object({
   runId: v.string(),
   taskId: v.string(),

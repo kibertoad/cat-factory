@@ -1,3 +1,4 @@
+import { reviewAwaitsHuman } from '@cat-factory/contracts'
 import {
   type Clock,
   getErrorMessage,
@@ -318,11 +319,14 @@ export class TrackerWebhookService {
    *
    *  1. **A named finding id decides it.** The ids are platform-minted and unique across both
    *     stores, so a comment that names one is unambiguous no matter how many reviews are live.
-   *  2. **Otherwise the review still WAITING decides it.** A bare `proceed` is about the loop
-   *     that stopped the run, and a settled review is not it.
+   *  2. **Otherwise the review PARKED ON A HUMAN decides it** (`reviewAwaitsHuman`). A bare
+   *     `proceed` is about the loop that stopped the run, which is the one holding a human's
+   *     answer and not merely the one that has not settled: `incorporating` / `reviewing` are the
+   *     driver's own transients, and picking one of those over a review sitting at `exceeded`
+   *     would drive the wrong loop with the reporter's verb.
    *  3. **Otherwise the declaration order.** Reached only by a control verb sent to a block whose
-   *     every review has settled, where the ack says exactly that (`settled`) whichever one is
-   *     picked, so the choice cannot mislead.
+   *     every review is settled or mid-cycle, where the ack says what it did (`settled`, or the
+   *     current state) whichever one is picked, so the choice cannot mislead.
    *
    * Reads every wired subject's store in parallel: they are independent point lookups on a path
    * that has already established the comment carries commands.
@@ -352,7 +356,7 @@ export class TrackerWebhookService {
     )
     return (
       candidates.find((c) => c.review.items.some((item) => named.has(item.id))) ??
-      candidates.find((c) => c.review.status !== 'incorporated') ??
+      candidates.find((c) => reviewAwaitsHuman(c.review.status)) ??
       candidates[0] ??
       null
     )

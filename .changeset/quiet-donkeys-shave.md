@@ -18,7 +18,10 @@ Close three holes in `/api/v1` around a run that stops.
   service methods the app calls.
 - **`decisions: []` no longer means "we cannot say".** The decision list carries `unanswerable[]`,
   naming each wait this surface cannot answer — a human-review gate, a gate the deployment
-  registered itself, an interviewer wired nowhere — with where its answer actually lives.
+  registered itself, an interviewer wired nowhere — with where its answer actually lives. It lists
+  only waits that are live and genuinely beyond this surface: a finished run names nothing, and a
+  wait the same response answers (a deployment gate that exhausted onto an ordinary approval) is
+  never reported as one nobody here can answer.
 - **`GET /api/v1/me`** reports what the calling key may do, and **`GET /api/v1/openapi.json`**
   serves the deployment's own spec.
 

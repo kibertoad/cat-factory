@@ -355,6 +355,18 @@ Four things worth reading before extending it:
   misreport in the other direction (a caller escalating a run that was going to resolve itself).
   Telling the two apart needed a second shared constant, `BUILTIN_GATE_KINDS`, pinned by the same
   drift guard as `HUMAN_WAIT_GATE_KINDS` and read for its NEGATIVE.
+- **"Unanswerable" is a claim about THIS response, and about a run that is still going.** Two more
+  exclusions belong to that same misreport-in-the-other-direction family, and neither is visible
+  from the step chain alone, which is why both are passed IN rather than re-derived:
+  - A run that has ENDED lists nothing. `failRun` records the failure and stops; it never walks the
+    chain settling steps, so a stopped run keeps its in-flight gate step exactly as it stood. Read
+    off the steps alone, the surface answered someone who had just cancelled a run with "a reviewer
+    must approve the pull request" and offered them the stop call they had already made.
+  - A wait the SAME payload answers is not listed. A deployment gate that exhausts hands off to
+    `onExhausted`, which raises an ordinary step approval: a `decisions[]` entry. The gate state
+    stays on the step, so both halves of one response described it, and only one of them was true.
+    The excluded set is derived from the assembled decisions (every kind carrying a `stepIndex`)
+    rather than re-deduced, so a new step-anchored decision kind joins it with no second edit.
 - **It does not close F1, and must not look like it.** Naming a custom gate is not classifying it:
   the surface says "the run is on this gate, and whether it ever ends is declared where the gate
   was built". A future `pollExhaustion`-at-registration (F1's shape) would let this promote such a

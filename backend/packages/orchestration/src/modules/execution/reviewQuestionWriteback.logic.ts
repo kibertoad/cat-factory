@@ -1,4 +1,4 @@
-import { isHeadlessIntake } from '@cat-factory/contracts'
+import { isHeadlessIntake, reviewAwaitsHuman } from '@cat-factory/contracts'
 import { REVIEW_QUESTION_POLICIES } from '@cat-factory/kernel'
 import type {
   ExecutionInstance,
@@ -29,9 +29,11 @@ import type { ReviewCommon } from '../review/IterativeReviewService.js'
  *   start, and asking against the origin that shipped first is how the second one silently never
  *   reached the requester's ticket. For `clarity` the audience is every run, because asking a
  *   bug's REPORTER what they left out is intake semantics rather than a headless fallback.
- * - **The review is actually parked on findings.** `incorporated` has settled (the run
- *   advances) and the transient `incorporating` / `reviewing` / `merged` states are the
- *   driver's own work, not a wait on a human. Only `ready` and `exceeded` park.
+ * - **The review is actually parked on findings** (`reviewAwaitsHuman`). `incorporated` has
+ *   settled (the run advances) and the transient `incorporating` / `reviewing` / `merged` states
+ *   are the driver's own work, not a wait on a human. Only `ready` and `exceeded` park, and that
+ *   rule is stated once in contracts because the tracker-reply path has to agree with it: the
+ *   review this echo asks about is the same one a reply comes back to.
  * - **There is something to ask.** A park with every finding answered or dismissed is waiting
  *   on the human to incorporate, not on an answer, so a comment would be noise.
  *
@@ -50,7 +52,7 @@ export function shouldPostReviewQuestions(
   ) {
     return false
   }
-  if (review.status !== 'ready' && review.status !== 'exceeded') return false
+  if (!reviewAwaitsHuman(review.status)) return false
   return review.items.some((item) => item.status === 'open')
 }
 

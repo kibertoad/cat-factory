@@ -603,9 +603,22 @@ there rather than left as an empty list:
 Each entry carries `stepKind` and `stepIndex` (line them up with `publicRun.steps`) plus a prose
 `detail`. It is deliberately **not** gated on `parked`: an unbounded wait gate keeps the run
 `running` between polls, so the worst case used to be a run that read as working and never moved.
-A bounded built-in gate (`ci`, `conflicts`) is never listed — it resolves itself, and reporting it
-would read as a demand for a human nobody has to meet. The same blind spot applies one step
-earlier, at admission; see [Scopes](#scopes) below.
+
+Everything listed is a wait that is **live** and **beyond this surface**, which is what makes an
+entry worth escalating on. Three things are therefore never listed, each of them a way for the
+field to demand a person nobody has to send:
+
+- **A bounded built-in gate** (`ci`, `conflicts`, `post-release-health`, `doc-quality`). It
+  resolves itself, and reporting it would have a caller escalate a run that was going to move on
+  its own.
+- **A run that has ENDED** (`status` `done` or `failed`, a `…/stop` included). A finished run keeps
+  the steps it held when it stopped, so it lists nothing at all rather than going on asking for a
+  reviewer for work that is over.
+- **A wait this same response answers.** A deployment's own gate that spends its attempt budget
+  parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
+  unanswerable, so the two halves of one payload never contradict each other.
+
+The same blind spot applies one step earlier, at admission; see [Scopes](#scopes) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

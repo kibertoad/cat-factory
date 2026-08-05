@@ -394,6 +394,52 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
   }
 }
 
+/**
+ * The board's own D1 repositories: the tables every deployment has, reached over the MAIN database
+ * with nothing to resolve or configure.
+ *
+ * Split out of {@link buildWorkerCoreDependencies} because it is the one run of entries there that
+ * needs no capability check, no registry and no config — `db` (and a clock for the one repo that
+ * stamps rows) is the whole dependency — which is what makes it liftable without threading
+ * anything new through. The `select*Deps` helpers below it take the same shape for the same
+ * reason; this one had simply never been lifted, and the function crossed its size budget.
+ */
+function selectWorkerBoardRepositories(deps: {
+  db: D1Database
+  clock: Clock
+}): Pick<
+  CoreDependencies,
+  | 'workspaceRepository'
+  | 'workspaceMemberRepository'
+  | 'accountRepository'
+  | 'membershipRepository'
+  | 'userRepository'
+  | 'blockRepository'
+  | 'pipelineRepository'
+  | 'executionRepository'
+  | 'subscriptionActivationRepository'
+  | 'serviceRepository'
+  | 'workspaceMountRepository'
+  | 'tokenUsageRepository'
+> {
+  const { db, clock } = deps
+  return {
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
+    accountRepository: new D1AccountRepository({ db }),
+    membershipRepository: new D1MembershipRepository({ db }),
+    userRepository: new D1UserRepository({ db }),
+    blockRepository: new D1BlockRepository({ db }),
+    pipelineRepository: new D1PipelineRepository({ db }),
+    executionRepository: new D1ExecutionRepository({ db, clock }),
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
+    tokenUsageRepository: new D1TokenUsageRepository({ db }),
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -474,20 +520,8 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // Resolves the per-account binary-artifact store (screenshots) for the
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
-    workspaceRepository: new D1WorkspaceRepository({ db }),
-    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
-    accountRepository: new D1AccountRepository({ db }),
-    membershipRepository: new D1MembershipRepository({ db }),
-    userRepository: new D1UserRepository({ db }),
+    ...selectWorkerBoardRepositories({ db, clock }),
     passwordHasher: new WebCryptoPasswordHasher(),
-    blockRepository: new D1BlockRepository({ db }),
-    pipelineRepository: new D1PipelineRepository({ db }),
-    executionRepository: new D1ExecutionRepository({ db, clock }),
-    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
-    serviceRepository: new D1ServiceRepository({ db }),
-    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
-    tokenUsageRepository: new D1TokenUsageRepository({ db }),
     ...selectWorkerObservabilityDeps({
       config,
       db,

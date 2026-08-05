@@ -373,6 +373,27 @@ describe('TrackerWebhookService — which review a reply reaches', () => {
     expect(requirements.calls).toEqual([])
   })
 
+  it.each(['incorporating', 'reviewing', 'merged'] as const)(
+    'skips a review the driver is mid-cycle on (%s) for the one holding a human',
+    async (status) => {
+      // "Still waiting" is not "not settled": these three are the driver's own transients, and it
+      // will leave them on its own. Picking one here would aim the reporter's bare `proceed` at a
+      // loop nobody is being asked about, while the review that actually stopped the run — the one
+      // whose questions they are answering — keeps waiting.
+      const requirements = makeGateway(review([item('req_a')], { status }))
+      const clarity = makeClarity([item('clri_a')], { status: 'exceeded' })
+      const service = makeService(requirements.gateway, {
+        reviewGateways: { requirements: requirements.gateway, clarity: clarity.gateway },
+      })
+      expect(await service.handle('ws1', comment('@cat-factory proceed'))).toEqual({
+        kind: 'reply',
+        outcome: 'resolved',
+      })
+      expect(clarity.calls).toEqual(['resolveExceeded:proceed'])
+      expect(requirements.calls).toEqual([])
+    },
+  )
+
   it('acknowledges the SUBJECT it reached, so the reporter is not told about requirements', async () => {
     const clarity = makeClarity([item('clri_a'), item('clri_b')])
     const ack = vi.fn(makeAckSpy)
