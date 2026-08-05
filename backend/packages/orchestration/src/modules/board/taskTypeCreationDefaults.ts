@@ -2,18 +2,26 @@ import {
   isNamespacedId,
   sanitizeDescriptorFields,
   validateDescriptorFields,
+  withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
-import type { Block, Logger, TaskTypeFields, TaskTypeRegistry } from '@cat-factory/kernel'
+import type {
+  Block,
+  Logger,
+  TaskTypeFields,
+  TaskTypeRegistry,
+  TaskTypeSuppressionRepository,
+} from '@cat-factory/kernel'
 import { defaultPipelineIdForTaskType, ValidationError } from '@cat-factory/kernel'
 import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 // ---------------------------------------------------------------------------
-// What a new task's TYPE implies for the row `BoardService.addTask` writes: the best-practice
-// fragment set it owns from creation, the pipeline its Run controls default to, and whether the
-// per-case values it arrived with are the ones its type actually declares. All three answers join a
-// deployment-registered descriptor (a REUSABLE OPERATION's bundle,
-// `backend/docs/reusable-operations.md`) with the built-in per-type defaults, which is why they
-// live together rather than inline: it is one lookup against one registry, read three times.
+// What a new task's TYPE implies for the row `BoardService.addTask` writes: whether the workspace
+// offers that type at all, the best-practice fragment set it owns from creation, the pipeline its
+// Run controls default to, and whether the per-case values it arrived with are the ones its type
+// actually declares. Every answer joins a deployment-registered descriptor (a REUSABLE OPERATION's
+// bundle, `backend/docs/reusable-operations.md`) with the built-in per-type defaults, which is why
+// they live together rather than inline: it is one lookup against one registry, read three times,
+// plus the per-workspace hide-list that decides whether that registry entry applies here.
 //
 // Extracted from `BoardService` when the standing-context union pushed that file over its size
 // budget. A collaborator over a small deps object, with thin delegates left behind at the call site.
@@ -73,6 +81,11 @@ export interface TaskTypeCreationDefaults {
    * alike or the whole check is opt-in: a headless caller would satisfy an operation's declared
    * form by omitting it, which is the door this exists to close.
    *
+   * The descriptor's DEFAULTS are applied before either step, so "unanswered" means the deployment
+   * declared no answer either. Without that, a `required` field carrying a `default` was enforced
+   * at one door and not the other: the SPA seeds it into the form before submit, so only the
+   * headless caller ever saw the refusal, for a value it had no way to know it had to restate.
+   *
    * Three cases pass straight through, each deliberately:
    * - a BUILT-IN type, whose fields are the schema-typed top-level keys, already validated there;
    * - a type this process does not REGISTER, because an unregistered namespaced type is a supported
@@ -84,6 +97,21 @@ export interface TaskTypeCreationDefaults {
     taskType: ResolvedTaskType,
     fields: TaskTypeFields | undefined,
   ): TaskTypeFields | undefined
+  /**
+   * Refuse a task of an operation this workspace has SUPPRESSED, before any side effect.
+   *
+   * The picker not offering it is presentation; this is the rule. A suppressed type is absent from
+   * the board snapshot's `customTaskTypes`, so the SPA cannot select it, but the internal API, the
+   * public API, an initiative spawn and a tracker import all reach `addTask` without ever seeing a
+   * picker. Refusing here is what makes "hidden on this board" mean the same thing at every door.
+   *
+   * A read failure PROPAGATES, unlike the snapshot's best-effort projection of the same rows. The
+   * two are not the same call: the snapshot renders a picker and must never take a board load down
+   * over one, while this decides whether a row is WRITTEN. Swallowing here would create the task
+   * the workspace asked not to have and report nothing, and the store is the same database the
+   * insert on the next line goes to, so there is no outage this could ride out.
+   */
+  assertNotSuppressed(workspaceId: string, taskType: ResolvedTaskType): Promise<void>
 }
 
 /**
@@ -131,7 +159,10 @@ function checkCustomFields(
   if (!descriptor || descriptor.formPanel) return fields
   const declared = descriptor.fields ?? []
   // An absent bag is an EMPTY one, not an exemption: a required field is unanswered either way.
-  const custom = fields?.custom ?? {}
+  // The descriptor's own DEFAULTS are folded in first, so a caller that omits a defaulted field is
+  // answered by the deployment's stated value rather than refused for it: the same bag the create
+  // form would have submitted, since the form seeds from the same helper.
+  const custom = withDescriptorFieldDefaults(declared, fields?.custom ?? {})
   const problems = validateDescriptorFields(declared, custom)
   if (problems.length > 0) {
     throw new ValidationError(
@@ -145,12 +176,36 @@ function checkCustomFields(
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
+/**
+ * Refuse a suppressed operation, per the contract on
+ * {@link TaskTypeCreationDefaults.assertNotSuppressed}. A BUILT-IN type short-circuits without a
+ * query: built-ins are not suppressible (they carry hardcoded creation affordances), so every
+ * ordinary `feature` creation would otherwise pay a read to learn nothing.
+ */
+async function assertNotSuppressed(
+  workspaceId: string,
+  taskType: ResolvedTaskType,
+  suppressions: TaskTypeSuppressionRepository | undefined,
+): Promise<void> {
+  if (!suppressions || !isNamespacedId(taskType)) return
+  const suppressed = await suppressions.list(workspaceId)
+  if (!suppressed.includes(taskType)) return
+  throw new ValidationError(
+    `The task type '${taskType}' is not offered on this board. A workspace admin hid it; restore it in the workspace's task-type settings to create work under it again.`,
+    { reason: 'task_type_suppressed', taskType },
+  )
+}
+
 export function createTaskTypeCreationDefaults(deps: {
   /** The app-owned registry a deployment registers its custom task types on. */
   taskTypeRegistry?: TaskTypeRegistry
+  /** The per-workspace hide-list; absent ⇒ nothing is suppressed. */
+  taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
   logger: Logger
 }): TaskTypeCreationDefaults {
   return {
+    assertNotSuppressed: (workspaceId, taskType) =>
+      assertNotSuppressed(workspaceId, taskType, deps.taskTypeSuppressionRepository),
     fragmentIdsFor: ({ taskType, explicit, serviceFragmentIds }) => [
       ...new Set([
         ...(explicit ?? serviceFragmentIds ?? []),

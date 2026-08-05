@@ -353,6 +353,13 @@
         "manageAccount": "Kontofragmente verwalten →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Wählen Sie aus, welche wiederverwendbaren Operationen dieses Deployments auf diesem Board angeboten werden. Wird eine ausgeblendet, verschwindet sie hier aus der Aufgabenauswahl und das Anlegen von Arbeit darunter wird abgelehnt; andere Boards bleiben unberührt.",
+      "loading": "Operationen werden geladen…",
+      "empty": "Dieses Deployment registriert keine wiederverwendbaren Operationen.",
+      "offer": "Auf diesem Board anbieten",
+      "saveFailed": "Die angebotenen Operationen konnten nicht geändert werden"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Wo Tickets abgelegt werden",
@@ -932,6 +939,7 @@
         "merge": "Risikorichtlinien",
         "tracker": "Issue-Tracker",
         "fragments": "Dienst-Best-Practices",
+        "operations": "Operationen",
         "metadata": "Metadaten",
         "members": "Mitglieder"
       },

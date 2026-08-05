@@ -377,17 +377,17 @@ mapping, so it always agrees with the field it filters on.
 
 ### Services & tasks
 
-| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                  |
-| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
-| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                               |
-| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                       |
-| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                        |
-| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                |
-| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                   |
-| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                |
-| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                    |
+| Method / path                            | Scope    | Behaviour                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/services`                   | `read`   | The board's service frames: `{ serviceId, title, description, type, status }`.                                                                                                                                                                                                                                                                                                                     |
+| `POST /api/v1/services/:serviceId/tasks` | `write`  | Create a task. Body `{ title (1–200), description? (≤2000), taskType?, fields?, ticket?, documents? }` (`taskType` defaults to `feature`; `recurring` is not creatable here). See [Filling a task type's form](#filling-a-task-types-form), [Filing a task from a tracker ticket](#filing-a-task-from-a-tracker-ticket) and [Attaching requirements documents](#attaching-requirements-documents). |
+| `GET /api/v1/services/:serviceId/tasks`  | `read`   | The service's whole task subtree (frame + modules), paginated. `?limit=`, `?cursor=`, `?status=`.                                                                                                                                                                                                                                                                                                  |
+| `GET /api/v1/tasks/:taskId`              | `read`   | One task: `{ taskId, serviceId, title, description, taskType, status, progress, runId, pullRequestUrl }`.                                                                                                                                                                                                                                                                                          |
+| `PATCH /api/v1/tasks/:taskId`            | `write`  | Edit `title` / `description` (the two human-authored fields; an empty patch is a no-op).                                                                                                                                                                                                                                                                                                           |
+| `POST /api/v1/tasks/:taskId/start`       | `write`¹ | Run it. Body `{ pipelineId? }`; falls back to the task's pinned pipeline (`400 pipeline_required` with neither). `202` with the task projection.                                                                                                                                                                                                                                                   |
+| `POST /api/v1/tasks/:taskId/stop`        | `write`  | Stop the in-flight run (records `cancelled`; the task stays retryable). `409 no_run` when nothing is running.                                                                                                                                                                                                                                                                                      |
+| `POST /api/v1/tasks/:taskId/retry`       | `write`  | Retry a failed run. `202`; refusals: `no_run`, `individual_model_unsupported`, engine 409s (e.g. not retryable).                                                                                                                                                                                                                                                                                   |
+| `DELETE /api/v1/tasks/:taskId`           | `admin`  | Delete the task **and its run history**. Destructive; `204`.                                                                                                                                                                                                                                                                                                                                       |
 
 ¹ Starting a pipeline that can park on a human requires `decide`, exactly as on `POST /jobs`. See
 the paragraph below for what counts as a park.
@@ -415,6 +415,101 @@ unconditional presets (`Standard build`, `Simple build`) never park and stay `wr
 What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
 `park`), a deployment's own unbounded-wait gate, and follow-up triage. See
 [Pick the right scope](#2-pick-the-right-scope) for what that means when you mint a key.
+
+#### Filling a task type's form
+
+A task type is more than a badge. A `bug` collects a severity and a repro; a `document` collects its
+kind and audience; and a deployment's own **reusable operation** (`acme:introduce-api`, say) collects
+the per-case brief its whole pipeline runs against
+([reusable operations](./reusable-operations.md)). Until now this surface could NAME a type and fill
+none of it, so a headless caller filed the operation and every agent in the run worked from a blank
+form.
+
+`fields` fills it. Read the shapes first:
+
+```http
+GET /api/v1/task-types
+```
+
+```json
+{
+  "taskTypes": [
+    { "taskType": "feature", "builtin": true, "label": "Feature", "fields": [] },
+    {
+      "taskType": "bug",
+      "builtin": true,
+      "label": "Bug",
+      "fields": [
+        {
+          "key": "severity",
+          "label": "Severity",
+          "type": "select",
+          "options": [
+            { "value": "low", "label": "Low" },
+            { "value": "critical", "label": "Critical" }
+          ]
+        },
+        {
+          "key": "stepsToReproduce",
+          "label": "Steps to reproduce",
+          "type": "textarea",
+          "maxLength": 2000
+        }
+      ]
+    },
+    {
+      "taskType": "acme:introduce-api",
+      "builtin": false,
+      "label": "Introduce API",
+      "description": "Expose existing functionality over the org\u2019s standard HTTP API.",
+      "category": "API delivery",
+      "defaultPipelineId": "pl_acme_introduce_api",
+      "fields": [
+        { "key": "entity", "label": "Entity", "type": "text", "required": true },
+        {
+          "key": "operations",
+          "label": "Operations",
+          "type": "checkbox-group",
+          "options": [
+            { "value": "create", "label": "Create" },
+            { "value": "list", "label": "List" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+Then send them:
+
+```json
+{
+  "title": "Expose order refunds",
+  "taskType": "acme:introduce-api",
+  "fields": { "entity": "Order", "operations": ["create", "list"] }
+}
+```
+
+The rules, which are the SAME ones the app's own create form runs (one descriptor, one validator, so
+what the catalog shows is exactly what creation accepts):
+
+- Values are JSON-native: a string, a number, a boolean (`checkbox`), or a string array
+  (`checkbox-group`).
+- A field with a declared `default` is filled from it when you omit it, so you restate only what you
+  actually decide. That includes a field that is both `required` and defaulted.
+- Unknown keys, wrong types, values outside a `select` / `checkbox-group`'s options, an unanswered
+  required field, an over-long string and an out-of-range number are each refused with **`422`**,
+  `details.reason: 'task_type_fields_invalid'`, and a `problems` list naming **every** failure at
+  once rather than the first.
+- A field hidden by its own `showWhen` condition is neither required nor stored.
+- A type the deployment does NOT register (a node whose build predates the registration) has no
+  descriptor to check against; its values are carried through verbatim, exactly as the app's own
+  internal door does.
+
+`GET /api/v1/task-types` lists the built-in kinds plus the operations this deployment registered,
+minus any a workspace admin has hidden on this board: it answers "what may I create **here**", so a
+type it omits is one creation would refuse.
 
 #### Filing a task from a tracker ticket
 
@@ -571,11 +666,12 @@ there is **no heartbeat**, so a quiet run produces a quiet stream. Event names:
 A revoked key cuts a live stream within ~5 seconds. Streams are per-run reads bounded by their own
 poll; for push at scale, register the [outbound webhook](#outbound-webhook-push) instead.
 
-### Pipelines (discovery)
+### Pipelines & task types (discovery)
 
-| Method / path           | Scope  | Behaviour                                                                                                  |
-| ----------------------- | ------ | ---------------------------------------------------------------------------------------------------------- |
-| `GET /api/v1/pipelines` | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`. |
+| Method / path            | Scope  | Behaviour                                                                                                                                        |
+| ------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/pipelines`  | `read` | The workspace's pipelines (archived excluded): `{ pipelineId, name, steps[], public, headlessStartable }`.                                       |
+| `GET /api/v1/task-types` | `read` | What a task may be created as here, and the form each accepts. See [Filling a task type's form](#filling-a-task-types-form) for the field rules. |
 
 `public` marks the pipelines `POST /jobs` accepts. `headlessStartable` means every enabled
 step is inline **and** nothing can park on a human: the pipeline can run end-to-end with no

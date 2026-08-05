@@ -140,6 +140,7 @@ import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageR
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
 import { D1AgentPromptRepository } from './repositories/D1AgentPromptRepository'
+import { D1TaskTypeSuppressionRepository } from './repositories/D1TaskTypeSuppressionRepository.js'
 import { D1WorkspaceAgentSettingsRepository } from './repositories/D1WorkspaceAgentSettingsRepository'
 import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
 import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
@@ -295,6 +296,7 @@ export function selectMergeLifecycleDeps(
     consensusGroupRepository: new D1ConsensusGroupRepository({ db }),
     agentPromptRepository: new D1AgentPromptRepository({ db }),
     workspaceAgentSettingsRepository: new D1WorkspaceAgentSettingsRepository({ db }),
+    taskTypeSuppressionRepository: new D1TaskTypeSuppressionRepository({ db }),
     serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }

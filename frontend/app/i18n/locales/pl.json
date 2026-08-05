@@ -2621,6 +2621,13 @@
         "manageAccount": "Zarządzaj fragmentami konta →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Wybierz, które operacje wielokrotnego użytku tego wdrożenia są dostępne na tej tablicy. Ukrycie usuwa operację z listy wyboru przy tworzeniu zadania i blokuje tworzenie pracy tego typu; inne tablice pozostają bez zmian.",
+      "loading": "Wczytywanie operacji…",
+      "empty": "To wdrożenie nie rejestruje żadnych operacji wielokrotnego użytku.",
+      "offer": "Udostępnij na tej tablicy",
+      "saveFailed": "Nie udało się zmienić operacji dostępnych na tej tablicy"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Gdzie są zgłaszane zgłoszenia",
@@ -3200,6 +3207,7 @@
         "merge": "Zasady ryzyka",
         "tracker": "System zgłoszeń",
         "fragments": "Dobre praktyki usługi",
+        "operations": "Operacje",
         "metadata": "Metadane",
         "members": "Członkowie"
       },

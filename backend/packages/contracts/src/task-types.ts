@@ -119,3 +119,23 @@ export const customTaskTypeSchema = v.object({
   formPanel: v.optional(namespacedIdSchema),
 })
 export type CustomTaskType = v.InferOutput<typeof customTaskTypeSchema>
+
+/**
+ * One row of the workspace's operation-suppression screen: a registered custom task type and
+ * whether THIS board hides it (`backend/docs/reusable-operations.md`).
+ *
+ * The list is its own read rather than a slice of the snapshot, for the same reason the
+ * foundational-service suppression list is: a suppressed id is BY CONSTRUCTION absent from the
+ * projected `customTaskTypes`, so nothing in the board's own catalog could offer the way back.
+ */
+export const taskTypeSuppressionSchema = v.object({
+  taskType: customTaskTypeSchema,
+  suppressed: v.boolean(),
+})
+export type TaskTypeSuppression = v.InferOutput<typeof taskTypeSuppressionSchema>
+
+/** The whole suppression screen: every registered operation, in registration order. */
+export const taskTypeSuppressionListSchema = v.object({
+  taskTypes: v.array(taskTypeSuppressionSchema),
+})
+export type TaskTypeSuppressionList = v.InferOutput<typeof taskTypeSuppressionListSchema>

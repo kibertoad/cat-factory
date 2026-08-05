@@ -2762,6 +2762,13 @@
         "manageAccount": "Hesap parçalarını yönet →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Bu dağıtımın yeniden kullanılabilir operasyonlarından hangilerinin bu panoda sunulacağını seçin. Birini gizlemek onu buradaki görev oluşturma seçicisinden kaldırır ve o türde iş oluşturmayı reddeder; diğer panolar etkilenmez.",
+      "loading": "Operasyonlar yükleniyor…",
+      "empty": "Bu dağıtım hiçbir yeniden kullanılabilir operasyon kaydetmiyor.",
+      "offer": "Bu panoda sun",
+      "saveFailed": "Bu panoda sunulan operasyonlar değiştirilemedi"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Biletlerin nereye açıldığı",
@@ -3341,6 +3348,7 @@
         "merge": "Risk ilkeleri",
         "tracker": "Sorun takipçisi",
         "fragments": "Servis en iyi uygulamaları",
+        "operations": "Operasyonlar",
         "metadata": "Meta veriler",
         "members": "Üyeler"
       },

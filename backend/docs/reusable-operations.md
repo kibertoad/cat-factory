@@ -155,10 +155,17 @@ schema-typed top-level keys, validated there), an UNREGISTERED namespaced type (
 since task types are node-local by design, and degrading data must not brick creation), and a
 descriptor declaring a `formPanel` (the panel owns the bag).
 
-Defaults are the one rule that stays frontend-side (`app/utils/descriptorFields.ts`
-`defaultDescriptorValues`), matching the preset precedent: the server validates and sanitizes but
-never fills a default in. So a headless caller omitting a field that is `required` AND has a
-`default` is refused where the SPA is not.
+**A declared DEFAULT is applied at the door, not in the form** (`withDescriptorFieldDefaults`,
+shared). The SPA seeds a fresh form from the same helper, so a browser submit is unchanged; what it
+fixes is every other caller. Before, a field that was both `required` and defaulted was accepted
+from the SPA (which had already filled it) and refused for a headless caller (which had no way to
+know it had to restate a value the deployment already declared). Only ABSENT keys are filled, so an
+explicit value always wins, including the one case where that matters: a `false` on a default-ON
+`checkbox`, which is the opt-out.
+
+Because defaults are now authoritative, a default OUTSIDE a `select`'s own options is a boot ERROR
+(`task_type_field_default_outside_options`): it would otherwise refuse every creation of the type
+for a value the caller never sent.
 
 ## Parameters reach the prompt: one generic, value-authoritative fold
 
@@ -372,6 +379,64 @@ registering it on the backend, and the SPA merges both into one catalog. A code-
 trusted and unvalidated, so prefer backend registration for the fail-fast guardrail. See
 [`consumer-extensions.md`](../../frontend/app/app/docs/consumer-extensions.md).
 
+## Per-workspace suppression: hiding an operation from one board
+
+A deployment registers its operations PROCESS-WIDE, so every board in the org offers every one of
+them. Twenty operations is a realistic org catalog and a flooded picker for a team that runs three,
+so a workspace admin can hide the ones that board does not use.
+
+The store is a set of TOMBSTONES (`task_type_suppressions`, keyed `(workspaceId, taskType)`): a row
+means "this board does not offer this operation", and restoring hard-DELETES it. Absence is
+therefore the default and nothing needs seeding: a newly registered operation is offered everywhere
+until somebody hides it, the only direction that cannot silently withhold a capability from every
+existing board at once.
+
+Three surfaces read it, and they read it differently on purpose:
+
+| Surface                                | Read                     | On a read failure                                                                        |
+| -------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+| The board snapshot's `customTaskTypes` | filter the projection    | BEST-EFFORT: a picker must never take a board load down over a cosmetic preference       |
+| `GET /api/v1/task-types`               | filter the catalog       | best-effort, same reason: a startup discovery must not fail over one                     |
+| `BoardService.addTask`                 | refuse a suppressed type | PROPAGATES: this decides whether a row is WRITTEN, and it hits the same DB as the insert |
+
+The creation refusal is what makes the hiding real. The picker not offering a type is presentation;
+the internal API, the public API, an initiative spawn and a tracker import all reach `addTask`
+without ever seeing one.
+
+Two rules bound the surface:
+
+- **The LIST is its own read** (`GET /workspaces/:ws/task-type-suppressions`, `settings.manage`).
+  A suppressed type is by construction absent from the projected catalog, so nothing else could
+  offer the way back. The foundational-services suppression model, for the same reason.
+- **BUILT-IN types are not suppressible.** They carry hardcoded creation affordances (the
+  document-frame restriction, the per-type form sections), so hiding one would remove a capability
+  with no descriptor stating what was lost. Suppressing an id the deployment does not register is a
+  404; RESTORING one is not, so a withdrawn registration never strands a row only a database edit
+  could clear.
+
+## The public API: discover a form, then fill it
+
+`/api/v1` could always NAME a task type and could fill none of it, so a headless caller filed an
+operation and every agent in the run worked from a blank form. Two additive changes close that
+(ADR [0034](./adr/0034-public-api-stability.md); OpenAPI minor + SDK regeneration):
+
+- **`GET /api/v1/task-types`** (`read`) serves the built-in types plus this workspace's registered,
+  non-suppressed ones, each with the fields it accepts. `formPanel` is deliberately not projected:
+  it names a component in the deployment's own SPA layer, which no external client can act on.
+- **`fields` on task creation** fills them. For a registered custom type the values land in
+  `taskTypeFields.custom`; for a BUILT-IN type they land on the schema-typed TOP-LEVEL keys, so the
+  existing creation machinery (the review task's PR resolution, the document fields) runs unchanged.
+
+ONE table stands behind both directions (`contracts/src/public-task-types.ts`), which is the point:
+the built-ins get real descriptors rather than a hand-written OpenAPI shape beside a validator, so
+what discovery advertises is exactly what creation checks, through the same shared
+`validateDescriptorFields` the app's own form runs. Refusal is a 422 with
+`details.reason: 'task_type_fields_invalid'` and every problem at once, because a headless caller
+fixing one field per round trip against a form it cannot see is the experience this exists to avoid.
+
+An unregistered namespaced type has no descriptor to check against; its values are carried through
+verbatim, matching the internal door's pass-through (task types are node-local by design, below).
+
 ## Mothership position: node-local by design
 
 Mothership mode's rule is that code-registered state a RUN resolves rides its own `/internal/*`
@@ -437,11 +502,6 @@ foundational-services catalog via its trait), then the coder, the tester and the
 
 Tracked in [`docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md):
 
-- **Per-workspace suppression** of registered operations (an org's twenty operations should not
-  flood every team's picker).
-- **Public API**: a `GET /api/v1/task-types` discovery read and a `fields` key on
-  `createPublicTaskSchema`, so "invoke operation X with params Y" is two SDK calls. Additive per
-  [ADR 0034](./adr/0034-public-api-stability.md).
 - **A `detect` prefill probe** (the initiative-preset mirror), deferred: operation forms carry
   per-case BUSINESS input, which no repo probe can prefill.
 - **Data-only operations** authored in the UI with no code: the descriptor/code split keeps the

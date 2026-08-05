@@ -68,6 +68,9 @@ const API_PREFIX = '/api/v1'
 // written against 1.12.0, moved to 1.13.0 when the validation field took that, and again once the
 // debug surface took 1.13.0. Every one of those was found by re-reading this line after a merge,
 // which is the only thing that catches it.
+// 1.16.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new endpoint
+// and a new optional key), so a minor. Re-read the note above against `origin/main` before
+// trusting this number.
 // 1.15.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
 // written against a main that was still on 1.11.0. Four numbers have gone past this branch while
 // it was in flight (`configUnreadable`, the run-debugging surface, the judge model pin, and the
@@ -75,7 +78,7 @@ const API_PREFIX = '/api/v1'
 // more, which is the point of the note at the top of this block: on a repo landing this many
 // additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
 // someone else already published. Re-read it against `origin/main` every time.
-const API_VERSION = '1.15.0'
+const API_VERSION = '1.16.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -300,6 +303,12 @@ const OPERATION_DOCS = {
     summary: 'Resolve a parked judge verdict',
     description:
       'Settle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.',
+  },
+  listPublicTaskTypes: {
+    tag: 'Task types',
+    summary: 'List the task types this workspace may create',
+    description:
+      'List the task types a task can be created as in the key’s workspace (the built-in ones plus any the deployment registered), each with the fields it accepts. Fill those fields through `fields` on task creation; the descriptors here are what that call validates against, so a caller reads the form rather than guessing it. A type a workspace admin has hidden is absent.',
   },
   listPublicPipelines: {
     tag: 'Pipelines',

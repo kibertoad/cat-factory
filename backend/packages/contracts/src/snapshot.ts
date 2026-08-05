@@ -299,6 +299,22 @@ export const workspaceSnapshotSchema = v.object({
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
   /**
+   * The catalog's own NAME for each id in `pipelineCatalogVersions`: the companion map, built from
+   * the same `seedPipelines()` read.
+   *
+   * It exists for the one moment a catalog id has no stored row to read a name off: the "new
+   * built-ins available" advisory. Without it the SPA humanised the id, which is passable for a
+   * shipped built-in (`pl_review` → "review") and wrong for the case that made this reachable, a
+   * deployment's own registered pipeline behind a reusable operation: `pl_org_introduce_api`
+   * rendered as "org introduce api", offering the operation's pipeline under a name that appears
+   * nowhere else in the product.
+   *
+   * A separate map rather than widening the versions record, because that record is a
+   * `Record<string, number>` the SPA compares numerically; the ids are identical by construction
+   * (one source, one pass), so a reader indexes either by the other's key.
+   */
+  pipelineCatalogNames: v.optional(v.record(v.string(), v.string())),
+  /**
    * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`) — the complement of
    * `pipelineCatalogVersions`, and the only signal that a stored built-in is no longer relevant.
    * A workspace seeded before the withdrawal still holds the row, so the SPA cross-references this

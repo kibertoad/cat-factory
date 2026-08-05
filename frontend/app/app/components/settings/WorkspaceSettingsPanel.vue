@@ -15,6 +15,7 @@ import type { InputGateMode, ReviewFrictionMode, TaskLimitMode } from '~/types/d
 import RiskPolicyPanel from '~/components/settings/RiskPolicyPanel.vue'
 import IssueTrackerPanel from '~/components/settings/IssueTrackerPanel.vue'
 import ServiceFragmentDefaultsPanel from '~/components/settings/ServiceFragmentDefaultsPanel.vue'
+import TaskTypeSuppressionsPanel from '~/components/settings/TaskTypeSuppressionsPanel.vue'
 import BudgetSettings from '~/components/settings/BudgetSettings.vue'
 import UsageSettings from '~/components/settings/UsageSettings.vue'
 import WorkspaceMembersSettings from '~/components/layout/WorkspaceMembersSettings.vue'
@@ -29,6 +30,9 @@ const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const toast = useToast()
 const slots = useReactiveSlots<AppSlots>()
+// The deployment's registered custom task types (reusable operations), so the Operations tab
+// exists only where there are any to hide.
+const taskTypes = useTaskTypesStore()
 
 // The Metadata tab exists only where the deployment DECLARES custom fields — an unwired
 // capability is invisible, not an empty tab in every deployment. Declared-but-malformed fields
@@ -86,6 +90,18 @@ const tabs = computed(() => [
     icon: 'i-lucide-book-open-check',
     slot: 'fragments',
   },
+  // Which of the deployment's reusable operations this board offers. Only where the deployment
+  // registers any: on the stock product the tab would name a catalog that does not exist.
+  ...(taskTypes.customTaskTypes.length
+    ? [
+        {
+          value: 'operations',
+          label: t('settings.workspaceSettings.tabs.operations'),
+          icon: 'i-lucide-plug',
+          slot: 'operations',
+        },
+      ]
+    : []),
   ...(hasMetadataFields.value
     ? [
         {
@@ -603,6 +619,11 @@ async function save() {
         <!-- Service best practices -->
         <template #fragments>
           <ServiceFragmentDefaultsPanel />
+        </template>
+
+        <!-- Reusable operations this board offers (only where the deployment registers any) -->
+        <template v-if="taskTypes.customTaskTypes.length" #operations>
+          <TaskTypeSuppressionsPanel />
         </template>
 
         <!-- Custom workspace metadata (only where the deployment declares fields) -->

@@ -2869,6 +2869,13 @@
         "manageAccount": "Manage account fragments →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Choose which of this deployment's reusable operations this board offers. Hiding one removes it from the create-task picker here and refuses creating work under it; other boards are unaffected.",
+      "loading": "Loading operations…",
+      "empty": "This deployment registers no reusable operations.",
+      "offer": "Offer on this board",
+      "saveFailed": "Could not change which operations this board offers"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Where tickets are filed",
@@ -3457,6 +3464,7 @@
         "merge": "Risk policies",
         "tracker": "Issue tracker",
         "fragments": "Service best practices",
+        "operations": "Operations",
         "metadata": "Metadata",
         "members": "Members"
       },

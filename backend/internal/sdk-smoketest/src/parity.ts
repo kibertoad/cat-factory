@@ -64,6 +64,11 @@ const EXPECTED: Record<string, unknown> = {
   firstServiceHasId: true,
   createdStatus: 'planned',
   createdTaskType: 'feature',
+  // The task-type catalog is code-registered, so every SDK sees the same one. Pinning the `bug`
+  // descriptors ABSOLUTELY (not merely as agreement) is what catches all four decoding the nested
+  // option list the same wrong way, the failure a purely comparative check is blind to.
+  bugSeverityFieldType: 'select',
+  bugSeverityOptionCount: 4,
   // The required-but-nullable pair. Reported as an explicit boolean by every SDK, because
   // "the server said null" and "the server said nothing" must not collapse into one another.
   createdExecutionIdIsNull: true,

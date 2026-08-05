@@ -33,6 +33,13 @@ export const usePipelinesStore = defineStore('pipelines', () => {
    */
   const catalogVersions = ref<Record<string, number>>({})
   /**
+   * The catalog's own NAME per id in {@link catalogVersions}, from the same snapshot field pair.
+   * Read only where a catalog entry has no stored row to take a name off (the "new built-ins"
+   * advisory and the replacement a retirement points at); everywhere else the stored row's authored
+   * name is the answer. Empty for a facade that ships no name map.
+   */
+  const catalogNames = ref<Record<string, string>>({})
+  /**
    * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`), from the workspace
    * snapshot. A stored pipeline whose id appears here is no longer relevant and can be REMOVED —
    * the opposite of a reseed, and the only case where deleting a built-in is allowed (see
@@ -84,9 +91,11 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     next: Pipeline[],
     versions?: Record<string, number>,
     retired?: RetiredPipelineWire[],
+    names?: Record<string, string>,
   ) {
     pipelines.value = next
     if (versions) catalogVersions.value = versions
+    if (names) catalogNames.value = names
     retiredPipelines.value = retired ?? []
   }
 
@@ -133,6 +142,7 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   return {
     pipelines,
     catalogVersions,
+    catalogNames,
     retiredPipelines,
     gateConfigForms,
     draft,

@@ -183,6 +183,61 @@ export function isSafeRepoDirPath(path: string): boolean {
   return !p.split('/').some((segment) => segment === '..')
 }
 
+/**
+ * The typed values a field list's declared DEFAULTS imply, in the `DescriptorFieldValues` shape the
+ * renderer, the wire contract and the validators all expect (`checkbox-group` to `string[]`,
+ * `checkbox` to a boolean, `number` to a number, everything else a string).
+ *
+ * Only fields with a MEANINGFUL default are seeded, so an unfilled optional field stays absent,
+ * which is what validation reads as unset and what sanitization keeps out of the frozen bag.
+ */
+export function descriptorFieldDefaults(fields: readonly DescriptorField[]): DescriptorFieldValues {
+  const values: DescriptorFieldValues = {}
+  for (const field of fields) {
+    if (field.type === 'checkbox-group') {
+      if (field.defaultValues?.length) values[field.key] = [...field.defaultValues]
+    } else if (field.type === 'checkbox') {
+      if (field.default === 'true') values[field.key] = true
+    } else if (field.type === 'number') {
+      const parsed = Number(field.default)
+      if (field.default !== undefined && field.default !== '' && Number.isFinite(parsed)) {
+        values[field.key] = parsed
+      }
+    } else if (field.default) {
+      values[field.key] = field.default
+    }
+  }
+  return values
+}
+
+/**
+ * A filled bag with each ABSENT field's declared default folded in: the values a door should
+ * validate, sanitize and freeze.
+ *
+ * This is what keeps the doors from disagreeing. The SPA seeds a form with
+ * {@link descriptorFieldDefaults} before the user touches it, so a `required` field carrying a
+ * default arrives filled from the browser and is never refused there. A headless caller sends only
+ * what it knows about, so the SAME descriptor refused the SAME creation over the public API for a
+ * value the deployment had already stated. Applying defaults HERE, at the door rather than in the
+ * form, makes the descriptor's default mean one thing everywhere: the answer when the caller gives
+ * none.
+ *
+ * Only absent keys are filled, so an explicit value always wins, including the one case where the
+ * distinction is load-bearing: a `false` on a default-ON `checkbox` is the opt-OUT, and re-seeding
+ * `true` over it would make that toggle unpressable for every caller that is not the form.
+ */
+export function withDescriptorFieldDefaults(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFieldValues {
+  const defaults = descriptorFieldDefaults(fields)
+  const merged: DescriptorFieldValues = { ...values }
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in merged)) merged[key] = value
+  }
+  return merged
+}
+
 /** Whether a field is visible given the current values (its `showWhen` condition). */
 export function isDescriptorFieldVisible(
   field: DescriptorField,

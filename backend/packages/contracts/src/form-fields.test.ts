@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import {
   DESCRIPTOR_FIELD_VALUE_MAX,
+  descriptorFieldDefaults,
   descriptorFieldValuesSchema,
   isDescriptorFieldVisible,
   renderDescriptorFieldValue,
   sanitizeDescriptorFields,
   validateDescriptorFields,
+  withDescriptorFieldDefaults,
   type DescriptorField,
 } from './form-fields.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
@@ -211,5 +213,74 @@ describe('the rules read the same on a task type as on a preset', () => {
     expect(renderDescriptorFieldValue(ops, ['create', 'list'])).toBe('Create, List')
     // An undeclared option still renders: values are authoritative, captions merely enrich.
     expect(renderDescriptorFieldValue(ops, ['create', 'archive'])).toBe('Create, archive')
+  })
+})
+
+// Defaults are applied at the DOOR (`withDescriptorFieldDefaults`), not in the form. They used to
+// be seeded only by the SPA, which made a field that is both `required` and defaulted pass from a
+// browser and fail from every headless caller: the form had already filled it in, and a script had
+// no way to know it must restate a value the deployment already declared.
+describe('descriptor defaults', () => {
+  it('types each default the way the wire bag expects', () => {
+    expect(
+      descriptorFieldDefaults([
+        field({ key: 'entity', default: 'Order' }),
+        field({ key: 'depth', type: 'number', default: '3' }),
+        field({ key: 'review', type: 'checkbox', default: 'true' }),
+        field({ key: 'ops', type: 'checkbox-group', defaultValues: ['create'] }),
+      ]),
+    ).toEqual({ entity: 'Order', depth: 3, review: true, ops: ['create'] })
+  })
+
+  it('seeds nothing for a field with no meaningful default', () => {
+    // An unfilled optional field must stay ABSENT, which is what validation reads as unset and what
+    // keeps an empty value off the frozen row.
+    expect(
+      descriptorFieldDefaults([
+        field({ key: 'notes' }),
+        field({ key: 'entity', default: '' }),
+        field({ key: 'depth', type: 'number', default: 'not-a-number' }),
+        field({ key: 'review', type: 'checkbox' }),
+        field({ key: 'ops', type: 'checkbox-group', defaultValues: [] }),
+      ]),
+    ).toEqual({})
+  })
+
+  it('answers a required-and-defaulted field the caller omitted', () => {
+    // The whole point: this bag was a 422 for every non-SPA caller and is now the same submission
+    // the create form would have made.
+    const fields = [
+      field({ key: 'entity', required: true }),
+      field({
+        key: 'auth',
+        type: 'select',
+        required: true,
+        default: 'service',
+        options: [{ value: 'service', label: 'Service token' }],
+      }),
+    ]
+    expect(validateDescriptorFields(fields, { entity: 'Order' })).toHaveLength(1)
+    const filled = withDescriptorFieldDefaults(fields, { entity: 'Order' })
+    expect(validateDescriptorFields(fields, filled)).toEqual([])
+    expect(filled.auth).toBe('service')
+  })
+
+  it('never overwrites a value the caller sent, including a default-ON checkbox opt-OUT', () => {
+    // `false` on a default-ON checkbox is the one place absence and the value are different facts.
+    // Re-seeding `true` over it would make that toggle unpressable for everything but the form.
+    const fields = [
+      field({ key: 'review', type: 'checkbox', default: 'true' }),
+      field({ key: 'entity', default: 'Order' }),
+    ]
+    expect(withDescriptorFieldDefaults(fields, { review: false, entity: 'Refund' })).toEqual({
+      review: false,
+      entity: 'Refund',
+    })
+  })
+
+  it('leaves a bag with no defaults to seed byte-identical', () => {
+    const fields = [field({ key: 'entity' }), field({ key: 'notes', type: 'textarea' })]
+    expect(withDescriptorFieldDefaults(fields, { entity: 'Order' })).toEqual({ entity: 'Order' })
+    expect(withDescriptorFieldDefaults([], {})).toEqual({})
   })
 })

@@ -24,6 +24,7 @@ import type {
   ReviewQuestionPostRepository,
   ReviewQuestionPostStatus,
   TaskSourceKind,
+  TaskTypeSuppressionRepository,
   TrackerCommentIngestClaimWindow,
   TrackerCommentIngestKey,
   TrackerCommentIngestRecord,
@@ -58,6 +59,7 @@ import {
   modelPresets,
   notificationWebhooks,
   reviewQuestionPosts,
+  taskTypeSuppressions,
   trackerCommentIngests,
   trackerSettings,
   tutorialProgress,
@@ -1051,6 +1053,44 @@ export class DrizzleWorkspaceAgentSettingsRepository implements WorkspaceAgentSe
         and(
           eq(workspaceAgentSettings.workspace_id, workspaceId),
           eq(workspaceAgentSettings.agent_kind, agentKind),
+        ),
+      )
+  }
+}
+
+/**
+ * Per-workspace suppressions of registered custom task types: the Drizzle mirror of
+ * `D1TaskTypeSuppressionRepository`. Tombstones: a row means the workspace hides that operation and
+ * a restore deletes it. See the port for why absence is the default.
+ */
+export class DrizzleTaskTypeSuppressionRepository implements TaskTypeSuppressionRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async list(workspaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ taskType: taskTypeSuppressions.task_type })
+      .from(taskTypeSuppressions)
+      .where(eq(taskTypeSuppressions.workspace_id, workspaceId))
+      .orderBy(taskTypeSuppressions.task_type)
+    return rows.map((row) => row.taskType)
+  }
+
+  async suppress(workspaceId: string, taskType: string, createdAt: number): Promise<void> {
+    await this.db
+      .insert(taskTypeSuppressions)
+      .values({ workspace_id: workspaceId, task_type: taskType, created_at: createdAt })
+      .onConflictDoNothing({
+        target: [taskTypeSuppressions.workspace_id, taskTypeSuppressions.task_type],
+      })
+  }
+
+  async restore(workspaceId: string, taskType: string): Promise<void> {
+    await this.db
+      .delete(taskTypeSuppressions)
+      .where(
+        and(
+          eq(taskTypeSuppressions.workspace_id, workspaceId),
+          eq(taskTypeSuppressions.task_type, taskType),
         ),
       )
   }

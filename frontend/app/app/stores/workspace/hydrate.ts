@@ -71,6 +71,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
     snapshot.pipelines,
     snapshot.pipelineCatalogVersions,
     snapshot.retiredPipelines,
+    snapshot.pipelineCatalogNames,
   )
   useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
   useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
