@@ -1584,6 +1584,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull Request",
+      "readOutcome": "Ergebnis lesen",
       "stepState": {
         "pending": "Ausstehend",
         "working": "In Arbeit",
@@ -2934,6 +2935,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "{pr} auf GitHub öffnen",
+      "readOutcome": "Ergebnis",
+      "readOutcomeHint": "Lies nach, was sich geändert hat, mit den Belegen dafür",
       "review": "Überprüfen",
       "merge": "Mergen",
       "mergeConfirm": {
@@ -5897,6 +5900,101 @@
     "history": {
       "heading": "Verlauf (keine Runden) | Verlauf ({count} Runde) | Verlauf ({count} Runden)",
       "fixRequested": "Korrektur angefordert"
+    }
+  },
+  "outcome": {
+    "title": "Ergebnis",
+    "subtitle": "Was dieser Lauf geändert hat, und die Belege dafür",
+    "diff": "Diff öffnen",
+    "diffNumbered": "Diff öffnen (#{number})",
+    "peerDiff": "Diff in {repo} öffnen",
+    "disposition": {
+      "merged": "Zusammengeführt",
+      "awaiting_merge": "Wartet auf das Zusammenführen",
+      "in_flight": "Läuft noch",
+      "needs_attention": "Braucht Aufmerksamkeit",
+      "not_run": "Noch nicht gelaufen"
+    },
+    "ask": {
+      "title": "Was gefordert war",
+      "none": "Diese Aufgabe hat keine Beschreibung, es gibt hier also nichts, womit sich das Ergebnis vergleichen ließe."
+    },
+    "requirements": {
+      "title": "Geprüfte Anforderungen",
+      "met": "Erfüllt: {count}",
+      "notMet": "Nicht erfüllt: {count}",
+      "notCovered": "Nicht geprüft: {count}",
+      "regressions": "Regressionen: {count}",
+      "regressionTag": "Regression",
+      "specUnavailable": "Die Spezifikation des Dienstes konnte nicht gelesen werden. Angezeigt werden daher die Anforderungs-IDs aus dem Testbericht, ohne ihre Titel.",
+      "verdict": {
+        "met": "Bestätigt",
+        "not_met": "Fehlgeschlagen",
+        "not_covered": "Nicht geprüft"
+      },
+      "gap": {
+        "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, daher wurde keine Anforderung geprüft.",
+        "tester_not_reported": "Der Tester hat noch nicht berichtet, daher wurde über keine Anforderung entschieden.",
+        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden."
+      }
+    },
+    "tests": {
+      "title": "Wie getestet wurde",
+      "openReport": "Vollständiger Testbericht",
+      "summary": "Der Tester berichtet: {summary}",
+      "abort": "Der Tester konnte nicht sinnvoll testen: {reason}",
+      "counts": "{passed} bestanden, {failed} fehlgeschlagen, {skipped} übersprungen",
+      "verdict": {
+        "greenlit": "Freigegeben",
+        "concerns": "Bedenken gemeldet",
+        "could_not_run": "Konnte nicht getestet werden"
+      },
+      "environment": {
+        "local": "Gegen lokale Abhängigkeiten getestet",
+        "ephemeral": "Gegen eine Vorschau-Umgebung getestet"
+      },
+      "severity": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch",
+        "critical": "Kritisch"
+      },
+      "gap": {
+        "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, es wurde also nichts ausgeführt.",
+        "tester_not_reported": "Der Tester hat noch nicht berichtet."
+      }
+    },
+    "visuals": {
+      "title": "Wie es aussieht",
+      "shotAlt": "Screenshot von {view}",
+      "hasReference": "Für diese Ansicht wurde eine Referenzvorlage hinterlegt",
+      "source": {
+        "visual_confirm": "Diese Ansichten wurden mit ihren Referenzvorlagen verglichen.",
+        "tester": "Diese Ansichten wurden beim Testen aufgenommen. Niemand wurde um eine Prüfung gebeten."
+      },
+      "gap": {
+        "no_visual_step": "In dieser Pipeline nimmt nichts die Oberfläche auf, es gibt also nichts zu sehen.",
+        "none_captured": "Die Oberfläche sollte aufgenommen werden, es wurde aber keine Ansicht erfasst."
+      }
+    },
+    "checks": {
+      "title": "Prüfungen",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Projektprüfungen",
+        "reproduction": "Fehler-Reproduktion"
+      },
+      "state": {
+        "pass": "bestanden",
+        "fail": "fehlgeschlagen",
+        "pending": "läuft noch",
+        "inconclusive": "ohne Ergebnis"
+      }
+    },
+    "empty": {
+      "title": "Noch nichts zu zeigen",
+      "body": "Diese Aufgabe hat noch kein lesbares Ergebnis hervorgebracht."
     }
   },
   "focus": {

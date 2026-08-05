@@ -134,4 +134,45 @@ describe('dispatchStepView routing', () => {
       expect(ui.stepDetail).toBeNull()
     })
   })
+
+  // The outcome summary is the RUN's, not a step's, and it has two entry points: the board and
+  // inspector know the block (and a merged task's run may be gone), while a deep link knows only
+  // the run id.
+  describe('openOutcome', () => {
+    it('opens block-keyed with no step, and with no run when the task has none', () => {
+      ui.openOutcome('b1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: null,
+        stepIndex: null,
+      })
+    })
+
+    it('carries the run when the caller knows it', () => {
+      ui.openOutcome('b1', 'e1')
+
+      expect(ui.resultView).toMatchObject({ view: 'outcome', blockId: 'b1', instanceId: 'e1' })
+    })
+
+    it('resolves the block from the run for a run-only caller (the deep link)', () => {
+      execution.hydrate([instance('e1', 'b1', [{ agentKind: 'coder' }])], 'ws1')
+
+      ui.openRunOutcome('e1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: 'e1',
+        stepIndex: null,
+      })
+    })
+
+    it('does nothing for a run the store has not hydrated', () => {
+      ui.openRunOutcome('missing')
+
+      expect(ui.resultView).toBeNull()
+    })
+  })
 })

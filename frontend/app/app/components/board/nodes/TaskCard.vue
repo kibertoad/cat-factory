@@ -72,6 +72,18 @@ const prLabel = computed(() =>
   pr.value?.number ? t('board.task.prNumber', { number: pr.value.number }) : t('board.task.pr'),
 )
 
+/**
+ * Reading the result starts at the OUTCOME summary (what changed in product terms, with the
+ * captured evidence), and the pull request is one click inside it. In BASIC mode that replaces
+ * the card's raw PR chip: the diff is still exactly as reachable, through a surface that says
+ * what the diff is about first. Advanced mode keeps both, since a reader who wants the diff
+ * directly is the reader that tier is for.
+ */
+const uiMode = useUiModeStore()
+function openOutcome() {
+  ui.openOutcome(props.taskId, task.value?.executionId ?? null)
+}
+
 // This task's current agent run (if any). A failed run must surface the shared
 // failure banner + retry — NOT a stuck progress bar — so the card never looks
 // like it's still working after the run has terminated.
@@ -402,7 +414,18 @@ function selectTask() {
 
       <template v-if="task.status === 'pr_ready'">
         <UButton
-          v-if="pr"
+          color="primary"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-clipboard-check"
+          :title="t('board.task.readOutcomeHint')"
+          data-testid="task-open-outcome"
+          @click.stop="openOutcome"
+        >
+          {{ t('board.task.readOutcome') }}
+        </UButton>
+        <UButton
+          v-if="pr && uiMode.isAdvanced"
           :to="pr.url"
           target="_blank"
           rel="noopener"
@@ -436,12 +459,24 @@ function selectTask() {
         </UButton>
       </template>
 
-      <span
-        v-else-if="task.status === 'done'"
-        class="inline-flex items-center gap-1 text-[9px] text-emerald-400"
-      >
-        <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
-      </span>
+      <!-- A merged task is the one people come back to READ, so its result stays openable
+           rather than collapsing to a tick the moment it lands. -->
+      <template v-else-if="task.status === 'done'">
+        <span class="inline-flex items-center gap-1 text-[9px] text-emerald-400">
+          <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
+        </span>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-clipboard-check"
+          :title="t('board.task.readOutcomeHint')"
+          data-testid="task-open-outcome"
+          @click.stop="openOutcome"
+        >
+          {{ t('board.task.readOutcome') }}
+        </UButton>
+      </template>
     </div>
 
     <!-- structural metadata: assigned module -->

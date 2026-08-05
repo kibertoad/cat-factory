@@ -181,6 +181,12 @@ hoc where it can be avoided:
   control, editable, as soon as any value it edits is set (`false` included: a tri-state
   `false` is a choice, not absence), so basic mode can never conceal a setting a run will
   actually use.
+- **The tier may also change which of two routes to the same thing LEADS**, and that is not a
+  hidden capability: a `pr_ready` task card offers the outcome summary in both tiers and drops
+  the raw pull-request chip in basic, because the card the button opens carries that same link
+  at the top. What basic mode may never do is remove the only route (the rule above); ordering
+  two routes by which one a tier's reader wants first is what the tier is for. State the pairing
+  where the control lives, so the hidden half can be checked against the surface that keeps it.
 
 ## Agent tiers (basic / intermediate / advanced)
 
@@ -700,6 +706,16 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   additionally leads with `TaskReviewTarget`, linking the pull request it reviews:
   distinct from the execution panel's link to the PR a run PRODUCED, which a review
   task never has.
+- **Outcome summary** (`components/outcome`): the run-keyed result window, and what
+  the board card and the inspector open to "read the result". It renders the reduction
+  in `utils/runOutcome.ts` (requirement coverage joined to the service spec, the
+  tester's verdict, the captured views, the recorded checks) and keeps the pull request
+  at the top, so the diff stays one click away rather than being the starting point.
+  The only result window keyed by a RUN rather than a step: it opens with
+  `stepIndex: null` and composes from the whole instance, which is also why it passes
+  no `stepRef` to the shell (there is no step to restart from). Available in both
+  interface tiers; what `basic` changes is which affordance leads (see
+  [interface modes](#interface-modes-basic--advanced)).
 - **Pipeline builder** (`components/pipeline`): assemble/edit agent chains and
   watch `PipelineProgress`. `PipelinePicker` (+ its `PipelinePreview` pane) is the
   single way a pipeline is chosen anywhere (add-task, run settings, the recurring

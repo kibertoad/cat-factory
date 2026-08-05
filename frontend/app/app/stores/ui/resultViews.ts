@@ -113,6 +113,16 @@ export function createUiResultViews() {
     stepDetail.value = { instanceId, stepIndex }
   }
 
+  /**
+   * Open a task's NON-CODE OUTCOME summary — what the run changed in product terms, with the
+   * evidence behind it, and the diff one click away. BLOCK-keyed rather than run-keyed because a
+   * merged task keeps its pull request long after its run instance is gone, and that task is
+   * exactly the one somebody comes back to read. The run rides along when there is one, which is
+   * where every piece of evidence comes from; `stepIndex` stays null (see `openRunOutcome`).
+   */
+  function openOutcome(blockId: string, instanceId: string | null = null) {
+    resultView.value = { view: 'outcome', blockId, instanceId, stepIndex: null }
+  }
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -138,7 +148,13 @@ export function createUiResultViews() {
   // The run-scoped openers (a caller that knows only the RUN, so the step index has to be
   // resolved) live in a sibling module: they share one shape and one hazard, and lifting them out
   // keeps this factory inside its per-function line budget. Their two seams are bound here.
-  const { openFollowUps, openForkDecision, openPrReview, openTestEvidence } = createRunStepOpeners({
+  const {
+    openFollowUps,
+    openForkDecision,
+    openPrReview,
+    openTestEvidence,
+    openOutcome: openRunOutcome,
+  } = createRunStepOpeners({
     dispatchStepView: (instanceId, stepIndex) => dispatchStepView(instanceId, stepIndex),
     setResultView: (view, instance, stepIndex) => {
       resultView.value = { view, blockId: instance.blockId, instanceId: instance.id, stepIndex }
@@ -185,6 +201,8 @@ export function createUiResultViews() {
     openForkDecision,
     openPrReview,
     openTestEvidence,
+    openOutcome,
+    openRunOutcome,
     closeResultView,
     closeRequirementReview,
     openStepDetail,
