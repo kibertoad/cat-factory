@@ -115,6 +115,10 @@ export {
   type DispatchTokenMintDependencies,
 } from './agents/dispatchTokenMint.js'
 export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
+// The clone origin a dispatch falls back to when a facade wires no `resolveRepoOrigin`. Exported
+// so a facade whose OWN resolver handles only the non-GitHub case can delegate the GitHub half
+// here instead of restating the URL, which would drift the moment this default learns anything.
+export { githubRepoOrigin } from './agents/containerAgentBody.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
 // deployment-environment credential resolver every facade wires as the FALLBACK behind the

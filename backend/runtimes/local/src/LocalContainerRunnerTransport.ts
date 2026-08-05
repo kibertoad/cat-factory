@@ -33,7 +33,7 @@ import {
   resolveInstallId,
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
-import { harnessAllowedHosts } from './github.js'
+import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
 import { RECOMMENDED_HARNESS_IMAGE, resolveHarnessImage } from './harnessImage.js'
 import { recommendedHarnessVersion, verifyHarnessVersion } from './harnessVersion.js'
 
@@ -108,6 +108,15 @@ export interface LocalContainerRunnerTransportOptions {
   network?: string
   /** Extra `-e KEY=VALUE` env passed into the container (rarely needed). */
   env?: Record<string, string>
+  /**
+   * Extra container env resolved PER CONTAINER START rather than at construction. It carries the
+   * clone/push host allow-list, which follows the deployment's source-control credential and can
+   * therefore change while this long-lived transport is alive (a GitLab token installed from the
+   * sign-in screen must widen it for the very next job). Merged over {@link env}, which
+   * `applySettings` rewrites wholesale — the allow-list used to live in there and was silently
+   * dropped by the first settings edit.
+   */
+  resolveEnv?: () => Record<string, string>
   /** Injectable CLI exec — defaults to running the adapter's binary via execFile. */
   exec?: ContainerExec
   /** Injectable fetch — defaults to the global. */
@@ -202,6 +211,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
   // Mutable: the warm-pool sizing + checkout env are re-read live via `applySettings` when
   // the DB-backed local-mode settings change, so an edit takes effect without a restart.
   private extraEnv: Record<string, string>
+  private readonly resolveExtraEnv: (() => Record<string, string>) | undefined
   private readonly exec: ContainerExec
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
@@ -250,6 +260,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
+    this.resolveExtraEnv = options.resolveEnv
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
@@ -306,6 +317,16 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // Fire-and-forget: a settings change must not block on Docker. A failure leaves the pool at
     // its previous sizing, which nothing else would report.
     void runBestEffort(logger, 'localPool.reconcile', () => this.reconcilePool())
+  }
+
+  /**
+   * The env a container is started with: the settings-derived {@link extraEnv} plus whatever
+   * {@link LocalContainerRunnerTransportOptions.resolveEnv} answers NOW. Resolved per start so a
+   * value that follows deployment state (the clone/push host allow-list) is current for the job
+   * about to run, and so `applySettings` rewriting `extraEnv` cannot drop it.
+   */
+  private containerEnv(): Record<string, string> {
+    return { ...this.extraEnv, ...this.resolveExtraEnv?.() }
   }
 
   /** Bring the warm set in line with the current sizing: trim excess idle, then re-warm. */
@@ -373,7 +394,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
         // refuses a local-infra Tester run there (the `localDind` capability gate).
         privileged: this.privilegedTestJobs,
         network: this.network,
-        env: this.extraEnv,
+        env: this.containerEnv(),
         instanceSize: options?.instanceSize
           ? resolveDockerResources(options.instanceSize)
           : undefined,
@@ -666,7 +687,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
       // instance sizing is NOT applied to a reused member (it keeps host defaults).
       privileged: this.privilegedTestJobs,
       network: this.network,
-      env: this.extraEnv,
+      env: this.containerEnv(),
       pool: true,
     })
     const endpoint = await this.waitForEndpoint(containerId)
@@ -929,10 +950,13 @@ function repoKeyOf(spec: Record<string, unknown>): string | undefined {
  * settings panel). The image ref (`LOCAL_HARNESS_IMAGE`) is required; the runtime adapter is
  * selected by `LOCAL_CONTAINER_RUNTIME` (docker | podman | orbstack | colima | apple).
  * `settings` omitted ⇒ pooling off + harness defaults (e.g. an early boot-reap call).
+ * `credential` is the deployment's source-control credential, read per container start for the
+ * clone/push host allow-list; omitted (an early boot-reap call) ⇒ the operator-set hosts only.
  */
 export function createLocalContainerTransportFromEnv(
   env: NodeJS.ProcessEnv,
   settings?: LocalSettings,
+  credential?: () => LocalVcsCredential | undefined,
 ): LocalContainerRunnerTransport {
   // LOCAL_HARNESS_IMAGE is OPTIONAL: unset ⇒ the backend-matched RECOMMENDED_HARNESS_IMAGE, so a
   // stock deployment runs the image this build was released against (startLocal refreshes it at
@@ -940,12 +964,6 @@ export function createLocalContainerTransportFromEnv(
   const image = resolveHarnessImage(env)
   const pool = settings?.pool
   const extraEnv = checkoutExtraEnv(settings)
-  // The harness validates every clone/push host against an allow-list defaulting to
-  // github.com. A GitLab local deployment clones a GitLab host, so forward it (plus any
-  // operator-set hosts) into the container — otherwise the harness rejects the GitLab clone
-  // URL before it can clone. No-op for a GitHub deployment with no extra hosts.
-  const allowedHosts = harnessAllowedHosts(env)
-  if (allowedHosts) extraEnv.GITHUB_ALLOWED_HOSTS = allowedHosts
   return new LocalContainerRunnerTransport({
     image,
     adapter: createRuntimeAdapter(env),
@@ -962,6 +980,15 @@ export function createLocalContainerTransportFromEnv(
     // nested containers without it (e.g. rootless Podman).
     privilegedTestJobs: env.LOCAL_DOCKER_PRIVILEGED_TEST_JOBS?.trim() !== 'false',
     ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
+    // The harness validates every clone/push host against an allow-list defaulting to
+    // github.com. A GitLab deployment clones a GitLab host, so forward it (plus any operator-set
+    // hosts) into the container — otherwise the harness rejects the GitLab clone URL before it
+    // can clone. Resolved per container start, because which host that is follows a credential
+    // installable while this transport is alive. No-op for a GitHub deployment with no extra hosts.
+    resolveEnv: (): Record<string, string> => {
+      const allowedHosts = harnessAllowedHosts(env, credential?.())
+      return allowedHosts ? { GITHUB_ALLOWED_HOSTS: allowedHosts } : {}
+    },
     // Warm pool (opt-in via the settings panel): keep idle harness containers ready and
     // re-lease them with repo-affinity checkout reuse. size 0 keeps the per-run behaviour.
     ...(pool

@@ -4,10 +4,8 @@ import {
   classifyPatProbe,
   describePatProbeVerdict,
   githubPatCreationUrl,
-  gitlabVcsHost,
-  harnessAllowedHosts,
+  LocalPatAppTokenSource,
   probeGitHubPat,
-  StaticTokenAppRegistry,
   warnOnGitHubPatProblemInBackground,
 } from './github.js'
 
@@ -16,15 +14,24 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 // NOTE: the PAT-authenticated client behaviour (Bearer auth, merge, mergeability, CI reads)
 // is asserted for BOTH GitHub and GitLab in the cross-provider `vcs-conformance.test.ts`.
-// This file keeps only the GitHub-specific units (the static app registry + the PAT URL).
+// This file keeps only the GitHub-specific units (the app token source + the PAT URL); the
+// credential source itself (env-vs-store precedence, install, the derived hosts) has its own.
 
-describe('StaticTokenAppRegistry', () => {
+describe('LocalPatAppTokenSource', () => {
   it('returns the PAT for installation tokens and rejects app-JWT use', async () => {
-    const reg = new StaticTokenAppRegistry('pat_abc')
+    const reg = new LocalPatAppTokenSource(() => 'pat_abc')
     expect(reg.defaultAppId).toBe('')
     expect(reg.apps()).toEqual([{ appId: '' }])
     await expect(reg.installationToken()).resolves.toBe('pat_abc')
     await expect(reg.authForApp().appJwt()).rejects.toThrow(/not available in local/)
+  })
+
+  it('reads the token per call, so one installed later is used without a rebuild', async () => {
+    let token: string | undefined
+    const reg = new LocalPatAppTokenSource(() => token)
+    await expect(reg.installationToken()).rejects.toThrow(/no source-control token yet/)
+    token = 'pat_installed'
+    await expect(reg.installationToken()).resolves.toBe('pat_installed')
   })
 })
 
@@ -76,8 +83,8 @@ describe('classifyPatProbe (A12)', () => {
 })
 
 describe('probeGitHubPat (A12)', () => {
-  it('returns undefined when no GITHUB_PAT is set (nothing to probe)', async () => {
-    await expect(probeGitHubPat({})).resolves.toBeUndefined()
+  it('returns undefined when the deployment has no token (nothing to probe)', async () => {
+    await expect(probeGitHubPat({}, undefined)).resolves.toBeUndefined()
   })
 
   it('probes GET /user with the PAT and classifies the response', async () => {
@@ -86,7 +93,7 @@ describe('probeGitHubPat (A12)', () => {
       requested = typeof input === 'string' ? input : input.toString()
       return new Response('{}', { status: 200, headers: { 'x-oauth-scopes': 'repo, workflow' } })
     }) as typeof fetch
-    await expect(probeGitHubPat({ GITHUB_PAT: 'ghp_x' }, { fetchImpl })).resolves.toEqual({
+    await expect(probeGitHubPat({}, 'ghp_x', { fetchImpl })).resolves.toEqual({
       ok: true,
     })
     expect(requested).toBe('https://api.github.com/user')
@@ -96,7 +103,7 @@ describe('probeGitHubPat (A12)', () => {
     const fetchImpl = (async () => {
       throw new Error('ENOTFOUND')
     }) as typeof fetch
-    await expect(probeGitHubPat({ GITHUB_PAT: 'ghp_x' }, { fetchImpl })).resolves.toBeUndefined()
+    await expect(probeGitHubPat({}, 'ghp_x', { fetchImpl })).resolves.toBeUndefined()
   })
 })
 
@@ -124,7 +131,7 @@ describe('warnOnGitHubPatProblemInBackground (app-startup item 6)', () => {
     // A fetch that never settles during this synchronous check: the call must STILL return with no
     // warning yet, so boot never stalls on the github.com round-trip.
     const fetchImpl = (() => new Promise<Response>(() => {})) as typeof fetch
-    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, { fetchImpl })
+    warnOnGitHubPatProblemInBackground({}, 'ghp_x', log, { fetchImpl })
     expect(log.lines).toEqual([])
   })
 
@@ -132,7 +139,7 @@ describe('warnOnGitHubPatProblemInBackground (app-startup item 6)', () => {
     const log = createRecordingLogger()
     const fetchImpl = (async () =>
       new Response('{}', { status: 200, headers: { 'x-oauth-scopes': 'repo' } })) as typeof fetch
-    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, { fetchImpl })
+    warnOnGitHubPatProblemInBackground({}, 'ghp_x', log, { fetchImpl })
     await flush()
     expect(log.lines).toHaveLength(1)
     expect(log.lines[0]?.msg).toMatch(/missing required scope\(s\) workflow/)
@@ -145,64 +152,17 @@ describe('warnOnGitHubPatProblemInBackground (app-startup item 6)', () => {
         status: 200,
         headers: { 'x-oauth-scopes': 'repo, workflow' },
       })) as typeof fetch
-    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, {
+    warnOnGitHubPatProblemInBackground({}, 'ghp_x', log, {
       fetchImpl: healthy,
     })
     // A network error → probeGitHubPat returns undefined → treated as ok → no warning, no throw.
     const boom = (async () => {
       throw new Error('ENOTFOUND')
     }) as typeof fetch
-    warnOnGitHubPatProblemInBackground({ GITHUB_PAT: 'ghp_x' }, log, {
+    warnOnGitHubPatProblemInBackground({}, 'ghp_x', log, {
       fetchImpl: boom,
     })
     await flush()
     expect(log.lines).toEqual([])
-  })
-})
-
-describe('gitlabVcsHost', () => {
-  it('returns undefined in GitHub mode (no GITLAB_PAT)', () => {
-    expect(gitlabVcsHost({})).toBeUndefined()
-    expect(gitlabVcsHost({ GITHUB_PAT: 'ghp_x' })).toBeUndefined()
-  })
-
-  it('defaults to gitlab.com when only GITLAB_PAT is set', () => {
-    expect(gitlabVcsHost({ GITLAB_PAT: 'glpat_x' })).toBe('gitlab.com')
-  })
-
-  it('derives the host from GITLAB_API_BASE for a self-managed instance', () => {
-    expect(
-      gitlabVcsHost({ GITLAB_PAT: 'glpat_x', GITLAB_API_BASE: 'https://git.acme.com/api/v4' }),
-    ).toBe('git.acme.com')
-  })
-
-  it('falls back to gitlab.com on an unparseable GITLAB_API_BASE', () => {
-    expect(gitlabVcsHost({ GITLAB_PAT: 'glpat_x', GITLAB_API_BASE: 'not a url' })).toBe(
-      'gitlab.com',
-    )
-  })
-})
-
-describe('harnessAllowedHosts', () => {
-  it('is undefined in GitHub mode with no extra hosts (harness keeps its github.com default)', () => {
-    expect(harnessAllowedHosts({})).toBeUndefined()
-  })
-
-  it('adds the GitLab host so the harness will not reject a GitLab clone URL', () => {
-    expect(harnessAllowedHosts({ GITLAB_PAT: 'glpat_x' })).toBe('gitlab.com')
-    expect(
-      harnessAllowedHosts({
-        GITLAB_PAT: 'glpat_x',
-        GITLAB_API_BASE: 'https://git.acme.com/api/v4',
-      }),
-    ).toBe('git.acme.com')
-  })
-
-  it('merges operator-set GITHUB_ALLOWED_HOSTS with the GitLab host (deduped)', () => {
-    const out = harnessAllowedHosts({
-      GITLAB_PAT: 'glpat_x',
-      GITHUB_ALLOWED_HOSTS: 'gitlab.com, ghe.internal',
-    })
-    expect(out?.split(',').sort()).toEqual(['ghe.internal', 'gitlab.com'])
   })
 })

@@ -70,8 +70,12 @@ export function registerGitLab(
 }
 
 export interface BuildGitLabEngineClientOptions {
-  /** The single deployment PAT (`GITLAB_TOKEN`). */
-  token: string
+  /**
+   * The single deployment PAT (`GITLAB_TOKEN`), or a getter for it. A getter is what a facade
+   * whose credential can change while the server runs passes (local mode's browser-installed
+   * token); it answering undefined makes every call refuse with that named cause.
+   */
+  token: string | (() => string | undefined)
   /** REST v4 base, e.g. `https://gitlab.com/api/v4` or a self-managed instance. */
   apiBase: string
   clock: Clock

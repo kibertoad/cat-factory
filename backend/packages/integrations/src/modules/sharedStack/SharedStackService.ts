@@ -65,9 +65,14 @@ export interface SharedStackServiceDependencies {
    * Optional VCS token used to CLONE a stack's repo during bring-up (threaded to the runtime's
    * `checkout` as `token`). Wired on the local facade from the same source-control PAT the agent
    * containers push with, so a shared stack whose `cloneUrl` is a PRIVATE repo can be brought up.
-   * Absent ⇒ the clone runs unauthenticated (public repos only), exactly as before.
+   * Absent (or answering undefined) ⇒ the clone runs unauthenticated (public repos only), exactly
+   * as before.
+   *
+   * A getter, not a value: the only facade that wires it can have its credential installed while
+   * the server runs, and a token captured at container-build time would be the one the process
+   * booted with forever.
    */
-  cloneToken?: string
+  cloneToken?: () => string | undefined
   /**
    * Optional host-bound preflight runner: given the stack's declared `prerequisites`, returns one
    * verdict per check. Wired ONLY where the host-probe seam exists (the local facade — the same
@@ -184,7 +189,7 @@ export class SharedStackService {
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
   private readonly runtime: ComposeRuntime | undefined
-  private readonly cloneToken: string | undefined
+  private readonly cloneToken: (() => string | undefined) | undefined
   private readonly runPreflightChecks:
     | ((refs: PreflightRef[]) => Promise<PreflightResult[]>)
     | undefined
@@ -662,11 +667,12 @@ export class SharedStackService {
       // capability gate in `bringUp` has already refused a runtime missing the one this shape
       // needs, so an absent seam at this point is a wiring bug, and it should say so instead of
       // surfacing as a `TypeError` on an `undefined` call.
+      const cloneToken = this.cloneToken?.()
       const tree = stack.cloneUrl
         ? await runtime.checkout?.(project, {
             cloneUrl: stack.cloneUrl,
             ref: stack.gitRef ?? 'HEAD',
-            ...(this.cloneToken ? { token: this.cloneToken } : {}),
+            ...(cloneToken ? { token: cloneToken } : {}),
           })
         : await runtime.workingDir?.(project)
       if (!tree) {

@@ -60,17 +60,21 @@ export const localModeConfigSchema = v.object({
    */
   mothershipUrl: v.optional(v.string()),
   /**
-   * When local mode runs WITHOUT a GitHub PAT, a github.com URL with the needed scopes
-   * pre-selected so the developer can create one in a click. Absent once a PAT is set.
+   * When local mode holds NO source-control token, a github.com URL with the needed scopes
+   * pre-selected so the developer can create one in a click. Absent once one is configured.
    */
   githubPatSetupUrl: v.optional(v.string()),
   /**
    * Source-control PAT login methods the local facade can serve, so the login screen
-   * renders the right controls without probing. Absent on non-local facades. The PAT lives
-   * server-side in env — the SPA only selects a provider, it never sees a token.
-   *  - `configured` — providers with a PAT set server-side (env): a "Sign in with configured
-   *    &lt;provider&gt; PAT" button. The ONLY way to sign in (the operational token is the env
-   *    PAT too); a provider with no env PAT gets no button.
+   * renders the right controls without probing. Absent on non-local facades.
+   *  - `configured` — providers whose token the deployment already holds (from `.env` or a
+   *    previous install): a "Sign in with configured &lt;provider&gt; PAT" button. The token stays
+   *    server-side; the SPA only selects a provider, it never sees one.
+   *  - `installable` — providers whose token the user may INSTALL from this screen, because the
+   *    deployment's environment names none. Local mode's token is both the sign-in identity and
+   *    the operational credential, so pasting it here is what makes the deployment work at all;
+   *    empty ⇒ `.env` owns the credential (or nothing can seal one) and the screen must not offer
+   *    a box that would be ignored.
    *  - `setupUrls`  — per-provider "create a PAT" link with the right scopes pre-selected, so
    *    the "no token configured" notice can deep-link straight to the token page. The server
    *    owns the scopes (they differ per provider), so the SPA renders the link rather than
@@ -79,6 +83,7 @@ export const localModeConfigSchema = v.object({
   patLogin: v.optional(
     v.object({
       configured: v.array(vcsProviderSchema),
+      installable: v.optional(v.array(vcsProviderSchema)),
       setupUrls: v.optional(v.record(vcsProviderSchema, v.string())),
     }),
   ),
@@ -289,7 +294,12 @@ export const passwordLoginContract = defineApiContract({
 // Log in as the account a source-control PAT belongs to. `token` omitted ⇒ use the
 // server-configured PAT for that provider (the one-click path); `token` present ⇒ the
 // user pasted one inline. Returns the same `{ token, user }` as password login. Served
-// only where an identity resolver is wired (local mode); 503 otherwise.
+// only where an identity resolver is wired (local mode + the hosted facades); 503 otherwise.
+//
+// In LOCAL mode a pasted token is also INSTALLED as the deployment's source-control credential
+// (`localMode.patLogin.installable` says when that is on offer): there, one token is both the
+// identity and what every agent step clones, pushes and merges with, so signing in with a token
+// the deployment cannot then use would be a sign-in into a product that does not work.
 export const patLoginContract = defineApiContract({
   method: 'post',
   pathResolver: () => '/pat',

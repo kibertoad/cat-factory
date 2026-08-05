@@ -124,7 +124,7 @@ function makeService(
     idGenerator: { next: (prefix: string) => `${prefix}_${++n}` },
     clock: { now: () => 1_700_000_000_000 },
     ...(runtime ? { composeRuntime: runtime } : {}),
-    ...(opts.cloneToken ? { cloneToken: opts.cloneToken } : {}),
+    ...(opts.cloneToken ? { cloneToken: () => opts.cloneToken } : {}),
     ...(opts.runPreflights ? { runPreflights: opts.runPreflights } : {}),
     ...(opts.resolveRepoFilesForWorkspace
       ? { resolveRepoFilesForWorkspace: opts.resolveRepoFilesForWorkspace }
