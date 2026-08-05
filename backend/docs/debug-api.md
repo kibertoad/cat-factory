@@ -171,11 +171,19 @@ The failure classes and where each one's evidence lives:
   limits or task size, not correctness.
 - **`tool_calls_failed` / `tool_retry_loop`: a tool broke inside the container.** A tool-EXECUTION
   failure is a perfectly healthy model call whose result came back bad, so it is invisible in
-  every LLM number on this page. `tool_calls_failed` counts them run-wide with the RATIO (34 of 36
-  and 34 of 3,600 are the same count and opposite diagnoses); `tool_retry_loop` fires only when
-  they CONCENTRATE on one `(agentKind, tool)` pair, which is the difference between an agent
-  re-running something that cannot work and one meeting the occasional failing command. Drill in
-  with `/tool-calls?ok=false`, and add `&order=trajectory` to see the loop in the order it ran.
+  every LLM number on this page. The two are deliberately not the same kind of statement, and
+  their severities say so. `tool_calls_failed` is an **`info`**: it counts them run-wide with the
+  RATIO (34 of 36 and 34 of 3,600 are the same count and opposite diagnoses) and fires on any run
+  with a failure at all, because a failing tool call is the ordinary shape of an agent loop (a
+  test that fails before it is fixed, a `grep` that matches nothing). As a `warning` it would fire
+  on most healthy runs and cost the ordering the thing it is for. `tool_retry_loop` is the
+  **`warning`**: it fires only where the failures CONCENTRATE on one `(agentKind, tool)` pair
+  (mostly-failing AND failed enough times to not be one bad command), which is the difference
+  between an agent re-running something that cannot work and one meeting the occasional failing
+  command. It considers EVERY cell rather than the run's most-failed one, or a fixer wedged
+  5-for-5 on `apply_patch` goes unreported behind a coder's 6 failures across 100 healthy `bash`
+  calls. Drill in with `/tool-calls?ok=false`, and add `&order=trajectory` to see the loop in the
+  order it ran.
 - **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
   is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
   reason, so it fires on a failure the model side cannot explain: tool execution inside the

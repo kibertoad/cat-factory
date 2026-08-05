@@ -17,7 +17,7 @@ import {
   foldToolCallsByAgentKind,
   foldToolCallsByTool,
   toolCallFailureRate,
-  worstToolCallCell,
+  worstToolRetryLoop,
 } from '@cat-factory/kernel'
 import type {
   DebugAgentContextDetail,
@@ -412,18 +412,6 @@ const COLD_CACHE_MIN_PROMPT_TOKENS = 50_000
 const HIGH_TRANSPORT_OVERHEAD = 0.5
 
 /**
- * Failures on ONE `(agentKind, tool)` cell at or above this share of that cell's calls, once
- * it has made at least {@link RETRY_LOOP_MIN_FAILURES}, read as an agent retrying something
- * that cannot work rather than meeting the occasional failing command.
- *
- * Two conditions rather than one because each alone fires on a healthy run: a share alone
- * flags the single `bash` call that legitimately returned non-zero, and a count alone flags a
- * thorough agent that ran hundreds of tests. Both together are the shape a stuck loop makes.
- */
-const RETRY_LOOP_FAILURE_RATE = 0.5
-const RETRY_LOOP_MIN_FAILURES = 5
-
-/**
  * Precompute the diagnostic hints the overview publishes. Every one of these is derivable by
  * the caller from the same payload — which is exactly the point: a model that has to
  * rediscover "13 of 40 calls were truncated" by arithmetic over a JSON blob will sometimes get
@@ -444,7 +432,14 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     message: string,
     extra: Partial<Pick<DebugSignal, 'count' | 'agentKind' | 'stepIndex'>> = {},
   ): void => {
-    signals.push(signal(code, severity, message, extra))
+    signals.push({
+      code,
+      severity,
+      message,
+      count: extra.count ?? null,
+      agentKind: extra.agentKind ?? null,
+      stepIndex: extra.stepIndex ?? null,
+    })
   }
 
   if (execution.status === 'failed') {
@@ -491,7 +486,17 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       )
     }
   }
-  signals.push(...toolCallSignals(toolCells, toolTotals))
+  // The DIAGNOSIS from the tool sink, beside the other warnings. Its supporting count is an
+  // `info` further down, because the two are not the same kind of statement.
+  const retryLoop = worstToolRetryLoop(toolCells)
+  if (retryLoop) {
+    push(
+      'tool_retry_loop',
+      'warning',
+      `${retryLoop.agentKind}'s '${retryLoop.tool}' call failed ${retryLoop.failures} of ${retryLoop.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&ok=false.`,
+      { count: retryLoop.failures, agentKind: retryLoop.agentKind },
+    )
+  }
   // A run that failed while every MODEL call looks healthy. Tool-EXECUTION errors (malformed
   // arguments, a stuck edit loop) happen inside the container, so each model call still reports
   // `ok` with a clean finish reason and this rollup, computed off the LLM sink alone, sees a
@@ -521,6 +526,20 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       'transport_overhead_high',
       'warning',
       `${Math.round(totals.transportOverheadRatio * 100)}% of the run's model latency was transport/proxy overhead rather than model execution.`,
+    )
+  }
+  // The run-wide count, unconditional above zero and deliberately `info` rather than `warning`.
+  // A tool-execution failure is an ORDINARY event in an agent loop (a test that fails before it
+  // is fixed, a `grep` that matches nothing, a build that errors mid-iteration all come back
+  // `ok: false`), so a warning here would fire on most healthy runs and cost the severity
+  // ordering the thing it is for. It is still published on every run that has one, with the rate
+  // that gives it meaning: the count is CONTEXT, and `tool_retry_loop` above is the diagnosis.
+  if (toolTotals.failures > 0) {
+    push(
+      'tool_calls_failed',
+      'info',
+      `${toolTotals.failures} of the run's ${toolTotals.calls} tool call(s) failed inside the container (${Math.round((toolCallFailureRate(toolTotals) ?? 0) * 100)}%). These are tool-EXECUTION failures, so the model calls around them all report ok, and some are the ordinary shape of an agent loop. Read them with GET /debug/runs/:runId/tool-calls?ok=false.`,
+      { count: toolTotals.failures },
     )
   }
   if (
@@ -575,65 +594,6 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       'no_model_calls',
       'warning',
       'The run recorded no model calls at all, so it failed or stalled before (or outside of) any agent work.',
-    )
-  }
-  return signals
-}
-
-/** Build one signal row, filling in the three scoping fields a signal may leave unset. */
-function signal(
-  code: string,
-  severity: DebugSignal['severity'],
-  message: string,
-  extra: Partial<Pick<DebugSignal, 'count' | 'agentKind' | 'stepIndex'>> = {},
-): DebugSignal {
-  return {
-    code,
-    severity,
-    message,
-    count: extra.count ?? null,
-    agentKind: extra.agentKind ?? null,
-    stepIndex: extra.stepIndex ?? null,
-  }
-}
-
-/**
- * The signals the tool-call sink produces: what failed, and whether it CONCENTRATED.
- *
- * Both are invisible in every LLM rollup beside them, because a rejected edit or a non-zero
- * command is a perfectly healthy model call whose result came back bad — so without these the
- * only way to find them is to walk the trajectory reading each row's `ok`.
- */
-function toolCallSignals(
-  cells: readonly AgentToolCallSummary[],
-  totals: ToolCallRollupTotals,
-): DebugSignal[] {
-  if (totals.failures === 0) return []
-  const signals = [
-    signal(
-      'tool_calls_failed',
-      'warning',
-      `${totals.failures} of the run's ${totals.calls} tool call(s) failed inside the container (${Math.round((toolCallFailureRate(totals) ?? 0) * 100)}%). These are tool-EXECUTION failures, so the model calls around them all report ok. Read them with GET /debug/runs/:runId/tool-calls?ok=false.`,
-      { count: totals.failures },
-    ),
-  ]
-  // The same failures concentrated on ONE tool: an agent re-running something that cannot work,
-  // a different finding from the same count scattered over nine tools and one that needs a
-  // different fix. Its own signal rather than a sharper wording of the one above, because the
-  // two are independently true and only this one names where to look.
-  const worst = worstToolCallCell(cells)
-  if (
-    worst &&
-    worst.failures >= RETRY_LOOP_MIN_FAILURES &&
-    worst.failures / worst.calls >= RETRY_LOOP_FAILURE_RATE
-  ) {
-    signals.push(
-      signal(
-        'tool_retry_loop',
-        'warning',
-        `${worst.agentKind}'s '${worst.tool}' call failed ${worst.failures} of ${worst.calls} time(s): the agent kept retrying one tool that mostly did not work. Read that loop in order with GET /debug/runs/:runId/tool-calls?order=trajectory&ok=false.`,
-        { count: worst.failures, agentKind: worst.agentKind },
-      ),
     )
   }
   return signals

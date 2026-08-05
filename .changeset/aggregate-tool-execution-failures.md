@@ -30,7 +30,15 @@ level carries `failureRate` beside its counts (34 of 36 and 34 of 3,600 are the 
 opposite diagnoses) and a run that called no tools reports it as `null` rather than a clean 0%, which
 would file "nothing happened" beside "everything worked".
 
-Two signals ride it, `tool_calls_failed` and the sharper `tool_retry_loop`, and
+Two signals ride it, and their severities carry the difference between them. `tool_calls_failed` is
+an `info` reporting the run-wide count with its ratio: a failing tool call is the ordinary shape of
+an agent loop (a test that fails before it is fixed, a `grep` that matches nothing), so as a warning
+it would fire on most healthy runs and cost the severity ordering the thing it is for.
+`tool_retry_loop` is the `warning`, firing only where the failures concentrate on one
+`(agentKind, tool)` cell that is both mostly-failing and has failed enough times to not be a single
+bad command. It selects among the cells that QUALIFY rather than testing the run's most-failed one,
+which is not the same thing: ranking first would hide a fixer wedged 5-for-5 on `apply_patch` behind
+a coder's 6 failures across 100 healthy `bash` calls, silently missing the run the sink exists for.
 `failure_outside_model_calls` now reads the sink before deciding where to send the reader: failing
 tool calls to start at, a recorded loop with none in it (so what is left is the engine), or no
 trajectory at all — which is unrecorded rather than uneventful, and was previously indistinguishable
@@ -43,3 +51,10 @@ and the MCP facade are regenerated. Worth a reviewer's attention: `countByExecut
 kernel port, so all three telemetry stores, the mothership read-through and its bounded-read table
 move together, and the new aggregate is classified `telemetry` in the drift guard rather than routed
 over the persistence RPC.
+
+No migration, and the aggregate is knowingly costlier than the COUNT it replaces: the existing run
+index served that count without touching the table, while grouping reads `agent_kind`, `tool` and
+`ok` off each row. A covering index would buy that back and is the wrong trade here: this sink is
+append-hot (a row per tool call of every run) and the aggregate runs once per debug overview, so a
+fifth index would tax the hot path for the rare read. Either way the scan is bounded by one run's
+rows.

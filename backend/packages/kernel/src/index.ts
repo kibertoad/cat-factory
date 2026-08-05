@@ -85,7 +85,7 @@ export {
   foldToolCallsByAgentKind,
   foldToolCallsByTool,
   toolCallFailureRate,
-  worstToolCallCell,
+  worstToolRetryLoop,
 } from './domain/tool-call-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {

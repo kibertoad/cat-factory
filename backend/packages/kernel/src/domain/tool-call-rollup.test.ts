@@ -5,7 +5,7 @@ import {
   foldToolCallsByAgentKind,
   foldToolCallsByTool,
   toolCallFailureRate,
-  worstToolCallCell,
+  worstToolRetryLoop,
 } from './tool-call-rollup.js'
 
 function cell(overrides: Partial<AgentToolCallSummary> = {}): AgentToolCallSummary {
@@ -78,11 +78,11 @@ describe('foldToolCallsByTool / foldToolCallsByAgentKind', () => {
   })
 })
 
-describe('worstToolCallCell', () => {
+describe('worstToolRetryLoop', () => {
   it('names the (agentKind, tool) pair the failures concentrate on', () => {
     // The finest grain on purpose: one kind retrying one tool is a stuck loop, and both
     // breakdowns above have already folded that concentration away.
-    const worst = worstToolCallCell([
+    const worst = worstToolRetryLoop([
       cell({ tool: 'bash', calls: 40, failures: 2 }),
       cell({ tool: 'edit', calls: 6, failures: 5 }),
       cell({ agentKind: 'ci-fixer', tool: 'edit', calls: 2, failures: 2 }),
@@ -90,9 +90,38 @@ describe('worstToolCallCell', () => {
     expect(worst).toMatchObject({ agentKind: 'coder', tool: 'edit', calls: 6, failures: 5 })
   })
 
+  it('finds a loop sitting BEHIND a busier cell with more raw failures', () => {
+    // The regression that motivated filtering before ranking. `bash` outranks the wedged cell on
+    // failure COUNT while being 94% healthy, so testing the top-ranked cell alone reports no loop
+    // on a run that is textbook stuck, the exact shape of a coder running tests that fail beside
+    // a fixer that cannot apply its patch.
+    const worst = worstToolRetryLoop([
+      cell({ tool: 'bash', calls: 100, failures: 6 }),
+      cell({ agentKind: 'ci-fixer', tool: 'apply_patch', calls: 5, failures: 5 }),
+    ])
+    expect(worst).toMatchObject({ agentKind: 'ci-fixer', tool: 'apply_patch' })
+  })
+
+  it('ranks among the QUALIFYING cells when several are loops', () => {
+    const worst = worstToolRetryLoop([
+      cell({ tool: 'edit', calls: 12, failures: 9 }),
+      cell({ agentKind: 'ci-fixer', tool: 'apply_patch', calls: 6, failures: 6 }),
+    ])
+    expect(worst).toMatchObject({ tool: 'edit', failures: 9 })
+  })
+
+  it('holds BOTH conditions, so neither a lone failure nor a busy healthy cell is a loop', () => {
+    // Under the count floor, however total the failure…
+    expect(worstToolRetryLoop([cell({ calls: 4, failures: 4 })])).toBeNull()
+    // …and over it, but nowhere near mostly-failing: a thorough agent, not a stuck one.
+    expect(worstToolRetryLoop([cell({ calls: 400, failures: 20 })])).toBeNull()
+    // The boundary is inclusive on both, so the first genuinely-stuck cell is named.
+    expect(worstToolRetryLoop([cell({ calls: 10, failures: 5 })])).toMatchObject({ failures: 5 })
+  })
+
   it('is null when nothing failed, rather than the busiest healthy cell', () => {
-    expect(worstToolCallCell([cell({ calls: 40 })])).toBeNull()
-    expect(worstToolCallCell([])).toBeNull()
+    expect(worstToolRetryLoop([cell({ calls: 40 })])).toBeNull()
+    expect(worstToolRetryLoop([])).toBeNull()
   })
 })
 

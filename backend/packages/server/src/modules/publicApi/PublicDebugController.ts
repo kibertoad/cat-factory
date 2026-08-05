@@ -260,8 +260,10 @@ export function publicDebugController(): Hono<AppEnv> {
       ...(query.jobId ? { jobId: query.jobId } : {}),
       ...(query.order ? { order: query.order } : {}),
       // `ok` is a string on the wire (a query param always is), so the enum is narrowed to the
-      // boolean the port takes here rather than carried as text down to the SQL.
-      ...(query.ok ? { ok: query.ok === 'true' } : {}),
+      // boolean the port takes here rather than carried as text down to the SQL. Keyed on
+      // PRESENCE, not truthiness: `'false'` is a truthy string, and reading it as one would send
+      // the filter down inverted the day the picklist gains a member.
+      ...(query.ok !== undefined ? { ok: query.ok === 'true' } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })

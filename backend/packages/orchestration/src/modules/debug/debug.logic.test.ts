@@ -568,7 +568,11 @@ describe('deriveSignals', () => {
       ],
     })
     const failed = signals.find((s) => s.code === 'tool_calls_failed')
-    expect(failed).toMatchObject({ severity: 'warning', count: 4 })
+    // `info`, not `warning`: a failing tool call is the ordinary shape of an agent loop (a test
+    // that fails before it is fixed, a `grep` that matches nothing), so a warning here would fire
+    // on most healthy runs and cost the severity ordering the thing it exists for. The count is
+    // context; `tool_retry_loop` is the diagnosis.
+    expect(failed).toMatchObject({ severity: 'info', count: 4 })
     expect(failed!.message).toContain('10%')
     expect(failed!.message).toContain('ok=false')
     // Scattered failures are NOT a retry loop: no cell is mostly-failing, so the sharper
@@ -612,6 +616,35 @@ describe('deriveSignals', () => {
       toolCells: [{ agentKind: 'coder', tool: 'bash', calls: 400, failures: 20 }],
     })
     expect(busy.map((s) => s.code)).not.toContain('tool_retry_loop')
+  })
+
+  it('finds the loop behind a busier cell that carries more raw failures', () => {
+    // A coder running tests that fail is not a loop and outranks the wedged fixer on failure
+    // COUNT, so the loop is only found by testing every cell rather than the top-ranked one.
+    // The run this fires on is the motivating case for the whole sink.
+    const signals = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      toolCells: [
+        { agentKind: 'coder', tool: 'bash', calls: 100, failures: 6 },
+        { agentKind: 'ci-fixer', tool: 'apply_patch', calls: 5, failures: 5 },
+      ],
+    })
+    expect(signals.find((s) => s.code === 'tool_retry_loop')).toMatchObject({
+      agentKind: 'ci-fixer',
+      count: 5,
+    })
+  })
+
+  it('orders the tool diagnosis above the tool count, as their severities say', () => {
+    // The list is read top-down and truncated by callers, so a `warning` that names where to look
+    // must not sit under the `info` that merely counts.
+    const codes = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [{ agentKind: 'ci-fixer', tool: 'apply_patch', calls: 6, failures: 6 }],
+    }).map((s) => s.code)
+    expect(codes.indexOf('tool_retry_loop')).toBeLessThan(codes.indexOf('tool_calls_failed'))
   })
 })
 

@@ -166,6 +166,13 @@ export interface AgentToolCallRepository {
    * count alone, because the number a reader actually needs is a RATIO — a run where 34 of 36
    * calls failed and one where 34 of 3,600 did are the same absolute failure count and
    * opposite diagnoses.
+   *
+   * COSTLIER than the COUNT it replaces, deliberately and by a known amount: the run index
+   * `(workspace_id, execution_id, created_at)` served the COUNT without touching the table,
+   * while grouping needs `agent_kind`, `tool` and `ok` off each row. A covering index would buy
+   * that back and is NOT worth it here: this sink is append-hot (every tool call of every run
+   * writes a row) and this read happens once per debug overview, so a fifth index would tax the
+   * hot path to speed up the rare one. The scan stays bounded by ONE run's rows either way.
    */
   summarizeByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallSummary[]>
   /**
