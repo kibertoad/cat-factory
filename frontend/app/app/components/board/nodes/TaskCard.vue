@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Block } from '~/types/domain'
 import { STATUS_META, MODULE_META, taskTypeMeta } from '~/utils/catalog'
+import { composeRunOutcome, hasOutcomeToShow } from '~/utils/runOutcome'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import TaskPipelineMini from './TaskPipelineMini.vue'
 
@@ -71,6 +72,40 @@ const pr = computed(() => task.value?.pullRequest)
 const prLabel = computed(() =>
   pr.value?.number ? t('board.task.prNumber', { number: pr.value.number }) : t('board.task.pr'),
 )
+
+/**
+ * Reading the result starts at the OUTCOME summary (what changed in product terms, with the
+ * captured evidence), and the pull request is one click inside it. In BASIC mode that replaces
+ * the card's raw PR chip: the diff is still exactly as reachable, through a surface that says
+ * what the diff is about first. Advanced mode keeps both, since a reader who wants the diff
+ * directly is the reader that tier is for.
+ *
+ * Offered only where there is something to read, asked of the SAME reduction the window renders
+ * and the inspector's button gates on: a card that offered "read the result" on a task whose
+ * every section says "nothing here" would teach people the surface is empty. A task marked done
+ * by hand, with no pull request and no run, is that task.
+ */
+const uiMode = useUiModeStore()
+const outcomeReadable = computed(() => {
+  const block = task.value
+  if (!block) return false
+  return hasOutcomeToShow(
+    composeRunOutcome({ block, instance: execution.getInstance(block.executionId) ?? null }),
+  )
+})
+/**
+ * The card's raw pull-request chip, which basic mode drops in favour of the outcome card
+ * carrying the same link at the top. Written as the INVARIANT ("the diff never stops being
+ * reachable from this card") rather than as `isAdvanced` alone, so the tier can only ever
+ * reorder two routes and never remove the last one: where the outcome card is not offered,
+ * the chip stays in both tiers.
+ */
+const showPrChip = computed(
+  () => Boolean(pr.value) && (uiMode.isAdvanced || !outcomeReadable.value),
+)
+function openOutcome() {
+  ui.openOutcome(props.taskId, task.value?.executionId ?? null)
+}
 
 // This task's current agent run (if any). A failed run must surface the shared
 // failure banner + retry — NOT a stuck progress bar — so the card never looks
@@ -403,8 +438,20 @@ function selectTask() {
 
       <template v-if="task.status === 'pr_ready'">
         <UButton
-          v-if="pr"
-          :to="pr.url"
+          v-if="outcomeReadable"
+          color="primary"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-clipboard-check"
+          :title="t('board.task.readOutcomeHint')"
+          data-testid="task-open-outcome"
+          @click.stop="openOutcome"
+        >
+          {{ t('board.task.readOutcome') }}
+        </UButton>
+        <UButton
+          v-if="showPrChip"
+          :to="pr?.url"
           target="_blank"
           rel="noopener"
           external
@@ -437,12 +484,25 @@ function selectTask() {
         </UButton>
       </template>
 
-      <span
-        v-else-if="task.status === 'done'"
-        class="inline-flex items-center gap-1 text-[9px] text-emerald-400"
-      >
-        <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
-      </span>
+      <!-- A merged task is the one people come back to READ, so its result stays openable
+           rather than collapsing to a tick the moment it lands. -->
+      <template v-else-if="task.status === 'done'">
+        <span class="inline-flex items-center gap-1 text-[9px] text-emerald-400">
+          <UIcon name="i-lucide-check-check" class="h-3 w-3" /> {{ t('board.task.implemented') }}
+        </span>
+        <UButton
+          v-if="outcomeReadable"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-clipboard-check"
+          :title="t('board.task.readOutcomeHint')"
+          data-testid="task-open-outcome"
+          @click.stop="openOutcome"
+        >
+          {{ t('board.task.readOutcome') }}
+        </UButton>
+      </template>
     </div>
 
     <!-- structural metadata: assigned module -->

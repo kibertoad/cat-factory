@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
  * @param at May be absent entirely.
  * @param attempts the {@code attempts} field.
  * @param commands the {@code commands} field.
+ * @param configUnreadable May be absent entirely.
  * @param maxAttempts May be absent entirely.
  * @param note May be absent entirely.
  * @param passed May be absent entirely.
@@ -28,6 +29,9 @@ public record PrReportValidation(
     @JsonProperty("attempts") Double attempts,
 
     @JsonProperty("commands") List<PrReportValidationCommand> commands,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("configUnreadable") @Nullable Boolean configUnreadable,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("maxAttempts") @Nullable Double maxAttempts,
@@ -59,6 +63,7 @@ public record PrReportValidation(
         private @Nullable Double at;
         private @Nullable Double attempts;
         private @Nullable List<PrReportValidationCommand> commands;
+        private @Nullable Boolean configUnreadable;
         private @Nullable Double maxAttempts;
         private @Nullable String note;
         private @Nullable Boolean passed;
@@ -80,6 +85,12 @@ public record PrReportValidation(
         /** Set {@code commands}. */
         public Builder commands(@Nullable List<PrReportValidationCommand> commands) {
             this.commands = commands;
+            return this;
+        }
+
+        /** Set {@code configUnreadable}. */
+        public Builder configUnreadable(@Nullable Boolean configUnreadable) {
+            this.configUnreadable = configUnreadable;
             return this;
         }
 
@@ -115,7 +126,7 @@ public record PrReportValidation(
 
         /** Build the {@link PrReportValidation}. */
         public PrReportValidation build() {
-            return new PrReportValidation(at, attempts, commands, maxAttempts, note, passed, status, stepKind);
+            return new PrReportValidation(at, attempts, commands, configUnreadable, maxAttempts, note, passed, status, stepKind);
         }
     }
 }

@@ -82,10 +82,18 @@ export function useRunDeepLink(): void {
       if (!ready || applied) return
       applied = true
       if (link.blockId) ui.select(link.blockId)
-      // Two views are served: the observability panel and the Tester's result window (where the
-      // screenshots the report's environment-lifecycle section lists are rendered). An unknown
-      // view still lands the user on the right board and task rather than failing the navigation.
-      if (link.view === 'observability') ui.openObservability(link.runId)
+      // Three views are served: the run's outcome summary (the non-code answer to "what did this
+      // change"), the observability panel, and the Tester's result window (where the screenshots
+      // the report's environment-lifecycle section lists are rendered). An unknown view still
+      // lands the user on the right board and task rather than failing the navigation.
+      //
+      // `outcome` is passed the block as well as the run: it is the one of the three that stays
+      // readable on a task whose run the snapshot no longer carries, and a link followed weeks
+      // after the work merged is exactly that case. The engine emits no `view=outcome` link
+      // today (its report links a REVIEWER to the two run-scoped panels); this is the entry
+      // point for one, and for a URL a person shares.
+      if (link.view === 'outcome') ui.openRunOutcome(link.runId, link.blockId)
+      else if (link.view === 'observability') ui.openObservability(link.runId)
       else if (link.view === 'test-evidence') ui.openTestEvidence(link.runId)
       stop?.()
     },

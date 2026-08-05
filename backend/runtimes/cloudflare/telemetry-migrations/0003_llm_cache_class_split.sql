@@ -8,7 +8,7 @@
 -- token-burn instrumentation needs (docs/initiatives/token-burn-instrumentation.md).
 --
 -- The old column is DROPPED rather than dual-read: backwards compatibility is a non-goal, and
--- this table is pruned to LLM_CALL_METRICS_RETENTION_DAYS (3 by default), so the rows whose
+-- this table is pruned to LLM_CALL_METRICS_RETENTION_DAYS, so the rows whose
 -- `prompt_tokens` still carries the old inclusive semantics churn out within the window. No
 -- backfill is attempted for the same reason — and because the split genuinely cannot be
 -- recovered from one summed number.

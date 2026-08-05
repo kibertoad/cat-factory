@@ -160,6 +160,11 @@ const STATUS_META = computed<Record<ExecutionInstance['status'], { label: string
 const steps = computed(() => props.instance.steps)
 const total = computed(() => steps.value.length)
 
+// A failed run is no longer executing: a step left mid-flight (state still `working`,
+// its container caught mid cold-boot) must stop looking live — no spinner, no pulse,
+// no "spinning up container" phase.
+const runFailed = computed(() => props.instance.status === 'failed')
+
 // A shared 1s tick drives every step's live elapsed clock, so a step that hasn't yet
 // emitted subtask counts still shows it is progressing rather than reading as hung.
 const nowTick = useNowTick()
@@ -172,10 +177,6 @@ function stepElapsed(s: PipelineStep): string | null {
 // human can see at a glance whether the fixer ran or was skipped.
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
-// A failed run is no longer executing: a step left mid-flight (state still `working`,
-// its container caught mid cold-boot) must stop looking live — no spinner, no pulse,
-// no "spinning up container" phase.
-const runFailed = computed(() => props.instance.status === 'failed')
 /**
  * A reviewer gate (requirements-review / clarity-review) folding the answers or
  * re-reviewing in the durable driver: the step parks in `waiting_decision` but is actively
