@@ -69,8 +69,11 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   plus `RunStateMachine`, `StepGraph`, the companion/review
   controllers, and `*.logic.ts` helpers (`ci.logic`, `release.logic`, `stepGating.logic`, …), and
   `PrVerificationReportController` + `prReport.logic.ts` (the **PR verification report**:
-  composed from the settled run's own state and published onto its PR through the
-  `PrVerificationReportPublisher` port), with `prReport.environments.ts` holding the **test
+  composed from the settled run's own state and published onto EACH pull request the run opened
+  through the `PrVerificationReportPublisher` port; a cross-service run's peer PRs get their own
+  SCOPED copy, which withholds the own-service-only sections rather than restating them, so the
+  write-avoidance cache is keyed per run AND target while the run's evidence is READ once per
+  settlement and layered per PR), with `prReport.environments.ts` holding the **test
   environment lifecycle** proof (environment up → evidence captured from it while live →
   teardown confirmed) because it is the one section composed from a source outside the
   in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.
@@ -84,7 +87,9 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   Its teardown leg is closed out of band by `ExecutionService.refreshVerificationReport`, wired
   to the teardown service's teardown-recorded hook (which fires on a failed attempt too), since
   the TTL sweep reclaims an environment long after the run's last step settled. The step-selection
-  rule both halves share lives under both in `prReport.steps.ts`. Every untrusted value it
+  rule both halves share lives under both in `prReport.steps.ts`, beside `absentNote`, the ONE
+  renderer for an absent section's note (through `hostMarkdown`, since a note now names a pull
+  request and `owner/repo#12` is a reference the host resolves). Every untrusted value it
   interpolates crosses kernel's
   shared `hostMarkdown` boundary (`shared/host-markdown.logic.ts`: auto-link triggers, table
   cells, code fences), which lives there rather than here because the tracker-issue writebacks

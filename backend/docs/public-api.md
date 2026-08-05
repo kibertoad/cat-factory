@@ -935,6 +935,16 @@ decision. `truncations` names anything a per-list cap left out.
 (the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is
 `null` when the deployment configured no public URL to build it from, never a link to nowhere.
 
+`scope` says WHICH of a multi-repo run's pull requests a copy of the report is written onto. A
+cross-service run opens one PR per repo it changed and every one gets a report, but they are not
+the same document: `role: "peer"` marks a connected service's copy, which WITHHOLDS the sections
+that are statements about the own-service repo (pre-PR validation, the reproduction proof, the
+requirement join) rather than restating them against a diff they were never computed for, and
+names `ownPullRequest` so a reader can reach them. This endpoint always answers the `own` copy,
+the complete one: a caller is asking about the RUN, not about one of its pull requests. Absent
+`scope` means what it always meant, the own-service PR, so a consumer written before 1.12 is
+unaffected.
+
 The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
 `kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
 for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture

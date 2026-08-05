@@ -52,6 +52,7 @@ import {
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
+  buildResolveRepoTargets,
   buildResolveRunInitiatorToken,
 } from './container-vcs-identity.js'
 // The App registry + repo-target resolvers moved to `container-vcs-identity.ts`; re-exported so
@@ -117,7 +118,6 @@ import { D1RequirementReviewRepository } from './repositories/D1RequirementRevie
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
-import { D1ConsensusGroupRepository } from './repositories/D1ConsensusGroupRepository'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
@@ -134,16 +134,12 @@ import {
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { selectPerUserDeps } from './container-per-user-deps'
+import { selectWorkspaceConfigDeps } from './container-workspace-config-deps'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
-import { D1AgentPromptRepository } from './repositories/D1AgentPromptRepository'
-import { D1TaskTypeSuppressionRepository } from './repositories/D1TaskTypeSuppressionRepository.js'
-import { D1WorkspaceAgentSettingsRepository } from './repositories/D1WorkspaceAgentSettingsRepository'
-import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
-import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`,
 // then wires each gate's provider below.
@@ -289,15 +285,7 @@ export function selectMergeLifecycleDeps(
     sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     ...selectPerUserDeps(db),
-    modelPresetRepository: new D1ModelPresetRepository({ db }),
-    // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to.
-    // Always wired (no secret material) — the panels only run when the optional consensus
-    // executor is enabled, but the library is editable and snapshot-visible regardless.
-    consensusGroupRepository: new D1ConsensusGroupRepository({ db }),
-    agentPromptRepository: new D1AgentPromptRepository({ db }),
-    workspaceAgentSettingsRepository: new D1WorkspaceAgentSettingsRepository({ db }),
-    taskTypeSuppressionRepository: new D1TaskTypeSuppressionRepository({ db }),
-    serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
+    ...selectWorkspaceConfigDeps(db),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present), Slack (when
@@ -359,13 +347,16 @@ export function selectMergeLifecycleDeps(
       resolveRepoTarget,
       blockRepository,
     })
-    // Keeps the engine-maintained verification report current on each run's PR. Reads through
+    // Keeps the engine-maintained verification report current on every pull request the run
+    // opened — the own-service one plus each peer repo's on a cross-service task. Reads through
     // the same engine VCS client, so a GitLab-only deployment gets it too (runtime symmetry
     // with the Node facade's `githubGateDeps`).
     deps.prVerificationReportPublisher = new GitHubPrReportPublisher({
       githubClient,
       resolveRepoTarget,
+      resolveRepoTargets: buildResolveRepoTargets(db),
       blockRepository,
+      logger,
     })
   }
   return deps
