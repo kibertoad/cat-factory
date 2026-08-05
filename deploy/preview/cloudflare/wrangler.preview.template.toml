@@ -11,6 +11,7 @@
 #   ${D1_ID}              per-PR primary D1 database id
 #   ${D1_TELEMETRY_ID}    per-PR telemetry D1 database id
 #   ${D1_SANDBOX_ID}      per-PR sandbox D1 database id
+#   ${D1_AUDIT_ID}        per-PR audit-log D1 database id
 #   ${WORKERS_SUBDOMAIN}  the account's workers.dev subdomain (for WORKER_PUBLIC_URL)
 #   ${EXECUTOR_IMAGE}     the executor-harness image, read out of the production wrangler.toml
 #   ${GITHUB_APP_ID}      the preview GitHub App's id (a THROWAWAY app — see ../README.md)
@@ -63,6 +64,14 @@ binding = "SANDBOX_DB"
 database_name = "cat_factory_pr_${PR_NUMBER}_sandbox"
 database_id = "${D1_SANDBOX_ID}"
 migrations_dir = "node_modules/@cat-factory/worker/sandbox-migrations"
+
+# The audit log's dedicated database (required). Provisioned + torn down per PR by
+# preview-env.yml alongside the others.
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "cat_factory_pr_${PR_NUMBER}_audit"
+database_id = "${D1_AUDIT_ID}"
+migrations_dir = "node_modules/@cat-factory/worker/audit-migrations"
 
 [ai]
 binding = "AI"

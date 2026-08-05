@@ -82,6 +82,16 @@ export interface Env {
    */
   PROVISIONING_DB?: D1Database
 
+  /**
+   * REQUIRED, dedicated D1 database for the account audit log, with its own migrations lineage
+   * (`audit-migrations/`). Separate from `DB` for RETENTION rather than write profile: audit is
+   * low-volume, but once run-lifecycle events land it is the only table that grows with run
+   * volume AND wants a multi-year window, and D1's ceiling is 10 GB PER DATABASE. Required for
+   * the same reason `TELEMETRY_DB` is: an unbound binding means no audit trail, which reads
+   * exactly like a deployment where nothing privileged ever happened.
+   */
+  AUDIT_DB: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 
@@ -729,6 +739,19 @@ export function requireTelemetryDb(env: Env): D1Database {
     throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
+}
+
+/**
+ * Resolve the required audit database, throwing a clear, actionable error when the binding is
+ * absent. The account audit log lives in its own D1 database; every entry point that touches it
+ * goes through this, so an unbound binding fails the same way with the same message instead of
+ * NPE-ing deep in a repository on the first privileged action.
+ */
+export function requireAuditDb(env: Env): D1Database {
+  if (!env.AUDIT_DB) {
+    throw configProblem({ key: 'AUDIT_DB', ...ENV_HELP.AUDIT_DB })
+  }
+  return env.AUDIT_DB
 }
 
 /**

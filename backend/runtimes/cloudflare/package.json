@@ -12,7 +12,8 @@
     "migrations",
     "telemetry-migrations",
     "sandbox-migrations",
-    "migrations-provisioning"
+    "migrations-provisioning",
+    "audit-migrations"
   ],
   "type": "module",
   "main": "./dist/index.js",

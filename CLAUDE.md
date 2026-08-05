@@ -912,8 +912,8 @@ recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). Th
 - **State what a producer does NOT know rather than filling a field with a guess**; the input side is
   THREE token classes, never a lump (`readInputTokenClasses`); every row is stamped with the PHASE that
   spent it by whoever OWNS the boundary.
-- **The rollup is ONE aggregate at the `(agentKind, phase)` grain**; a new consumer folds, it does not
-  add a query.
+- **A rollup is ONE aggregate** (`(agentKind, phase)` for spend, `(agentKind, tool)` for tool calls,
+  whose failures are invisible in the first); a new consumer folds, it does not add a query.
 - **The tool-call TRAJECTORY is one sink per invocation, ordered SERVER-SIDE by `(startedAt, seq)`**
   and never by the drain stamp several calls share nor by the job id, a string that sorts dispatches
   by agent-kind spelling; a harness image that numbers nothing has its trajectory skipped rather

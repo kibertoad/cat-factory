@@ -171,6 +171,7 @@ export type {
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
@@ -564,6 +565,16 @@ export type {
   MachineNodeRepository,
 } from './machine-node-repositories.js'
 export type { AuthAttemptRecord, AuthAttemptRepository } from './auth-attempt-repositories.js'
+export type {
+  AuditActor,
+  AuditEvent,
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
+  AuditEventView,
+  AuditRecorder,
+} from './audit.js'
+export { noopAuditRecorder } from './audit.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,

@@ -305,10 +305,12 @@ jobs:
           primary="$(ensure_db "cat_factory_pr_${PR}")"
           telemetry="$(ensure_db "cat_factory_pr_${PR}_telemetry")"
           sandbox="$(ensure_db "cat_factory_pr_${PR}_sandbox")"
+          audit="$(ensure_db "cat_factory_pr_${PR}_audit")"
           {
             echo "primary=${primary}"
             echo "telemetry=${telemetry}"
             echo "sandbox=${sandbox}"
+            echo "audit=${audit}"
           } >> "$GITHUB_OUTPUT"
 
       # Rendered BESIDE the production wrangler.toml so `main` and every `migrations_dir`
@@ -320,6 +322,7 @@ jobs:
           D1_ID: ${{ steps.d1.outputs.primary }}
           D1_TELEMETRY_ID: ${{ steps.d1.outputs.telemetry }}
           D1_SANDBOX_ID: ${{ steps.d1.outputs.sandbox }}
+          D1_AUDIT_ID: ${{ steps.d1.outputs.audit }}
           WORKERS_SUBDOMAIN: ${{ vars.CLOUDFLARE_WORKERS_SUBDOMAIN }}
           GITHUB_APP_ID: ${{ vars.PREVIEW_GITHUB_APP_ID }}
         run: |
@@ -336,7 +339,7 @@ jobs:
           # the shell should expand.
           # shellcheck disable=SC2016
           envsubst \
-            '${PR_NUMBER} ${D1_ID} ${D1_TELEMETRY_ID} ${D1_SANDBOX_ID} ${WORKERS_SUBDOMAIN} ${EXECUTOR_IMAGE} ${GITHUB_APP_ID}' \
+            '${PR_NUMBER} ${D1_ID} ${D1_TELEMETRY_ID} ${D1_SANDBOX_ID} ${D1_AUDIT_ID} ${WORKERS_SUBDOMAIN} ${EXECUTOR_IMAGE} ${GITHUB_APP_ID}' \
             < deploy/preview/cloudflare/wrangler.preview.template.toml \
             > deploy/backend/wrangler.pr.toml
           # A leftover placeholder would deploy a Worker bound to a database that does not
@@ -359,7 +362,7 @@ jobs:
           PR: ${{ steps.id.outputs.pr }}
         run: |
           set -euo pipefail
-          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox"; do
+          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox" "cat_factory_pr_${PR}_audit"; do
             pnpm exec wrangler d1 migrations apply "$db" --remote -c wrangler.pr.toml
           done
 
@@ -562,7 +565,7 @@ jobs:
           # erroring against missing bindings.
           pnpm exec wrangler delete --name "cat-factory-pr-${PR}" --force || \
             echo "Worker cat-factory-pr-${PR} already absent."
-          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox"; do
+          for db in "cat_factory_pr_${PR}" "cat_factory_pr_${PR}_telemetry" "cat_factory_pr_${PR}_sandbox" "cat_factory_pr_${PR}_audit"; do
             pnpm exec wrangler d1 delete "$db" --skip-confirmation || \
               echo "D1 database ${db} already absent."
           done

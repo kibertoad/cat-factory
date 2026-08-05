@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
  * @param signals the {@code signals} field.
  * @param sinks the {@code sinks} field.
  * @param steps the {@code steps} field.
+ * @param toolCalls the {@code toolCalls} field.
  * @param version the {@code version} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -38,6 +39,8 @@ public record DebugRunOverview(
     @JsonProperty("sinks") DebugRunOverviewSinks sinks,
 
     @JsonProperty("steps") List<DebugRunStep> steps,
+
+    @JsonProperty("toolCalls") DebugRunOverviewToolCalls toolCalls,
 
     @JsonProperty("version") Object version
 ) {
@@ -62,6 +65,7 @@ public record DebugRunOverview(
         private @Nullable List<DebugRunSignal> signals;
         private @Nullable DebugRunOverviewSinks sinks;
         private @Nullable List<DebugRunStep> steps;
+        private @Nullable DebugRunOverviewToolCalls toolCalls;
         private @Nullable Object version;
 
         /** Set {@code diagnostics}. */
@@ -112,6 +116,12 @@ public record DebugRunOverview(
             return this;
         }
 
+        /** Set {@code toolCalls}. */
+        public Builder toolCalls(@Nullable DebugRunOverviewToolCalls toolCalls) {
+            this.toolCalls = toolCalls;
+            return this;
+        }
+
         /** Set {@code version}. */
         public Builder version(@Nullable Object version) {
             this.version = version;
@@ -120,7 +130,7 @@ public record DebugRunOverview(
 
         /** Build the {@link DebugRunOverview}. */
         public DebugRunOverview build() {
-            return new DebugRunOverview(diagnostics, generatedAt, kind, llm, run, signals, sinks, steps, version);
+            return new DebugRunOverview(diagnostics, generatedAt, kind, llm, run, signals, sinks, steps, toolCalls, version);
         }
     }
 }
