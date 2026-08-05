@@ -2,6 +2,7 @@ import type {
   AgentToolCall,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -120,6 +121,10 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
+    if (query.ok !== undefined) {
+      clauses.push('ok = ?')
+      binds.push(query.ok ? 1 : 0)
+    }
     binds.push(query.limit)
     const { results } = await this.db
       .prepare(
@@ -139,6 +144,10 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
     if (query.jobId) {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
+    }
+    if (query.ok !== undefined) {
+      clauses.push('ok = ?')
+      binds.push(query.ok ? 1 : 0)
     }
     if (query.cursor) {
       // Composite keyset matching the ORDER BY, so rows sharing a `created_at` millisecond are
@@ -160,14 +169,30 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
     return (results ?? []).map(rowToCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
-    const row = await this.db
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AgentToolCallSummary[]> {
+    // One GROUP BY over the run's rows on `idx_agent_tool_calls_execution`, reading neither
+    // body column. The failures are summed in SQL beside the count rather than counted by a
+    // second query or reduced in JS: two aggregates over one population are two chances to
+    // disagree about it, and pulling the rows back to count them here is what this method
+    // exists to avoid.
+    const { results } = await this.db
       .prepare(
-        'SELECT COUNT(*) AS n FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?',
+        `SELECT agent_kind, tool, COUNT(*) AS calls, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures
+         FROM agent_tool_calls
+         WHERE workspace_id = ? AND execution_id = ?
+         GROUP BY agent_kind, tool`,
       )
       .bind(workspaceId, executionId)
-      .first<{ n: number }>()
-    return row?.n ?? 0
+      .all<{ agent_kind: string; tool: string; calls: number; failures: number }>()
+    return (results ?? []).map((row) => ({
+      agentKind: row.agent_kind,
+      tool: row.tool,
+      calls: Number(row.calls),
+      failures: Number(row.failures ?? 0),
+    }))
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

@@ -5,6 +5,7 @@ import type {
   Logger,
   McpSecretRef,
   McpServerDefinition,
+  McpOAuthTokenSource,
   ResolvedToolServer,
   ToolSecretResolver,
   UnavailableToolServer,
@@ -85,6 +86,13 @@ export interface ResolveToolServersInput {
   blockId?: string
   /** Facade-wired; absent ⇒ a server declaring a required secret is dropped, never run blind. */
   resolveToolSecrets?: ToolSecretResolver
+  /**
+   * Facade-wired mint for an OAuth-authenticated remote server's access token. Absent ⇒ the
+   * deployment has no grant store (it needs `ENCRYPTION_KEY`), and every server declaring `oauth`
+   * is stated as `oauth_not_connected` rather than dispatched without its `Authorization` header —
+   * which would surface as the server 401ing in the middle of a run, after the prompt promised it.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
   logger?: Logger
 }
 
@@ -152,8 +160,13 @@ export async function resolveToolServers(
       unavailableToolServers.push({ id: definition.id, label, reason: secrets.reason })
       continue
     }
+    const oauth = await resolveOAuthHeader(input, definition)
+    if (!oauth.ok) {
+      unavailableToolServers.push({ id: definition.id, label, reason: oauth.reason })
+      continue
+    }
     const allowedTools = sanitizeAllowedTools(input, definition)
-    const spec = buildJobSpec(definition, secrets.values, allowedTools)
+    const spec = buildJobSpec(definition, secrets.values, allowedTools, oauth.header)
     // Measured on the RESOLVED spec, because that is the thing the job body carries: a
     // declaration's size says nothing about the env map its credentials fold into. Boot validation
     // measures the declaration alone (`toolServerDeclaredBytes`), which is a floor on this.
@@ -322,6 +335,66 @@ async function resolveSecrets(
   return { ok: true, values: resolved }
 }
 
+/** Either the resolved OAuth header, or the reason the server must be dropped. */
+type OAuthResolution =
+  | { ok: true; header?: { name: string; value: string } }
+  | { ok: false; reason: 'oauth_not_connected' | 'oauth_token_failed' }
+
+/**
+ * Mint the access token an OAuth-declaring server needs, as the header its declaration named.
+ *
+ * A server with no `oauth` resolves trivially without consulting the source at all, which is what
+ * keeps every existing declaration byte-for-byte on the path it already took.
+ *
+ * The three failure dispositions are the whole point of this being separate from
+ * {@link resolveSecrets}. A missing GRANT is not a missing credential: `oauth_not_connected` sends
+ * an operator to the Connect button, `missing_secret` sends them to the credential checklist, and
+ * only one of those rows exists. `oauth_token_failed` is kept apart from both because a grant that
+ * stopped producing tokens is the one state of the three that can be transient.
+ *
+ * An unwired source is `oauth_not_connected` rather than a silent pass: a deployment with no
+ * `ENCRYPTION_KEY` has nowhere to keep a grant, so nothing IS connected, and dispatching the server
+ * without its `Authorization` header would advertise a tool whose first call 401s.
+ */
+async function resolveOAuthHeader(
+  input: ResolveToolServersInput,
+  definition: McpServerDefinition,
+): Promise<OAuthResolution> {
+  const oauth = definition.oauth
+  if (!oauth) return { ok: true }
+  // Boot validation refuses the combination; this is the mothership case, where the definition was
+  // authored by a process that is not this one. A stdio server has no request to authorise, so
+  // there is nothing to mint and nothing to state beyond "this harness/transport cannot serve it".
+  if (definition.transport.kind !== 'http') return { ok: true }
+  const source = input.resolveToolServerOAuth
+  if (!source) {
+    input.logger?.warn('tool server declares oauth but no grant store is wired; stating it', {
+      agentKind: input.context.agentKind,
+      toolServerId: definition.id,
+    })
+    return { ok: false, reason: 'oauth_not_connected' }
+  }
+  const result = await source.accessToken({
+    workspaceId: input.workspaceId,
+    serverId: definition.id,
+    serverUrl: definition.transport.url,
+    oauth,
+  })
+  if (result.status === 'ok') {
+    return { ok: true, header: { name: result.header, value: result.value } }
+  }
+  input.logger?.warn('tool server oauth token unavailable; stating the server as unavailable', {
+    agentKind: input.context.agentKind,
+    toolServerId: definition.id,
+    status: result.status,
+    ...(result.status === 'token_failed' ? { detail: result.error } : {}),
+  })
+  return {
+    ok: false,
+    reason: result.status === 'not_connected' ? 'oauth_not_connected' : 'oauth_token_failed',
+  }
+}
+
 /**
  * Build the job-body spec, folding each resolved secret into the channel its declaration named:
  * an environment variable for a stdio server's child process, or a request header for an HTTP
@@ -336,6 +409,7 @@ function buildJobSpec(
   definition: McpServerDefinition,
   secrets: Record<string, string>,
   allowedTools: string[] | undefined,
+  oauthHeader?: { name: string; value: string },
 ): McpServerJobSpec {
   const allowed = allowedTools?.length ? { allowedTools } : {}
   if (definition.transport.kind === 'stdio') {
@@ -351,8 +425,21 @@ function buildJobSpec(
       ...secretKeyNames(credentials),
     }
   }
-  const credentials = headerSecrets(definition.secretKeys, secrets)
-  const headers = { ...definition.transport.headers, ...credentials }
+  // The OAuth header goes in LAST, so a granted access token wins over a static credential
+  // declared for the same header name. That collision is a declaration fault boot validation
+  // warns about, and the resolution has to be one of the two: silently keeping the static value
+  // would send a stale token that the vendor's own consent screen has just been used to replace.
+  //
+  // "The same header name" is decided CASE-INSENSITIVELY, because HTTP header names are, and
+  // because that is the rule boot validation warns under. A plain object spread would compare them
+  // as strings instead, so a declaration pairing `authorization` with the default `Authorization`
+  // would produce two entries, both would go out, and the win the comment above describes would
+  // silently not happen, on a collision the WARNING said was resolved.
+  const credentials = mergeHeaders(
+    headerSecrets(definition.secretKeys, secrets),
+    oauthHeader ? { [oauthHeader.name]: oauthHeader.value } : {},
+  )
+  const headers = mergeHeaders(definition.transport.headers ?? {}, credentials)
   return {
     id: definition.id,
     transport: 'http',
@@ -361,6 +448,31 @@ function buildJobSpec(
     ...allowed,
     ...secretKeyNames(credentials),
   }
+}
+
+/**
+ * Fold `overrides` onto `base` with header names compared case-insensitively, keeping the SPELLING
+ * the override used.
+ *
+ * Object spread is the wrong tool for a header map: `{...{authorization: a}, ...{Authorization: b}}`
+ * keeps both, and every one of them is sent. Wherever this platform decides one header value must
+ * WIN over another (a granted OAuth token over a static credential; a resolved credential over a
+ * declaration's own header), that decision has to be made under HTTP's own equality rule or it is
+ * not made at all.
+ */
+export function mergeHeaders(
+  base: Record<string, string>,
+  overrides: Record<string, string>,
+): Record<string, string> {
+  const merged: Record<string, string> = { ...base }
+  for (const [name, value] of Object.entries(overrides)) {
+    for (const existing of Object.keys(merged)) {
+      if (existing !== name && existing.toLowerCase() === name.toLowerCase())
+        delete merged[existing]
+    }
+    merged[name] = value
+  }
+  return merged
 }
 
 /**
@@ -484,4 +596,64 @@ export function createEnvToolSecretResolver(
       return out
     },
   }
+}
+
+/** The executor-side deps a dispatch's tool-server resolution binds onto. */
+export interface DispatchToolServerDeps {
+  agentKindRegistry: AgentKindRegistry
+  resolveToolSecrets?: ToolSecretResolver
+  resolveToolServerOAuth?: McpOAuthTokenSource
+  logger?: Logger
+}
+
+/**
+ * Pick exactly the four things {@link resolveDispatchToolServers} needs out of a wider executor
+ * dependency bag.
+ *
+ * Here rather than spread at the call site (`{...this.deps, agentKindRegistry}`), which typechecks
+ * against a structural parameter and quietly hands this seam every unrelated field the executor
+ * holds. Naming them keeps the seam's surface honest and puts the next credential channel's wiring
+ * in one place, the same reason the binding function itself lives beside what it binds.
+ */
+export function dispatchToolServerDeps(
+  deps: {
+    resolveToolSecrets?: ToolSecretResolver | undefined
+    resolveToolServerOAuth?: McpOAuthTokenSource | undefined
+    logger?: Logger | undefined
+  },
+  agentKindRegistry: AgentKindRegistry,
+): DispatchToolServerDeps {
+  return {
+    agentKindRegistry,
+    ...(deps.resolveToolSecrets ? { resolveToolSecrets: deps.resolveToolSecrets } : {}),
+    ...(deps.resolveToolServerOAuth ? { resolveToolServerOAuth: deps.resolveToolServerOAuth } : {}),
+    ...(deps.logger ? { logger: deps.logger } : {}),
+  }
+}
+
+/**
+ * Bind an executor's injected deps onto {@link resolveToolServers} for one dispatch.
+ *
+ * A function HERE rather than a method on the executor, because every dep it threads is optional
+ * and the conditional spreads that express that are what the executor's own file has no room for:
+ * it sits at the file-size ratchet, and this is the seam a capability addition keeps widening (each
+ * new credential channel is another optional field plus its spread). Keeping the binding beside the
+ * thing it binds means the next one lands here instead.
+ */
+export function resolveDispatchToolServers(
+  deps: DispatchToolServerDeps,
+  context: AgentRunContext,
+  args: { harness: HarnessKind; ambientAuth: boolean; workspaceId: string; blockId: string },
+): Promise<ResolvedToolServers> {
+  return resolveToolServers({
+    context,
+    agentKindRegistry: deps.agentKindRegistry,
+    harness: args.harness,
+    ...(args.ambientAuth ? { ambientAuth: true } : {}),
+    workspaceId: args.workspaceId,
+    blockId: args.blockId,
+    ...(deps.resolveToolSecrets ? { resolveToolSecrets: deps.resolveToolSecrets } : {}),
+    ...(deps.resolveToolServerOAuth ? { resolveToolServerOAuth: deps.resolveToolServerOAuth } : {}),
+    ...(deps.logger ? { logger: deps.logger } : {}),
+  })
 }

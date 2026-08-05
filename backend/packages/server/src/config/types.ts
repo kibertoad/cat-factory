@@ -88,8 +88,47 @@ export interface GoogleOAuthConfig {
   apiBase?: string
 }
 
+/**
+ * The deployment's OWN identity provider (enterprise SSO), present only when configured.
+ *
+ * One generic OpenID Connect adapter serves every enterprise IdP — Okta, Entra ID, Auth0,
+ * Keycloak, PingFederate, OneLogin, JumpCloud, a Shibboleth IdP with the OIDC OP plugin —
+ * because a discovery document plus a client id/secret IS the configuration. There is
+ * deliberately no per-vendor field here: a vendor name would only ever be a label.
+ *
+ * Built by {@link resolveSsoConfig}, which both facades call, so the parsing and every boot
+ * refusal live in ONE place rather than being restated per runtime.
+ */
+export interface SsoConfig {
+  /**
+   * The issuer / discovery base URL as the operator typed it (`AUTH_SSO_ISSUER_URL`). The
+   * DISCOVERED `issuer` is authoritative for everything downstream (the identity subject, the
+   * `iss` check); this value only locates the document and keys its cache entry.
+   */
+  issuerUrl: string
+  clientId: string
+  clientSecret: string
+  /** Operator-supplied sign-in button label. Never localized: it names their IdP. */
+  label: string
+  /** Space-separated scopes requested. Always contains `openid`. */
+  scopes: string
+  /** Explicit redirect_uri; '' means derive `${origin}/auth/sso/callback`. */
+  redirectUrl: string
+  /**
+   * Lowercased email domains admitted. EMPTY is the normal, correct state and means the IdP's
+   * own app assignment is the whole allowlist — which is the point of SSO, and why this is not
+   * fail-closed the way the GitHub login/org lists are: refusing everyone until an operator
+   * restates their directory here would defeat the feature they adopted SSO to get.
+   */
+  allowedEmailDomains: string[]
+  /** The claim holding group memberships (`groups` by default; Entra/Shibboleth vary). */
+  groupsClaim: string
+  /** Lowercased group values admitted. Empty ⇒ no group gate. */
+  requiredGroups: string[]
+}
+
 export interface AuthConfig {
-  /** True when ANY login provider (GitHub OAuth / password / Google) is configured. */
+  /** True when ANY login provider (GitHub OAuth / password / Google / SSO) is configured. */
   enabled: boolean
   /** Local-dev/test ONLY: permit running with auth unconfigured (open API). */
   devOpen: boolean
@@ -139,6 +178,8 @@ export interface AuthConfig {
   openSignup: boolean
   /** Google OAuth config, present only when configured. */
   google?: GoogleOAuthConfig
+  /** Enterprise SSO (generic OIDC) config, present only when configured. */
+  sso?: SsoConfig
   /**
    * Lowercased email domains permitted to self-signup (password/Google) without an
    * invite. Empty ⇒ new-user creation is invite-only (the default, fail-closed).

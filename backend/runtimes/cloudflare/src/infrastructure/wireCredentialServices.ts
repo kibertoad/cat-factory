@@ -15,6 +15,8 @@ import {
   TestSecretsService,
   CAPABILITY_CREDENTIALS_CIPHER_INFO,
   CapabilityCredentialsService,
+  MCP_OAUTH_CIPHER_INFO,
+  McpOAuthService,
   UserSecretService,
   ValidationConfigService,
   type UserSecretKindRegistry,
@@ -27,6 +29,7 @@ import { baseUrlFor } from './ai/providerEndpoints'
 import { WebCryptoSecretCipher } from './environments/WebCryptoSecretCipher'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
 import { D1CapabilityCredentialRepository } from './repositories/D1CapabilityCredentialRepository'
+import { D1McpOAuthGrantRepository } from './repositories/D1McpOAuthGrantRepository'
 import { D1TestSecretsRepository } from './repositories/D1TestSecretsRepository'
 import { D1ValidationConfigRepository } from './repositories/D1ValidationConfigRepository'
 import { D1ProviderSubscriptionTokenRepository } from './repositories/D1ProviderSubscriptionTokenRepository'
@@ -289,6 +292,33 @@ export function buildCapabilityCredentialsService(
     secretCipher: new WebCryptoSecretCipher({
       masterKeyBase64: encryptionKey,
       info: CAPABILITY_CREDENTIALS_CIPHER_INFO,
+    }),
+    clock,
+  })
+}
+
+/**
+ * Build the PER-WORKSPACE MCP OAUTH GRANT store (sealed), or undefined when the shared encryption
+ * key is absent. Backs the tool-server connect/disconnect routes, the inventory's connection
+ * state, AND the dispatch-time token source the executor mints an `Authorization` header from.
+ *
+ * Absent is a real deployment shape rather than a broken one: a Worker with no ENCRYPTION_KEY has
+ * nowhere to keep a grant, so every OAuth-declaring server is stated to its agent as
+ * `oauth_not_connected` instead of dispatched without a token. Stateless, so building a fresh
+ * instance per call site is safe (mirrors the sealed stores above).
+ */
+export function buildMcpOAuthService(
+  env: Env,
+  db: D1Database,
+  clock: Clock,
+): McpOAuthService | undefined {
+  const encryptionKey = env.ENCRYPTION_KEY?.trim()
+  if (!encryptionKey) return undefined
+  return new McpOAuthService({
+    mcpOAuthGrantRepository: new D1McpOAuthGrantRepository({ db }),
+    secretCipher: new WebCryptoSecretCipher({
+      masterKeyBase64: encryptionKey,
+      info: MCP_OAUTH_CIPHER_INFO,
     }),
     clock,
   })

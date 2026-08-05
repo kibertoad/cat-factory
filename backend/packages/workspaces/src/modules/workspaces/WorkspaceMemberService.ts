@@ -5,6 +5,8 @@ import type {
   Workspace,
 } from '@cat-factory/kernel'
 import type {
+  AuditActor,
+  AuditRecorder,
   GroupCacheHandle,
   MembershipRepository,
   UserRepository,
@@ -14,7 +16,13 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import type { Clock } from '@cat-factory/kernel'
-import { NotFoundError, ValidationError, assertFound, requireWorkspace } from '@cat-factory/kernel'
+import {
+  NotFoundError,
+  ValidationError,
+  assertFound,
+  noopAuditRecorder,
+  requireWorkspace,
+} from '@cat-factory/kernel'
 
 // ---------------------------------------------------------------------------
 // WorkspaceMemberService: the roster + access-mode management for the workspace-RBAC
@@ -48,6 +56,12 @@ export interface WorkspaceMemberServiceDependencies {
    * ⇒ the write skips invalidation (the gate reads live).
    */
   workspaceAccessCache?: GroupCacheHandle<WorkspaceAccessCacheValue>
+  /**
+   * Where roster and access-mode changes are recorded for an account admin to read back.
+   * Optional so the service stays unit-testable standalone (normalised once to
+   * `noopAuditRecorder`); REQUIRED on `CoreDependencies`, so a facade cannot run unaudited.
+   */
+  audit?: AuditRecorder
 }
 
 /** Manages a board's explicit member roster and its account/restricted access mode. */
@@ -58,6 +72,7 @@ export class WorkspaceMemberService {
   private readonly clock: Clock
   private readonly users?: UserRepository
   private readonly cache?: GroupCacheHandle<WorkspaceAccessCacheValue>
+  private readonly audit: AuditRecorder
 
   constructor(deps: WorkspaceMemberServiceDependencies) {
     this.members = deps.workspaceMemberRepository
@@ -66,6 +81,20 @@ export class WorkspaceMemberService {
     this.clock = deps.clock
     this.users = deps.userRepository
     this.cache = deps.workspaceAccessCache
+    this.audit = deps.audit ?? noopAuditRecorder
+  }
+
+  /**
+   * The acting principal for an audit event, or null when there is none to name.
+   *
+   * Null happens on exactly one path: `AUTH_DEV_OPEN`, where no session is resolved and the whole
+   * authorization model is bypassed. That case records NOTHING rather than falling back to
+   * `system`, because `system` asserts the engine acted with no human in the loop and a human
+   * plainly did. An unaudited write with auth disabled is a property of running with auth
+   * disabled; a misattributed one would be a defect in the log.
+   */
+  private actorOf(actingUserId: string | null): AuditActor | null {
+    return actingUserId ? { kind: 'user', userId: actingUserId } : null
   }
 
   /**
@@ -118,6 +147,18 @@ export class WorkspaceMemberService {
       : { workspaceId, userId, role, createdAt: this.clock.now(), addedByUserId }
     await this.members.upsert(record)
     await this.invalidate(workspaceId)
+    const actor = this.actorOf(addedByUserId)
+    if (actor) {
+      await this.audit.record({
+        accountId,
+        workspaceId,
+        actor,
+        action: 'workspace.member_added',
+        targetType: 'user',
+        targetId: userId,
+        details: { role },
+      })
+    }
     return toWire(record)
   }
 
@@ -126,19 +167,57 @@ export class WorkspaceMemberService {
     workspaceId: string,
     userId: string,
     role: WorkspaceRole,
+    actingUserId: string | null,
   ): Promise<WorkspaceMember> {
     const existing = await this.members.get(workspaceId, userId)
     if (!existing) throw new NotFoundError('Workspace member', userId)
+    const actor = this.actorOf(actingUserId)
+    // The board's account, read back rather than assumed: a roster write is only reachable on an
+    // account-scoped board, but the audit event is account-keyed and guessing the scope is how a
+    // row lands where no admin will ever read it. Resolved BEFORE the write, because this read can
+    // refuse (see {@link accountIdOf}) and a refusal after the upsert would report a failure for a
+    // change that had already committed.
+    const accountId = actor ? await this.accountIdOf(workspaceId) : null
     const record: WorkspaceMemberRecord = { ...existing, role }
     await this.members.upsert(record)
     await this.invalidate(workspaceId)
+    if (actor && accountId) {
+      await this.audit.record({
+        accountId,
+        workspaceId,
+        actor,
+        action: 'workspace.member_role_changed',
+        targetType: 'user',
+        targetId: userId,
+        details: { previousRole: existing.role, role },
+      })
+    }
     return toWire(record)
   }
 
   /** Remove a member's row. Idempotent (removing an absent row is a no-op). */
-  async remove(workspaceId: string, userId: string): Promise<void> {
+  async remove(workspaceId: string, userId: string, actingUserId: string | null): Promise<void> {
+    // Read the row BEFORE the delete: after it there is nothing left to say what was removed, and
+    // an idempotent no-op must not produce an event claiming a member was removed.
+    const existing = await this.members.get(workspaceId, userId)
+    const actor = this.actorOf(actingUserId)
+    // Also before the delete, and for the second reason given on {@link setRole}: this read can
+    // refuse, and refusing after the row is gone would report a failure for a removal that
+    // happened. An absent row audits nothing, so it resolves nothing either.
+    const accountId = actor && existing ? await this.accountIdOf(workspaceId) : null
     await this.members.remove(workspaceId, userId)
     await this.invalidate(workspaceId)
+    if (actor && existing && accountId) {
+      await this.audit.record({
+        accountId,
+        workspaceId,
+        actor,
+        action: 'workspace.member_removed',
+        targetType: 'user',
+        targetId: userId,
+        details: { role: existing.role },
+      })
+    }
   }
 
   /**
@@ -148,11 +227,47 @@ export class WorkspaceMemberService {
    * flip only means something once the board is account-scoped. Invalidates the access cache — the
    * mode is a direct input to resolution for every user.
    */
-  async setAccessMode(workspaceId: string, mode: WorkspaceAccessMode): Promise<Workspace> {
-    await this.ensureAccountScoped(workspaceId)
+  async setAccessMode(
+    workspaceId: string,
+    mode: WorkspaceAccessMode,
+    actingUserId: string | null,
+  ): Promise<Workspace> {
+    const accountId = await this.ensureAccountScoped(workspaceId)
     await this.workspaces.setAccessMode(workspaceId, mode)
     await this.invalidate(workspaceId)
+    const actor = this.actorOf(actingUserId)
+    if (actor) {
+      await this.audit.record({
+        accountId,
+        workspaceId,
+        actor,
+        action: 'workspace.access_mode_changed',
+        targetType: 'workspace',
+        targetId: workspaceId,
+        details: { accessMode: mode },
+      })
+    }
     return requireWorkspace(this.workspaces, workspaceId)
+  }
+
+  /**
+   * The board's owning account id, for keying an audit event. Unlike {@link ensureAccountScoped}
+   * this NEVER heals: it is only reached from a roster write that already found a member row, and
+   * a member row can only exist on an account-scoped board. A board that is somehow unscoped here
+   * throws rather than inventing a scope, because an audit row filed under the wrong account is
+   * one no admin will ever read. Callers resolve it BEFORE their write, so that refusal costs the
+   * write rather than arriving after it.
+   */
+  private async accountIdOf(workspaceId: string): Promise<string> {
+    const row = assertFound(
+      await this.workspaces.accessRowOf(workspaceId),
+      'Workspace',
+      workspaceId,
+    )
+    if (row.accountId === null) {
+      throw new ValidationError('This board is not linked to an account')
+    }
+    return row.accountId
   }
 
   /**

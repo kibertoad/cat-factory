@@ -47,6 +47,16 @@ binding = "PROVISIONING_DB"
 database_name = "cat_factory_provisioning"
 migrations_dir = "migrations-provisioning"
 
+# Dedicated database for the account audit log. Separate not for write profile (it is
+# low-volume) but for RETENTION: it is the only table that grows with run volume AND wants a
+# multi-year window, so on a 10 GB-per-database store it must not share the transactional
+# budget. REQUIRED, like TELEMETRY_DB — an unbound binding would mean "no audit", which is
+# indistinguishable from "nothing privileged happened".
+[[d1_databases]]
+binding = "AUDIT_DB"
+database_name = "cat_factory_audit"
+migrations_dir = "audit-migrations"
+
 # Workers AI binding. Tests inject a FakeAgentExecutor and never touch env.AI
 # (vitest.config.ts sets remoteBindings:false); declared so the binding shape
 # matches production.

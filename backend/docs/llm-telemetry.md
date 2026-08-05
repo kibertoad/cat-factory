@@ -168,6 +168,15 @@ the backend drains a window's worth on its existing job poll and sends it to two
 - **`bodies` says whether they were retained at all.** A withheld body and a tool that genuinely
   took no arguments both leave `args` empty, and without the field an opted-out workspace's
   trajectory reads as a run whose every tool took none.
+- **The failures are AGGREGATED, at the `(agentKind, tool)` grain.** A tool-execution failure is
+  a healthy model call whose result came back bad, so it is invisible in every LLM rollup and a
+  run-level count of the rows says nothing on its own: 34 failures out of 36 calls and out of
+  3,600 are the same number and opposite diagnoses. `summarizeByExecution` is the one GROUP BY,
+  and the run's total, both breakdowns and the debug overview's `sinks.toolCalls.count` are folds
+  over it (kernel `domain/tool-call-rollup.ts`) rather than a second query, on the same rule the
+  LLM rollup follows. The grain keeps BOTH halves because the finding is the CONCENTRATION: one
+  agent kind retrying one tool is a stuck loop, and the same count scattered across nine tools is
+  an agent exploring. `?ok=` narrows the rows behind any of it, in SQL.
 - **The gate is applied ONCE, at the drain** (`toolTrajectory.ts`), not in either destination:
   the store and the external trace sinks receive the same already-gated batch. Reading it per
   destination is how a body withheld from the store gets shipped to Langfuse anyway.

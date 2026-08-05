@@ -1,4 +1,4 @@
-import type { ConfigProblem } from '@cat-factory/contracts'
+import type { AuthProvidersConfig, ConfigProblem } from '@cat-factory/contracts'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { CORS_ALLOWED_HEADERS, CORS_EXPOSED_HEADERS } from '../http/cors.js'
@@ -27,7 +27,20 @@ import { mountRequestLogging } from '../http/requestLogging.js'
 // (failed) config load ever resolved CORS_ALLOWED_ORIGINS / ENVIRONMENT.
 // ---------------------------------------------------------------------------
 
-const AUTH_DISABLED_PROVIDERS = { github: false, password: false, google: false }
+/**
+ * Every login provider reported OFF, for the fallback `/auth/config`.
+ *
+ * Typed against the contract's own providers shape rather than left as an inferred literal: this
+ * response is hand-built with `Response.json` (the fallback app has no contract-typed route
+ * layer), so nothing else would notice a provider added to the vocabulary and missing here — the
+ * SPA would simply read `undefined` for it and render whatever that coerces to.
+ */
+const AUTH_DISABLED_PROVIDERS: AuthProvidersConfig['providers'] = {
+  github: false,
+  password: false,
+  google: false,
+  sso: false,
+}
 
 /**
  * Build the Response for one request against the fallback backend, keyed off the URL pathname.

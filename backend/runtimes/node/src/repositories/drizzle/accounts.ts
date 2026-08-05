@@ -11,6 +11,9 @@ import type {
   AccountRepository,
   AccountRole,
   AccountSettingsPatch,
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
   AuthAttemptRecord,
   AuthAttemptRepository,
   CloudProvider,
@@ -31,12 +34,20 @@ import type {
   UserRecord,
   UserRepository,
 } from '@cat-factory/kernel'
-import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import {
+  auditEventColumns,
+  auditPageLimit,
+  decodeAuditCursor,
+  encodeAuditCursor,
+  rowToAuditEventView,
+} from '@cat-factory/kernel'
+import { and, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   accountInvitations,
   accounts,
+  auditEvents,
   authAttempts,
   emailConnections,
   machineNodes,
@@ -577,6 +588,51 @@ export class DrizzleMachineNodeRepository implements MachineNodeRepository {
   async deleteExpired(before: number): Promise<number> {
     const result = await this.db.delete(machineNodes).where(lt(machineNodes.expires_at, before))
     return result.rowCount ?? 0
+  }
+}
+
+/** Postgres append-only account audit log. Mirror of the D1 repo. */
+export class DrizzleAuditEventRepository implements AuditEventRepository {
+  constructor(private readonly db: DrizzleDb) {}
+
+  async append(event: AuditEventRecord): Promise<void> {
+    // No conflict clause: an id collision is an id-generator bug, and quietly folding one append
+    // onto another would lose an audited action, the one outcome this table exists to prevent.
+    await this.db.insert(auditEvents).values(auditEventColumns(event))
+  }
+
+  async listByAccount(
+    accountId: string,
+    options?: { cursor?: string | null; limit?: number },
+  ): Promise<AuditEventPage> {
+    const limit = auditPageLimit(options?.limit)
+    const after = decodeAuditCursor(options?.cursor)
+    // One extra row tells us whether another page exists, with no second COUNT query. The keyset
+    // predicate is the (at, id) pair, matching the index's ordering exactly: an OFFSET would
+    // re-read every earlier row and skip a row that arrived mid-pagination.
+    const rows = await this.db
+      .select()
+      .from(auditEvents)
+      .where(
+        after
+          ? and(
+              eq(auditEvents.account_id, accountId),
+              or(
+                lt(auditEvents.at, after.at),
+                and(eq(auditEvents.at, after.at), lt(auditEvents.id, after.id)),
+              ),
+            )
+          : eq(auditEvents.account_id, accountId),
+      )
+      .orderBy(desc(auditEvents.at), desc(auditEvents.id))
+      .limit(limit + 1)
+
+    const page = rows.slice(0, limit).map(rowToAuditEventView)
+    const last = page.at(-1)
+    return {
+      events: page,
+      nextCursor: rows.length > limit && last ? encodeAuditCursor(last) : null,
+    }
   }
 }
 

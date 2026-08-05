@@ -1,5 +1,8 @@
+import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import { createMisconfiguredApp } from '../src/config/misconfiguredApp.js'
+import { authController } from '../src/modules/auth/AuthController.js'
+import type { AppEnv, ServerContainer } from '../src/http/env.js'
 import { REQUEST_ID_HEADER } from '../src/http/requestLogging.js'
 import {
   ConfigValidationError,
@@ -234,6 +237,37 @@ describe('createMisconfiguredApp', () => {
     }
     expect(body.enabled).toBe(false)
     expect(body.misconfigured.problems).toEqual(PROBLEMS)
+  })
+
+  it('reports the SAME provider keys the real /auth/config does, all off', async () => {
+    // The fallback response is hand-built with `Response.json`, so it has no contract-typed route
+    // layer to hold it to the live shape. The typed constant catches a MISSING key; what it cannot
+    // catch is the two endpoints disagreeing, and the SPA gates each login control on one of these
+    // booleans — a key absent here reads as `undefined` and renders whatever that coerces to.
+    // Derived from the real controller's own answer rather than a hand-listed set, so a provider
+    // added later needs no edit in this test.
+    const live = new Hono<AppEnv>()
+    live.use('*', async (c, next) => {
+      c.set('container', {
+        // An unconfigured deployment: every provider flag off, so the live route reports the same
+        // all-false shape the fallback hand-builds.
+        config: { auth: { enabled: false, githubEnabled: false, passwordEnabled: false } },
+      } as unknown as ServerContainer)
+      await next()
+    })
+    live.route('/auth', authController())
+    const liveBody = (await (await live.request('http://x/auth/config')).json()) as {
+      providers: Record<string, unknown>
+    }
+    const fallbackBody = (await (await app.request('http://x/auth/config')).json()) as {
+      providers: Record<string, unknown>
+    }
+    expect(Object.keys(fallbackBody.providers).sort()).toEqual(
+      Object.keys(liveBody.providers).sort(),
+    )
+    expect(Object.values(fallbackBody.providers)).toEqual(
+      Object.values(fallbackBody.providers).map(() => false),
+    )
   })
 
   it('reports misconfigured on /health but stays 200 (no crash-loop)', async () => {

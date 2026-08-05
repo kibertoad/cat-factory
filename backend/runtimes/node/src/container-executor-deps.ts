@@ -32,6 +32,7 @@ import type {
   StoreAgentContextGate,
   SubscriptionQuotaTarget,
   TestSecretEntry,
+  McpOAuthTokenSource,
   ToolSecretResolver,
   WebSearchAvailability,
 } from '@cat-factory/kernel'
@@ -271,6 +272,19 @@ export interface NodeContainerExecutorDeps {
    * plus the description the credential checklist renders.
    */
   resolveToolSecrets: ToolSecretResolver
+  /**
+   * Mint the ACCESS TOKEN an OAuth-authenticated remote tool server needs. Built at the
+   * composition root beside {@link resolveToolSecrets}, from the sealed grant store and that same
+   * credential chain (the chain is what resolves the OAuth CLIENT SECRET).
+   *
+   * OPTIONAL where its neighbour is required, and the asymmetry is real rather than an oversight:
+   * the credential chain always exists (a deployment with nothing configured still has an
+   * environment to read), while the grant store needs `ENCRYPTION_KEY` and genuinely may not.
+   * Absent, a dispatch states an OAuth server to its agent as `oauth_not_connected`, which is the
+   * true description of a deployment with nowhere to keep a grant — so this default fails CLOSED,
+   * which is what makes it safe to be optional.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
   recordHarnessCalls?: (input: HarnessCallsRecordInput) => Promise<void>
   /** The tool-call trajectory drain's two halves; see `@cat-factory/server`'s `toolTrajectory.ts`. */
   recordToolCalls?: (input: ToolCallsRecordInput) => Promise<void>
@@ -302,6 +316,7 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     resolvePackageRegistries,
     resolveTestSecrets,
     resolveToolSecrets,
+    resolveToolServerOAuth,
     recordHarnessCalls,
     recordToolCalls,
     toolBodyGate,
@@ -458,6 +473,10 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     // there is no default here to fall back to, because the only one available (this node's
     // environment alone) would drop the per-workspace store without saying so.
     resolveToolSecrets,
+    // Mint an OAuth-authenticated remote tool server's access token, refreshing it when the stored
+    // one is spent. Absent ⇒ this deployment has no grant store, and the server is stated as
+    // unavailable rather than dispatched without its Authorization header.
+    ...(resolveToolServerOAuth ? { resolveToolServerOAuth } : {}),
     logger,
     githubApiBase: config.github.apiBase,
     // Resolve the clone URL + provider per repo. The local GitLab facade injects a GitLab

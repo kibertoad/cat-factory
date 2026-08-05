@@ -7,6 +7,7 @@ import {
   signupSchema,
 } from '../auth.js'
 import { backendMisconfiguredSchema } from '../config.js'
+import { ssoConfigViewSchema } from '../sso.js'
 import { errorResponses, singleStringParam } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -158,7 +159,18 @@ const authConfigViewSchema = v.object({
     github: v.boolean(),
     password: v.boolean(),
     google: v.boolean(),
+    /**
+     * Whether the deployment's OWN identity provider (enterprise SSO) is configured. Reported
+     * as a boolean beside its siblings so "which controls do I render" stays one uniform read;
+     * the operator's button label rides the `sso` object below, because only that varies.
+     */
+    sso: v.boolean(),
   }),
+  /**
+   * Presentation for the configured SSO provider (its operator-supplied label + protocol).
+   * Present exactly when `providers.sso` is true.
+   */
+  sso: v.optional(ssoConfigViewSchema),
   localMode: v.optional(localModeConfigSchema),
   /**
    * Source-control PAT login offered on a HOSTED facade (remote node): the user pastes their
@@ -238,6 +250,26 @@ export const googleLoginContract = defineApiContract({
 export const googleCallbackContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/google/callback',
+  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+})
+
+// ---- Enterprise SSO (browser redirect) ------------------------------------
+
+// The deployment's OWN identity provider. One pair of routes serves every OIDC IdP — Okta,
+// Entra ID, Auth0, Keycloak, PingFederate, a Shibboleth OP — because the provider is resolved
+// from its discovery document at runtime, not from a per-vendor code path. Both legs are pure
+// browser redirects (session token in the fragment on success, a machine-readable
+// `#sso_error=<reason>` on refusal), so their success is `ContractNoBody` like the OAuth pair.
+
+export const ssoLoginContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/sso/login',
+  responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
+})
+
+export const ssoCallbackContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/sso/callback',
   responsesByStatusCode: { 200: ContractNoBody, ...errorResponses },
 })
 

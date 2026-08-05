@@ -17,6 +17,7 @@ import type {
   BlockRepository,
   BrainstormSessionRepository,
   CapabilityCredentialRepository,
+  McpOAuthGrantRepository,
   ClarityReviewRepository,
   Clock,
   ConsensusGroupRepository,
@@ -35,6 +36,7 @@ import type {
   ModelPresetRepository,
   ObservabilityConnectionRepository,
   PackageRegistryConnectionRepository,
+  AuditEventRepository,
   AuthAttemptRepository,
   MachineNodeRepository,
   PasswordResetTokenRepository,
@@ -89,6 +91,7 @@ import { DrizzleReportsRepository } from './drizzle/reports.js'
 import {
   DrizzleAccountInvitationRepository,
   DrizzleAccountRepository,
+  DrizzleAuditEventRepository,
   DrizzleAuthAttemptRepository,
   DrizzleEmailConnectionRepository,
   DrizzleMachineNodeRepository,
@@ -149,6 +152,7 @@ import {
   DrizzleSubscriptionQuotaCycleRepository,
   DrizzleTestSecretsRepository,
   DrizzleCapabilityCredentialRepository,
+  DrizzleMcpOAuthGrantRepository,
 } from './drizzle/connections.js'
 
 export interface CoreRepositories {
@@ -161,6 +165,7 @@ export interface CoreRepositories {
   passwordResetTokenRepository: PasswordResetTokenRepository
   machineNodeRepository: MachineNodeRepository
   authAttemptRepository: AuthAttemptRepository
+  auditEventRepository: AuditEventRepository
   emailConnectionRepository: EmailConnectionRepository
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
@@ -206,6 +211,7 @@ export interface CoreRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
   capabilityCredentialRepository: CapabilityCredentialRepository
+  mcpOAuthGrantRepository: McpOAuthGrantRepository
   validationConfigRepository: ValidationConfigRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
@@ -222,6 +228,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     passwordResetTokenRepository: new DrizzlePasswordResetTokenRepository(db),
     machineNodeRepository: new DrizzleMachineNodeRepository(db),
     authAttemptRepository: new DrizzleAuthAttemptRepository(db),
+    auditEventRepository: new DrizzleAuditEventRepository(db),
     emailConnectionRepository: new DrizzleEmailConnectionRepository(db),
     blockRepository: new DrizzleBlockRepository(db),
     pipelineRepository: new DrizzlePipelineRepository(db),
@@ -268,6 +275,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
     capabilityCredentialRepository: new DrizzleCapabilityCredentialRepository(db),
+    mcpOAuthGrantRepository: new DrizzleMcpOAuthGrantRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }

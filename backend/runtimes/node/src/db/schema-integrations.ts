@@ -119,3 +119,25 @@ export const capabilityCredentials = pgTable('capability_credentials', {
   created_at: bigint('created_at', { mode: 'number' }).notNull(),
   updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
 })
+
+// Per-workspace OAUTH GRANTS for remote (http) MCP tool servers (sealed; mirror of D1 migration
+// 0082's `mcp_oauth_grants`). What comes out of a person authorising this board against a vendor's
+// MCP server: `tokens` is a sealed blob holding the access token, the refresh token and the expiry
+// (domain tag 'cat-factory:mcp-oauth'), `summary` is the non-secret blob the connection panel
+// renders. ONE row per (workspace, server) rather than one per workspace, because the write that
+// contends here is a dispatch-path REFRESH rather than a human's checklist save.
+export const mcpOAuthGrants = pgTable(
+  'mcp_oauth_grants',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    server_id: text('server_id').notNull(),
+    tokens: text('tokens').notNull(),
+    summary: text('summary').notNull().default('{}'),
+    // Optimistic concurrency for the refresh path: two dispatches can find the same access token
+    // expired at the same instant, and only one of their token sets is the live one afterwards.
+    rev: integer('rev').notNull().default(0),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    updated_at: bigint('updated_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.server_id] })],
+)

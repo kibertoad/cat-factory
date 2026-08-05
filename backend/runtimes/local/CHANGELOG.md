@@ -1,5 +1,99 @@
 # @cat-factory/local-server
 
+## 0.110.0
+
+### Minor Changes
+
+- 7f5ed08: Aggregate tool-execution failures: a rollup, a signal and an `?ok=` filter
+
+  A failed tool call was a row nowhere counted. The trajectory sink recorded each one (`ok: false`,
+  with what the tool returned), and nothing above it added them up: the run overview reported only how
+  many tool calls the run made, no filter narrowed a page to the failures, and no signal was derived
+  from them. That is the one class of failure the LLM telemetry beside it structurally cannot see: a
+  rejected edit or a non-zero command is a perfectly healthy model call whose result came back bad, so
+  a run stuck re-running a broken tool reports a clean model side and an inexplicable death. Finding
+  it meant paging the whole trajectory and reading each row's `ok` by eye.
+
+  `AgentToolCallRepository.summarizeByExecution` is now the one GROUP BY, at the `(agentKind, tool)`
+  grain, and it REPLACES the bare `countByExecution`: the overview's `sinks.toolCalls.count`, its new
+  `toolCalls` rollup and both of that rollup's breakdowns are folds over the same cells, so a count and
+  a breakdown that disagree is not a representable state. The grain keeps both halves deliberately,
+  because the finding is the CONCENTRATION: one agent kind retrying one tool is a stuck loop, the same
+  count scattered over nine tools is an agent exploring, and either axis alone folds that away. Every
+  level carries `failureRate` beside its counts (34 of 36 and 34 of 3,600 are the same number and
+  opposite diagnoses) and a run that called no tools reports it as `null` rather than a clean 0%, which
+  would file "nothing happened" beside "everything worked".
+
+  Two signals ride it, and their severities carry the difference between them. `tool_calls_failed` is
+  an `info` reporting the run-wide count with its ratio: a failing tool call is the ordinary shape of
+  an agent loop (a test that fails before it is fixed, a `grep` that matches nothing), so as a warning
+  it would fire on most healthy runs and cost the severity ordering the thing it is for.
+  `tool_retry_loop` is the `warning`, firing only where the failures concentrate on one
+  `(agentKind, tool)` cell that is both mostly-failing and has failed enough times to not be a single
+  bad command. It selects among the cells that QUALIFY rather than testing the run's most-failed one,
+  which is not the same thing: ranking first would hide a fixer wedged 5-for-5 on `apply_patch` behind
+  a coder's 6 failures across 100 healthy `bash` calls, silently missing the run the sink exists for.
+  `failure_outside_model_calls` now reads the sink before deciding where to send the reader: failing
+  tool calls to start at, a recorded loop with none in it (so what is left is the engine), or no
+  trajectory at all — which is unrecorded rather than uneventful, and was previously indistinguishable
+  from a clean one.
+
+  Public API 1.12.0 → 1.13.0, additive: `?ok=true|false` on `GET /api/v1/debug/runs/:runId/tool-calls`
+  (both orders, applied in SQL, because a caller filtering a page itself has already spent that page's
+  `limit` on the calls that worked) and the `toolCalls` block on the run overview. The four SDK clients
+  and the MCP facade are regenerated. Worth a reviewer's attention: `countByExecution` is gone from the
+  kernel port, so all three telemetry stores, the mothership read-through and its bounded-read table
+  move together, and the new aggregate is classified `telemetry` in the drift guard rather than routed
+  over the persistence RPC.
+
+  No migration, and the aggregate is knowingly costlier than the COUNT it replaces: the existing run
+  index served that count without touching the table, while grouping reads `agent_kind`, `tool` and
+  `ok` off each row. A covering index would buy that back and is the wrong trade here: this sink is
+  append-hot (a row per tool call of every run) and the aggregate runs once per debug overview, so a
+  fifth index would tax the hot path for the rare read. Either way the scan is bounded by one run's
+  rows.
+
+- 4e4d1b4: OAuth for external MCP tool servers, so the OAuth-first hosted ecosystem (Linear, Atlassian,
+  Figma, Slack's remote server) is reachable at all. A remote (`http`) declaration may now carry
+  `oauth`: the `authorization_code` grant, which a `secrets.manage` holder completes once per board
+  from the Infrastructure window, and `client_credentials`, which needs no human and covers an
+  internal or partner server. Endpoints are discovered per the MCP authorization spec (RFC 9728 →
+  RFC 8414 → OIDC discovery) with a declaration override, PKCE and the RFC 8707 `resource` indicator
+  are always used, and the grant is sealed per (workspace, server) and refreshed on the dispatch
+  path. The access token rides the job body's header channel only, never a prompt or the telemetry
+  snapshot.
+
+  Two new unavailability reasons (`oauth_not_connected`, `oauth_token_failed`) and the matching probe
+  verdicts keep "nobody connected", "the connection stopped working" and "no credential configured"
+  apart, since each sends an operator somewhere different. New table `mcp_oauth_grants` on both
+  runtimes (D1 migration 0082 ⇄ a Drizzle migration), in the mothership `remote` bucket and in the
+  workspace-delete cascade. Interactive grants need `MCP_OAUTH_REDIRECT_URL` set to the deployment's
+  public app URL followed by `/mcp-oauth-callback` and `ENCRYPTION_KEY` for the sealed store; without
+  either, an OAuth server is stated to its agent as unavailable rather than dispatched without a
+  token.
+
+  The vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a session-gated
+  `POST /mcp/oauth/complete`. A backend route receiving the redirect directly could not be gated:
+  sessions are bearer tokens and a third-party browser navigation carries none, so it would have to
+  sit outside the default-deny session gate, and the "same user who started the flow" and "still
+  holds `secrets.manage`" checks would never execute. Routing it through the app is what makes both
+  enforceable.
+
+### Patch Changes
+
+- Updated dependencies [ec96387]
+- Updated dependencies [7f5ed08]
+- Updated dependencies [4e4d1b4]
+  - @cat-factory/contracts@0.246.0
+  - @cat-factory/kernel@0.244.0
+  - @cat-factory/integrations@0.131.0
+  - @cat-factory/orchestration@0.213.0
+  - @cat-factory/server@0.223.0
+  - @cat-factory/node-server@0.176.0
+  - @cat-factory/agents@0.113.0
+  - @cat-factory/gitlab@0.15.42
+  - @cat-factory/executor-harness@1.92.2
+
 ## 0.109.2
 
 ### Patch Changes
