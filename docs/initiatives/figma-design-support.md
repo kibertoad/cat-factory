@@ -146,23 +146,23 @@ All rendering changes land in the source-neutral `DesignContext` model (new opti
 sections and token fields), never as Figma-only renderer branches; Zeplin maps what it has,
 omits what it lacks, and the conformity of the two is what keeps Penpot cheap later.
 
-- [x] **Real whole-file content.** The `depth=2` file read became an OUTLINE read, and the frames
+- [x] **Real whole-file content.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) The `depth=2` file read became an OUTLINE read, and the frames
       it names are fetched as real subtrees in chunks of 4, capped at `MAX_FILE_FRAMES`. Chunked
       rather than one request because an oversize response must cost its own frames, not every
       frame: a chunk that fails leaves those frames at outline depth and says so, beside the note
       naming the frames the cap dropped. The two caps that bound the render moved with it: the
       per-frame node cap now sits under an IMPORT-wide budget, since a per-frame cap alone bounds
       nothing about a whole-file import that fans out over a dozen frames.
-- [x] **Styling in the layout tree.** Fills, strokes, typography, corner radius and the
+- [x] **Styling in the layout tree.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) Fills, strokes, typography, corner radius and the
       auto-layout facts ride the node's own layout line in brackets, rather than a per-frame
       `Styling` section: the facts are per-node, and a second section would make the reader join
       them back up by name. Bounded by the tree's own caps, since they are the same lines.
-- [x] **Tokens without Enterprise.** Published styles (the `styles` map joined to the fills/text
+- [x] **Tokens without Enterprise.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) Published styles (the `styles` map joined to the fills/text
       styles of the nodes referencing them) are the fallback when variables are plan-gated, and
       `DesignContext.tokenOrigin` states which source produced the section. A style whose value no
       node resolves is DROPPED rather than emitted as a bare name: a token an implementer cannot
       apply is noise, and it would inflate the section that decides whether the gate gets stated.
-- [x] **Component fidelity.** An instance is named by its component SET (a variant's own name is
+- [x] **Component fidelity.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) An instance is named by its component SET (a variant's own name is
       its property assignment, so it identifies nothing alone), and every variant and property the
       design uses folds onto that one component's `note`. Folded rather than one entry per variant
       because the shared `dedupeComponents` keys on the name, so per-variant entries would collapse
