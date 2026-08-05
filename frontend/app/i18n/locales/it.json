@@ -624,6 +624,27 @@
       "servableHarnessesNone": "Nessuna CLI di agente può servire questo trasporto, quindi questo server non si applica a nessuna esecuzione.",
       "allowedTools": "Limitato a: {tools}",
       "credentials": "Credenziali: {keys}",
+      "oauth": {
+        "connected": "Collegato",
+        "notConnected": "Non collegato",
+        "machineGrant": "Si autentica come questo deployment",
+        "connectedBy": "Collegato da {user}",
+        "scopes": "Concesso: {scopes}",
+        "notRefreshable": "Il fornitore non ha emesso un token di aggiornamento, quindi il collegamento andrà rifatto alla scadenza del token di accesso.",
+        "lastError": "L’ultimo rinnovo del token non è riuscito: {detail}",
+        "connect": "Collega",
+        "reconnect": "Ricollega",
+        "disconnect": "Scollega",
+        "callback": {
+          "working": "Completamento della connessione…",
+          "done": "Collegato a {server}",
+          "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
+          "back": "Torna all’app",
+          "failedTitle": "Non è stato possibile completare la connessione",
+          "failed": "Non è stato possibile completare l’autorizzazione. Riavvia la connessione dalla finestra Infrastruttura.",
+          "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
+        }
+      },
       "test": "Prova",
       "notProbeable": {
         "stdio": "Gira dentro il container dell’agente, quindi non può essere provato da qui.",
@@ -634,6 +655,8 @@
         "ok": "Ha risposto",
         "credentialsMissing": "Nessuna credenziale",
         "credentialRefused": "Credenziale rifiutata",
+        "oauthNotConnected": "Non collegato",
+        "oauthTokenFailed": "Il collegamento ha smesso di funzionare",
         "unreachable": "Nessuna risposta",
         "httpError": "Richiesta respinta",
         "protocolError": "Non è un server MCP",
@@ -650,7 +673,9 @@
       "hideDetails": "Nascondi dettagli",
       "toast": {
         "loadFailed": "Impossibile caricare i server di strumenti",
-        "probeFailed": "Impossibile provare il server di strumenti"
+        "probeFailed": "Impossibile provare il server di strumenti",
+        "connectFailed": "Impossibile avviare il collegamento",
+        "disconnectFailed": "Impossibile scollegare il server di strumenti"
       }
     },
     "capabilityCredentials": {
@@ -1584,6 +1609,7 @@
       },
       "prNumber": "PR n. {number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Leggi l'esito",
       "stepState": {
         "pending": "In attesa",
         "working": "In lavorazione",
@@ -2934,6 +2960,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Apri {pr} su GitHub",
+      "readOutcome": "Esito",
+      "readOutcomeHint": "Leggi che cosa è cambiato, con le prove che lo sostengono",
       "review": "Rivedi",
       "merge": "Unisci",
       "mergeConfirm": {
@@ -5897,6 +5925,110 @@
     "history": {
       "heading": "Cronologia (nessun round) | Cronologia ({count} round) | Cronologia ({count} round)",
       "fixRequested": "Correzione richiesta"
+    }
+  },
+  "outcome": {
+    "title": "Esito",
+    "subtitle": "Che cosa ha cambiato questa esecuzione, e le prove che lo sostengono",
+    "diff": "Apri il diff",
+    "diffNumbered": "Apri il diff (#{number})",
+    "peerDiff": "Apri il diff in {repo}",
+    "disposition": {
+      "merged": "Unito",
+      "awaiting_merge": "In attesa di essere unito",
+      "in_flight": "Ancora in corso",
+      "needs_attention": "Richiede attenzione",
+      "not_run": "Non ancora eseguito",
+      "unknown": "Esecuzione non caricata"
+    },
+    "ask": {
+      "title": "Che cosa era stato chiesto",
+      "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
+    },
+    "gap": {
+      "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."
+    },
+    "requirements": {
+      "title": "Requisiti verificati",
+      "met": "Soddisfatti: {count}",
+      "notMet": "Non soddisfatti: {count}",
+      "notCovered": "Non verificati: {count}",
+      "regressions": "Regressioni: {count}",
+      "regressionTag": "Regressione",
+      "idOnly": "solo id",
+      "idOnlyHint": "Questo identificatore non è nella specifica del servizio, quindi non c'è alcun titolo da mostrare.",
+      "spec": {
+        "not_read": "La specifica del servizio non è stata letta, quindi questi sono gli identificatori dei requisiti riportati dal tester, senza i loro titoli.",
+        "unmatched": "Nessuno di questi identificatori di requisito compare nella specifica del servizio che è stata letta, quindi vengono mostrati solo gli identificatori riportati dal tester."
+      },
+      "verdict": {
+        "met": "Verificato",
+        "not_met": "Fallito",
+        "not_covered": "Non verificato"
+      },
+      "gap": {
+        "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato verificato alcun requisito.",
+        "tester_not_reported": "Il tester non ha ancora riportato nulla, quindi nessun requisito è stato deciso.",
+        "no_verdicts": "Il tester ha riportato senza pronunciarsi su alcun requisito della specifica."
+      }
+    },
+    "tests": {
+      "title": "Come è stato testato",
+      "openReport": "Rapporto di test completo",
+      "summary": "Il tester riferisce: {summary}",
+      "abort": "Il tester non è riuscito a eseguire un test significativo: {reason}",
+      "counts": "{passed} superati, {failed} falliti, {skipped} saltati",
+      "verdict": {
+        "greenlit": "Pronto per il rilascio",
+        "concerns": "Sollevati dei dubbi",
+        "could_not_run": "Non è stato possibile testarlo"
+      },
+      "environment": {
+        "local": "Testato con dipendenze locali",
+        "ephemeral": "Testato su un ambiente di anteprima"
+      },
+      "severity": {
+        "low": "Bassa",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Critica"
+      },
+      "gap": {
+        "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato eseguito nulla.",
+        "tester_not_reported": "Il tester non ha ancora riportato nulla."
+      }
+    },
+    "visuals": {
+      "title": "Che aspetto ha",
+      "shotAlt": "Schermata di {view}",
+      "hasReference": "Per questa vista è stato fornito un progetto di riferimento",
+      "source": {
+        "visual_confirm": "Queste viste sono state confrontate con i progetti di riferimento.",
+        "tester": "Queste viste sono state catturate durante i test. Nessuno è stato invitato a rivederle."
+      },
+      "gap": {
+        "no_visual_step": "In questa pipeline nulla cattura l'interfaccia, quindi non c'è nulla da guardare.",
+        "none_captured": "L'interfaccia doveva essere catturata, ma non è stata catturata alcuna vista."
+      }
+    },
+    "checks": {
+      "title": "Controlli",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Controlli del progetto",
+        "reproduction": "Riproduzione del bug"
+      },
+      "state": {
+        "pass": "superato",
+        "fail": "fallito",
+        "pending": "ancora in corso",
+        "inconclusive": "non conclusivo"
+      }
+    },
+    "empty": {
+      "title": "Ancora nulla da mostrare",
+      "body": "Questa attività non ha ancora prodotto un esito da leggere."
     }
   },
   "focus": {

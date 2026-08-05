@@ -810,14 +810,11 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
 - **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`,
-  `submissionClassesByRole`). Traps: narrowing is subtractive and an allowlist exhaustive, but
-  absent is not a rule and `unknown` matches neither; a bar on LANDING is refused at BOTH exits
-  (auto-merge AND `mergePr`); the role and mode PIN at admission and count only if the pin PERSISTS
-  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`; SELECTING a task's preset
-  is guarded like editing one (no selection may relax the selector's own role, at either door that
-  writes `riskPolicyId`); starting a run or writing a block reads its tier through
-  `runInitiatorRole(c)` / `blockEditActor(c)` or is named in the matching `*.coverage.spec.ts` as
-  deliberately unattributed. Docs: [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
+  `submissionClassesByRole`), and a bar on LANDING is refused at BOTH exits (auto-merge AND
+  `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin PERSISTS
+  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads as
+  a run with no policy rather than as an error. Docs:
+  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
   yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
@@ -901,11 +898,10 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
-live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
-Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
-The full model, and the authority for anything recording an LLM call:
-[`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`) live in a
+dedicated telemetry store, not the transactional one: a required `TELEMETRY_DB` D1 database on Cloudflare and a
+`telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`. The authority for anything
+recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite:
 
 - **Three producers converge on the ONE `LlmObservabilityService` and a new one must too**: the proxy,
   the subscription harnesses, and inline calls through the kernel `InlineLlmCallRecorder` port. A model
@@ -1071,9 +1067,8 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment:
   some reasoning models emit the whole answer into their private channel and return an empty visible reply,
   which the harness reads as unusable and fails the run. Do NOT append it to side-effect agents whose
-  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright,
-  business-documenter): they legitimately end with no final text. Editing a versioned prompt means bumping
-  its number.
+  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter):
+  they legitimately end with no final text. Editing a versioned prompt means bumping its number.
 - **Frontend extension seams** are all contributed through the one `registerAppModule` registry
   (`app/modular/registry.ts`), the frontend analogue of the backend registries: result views, inspector
   panels (`PanelEntry<Block>` in the `inspectorPanels` slot), overlays (`appOverlays` +

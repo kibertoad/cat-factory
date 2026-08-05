@@ -59,6 +59,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   really exposes; `mcpProbe.ts` is a hand-rolled Streamable-HTTP client (three POSTs over `fetch`,
   no MCP SDK, so nothing Node-reaching enters a module every facade bundles). A `stdio` server and a
   loopback url are REFUSED by name rather than probed, because the backend is not the run container.
+  `McpOAuthCallbackController.ts` is the vendor's redirect target and is deliberately NOT in this
+  gated mount: it is a third-party browser navigation, so it is mounted at the app ROOT and gates
+  itself on the sealed state, the user who started the flow, and a re-loaded `secrets.manage`.
   See `backend/docs/mcp-tool-servers.md`.
 - `modules/tasks/TaskWebhookController.ts` + `webhooks/`: the three PUBLIC, session-gate-bypassing
   webhook receivers (`/github`, `/vcs/:provider`, `/webhooks/tasks/:source/:workspaceId`) and their

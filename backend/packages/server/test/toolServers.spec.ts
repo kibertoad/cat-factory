@@ -442,6 +442,110 @@ describe('probeToolServer', () => {
   })
 })
 
+/**
+ * A compliant server's three responses (initialize, the notification's 202, tools/list), shared by
+ * the OAuth cases below — the probe describe keeps its own copy scoped to its page-bound tests.
+ */
+function okResponsesForOAuth(): typeof fetch {
+  let call = 0
+  return (async () => {
+    call++
+    if (call === 1) {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: {
+            protocolVersion: '2025-06-18',
+            capabilities: {},
+            serverInfo: { name: 'linear-mcp', version: '1.0.0' },
+          },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      )
+    }
+    if (call === 2) return new Response(null, { status: 202 })
+    return new Response(
+      JSON.stringify({ jsonrpc: '2.0', id: 2, result: { tools: [{ name: 'list_issues' }] } }),
+      { headers: { 'content-type': 'application/json' } },
+    )
+  }) as unknown as typeof fetch
+}
+
+// The OAuth half of both surfaces: what a probe answers for a server nobody has granted, and what
+// the connect/disconnect routes refuse before a browser ever leaves the app.
+describe('probeToolServer with OAuth', () => {
+  const OAUTH_SERVER: McpServerDefinition = {
+    id: 'linear',
+    transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
+    oauth: { grant: 'authorization_code', clientId: 'cid' },
+  }
+  const neverFetch = (async () => {
+    throw new Error('the probe must not reach the network without a token')
+  }) as unknown as typeof fetch
+
+  it('reports an ungranted server as oauth_not_connected rather than probing it unauthenticated', async () => {
+    const result = await probeToolServer({
+      agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+      workspaceId: 'ws_1',
+      serverId: 'linear',
+      resolveToolServerOAuth: { accessToken: async () => ({ status: 'not_connected' }) },
+      probe: { fetch: neverFetch },
+    })
+    // Probing anyway and reporting the 401 would say "your credential is wrong", which is the one
+    // diagnosis that is false here: there is no credential to be wrong.
+    expect(result).toEqual({ serverId: 'linear', status: 'oauth_not_connected' })
+  })
+
+  it('keeps a failed token exchange apart, and carries the cause', async () => {
+    const result = await probeToolServer({
+      agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+      workspaceId: 'ws_1',
+      serverId: 'linear',
+      resolveToolServerOAuth: {
+        accessToken: async () => ({ status: 'token_failed', error: 'invalid_grant' }),
+      },
+      probe: { fetch: neverFetch },
+    })
+    expect(result).toMatchObject({ status: 'oauth_token_failed', error: 'invalid_grant' })
+  })
+
+  it('sends the granted token as the header the declaration named', async () => {
+    const sent: Record<string, string>[] = []
+    const inner = okResponsesForOAuth()
+    const result = await probeToolServer({
+      agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+      workspaceId: 'ws_1',
+      serverId: 'linear',
+      resolveToolServerOAuth: {
+        accessToken: async () => ({
+          status: 'ok',
+          header: 'Authorization',
+          value: 'Bearer granted',
+        }),
+      },
+      probe: {
+        fetch: (async (url: string, init?: RequestInit) => {
+          sent.push(Object.fromEntries(new Headers(init?.headers).entries()))
+          return inner(url, init)
+        }) as unknown as typeof fetch,
+      },
+    })
+    expect(result.status).toBe('ok')
+    expect(sent[0]!.authorization).toBe('Bearer granted')
+  })
+
+  it('reports the server as unconnected when the deployment has no grant store at all', async () => {
+    const result = await probeToolServer({
+      agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+      workspaceId: 'ws_1',
+      serverId: 'linear',
+      probe: { fetch: neverFetch },
+    })
+    expect(result.status).toBe('oauth_not_connected')
+  })
+})
+
 describe('toolServerController', () => {
   function build(container: Partial<ServerContainer>): Hono<AppEnv> {
     const app = new Hono<AppEnv>()
@@ -480,6 +584,112 @@ describe('toolServerController', () => {
     expect(await res.json()).toMatchObject({
       status: 'credentials_missing',
       unresolvedCredentials: ['ACME_TRACKER_TOKEN'],
+    })
+  })
+
+  // The connect/disconnect routes. Every refusal here has to land BEFORE the browser leaves the
+  // app: a refusal after the redirect arrives on a vendor's error page, where nothing this
+  // deployment wrote is visible.
+  describe('oauth routes', () => {
+    const OAUTH_SERVER: McpServerDefinition = {
+      id: 'linear',
+      transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
+      oauth: { grant: 'authorization_code', clientId: 'cid' },
+    }
+    const fakeOAuth = (over: Partial<Record<string, unknown>> = {}) =>
+      ({
+        listStatuses: async () => new Map(),
+        startAuthorization: async () => ({ url: 'https://auth.linear.app/authorize?state=x' }),
+        disconnect: async () => undefined,
+        ...over,
+      }) as unknown as ServerContainer['mcpOAuth']
+
+    it('answers the vendor authorization url', async () => {
+      const res = await build({
+        agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+        mcpOAuth: fakeOAuth(),
+        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
+      }).request('/workspaces/ws_1/tool-servers/linear/oauth/authorize', { method: 'POST' })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ url: 'https://auth.linear.app/authorize?state=x' })
+    })
+
+    it('refuses with a 503 naming the variable when no redirect url is registered', async () => {
+      const res = await build({
+        agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+        mcpOAuth: fakeOAuth(),
+      }).request('/workspaces/ws_1/tool-servers/linear/oauth/authorize', { method: 'POST' })
+
+      expect(res.status).toBe(503)
+      expect(await res.json()).toMatchObject({
+        error: { details: { reason: 'mcp_oauth_redirect_url_not_configured' } },
+      })
+    })
+
+    it('refuses a server that authenticates with a static credential', async () => {
+      const res = await build({
+        agentKindRegistry: registryWith((r) => r.registerToolServer(HTTP_SERVER)),
+        mcpOAuth: fakeOAuth(),
+        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
+      }).request('/workspaces/ws_1/tool-servers/issues/oauth/authorize', { method: 'POST' })
+
+      expect(res.status).toBe(422)
+      expect(await res.json()).toMatchObject({
+        error: { details: { reason: 'tool_server_without_oauth' } },
+      })
+    })
+
+    it('disconnects an id no live declaration names', async () => {
+      // A grant OUTLIVES the declaration that created it (a retired server, a rename in a
+      // refactor), and the row is then a live vendor token nobody can reach — so the one action
+      // that removes it must not be gated on the registry still naming it.
+      let dropped: string[] = []
+      const res = await build({
+        agentKindRegistry: new AgentKindRegistry(),
+        mcpOAuth: fakeOAuth({
+          disconnect: async (_ws: string, id: string) => {
+            dropped.push(id)
+          },
+        }),
+      }).request('/workspaces/ws_1/tool-servers/retired/oauth', { method: 'DELETE' })
+
+      expect(res.status).toBe(204)
+      expect(dropped).toEqual(['retired'])
+    })
+
+    it('projects a stored grant onto the inventory row', async () => {
+      const res = await build({
+        agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+        mcpOAuth: fakeOAuth({
+          listStatuses: async () =>
+            new Map([['linear', { connectedBy: 'usr_1', refreshable: true }]]),
+        }),
+      }).request('/workspaces/ws_1/tool-servers')
+
+      expect(await res.json()).toMatchObject({
+        servers: [
+          {
+            id: 'linear',
+            oauth: {
+              grant: 'authorization_code',
+              connected: true,
+              connectedBy: 'usr_1',
+              refreshable: true,
+            },
+          },
+        ],
+      })
+    })
+
+    it('renders a declaration as unconnected when the deployment has no grant store', async () => {
+      const res = await build({
+        agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
+      }).request('/workspaces/ws_1/tool-servers')
+
+      expect(await res.json()).toMatchObject({
+        servers: [{ id: 'linear', oauth: { connected: false } }],
+      })
     })
   })
 

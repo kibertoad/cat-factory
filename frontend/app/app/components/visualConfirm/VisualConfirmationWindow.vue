@@ -131,6 +131,20 @@ function buildFindings(): { text: string; structured: { view?: string; note: str
   return { text: blocks.join('\n\n'), structured }
 }
 
+// Degraded-basis approval guard (no capture / a fix landed after these shots): require an
+// explicit "I reviewed this another way" acknowledgement before the one-click approve.
+const ackDegraded = ref(false)
+watch(
+  () => vc.value?.degradedReason ?? null,
+  () => {
+    ackDegraded.value = false
+  },
+)
+const needsAck = computed(() => !!vc.value?.degradedReason)
+const canApprove = computed(
+  () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
+)
+
 async function approve() {
   if (!blockId.value || !canApprove.value) return
   await visualConfirm.approve(blockId.value)
@@ -169,20 +183,6 @@ async function onFilePicked(e: Event) {
   uploadView.value = ''
   if (fileInput.value) fileInput.value.value = ''
 }
-
-// Degraded-basis approval guard (no capture / a fix landed after these shots): require an
-// explicit "I reviewed this another way" acknowledgement before the one-click approve.
-const ackDegraded = ref(false)
-watch(
-  () => vc.value?.degradedReason ?? null,
-  () => {
-    ackDegraded.value = false
-  },
-)
-const needsAck = computed(() => !!vc.value?.degradedReason)
-const canApprove = computed(
-  () => awaitingHuman.value && !busy.value && (!needsAck.value || ackDegraded.value),
-)
 </script>
 
 <template>

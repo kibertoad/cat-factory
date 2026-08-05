@@ -45,6 +45,21 @@ body out of band. The differences are all forced by what a capability credential
 | resolution     | one service, one call site | **a `ToolSecretResolver`**, composed in front of the environment one                                             |
 | fallback       | none                       | **the deployment environment, per key**                                                                          |
 
+### What this store is NOT: an OAuth grant
+
+A credential here is a value a human TYPES and a dispatch reads. An OAuth grant against a remote
+MCP tool server is not one, and it deliberately lives in its own store
+([`backend/docs/mcp-tool-servers.md`](../../backend/docs/mcp-tool-servers.md) → OAuth): it expires,
+it is REWRITTEN by the dispatch path when it refreshes, it belongs to a named person's vendor
+account, and it is created by a browser redirect. Every column of the checklist's shape (a key, a
+write-only value, a last-written date) is wrong for it, and the one-blob-per-workspace row would
+have made every server's refresh contend with every other's.
+
+What the grant DOES reuse is this chain, for the OAuth client secret: that one really is a static
+value a tenant supplies, so it is an ordinary checklist key held to the ordinary floor. So the split
+is not "two credential systems" — it is one credential system plus a grant lifecycle that could not
+be expressed as a credential.
+
 ### The five decisions worth re-reading before changing this
 
 1. **Keyed by `(workspace, key)`, not by subject.** The `ToolSecretSubject` discriminator exists so

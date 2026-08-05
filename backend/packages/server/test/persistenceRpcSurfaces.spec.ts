@@ -518,6 +518,13 @@ describe('post-release-health settings surface (observability / release-health /
     { repo: 'capabilityCredentialRepository', method: 'get', args: [], echoes: true },
     { repo: 'capabilityCredentialRepository', method: 'deleteIfRev', args: [3], echoes: true },
     { repo: 'capabilityCredentialRepository', method: 'delete', args: [] },
+    // The MCP OAuth grants ride the same shape one level finer: keyed by (workspace, server), so
+    // the server id is an ordinary argument AFTER the workspace the call is scoped on. Same
+    // `remote` bucket and the same reason — a dispatch refreshes the token, and a mothership-mode
+    // node has no `db` to refresh it in.
+    { repo: 'mcpOAuthGrantRepository', method: 'get', args: ['issues'], echoes: true },
+    { repo: 'mcpOAuthGrantRepository', method: 'listByWorkspace', args: [], echoes: true },
+    { repo: 'mcpOAuthGrantRepository', method: 'delete', args: ['issues'] },
   ]
 
   for (const { repo, method, args, echoes } of WORKSPACE_METHODS) {
@@ -584,6 +591,7 @@ describe('post-release-health settings surface (observability / release-health /
     'releaseHealthConfigRepository',
     'incidentEnrichmentConnectionRepository',
     'capabilityCredentialRepository',
+    'mcpOAuthGrantRepository',
   ]
 
   for (const repo of UPSERTS) {
