@@ -163,11 +163,14 @@ The failure classes and where each one's evidence lives:
 - **`output_truncated`: the model was cut off.** The per-kind insight names which agent kept
   hitting its output ceiling (`outputHeadroomRatio` ≈ 1). The fix conversation is about output
   limits or task size, not correctness.
-- **`failure_outside_model_calls`: the run died while every call looks healthy.** This is the
-  most common hard diagnosis, and it has no row of its own: tool-EXECUTION errors (malformed
-  arguments, a stuck edit loop) happen inside the container and exist only as text inside the
-  prompt deltas; each call still reports `ok` with a clean finish reason. The signal points at
-  the search workflow below.
+- **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
+  is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
+  reason, so it fires on a failure the model side cannot explain: tool execution inside the
+  container, or the engine. Read the trajectory first
+  (`/tool-calls?order=trajectory`, `?jobId=` to narrow to the dispatch that died): a tool-EXECUTION
+  error is a row of its own, `ok: false`, with the tool's own error text in `result`. Two gaps stay
+  behind it, and both are the search workflow below: a workspace with bodies `withheld` gives the
+  failing call but not what it said, and an ENGINE-side failure records no call anywhere.
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately: a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.
@@ -290,11 +293,15 @@ stored character is reachable; a body larger than one window is read in stitched
   other side (it is the harness's JOB-scoped counter, so a re-dispatch starts it over). Neither is
   a step index: they mark the boundary without naming which attempt sits on either side of it, and
   a proxied call reports `turnIndex: null` rather than participating in the sequence at all.
-- **Tool-execution errors are not rows.** The harness's tool loop runs inside the container; its
-  failures reach this surface only as text inside prompt deltas. The
-  `failure_outside_model_calls` signal and `?contains=` exist precisely to compensate; a
-  first-class per-call tool-error count would need harness capture (an image-bumping change) and
-  is deliberately not faked here from pattern-matching at record time.
+- **Tool-execution errors are rows, but no rollup counts them.** Each is its own tool-call row
+  (`ok: false`), so each is readable with what the tool returned. What is missing is aggregation:
+  there is no `?ok=` filter, the overview reports only how many tool calls the run made, and no
+  signal is derived from how many of them failed. Finding a stuck edit loop is a walk of
+  `?order=trajectory`, not a number on the overview. Two things
+  genuinely fall outside the sink: an engine-side failure, which no producer records, and an older
+  harness image, which reports `bodies: 'withheld'` when it captured no argument text and has its
+  whole dispatch skipped when it numbers no calls at all. Neither is reconstructed from
+  pattern-matching at record time.
 - **Search case folding is ASCII.** SQLite's `LIKE` folds only ASCII and Postgres' `ILIKE`
   follows its locale; conformance pins the ASCII behaviour the two stores share. Search terms are
   literal substrings, not patterns.

@@ -434,12 +434,19 @@ export const agentToolCallSchema = v.object({
   agentKind: v.string(),
   /**
    * The dispatch (container job) the call was made in. One run's step can dispatch more
-   * than once (a re-run, a gate's fixer rounds, a Ralph iteration), and {@link seq} is
-   * only monotonic WITHIN a dispatch, so the trajectory orders by `(jobId, seq)` — never
-   * by `seq` alone, which would interleave two dispatches into one nonsensical sequence.
+   * than once (a re-run, a gate's fixer rounds, a Ralph iteration), so this is what
+   * narrows a read to ONE of them. It is NOT a sort key: a job id is a string
+   * (`<executionId>-<agentKind>`, plus `-<epoch>` past the first dispatch), so ordering by
+   * it sorts a run's dispatches by agent-kind spelling and its re-runs `-10` before `-2`.
+   * The trajectory orders by `(startedAt, seq, id)` server-side; see the
+   * `AgentToolCallRepository.listByExecution` contract in kernel.
    */
   jobId: v.string(),
-  /** The call's 0-based ordinal within its dispatch: the trajectory order itself. */
+  /**
+   * The call's 0-based ordinal within its dispatch. It restarts at zero on every dispatch,
+   * so it separates the calls sharing a {@link startedAt} millisecond rather than ordering
+   * the run on its own.
+   */
   seq: v.number(),
   /** The tool the agent invoked (`edit_file`, `bash`, `todo`, …). */
   tool: v.string(),

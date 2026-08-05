@@ -1,9 +1,13 @@
 # Initiative: PR verification report
 
-**Status:** phase 1 in progress · **Owner:** core · **Started:** 2026-07-26
+**Status:** phases 1 + 2 landed; slices 11 + 12 open · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
+
+The report itself ships: every slice that produces it has landed. What keeps this tracker alive
+rather than converted to an ADR is slice 11 (peer-PR reports) and slice 12, which cannot start
+until global-search slice 4 lands elsewhere. Convert once both close.
 
 ## Goal & rationale
 
