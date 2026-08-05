@@ -82,6 +82,16 @@ export interface Env {
    */
   PROVISIONING_DB?: D1Database
 
+  /**
+   * REQUIRED, dedicated D1 database for the account audit log, with its own migrations lineage
+   * (`audit-migrations/`). Separate from `DB` for RETENTION rather than write profile: audit is
+   * low-volume, but once run-lifecycle events land it is the only table that grows with run
+   * volume AND wants a multi-year window, and D1's ceiling is 10 GB PER DATABASE. Required for
+   * the same reason `TELEMETRY_DB` is: an unbound binding means no audit trail, which reads
+   * exactly like a deployment where nothing privileged ever happened.
+   */
+  AUDIT_DB: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 
@@ -396,6 +406,29 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_SECRET?: string
   /** Explicit Google redirect_uri; derived from the request origin when unset. */
   GOOGLE_OAUTH_REDIRECT_URL?: string
+  // ---- Enterprise SSO (generic OIDC) --------------------------------------
+  // One adapter for every enterprise identity provider: the issuer's own discovery document
+  // supplies the endpoints, so Okta / Entra ID / Auth0 / Keycloak / PingFederate / a Shibboleth
+  // OP are configuration rather than code. All three of the first group are required together —
+  // a partial set REFUSES to boot rather than silently leaving the deployment on consumer
+  // logins. Parsing and validation live in `@cat-factory/server`'s `resolveSsoConfig`, which the
+  // Node facade calls too, so the two runtimes cannot drift on admission policy.
+  /** The provider's issuer URL, e.g. `https://acme.okta.com/oauth2/default`. */
+  AUTH_SSO_ISSUER_URL?: string
+  AUTH_SSO_CLIENT_ID?: string
+  AUTH_SSO_CLIENT_SECRET?: string
+  /** Sign-in button label; names the operator's IdP, so it is never localized. */
+  AUTH_SSO_LABEL?: string
+  /** Space-separated scopes; `openid` is added when absent. Default `openid profile email`. */
+  AUTH_SSO_SCOPES?: string
+  /** Explicit redirect_uri; derived from the request origin when unset. */
+  AUTH_SSO_REDIRECT_URL?: string
+  /** Optional narrowing: only these email domains may sign in via SSO. */
+  AUTH_SSO_ALLOWED_EMAIL_DOMAINS?: string
+  /** The claim group memberships arrive under (`groups` by default). */
+  AUTH_SSO_GROUPS_CLAIM?: string
+  /** Optional narrowing: the user must be in at least one of these directory groups. */
+  AUTH_SSO_REQUIRED_GROUPS?: string
   /** Optional dedicated master key for the per-account email API key (falls back to ENCRYPTION_KEY). */
   EMAIL_ENCRYPTION_KEY?: string
   /** Deployment-level system sender for auth emails (password reset): provider/from/key. */
@@ -729,6 +762,19 @@ export function requireTelemetryDb(env: Env): D1Database {
     throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
+}
+
+/**
+ * Resolve the required audit database, throwing a clear, actionable error when the binding is
+ * absent. The account audit log lives in its own D1 database; every entry point that touches it
+ * goes through this, so an unbound binding fails the same way with the same message instead of
+ * NPE-ing deep in a repository on the first privileged action.
+ */
+export function requireAuditDb(env: Env): D1Database {
+  if (!env.AUDIT_DB) {
+    throw configProblem({ key: 'AUDIT_DB', ...ENV_HELP.AUDIT_DB })
+  }
+  return env.AUDIT_DB
 }
 
 /**

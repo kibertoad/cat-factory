@@ -11,9 +11,9 @@ import {
   type AgentSearchQueryPageQuery,
   type AgentSearchQueryRepository,
   type AgentToolCall,
-  type AgentToolCallCounts,
   type AgentToolCallPageQuery,
   type AgentToolCallRepository,
+  type AgentToolCallSummary,
   type AgentToolCallTrajectoryQuery,
   type LlmCallBodyWindow,
   type LlmCallMetric,
@@ -31,7 +31,6 @@ import {
   type SubscriptionQuotaCycleRepository,
   type SubscriptionQuotaScope,
   type SubscriptionQuotaWindowKind,
-  type ToolCallOutcome,
 } from '@cat-factory/kernel'
 import { type SubscriptionVendor, subscriptionVendorSchema } from '@cat-factory/contracts'
 import { decodeEnum } from '@cat-factory/server'
@@ -1000,15 +999,6 @@ class SqliteAgentSearchQueryRepository implements AgentSearchQueryRepository {
   }
 }
 
-/**
- * The stored `ok` value an outcome filter selects. The column is an INTEGER flag (SQLite has no
- * boolean), so the mapping is stated once rather than spelled at each call site, where inverting
- * it returns a plausible-looking page of exactly the wrong rows.
- */
-function okFlagFor(outcome: ToolCallOutcome): number {
-  return outcome === 'ok' ? 1 : 0
-}
-
 /** The tool-call trajectory — the local-sqlite mirror of `D1AgentToolCallRepository`. */
 class SqliteAgentToolCallRepository implements AgentToolCallRepository {
   constructor(
@@ -1069,11 +1059,9 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
-    // Narrowed IN SQL, before the limit takes the oldest end: filtered afterwards, a run whose
-    // failures sit past the prefix would report none at all.
-    if (query.outcome) {
+    if (query.ok !== undefined) {
       clauses.push('ok = ?')
-      binds.push(okFlagFor(query.outcome))
+      binds.push(query.ok ? 1 : 0)
     }
     binds.push(query.limit)
     const rows = this.db
@@ -1097,9 +1085,9 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
-    if (query.outcome) {
+    if (query.ok !== undefined) {
       clauses.push('ok = ?')
-      binds.push(okFlagFor(query.outcome))
+      binds.push(query.ok ? 1 : 0)
     }
     if (query.cursor) {
       clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
@@ -1117,17 +1105,30 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
     return rows.map(rowToToolCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallCounts> {
-    // Total and failures in ONE pass, mirroring the D1 and Drizzle repos: separate reads could
-    // land either side of a drain and report more failures than calls.
-    const row = this.db
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AgentToolCallSummary[]> {
+    // The D1 GROUP BY, verbatim: one pass over the run's rows, neither body column read.
+    const rows = this.db
       .prepare(
-        `SELECT COUNT(*) AS n, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed
-           FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?`,
+        `SELECT agent_kind, tool, COUNT(*) AS calls, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures
+         FROM agent_tool_calls
+         WHERE workspace_id = ? AND execution_id = ?
+         GROUP BY agent_kind, tool`,
       )
-      .get(workspaceId, executionId) as unknown as { n: number; failed: number | null } | undefined
-    // `SUM` over no rows is NULL: read as 0, the same fact the 0 total already states.
-    return { total: row?.n ?? 0, failed: row?.failed ?? 0 }
+      .all(workspaceId, executionId) as unknown as {
+      agent_kind: string
+      tool: string
+      calls: number
+      failures: number
+    }[]
+    return rows.map((row) => ({
+      agentKind: row.agent_kind,
+      tool: row.tool,
+      calls: Number(row.calls),
+      failures: Number(row.failures ?? 0),
+    }))
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

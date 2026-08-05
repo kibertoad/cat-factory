@@ -204,9 +204,11 @@ describe('RunDebugService with unwired sinks', () => {
       llmCalls: { available: false, count: 0 },
       agentContext: { available: false, count: 0 },
       searchQueries: { available: false, count: 0 },
-      // `failed: 0` beside `available: false` is not a claim that nothing failed: the
-      // `available` flag it sits next to is what says the sink was never wired.
-      toolCalls: { available: false, count: 0, failed: 0 },
+      // The tool-call sink carries no failure count of its own: it lives on the `toolCalls`
+      // rollup, folded from the same aggregate this `count` comes from. So an unwired sink says
+      // `available: false` here and reports a null failure RATE there, and neither reads as a
+      // run whose every tool call worked.
+      toolCalls: { available: false, count: 0 },
       provisioningLog: { available: false, count: 0 },
     })
     expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(5)
@@ -262,6 +264,33 @@ describe('RunDebugService overview', () => {
     // The failure count rides the same aggregate pass and drives the top signal.
     expect(overview.signals[0]).toMatchObject({ code: 'provisioning_failed', count: 1 })
   })
+
+  it('folds the tool-call count from the SAME aggregate its failure breakdown comes from', async () => {
+    const summarizeByExecution = vi.fn(async () => [
+      { agentKind: 'coder', tool: 'edit', calls: 6, failures: 5 },
+      { agentKind: 'coder', tool: 'bash', calls: 14, failures: 0 },
+    ])
+    const service = new RunDebugService({
+      executionRepository: executionRepo([run('exec_1', 1)]),
+      clock,
+      agentToolCallRepository: {
+        summarizeByExecution,
+      } as unknown as AgentToolCallRepository,
+    })
+
+    const overview = await service.overview('ws', run('exec_1', 1))
+
+    // ONE pass over the rows: the sink count is a fold over the cells, never a second COUNT
+    // that could disagree with the breakdown printed beside it.
+    expect(summarizeByExecution).toHaveBeenCalledTimes(1)
+    expect(overview.sinks.toolCalls).toEqual({ available: true, count: 20 })
+    expect(overview.toolCalls.totals).toEqual({ calls: 20, failures: 5, failureRate: 0.25 })
+    // Most-failed first, which is the row a caller opened this for.
+    expect(overview.toolCalls.byTool.map((row) => row.tool)).toEqual(['edit', 'bash'])
+    expect(overview.signals.map((s) => s.code)).toEqual(
+      expect.arrayContaining(['tool_calls_failed', 'tool_retry_loop']),
+    )
+  })
 })
 
 describe('RunDebugService.listToolCalls', () => {
@@ -309,33 +338,31 @@ describe('RunDebugService.listToolCalls', () => {
     expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
   })
 
-  it('forwards the outcome narrowing INTO the store query, on both orders', async () => {
-    // The half no integration test can see on a run that recorded nothing: an unforwarded
-    // `outcome` returns 200 with a well-formed page of EVERY row, which reads as a run whose
-    // every tool call failed. Asserted on both orders because they take different query paths.
+  it('pushes the outcome filter into BOTH reads rather than filtering a page it fetched', async () => {
+    // Filtering here would have already paid for the successful rows and spent the page's limit
+    // on them, so a run whose failures sit behind a hundred successes would return none.
     const { service, listPage, listByExecution } = toolCallRepo()
 
-    await service.listToolCalls('ws', 'exec_1', { limit: 20, outcome: 'error' })
-    expect(listPage).toHaveBeenCalledWith('ws', {
-      executionId: 'exec_1',
-      limit: 21,
-      outcome: 'error',
-    })
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, ok: false })
+    expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21, ok: false })
 
-    await service.listToolCalls('ws', 'exec_1', { limit: 20, order: 'trajectory', outcome: 'ok' })
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, order: 'trajectory', ok: false })
     expect(listByExecution).toHaveBeenCalledWith('ws', {
       executionId: 'exec_1',
       limit: 20,
-      outcome: 'ok',
+      ok: false,
     })
-  })
 
-  it('omits the narrowing entirely when none was asked for', async () => {
-    // Absent is NOT `ok`: a service that defaulted the key would hide every failing row from
-    // the unfiltered read, which is the one an operator starts from.
-    const { service, listPage } = toolCallRepo()
+    // `ok: true` is a real filter, and an ABSENT one asks for every call — a store handed
+    // `ok: undefined` would narrow to the successes on a truthiness check.
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, ok: true })
+    expect(listPage).toHaveBeenLastCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 21,
+      ok: true,
+    })
     await service.listToolCalls('ws', 'exec_1', { limit: 20 })
-    expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
+    expect(listPage).toHaveBeenLastCalledWith('ws', { executionId: 'exec_1', limit: 21 })
   })
 
   it('reports an unwired sink as empty rather than throwing', async () => {

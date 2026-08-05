@@ -9,7 +9,7 @@ import type {
   Logger,
   RecordAgentToolCallInput,
 } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import { foldToolCallTotals, noopLogger } from '@cat-factory/kernel'
 import type { RunToolCallFailures, RunToolCallTrajectory } from '@cat-factory/contracts'
 
 /**
@@ -161,25 +161,30 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
    * be holding and calls it the run's failure count, which is precisely the false all-clear the
    * failing-call surface exists to prevent.
    *
+   * Both numbers are FOLDED from the same `(agentKind, tool)` rollup the debug overview reads,
+   * not counted by a query of their own: two aggregates over one index range can be read at
+   * different instants mid-run and report more failures than calls.
+   *
    * Both reads are issued together: they hit the same `(workspace_id, execution_id)` index range
    * and the caller wants both or neither, exactly like the debug overview's five aggregates.
    */
   async failuresForRun(workspaceId: string, executionId: string): Promise<RunToolCallFailures> {
-    const [counts, fetched] = await Promise.all([
-      this.repository.countByExecution(workspaceId, executionId),
+    const [cells, fetched] = await Promise.all([
+      this.repository.summarizeByExecution(workspaceId, executionId),
       this.repository.listByExecution(workspaceId, {
         executionId,
         limit: MAX_PINNED_FAILURES + 1,
         // Narrowed in SQL, not after the read: the failing calls of a long run sit past any
         // prefix of it, so a post-filter here would answer "nothing failed" on exactly the runs
         // this surface exists for.
-        outcome: 'error',
+        ok: false,
       }),
     ])
+    const totals = foldToolCallTotals(cells)
     const failuresTruncated = fetched.length > MAX_PINNED_FAILURES
     return {
-      total: counts.total,
-      failed: counts.failed,
+      total: totals.calls,
+      failed: totals.failures,
       failures: failuresTruncated ? fetched.slice(0, MAX_PINNED_FAILURES) : fetched,
       failuresTruncated,
     }

@@ -312,28 +312,11 @@ export const debugSinkStatusSchema = v.object({
 })
 export type DebugSinkStatus = v.InferOutput<typeof debugSinkStatusSchema>
 
-/**
- * The tool-call sink's status, which carries one number the other four have no analogue for:
- * how many of the run's tool calls FAILED.
- *
- * It sits here rather than on the shared {@link debugSinkStatusSchema} because it is not a
- * property of "a sink": a context snapshot or a search query has no success axis to count. It
- * exists at all because a tool-execution error is otherwise a row nothing aggregates: the model
- * call that requested the tool still reports `ok` with a clean finish reason, so `llm.totals`
- * sees a healthy run, and finding the failures meant walking the trajectory. One number here
- * (and the `tool_calls_failed` signal derived from it) is what makes them visible in the same
- * cheap first call every other failure class is.
- *
- * `failed` is counted in the SAME aggregate pass as `count`, so the two can never disagree, and
- * it is 0 rather than null when the sink is unavailable, because the enclosing `available: false`
- * already says the count means "we never recorded this".
- */
-export const debugToolCallSinkStatusSchema = v.object({
-  ...debugSinkStatusSchema.entries,
-  /** How many of the run's tool calls reported failure (`ok: false`). */
-  failed: v.number(),
-})
-export type DebugToolCallSinkStatus = v.InferOutput<typeof debugToolCallSinkStatusSchema>
+// How many of the run's tool calls FAILED is deliberately NOT a field here. It is one number the
+// other four sinks have no analogue for, and it lives on the `toolCalls` rollup beside the
+// breakdown it is folded from (`totals.failures`), because that rollup and the sink's `count` come
+// out of ONE aggregate pass. A second copy on the sink status could only ever be a second read of
+// the same rows, which is how a `failed` above its own `count` gets published.
 
 /** Severity of a derived diagnostic signal. */
 export const debugSignalSeveritySchema = v.picklist(['info', 'warning', 'error'])
@@ -360,10 +343,63 @@ export const debugSignalSchema = v.object({
 export type DebugSignal = v.InferOutput<typeof debugSignalSchema>
 
 /**
+ * What every level of the tool-call rollup counts, plus the ratio the counts only mean
+ * something as.
+ *
+ * `failureRate` is null where nothing was called, never 0: a run that made no tool calls has
+ * no failure rate, and a clean 0% would file it beside a run whose every call worked — the
+ * same number for "nothing happened" and "everything worked".
+ */
+const toolCallCountsSchema = {
+  calls: v.number(),
+  /**
+   * Calls that came back `ok: false`: the TOOL failed inside the container (a rejected edit,
+   * a non-zero command, malformed arguments), which is invisible in the LLM rollup beside it,
+   * where every one of those turns still reports a healthy model call.
+   */
+  failures: v.number(),
+  /** `failures / calls`, or null when there were no calls. */
+  failureRate: v.nullable(v.number()),
+} as const
+
+/** The run's tool activity in total. */
+export const debugToolCallTotalsSchema = v.object(toolCallCountsSchema)
+export type DebugToolCallTotals = v.InferOutput<typeof debugToolCallTotalsSchema>
+
+/** One tool's slice of it, folded across the agent kinds that called it. */
+export const debugToolInsightSchema = v.object({ tool: v.string(), ...toolCallCountsSchema })
+export type DebugToolInsight = v.InferOutput<typeof debugToolInsightSchema>
+
+/** One agent kind's slice of it, folded across the tools it called. */
+export const debugToolCallKindInsightSchema = v.object({
+  agentKind: v.string(),
+  ...toolCallCountsSchema,
+})
+export type DebugToolCallKindInsight = v.InferOutput<typeof debugToolCallKindInsightSchema>
+
+/**
+ * The run's tool-EXECUTION activity, aggregated in SQL at the `(agentKind, tool)` grain and
+ * re-cut along each axis. The counterpart of the `llm` block, and the half of a run's health
+ * that block structurally cannot report: a tool that fails inside the container leaves every
+ * model call around it looking perfectly healthy.
+ *
+ * Both breakdowns are folds over ONE aggregate, so they total identically to each other and to
+ * `totals` by construction, and both lead with the most-failed row: a run's busiest tool is
+ * almost never its broken one, and the caller reading this is looking for the broken one.
+ * `GET /debug/runs/:runId/tool-calls?ok=false` is the drill-down into any row of it.
+ */
+export const debugToolCallRollupSchema = v.object({
+  totals: debugToolCallTotalsSchema,
+  byTool: v.array(debugToolInsightSchema),
+  byAgentKind: v.array(debugToolCallKindInsightSchema),
+})
+export type DebugToolCallRollup = v.InferOutput<typeof debugToolCallRollupSchema>
+
+/**
  * The run's diagnostic map: identity, per-step state, what each telemetry sink holds, the
- * SQL-aggregated LLM rollups, and the derived signals. Composed from aggregates only — it
- * reads no prompt, response or context body, so it stays cheap enough to be the first call a
- * debugging client always makes.
+ * SQL-aggregated LLM and tool-call rollups, and the derived signals. Composed from aggregates
+ * only — it reads no prompt, response or context body, so it stays cheap enough to be the
+ * first call a debugging client always makes.
  */
 export const debugRunOverviewSchema = v.object({
   /** Schema marker so a consuming model knows the shape without external docs. */
@@ -382,7 +418,7 @@ export const debugRunOverviewSchema = v.object({
     llmCalls: debugSinkStatusSchema,
     agentContext: debugSinkStatusSchema,
     searchQueries: debugSinkStatusSchema,
-    toolCalls: debugToolCallSinkStatusSchema,
+    toolCalls: debugSinkStatusSchema,
     provisioningLog: debugSinkStatusSchema,
   }),
   /**
@@ -408,6 +444,11 @@ export const debugRunOverviewSchema = v.object({
      */
     costCurrency: v.nullable(v.string()),
   }),
+  /**
+   * What the run's agents DID with their tools, and how much of it failed. Counted from the
+   * same rows `sinks.toolCalls` counts, in the same pass, so the two can never disagree.
+   */
+  toolCalls: debugToolCallRollupSchema,
   signals: v.array(debugSignalSchema),
 })
 export type DebugRunOverview = v.InferOutput<typeof debugRunOverviewSchema>
@@ -760,10 +801,12 @@ export const toolCallOrderSchema = v.picklist(['recent', 'trajectory'])
 export type ToolCallOrder = v.InferOutput<typeof toolCallOrderSchema>
 
 /**
- * Query params for the tool-call trajectory list. It takes the small-row page params plus two
- * of its own: the {@link toolCallOrderSchema order}, and a dispatch filter, because a run's step
+ * Query params for the tool-call trajectory list. It takes the small-row page params plus three
+ * of its own: the {@link toolCallOrderSchema order}; a dispatch filter, because a run's step
  * can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph iteration) and "what did
- * the third ci-fixer round actually do" is a different question from "what did this run do".
+ * the third ci-fixer round actually do" is a different question from "what did this run do"; and
+ * the {@link toolCallOutcomeSchema outcome} filter, which is how the overview's failure counts
+ * are turned into the rows behind them.
  */
 export const listDebugToolCallsQuerySchema = v.object({
   limit: v.optional(pageLimitSchema),
@@ -771,14 +814,20 @@ export const listDebugToolCallsQuerySchema = v.object({
   jobId: v.optional(v.string()),
   order: v.optional(toolCallOrderSchema),
   /**
-   * Narrow to the calls that FAILED (or, with `ok`, the ones that did not), applied in SQL like
-   * every other narrowing here: a filter applied after the read has already paid for the rows it
-   * discards, and spends the page's `limit` on them, which on this sink is the difference
+   * Narrow to the calls that FAILED (`error`) or the ones that did not (`ok`), applied in SQL
+   * like every other narrowing here: a filter applied after the read has already paid for the
+   * rows it discards, and spends the page's `limit` on them, which on this sink is the difference
    * between one request and paging a thousand-call trajectory to find the four rows that matter.
    *
    * It composes with both orders. `order=trajectory&outcome=error` is the failing calls in the
    * sequence the agent made them, which is how a stuck edit loop (the same tool failing the same
    * way, round after round) is told apart from one tool that failed once and was worked around.
+   *
+   * THE SAME param name and vocabulary as the llm-call list's `outcome`, deliberately: the two
+   * drill-downs answer the same question about different sinks, and a reader who learned one
+   * should not have to discover that the other spells it `ok=false`. A picklist rather than a
+   * wire boolean for the reason a query param always is text, and so the set can gain a member
+   * (a timeout, a refusal) without retyping a published field.
    */
   outcome: v.optional(toolCallOutcomeSchema),
 })

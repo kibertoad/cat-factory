@@ -8,9 +8,9 @@ import type {
   AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
   AgentToolCall,
-  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   LlmCallBodyWindow,
   LlmCallMetric,
@@ -498,15 +498,19 @@ function toolCallsReadThrough(
       return ctx.read<AgentToolCall[]>('agentToolCallRepository', 'listPage', ws, [query])
     },
 
-    async countByExecution(ws, executionId) {
-      const counts = await local.countByExecution(ws, executionId)
-      // Coverage is judged on the TOTAL, never on the failure count: a run whose local rows were
-      // all pruned reports `{ total: 0, failed: 0 }`, and a zero failure count would read as
-      // "nothing failed here", the false clean bill this whole read-through exists to prevent.
-      if (ctx.whole(ws, executionId, counts.total)) return counts
-      return ctx.read<AgentToolCallCounts>('agentToolCallRepository', 'countByExecution', ws, [
-        executionId,
-      ])
+    async summarizeByExecution(ws, executionId) {
+      const cells = await local.summarizeByExecution(ws, executionId)
+      // Cell COUNT stands in for row count, exactly as it does for the LLM rollup: an aggregate
+      // over zero rows is zero cells, and a run the prune has taken from produces cells whose
+      // counts are simply too low. Never a merge of the two — nothing in either says which rows
+      // they share, so summing double-counts and taking the larger is a guess.
+      if (ctx.whole(ws, executionId, cells.length)) return cells
+      return ctx.read<AgentToolCallSummary[]>(
+        'agentToolCallRepository',
+        'summarizeByExecution',
+        ws,
+        [executionId],
+      )
     },
   }
 }

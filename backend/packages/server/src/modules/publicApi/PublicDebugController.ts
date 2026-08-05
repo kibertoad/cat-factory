@@ -260,7 +260,13 @@ export function publicDebugController(): Hono<AppEnv> {
       ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
       ...(query.jobId ? { jobId: query.jobId } : {}),
       ...(query.order ? { order: query.order } : {}),
-      ...(query.outcome ? { outcome: query.outcome } : {}),
+      // The wire vocabulary is `outcome=ok|error`, shared with the llm-call list; the port below
+      // narrows a two-valued column, so it takes the boolean. Converting HERE keeps that one
+      // representation under the boundary while the published surface keeps the name a reader
+      // learned on the other drill-down. Keyed on PRESENCE, not truthiness: an absent filter and
+      // a filter for the calls that failed are different requests, and only the absent one means
+      // "every call".
+      ...(query.outcome !== undefined ? { ok: query.outcome === 'ok' } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })

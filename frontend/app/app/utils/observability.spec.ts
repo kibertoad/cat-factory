@@ -322,7 +322,7 @@ describe('failing-call-first triage', () => {
       // The failure this split exists to prevent. The backend narrows and counts over the whole
       // run; the rows come back bounded. A count taken from the list would under-report exactly
       // the long runs worth opening the panel for, and would disagree with the debug overview's
-      // `sinks.toolCalls.failed` on the same run.
+      // `toolCalls.totals.failures` on the same run.
       const evidence = evidenceFor({
         failure: failure(),
         toolFailures: {

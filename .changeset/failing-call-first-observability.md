@@ -45,18 +45,30 @@ trajectory is a new panel view with `All / Failed / OK`, keeping trajectory orde
 filter: reading the failures in sequence is what tells one tool that failed and was worked around
 from an edit loop stuck repeating the same failing call.
 
-On the public API (additive; OpenAPI `1.12.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
-`?outcome=ok|error`, composing with both orders and with `?jobId=`, and the run overview's
-`sinks.toolCalls` carries `failed` beside its `count`, with a `tool_calls_failed` signal derived
-from it. `failure_outside_model_calls` now states what the trajectory actually holds instead of
-pointing at it unconditionally.
+On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+`?outcome=ok|error`, composing with both orders and with `?jobId=`.
+`failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+it unconditionally.
+
+**That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+two drill-downs answering the same question under two spellings is the wart this change exists to
+remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+published.
 
 The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
 than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
 the read would report no failures on any run whose failures came after its opening moves. Internal
-breaks: `AgentToolCallRepository.countByExecution` returns `{ total, failed }` (one aggregate pass,
-so the two can never be read at different instants and disagree), and the trajectory/page queries
-gain an `outcome` field.
+break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+own.
 
 **The panel obeys the same prefix rule the stores do.** It reads the sink through two
 workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the

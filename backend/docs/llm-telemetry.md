@@ -168,16 +168,28 @@ the backend drains a window's worth on its existing job poll and sends it to two
 - **`bodies` says whether they were retained at all.** A withheld body and a tool that genuinely
   took no arguments both leave `args` empty, and without the field an opted-out workspace's
   trajectory reads as a run whose every tool took none.
+- **The failures are AGGREGATED, at the `(agentKind, tool)` grain.** A tool-execution failure is
+  a healthy model call whose result came back bad, so it is invisible in every LLM rollup and a
+  run-level count of the rows says nothing on its own: 34 failures out of 36 calls and out of
+  3,600 are the same number and opposite diagnoses. `summarizeByExecution` is the one GROUP BY,
+  and the run's total, both breakdowns and the debug overview's `sinks.toolCalls.count` are folds
+  over it (kernel `domain/tool-call-rollup.ts`) rather than a second query, on the same rule the
+  LLM rollup follows. The grain keeps BOTH halves because the finding is the CONCENTRATION: one
+  agent kind retrying one tool is a stuck loop, and the same count scattered across nine tools is
+  an agent exploring. `?ok=` narrows the rows behind any of it, in SQL.
 - **The gate is applied ONCE, at the drain** (`toolTrajectory.ts`), not in either destination:
   the store and the external trace sinks receive the same already-gated batch. Reading it per
   destination is how a body withheld from the store gets shipped to Langfuse anyway.
 - **A FAILING tool call is the one failure class no other sink can see.** The tool executes inside
   the container, so the model call that requested it still records `ok` with a clean finish reason
   and every `llm_call_metrics` rollup reads healthy on a run whose edit loop is wedged. Both reads
-  therefore narrow on it in SQL (`outcome: 'ok' | 'error'` on the port, `?outcome=` on the debug
-  list), and `countByExecution` returns `{ total, failed }` from ONE aggregate pass so the debug
-  overview can carry the count (`sinks.toolCalls.failed`) and derive a `tool_calls_failed` signal
-  from it. Narrowing in SQL rather than after the read is what makes it correct on a long run: the
+  therefore narrow on it in SQL (`ok?: boolean` on the port, `?outcome=ok|error` on the debug list,
+  which is the same param name and vocabulary the llm-call list uses), and `summarizeByExecution`
+  returns the `(agentKind, tool)` cells from ONE aggregate pass, which the overview folds into
+  `toolCalls.totals` and derives a `tool_calls_failed` signal from. The count lives THERE and not
+  on `sinks.toolCalls` as well: a second copy could only be a second read of the same rows, which
+  is how a `failed` above its own `count` gets published. Narrowing in SQL rather than after the
+  read is what makes it correct on a long run: the
   trajectory read is bounded to a PREFIX, so a post-filter would report no failures on any run
   whose failures came after its opening moves.
 

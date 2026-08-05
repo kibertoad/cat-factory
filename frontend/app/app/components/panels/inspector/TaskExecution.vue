@@ -373,6 +373,7 @@ async function mergePr() {
             <button
               type="button"
               class="flex min-w-0 cursor-pointer items-center gap-2 text-start transition hover:text-white"
+              data-testid="run-step-open"
               :title="
                 s.output
                   ? t('inspector.execution.viewDetailsOutput')

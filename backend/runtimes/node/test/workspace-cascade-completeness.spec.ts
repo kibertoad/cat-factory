@@ -18,6 +18,12 @@ describe('workspace-delete cascade completeness (Node/Drizzle schema)', () => {
   // stores reclaimed by their own retention sweeps (e.g. `llm_call_metrics`) or the extractable
   // sandbox surface — never by the board-delete cascade. Filtering on `schema === undefined` keeps
   // this guard focused on exactly the tables the cascade is responsible for.
+  //
+  // The `audit` schema is out of scope for a STRONGER reason than the others, and it is worth
+  // being explicit because `audit_events` does carry a `workspace_id`. It must NOT cascade: a
+  // board being deleted is itself among the things worth having a record of, so a log that a
+  // later delete can erase is not an audit log. Living in its own schema (its own DATABASE on the
+  // Worker) makes that structural rather than a rule someone has to remember.
   const workspaceScopedTables = (Object.values(schema) as unknown[])
     .filter((v) => is(v, PgTable))
     .map((v) => getTableConfig(v as PgTable))

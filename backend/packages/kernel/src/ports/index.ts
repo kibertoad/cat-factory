@@ -28,6 +28,8 @@ export type {
   UserIdentityRecord,
   UserRepository,
 } from './user-repositories.js'
+export type { OidcProviderMetadata, SsoDiscoveryDocument } from './sso.js'
+export { oidcIdentitySubject } from './sso.js'
 export type { PasswordHasher } from './password-hasher.js'
 export type {
   EmailMessage,
@@ -169,10 +171,10 @@ export type {
 } from './agent-search-queries.js'
 export type {
   AgentToolCall,
-  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
@@ -567,6 +569,16 @@ export type {
   MachineNodeRepository,
 } from './machine-node-repositories.js'
 export type { AuthAttemptRecord, AuthAttemptRepository } from './auth-attempt-repositories.js'
+export type {
+  AuditActor,
+  AuditEvent,
+  AuditEventPage,
+  AuditEventRecord,
+  AuditEventRepository,
+  AuditEventView,
+  AuditRecorder,
+} from './audit.js'
+export { noopAuditRecorder } from './audit.js'
 export type {
   UserSecretRecord,
   UserSecretRepository,

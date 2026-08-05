@@ -28,6 +28,22 @@ export {
   providerCachesPrompts,
 } from './domain/cache-policy.js'
 export { resolveWritebackFlag } from './domain/writeback.js'
+export {
+  AUDIT_PAGE_LIMIT_DEFAULT,
+  AUDIT_PAGE_LIMIT_MAX,
+  auditActorColumns,
+  auditEventColumns,
+  auditPageLimit,
+  decodeAuditCursor,
+  decodeAuditDetails,
+  encodeAuditCursor,
+  encodeAuditDetails,
+  rowToAuditActor,
+  rowToAuditEventView,
+  type AuditCursor,
+  type AuditEventColumns,
+  type AuditEventRow,
+} from './domain/audit-log.js'
 // `narrowMergeClassRule` is NOT re-exported from here: it moved to `@cat-factory/contracts` beside
 // the rule maps it composes, so the preset editor in the SPA narrows by the same implementation the
 // engine applies. A convenience re-export would put two import paths on one rule, which is the
@@ -75,6 +91,18 @@ export {
   priceRollupCells,
   rollupInputTokens,
 } from './domain/llm-rollup.js'
+export type {
+  ToolCallKindRollup,
+  ToolCallRollupTotals,
+  ToolCallToolRollup,
+} from './domain/tool-call-rollup.js'
+export {
+  foldToolCallTotals,
+  foldToolCallsByAgentKind,
+  foldToolCallsByTool,
+  toolCallFailureRate,
+  worstToolRetryLoop,
+} from './domain/tool-call-rollup.js'
 export { bugHuntScore, parseBugHuntVerdicts, rankBugCandidates } from './domain/bug-hunt-logic.js'
 export {
   BLOCK_TYPE_LABEL,

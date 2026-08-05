@@ -12,6 +12,7 @@ import type {
   ResolvedAccountSettings,
   ResolvedCatalogEntry,
   RiskPolicyCacheValue,
+  SsoDiscoveryDocument,
   WorkspaceAccessCacheValue,
   WorkspaceSettingsCacheValue,
   ResolvedFoundationalService,
@@ -97,6 +98,7 @@ export interface AppCachesProfile {
   riskPolicy: GroupCacheProfile
   modelPreset: GroupCacheProfile
   workspaceAccess: GroupCacheProfile
+  ssoDiscovery: GroupCacheProfile
 }
 
 /** The default (Node/local/test) profile: caching on, modest bounds. */
@@ -213,6 +215,13 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
   // roster/access-mode/account-membership writes invalidate on commit), and it bounds how long a
   // just-revoked member keeps read access on the rare path an invalidation is missed.
   workspaceAccess: { enabled: true, ttlInMsecs: 60_000, maxGroups: 2000, maxItemsPerGroup: 256 },
+  // The deployment's discovered SSO provider (metadata + JWKS), grouped AND keyed by issuer
+  // URL — so ONE group with one entry, since a deployment configures one provider. An
+  // external document we never write: coherence is the TTL plus the key-rotation refetch the
+  // reader triggers on an unknown `kid`, not an invalidation. 15 minutes is long enough that a
+  // login costs no extra round-trips and short enough that an endpoint move (a provider
+  // migrating hosts) heals without a redeploy.
+  ssoDiscovery: { enabled: true, ttlInMsecs: 15 * 60_000, maxGroups: 4, maxItemsPerGroup: 4 },
 }
 
 /**
@@ -283,6 +292,14 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
   // TTL'd entry would keep granting access after a peer isolate revoked a member. The isolate
   // resolves it live every request — same class as `workspaceSettings`/`accountModelPolicy`.
   workspaceAccess: { ...DEFAULT_APP_CACHES_PROFILE.workspaceAccess, enabled: false },
+  // Stays ENABLED here, unlike every slice above it: the SSO discovery document is EXTERNAL
+  // state we never write, and a stale entry self-heals — an ID token signed with a rotated
+  // `kid` drops the entry and refetches, so a peer isolate's pre-rotation key set costs one
+  // refetch rather than failing logins until eviction. Same "bounded by a probe" reasoning
+  // that keeps `fragmentDocumentBody`/`repoFiles` on. Passing through instead would put two
+  // IdP round-trips in front of every single sign-in on the facade with the least budget for
+  // them.
+  ssoDiscovery: { ...DEFAULT_APP_CACHES_PROFILE.ssoDiscovery },
 }
 
 /**
@@ -513,6 +530,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.workspaceAccess,
     options,
   )
+  const ssoDiscovery = buildGroupCache<SsoDiscoveryDocument>(
+    'sso-discovery',
+    profile.ssoDiscovery,
+    options,
+  )
   return {
     fragmentCatalog,
     skillCatalog,
@@ -530,6 +552,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     riskPolicy,
     modelPreset,
     workspaceAccess,
+    ssoDiscovery,
     close: async () => {
       await Promise.all([
         fragmentCatalog.close(),
@@ -548,6 +571,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         riskPolicy.close(),
         modelPreset.close(),
         workspaceAccess.close(),
+        ssoDiscovery.close(),
       ])
     },
   }

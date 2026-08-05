@@ -37,13 +37,20 @@ const API_PREFIX = '/api/v1'
 // this against `origin/main` after every merge rather than trusting a clean one.
 // 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
 // so a consumer built against 1.11.0 keeps parsing.
-// 1.13.0, not 1.12.0: this branch claimed 1.12.0 while in flight and main then shipped a
-// DIFFERENT 1.12.0 (the `configUnreadable` field above). Exactly the collision the note above
-// describes — and this time it did conflict rather than auto-merge only because both sides had
-// also edited the comment, which is luck, not a guard. Additive either way: the tool-call list
-// gained an `?outcome=` narrowing and the run overview's `sinks.toolCalls` gained a `failed`
-// count, so a client built against 1.12.0 keeps working unchanged.
-const API_VERSION = '1.13.0'
+// 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
+// tool-call list and a `toolCalls` rollup on the run overview), but main reached 1.12.0 with
+// `configUnreadable` while this branch was in flight. The collision note above, arriving exactly
+// as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
+// only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
+// that clean merge.
+// 1.14.0: the tool-call list's `?ok=true|false` filter is REPLACED by `?outcome=ok|error`, the
+// same param name and vocabulary the llm-call list already uses. This is a MINOR for a change
+// that is technically breaking, taken deliberately: `?ok=` existed for one release, has no known
+// consumer, and the two drill-downs answering the same question under two spellings is the wart
+// the change exists to remove. A picklist also lets the set gain a member (a timeout, a refusal)
+// where `true|false` could only be retyped. If an adopter turns up before this lands, the honest
+// shape is `?ok=` served beside `?outcome=` for a release, not a rename.
+const API_VERSION = '1.14.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

@@ -65,15 +65,29 @@ async function assertToolCallReads(
     // being vacuous the moment a facade's fake agent starts reporting spans.
     expect(failing.body.toolCalls.every((c) => c.ok === false)).toBe(true)
   }
-  // Outside the picklist is a 400, not a silently unfiltered page: a caller that asked for
-  // the failures and got every row back would read the run as all-failing.
-  const badOutcome = await app.call(
+  // The other member is accepted too, so a narrowing to the calls that WORKED is not left to a
+  // caller filtering a page itself.
+  const working = await app.call<{ toolCalls: unknown[] }>(
     'GET',
-    `/api/v1/debug/runs/${runId}/tool-calls?outcome=warning`,
+    `/api/v1/debug/runs/${runId}/tool-calls?outcome=ok&limit=5`,
     undefined,
     auth,
   )
-  expect(badOutcome.status).toBe(400)
+  expect(working.status).toBe(200)
+  expect(working.body.toolCalls).toEqual([])
+  // Outside the picklist is a 400, not a silently unfiltered page: a caller that asked for
+  // the failures and got every row back would read the run as all-failing. `warning` is the
+  // member the LLM-call vocabulary has and this one does not, so it is the spelling a reader
+  // who learned the sibling drill-down would reach for first.
+  for (const bad of ['warning', 'maybe']) {
+    const badOutcome = await app.call(
+      'GET',
+      `/api/v1/debug/runs/${runId}/tool-calls?outcome=${bad}`,
+      undefined,
+      auth,
+    )
+    expect(badOutcome.status).toBe(400)
+  }
 
   // The SPA reads the SAME sink through its own workspace-scoped routes, and both hang off
   // `container.toolCallObservability` — a module the engine builds from the tool-call
@@ -249,11 +263,15 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       }
       // Totals are folded from the SQL rollup, so they exist even for a run with no calls.
       expect(overview.body.llm.totals.calls).toBe(overview.body.sinks.llmCalls.count)
-      // The tool-call sink carries the one number no LLM rollup can: how many of the run's tool
-      // calls FAILED. It is counted in the same pass as the total, so it can never exceed it.
-      expect(overview.body.sinks.toolCalls.failed).toBeLessThanOrEqual(
-        overview.body.sinks.toolCalls.count,
-      )
+      // The tool-call rollup is folded from the SAME aggregate the sink count is taken from, so
+      // the two agree by construction rather than by two queries happening to match. A run with
+      // no tool calls reports a NULL failure rate, never a clean 0%: a rate of zero would file
+      // "nothing happened" beside "everything worked".
+      expect(overview.body.toolCalls.totals.calls).toBe(overview.body.sinks.toolCalls.count)
+      expect(overview.body.toolCalls.totals.failures).toBe(0)
+      expect(overview.body.toolCalls.totals.failureRate).toBeNull()
+      expect(overview.body.toolCalls.byTool).toEqual([])
+      expect(overview.body.toolCalls.byAgentKind).toEqual([])
     })
 
     it('serves every per-run detail list for a real run, bounded and empty-safe', async () => {
