@@ -25,5 +25,18 @@ The report payload gains an optional `scope` (`PR_VERIFICATION_REPORT_VERSION` 7
 which is additive: absent means the own-service PR, exactly as before. `GET /api/v1/runs/:runId/report`
 keeps answering the complete own-service copy.
 
-Internal break: the `PrVerificationReportPublisher` port replaces `resolveTarget` with `resolveTargets`
-and `publish` now takes the resolved target it was composed for.
+Publishing to N pull requests costs what publishing to one did. `resolveTargets` is the only
+addressing step a settlement runs, the run-scoped evidence is read once and layered per pull request,
+and a resolved target carries its own repo and connection so the write reads nothing. The multi-repo
+repo resolver also reads the workspace's repo projection through the same per-workspace cache as the
+singular one, which it did not before (harmless while its only caller was dispatch, a full uncached
+re-list once the report started calling it on every settled step).
+
+`hostMarkdown` gains `link`/`cellLink`, the boundary for a link TARGET: an unusable or non-`http(s)`
+URL renders as plain text instead of a link. The existing helpers only ever covered link text, and a
+peer report links to a pull-request URL the harness reported.
+
+Internal break: the `PrVerificationReportPublisher` port replaces `resolveTarget` with `resolveTargets`,
+`publish` takes `(workspaceId, target, section)` (no block id, since it no longer resolves anything),
+and `PrReportTarget` gains a required `connection`. The `no_pull_request` / `no_repo` skip reasons are
+gone with the resolution they described: nowhere to publish is an empty `resolveTargets`.

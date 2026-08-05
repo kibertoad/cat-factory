@@ -6,8 +6,10 @@ import type {
   PrReportPublishResult,
   PrReportTarget,
   PrVerificationReportPublisher,
+  VcsConnectionRef,
 } from '@cat-factory/kernel'
 import { noopLogger, runBestEffort, spliceManagedSection } from '@cat-factory/kernel'
+import { allPullRequests } from '@cat-factory/contracts'
 import type {
   RepoTarget,
   ResolveRepoOrigin,
@@ -15,6 +17,7 @@ import type {
 } from '../agents/ContainerAgentExecutor.js'
 import type { ResolveRepoTargets } from '../agents/resolveRepoTarget.js'
 import { githubRepoOrigin } from '../agents/containerAgentBody.js'
+import { splitRepo } from './repoFullName.js'
 
 export interface GitHubPrReportPublisherDependencies {
   /**
@@ -25,7 +28,7 @@ export interface GitHubPrReportPublisherDependencies {
   githubClient: GitHubClient
   /** Resolves the repo (connection + owner/name) the block's work targets. */
   resolveRepoTarget: ResolveRepoTarget
-  /** Reads the block's recorded PR ref (number). */
+  /** Reads the block's recorded PR refs (own-service + peers). */
   blockRepository: BlockRepository
   /**
    * Resolves EVERY repo a multi-repo run touches, in one call, so a peer PR's report can be
@@ -50,21 +53,24 @@ export interface GitHubPrReportPublisherDependencies {
   logger?: Logger
 }
 
-/** A resolved target paired with the repo identity the write needs (never leaves this module). */
-interface AddressedTarget {
-  target: PrReportTarget
-  repo: RepoTarget
-}
+/** One entry of the block's recorded PR set (`allPullRequests`): own-service when `repo` is absent. */
+type RecordedPullRequest = ReturnType<typeof allPullRequests>[number]
 
 /**
- * The block plus its addressable pull requests. The block rides along so a publish that finds
- * no target can say WHICH of the two causes it hit — a run that has opened no pull request yet,
- * or one whose repo linkage is gone — rather than collapsing them into one reason (the report's
- * own "absent and zero must never render the same" rule, applied to its skips).
+ * The numeric connection handle the engine VCS client takes, recovered from a target's neutral
+ * {@link VcsConnectionRef}.
+ *
+ * Not kernel's `githubInstallationId`, which refuses a non-GitHub connection: this adapter serves
+ * a GitLab deployment too (through `vcsBackedGitHubClient`), and there the same numeric id is the
+ * workspace's `github_installations` row that holds its PAT. A non-numeric id is a wiring bug and
+ * throws, which the engine records as a failed publish rather than a run failure.
  */
-interface AddressedBlock {
-  block: Block | null
-  targets: AddressedTarget[]
+function connectionId(connection: VcsConnectionRef): number {
+  const id = Number(connection.connectionId)
+  if (!Number.isInteger(id)) {
+    throw new Error(`PR report target carries an unusable connection id "${connection.connectionId}".`)
+  }
+  return id
 }
 
 /**
@@ -81,59 +87,58 @@ interface AddressedBlock {
  * and every one of them is a target: a reviewer on a connected service's PR is looking at part
  * of this change and is as entitled to the run's evidence as one on the own-service PR. The
  * engine composes a distinct report per target — the own-service-only sections are withheld
- * from a peer's copy rather than copied onto it — which is why `publish` takes the target it
- * was composed FOR instead of re-deciding which pull request is "the block's".
+ * from a peer's copy rather than copied onto it.
+ *
+ * **All addressing happens in {@link resolveTargets}, once.** Each target it returns carries the
+ * connection and repo its write needs, so `publish` reads no repository and a run with N pull
+ * requests costs one resolution per settlement rather than N. That also removes the question
+ * `publish` would otherwise have to answer on every call ("is this still the block's PR?") on a
+ * hook that fires on every settled step.
  */
 export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
   constructor(private readonly deps: GitHubPrReportPublisherDependencies) {}
 
-  async resolveTargets(workspaceId: string, blockId: string): Promise<PrReportTarget[]> {
-    return (await this.address(workspaceId, blockId)).targets.map((a) => a.target)
-  }
-
   /**
-   * Every pull request of the block's run, paired with the repo identity its write needs.
+   * Every pull request of the block's run, own-service first, each addressed for writing.
    *
-   * ONE repo resolution for the whole set: the own-service target is resolved first (it is
-   * needed regardless and lets the multi-repo resolver skip re-walking the block's ancestry),
-   * then a single `resolveRepoTargets` call covers every peer. Resolving per recorded peer PR
-   * would be the N+1 this codebase bans, on a path that runs on every settled step.
+   * ONE block read and ONE repo resolution for the whole set: the own-service target is
+   * resolved first (it is needed regardless, and lets the multi-repo resolver skip re-walking
+   * the block's ancestry), then a single `resolveRepoTargets` call covers every peer. Resolving
+   * per recorded peer PR would be the N+1 this codebase bans.
    */
-  private async address(workspaceId: string, blockId: string): Promise<AddressedBlock> {
+  async resolveTargets(workspaceId: string, blockId: string): Promise<PrReportTarget[]> {
     const block = await this.deps.blockRepository.get(workspaceId, blockId)
-    if (!block) return { block: null, targets: [] }
+    if (!block) return []
 
-    const out: AddressedTarget[] = []
+    // `allPullRequests` is the single source of truth for "every PR this task opened", own
+    // first then peers — the same enumeration the CI gate aggregates over. The own-service
+    // entry is the one carrying no `repo` (its repo is the task's own service).
+    const prs = allPullRequests(block)
+    if (prs.length === 0) return []
+
+    const targets: PrReportTarget[] = []
     // The own-service PR FIRST when it exists: the engine reads the peer reports' back-pointer
-    // off the head of this list rather than re-resolving it.
-    const ownNumber = block.pullRequest?.number
-    const ownRepo =
-      ownNumber == null ? null : await this.deps.resolveRepoTarget(workspaceId, blockId)
-    if (ownNumber != null && ownRepo) {
-      out.push({
-        repo: ownRepo,
-        target: {
-          ...this.describe(ownRepo, ownNumber),
-          role: 'own',
-          frameId: null,
-          url: block.pullRequest?.url ?? null,
-        },
-      })
+    // off the head of this list rather than re-resolving it. Matched on an ABSENT `repo` rather
+    // than a falsy one, and only when the block records an own PR at all: a peer whose recorded
+    // repo is the empty string is unaddressable, not the own-service one.
+    const own = block.pullRequest ? prs.find((pr) => pr.repo === undefined) : undefined
+    const ownRepo = own ? await this.deps.resolveRepoTarget(workspaceId, blockId) : null
+    if (own?.ref.number != null && ownRepo) {
+      targets.push(this.describe(ownRepo, own.ref.number, { role: 'own', url: own.ref.url }))
     }
     // BEST-EFFORT, and deliberately so: the multi-repo resolver THROWS on a workspace with no
     // installation or an involved frame that lost its repo linkage, and letting that propagate
     // would mean one broken peer linkage costs the OWN-SERVICE report too — the one a reviewer is
     // most likely reading. The same "a failure on one target does not cost the others" rule the
     // engine applies when publishing, applied one step earlier where the targets are found.
-    out.push(
-      ...((await runBestEffort(
-        this.deps.logger ?? noopLogger,
-        'pr-report peer target resolution',
-        () => this.peers(workspaceId, blockId, block, ownRepo),
-        { workspaceId, blockId },
-      )) ?? []),
+    const peers = await runBestEffort(
+      this.deps.logger ?? noopLogger,
+      'pr-report peer target resolution',
+      () => this.peerTargets(workspaceId, blockId, block, prs, ownRepo),
+      { workspaceId, blockId },
     )
-    return { block, targets: out }
+    targets.push(...(peers ?? []))
+    return targets
   }
 
   /**
@@ -142,17 +147,20 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
    * A recorded peer PR is only targetable when two things line up: it carries a `number` (the
    * unit the description write addresses, absent on a ref that was only ever a URL) and its
    * repo is in the resolved checkout set (which is what supplies the connection to write
-   * through). A peer that satisfies neither is skipped rather than guessed at — writing a
-   * report onto a pull request we cannot confirm the identity of is the one failure mode worse
-   * than not writing it.
+   * through, and is the platform's own answer about which repos this run touched). A peer that
+   * satisfies neither is skipped rather than guessed at — the repo name on a recorded peer PR
+   * is harness-reported, and writing a report onto a pull request we cannot confirm the identity
+   * of is the one failure mode worse than not writing it.
    */
-  private async peers(
+  private async peerTargets(
     workspaceId: string,
     blockId: string,
     block: Block,
+    prs: readonly RecordedPullRequest[],
     ownRepo: RepoTarget | null,
-  ): Promise<AddressedTarget[]> {
-    const peers = block.peerPullRequests ?? []
+  ): Promise<PrReportTarget[]> {
+    // Every entry that names a repo: the complement of the own-service one above.
+    const peers = prs.filter((pr) => pr.repo !== undefined)
     const resolveAll = this.deps.resolveRepoTargets
     if (!peers.length || !resolveAll) return []
 
@@ -171,70 +179,63 @@ export class GitHubPrReportPublisher implements PrVerificationReportPublisher {
       resolved.checkouts.map((c) => [`${c.target.owner}/${c.target.name}`, c.target]),
     )
 
-    const out: AddressedTarget[] = []
+    const out: PrReportTarget[] = []
     for (const peer of peers) {
       const number = peer.ref.number
-      const repo = byRepo.get(peer.repo)
+      const repo = peer.repo ? byRepo.get(peer.repo) : undefined
       if (number == null || !repo) continue
-      out.push({
-        repo,
-        target: {
-          ...this.describe(repo, number),
-          role: 'peer',
-          frameId: peer.frameId ?? null,
-          url: peer.ref.url ?? null,
-        },
-      })
+      out.push(
+        this.describe(repo, number, { role: 'peer', frameId: peer.frameId, url: peer.ref.url }),
+      )
     }
     return out
   }
 
-  /** The provider-neutral half of a target: which PR, in which repo, on which provider. */
+  /**
+   * A resolved repo + PR number as a self-describing target: which PR, in which repo, on which
+   * provider, through which connection.
+   *
+   * The connection names the DEPLOYMENT'S provider, not this class's name: a GitLab deployment
+   * reaches this adapter through `vcsBackedGitHubClient`, and a target that claimed `github`
+   * would mis-route the day a native GitLab publisher selects its adapter from it. Both providers
+   * ride the same numeric connection id, because a GitLab workspace's PAT connect reuses the
+   * `github_installations` row this id comes from.
+   */
   private describe(
     repo: RepoTarget,
     prNumber: number,
-  ): Pick<PrReportTarget, 'prNumber' | 'repo' | 'provider'> {
+    scope: { role: 'own' | 'peer'; frameId?: string; url?: string | null },
+  ): PrReportTarget {
     const origin = (this.deps.resolveRepoOrigin ?? githubRepoOrigin)(repo)
-    return { prNumber, repo: `${repo.owner}/${repo.name}`, provider: origin.provider }
+    return {
+      prNumber,
+      repo: `${repo.owner}/${repo.name}`,
+      provider: origin.provider,
+      connection: { provider: origin.provider, connectionId: String(repo.installationId) },
+      role: scope.role,
+      frameId: scope.frameId ?? null,
+      url: scope.url ?? null,
+    }
   }
 
   async publish(
-    workspaceId: string,
-    blockId: string,
+    _workspaceId: string,
     target: PrReportTarget,
     section: string,
   ): Promise<PrReportPublishResult> {
-    // Re-addressed through the SAME helper `resolveTargets` used, so the connection this writes
-    // through can never come from a second opinion about which repos the run touched. The caller
-    // composed `section` FOR this target, so the match is by identity (repo + number) and a
-    // target that is no longer in the set is a skip, never a write onto whatever is nearest.
-    const { block, targets } = await this.address(workspaceId, blockId)
-    const match = targets.find(
-      (a) => a.target.repo === target.repo && a.target.prNumber === target.prNumber,
-    )
-    if (!match) {
-      // The PR the report was composed for is not addressable: either the run has recorded no
-      // pull request at all, or it has but the repo behind it no longer resolves. The two call
-      // for different fixes, so they are reported as different reasons.
-      const anyRecorded =
-        block?.pullRequest?.number != null || (block?.peerPullRequests?.length ?? 0) > 0
-      return {
-        published: false,
-        skipped: anyRecorded ? 'no_repo' : 'no_pull_request',
-        ...(anyRecorded ? { prNumber: target.prNumber } : {}),
-      }
-    }
-
-    const { repo } = match
+    // No resolution here at all: the target names its own pull request, repo and connection,
+    // and the caller composed `section` for exactly that. See the class doc.
+    const installationId = connectionId(target.connection)
+    const [owner, name] = splitRepo(target.repo)
+    const ref = { owner, repo: name }
     const number = target.prNumber
-    const ref = { owner: repo.owner, repo: repo.name }
     const gh = this.deps.githubClient
-    const current = await gh.getPullRequestBody(repo.installationId, ref, number)
+    const current = await gh.getPullRequestBody(installationId, ref, number)
     const next = spliceManagedSection(current, section)
     if (next === (current ?? '')) {
       return { published: false, skipped: 'unchanged', prNumber: number }
     }
-    await gh.updatePullRequest(repo.installationId, ref, number, { body: next })
+    await gh.updatePullRequest(installationId, ref, number, { body: next })
     return { published: true, prNumber: number }
   }
 }

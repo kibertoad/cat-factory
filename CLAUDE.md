@@ -401,7 +401,8 @@ native-child env allow-list) updates that doc in the same PR.
   keyword before an issue reference CLOSES that issue on merge**, a raw newline ends a table row, and an
   unbalanced fence swallows whatever follows, including the machine-readable JSON block of the
   verification report. Every hole goes through `cell`, `inline` or `prose`, which neutralise the auto-link
-  triggers with numeric entities in ONE pass (chained `.replace()`s re-escape each other).
+  triggers with numeric entities in ONE pass (chained `.replace()`s re-escape each other); a hole that is a
+  link TARGET goes through `link`/`cellLink`, which emit an unusable URL as plain text rather than a link.
 - **The harness carries byte-for-byte COPIES of a few kernel helpers** (`host-markdown.ts`,
   `normalizeProxyPhase`, `isSafeTestPath`) because the image builds from `src/` plus typescript and can
   depend on no workspace package. Each is pinned by a conformity test: change one, change the other.

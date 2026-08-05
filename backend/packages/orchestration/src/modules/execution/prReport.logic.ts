@@ -692,9 +692,7 @@ function renderCi(ci: PrVerificationReport['ci']): string[] {
       multiRepo ? '| --- | --- | --- |' : '| --- | --- |',
     )
     for (const check of ci.failingChecks) {
-      const name = check.url
-        ? `[${hostMarkdown.cell(check.name)}](${check.url})`
-        : hostMarkdown.cell(check.name)
+      const name = hostMarkdown.cellLink(check.name, check.url)
       const conclusion = hostMarkdown.cell(check.conclusion ?? 'unknown')
       out.push(
         multiRepo
@@ -926,12 +924,12 @@ function renderTruncations(truncations: readonly string[]): string[] {
 function renderScope(scope: PrVerificationReport['scope']): string[] {
   if (scope?.role !== 'peer') return []
   const own = scope.ownPullRequest
+  // The URL goes through the link boundary, not a template hole: a peer PR's URL is a string
+  // the harness reported, and an unusable one renders as the plain `#12` a reader can still act
+  // on rather than spilling out of the link syntax.
   const pointer = own
     ? `The task's own service is ${hostMarkdown.inline(own.repo)}` +
-      (own.url
-        ? ` ([#${own.number}](${own.url}))`
-        : ` (${hostMarkdown.inline(`#${own.number}`)})`) +
-      '.'
+      ` (${hostMarkdown.link(`#${own.number}`, own.url)}).`
     : "The task's own service has no pull request open yet."
   return [
     `> **This is a connected service's pull request.** This change spans several repositories; ` +

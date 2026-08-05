@@ -288,24 +288,48 @@ Traps found building it:
 - **The write-avoidance cache is keyed per TARGET, not per run.** Keyed by run alone, the first
   target's fingerprint suppresses every other target's write on the same settlement and the peers
   carry a stale report forever. That failure is invisible: the own-service PR looks perfect.
-- **`publish` takes the target it was composed FOR.** It used to re-resolve "the block's PR"
-  self-containedly, which is right when there is one; with several, re-deciding is how the body
-  written and the report written into it come to disagree about which repo they are about. A target
-  that has dropped out of the resolved set is a SKIP, never a write onto whatever is nearest.
+- **`publish` takes the target it was composed FOR, and the target is SELF-DESCRIBING.** It used to
+  re-resolve "the block's PR" self-containedly, which is right when there is one; with several,
+  re-deciding is how the body written and the report written into it come to disagree about which
+  repo they are about. Carrying the address on the target (repo, PR number, and the `connection` in
+  the neutral `VcsConnectionRef` vocabulary) settles it structurally: the write reads no repository,
+  so "is this still the block's PR?" is not a question `publish` has to answer on every call, and a
+  report composed for one repo cannot land on another's PR because there is no second opinion to
+  disagree with.
 - **The head sha is the one CI field that is genuinely per-PR.** The gate records `headShas` keyed
   by repo on a multi-repo block; reporting the scalar `headSha` on a peer names a commit that repo
   has never heard of. The rendered check table also gained a Repo column (only when the checks are
   repo-tagged, which is exactly the multi-repo case) — without it a cross-service reviewer reads red
   check names with no way to tell whose repo is broken.
-- **Resolving N peers is ONE repo call.** `resolveTargets` resolves the own target first, then joins
-  the recorded peer PRs onto a single `resolveRepoTargets` result. A lookup per recorded peer would
-  be the banned N+1 on a path that runs on every settled step.
+- **A settlement pays for ONE resolution and ONE read of the run's evidence, whatever N is.** Three
+  places had to hold that line, because the hook fires on every settled step and each of them scales
+  with the number of pull requests if it is written per target:
+  - `resolveTargets` reads the block once (through `allPullRequests`, the same enumeration the CI
+    gate aggregates over), resolves the own target, and joins the recorded peer PRs onto a single
+    `resolveRepoTargets` result.
+  - The controller reads the run-scoped evidence once per settlement (`loadRunScopedInputs`: block,
+    linked issues, `spec/`, provisioning history) and layers the per-PR repo/provider/scope on top
+    with a pure function. None of those answers can differ between two PRs of the same run, which is
+    what makes the split safe as well as cheap; it also gives every copy of one settlement the same
+    `generatedAt`.
+  - `publish` reads nothing at all (see the self-describing target above).
+- **The multi-repo resolver reads the projection through the SAME cache as the singular one.** It did
+  not, which was invisible while its only caller was dispatch and became a full uncached
+  whole-workspace re-list per settlement the moment the report started calling it. Both builders now
+  share one `listProjection` helper (still live on the Worker, whose profile makes that cache
+  pass-through: reading live IS the isolate-safe behaviour there).
 - **A peer with no `number`, or whose repo is not in the resolved checkout set, is SKIPPED.** There
   is nothing to address the description write with, and writing a report onto a pull request whose
   identity we cannot confirm is the one failure worse than not writing it.
 - **`GET /api/v1/runs/:runId/report` answers the OWN copy**, on a multi-repo run as much as a
   single-repo one: it is the complete one, and the endpoint answers about the RUN rather than about
   one of its pull requests.
+- **A peer report is the first place the report LINKS to something an agent named.** The own-service
+  PR's URL reaches it from the harness's job result, and a link target is its own syntax: an
+  unescaped `)` closes it early and spills the rest into the body. `hostMarkdown` gained
+  `link`/`cellLink` for that half of the boundary (the existing helpers only ever covered link
+  TEXT), and an unusable or non-`http(s)` target renders as plain text rather than as a link the
+  platform never meant to publish.
 
 ### Machine reachability (slice 14)
 

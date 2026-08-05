@@ -5,15 +5,11 @@ import type {
 } from '@cat-factory/kernel'
 import { readManagedSection, spliceManagedSection } from '@cat-factory/kernel'
 
-/** The own-service PR every resolvable block has, unless a suite seeds peers beside it. */
-const OWN_TARGET: PrReportTarget = {
-  prNumber: 1,
-  repo: 'acme/api',
-  provider: 'github',
-  role: 'own',
-  frameId: null,
-  url: 'https://github.test/acme/api/pull/1',
-}
+/** The repo every block's own-service PR lives in, for the suite's purposes. */
+const OWN_REPO = 'acme/api'
+
+/** The connection a target names; the GitHub adapter would put a stringified installation id here. */
+const CONNECTION = { provider: 'github', connectionId: '1' } as const
 
 /**
  * Deterministic {@link PrVerificationReportPublisher} for the cross-runtime conformance
@@ -30,12 +26,11 @@ const OWN_TARGET: PrReportTarget = {
  * peers carried the own-service report.
  */
 export class FakePrReportPublisher implements PrVerificationReportPublisher {
-  /** The current "PR body" per `<blockId> <repo>#<number>`. See {@link bodyKey}. */
+  /** The current "PR body" per `<repo>#<number>`. See {@link bodyKey}. */
   readonly bodies = new Map<string, string>()
   /** Every publish call, in order, for asserting how many remote writes were attempted. */
   readonly calls: {
     workspaceId: string
-    blockId: string
     repo: string
     prNumber: number
     role: 'own' | 'peer'
@@ -51,6 +46,13 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
    * block unless a suite seeds one, so a single-repo assertion is untouched by this existing.
    */
   readonly peers = new Map<string, PrReportTarget[]>()
+  /**
+   * Each block's own-service target, minted on first resolve with its OWN pull-request number.
+   * Distinct per block on purpose: `publish` addresses a pull request and nothing else (that is
+   * the port's contract), so two blocks sharing a PR identity would share a body, and a suite
+   * driving two runs would assert one's report while reading the other's.
+   */
+  private readonly ownByBlock = new Map<string, PrReportTarget>()
 
   /** Seed a block's peer PR (the multi-repo case), returning the target it will resolve. */
   addPeer(blockId: string, repo: string, prNumber: number, frameId?: string): PrReportTarget {
@@ -58,6 +60,7 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
       prNumber,
       repo,
       provider: 'github',
+      connection: CONNECTION,
       role: 'peer',
       frameId: frameId ?? null,
       url: `https://github.test/${repo}/pull/${prNumber}`,
@@ -70,23 +73,21 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
     if (this.unresolvable.has(blockId)) return []
     // Own FIRST, exactly like the real adapter: the engine reads the peer reports' back-pointer
     // off the head of this list.
-    return [OWN_TARGET, ...(this.peers.get(blockId) ?? [])]
+    return [this.ownTarget(blockId), ...(this.peers.get(blockId) ?? [])]
   }
 
   async publish(
     workspaceId: string,
-    blockId: string,
     target: PrReportTarget,
     section: string,
   ): Promise<PrReportPublishResult> {
-    const key = bodyKey(blockId, target)
+    const key = bodyKey(target)
     const current = this.bodies.get(key) ?? ''
     const next = spliceManagedSection(current, section)
     const published = next !== current
     if (published) this.bodies.set(key, next)
     this.calls.push({
       workspaceId,
-      blockId,
       repo: target.repo,
       prNumber: target.prNumber,
       role: target.role,
@@ -102,13 +103,31 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
    * published. This is the report a single-repo run produces, and the complete one.
    */
   section(blockId: string): string | null {
-    return readManagedSection(this.bodies.get(bodyKey(blockId, OWN_TARGET)))
+    return readManagedSection(this.bodies.get(bodyKey(this.ownTarget(blockId))))
   }
 
   /** The same, for one of the block's PEER pull requests (addressed by its repo). */
   peerSection(blockId: string, repo: string): string | null {
     const target = this.peers.get(blockId)?.find((t) => t.repo === repo)
-    return target ? readManagedSection(this.bodies.get(bodyKey(blockId, target))) : null
+    return target ? readManagedSection(this.bodies.get(bodyKey(target))) : null
+  }
+
+  /** The block's own-service target, minted once and stable for the fake's lifetime. */
+  private ownTarget(blockId: string): PrReportTarget {
+    const existing = this.ownByBlock.get(blockId)
+    if (existing) return existing
+    const prNumber = this.ownByBlock.size + 1
+    const target: PrReportTarget = {
+      prNumber,
+      repo: OWN_REPO,
+      provider: 'github',
+      connection: CONNECTION,
+      role: 'own',
+      frameId: null,
+      url: `https://github.test/${OWN_REPO}/pull/${prNumber}`,
+    }
+    this.ownByBlock.set(blockId, target)
+    return target
   }
 
   /**
@@ -126,9 +145,9 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
   }
 }
 
-/** One body per (block, pull request) — see the class doc for why the PR is part of the key. */
-function bodyKey(blockId: string, target: PrReportTarget): string {
-  return `${blockId} ${target.repo}#${target.prNumber}`
+/** One body per PULL REQUEST — see the class doc for why the block is not part of the key. */
+function bodyKey(target: PrReportTarget): string {
+  return `${target.repo}#${target.prNumber}`
 }
 
 function parseFence(section: string | null): unknown {

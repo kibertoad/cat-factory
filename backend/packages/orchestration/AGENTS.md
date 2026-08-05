@@ -72,7 +72,8 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   composed from the settled run's own state and published onto EACH pull request the run opened
   through the `PrVerificationReportPublisher` port; a cross-service run's peer PRs get their own
   SCOPED copy, which withholds the own-service-only sections rather than restating them, so the
-  write-avoidance cache is keyed per run AND target), with `prReport.environments.ts` holding the **test
+  write-avoidance cache is keyed per run AND target while the run's evidence is READ once per
+  settlement and layered per PR), with `prReport.environments.ts` holding the **test
   environment lifecycle** proof (environment up → evidence captured from it while live →
   teardown confirmed) because it is the one section composed from a source outside the
   in-memory run: the provisioning event log, which is what dates the bring-up and the teardown.

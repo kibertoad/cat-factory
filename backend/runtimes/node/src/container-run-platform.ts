@@ -114,23 +114,22 @@ function buildNodeRepoResolvers(deps: {
   serviceRepository: ServiceRepository
   repoProjectionCache?: AppCaches['repoProjection']
 }) {
-  const { repoProjectionCache, ...shared } = deps
+  // BOTH resolvers get the projection cache. They read the same whole-workspace list, on the
+  // same hot paths, and it is invalidated by the same projection writes (slice 3; the GitHub
+  // sync/webhook module + bootstrapper invalidate the bag after every write). Handing it to one
+  // of them is how the cheap resolver and the expensive one end up looking alike at the call
+  // site while costing an order of magnitude apart.
   return {
     // The repo a running block targets (installation + owner/name), resolved from the
     // github_repos projection. Built once and shared by the container executor, the
     // GitHub-issue tracker filer, and the CI / merge providers.
-    resolveRepoTarget: buildResolveRepoTarget({
-      ...shared,
-      // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
-      // module + bootstrapper invalidate the same bag on every projection write.
-      repoProjectionCache,
-    }),
+    resolveRepoTarget: buildResolveRepoTarget(deps),
     // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
     // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
     // resolves the involved frames in one query). Fed to the container executor so the
     // implementer can fan a cross-service change out across sibling checkouts, and to the PR
     // verification report so it reaches the peer PRs that fan-out opened.
-    resolveRepoTargets: buildResolveRepoTargets(shared),
+    resolveRepoTargets: buildResolveRepoTargets(deps),
   }
 }
 
