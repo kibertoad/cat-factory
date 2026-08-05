@@ -30,6 +30,12 @@ prerequisites are configured.
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
 - `datadog/` + `observability/`: release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/`: incident enrichment.
+- `mcpOAuth/`: the per-workspace OAuth grants a remote (`http`) MCP tool server needs.
+  `McpOAuthService.ts` owns the lifecycle (start → sealed state → exchange → refresh → disconnect)
+  and `mcpOAuthClient.ts` is the wire half (RFC 9728/8414 endpoint discovery plus the three token
+  calls, hand-rolled on `fetch` so it bundles into a Worker). Separate from `capabilityCredentials/`
+  on purpose: a grant expires, is rewritten by the dispatch path, and belongs to a person's vendor
+  account, none of which a typed credential's shape can hold. See `backend/docs/mcp-tool-servers.md`.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and

@@ -207,6 +207,14 @@ const failureEvidence = computed(() =>
   }),
 )
 /**
+ * Which call rows are expanded.
+ *
+ * Declared here rather than beside `toggle` below because `revealCall` writes it: the pinned
+ * summary's jump opens the row it scrolls to, so the state has to exist above its first use.
+ */
+const expanded = reactive<Record<string, boolean>>({})
+
+/**
  * Whether to pin the section at all.
  *
  * Deliberately NOT gated on `status === 'failed'`: a run still in flight whose calls are already
@@ -395,7 +403,6 @@ function isWarning(finishReason: string | null): boolean {
   return isLlmWarningFinishReason(finishReason)
 }
 
-const expanded = reactive<Record<string, boolean>>({})
 function toggle(c: LlmCallMetric) {
   expanded[c.id] = !expanded[c.id]
   // A live-streamed row arrives without its prompt/response bodies (the event stays

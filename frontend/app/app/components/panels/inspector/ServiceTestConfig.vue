@@ -190,6 +190,18 @@ function rootUnderDirectory(directory: string | null | undefined, path: string):
   return segs.join('/')
 }
 
+// The repo + service subdirectory backing this frame (the manifest prefills, the fixer
+// run, and the compose-file browser all root paths under it). A monorepo service isn't
+// on the `github_repos` blockId link (that stays null), so fall back to the service
+// catalog mapping, which carries the repo + directory.
+const repoContext = computed<{ githubId: number; directory?: string | null } | undefined>(() => {
+  if (props.repo) return props.repo
+  const svc = services.serviceByFrameBlock[props.block.id]
+  if (svc?.repoGithubId != null) return { githubId: svc.repoGithubId, directory: svc.directory }
+  const r = github.repoForBlock(props.block.id)
+  return r ? { githubId: r.githubId } : undefined
+})
+
 function setCustomManifestId(value: string) {
   // Prefill the manifest path with the selected type's default, rooted under the service subtree
   // (repo-root-relative, editable afterwards) so a monorepo service targets the right location
@@ -365,17 +377,6 @@ async function stopEnvTest() {
 // The provisioning hints (cloud provider + instance size) are advisory inputs to the
 // ephemeral-environment provisioner, not commonly tuned — keep them collapsed by default.
 const showProvisioning = ref(false)
-
-// The repo + service subdirectory backing this frame, for the compose-file browser.
-// A monorepo service isn't on the `github_repos` blockId link (that stays null), so
-// fall back to the service catalog mapping, which carries the repo + directory.
-const repoContext = computed<{ githubId: number; directory?: string | null } | undefined>(() => {
-  if (props.repo) return props.repo
-  const svc = services.serviceByFrameBlock[props.block.id]
-  if (svc?.repoGithubId != null) return { githubId: svc.repoGithubId, directory: svc.directory }
-  const r = github.repoForBlock(props.block.id)
-  return r ? { githubId: r.githubId } : undefined
-})
 
 // Repo-path picker, shared by the compose file (`docker compose -f <path>`) and the
 // kubernetes colocated manifests path. The stored path is relative to the repo root (the

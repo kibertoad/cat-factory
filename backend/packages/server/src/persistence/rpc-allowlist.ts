@@ -856,6 +856,22 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     deleteIfRev: { scope: { kind: 'workspace', arg: 0 } },
     delete: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // The PER-WORKSPACE OAUTH GRANTS a board holds against remote MCP tool servers. Sealed exactly
+  // like the credentials above (opened in the service under the LOCAL key), so no token crosses
+  // the machine API, and `remote` for the identical reason: the grant is org state a RUN resolves,
+  // and a mothership-mode node has no `db` to keep it in — a connection an operator made on the
+  // mothership has to reach the dispatch that needs the token. The connect/disconnect CRUD and the
+  // dispatch's refresh are the SAME methods; everything is workspace-scoped on arg0 except the
+  // record-based `upsert`/`compareAndSwap`, which bind on the record's `workspaceId` FIELD. The
+  // rev-guarded `compareAndSwap` is what makes a refresh safe across two nodes rather than two
+  // requests, which is precisely the case a mothership deployment makes ordinary.
+  mcpOAuthGrantRepository: {
+    get: { scope: { kind: 'workspace', arg: 0 } },
+    listByWorkspace: { scope: { kind: 'workspace', arg: 0 } },
+    upsert: { scope: { kind: 'workspaceField', arg: 0 } },
+    compareAndSwap: { scope: { kind: 'workspaceField', arg: 0 } },
+    delete: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // The per-service PRE-PR VALIDATION CHECKS, keyed by service-frame block like
   // `releaseHealthConfigRepository` above. Nothing sealed — the commands are operator-authored
   // shell strings that run inside the run's own container — so the plain record crosses the

@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "{pr} を GitHub で開く",
+      "readOutcome": "成果",
+      "readOutcomeHint": "何が変わったかを、その根拠とともに読む",
       "review": "レビュー",
       "merge": "マージ",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "プルリクエスト",
+      "readOutcome": "成果を読む",
       "stepState": {
         "pending": "保留中",
         "working": "実行中",
@@ -3057,6 +3060,27 @@
       "servableHarnessesNone": "このトランスポートを扱えるエージェント CLI がないため、このサーバーはどの実行にも適用されません。",
       "allowedTools": "許可されたツール: {tools}",
       "credentials": "認証情報: {keys}",
+      "oauth": {
+        "connected": "接続済み",
+        "notConnected": "未接続",
+        "machineGrant": "このデプロイとしてサインインします",
+        "connectedBy": "{user} が接続しました",
+        "scopes": "許可されたスコープ: {scopes}",
+        "notRefreshable": "プロバイダーがリフレッシュトークンを発行しなかったため、アクセストークンの期限が切れたら接続をやり直す必要があります。",
+        "lastError": "直近のトークン更新に失敗しました: {detail}",
+        "connect": "接続",
+        "reconnect": "再接続",
+        "disconnect": "接続を解除",
+        "callback": {
+          "working": "接続を完了しています…",
+          "done": "{server} に接続しました",
+          "doneHint": "このボードの実行では、サインインしたアカウントとしてツールサーバーを利用できるようになりました。",
+          "back": "アプリに戻る",
+          "failedTitle": "接続を完了できませんでした",
+          "failed": "認可を完了できませんでした。インフラストラクチャ ウィンドウから接続をやり直してください。",
+          "missingParams": "このリンクにはプロバイダーが返す値が含まれていないため、完了できる処理がありません。接続をやり直してください。"
+        }
+      },
       "test": "テスト",
       "notProbeable": {
         "stdio": "エージェントのコンテナ内で動作するため、ここからはテストできません。",
@@ -3067,6 +3091,8 @@
         "ok": "応答あり",
         "credentialsMissing": "認証情報なし",
         "credentialRefused": "認証情報を拒否",
+        "oauthNotConnected": "未接続",
+        "oauthTokenFailed": "接続が機能しなくなりました",
         "unreachable": "応答なし",
         "httpError": "リクエストを拒否",
         "protocolError": "MCP サーバーではない",
@@ -3083,7 +3109,9 @@
       "hideDetails": "詳細を隠す",
       "toast": {
         "loadFailed": "ツールサーバーを読み込めませんでした",
-        "probeFailed": "ツールサーバーをテストできませんでした"
+        "probeFailed": "ツールサーバーをテストできませんでした",
+        "connectFailed": "接続を開始できませんでした",
+        "disconnectFailed": "ツールサーバーの接続を解除できませんでした"
       }
     },
     "capabilityCredentials": {
@@ -5387,6 +5415,110 @@
     "history": {
       "heading": "履歴（ラウンドなし） | 履歴（{count} ラウンド） | 履歴（{count} ラウンド）",
       "fixRequested": "修正をリクエスト済み"
+    }
+  },
+  "outcome": {
+    "title": "成果",
+    "subtitle": "この実行で何が変わったか、そしてその根拠",
+    "diff": "差分を開く",
+    "diffNumbered": "差分を開く (#{number})",
+    "peerDiff": "{repo} の差分を開く",
+    "disposition": {
+      "merged": "マージ済み",
+      "awaiting_merge": "マージ待ち",
+      "in_flight": "実行中",
+      "needs_attention": "対応が必要",
+      "not_run": "未実行",
+      "unknown": "実行を読み込めていません"
+    },
+    "ask": {
+      "title": "依頼内容",
+      "none": "このタスクには説明がないため、結果と照らし合わせるものがありません。"
+    },
+    "gap": {
+      "run_unavailable": "このタスクの実行が読み込まれていないため、そこに記録された根拠をここには表示できません。何も記録しなかった実行とは別のことです。"
+    },
+    "requirements": {
+      "title": "確認した要件",
+      "met": "満たした: {count}",
+      "notMet": "満たしていない: {count}",
+      "notCovered": "未確認: {count}",
+      "regressions": "リグレッション: {count}",
+      "regressionTag": "リグレッション",
+      "idOnly": "ID のみ",
+      "idOnlyHint": "この ID はサービス仕様に含まれていないため、表示できる名称がありません。",
+      "spec": {
+        "not_read": "サービス仕様を読み取っていないため、ここに並ぶのはテスターが報告した要件 ID だけで、その名称はありません。",
+        "unmatched": "読み取ったサービス仕様には、これらの要件 ID がひとつも含まれていません。そのため、テスターが報告した ID のみを表示しています。"
+      },
+      "verdict": {
+        "met": "確認済み",
+        "not_met": "失敗",
+        "not_covered": "未確認"
+      },
+      "gap": {
+        "no_tester_step": "このパイプラインにはテスト工程がないため、要件は確認されていません。",
+        "tester_not_reported": "テスターがまだ報告していないため、どの要件も判定されていません。",
+        "no_verdicts": "テスターは報告しましたが、仕様のいずれの要件についても判定していません。"
+      }
+    },
+    "tests": {
+      "title": "テストの内容",
+      "openReport": "詳細なテストレポート",
+      "summary": "テスターの報告: {summary}",
+      "abort": "テスターは意味のあるテストを実行できませんでした: {reason}",
+      "counts": "成功 {passed}、失敗 {failed}、スキップ {skipped}",
+      "verdict": {
+        "greenlit": "リリース可",
+        "concerns": "懸念あり",
+        "could_not_run": "テストできず"
+      },
+      "environment": {
+        "local": "ローカル依存関係に対してテスト",
+        "ephemeral": "プレビュー環境に対してテスト"
+      },
+      "severity": {
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "critical": "重大"
+      },
+      "gap": {
+        "no_tester_step": "このパイプラインにはテスト工程がないため、何も実行されていません。",
+        "tester_not_reported": "テスターはまだ報告していません。"
+      }
+    },
+    "visuals": {
+      "title": "見た目",
+      "shotAlt": "{view} のスクリーンショット",
+      "hasReference": "このビューには参照デザインが用意されています",
+      "source": {
+        "visual_confirm": "これらのビューは参照デザインと比較されました。",
+        "tester": "これらのビューはテスト中に取得されたもので、レビューは依頼されていません。"
+      },
+      "gap": {
+        "no_visual_step": "このパイプラインには画面を取得する工程がないため、見るものはありません。",
+        "none_captured": "画面を取得する予定でしたが、ビューは取得されませんでした。"
+      }
+    },
+    "checks": {
+      "title": "チェック",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "プロジェクトのチェック",
+        "reproduction": "不具合の再現"
+      },
+      "state": {
+        "pass": "成功",
+        "fail": "失敗",
+        "pending": "実行中",
+        "inconclusive": "判定不能"
+      }
+    },
+    "empty": {
+      "title": "まだ表示できるものがありません",
+      "body": "このタスクはまだ読める結果を生み出していません。"
     }
   },
   "focus": {

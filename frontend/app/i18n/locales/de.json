@@ -624,6 +624,27 @@
       "servableHarnessesNone": "Keine Agenten-CLI kann diesen Transport bedienen, daher greift dieser Server in keinem Lauf.",
       "allowedTools": "Eingeschränkt auf: {tools}",
       "credentials": "Zugangsdaten: {keys}",
+      "oauth": {
+        "connected": "Verbunden",
+        "notConnected": "Nicht verbunden",
+        "machineGrant": "Meldet sich als dieses Deployment an",
+        "connectedBy": "Verbunden von {user}",
+        "scopes": "Gewährt: {scopes}",
+        "notRefreshable": "Der Anbieter hat kein Refresh-Token ausgestellt, daher muss diese Verbindung neu hergestellt werden, sobald das Zugriffstoken abläuft.",
+        "lastError": "Die letzte Token-Erneuerung ist fehlgeschlagen: {detail}",
+        "connect": "Verbinden",
+        "reconnect": "Neu verbinden",
+        "disconnect": "Trennen",
+        "callback": {
+          "working": "Verbindung wird abgeschlossen …",
+          "done": "Mit {server} verbunden",
+          "doneHint": "Die Läufe dieses Boards können den Werkzeugserver jetzt mit dem Konto nutzen, mit dem Sie sich angemeldet haben.",
+          "back": "Zurück zur App",
+          "failedTitle": "Die Verbindung konnte nicht abgeschlossen werden",
+          "failed": "Die Autorisierung konnte nicht abgeschlossen werden. Starten Sie die Verbindung im Infrastruktur-Fenster erneut.",
+          "missingParams": "In diesem Link fehlen die vom Anbieter zurückgesendeten Werte, daher gibt es nichts abzuschließen. Starten Sie die Verbindung erneut."
+        }
+      },
       "test": "Testen",
       "notProbeable": {
         "stdio": "Läuft im Container des Agenten und kann von hier aus nicht getestet werden.",
@@ -634,6 +655,8 @@
         "ok": "Hat geantwortet",
         "credentialsMissing": "Keine Zugangsdaten",
         "credentialRefused": "Zugangsdaten abgelehnt",
+        "oauthNotConnected": "Nicht verbunden",
+        "oauthTokenFailed": "Verbindung funktioniert nicht mehr",
         "unreachable": "Keine Antwort",
         "httpError": "Anfrage abgewiesen",
         "protocolError": "Kein MCP-Server",
@@ -650,7 +673,9 @@
       "hideDetails": "Details verbergen",
       "toast": {
         "loadFailed": "Die Werkzeugserver konnten nicht geladen werden",
-        "probeFailed": "Der Werkzeugserver konnte nicht getestet werden"
+        "probeFailed": "Der Werkzeugserver konnte nicht getestet werden",
+        "connectFailed": "Die Verbindung konnte nicht gestartet werden",
+        "disconnectFailed": "Der Werkzeugserver konnte nicht getrennt werden"
       }
     },
     "capabilityCredentials": {
@@ -1584,6 +1609,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull Request",
+      "readOutcome": "Ergebnis lesen",
       "stepState": {
         "pending": "Ausstehend",
         "working": "In Arbeit",
@@ -2934,6 +2960,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "{pr} auf GitHub öffnen",
+      "readOutcome": "Ergebnis",
+      "readOutcomeHint": "Lies nach, was sich geändert hat, mit den Belegen dafür",
       "review": "Überprüfen",
       "merge": "Mergen",
       "mergeConfirm": {
@@ -5942,6 +5970,110 @@
     "history": {
       "heading": "Verlauf (keine Runden) | Verlauf ({count} Runde) | Verlauf ({count} Runden)",
       "fixRequested": "Korrektur angefordert"
+    }
+  },
+  "outcome": {
+    "title": "Ergebnis",
+    "subtitle": "Was dieser Lauf geändert hat, und die Belege dafür",
+    "diff": "Diff öffnen",
+    "diffNumbered": "Diff öffnen (#{number})",
+    "peerDiff": "Diff in {repo} öffnen",
+    "disposition": {
+      "merged": "Zusammengeführt",
+      "awaiting_merge": "Wartet auf das Zusammenführen",
+      "in_flight": "Läuft noch",
+      "needs_attention": "Braucht Aufmerksamkeit",
+      "not_run": "Noch nicht gelaufen",
+      "unknown": "Lauf nicht geladen"
+    },
+    "ask": {
+      "title": "Was gefordert war",
+      "none": "Diese Aufgabe hat keine Beschreibung, es gibt hier also nichts, womit sich das Ergebnis vergleichen ließe."
+    },
+    "gap": {
+      "run_unavailable": "Der Lauf dieser Aufgabe wurde nicht geladen, deshalb können die von ihm erfassten Belege hier nicht gezeigt werden. Das ist nicht dasselbe wie ein Lauf, der nichts erfasst hat."
+    },
+    "requirements": {
+      "title": "Geprüfte Anforderungen",
+      "met": "Erfüllt: {count}",
+      "notMet": "Nicht erfüllt: {count}",
+      "notCovered": "Nicht geprüft: {count}",
+      "regressions": "Regressionen: {count}",
+      "regressionTag": "Regression",
+      "idOnly": "nur ID",
+      "idOnlyHint": "Diese ID steht nicht in der Service-Spezifikation, deshalb gibt es dafür keinen Titel.",
+      "spec": {
+        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb stehen hier die vom Tester gemeldeten Anforderungs-IDs ohne ihre Titel.",
+        "unmatched": "Keine dieser Anforderungs-IDs steht in der gelesenen Service-Spezifikation, deshalb werden nur die vom Tester gemeldeten IDs gezeigt."
+      },
+      "verdict": {
+        "met": "Bestätigt",
+        "not_met": "Fehlgeschlagen",
+        "not_covered": "Nicht geprüft"
+      },
+      "gap": {
+        "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, daher wurde keine Anforderung geprüft.",
+        "tester_not_reported": "Der Tester hat noch nicht berichtet, daher wurde über keine Anforderung entschieden.",
+        "no_verdicts": "Der Tester hat berichtet, ohne über eine Anforderung der Spezifikation zu entscheiden."
+      }
+    },
+    "tests": {
+      "title": "Wie getestet wurde",
+      "openReport": "Vollständiger Testbericht",
+      "summary": "Der Tester berichtet: {summary}",
+      "abort": "Der Tester konnte nicht sinnvoll testen: {reason}",
+      "counts": "{passed} bestanden, {failed} fehlgeschlagen, {skipped} übersprungen",
+      "verdict": {
+        "greenlit": "Freigegeben",
+        "concerns": "Bedenken gemeldet",
+        "could_not_run": "Konnte nicht getestet werden"
+      },
+      "environment": {
+        "local": "Gegen lokale Abhängigkeiten getestet",
+        "ephemeral": "Gegen eine Vorschau-Umgebung getestet"
+      },
+      "severity": {
+        "low": "Niedrig",
+        "medium": "Mittel",
+        "high": "Hoch",
+        "critical": "Kritisch"
+      },
+      "gap": {
+        "no_tester_step": "Diese Pipeline hat keinen Test-Schritt, es wurde also nichts ausgeführt.",
+        "tester_not_reported": "Der Tester hat noch nicht berichtet."
+      }
+    },
+    "visuals": {
+      "title": "Wie es aussieht",
+      "shotAlt": "Screenshot von {view}",
+      "hasReference": "Für diese Ansicht wurde eine Referenzvorlage hinterlegt",
+      "source": {
+        "visual_confirm": "Diese Ansichten wurden mit ihren Referenzvorlagen verglichen.",
+        "tester": "Diese Ansichten wurden beim Testen aufgenommen. Niemand wurde um eine Prüfung gebeten."
+      },
+      "gap": {
+        "no_visual_step": "In dieser Pipeline nimmt nichts die Oberfläche auf, es gibt also nichts zu sehen.",
+        "none_captured": "Die Oberfläche sollte aufgenommen werden, es wurde aber keine Ansicht erfasst."
+      }
+    },
+    "checks": {
+      "title": "Prüfungen",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Projektprüfungen",
+        "reproduction": "Fehler-Reproduktion"
+      },
+      "state": {
+        "pass": "bestanden",
+        "fail": "fehlgeschlagen",
+        "pending": "läuft noch",
+        "inconclusive": "ohne Ergebnis"
+      }
+    },
+    "empty": {
+      "title": "Noch nichts zu zeigen",
+      "body": "Diese Aufgabe hat noch kein lesbares Ergebnis hervorgebracht."
     }
   },
   "focus": {

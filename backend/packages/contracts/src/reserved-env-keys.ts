@@ -126,6 +126,11 @@ export const PLATFORM_RESERVED_ENV_KEYS: readonly string[] = [
   'HARNESS_SHARED_SECRET',
   'HOST',
   'LOG_LEVEL',
+  // Deliberately an EXACT name and not an `MCP_` family. The docs recommend `MCP_…` as the prefix
+  // a deployment keeps its tool-server CREDENTIALS behind, so reserving the family would make the
+  // recommended convention unusable; reserving this one name costs a deployment nothing, because
+  // nobody names a credential after a redirect URL, and it is refused loudly at boot if anyone does.
+  'MCP_OAUTH_REDIRECT_URL',
   'MOONSHOT_API_KEY',
   'OPENAI_API_KEY',
   'PLATFORM_RUN_DAY_RETENTION_DAYS',

@@ -5,6 +5,8 @@ import {
   TEST_SECRETS_CIPHER_INFO,
   TestSecretsService,
   CAPABILITY_CREDENTIALS_CIPHER_INFO,
+  MCP_OAUTH_CIPHER_INFO,
+  McpOAuthService,
   CapabilityCredentialsService,
   ValidationConfigService,
   defaultSubscriptionQuotaRegistry,
@@ -222,6 +224,23 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
         clock,
       })
     : undefined
+  // Per-workspace MCP OAUTH GRANTS (sealed): what a board holds after someone authorised it
+  // against a vendor's remote MCP server, plus the machine tokens a client-credentials
+  // declaration mints. Backs the connect/disconnect controller AND the dispatch-time token source
+  // the executor uses to fill in an `Authorization` header. Guarded by ENCRYPTION_KEY like every
+  // other sealed store — a deployment with no key has nowhere to keep a grant, and every OAuth
+  // server is then stated to its agent as `oauth_not_connected` rather than dispatched blind.
+  const mcpOAuthService = testSecretsEncryptionKey
+    ? new McpOAuthService({
+        mcpOAuthGrantRepository: repos.mcpOAuthGrantRepository,
+        secretCipher: new WebCryptoSecretCipher({
+          masterKeyBase64: testSecretsEncryptionKey,
+          info: MCP_OAUTH_CIPHER_INFO,
+        }),
+        clock,
+        logger,
+      })
+    : undefined
   // Pre-PR validation checks: the service backs the CRUD controller and the engine's dispatch
   // resolution (`resolveValidationChecks`), which folds the service frame's commands onto the
   // agent run context so they ride the coding job body. Nothing is sealed here — the commands are
@@ -261,6 +280,7 @@ export function buildNodeRunServices(input: NodeRunServicesInput) {
     resolveTestSecrets,
     resolveTestSecretRefs,
     capabilityCredentialsService,
+    mcpOAuthService,
     validationConfigService,
     resolveValidationChecks,
     subscriptionQuotaProvider,
