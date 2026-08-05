@@ -17,6 +17,7 @@ import type {
   BlockRepository,
   BrainstormSessionRepository,
   CapabilityCredentialRepository,
+  McpOAuthGrantRepository,
   ClarityReviewRepository,
   Clock,
   ConsensusGroupRepository,
@@ -151,6 +152,7 @@ import {
   DrizzleSubscriptionQuotaCycleRepository,
   DrizzleTestSecretsRepository,
   DrizzleCapabilityCredentialRepository,
+  DrizzleMcpOAuthGrantRepository,
 } from './drizzle/connections.js'
 
 export interface CoreRepositories {
@@ -209,6 +211,7 @@ export interface CoreRepositories {
   subscriptionQuotaCycleRepository: SubscriptionQuotaCycleRepository
   testSecretsRepository: TestSecretsRepository
   capabilityCredentialRepository: CapabilityCredentialRepository
+  mcpOAuthGrantRepository: McpOAuthGrantRepository
   validationConfigRepository: ValidationConfigRepository
   provisioningLogRepository: ProvisioningLogRepository
 }
@@ -272,6 +275,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     subscriptionQuotaCycleRepository: new DrizzleSubscriptionQuotaCycleRepository(db),
     testSecretsRepository: new DrizzleTestSecretsRepository(db),
     capabilityCredentialRepository: new DrizzleCapabilityCredentialRepository(db),
+    mcpOAuthGrantRepository: new DrizzleMcpOAuthGrantRepository(db),
     provisioningLogRepository: new DrizzleProvisioningLogRepository(db),
   }
 }

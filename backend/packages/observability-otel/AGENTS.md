@@ -27,6 +27,11 @@ Two things in `src/mapping.ts` bind changes here:
 - **`ATTR` and the README's GenAI semantic-convention coverage table are edited together.**
   The convention is experimental, so what we cover, extend and deliberately omit is documented
   rather than inferred.
+- **This exporter carries OBSERVED facts, never DERIVED money.** Cost is deliberately absent
+  (see the README's not-emitted list): it is `tokens x rates` in a store that cannot reprice it,
+  and it would sit beside the spend ledger as a second, un-reconcilable answer. What ships is
+  what a downstream consumer prices FROM: the model plus the three input classes and the output
+  count, kept apart rather than lumped.
 
 Also exports the **log exporter** (`src/logs.ts`, `createOtelLogExporter`): the kernel `LogSink`
 implementation that POSTs the platform's own structured lines to `{endpoint}/v1/logs`. Fetch on
@@ -40,6 +45,10 @@ with everything else. Three things bind a change here:
   `waitUntil`), because a Worker's buffer is per isolate. The exporter owns no timer.
 - **Every bound states what it dropped**: the queue cap reports its drop count on the next
   batch, and the 8 KiB attribute cap says how much it cut.
+- **A line's trace is the RUN's when it has one, and an ADOPTED `traceparent` otherwise.** The
+  derived id is the only thing joining a run's lines to its spans, so it wins; the inbound
+  context (bound onto the request logger by `mountRequestLogging`, parsed through kernel's
+  `parseTraceparent`) covers everything else. Only the adopted case names a `spanId`.
 
 Also exports the **platform-operator metrics** exporter (`src/platform.ts`,
 `createPlatformMetricsOtelExporter`): a fetch-based OTLP GAUGE publisher for the

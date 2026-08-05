@@ -1,5 +1,76 @@
 # @cat-factory/gitlab
 
+## 0.15.41
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/kernel@0.243.1
+
+## 0.15.40
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+
+## 0.15.39
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/contracts@0.243.0
+
+## 0.15.38
+
+### Patch Changes
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/kernel@0.241.1
+
+## 0.15.37
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+
+## 0.15.36
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+
+## 0.15.35
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/kernel@0.239.0
+
+## 0.15.34
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/contracts@0.239.0
+
 ## 0.15.33
 
 ### Patch Changes

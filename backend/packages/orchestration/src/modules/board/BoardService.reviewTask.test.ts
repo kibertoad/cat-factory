@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, OpenedPullRequest, RepoFiles, RunRepoContext } from '@cat-factory/kernel'
 import { createRecordingLogger, DomainError } from '@cat-factory/kernel'
@@ -71,15 +72,20 @@ const openPr = (number: number, url: string): OpenedPullRequest =>
 // pins the review task to the PR-review pipeline. These pin that folding + default.
 describe('BoardService review-task description folding', () => {
   it('folds the PR URL + focus preamble ahead of the description and pins pl_review', async () => {
-    const task = await build().addTask(WS, 'frame_svc', {
-      title: 'Review the auth PR',
-      taskType: 'review',
-      description: 'Extra notes.',
-      taskTypeFields: {
-        prUrl: 'https://github.com/o/r/pull/7',
-        reviewFocus: 'the token refresh',
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Review the auth PR',
+        taskType: 'review',
+        description: 'Extra notes.',
+        taskTypeFields: {
+          prUrl: 'https://github.com/o/r/pull/7',
+          reviewFocus: 'the token refresh',
+        },
       },
-    })
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.description).toBe(
       'Review pull request https://github.com/o/r/pull/7. Review focus: the token refresh\n\nExtra notes.',
     )
@@ -88,20 +94,30 @@ describe('BoardService review-task description folding', () => {
   })
 
   it('uses #number when only prNumber is given, with no trailing description', async () => {
-    const task = await build().addTask(WS, 'frame_svc', {
-      title: 'Review PR 42',
-      taskType: 'review',
-      taskTypeFields: { prNumber: 42 },
-    })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Review PR 42',
+        taskType: 'review',
+        taskTypeFields: { prNumber: 42 },
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.description).toBe('Review pull request #42.')
   })
 
   it('prefers prUrl over prNumber when both are present', async () => {
-    const task = await build().addTask(WS, 'frame_svc', {
-      title: 'Review',
-      taskType: 'review',
-      taskTypeFields: { prUrl: 'https://github.com/o/r/pull/9', prNumber: 42 },
-    })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Review',
+        taskType: 'review',
+        taskTypeFields: { prUrl: 'https://github.com/o/r/pull/9', prNumber: 42 },
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.description).toBe('Review pull request https://github.com/o/r/pull/9.')
   })
 })
@@ -112,7 +128,12 @@ describe('BoardService review-task description folding', () => {
 // important) every case that must NOT refuse.
 describe('BoardService review-task PR validation', () => {
   const addReviewTask = (service: BoardService, taskTypeFields: Record<string, unknown>) =>
-    service.addTask(WS, 'frame_svc', { title: 'Review', taskType: 'review', taskTypeFields })
+    service.addTask(
+      WS,
+      'frame_svc',
+      { title: 'Review', taskType: 'review', taskTypeFields },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
 
   it('refuses a PR the provider reports as absent, before creating the block', async () => {
     const service = build({ resolveRunRepoContext: async () => repoContext(async () => null) })
@@ -221,7 +242,12 @@ describe('BoardService review-task PR validation', () => {
         return repoContext(async () => null)
       },
     })
-    const task = await service.addTask(WS, 'frame_svc', { title: 'Build it', taskType: 'feature' })
+    const task = await service.addTask(
+      WS,
+      'frame_svc',
+      { title: 'Build it', taskType: 'feature' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.taskType).toBe('feature')
     expect(probes).toBe(0)
   })

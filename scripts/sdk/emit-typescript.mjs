@@ -167,6 +167,7 @@ function pathExpression(operation) {
 
 function returnType(operation) {
   if (operation.stream) return 'EventStream'
+  if (operation.binary) return 'Uint8Array'
   if (!operation.result) return 'void'
   return tsType(operation.result)
 }
@@ -190,9 +191,11 @@ function emitMethod(operation) {
 
   const call = operation.stream
     ? 'this.#transport.stream'
-    : operation.result
-      ? `this.#transport.request<${tsType(operation.result)}>`
-      : 'this.#transport.requestNoContent'
+    : operation.binary
+      ? 'this.#transport.bytes'
+      : operation.result
+        ? `this.#transport.request<${tsType(operation.result)}>`
+        : 'this.#transport.requestNoContent'
 
   const notes = [
     operation.summary,

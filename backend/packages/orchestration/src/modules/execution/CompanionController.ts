@@ -12,12 +12,14 @@ import {
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor, companionTargets } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { AgentContextBuilder } from './AgentContextBuilder.js'
 import type { RunStateMachine } from './RunStateMachine.js'
+import { buildStepApproval } from './stepApproval.js'
 import type { StepGraph } from './StepGraph.js'
 
 /** Parse a companion's JSON verdict from a model reply, or `undefined` if it won't parse. */
@@ -67,6 +69,12 @@ function sumUsage(
  */
 export interface CompanionControllerDeps {
   contextBuilder: AgentContextBuilder
+  /**
+   * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion is driven by this
+   * loop on the same terms as a built-in: its targets found by the same producer search, its
+   * default threshold read from its own registration.
+   */
+  agentKindRegistry: AgentKindRegistry
   spend: SpendService
   idGenerator: IdGenerator
   previewStepModel: (context: AgentRunContext) => Promise<string | undefined>
@@ -190,7 +198,7 @@ export class CompanionController {
 
   /** The nearest earlier step whose kind this companion reviews (the producer), or -1. */
   private producerIndexFor(instance: ExecutionInstance, step: PipelineStep): number {
-    const targets = companionTargets(step.agentKind)
+    const targets = companionTargets(step.agentKind, this.deps.agentKindRegistry)
     for (let i = instance.currentStep - 1; i >= 0; i--) {
       if (targets.includes(instance.steps[i]!.agentKind)) return i
     }
@@ -228,7 +236,7 @@ export class CompanionController {
   ): Promise<AdvanceResult> {
     const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
-      threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
+      threshold: companionFor(step.agentKind, this.deps.agentKindRegistry)?.defaultThreshold ?? 0.8,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
       attempts: 0,
       verdicts: [],
@@ -407,13 +415,17 @@ export class CompanionController {
     }
     // A gated companion now raises the HUMAN approval gate on the producer's output
     // (the human reviews what the companion just cleared). Never on the final step.
+    //
+    // Through the SHARED builder, so the companion's gate carries the approver policy and quorum
+    // the companion STEP configured, exactly as the ordinary settle path does. Hand-rolling the
+    // literal here is what silently dropped both (see `stepApproval.ts`).
     if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
       const producer = producerIndex >= 0 ? instance.steps[producerIndex] : undefined
-      step.approval = {
-        id: this.deps.idGenerator.next('appr'),
-        status: 'pending',
-        proposal: producer?.output ?? step.output ?? '',
-      }
+      step.approval = buildStepApproval(
+        step,
+        this.deps.idGenerator.next('appr'),
+        producer?.output ?? step.output ?? '',
+      )
       this.deps.stepGraph.pauseStepForInput(step)
       instance.status = 'blocked'
       await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')

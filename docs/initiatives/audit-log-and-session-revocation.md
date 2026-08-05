@@ -100,7 +100,13 @@ revocation via a per-user session-generation check.
 - **The generation check DOES add a query** (corrected; the original text claimed otherwise).
   See target pattern 5: nothing on the request path reads the user row today, so slice 5 owes a
   deliberate cached read via the `AppCaches` seam, invalidated on the generation bump, modelled on
-  `workspaceAccess`.
+  `workspaceAccess`. The alternative it must be weighed against is short session TTLs plus a bump,
+  which adds no read and accepts a bounded revocation window. Either way there is a user-row column
+  behind it (D1 migration ⇄ Drizzle), so this is not the one-line middleware change it reads as.
+- **SSO is the consumer that makes slice 5 load-bearing.** See
+  [`enterprise-sso-oidc.md`](./enterprise-sso-oidc.md): the whole offboarding promise of SSO is
+  "we disabled them in the IdP and they lost access", which a stateless session cannot keep on
+  its own. The two should land together.
 - **List reads are paginated from day one** (audit tables grow monotonically; the
   unbounded-SELECT lesson from the perf tracker applies before it hurts).
 - Public-API keys are a distinct principal type: represent them as `apiKeyRef` actors, and

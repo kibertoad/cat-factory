@@ -39,6 +39,7 @@ import {
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
 } from './ci.logic.js'
+import { defaultTaskTypeRegistry } from '@cat-factory/kernel'
 
 /**
  * The already-built collaborators + bound engine call-backs {@link buildGateWindowControllers}
@@ -355,6 +356,9 @@ export function buildInputGateController(
     stateMachine: runtime.stateMachine,
     stepGraph: runtime.stepGraph,
     clock: dependencies.clock,
+    // An EMPTY registry, not `undefined`: a facade that registers no custom task types has
+    // nothing declaring required fields, which is a real answer rather than a missing one.
+    taskTypeRegistry: dependencies.taskTypeRegistry ?? defaultTaskTypeRegistry(),
     workspaceSettingsService: dependencies.workspaceSettingsService,
     logger: dependencies.logger,
   })

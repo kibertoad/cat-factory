@@ -53,6 +53,7 @@ import {
   configProblem,
   resolveUrlSafetyPolicy,
   noRunnerBackendAvailableError,
+  buildDispatchTokenMint,
   type MintInstallationToken,
   type WebSearchUpstream,
   operationalMetrics,
@@ -427,19 +428,19 @@ function buildContainerExecutor(deps: WorkerExecutorDeps): AgentExecutor | null 
     clock,
     registry: defaultSubscriptionQuotaRegistry,
   })
-  // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
-  // the App token, so the container's clone/push/PR is attributed to them. Falls back to the
-  // App token; `resolveRunInitiatorToken` answers null for every "no" in that chain, and is
-  // the SAME builder the engine's GitHub client uses, so the workspace's `allowInitiatorPat`
-  // switch cannot bind one path and miss the other.
+  // The dispatch's clone/push credential: the run initiator's per-user PAT when stored AND
+  // permitted (so the container's clone/push/PR is attributed to them), else a GitHub App token
+  // narrowed to the repos this one run resolved. Both decisions live in the SHARED
+  // `buildDispatchTokenMint` so this facade and Node cannot drift on either;
+  // `resolveRunInitiatorToken` is likewise the SAME builder the engine's GitHub client uses, so
+  // the workspace's `allowInitiatorPat` switch cannot bind one path and miss the other.
   const resolveRunInitiatorToken = buildResolveRunInitiatorToken(env, db, clock)
-  const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
-    if (resolveRunInitiatorToken && ctx) {
-      const pat = await resolveRunInitiatorToken(ctx)
-      if (pat) return pat
-    }
-    return registry.installationToken(installationId)
-  }
+  const mintInstallationToken: MintInstallationToken = buildDispatchTokenMint({
+    mint: (installationId, opts) => registry.installationToken(installationId, opts),
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    logger,
+    operationalMetrics,
+  })
 
   // Decrypt the service frame's sensitive test credentials onto the tester job body (out of band).
   const testSecretsForDispatch = buildTestSecretsService(env, db, clock)

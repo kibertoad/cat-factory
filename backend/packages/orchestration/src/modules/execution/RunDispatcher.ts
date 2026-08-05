@@ -36,6 +36,7 @@ import {
   runBestEffort,
   RunContendedError,
 } from '@cat-factory/kernel'
+import { buildStepApproval } from './stepApproval.js'
 import { parseBlueprintService, parseSpecDoc } from '@cat-factory/contracts'
 import { applyContainerRunning, applySubtaskProgress } from './step-fold.logic.js'
 import { FORK_PROPOSER_KIND } from '@cat-factory/agents'
@@ -46,6 +47,7 @@ import { reviewableArtifactOutput } from './artifact-review.logic.js'
 import { HUMAN_TEST_AGENT_KIND } from './ci.logic.js'
 import { AgentContextBuilder } from './AgentContextBuilder.js'
 import { DeployerStepController } from './DeployerStepController.js'
+import { DisposerStepController } from './DisposerStepController.js'
 import { FollowUpGateController } from './FollowUpGateController.js'
 import { RunRepoOpsController } from './RunRepoOpsController.js'
 import { CompanionController } from './CompanionController.js'
@@ -179,6 +181,12 @@ export class RunDispatcher {
    * back as callbacks so the agent and deployer paths share one implementation of each.
    */
   private readonly deployer: DeployerStepController
+  /**
+   * The deterministic `disposer` step — the deployer's counterpart, reclaiming the environments
+   * the run stood up at the point in the pipeline its author chose. Extracted to
+   * {@link DisposerStepController} for the same reason the deployer is.
+   */
+  private readonly disposer: DisposerStepController
   private readonly repoOps: RunRepoOpsController
   /** Driver-side PR deep-review resolution (`fix` / `post`), extracted as a cohesive collaborator. */
   private readonly prReviewResolution: PrReviewResolutionController
@@ -282,6 +290,13 @@ export class RunDispatcher {
         this.pollRunning.recoverContainerEviction(ws, instance, step, failure, onBeforeRedispatch),
       logger: deps.logger,
     })
+    this.disposer = new DisposerStepController({
+      runStateMachine: deps.runStateMachine,
+      environmentTeardown: deps.environmentTeardown,
+      recordStepResult: (ws, instance, step, isFinalStep, result) =>
+        this.recordStepResult(ws, instance, step, isFinalStep, result),
+      logger: deps.logger,
+    })
     this.followUpGate = new FollowUpGateController({
       executionRepository: deps.executionRepository,
       blockRepository: deps.blockRepository,
@@ -377,6 +392,7 @@ export class RunDispatcher {
         runStateMachine: deps.runStateMachine,
         runInitiatorScope: this.runInitiatorScope,
         resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
+        declaredGateFields: (kind) => this.gateRegistry.configFields(kind),
         ...gateOutcomeRecorder,
         recordStepResult: (ws, instance, step, isFinalStep, result) =>
           this.recordStepResult(ws, instance, step, isFinalStep, result),
@@ -417,6 +433,7 @@ export class RunDispatcher {
       environmentProvisioning: this.environmentProvisioning,
       initiativeService: this.initiativeService,
       deployer: this.deployer,
+      disposer: this.disposer,
       companionController: this.companionController,
       testerController: this.testerController,
       ralphController: this.ralphController,
@@ -908,11 +925,9 @@ export class RunDispatcher {
     // wake it. Never gates the final step (nothing downstream to feed) and is
     // idempotent: an already-approved step falls through to advance/finish.
     if (step.requiresApproval && !isFinalStep && step.approval?.status !== 'approved') {
-      step.approval = {
-        id: this.idGenerator.next('appr'),
-        status: 'pending',
-        proposal: step.output,
-      }
+      // Through the shared builder, which snapshots the gate's configured policy. See
+      // `stepApproval.ts` for why a second raise site may not hand-roll this literal.
+      step.approval = buildStepApproval(step, this.idGenerator.next('appr'), step.output)
       return this.parkStepAwaitingInput(workspaceId, instance, step, step.approval.id)
     }
 

@@ -6,17 +6,24 @@ import {
   type Clock,
   ConflictError,
   type ExecutionInstance,
+  ForbiddenError,
   type ExecutionRepository,
   NotFoundError,
+  type GateActor,
   type PipelineStep,
   ValidationError,
+  type StepApproval,
   type StepReviewComment,
   type WorkRunner,
   assertFound,
 } from '@cat-factory/kernel'
 import { type AgentKindRegistry, companionTargets, isCompanionKind } from '@cat-factory/agents'
-import { isAsyncAgentExecutor } from '@cat-factory/kernel'
-import { isDryRun } from '@cat-factory/contracts'
+import { foldGateApproval, isAsyncAgentExecutor, refuseGateResolution } from '@cat-factory/kernel'
+import {
+  isDryRun,
+  submissionAllowedForRole,
+  submissionAllowlistForRole,
+} from '@cat-factory/contracts'
 import type { ReviewEffort } from '@cat-factory/contracts'
 import { HUMAN_REVIEW_AGENT_KIND } from './ci.logic.js'
 import { type DedicatedParkSurface, dedicatedParkSurface } from './step-park.logic.js'
@@ -127,6 +134,26 @@ export class StepDecisionController {
       surface === 'input-gate' ? 'input_gate_parked' : undefined,
     )
   }
+
+  /**
+   * Refuse an actor the gate's approver policy does not admit. Applied to ALL THREE resolutions —
+   * approve, request changes and reject — because each of them settles the checkpoint: a policy
+   * that let a non-approver reject would be gating nothing, it would only be choosing which
+   * button the wrong person presses.
+   *
+   * The policy read is the one SNAPSHOTTED on the approval when the gate was raised, never the
+   * live pipeline definition: see `StepApproval.requiredApprovals`.
+   */
+  private assertGateApprover(approval: StepApproval, actor: GateActor): void {
+    const refusal = refuseGateResolution(approval.approverPolicy, actor)
+    if (!refusal) return
+    throw new ForbiddenError(
+      refusal === 'gate_approver_identity_required'
+        ? 'This gate names who may approve it, so it has to be resolved by one of those people signed in — an API key or an unauthenticated caller is not one of them.'
+        : 'You are not one of the approvers this gate names.',
+      { reason: refusal },
+    )
+  }
   /**
    * Dispatch the `fixer` against the human-review gate's PR branch from a human's freeform
    * instructions — bypassing the precheck + grace window. Parks a `pendingFix` on the gate step,
@@ -220,12 +247,20 @@ export class StepDecisionController {
    * {@link resolveDecision}'s durable-wake but *advances* the pipeline instead of
    * re-running the step (the step is already done). Idempotent — re-approving an
    * already-approved gate is a no-op.
+   *
+   * When the gate was raised with a QUORUM (`requiredApprovals` above 1), an approval that does
+   * not yet reach it is RECORDED and the run stays parked: the gate keeps its `pending` status,
+   * nothing advances, and the caller gets the instance back with one more entry on
+   * `approval.approvals`. That is the whole point of a quorum, and it is why the SPA and the
+   * public decision projection both surface the count — an approve that legitimately does not
+   * advance the run is otherwise indistinguishable from one that failed.
    */
   async approveStep(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     opts: { proposal?: string } = {},
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
     await this.deps.requireWorkspace(workspaceId)
     // Optimistic-concurrency write like resolveDecision/requestStepChanges: an approve
@@ -236,19 +271,29 @@ export class StepDecisionController {
     // after, on the winning state.
     let stepIndex = -1
     let alreadyApproved = false
+    // Set when this approval was recorded but the gate's quorum is not met yet: the run stays
+    // parked, so every post-CAS side effect below (the advance, the driver signal, the block
+    // write) must be skipped — only the emit runs, so the SPA shows the new tally.
+    let awaitingQuorum = false
     const instance = await this.deps.runStateMachine.mutateInstance(
       workspaceId,
       executionId,
       (inst) => {
         alreadyApproved = false
+        awaitingQuorum = false
         stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
         const step = inst.steps[stepIndex]
         if (!step || !step.approval) throw new NotFoundError('Approval', approvalId)
         this.assertNotIterativeGate(inst, step)
+        // The idempotent no-op is answered BEFORE the policy, so re-approving a gate that is
+        // already through stays a no-op for everyone. Refusing it 403 would report a refusal
+        // about a call that was never going to change anything, and the docstring's promise of
+        // idempotence would hold only for the people the policy happens to name.
         if (step.approval.status === 'approved') {
           alreadyApproved = true
           return
         }
+        this.assertGateApprover(step.approval, actor)
         if (step.approval.status === 'rejected') {
           throw new ConflictError(`Approval '${approvalId}' was rejected`)
         }
@@ -256,15 +301,26 @@ export class StepDecisionController {
           throw new ConflictError(`Execution '${executionId}' is already ${inst.status}`)
         }
 
+        // Fold WHO approved before anything is written, because whether this approval completes
+        // the quorum decides what the call is allowed to do. Counting distinct identities is what
+        // makes a double-click idempotent rather than a second vote. Pure, and keyed on the
+        // actor's id, so the CAS re-applying this mutation on a winner's snapshot recomputes the
+        // same answer rather than stacking a second vote.
+        const { approvals, satisfied } = foldGateApproval(
+          step.approval,
+          actor,
+          this.deps.clock.now(),
+        )
         // A human edit to the proposal replaces the agent's text, so the revised
-        // proposal is what downstream steps read (via priorOutputs). That only holds when the
-        // output IS the agent's work product: a step whose output is a RENDERING of an
-        // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan —
-        // see `reviewableArtifactOutput`) would take the edit into `step.output` while the
-        // committed artifact stayed the ingested one, so the correction silently reaches
-        // nothing. Refuse rather than accept-and-drop; the reviewer's route is "request
-        // changes", which re-runs the producer with the correction as feedback.
+        // proposal is what downstream steps read (via priorOutputs). Two things refuse it, both
+        // because the edit would reach nothing or reach too much.
         if (opts.proposal !== undefined) {
+          // The output IS the agent's work product only when it is not a RENDERING of an
+          // already-ingested artifact (the spec doc, the blueprint tree, the initiative plan:
+          // see `reviewableArtifactOutput`). Editing a rendering would take the text into
+          // `step.output` while the committed artifact stayed the ingested one, so the
+          // correction silently reaches nothing. Refuse rather than accept-and-drop; the
+          // reviewer's route is "request changes", which re-runs the producer with it.
           if (step.outputIsRendered) {
             throw new ValidationError(
               "This step's output is a rendering of the artifact it already produced, so edits " +
@@ -273,8 +329,27 @@ export class StepDecisionController {
               { reason: 'proposal_not_editable' },
             )
           }
+          // A quorum votes on ONE artifact. An edit landing on an approval that does NOT complete
+          // the quorum would rewrite the proposal under the people already counted toward it, and
+          // under the ones still to come: every recorded approval would then stand against text
+          // its approver never saw, and the next editor would silently overwrite this one. Refuse
+          // rather than accept-and-mislead; the last approver may still edit, and anyone may
+          // request changes, which re-runs the step with the correction as feedback.
+          if (!satisfied) {
+            throw new ValidationError(
+              'This gate needs more approvals before it clears, so the proposal cannot be edited ' +
+                'yet: an edit now would change what the other approvers are signing off on. ' +
+                'Approve as-is, or request changes to have the step re-run with your correction.',
+              { reason: 'proposal_not_editable_until_quorum' },
+            )
+          }
           step.output = opts.proposal
           step.approval.proposal = opts.proposal
+        }
+        step.approval.approvals = approvals
+        if (!satisfied) {
+          awaitingQuorum = true
+          return
         }
         step.approval.status = 'approved'
         // A gate is never raised on the final step, but the shared advance stays defensive.
@@ -282,6 +357,17 @@ export class StepDecisionController {
       },
     )
     if (alreadyApproved) return instance
+    if (awaitingQuorum) {
+      // The gate is still holding the run: push the new tally to the board and stop. No driver
+      // signal (nothing to wake — the run is meant to stay parked) and no block write.
+      //
+      // `rollUpMetrics: false` because no step SETTLED here: this emit redraws a counter, and the
+      // rollup is a per-run GROUP BY over `llm_call_metrics` that would re-aggregate the whole run
+      // once per vote. Same disposition as the progress-only poll folds; the SPA carries the last
+      // rollup forward, so the metrics bar does not blank between approvals.
+      await this.deps.runStateMachine.emitInstance(workspaceId, instance, { rollUpMetrics: false })
+      return instance
+    }
     await this.deps.runStateMachine.settleAdvancedGate(workspaceId, instance, stepIndex)
     return instance
   }
@@ -299,6 +385,7 @@ export class StepDecisionController {
     executionId: string,
     approvalId: string,
     review: { feedback?: string; comments?: StepReviewComment[] },
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
     await this.deps.requireWorkspace(workspaceId)
     // Optimistic-concurrency write: two concurrent change-requests on the same gate
@@ -322,6 +409,9 @@ export class StepDecisionController {
         if (step.approval.status === 'changes_requested') {
           throw new ConflictError(`Approval '${approvalId}' is already being re-run`)
         }
+        // After the settled-state checks, as in the sibling resolutions: a gate that is already
+        // resolved reports THAT, and the policy answers only calls that could still change it.
+        this.assertGateApprover(step.approval, actor)
 
         const stepIndex = inst.steps.findIndex((s) => s.approval?.id === approvalId)
 
@@ -333,8 +423,8 @@ export class StepDecisionController {
         // requesting changes here must re-run the producer (with the human's feedback
         // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
         // nearest preceding step of one of the companion's target kinds.
-        if (isCompanionKind(step.agentKind)) {
-          const targets = companionTargets(step.agentKind)
+        if (isCompanionKind(step.agentKind, this.deps.agentKindRegistry)) {
+          const targets = companionTargets(step.agentKind, this.deps.agentKindRegistry)
           let producerIndex = -1
           for (let i = stepIndex - 1; i >= 0; i--) {
             if (targets.includes(inst.steps[i]!.agentKind)) {
@@ -391,7 +481,8 @@ export class StepDecisionController {
     workspaceId: string,
     executionId: string,
     approvalId: string,
-    reason?: string,
+    reason: string | undefined,
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
     await this.deps.requireWorkspace(workspaceId)
     // Optimistic-concurrency write: a reject racing the durable driver (or a concurrent
@@ -414,10 +505,13 @@ export class StepDecisionController {
           throw new ConflictError(`Approval '${approvalId}' is being re-run`)
         }
         // Already rejected (and the run already failed): leave it as-is and skip failRun below.
+        // Settled states are answered BEFORE the policy for the reason `approveStep` answers its
+        // own no-op first: a call that cannot change anything reports the state, not a refusal.
         if (step.approval.status === 'rejected') {
           alreadyRejected = true
           return
         }
+        this.assertGateApprover(step.approval, actor)
         step.approval.status = 'rejected'
         if (reason) step.approval.feedback = reason
       },
@@ -446,10 +540,11 @@ export class StepDecisionController {
    * downstream breaks. The record settle runs AFTER the merge and is best-effort inside the
    * service, so no part of this feature can fail or block a merge.
    *
-   * A DRY RUN's PR is refused here. Without this the sandbox is decorative: `MergeResolver`
-   * declining to auto-merge only to leave a `merge_review` card whose own action lands the change
-   * would let a run that was never authorised to merge do exactly that, one tap later and through
-   * the surface the mode exists to guard.
+   * A DRY RUN's PR is refused here, and so is one whose initiator's role may not land this class
+   * of change. Without those the two policies are decorative: `MergeResolver` declining to
+   * auto-merge only to leave a `merge_review` card whose own action lands the change would let a
+   * run that was never authorised to merge do exactly that, one tap later and through the surface
+   * the policy exists to guard.
    */
   async mergePr(
     workspaceId: string,
@@ -461,10 +556,27 @@ export class StepDecisionController {
     if (block.status !== 'pr_ready') {
       throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
     }
-    await this.assertNotDryRun(workspaceId, block)
+    await this.assertPlatformMayMerge(workspaceId, block)
     await this.deps.finalizeMerge(workspaceId, blockId)
     await this.deps.mergePolicy.recordHumanMerge(workspaceId, blockId, reviewEffort)
     return this.deps.requireBlock(workspaceId, blockId)
+  }
+
+  /**
+   * The two policies that refuse the PLATFORM merge path outright, checked in the same order
+   * `MergeResolver` applies them so the manual exit and the automatic one can never disagree
+   * about which one held a PR back.
+   *
+   * The run is loaded ONCE and handed to both. Both read state off the run that opened this PR
+   * (its mode, and the tier it was admitted under), and re-reading it per guard would be a second
+   * point-read of the same row for no second fact.
+   */
+  private async assertPlatformMayMerge(workspaceId: string, block: Block): Promise<void> {
+    const instance = block.executionId
+      ? await this.deps.executionRepository.get(workspaceId, block.executionId)
+      : null
+    this.assertNotDryRun(block, instance)
+    await this.assertSubmissionAllowed(workspaceId, block, instance)
   }
 
   /**
@@ -481,15 +593,52 @@ export class StepDecisionController {
    * real PR on the host, and someone with write access there can always merge it by hand. What
    * this mode guarantees is that the PLATFORM will not do it on a sandboxed run's behalf.
    */
-  private async assertNotDryRun(workspaceId: string, block: Block): Promise<void> {
-    if (!block.executionId) return
-    const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
+  private assertNotDryRun(block: Block, instance: ExecutionInstance | null): void {
     if (!isDryRun(instance?.mode)) return
     throw new ConflictError(
       'This pull request came from a dry run, so it cannot be merged from here. Start the task ' +
         'again as a live run to produce a pull request this workspace will merge.',
       'dry_run_not_mergeable',
       { executionId: block.executionId },
+    )
+  }
+
+  /**
+   * Refuse the platform merge path when the run's initiator holds a role whose merge preset
+   * allowlists which change classes it may land, and this PR's class is outside that list.
+   *
+   * The sibling of {@link assertNotDryRun}, and the reason this policy is more than a `never`
+   * class rule: a rule routes to a human, but the human it routes to may be the initiator, so
+   * without this exit a scoped role would land exactly what the allowlist withholds, one tap
+   * later, from the card their own run raised.
+   *
+   * The class is only knowable at merge time, so the order below is load-bearing: the allowlist
+   * is read first and the classification (one VCS call) is paid for ONLY when a scoped role is
+   * actually on the other side of it. An unattributed run and an unscoped role therefore cost
+   * this guard a preset read and nothing else.
+   *
+   * The refusal deliberately does NOT claim the change cannot land: the PR is real, a teammate
+   * whose role may land this class can merge it from here, and someone with write access on the
+   * host can always merge it there. Unlike the sandbox, re-running the task changes nothing (the
+   * same role would produce the same refusal), so the copy must not suggest it.
+   */
+  private async assertSubmissionAllowed(
+    workspaceId: string,
+    block: Block,
+    instance: ExecutionInstance | null,
+  ): Promise<void> {
+    const role = instance?.initiatedByRole
+    if (!role) return
+    const preset = await this.deps.mergePolicy.resolve(workspaceId, block)
+    if (!submissionAllowlistForRole(preset.submissionClassesByRole, role)) return
+    const changeClass = await this.deps.mergePolicy.classifyChangeClass(workspaceId, block)
+    if (submissionAllowedForRole(preset.submissionClassesByRole, role, changeClass)) return
+    throw new ConflictError(
+      `This task's merge policy does not let a ${role} land a ${changeClass} change, so this ` +
+        'pull request cannot be merged from here. A teammate whose role may land this kind of ' +
+        'change can merge it, or an admin can widen the merge policy.',
+      'submission_not_allowed',
+      { executionId: block.executionId, role, changeClass },
     )
   }
 

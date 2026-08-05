@@ -13,6 +13,7 @@ import BinaryOutputReport from '~/components/binaryOutput/BinaryOutputReport.vue
 import EnvironmentStatusPanel from '~/components/environments/EnvironmentStatusPanel.vue'
 import FrontendBindingsResolved from '~/components/panels/inspector/FrontendBindingsResolved.vue'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
+import type { GateApprovalRefusal } from '@cat-factory/contracts'
 import ProvisioningLogsDrawer from '~/components/provisioning/ProvisioningLogsDrawer.vue'
 import IterationCapPrompt from '~/components/pipeline/IterationCapPrompt.vue'
 import StepExecutionHistory from '~/components/board/StepExecutionHistory.vue'
@@ -199,15 +200,10 @@ function openDedicatedWindow() {
   else if (park === 'fork-decision') ui.openForkDecision(c.instanceId, c.stepIndex)
 }
 
-function close() {
-  // Reset the approval-mode sub-states so reopening the same step is clean
-  // (the step-change watch only fires when the step key actually changes).
-  approval.resetForClose()
-  ui.closeStepDetail()
-}
-
 // The GitHub-style approval/review state machine for a pending gate step. A park a
 // dedicated window owns is NOT reviewable here, so it doesn't count as pending.
+// (`close` is passed by hoisted function reference; it's declared below `approval`,
+// which it resets.)
 const approval = useStepApproval({
   step: () => step.value,
   scrollEl: () => scrollEl.value,
@@ -227,6 +223,10 @@ const {
   draftProposal,
   rejectArmed,
   canRequestChanges,
+  quorum: gateQuorum,
+  viewerHasApproved,
+  approvalWouldClearGate,
+  refusal: gateRefusal,
   onProseClick,
   addDraftComment,
   cancelDraft,
@@ -240,6 +240,32 @@ const {
   disarmReject,
   reject,
 } = approval
+
+function close() {
+  // Reset the approval-mode sub-states so reopening the same step is clean
+  // (the step-change watch only fires when the step key actually changes).
+  approval.resetForClose()
+  ui.closeStepDetail()
+}
+
+/**
+ * Why the gate refuses this viewer, worded for them. An exhaustive Record over the shared refusal
+ * vocabulary with LITERAL keys, so the typed-message-key check sees them and a new refusal reason
+ * fails the typecheck instead of rendering as a blank line under a disabled button.
+ */
+const GATE_REFUSAL_KEYS: Record<GateApprovalRefusal, string> = {
+  not_a_gate_approver: 'panels.stepDetail.notAnApprover',
+  gate_approver_identity_required: 'panels.stepDetail.approverIdentityRequired',
+}
+
+/**
+ * Whether "approve with corrections" is offered RIGHT NOW. Two independent reasons withhold it,
+ * and they are kept apart because their remedies differ: an output that is a rendering can never
+ * be edited here, while an unmet quorum only means not yet: this viewer's approval is not the
+ * one that clears the gate, and an edit under it would move the artifact beneath the approvals
+ * already recorded. Each states itself below rather than the button quietly vanishing.
+ */
+const proposalEditableNow = computed(() => proposalEditable.value && approvalWouldClearGate.value)
 
 const resolvingCap = ref(false)
 async function resolveCompanionCap(choice: IterationCapChoice) {
@@ -692,6 +718,30 @@ async function copyOutput() {
             <p class="mt-1 text-[12px] text-slate-400">
               {{ editing ? t('panels.stepDetail.editHint') : t('panels.stepDetail.reviewHint') }}
             </p>
+            <!-- The gate's configured POLICY, when it has one. Both lines exist because an
+               approve on such a gate legitimately may not advance the run: without the tally, a
+               correctly-recorded approval is indistinguishable from a call that failed, and
+               without the refusal a person would press a button the server answers 403. -->
+            <p
+              v-if="gateQuorum"
+              class="mt-1 text-[12px] text-amber-300/90"
+              data-testid="gate-quorum"
+            >
+              {{
+                t('panels.stepDetail.quorumProgress', {
+                  recorded: gateQuorum.recorded,
+                  required: gateQuorum.required,
+                })
+              }}
+              <span v-if="viewerHasApproved">{{ t('panels.stepDetail.quorumYours') }}</span>
+            </p>
+            <p
+              v-if="gateRefusal"
+              class="mt-1 text-[12px] text-slate-400"
+              data-testid="gate-not-approver"
+            >
+              {{ t(GATE_REFUSAL_KEYS[gateRefusal]) }}
+            </p>
           </div>
 
           <div class="flex-1 space-y-3 overflow-auto overscroll-contain px-4 py-3">
@@ -820,26 +870,35 @@ async function copyOutput() {
               size="sm"
               icon="i-lucide-check"
               block
-              :disabled="rejectArmed"
+              :disabled="rejectArmed || !!gateRefusal"
               :loading="submitting"
               @click="approve"
             >
               {{ t('panels.stepDetail.approveAndProceed') }}
             </UButton>
             <UButton
-              v-if="proposalEditable"
+              v-if="proposalEditableNow"
               color="primary"
               variant="soft"
               size="sm"
               icon="i-lucide-pencil"
               block
-              :disabled="rejectArmed || submitting"
+              :disabled="rejectArmed || submitting || !!gateRefusal"
               @click="startEditing"
             >
               {{ t('panels.stepDetail.approveWithCorrections') }}
             </UButton>
-            <p v-else class="text-[10px] text-slate-500" data-testid="step-rendered-output-note">
+            <p
+              v-else-if="!proposalEditable"
+              class="text-[10px] text-slate-500"
+              data-testid="step-rendered-output-note"
+            >
               {{ t('panels.stepDetail.renderedOutputNote') }}
+            </p>
+            <!-- Withheld only until the quorum is one approval away, so it says so rather than
+               leaving a reviewer to wonder where the affordance went. -->
+            <p v-else class="text-[10px] text-slate-500" data-testid="step-quorum-edit-locked">
+              {{ t('panels.stepDetail.quorumEditLocked') }}
             </p>
 
             <!-- destructive: a two-step inline confirm instead of a native dialog -->
@@ -881,7 +940,7 @@ async function copyOutput() {
                 icon="i-lucide-rotate-ccw"
                 class="flex-1"
                 data-testid="step-request-changes"
-                :disabled="!canRequestChanges"
+                :disabled="!canRequestChanges || !!gateRefusal"
                 :loading="submitting"
                 @click="requestChanges"
               >
@@ -893,7 +952,7 @@ async function copyOutput() {
                 size="sm"
                 icon="i-lucide-ban"
                 class="flex-1"
-                :disabled="submitting"
+                :disabled="submitting || !!gateRefusal"
                 @click="armReject"
               >
                 {{ t('panels.stepDetail.reject') }}

@@ -7,6 +7,7 @@ import {
   AGENT_ARCHETYPES,
   AGENT_BY_KIND,
   setCustomAgentKindMeta,
+  setCustomCompanionTargets,
   SYSTEM_AGENT_META,
   uid,
 } from '~/utils/catalog'
@@ -104,6 +105,28 @@ export const useAgentsStore = defineStore('agents', () => {
   // dispatch resolving a custom kind's `resultView`) sees the fresh catalog with
   // no tick gap. The watch lives in the store's effect scope (disposed with it).
   watch(customByKind, (map) => setCustomAgentKindMeta(map), { immediate: true, flush: 'sync' })
+
+  /**
+   * The custom COMPANION pairings (companion kind → the producer kinds it reviews), read off the
+   * same custom-kind sources the palette is built from. Kept apart from `customByKind` because a
+   * pairing is not display metadata: the builder uses it to decide a kind is a TOGGLE on its
+   * producer rather than a placeable block, and `AgentArchetype` has no business carrying it.
+   */
+  const customCompanions = computed<Record<string, readonly AgentKind[]>>(() => {
+    const out: Record<string, readonly AgentKind[]> = {}
+    const add = (k: CustomAgentKind) => {
+      // A pairing with no targets is not a pairing. Recording it would make the kind vanish from
+      // the palette (an `isProducerCompanion` hit) with no producer to hang the toggle on.
+      if (k.companionTargets?.length) out[k.kind] = k.companionTargets
+    }
+    for (const k of consumerKinds.value) add(k)
+    for (const k of capabilitiesManifest.value?.slots?.agentKinds ?? []) add(k)
+    return out
+  })
+  watch(customCompanions, (map) => setCustomCompanionTargets(map), {
+    immediate: true,
+    flush: 'sync',
+  })
 
   /** Display metadata for a KNOWN kind (built-in / system / custom), else undefined. */
   function get(kind: AgentKind): AgentArchetype | undefined {

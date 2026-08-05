@@ -87,45 +87,56 @@ describe('public-API admission', () => {
         'requirements-brainstorm',
         'architecture-brainstorm',
       ]) {
-        expect(canParkOnHuman({ agentKinds: [kind] }), kind).toBe(true)
+        expect(canParkOnHuman({ agentKinds: [kind] }, registry), kind).toBe(true)
       }
     })
 
     it('detects an approval gate on an enabled step', () => {
       // A gate parks the run just as surely as a review kind does, on an otherwise ordinary step.
-      expect(canParkOnHuman({ agentKinds: ['initiative-breakdown'], gates: [true] })).toBe(true)
+      expect(
+        canParkOnHuman({ agentKinds: ['initiative-breakdown'], gates: [true] }, registry),
+      ).toBe(true)
     })
 
     it('ignores a gate on a DISABLED step (index-aligned with the original chain)', () => {
       // `gates` is parallel to the ORIGINAL `agentKinds`, so the alignment has to survive
       // filtering — reading the gate array by the FILTERED index would look at the wrong step.
       expect(
-        canParkOnHuman({
-          agentKinds: ['initiative-breakdown', 'task-estimator'],
-          enabled: [true, false],
-          gates: [false, true],
-        }),
+        canParkOnHuman(
+          {
+            agentKinds: ['initiative-breakdown', 'task-estimator'],
+            enabled: [true, false],
+            gates: [false, true],
+          },
+          registry,
+        ),
       ).toBe(false)
       expect(
-        canParkOnHuman({
-          agentKinds: ['initiative-breakdown', 'task-estimator'],
-          enabled: [false, true],
-          gates: [true, false],
-        }),
+        canParkOnHuman(
+          {
+            agentKinds: ['initiative-breakdown', 'task-estimator'],
+            enabled: [false, true],
+            gates: [true, false],
+          },
+          registry,
+        ),
       ).toBe(false)
     })
 
     it('ignores a parking kind on a disabled step', () => {
       expect(
-        canParkOnHuman({
-          agentKinds: ['initiative-breakdown', 'requirements-review'],
-          enabled: [true, false],
-        }),
+        canParkOnHuman(
+          {
+            agentKinds: ['initiative-breakdown', 'requirements-review'],
+            enabled: [true, false],
+          },
+          registry,
+        ),
       ).toBe(false)
     })
 
     it('is false for an ordinary non-parking chain', () => {
-      expect(canParkOnHuman({ agentKinds: ['initiative-breakdown'] })).toBe(false)
+      expect(canParkOnHuman({ agentKinds: ['initiative-breakdown'] }, registry)).toBe(false)
     })
 
     it('sees a human-wait GATE kind, which carries no approval-gate flag of its own', () => {
@@ -133,12 +144,14 @@ describe('public-API admission', () => {
       // whose poll never times out (`pollExhaustion: 'rearm'`) because it is waiting on a person on
       // the PR, so it parks the run just as surely as a review kind. It rides the step chain as an
       // ordinary kind with `gates[i]` false, so neither of the other two checks could find it.
-      expect(canParkOnHuman({ agentKinds: ['coder', 'human-review', 'merger'] })).toBe(true)
+      expect(canParkOnHuman({ agentKinds: ['coder', 'human-review', 'merger'] }, registry)).toBe(
+        true,
+      )
     })
 
     it('ignores a human-wait gate on a disabled step', () => {
       expect(
-        canParkOnHuman({ agentKinds: ['coder', 'human-review'], enabled: [true, false] }),
+        canParkOnHuman({ agentKinds: ['coder', 'human-review'], enabled: [true, false] }, registry),
       ).toBe(false)
     })
 
@@ -153,8 +166,48 @@ describe('public-API admission', () => {
       const full = seedPipelines().find((p) => p.id === 'pl_full')
       expect(full, 'pl_full must exist in the built-in catalog').toBeTruthy()
       expect(full!.agentKinds).toContain('human-review')
-      expect(canParkOnHuman(full!)).toBe(true)
-      expect(parkSurfacesOf(full!)).toContain('human-review')
+      expect(canParkOnHuman(full!, registry)).toBe(true)
+      expect(parkSurfacesOf(full!, registry)).toContain('human-review')
+    })
+
+    it('sees an INTERVIEW gate, whose kind is neither a review nor a polling gate', () => {
+      // The fourth mechanism. An interviewer parks through its own controller rather than through
+      // a `gate` flag, and it is an INLINE step, so before this it was not merely missed: it was
+      // missed in the direction that lies: a chain of interview steps satisfies inline-only, so it
+      // was advertised as `headlessStartable` while every run of it stopped on the first batch of
+      // questions.
+      expect(canParkOnHuman({ agentKinds: ['doc-interviewer'] }, registry)).toBe(true)
+      expect(parkSurfacesOf({ agentKinds: ['initiative-interviewer'] }, registry)).toEqual([
+        'interview',
+      ])
+      expect(isHeadlessInlinePipeline({ agentKinds: ['doc-interviewer'] }, registry)).toBe(false)
+    })
+
+    it('follows the TRAIT, so a deployment’s own interviewer is seen with no edit here', () => {
+      // What makes case 4 different from the wait-gate gap it sits beside: the trait is declared at
+      // REGISTRATION, so a custom interviewer reaches this rule the moment it is registered, where
+      // a custom unbounded-wait GATE declares `pollExhaustion` inside the object its factory builds
+      // and stays invisible. Asserted on a registry the test registers into, so the claim is about
+      // the mechanism rather than about the built-ins.
+      const custom = defaultAgentKindRegistry()
+      custom.register({
+        kind: 'org-interviewer',
+        systemPrompt: 'x',
+        agent: { surface: 'inline' },
+        traits: ['interview-gate'],
+      })
+      expect(canParkOnHuman({ agentKinds: ['org-interviewer'] }, custom)).toBe(true)
+      // …and unregistered, the same chain is just an unknown kind that parks nowhere.
+      expect(canParkOnHuman({ agentKinds: ['org-interviewer'] }, registry)).toBe(false)
+    })
+
+    it('does NOT count the follow-up companion, which every Coder step carries', () => {
+      // A deliberate omission, not a miss, and the one place the rule knowingly admits a park a
+      // `write` key cannot answer. The companion is seeded on every Coder step unless a pipeline
+      // turns it off, so counting it would make `decide` mandatory for all board work that builds
+      // anything; see `parkSurfacesOf`. The park is answerable over `/api/v1` now, which is what
+      // makes leaving it out recoverable rather than a dead end.
+      expect(parkSurfacesOf({ agentKinds: ['coder'] }, registry)).toEqual([])
     })
 
     it('leaves the unconditional build presets startable by a plain write key', () => {
@@ -164,31 +217,33 @@ describe('public-API admission', () => {
       for (const id of ['pl_build', 'pl_simple']) {
         const pipeline = seedPipelines().find((p) => p.id === id)
         expect(pipeline, `${id} must exist in the built-in catalog`).toBeTruthy()
-        expect(canParkOnHuman(pipeline!), id).toBe(false)
+        expect(canParkOnHuman(pipeline!, registry), id).toBe(false)
       }
     })
   })
 
   describe('parkSurfacesOf', () => {
     it('names the gate and the kind separately when a step carries both', () => {
-      expect(parkSurfacesOf({ agentKinds: ['requirements-review'], gates: [true] })).toEqual([
-        'approval-gate',
-        'requirements-review',
-      ])
+      expect(
+        parkSurfacesOf({ agentKinds: ['requirements-review'], gates: [true] }, registry),
+      ).toEqual(['approval-gate', 'requirements-review'])
     })
 
     it('dedupes a surface reached by several steps', () => {
       // Two gated steps are ONE thing to tell the caller about, not two.
       expect(
-        parkSurfacesOf({
-          agentKinds: ['initiative-breakdown', 'task-estimator'],
-          gates: [true, true],
-        }),
+        parkSurfacesOf(
+          {
+            agentKinds: ['initiative-breakdown', 'task-estimator'],
+            gates: [true, true],
+          },
+          registry,
+        ),
       ).toEqual(['approval-gate'])
     })
 
     it('is empty for a chain that cannot park', () => {
-      expect(parkSurfacesOf({ agentKinds: ['initiative-breakdown'] })).toEqual([])
+      expect(parkSurfacesOf({ agentKinds: ['initiative-breakdown'] }, registry)).toEqual([])
     })
   })
 
@@ -203,7 +258,9 @@ describe('public-API admission', () => {
       // slice waiting to be built: its answer is a person approving the PR on the VCS host, so
       // there is nothing for this surface to offer and the refusal must not pretend otherwise.
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['human-review'] }, { inputGateBlocks: false }),
+        publicRunParkSurfaces({ agentKinds: ['human-review'] }, registry, {
+          inputGateBlocks: false,
+        }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain('human-review')
@@ -217,7 +274,9 @@ describe('public-API admission', () => {
       // name a route that 404s for the run it is about. `cancelPath` is required rather than
       // defaulted precisely so a third start surface cannot inherit either of these by accident.
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['human-review'] }, { inputGateBlocks: false }),
+        publicRunParkSurfaces({ agentKinds: ['human-review'] }, registry, {
+          inputGateBlocks: false,
+        }),
         { cancelPath: PUBLIC_TASK_STOP_PATH },
       )
       expect(message).toContain('POST /api/v1/tasks/:taskId/stop')
@@ -226,10 +285,9 @@ describe('public-API admission', () => {
 
     it('names both halves when a pipeline mixes answerable and unanswerable parks', () => {
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces(
-          { agentKinds: ['requirements-review', 'human-review'] },
-          { inputGateBlocks: false },
-        ),
+        publicRunParkSurfaces({ agentKinds: ['requirements-review', 'human-review'] }, registry, {
+          inputGateBlocks: false,
+        }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain(
@@ -243,10 +301,9 @@ describe('public-API admission', () => {
       // first: any pipeline can carry a gated step. While it was unanswerable this refusal told
       // them a `decide` key bought nothing but a cancel.
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces(
-          { agentKinds: ['initiative-breakdown'], gates: [true] },
-          { inputGateBlocks: false },
-        ),
+        publicRunParkSurfaces({ agentKinds: ['initiative-breakdown'], gates: [true] }, registry, {
+          inputGateBlocks: false,
+        }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain(
@@ -257,7 +314,9 @@ describe('public-API admission', () => {
 
     it('mentions no cancel-only caveat when every park is answerable', () => {
       const message = parkingRefusalMessage(
-        publicRunParkSurfaces({ agentKinds: ['requirements-review'] }, { inputGateBlocks: false }),
+        publicRunParkSurfaces({ agentKinds: ['requirements-review'] }, registry, {
+          inputGateBlocks: false,
+        }),
         { cancelPath: PUBLIC_JOB_CANCEL_PATH },
       )
       expect(message).toContain('/api/v1/runs/:runId/decisions')
@@ -271,7 +330,7 @@ describe('public-API admission', () => {
       // into the answerable set rather than leaving the message silently wrong.
       for (const kind of [...PARKING_INLINE_KINDS, ...HUMAN_WAIT_GATE_KINDS]) {
         const message = parkingRefusalMessage(
-          publicRunParkSurfaces({ agentKinds: [kind] }, { inputGateBlocks: false }),
+          publicRunParkSurfaces({ agentKinds: [kind] }, registry, { inputGateBlocks: false }),
           { cancelPath: PUBLIC_JOB_CANCEL_PATH },
         )
         expect(message.includes('/api/v1/runs/:runId/decisions'), kind).toBe(
@@ -307,20 +366,19 @@ describe('publicRunParkSurfaces', () => {
   const inlineOnly = { agentKinds: ['task-estimator'] }
 
   it('reports no park for a non-parking pipeline whose task is fine', () => {
-    expect(publicRunParkSurfaces(inlineOnly, { inputGateBlocks: false })).toEqual([])
+    expect(publicRunParkSurfaces(inlineOnly, registry, { inputGateBlocks: false })).toEqual([])
   })
 
   it('reports the gate for a non-parking pipeline whose TASK would park the run', () => {
-    expect(publicRunParkSurfaces(inlineOnly, { inputGateBlocks: true })).toEqual([
+    expect(publicRunParkSurfaces(inlineOnly, registry, { inputGateBlocks: true })).toEqual([
       INPUT_GATE_PARK_SURFACE,
     ])
   })
 
   it('lists the gate FIRST, since it parks before any step of the pipeline runs', () => {
-    const surfaces = publicRunParkSurfaces(
-      { agentKinds: ['requirements-review'] },
-      { inputGateBlocks: true },
-    )
+    const surfaces = publicRunParkSurfaces({ agentKinds: ['requirements-review'] }, registry, {
+      inputGateBlocks: true,
+    })
     expect(surfaces[0]).toBe(INPUT_GATE_PARK_SURFACE)
     expect(surfaces).toContain('requirements-review')
   })
@@ -330,7 +388,7 @@ describe('publicRunParkSurfaces', () => {
     // so unlike the app-only parks it must NOT be described as cancel-only.
     expect(PUBLICLY_ANSWERABLE_PARK_SURFACES.has(INPUT_GATE_PARK_SURFACE)).toBe(true)
     const message = parkingRefusalMessage(
-      publicRunParkSurfaces(inlineOnly, { inputGateBlocks: true }),
+      publicRunParkSurfaces(inlineOnly, registry, { inputGateBlocks: true }),
       { cancelPath: PUBLIC_JOB_CANCEL_PATH },
     )
     expect(message).toContain(INPUT_GATE_PARK_SURFACE)

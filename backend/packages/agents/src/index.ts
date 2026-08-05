@@ -210,12 +210,15 @@ export {
   isAcceptanceKind,
   testApproachSection,
 } from './agents/prompts/acceptance.js'
+// The companion PAIRING vocabulary. The built-in catalog is exported for the tests and the
+// snapshot projection; every LOOKUP is a method on `AgentKindRegistry`, which pre-loads it,
+// so a deployment's own rework pair answers the same questions the built-ins do.
 export {
   type CompanionDefinition,
   COMPANIONS,
-  isCompanionKind,
   companionFor,
   companionTargets,
+  isCompanionKind,
   isContainerBackedCompanion,
 } from './agents/kinds/companions.js'
 // Which kinds a pipeline may ESTIMATE-GATE. Shared by the pipeline-shape validation (builder save +

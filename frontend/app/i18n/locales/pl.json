@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Otwórz {pr} na GitHub",
+      "readOutcome": "Wynik",
+      "readOutcomeHint": "Przeczytaj, co się zmieniło, wraz z dowodami",
       "review": "Przejrzyj",
       "merge": "Scal",
       "mergeConfirm": {
@@ -578,7 +580,8 @@
         "input_gate_parked": "Odpowiedz w kontroli danych wejściowych zadania",
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
         "document_already_linked": "Dokument jest już załączony",
-        "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić"
+        "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić",
+        "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -615,7 +618,8 @@
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
-        "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
+        "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali.",
+        "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1003,6 +1007,12 @@
       "inherited": "odziedziczone z usługi",
       "frozen": "Zamrożone: agent został uruchomiony"
     },
+    "taskTypeFields": {
+      "title": "Pola typu zadania",
+      "hint": "Odpowiedzi, których wymaga ten typ zadania. Brak wymaganej odpowiedzi wstrzymuje uruchomienie przed startem.",
+      "save": "Zapisz",
+      "revert": "Przywróć"
+    },
     "dependencies": {
       "title": "Zależy od",
       "hint": "Zadania, które muszą zostać scalone, zanim to będzie mogło się uruchomić. Przycisk uruchamiania pozostaje zablokowany, dopóki wszystkie zależności nie będą gotowe.",
@@ -1038,6 +1048,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Przeczytaj wynik",
       "stepState": {
         "pending": "Oczekuje",
         "working": "Praca",
@@ -1263,6 +1274,7 @@
         "class_auto_merge": "Ten zestaw zawsze scala automatycznie tę kategorię zmian, więc oceny nie były porównywane.",
         "class_requires_review": "Ten zestaw zawsze przekazuje tę kategorię zmian człowiekowi, niezależnie od ocen.",
         "role_requires_review": "Ten zestaw ustawień kieruje uruchomienia rozpoczęte przez rolę {role} do przeglądu przez człowieka dla tego rodzaju zmiany, niezależnie od ocen. Osoba z wyższymi uprawnieniami może scalić ten PR bez żadnych poprawek.",
+        "submission_not_allowed": "To ustawienie pozwala uruchomieniom rozpoczętym przez rolę {role} scalać tylko te typy zmian: {classes}. Ta zmiana jest innego typu, więc pull request czeka na kogoś, czyja rola pozwala go scalić.",
         "dry_run": "To było uruchomienie próbne, więc pull request pozostał otwarty dla człowieka, a oceny nie były porównywane. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
       "scores": "Oceny",
@@ -1274,7 +1286,8 @@
       "ceiling": "limit {value}",
       "rationale": "Uzasadnienie",
       "noAssessment": "Scalający nie zwrócił oceny punktowej.",
-      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu."
+      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu.",
+      "noSubmittableClasses": "brak"
     },
     "testReport": {
       "title": "Raport z testów",
@@ -1449,7 +1462,12 @@
         "notRun": "nie uruchomiono",
         "attempts": "Próba {attempts} z {maxAttempts}",
         "omittedTestPaths": "Przed uruchomieniem dowodu pominięto {count} zadeklarowany plik testowy, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji. | Przed uruchomieniem dowodu pominięto {count} zadeklarowane pliki testowe, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji. | Przed uruchomieniem dowodu pominięto {count} zadeklarowanych plików testowych, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji."
-      }
+      },
+      "quorumProgress": "{recorded} z {required} zatwierdzeń",
+      "quorumYours": "(twoje jest policzone)",
+      "quorumEditLocked": "Poprawki będzie można wpisać, gdy Twoja akceptacja odblokuje tę bramkę. Do tego czasu zatwierdź bez zmian lub poproś o zmiany.",
+      "notAnApprover": "Ta bramka wskazuje, kto może ją rozstrzygnąć, a ciebie na tej liście nie ma.",
+      "approverIdentityRequired": "Ta bramka wskazuje, kto może ją rozstrzygnąć, więc musi to zrobić jedna z tych osób po zalogowaniu."
     },
     "inspector": {
       "frameStatus": {
@@ -2757,10 +2775,15 @@
       },
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
-        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można objąć surowszymi regułami niż powyższe albo wyłącznie uruchomieniami próbnymi: potok pracuje i otwiera pull request, ale nic nie jest scalane. Rola może tę zasadę tylko zaostrzyć, nigdy poluzować.",
-        "autoMergeOffWarning": "W tym zestawie automatyczne scalanie jest wyłączone, więc każdy pull request i tak trafia do człowieka, a ograniczenia kategorii poniżej niczego nie dodają. Uruchomienia próbne nadal obowiązują: odmawiają też scalenia ręcznego.",
+        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można ograniczyć do wybranych typów zmian, objąć surowszymi regułami niż powyższe albo ograniczyć do uruchomień próbnych: potok pracuje i otwiera pull request, a nic nie jest scalane. Rola może tę politykę tylko zawężać, nigdy rozszerzać.",
+        "autoMergeOffWarning": "Automatyczne scalanie jest wyłączone w tym ustawieniu, więc każdy pull request i tak trafia do człowieka, a limity klas poniżej nic nie zmieniają. Ograniczenie scalania i uruchomienia próbne nadal działają: oba odmawiają także scalenia ręcznego.",
         "sandboxLabel": "Tylko uruchomienia próbne",
-        "sandboxNote": "Uruchomienia rozpoczęte przez tę rolę otwierają pull request i niczego nie scalają, więc reguły kategorii poniżej nie mogą ich już bardziej ograniczyć.",
+        "sandboxNote": "Uruchomienia tej roli otwierają pull request i nic nie scalają, więc żadne z ograniczeń poniżej nie może ich bardziej zawęzić.",
+        "submissionLabel": "Ogranicz, jakie zmiany ta rola może scalać",
+        "submissionHelp": "Po włączeniu w uruchomieniach tej roli scalane są tylko zaznaczone typy zmian. Reszta czeka na kogoś innego, niezależnie od ocen. Pull request i tak powstaje i można go scalić ręcznie na hoście git.",
+        "submissionNone": "Nic nie jest zaznaczone, więc ta przestrzeń robocza nie scali żadnego uruchomienia tej roli.",
+        "submissionBadge": "Scalanie ograniczone",
+        "classHeading": "Wymagany przegląd według typu zmiany",
         "noRules": "Brak ograniczeń kategorii",
         "ruleCount": "{count} kategoria ograniczona | {count} kategorie ograniczone | {count} kategorii ograniczonych",
         "inherit": "Tak jak w tej zasadzie",
@@ -2838,6 +2861,73 @@
         "removeFailed": "Nie udało się usunąć wpisu rejestru"
       }
     },
+    "toolServers": {
+      "heading": "Serwery narzędzi (MCP)",
+      "intro": "Serwery MCP, które ta instalacja rejestruje dla swoich agentów. Test rozwiązuje dane uwierzytelniające tej tablicy i rozmawia z serwerem protokołem, więc wynik jest taki, jaki otrzymałby przebieg.",
+      "transport": {
+        "stdio": "W kontenerze",
+        "http": "Zdalny"
+      },
+      "declaredBy": "Przypisany do: {kinds}",
+      "declaredByNone": "Żaden agent nie otrzymuje tego serwera, więc żaden przebieg go nie uruchomi.",
+      "servableHarnesses": "Działa z: {harnesses}",
+      "servableHarnessesNone": "Żadne CLI agenta nie obsługuje tego transportu, więc ten serwer nie dotyczy żadnego przebiegu.",
+      "allowedTools": "Zawężone do: {tools}",
+      "credentials": "Dane uwierzytelniające: {keys}",
+      "oauth": {
+        "connected": "Połączono",
+        "notConnected": "Niepołączony",
+        "machineGrant": "Loguje się jako to wdrożenie",
+        "connectedBy": "Połączone przez {user}",
+        "scopes": "Przyznano: {scopes}",
+        "notRefreshable": "Dostawca nie wydał tokenu odświeżania, więc połączenie trzeba będzie nawiązać ponownie, gdy token dostępu wygaśnie.",
+        "lastError": "Ostatnie odnowienie tokenu nie powiodło się: {detail}",
+        "connect": "Połącz",
+        "reconnect": "Połącz ponownie",
+        "disconnect": "Rozłącz",
+        "callback": {
+          "working": "Kończenie połączenia…",
+          "done": "Połączono z {server}",
+          "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
+          "back": "Powrót do aplikacji",
+          "failedTitle": "Nie udało się zakończyć połączenia",
+          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
+        }
+      },
+      "test": "Testuj",
+      "notProbeable": {
+        "stdio": "Działa w kontenerze agenta, więc nie można go przetestować z tego miejsca.",
+        "containerLocal": "Nasłuchuje obok agenta w jego własnym kontenerze, który jest tu nieosiągalny.",
+        "urlNotAllowed": "Pod tym adresem serwer narzędzi nie może być osiągany (https albo zwykłe http tylko na localhost)."
+      },
+      "status": {
+        "ok": "Odpowiedział",
+        "credentialsMissing": "Brak danych uwierzytelniających",
+        "credentialRefused": "Dane uwierzytelniające odrzucone",
+        "oauthNotConnected": "Niepołączony",
+        "oauthTokenFailed": "Połączenie przestało działać",
+        "unreachable": "Brak odpowiedzi",
+        "httpError": "Odrzucił żądanie",
+        "protocolError": "To nie serwer MCP",
+        "notProbeable": "Nie można testować z tego miejsca"
+      },
+      "okDetail": "{name} {version}, protokół {protocol}, {count} narzędzi.",
+      "toolsIncomplete": "Serwer ma więcej narzędzi, niż jeden test odczytuje, więc ta liczba to minimum.",
+      "unmatchedTools": "Ten serwer nie udostępnia narzędzia o nazwie {tools}, więc agent dowiaduje się o narzędziu, którego nie może wywołać.",
+      "allowedToolsUnchecked": "Lista narzędzi była zbyt długa, by odczytać ją w całości, więc zawężonych nazw nie dało się sprawdzić.",
+      "unresolvedCredentials": "Nic nie rozwiązano dla {keys}. Wpisz wartość poniżej albo ustaw ją w środowisku instalacji.",
+      "refusedCredentials": "{keys} nazywa zmienną należącą do konfiguracji samej platformy, więc nigdy nie jest rozwiązywana. Zmień deklarację w kodzie instalacji.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Pokaż szczegóły",
+      "hideDetails": "Ukryj szczegóły",
+      "toast": {
+        "loadFailed": "Nie udało się wczytać serwerów narzędzi",
+        "probeFailed": "Nie udało się przetestować serwera narzędzi",
+        "connectFailed": "Nie udało się rozpocząć łączenia",
+        "disconnectFailed": "Nie udało się rozłączyć serwera narzędzi"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Poświadczenia funkcji",
       "intro": "Sekrety, o które serwery narzędzi i integracje generatywne tego wdrożenia proszą po nazwie. Wartości są zapisywane tylko dla tej tablicy, szyfrowane w spoczynku i przekazywane wprost do procesu agenta: nigdy nie trafiają do promptu ani do logu. Wartości można tylko zapisywać, więc zapisaną zastępuje się, wpisując nową, i nigdy nie jest odczytywana.",
@@ -2889,6 +2979,7 @@
         "neverUsed": "nigdy nie użyto",
         "createdBy": "utworzone przez {user}",
         "createdByYou": "Ciebie",
+        "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token"
       },
       "add": {
@@ -4462,6 +4553,17 @@
       "hint": "Maksymalna długość pojedynczej odpowiedzi tego agenta. Puste pole dziedziczy wartość z wyższego poziomu, a nie znosi limitu. Wartość ustawiona na kroku pipeline'u ma pierwszeństwo przed domyślną wartością obszaru roboczego.",
       "inherits": "Odziedziczone",
       "inheritsValue": "Odziedziczone ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Kto może zatwierdzić",
+      "roleAdmin": "Administratorzy",
+      "roleMember": "Członkowie",
+      "namedApproversLabel": "Wskazane osoby zatwierdzające",
+      "namedApproversPlaceholder": "Każdy z prawem zapisu",
+      "requiredApprovalsLabel": "Wymagane zatwierdzenia",
+      "requiredApprovalsHint": "Każde od innej osoby, zanim przebieg ruszy dalej.",
+      "anyoneHint": "Każdy, kto może edytować tę tablicę, może zatwierdzić ten krok.",
+      "gateParametersLabel": "Ustawienia bramki"
     }
   },
   "agentPrompt": {
@@ -4660,6 +4762,11 @@
       "success_criteria_missing": {
         "title": "Brak kryteriów sukcesu",
         "hint": "Podaj pytanie, na które odpowiada spike, albo jak wygląda dobry wynik, żeby wyznaczony czas miał cel."
+      },
+      "required_field_missing": {
+        "title": "Brakuje: {field}",
+        "hint": "Ten typ zadania wymaga pola „{field}”, a zadanie go nie wypełnia. Uzupełnij je w zadaniu i sprawdź ponownie.",
+        "unnamedField": "pole wymagane"
       },
       "unknown": {
         "title": "Nierozpoznane ustalenie",
@@ -5265,6 +5372,110 @@
       "fixRequested": "Poproszono o poprawkę"
     }
   },
+  "outcome": {
+    "title": "Wynik",
+    "subtitle": "Co zmienił ten przebieg i jakie są na to dowody",
+    "diff": "Otwórz diff",
+    "diffNumbered": "Otwórz diff (#{number})",
+    "peerDiff": "Otwórz diff w {repo}",
+    "disposition": {
+      "merged": "Scalone",
+      "awaiting_merge": "Czeka na scalenie",
+      "in_flight": "Wciąż trwa",
+      "needs_attention": "Wymaga uwagi",
+      "not_run": "Jeszcze nie uruchomiono",
+      "unknown": "Przebieg nie został wczytany"
+    },
+    "ask": {
+      "title": "O co proszono",
+      "none": "To zadanie nie ma opisu, więc nie ma do czego porównać wyniku."
+    },
+    "gap": {
+      "run_unavailable": "Przebieg tego zadania nie został wczytany, więc zapisane w nim dowody nie są tutaj pokazane. To co innego niż przebieg, który niczego nie zapisał."
+    },
+    "requirements": {
+      "title": "Sprawdzone wymagania",
+      "met": "Spełnione: {count}",
+      "notMet": "Niespełnione: {count}",
+      "notCovered": "Niesprawdzone: {count}",
+      "regressions": "Regresje: {count}",
+      "regressionTag": "Regresja",
+      "idOnly": "sam identyfikator",
+      "idOnlyHint": "Tego identyfikatora nie ma w specyfikacji usługi, więc nie ma nazwy do pokazania.",
+      "spec": {
+        "not_read": "Specyfikacja usługi nie została odczytana, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
+        "unmatched": "Żaden z tych identyfikatorów wymagań nie występuje w odczytanej specyfikacji usługi, więc pokazane są tylko identyfikatory zgłoszone przez testera."
+      },
+      "verdict": {
+        "met": "Potwierdzone",
+        "not_met": "Niespełnione",
+        "not_covered": "Niesprawdzone"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc nie sprawdzono żadnego wymagania.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu, więc żadne wymaganie nie zostało rozstrzygnięte.",
+        "no_verdicts": "Tester zgłosił raport, nie rozstrzygając żadnego wymagania ze specyfikacji."
+      }
+    },
+    "tests": {
+      "title": "Jak to przetestowano",
+      "openReport": "Pełny raport z testów",
+      "summary": "Tester zgłasza: {summary}",
+      "abort": "Tester nie mógł przeprowadzić sensownego testu: {reason}",
+      "counts": "{passed} zaliczonych, {failed} niezaliczonych, {skipped} pominiętych",
+      "verdict": {
+        "greenlit": "Gotowe do wydania",
+        "concerns": "Zgłoszono zastrzeżenia",
+        "could_not_run": "Nie dało się przetestować"
+      },
+      "environment": {
+        "local": "Przetestowane na lokalnych zależnościach",
+        "ephemeral": "Przetestowane na środowisku podglądu"
+      },
+      "severity": {
+        "low": "Niski",
+        "medium": "Średni",
+        "high": "Wysoki",
+        "critical": "Krytyczny"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc niczego nie sprawdzono.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu."
+      }
+    },
+    "visuals": {
+      "title": "Jak to wygląda",
+      "shotAlt": "Zrzut ekranu widoku {view}",
+      "hasReference": "Dla tego widoku dostarczono projekt referencyjny",
+      "source": {
+        "visual_confirm": "Te widoki porównano z projektami referencyjnymi.",
+        "tester": "Te widoki zarejestrowano podczas testów. Nikogo nie poproszono o ich ocenę."
+      },
+      "gap": {
+        "no_visual_step": "Nic w tym potoku nie rejestruje interfejsu, więc nie ma na co patrzeć.",
+        "none_captured": "Interfejs miał zostać zarejestrowany, ale nie zapisano żadnego widoku."
+      }
+    },
+    "checks": {
+      "title": "Sprawdzenia",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Sprawdzenia projektu",
+        "reproduction": "Odtworzenie błędu"
+      },
+      "state": {
+        "pass": "zaliczone",
+        "fail": "niezaliczone",
+        "pending": "wciąż trwa",
+        "inconclusive": "bez rozstrzygnięcia"
+      }
+    },
+    "empty": {
+      "title": "Nie ma jeszcze czego pokazać",
+      "body": "To zadanie nie wytworzyło jeszcze wyniku do przeczytania."
+    }
+  },
   "focus": {
     "board": "Tablica",
     "typeSubtitle": "{type} · widok szczegółowy",
@@ -5317,6 +5528,7 @@
     "operation": {
       "provision": "Uruchom",
       "teardown": "Zatrzymaj",
+      "teardown-verify": "Sprawdzenie zatrzymania",
       "status": "Sprawdzenie stanu",
       "dispatch": "Uruchom",
       "release": "Zatrzymaj",
@@ -5952,7 +6164,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Stosowana, ponieważ to zadanie nie wybiera własnej zasady.",
-      "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję."
+      "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję.",
+      "refused": {
+        "relaxes_role_sandbox": "Niedostępne dla twojej roli: uruchomienia tego zadania działają w piaskownicy, a ta zasada pozwoliłaby je scalić. Administrator obszaru roboczego może to zmienić.",
+        "relaxes_role_submission_allowlist": "Niedostępne dla twojej roli: ta zasada pozwoliłaby ci scalać rodzaje zmian, których to zadanie ci zabrania. Administrator obszaru roboczego może to zmienić.",
+        "relaxes_role_class_rule": "Niedostępne dla twojej roli: ta zasada automatycznie scala zmiany, które musisz przejrzeć w tym zadaniu. Administrator obszaru roboczego może to zmienić."
+      }
     },
     "preview": {
       "defaultBadge": "Domyślna",
@@ -5970,6 +6187,7 @@
       "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda.",
       "roleHeading": "Kto rozpoczął uruchomienie",
       "roleSandboxed": "Uruchomienia rozpoczęte przez role {roles} otwierają pull request i nigdy nie są scalane.",
+      "roleScoped": "Uruchomienia rozpoczęte przez {roles} scalają tylko wybrane typy zmian.",
       "roleNarrowed": "Uruchomienia rozpoczęte przez role {roles} podlegają surowszym regułom w części kategorii zmian."
     }
   },

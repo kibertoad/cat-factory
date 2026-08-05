@@ -38,12 +38,20 @@ const auth = useAuthStore()
 const store = usePublicApiKeysStore()
 
 /**
- * The minter to attribute a key to. `null` when the key predates the audit column (or was
- * minted with no session), so the row simply omits the segment. When the minter is the
- * signed-in user we show a localized "you"; otherwise the raw `usr_*` id (the list has no
- * user-name lookup — the audit id is the honest, non-misleading thing to show).
+ * The minter to attribute a key to. When the minter is the signed-in user we show a localized
+ * "you"; for another person, the raw `usr_*` id (the list has no user-name lookup, so the audit id
+ * is the honest, non-misleading thing to show).
+ *
+ * A key PROVISIONED HEADLESSLY (`POST /api/v1/keys`) has no user and names the KEY that minted
+ * it instead. Reading `createdByKeyId` here is not a nicety: a headless mint stores a null user,
+ * so without this branch it would render exactly like a key that predates the audit column, and
+ * "nobody knows who made this" would be shown for the one case the platform knows precisely.
+ * `null` stays reserved for genuinely unattributed keys, where the row omits the segment.
  */
 function minterLabel(key: PublicApiKey): string | null {
+  if (key.createdByKeyId) {
+    return t('settings.apiTokens.list.createdByKey', { id: key.createdByKeyId })
+  }
   if (!key.createdByUserId) return null
   return key.createdByUserId === auth.user?.id
     ? t('settings.apiTokens.list.createdByYou')

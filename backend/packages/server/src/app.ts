@@ -37,6 +37,8 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { mcpOAuthCompletionController } from './modules/toolServers/McpOAuthCompletionController.js'
+import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
 import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
 import { previewController } from './modules/preview/PreviewController.js'
@@ -102,6 +104,8 @@ import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
+import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
 import { notificationWebhookController } from './modules/notificationWebhook/NotificationWebhookController.js'
@@ -205,6 +209,15 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // over a run's telemetry + provisioning log, sized so an LLM can walk them within a context
   // budget. See backend/docs/debug-api.md.
   app.route('/', publicDebugController())
+  // The public run-EVIDENCE surface (`/api/v1/runs/:runId/report`, `…/artifacts`, and the bytes
+  // at `/api/v1/artifacts/:id/blob`): read-scoped access to the engine's own verification report
+  // and the artifacts a run captured, for a consumer whose job is to JUDGE the run rather than
+  // debug it. See backend/docs/public-api.md.
+  app.route('/', publicEvidenceController())
+  // HEADLESS key provisioning (`/api/v1/keys`): the external counterpart of the session-authed
+  // key panel, `admin` scope, bounded so a minted key can never mint another and revoking a key
+  // revokes what it minted.
+  app.route('/', publicKeyController())
   // The public OUTBOUND-WEBHOOK management surface (`/api/v1/notification-webhook`): the enrolment
   // half of the push channel, so a deployment with no browser session can register the receiver
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
@@ -235,6 +248,11 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Per-user infra handler overrides (local mode); 503s where the service is unwired.
   app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())
+  // Finishes an MCP tool-server OAuth grant from the `code`/`state` the SPA carries back off the
+  // vendor's redirect. Root-mounted because the board is sealed into the state rather than named in
+  // the path, and session-gated by the shared default-deny gate like everything else here, which
+  // is what makes its user binding and `secrets.manage` re-check enforceable at all.
+  app.route('/', mcpOAuthCompletionController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
   // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.
@@ -330,6 +348,7 @@ function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): voi
   app.route('/workspaces/:workspaceId', releaseHealthController())
   app.route('/workspaces/:workspaceId', testSecretsController())
   app.route('/workspaces/:workspaceId', capabilityCredentialsController())
+  app.route('/workspaces/:workspaceId', toolServerController())
   app.route('/workspaces/:workspaceId', validationConfigController())
   app.route('/workspaces/:workspaceId', packageRegistriesController())
   // Browsable frontend preview (local/node); 503 on the Worker (frontendPreview unsupported).
@@ -369,4 +388,9 @@ function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/slack', slackOAuthController())
   // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/tasks', linearOAuthController())
+  // The MCP tool-server OAuth flow deliberately has NO receiver here: a vendor redirects the
+  // operator's browser to the SPA, which re-presents the `code` and `state` over the authenticated
+  // API (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A
+  // public receiver could not tell WHO was completing the grant, since a third-party navigation
+  // carries no bearer token.
 }

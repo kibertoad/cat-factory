@@ -140,7 +140,102 @@ export interface McpSecretRef {
    * agent was told it does not have. Set false for a genuinely optional credential.
    */
   required?: boolean
+  /**
+   * One line telling the OPERATOR what value to put here and where to get it (a vendor's token
+   * page, the scopes it needs). Rendered beside the key in the capability-credential checklist.
+   *
+   * The checklist can only ever say what the DECLARATION says. Without this it names a variable
+   * and the capability that wants it, which for a house server the operator wrote is enough and
+   * for `SLACK_MCP_TOKEN` is not: nothing on the surface says whether that is a bot token, a user
+   * token, or which scopes it needs, so the operator goes back to the deployment's source — the
+   * exact trip the checklist exists to remove. The generative-integration half of this vocabulary
+   * has carried the field since it landed; a tool server's credential simply had nowhere to put it.
+   *
+   * Non-secret and operator-facing: it is rendered in the SPA, so it must name no value.
+   */
+  usage?: string
 }
+
+/**
+ * How a REMOTE (`http`) tool server's access token is obtained, when the server authenticates with
+ * OAuth 2.1 rather than a static credential.
+ *
+ * This is the declaration half only: the deployment states which OAuth client it is and what it
+ * wants, and everything mutable (the tokens, their expiry, the refresh) lives per WORKSPACE in the
+ * sealed grant store. That split is deliberate and mirrors {@link McpSecretRef}: a static
+ * credential's declaration is a key NAME and its value is per-tenant, and an OAuth credential's
+ * declaration is a client and its GRANT is per-tenant. A deployment therefore registers a vendor's
+ * remote server once, and each board authorises its own account against it.
+ *
+ * The two grants cover the two shapes a remote server comes in, and they differ in whether a HUMAN
+ * is involved at all, which is why they are one field rather than two definitions:
+ *
+ * - `authorization_code` — the vendor case (Linear, Atlassian, Figma). Someone with
+ *   `secrets.manage` presses Connect, authorises in the vendor's own UI, and the workspace holds
+ *   the resulting refresh token. PKCE is always used, so a PUBLIC client (no
+ *   {@link McpOAuthConfig.clientSecretKey}) is a supported and common shape.
+ * - `client_credentials` — a machine grant against an internal or partner server. No browser, no
+ *   grant UI, nothing per-tenant except the client secret: the token is minted on demand and
+ *   cached in the same store. This is what makes an OAuth-protected INTERNAL server reachable on a
+ *   deployment that has no one to press a button (a cron-driven install, a CI environment).
+ */
+export interface McpOAuthConfig {
+  grant: 'authorization_code' | 'client_credentials'
+  /**
+   * The OAuth client id this deployment registered with the server's authorization server.
+   *
+   * Static on purpose: dynamic client registration (RFC 7591) is not performed, because a
+   * client registered at runtime is deployment state with no home in a composition-root
+   * registration and no operator-visible identity at the vendor. Register the client once in the
+   * vendor's console and name it here.
+   */
+  clientId: string
+  /**
+   * The LOOKUP key for the client SECRET, resolved through the very same `ToolSecretResolver`
+   * chain a {@link McpSecretRef} uses — so a workspace can bring its own OAuth client through the
+   * capability-credential checklist, and a single-tenant deployment can set an environment
+   * variable, with no second credential mechanism to learn.
+   *
+   * Omitted ⇒ a PUBLIC client: the token requests carry the client id and PKCE and no secret,
+   * which is what most remote MCP servers expect. Held to the same reserved-key floor as every
+   * other capability credential (`isReservedPlatformEnvKey`), for the same reason: a definition
+   * names both the key it wants and the endpoint that key is sent to.
+   */
+  clientSecretKey?: string
+  /**
+   * The authorization endpoint. Omitted ⇒ DISCOVERED from the server url (RFC 9728 protected
+   * resource metadata, then RFC 8414 authorization-server metadata), which is what the MCP
+   * authorization spec prescribes and what makes a vendor server connectable without an operator
+   * hunting endpoint URLs out of a changelog.
+   *
+   * Declared, it WINS over discovery: a deployment that pins its endpoints is stating that it does
+   * not want a third party's metadata document deciding where its tokens are sent.
+   */
+  authorizationUrl?: string
+  /** The token endpoint. Omitted ⇒ discovered, as {@link McpOAuthConfig.authorizationUrl}. */
+  tokenUrl?: string
+  /** Scopes requested at authorization. Omitted ⇒ whatever the server grants by default. */
+  scopes?: string[]
+  /**
+   * The RFC 8707 `resource` indicator sent with the authorization and token requests, which the
+   * MCP authorization spec requires so a token minted for one MCP server cannot be replayed
+   * against another behind the same authorization server. Omitted ⇒ the server's own url, which is
+   * the right answer whenever the server is its own resource.
+   */
+  resource?: string
+  /**
+   * The request header the access token rides, and its template. Default `Authorization` /
+   * `Bearer {value}`, which is what every OAuth-protected MCP server expects; the override exists
+   * for a gateway that reads the token somewhere else, exactly as {@link McpSecretRef.header} does.
+   */
+  header?: string
+  headerTemplate?: string
+}
+
+/** The header an OAuth access token rides when the declaration does not say otherwise. */
+export const MCP_OAUTH_DEFAULT_HEADER = 'Authorization'
+/** The template that header's value uses when the declaration does not say otherwise. */
+export const MCP_OAUTH_DEFAULT_HEADER_TEMPLATE = 'Bearer {value}'
 
 /**
  * A tool server (MCP) an agent kind can be given. Registered on the `AgentKindRegistry` by id and
@@ -191,6 +286,17 @@ export interface McpServerDefinition {
   harnesses?: HarnessKind[]
   /** Credentials the server needs, by name. Resolved at dispatch; never rendered into a prompt. */
   secretKeys?: McpSecretRef[]
+  /**
+   * OAuth, for a remote server that authenticates with a granted token rather than a static one.
+   * `http` transport only — a `stdio` server is a child process with no request to authorise, and
+   * boot validation refuses the combination rather than letting it read as configured.
+   *
+   * Composes with {@link McpServerDefinition.secretKeys} rather than replacing them: a server may
+   * want a granted token AND a static tenant header, and each rides the channel its own
+   * declaration named. The access token's header is the one place they can collide, which boot
+   * validation names.
+   */
+  oauth?: McpOAuthConfig
 }
 
 /**
@@ -228,12 +334,23 @@ export interface UnavailableToolServer {
    *   `harnesses` list, not a different harness.
    * - `over_budget` says the server was declared, servable and credentialed, and lost to a cap.
    *   Nothing about the server is wrong; the KIND declares more than a job body carries.
+   * - `oauth_not_connected` is kept apart from `missing_secret` because the fix is not a value to
+   *   type: nobody has AUTHORISED this workspace against the server yet, and the remedy is a
+   *   person pressing Connect and signing in at the vendor. An operator who read "credential not
+   *   configured" would go looking for a variable that does not exist.
+   * - `oauth_token_failed` says a grant (or a client-credentials client) IS on file and the
+   *   platform could not turn it into an access token: a revoked or expired refresh token, an
+   *   authorization server that would not answer, a rotated client secret. Apart from
+   *   `oauth_not_connected` because "never connected" and "the connection stopped working" send an
+   *   operator to different places, and only the second is ever transient.
    */
   reason:
     | 'harness_unsupported'
     | 'transport_unsupported'
     | 'missing_secret'
     | 'reserved_secret'
+    | 'oauth_not_connected'
+    | 'oauth_token_failed'
     | 'over_budget'
 }
 
@@ -424,11 +541,40 @@ export function isValidMcpToolName(name: string): boolean {
  * CLI inside the run container rather than by the backend.
  */
 export function isAllowedMcpHttpUrl(raw: string): boolean {
+  const parsed = parseMcpHttpUrl(raw)
+  if (!parsed) return false
+  return parsed.scheme === 'https' || isLoopbackHost(parsed.host)
+}
+
+/**
+ * Whether an HTTP tool server's URL names LOOPBACK — a server running beside the agent, inside the
+ * run container.
+ *
+ * Its own exported predicate because "allowed" and "loopback" answer different questions and only
+ * one caller wants the second. The OPERABILITY PROBE cannot reach a loopback endpoint meaningfully:
+ * the backend's `127.0.0.1` is a different machine from the container's, so a probe would report on
+ * whatever happens to listen on the backend's own port, and a SUCCESS there is the more misleading
+ * of the two outcomes. So the probe refuses such a server by name rather than attempting it.
+ *
+ * True for an `https` loopback url too. The scheme is what {@link isAllowedMcpHttpUrl} rules on;
+ * where the server LIVES is this question, and a sidecar with a self-signed certificate is no more
+ * reachable from the backend than a cleartext one.
+ */
+export function isLoopbackMcpHttpUrl(raw: string): boolean {
+  const parsed = parseMcpHttpUrl(raw)
+  return parsed ? isLoopbackHost(parsed.host) : false
+}
+
+/**
+ * Split an http(s) URL into its scheme and bare host, or undefined when it is neither.
+ *
+ * Hand-parsed rather than handed to `new URL`, because the userinfo rule is the whole point: strip it
+ * FIRST and from the LAST `@`, or `http://127.0.0.1@evil.example` reads as loopback while the request
+ * goes to evil.example.
+ */
+function parseMcpHttpUrl(raw: string): { scheme: string; host: string } | undefined {
   const match = /^(https?):\/\/([^/?#]*)/i.exec(raw)
-  if (!match) return false
-  if (match[1]!.toLowerCase() === 'https') return true
-  // Plain http from here: the host must be loopback. Strip userinfo FIRST and from the LAST `@`,
-  // or `http://127.0.0.1@evil.example` reads as loopback while the request goes to evil.example.
+  if (!match) return undefined
   const authority = match[2]!
   const hostPort = authority.slice(authority.lastIndexOf('@') + 1)
   const closingBracket = hostPort.indexOf(']')
@@ -437,5 +583,9 @@ export function isAllowedMcpHttpUrl(raw: string): boolean {
       ? hostPort.slice(1, closingBracket) // IPv6 literal, e.g. [::1]:8080
       : (hostPort.split(':')[0] ?? '')
   ).toLowerCase()
+  return { scheme: match[1]!.toLowerCase(), host }
+}
+
+function isLoopbackHost(host: string): boolean {
   return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
 }

@@ -12,6 +12,9 @@ It sits between two neighbouring docs and deliberately restates neither:
 - [`custom-agent-gate-ergonomics.md`](./custom-agent-gate-ergonomics.md): provider
   tokens, schema-driven structured output (`defineStructuredOutput`), and boot-time
   registration validation.
+- [`mcp-tool-servers.md`](./mcp-tool-servers.md): the full tool-server (MCP) model:
+  registration, harness support, credentials, the probe, security posture and limits.
+  The "Tool servers" section below is the authoring half of that model.
 
 The design record for capabilities is
 [ADR 0029](./adr/0029-agent-kind-capabilities.md); the worked example every section
@@ -203,8 +206,7 @@ across the two.
 
 A tool server extends what the agent can REACH. The wiring rules (credential resolution,
 drop-and-state behaviour, harness support, the security posture of `allowedTools` and the
-`https`-or-loopback rule) are in
-[`custom-agents.md` → Tool servers](./custom-agents.md#tool-servers-mcp) and ADR 0029.
+`https`-or-loopback rule) are in [`mcp-tool-servers.md`](./mcp-tool-servers.md) and ADR 0029.
 This section is the field-by-field authoring reference for `McpServerDefinition`
 (`packages/kernel/src/domain/agent-capabilities.ts`).
 
@@ -217,6 +219,7 @@ This section is the field-by-field authoring reference for `McpServerDefinition`
 | `allowedTools` | Bare tool names the agent may call. Omit ⇒ every tool. Scoping, never a security boundary: see the rules doc.                                                                                                                                                       |
 | `harnesses`    | NARROWS which MCP-capable harnesses may serve it (it can never widen: Pi has no MCP client regardless). Declare `['claude-code']` on an `http` server so the Codex drop is stated rather than invisible.                                                            |
 | `secretKeys`   | Credentials by NAME (below).                                                                                                                                                                                                                                        |
+| `oauth`        | For an `http` server that authenticates with a GRANT rather than a static token (below). Composes with `secretKeys` rather than replacing them.                                                                                                                     |
 
 ### `secretKeys` anatomy (`McpSecretRef`)
 
@@ -238,6 +241,25 @@ genuinely works without (higher rate limits, extra scopes).
 Name keys under a dedicated `MCP_` prefix by convention: that is what a deployment's
 `createEnvToolSecretResolver(env, { allowKeys })` allow-list keys off when it installs
 agent packages it did not author.
+
+### `oauth` anatomy (`McpOAuthConfig`)
+
+`http` transport only — a `stdio` server is a child process with no request to authorise, and the
+combination is a boot error rather than an inert declaration.
+
+| Field                           | What it actually does                                                                                                                                                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `grant`                         | `'authorization_code'` (a person with `secrets.manage` presses Connect and signs in at the vendor) or `'client_credentials'` (the deployment's own client, no browser, no UI, token minted on first dispatch).                                  |
+| `clientId`                      | The OAuth client this deployment registered at the vendor. Static: dynamic client registration (RFC 7591) is not performed.                                                                                                                     |
+| `clientSecretKey`               | LOOKUP key for the client secret, resolved through the SAME capability-credential chain a `secretKeys` entry uses, and held to the same reserved-key floor. Omit for a public client (PKCE only), which is what most remote MCP servers expect. |
+| `authorizationUrl` / `tokenUrl` | Omit ⇒ DISCOVERED from the server url (RFC 9728 → RFC 8414 → OpenID Connect discovery). Declared, it wins over discovery, half a pair included. Either way the endpoint must be https (or loopback).                                            |
+| `scopes`                        | Requested at authorization. The GRANTED scopes (which may be narrower) are what the connection row reports.                                                                                                                                     |
+| `resource`                      | The RFC 8707 resource indicator. Defaults to the server's own url, which is right whenever the server is its own resource.                                                                                                                      |
+| `header` / `headerTemplate`     | Where the access token rides. Defaults to `Authorization` / `Bearer {value}`. A `secretKeys` entry naming the SAME header is a boot warning: the granted token wins, so the static credential reaches the server as nothing.                    |
+
+The operator-facing half (what a deployment configures, what a board sees, and the security
+properties of the grant flow) is in
+[`mcp-tool-servers.md` → OAuth](./mcp-tool-servers.md#oauth-connecting-an-oauth-protected-remote-server).
 
 ### What the agent actually sees
 

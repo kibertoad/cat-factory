@@ -34,6 +34,10 @@ const readyProvider = {
   status: async () =>
     ({ externalId: 'env-1', status: 'ready', url: 'https://preview.example' }) as never,
   teardown: async () => ({ status: 'torn_down' }) as never,
+  // A teardown call returning is not the environment being gone, so the proof's third leg is
+  // closed by this INDEPENDENT probe, never by the call above. A provider that offers no probe
+  // gets `unverifiableProvider` below, and does NOT reach `confirmed`.
+  confirmTeardown: async () => ({ state: 'gone' }) as never,
 } as unknown as EnvironmentProvider
 
 /** The same provider, except that reclaiming the environment is refused by the far end. */
@@ -42,6 +46,17 @@ const teardownRefusingProvider = {
   teardown: async () => {
     throw new Error('provider refused: environment is locked')
   },
+} as unknown as EnvironmentProvider
+
+/**
+ * A provider whose teardown SUCCEEDS and which cannot confirm the result — the generic
+ * manifest-driven shape, whose `teardown()` reports `torn_down` whether or not the manifest
+ * declares a request to destroy anything. The platform did its part and cannot say the
+ * environment is gone, which is its own verdict rather than a shade of the clean one.
+ */
+const unverifiableProvider = {
+  ...readyProvider,
+  confirmTeardown: undefined,
 } as unknown as EnvironmentProvider
 
 /** The manifest connection a `deployer` needs to reach the injected provider at all. */
@@ -200,6 +215,64 @@ export function defineExecutionPrReportEnvironmentsConformance(harness: Conforma
           expect(settled.environments.teardown).toBe('failed')
           expect(settled.environments.timeline.teardownFailures).toBe(1)
           expect(settled.environments.gaps.join(' ')).toContain('needs reclaiming by hand')
+        },
+      )
+
+      // The THIRD teardown state, and the one that used to be reported as a clean reclaim. A
+      // provider that accepts the destroy call and cannot confirm the result is neither of the
+      // two above: the platform did its part (unlike `pending`) and the provider did not refuse
+      // (unlike `failed`), yet nobody established that the environment is gone. The generic
+      // manifest provider is exactly this shape whenever its manifest declares no `teardown:`
+      // request, so before the probe this rendered a green tick over an environment that was
+      // still running and still billing.
+      it.skipIf(harness.name === 'mothership')(
+        'refuses to call an UNVERIFIED teardown a reclaim',
+        async () => {
+          const publisher = new FakePrReportPublisher()
+          const app = harness.makeApp(
+            { pullRequest: PR },
+            {
+              prVerificationReportPublisher: publisher,
+              environmentProvider: unverifiableProvider,
+              appBaseUrl: APP_BASE_URL,
+            },
+          )
+          const { workspace } = await app.createWorkspace()
+          const wsId = workspace.id
+
+          const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+            config: { kind: 'manifest', manifest: MANIFEST },
+            secrets: { API_TOKEN: 'super-secret-env-token' },
+          })
+          expect(registered.status).toBe(201)
+
+          const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+            name: 'Deploy only',
+            agentKinds: ['deployer'],
+          })
+          await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+            pipelineId: pipeline.body.id,
+          })
+          const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+          expect(exec.status).toBe('done')
+
+          const envs = await app.call<{ id: string }[]>('GET', `/workspaces/${wsId}/environments`)
+          expect(envs.body).toHaveLength(1)
+          // The teardown SUCCEEDS — this is not a failure path — and the caller is told so.
+          const torn = await app.call(
+            'POST',
+            `/workspaces/${wsId}/environments/${envs.body[0]!.id}/teardown`,
+            {},
+          )
+          expect(torn.status).toBe(200)
+
+          const settled = parsePrVerificationReport(publisher.reportJson('task_login'))
+          expect(settled.environments.teardown).toBe('unconfirmed')
+          expect(settled.environments.timeline.teardownsUnconfirmed).toBe(1)
+          expect(settled.environments.proof).not.toBe('complete')
+          expect(settled.environments.gaps.join(' ')).toContain('could not be confirmed gone')
+          // Neither a tick nor a cross: the rendered line must not read as a reclaim.
+          expect(publisher.section('task_login')).toContain('not confirmed gone')
         },
       )
 

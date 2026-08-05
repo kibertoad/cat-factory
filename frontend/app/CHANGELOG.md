@@ -1,5 +1,495 @@
 # @cat-factory/app
 
+## 0.228.1
+
+### Patch Changes
+
+- 5260c74: Fix a white screen on the very first launch, for a user with no saved tutorial answer.
+
+  The board page's tutorial launch offer reads `startupAdvisoryOpen` from a watcher with
+  `immediate: true`, so that getter runs synchronously during `setup()`. Two of the values it folds in
+  (`needsGitHubInstall`, `githubProbePending`) were declared further down the same script block, so the
+  first evaluation hit their temporal dead zone and threw `ReferenceError: can't access lexical
+declaration 'needsGitHubInstall' before initialization`, taking the whole page down. The two
+  `computed`s move above the offer that consumes them; nothing else changes.
+
+  Only a first-ever launch could reach it: any saved decision short-circuits `tutorialOfferSettled()`,
+  so the watcher never registers and the getter never runs early. And only a DEV build shows it,
+  because Vue rethrows an unhandled watcher error in development and merely logs it in production,
+  where the computed recovers on its next evaluation. That pair is why the e2e suite stayed green: it
+  drives a production build, and every spec but the tutorial one pre-answers the prompt.
+
+## 0.228.0
+
+### Minor Changes
+
+- 10e7a15: Non-code outcome summary: "read the result" lands on evidence, not a diff
+
+  Reading a finished run meant reading a pull request. Everything a person who does not read diffs
+  needs was already captured (the tester's structured report, the screenshots it took, the
+  visual-confirmation pairs a human reviewed, the per-requirement verdicts it returned) and every
+  piece of it sat behind its own STEP-keyed window, so it was reachable only by someone who had
+  already learned the pipeline. The engine composes exactly these facts for the reviewer on the pull
+  request; the person who asked for the work got a branch name.
+
+  There is now an OUTCOME result view, keyed by the RUN: what was asked in the requester's own words,
+  which of the service's requirements the tester ruled on and what it observed against each, the
+  tester's verdict and concerns, the views it captured (against their reference designs when a human
+  reviewed them), and the checks that recorded a verdict, with every pull request the run opened at
+  the top of the card. It is what the board's `pr_ready` and `done` cards and the inspector's
+  execution panel open, on a task that has something to show; a task with no pull request and no
+  recorded evidence offers no card rather than an empty one. The `outcome` run deep link
+  (`?run=…&block=…&view=outcome`) resolves to it as well: nothing emits that link yet (the engine's
+  verification report links a REVIEWER to the run-scoped panels it already served), so today it is
+  the entry point for a URL a person shares.
+
+  The composition is a pure reduction (`utils/runOutcome.ts`) over state the SPA is already streamed,
+  not a new endpoint and not a model asked to summarise itself. That was the main decision: an
+  endpoint would have meant a second producer of the facts the PR verification report already
+  composes, and the two would disagree about what a run proved. The cost is that requirement TITLES
+  come from a best-effort read of the service spec, and the card says so rather than letting a
+  requirement id read as its name: a spec it never read and a spec it DID read that names none of
+  the reported ids are different sentences, and where only some ids resolved, the rows that did not
+  are marked individually instead of sitting unmarked beside their named neighbours.
+
+  The same discipline covers every section: an absent producer states WHICH one was missing, a tester
+  that could not run at all is kept apart from one that ran and raised concerns, a run the SPA cannot
+  resolve is stated as that rather than as a pipeline that recorded nothing, and a regression (an
+  `established` requirement observed to fail) is computed from the spec's state and the tester's
+  verdict rather than read off any report.
+
+  Worth watching in review: the board card's basic-mode behaviour. A `pr_ready` card drops its raw
+  pull-request chip in basic mode, because the outcome card it now leads with carries that link at the
+  top. That is an ordering change, not a hidden capability, and advanced mode keeps both. The chip's
+  condition states that as the invariant it is (drop it only where the outcome card is offered), so
+  the tier can reorder two routes to the diff but never remove the last one.
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+
+## 0.227.0
+
+### Minor Changes
+
+- d69115d: Role-scoped submission allowlists: what a tier may LAND, per change class
+
+  A merge preset could already narrow a role's per-class auto-merge rules (`classRulesByRole`) or hold
+  a role to dry runs entirely (`dryRunRoles`), and there was a gap exactly between them. A `never`
+  class rule routes a PR to a human, but the human it routes to may be the initiator: the review card
+  carries a merge button and the RBAC write floor is `member`, so a member's run raises its own card
+  and lands on the next tap. The sandbox closes that by refusing both exits, but only for every class
+  at once. So a workspace could not say the thing it most often wants to say: a product manager may
+  land copy and dependency bumps on this service, and may not land source, however good the scores
+  look.
+
+  A preset now carries `submissionClassesByRole`, a per-role allowlist of the change classes it will
+  land at all, refused at BOTH exits like a dry run: the auto-merge arm in `MergeResolver` (above
+  `autoMergeEnabled`, since it is a property of who started the run rather than of the policy about
+  the work) and the manual `mergePr` path, with its own `submission_not_allowed` conflict rather than
+  a borrowed `dry_run_not_mergeable`. Re-running live changes nothing here, so copy that suggested it
+  would be a lie.
+
+  Three readings define it. It is an ALLOWLIST, so a class added to the vocabulary later is refused
+  for a scoped role rather than silently landed by it. Absent means UNRESTRICTED and empty means
+  NOTHING, so `{}` stays the identity and authoring one role's policy cannot bar every other; that
+  distinction is why the editor is a switch plus tick boxes rather than tick boxes alone. And
+  `unknown` is INERT: a diff we could not read is an outage, not evidence about the change, which is
+  the opposite direction from the first reading and deliberately so.
+
+  The built-ins ship it empty, so every existing preset behaves byte-for-byte as before. Internal wire
+  break: `RiskPolicy.submissionClassesByRole` is required rather than optional-with-a-shim (persisted
+  rows get `'{}'` from the column default on both runtimes), and `MergeDecision.reason` gains
+  `submission_not_allowed`.
+
+  Also fixes `RiskPolicyService.update` dropping `classRulesByRole` and `dryRunRoles`: both were on
+  the update contract but never applied, so editing the role layer of an existing preset returned 200
+  and changed nothing.
+
+  The allowlist is role-scoped state, so it takes an arm in `refuseRiskPolicySelection` too
+  (`relaxes_role_submission_allowlist`), on the rule ADR 0037 set when it closed the same escape for
+  the sandbox: a task's `riskPolicyId` is a member-tier board write, so without it a role held to
+  `['docs']` could re-point the task at a preset that allowlists it nothing and land `source` without
+  editing a policy. The arm is the same subset test the others make, and an ABSENT allowlist on the
+  far side relaxes every held one, the empty one included. The three arms run in the merge ladder's
+  own order, so a refused row in the picker names the restriction the run would have been refused on.
+
+  Design: `backend/docs/adr/0039-role-scoped-submission-allowlists.md`.
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+
+## 0.226.0
+
+### Minor Changes
+
+- 3857ea4: Close the merge-preset selection escape hatch in the role-scoped merge policy
+
+  ADR 0037 sandboxes a role's runs (`dryRunRoles`) and narrows what they may auto-merge
+  (`classRulesByRole`), reading both off the merge preset the TASK selects, and concluded that a
+  sandboxed member cannot un-sandbox themselves because editing a preset is admin-tier. That covered
+  only one door. Which preset a task is under is `riskPolicyId` on the block patch: a plain
+  `board.write`, member tier, on the same board. Re-pointing the task at a preset that sandboxes
+  nobody was one PATCH or one click in the inspector's picker, and authoring a new task straight onto
+  one was the same escape a door along, since a task that picks nothing is governed by the workspace
+  default. Both built-in presets ship with empty `dryRunRoles`, so an open preset is always to hand.
+
+  Gating preset selection behind `settings.manage` was the obvious fix and the wrong one: the preset
+  library exists to be chosen from per task, and taking that from members would make every preset
+  admin-only on deployments that authored no role policy at all. So the fix applies the feature's own
+  narrow-only property one level up: a selection may not drop a restriction the SELECTOR's own role
+  was under, either the sandbox or a class rule the ROLE LAYER narrowed. It deliberately does not
+  compare the presets' base policy (ceilings, `autoMergeEnabled`, `classRules`), which says the same
+  thing to every tier, so on a workspace whose presets treat every initiator alike, which is every
+  built-in, the guard cannot refuse anything and selection behaves exactly as before.
+
+  Worth reviewing: the refusal binds at `BoardService`, not in a controller, because `riskPolicyId` is
+  writable at creation AND by patch and the escape is whichever door a caller reaches for. The rule
+  itself lives in `@cat-factory/contracts` so the SPA's picker disables an option the engine would
+  refuse rather than offering it and returning a 403. `resolveMergeClassRule` /
+  `resolveRoleScopedMergeClassRule` moved from kernel to contracts for that reason; the engine imports
+  them from there now.
+
+  Internal break, per the pre-1.0 rule: every board-write entry point now requires the acting
+  `BlockEditActor`. `BoardService.addTask` / `updateBlock` / `addServiceTask` and the `BoardWritePort`
+  they satisfy, plus the methods that write blocks on a caller's behalf: `TaskLinkService`'s
+  `createTaskFromIssue` / `spawnEpic`, `DocumentLinkService.spawn` and `BugHuntService.adopt`. Required
+  rather than optional so a new call site cannot inherit an exemption from a default.
+
+  The reason it reaches that far is the part worth reviewing. A service that hardcodes
+  `UNATTRIBUTED_BLOCK_EDITOR` inside itself exempts every route above it while looking correct at the
+  call site, which is how filing a tracker issue, spawning an epic, spawning a document's structure
+  and adopting a hunted bug were all member-tier writes made under no tier. So the decision moves to
+  the layer that can answer it: the acting tier is a fact about the REQUEST, services take it and
+  never invent one, and `blockEditActor.coverage.spec.ts` classifies each site that NAMES an actor
+  (rather than each site that calls a board write, which is what missed those four) as attributed or
+  deliberately unattributed with a reason. None of them can carry a merge preset today, so there is no
+  behaviour change; the point is that the next one to gain the field is judged rather than exempt.
+
+### Patch Changes
+
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/contracts@0.243.0
+
+## 0.225.1
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+## 0.225.0
+
+### Minor Changes
+
+- e7867db: Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
+
+  Everything the platform captured about a run was reachable only from a browser session. A consumer
+  whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+  pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
+  `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
+  pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
+  Getting a key at all still needed a browser.
+
+  Three additions, all `/api/v1`:
+
+  - **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
+    onto the pull request, composed on read by the same code, so the two can never disagree about
+    what a run proved. It answers for runs that never opened a pull request, and it does not consult
+    the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
+    pull request rather than about reading your own evidence back.
+  - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
+    artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
+    allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
+    never an empty list. The blob operation declares every media type it can answer with (the image
+    allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+    so a client generated from the spec can switch on the response honestly.
+  - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
+    that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
+    one link long), and revoking a key now revokes every key it minted, on this surface and in the
+    app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+  Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+  reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+  outlived its bytes, which is a storage fault rather than a bad request) and
+  `binary_artifact_storage_unconfigured`.
+
+  The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
+  run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,
+  served live), both rendered in the prose as well as carried in the JSON, and both built from the
+  deployment's public BACKEND url. Report payload version 5 → 6.
+
+  Worth knowing when upgrading:
+
+  - **The report shape is now part of the STABLE public surface.** It is served verbatim on
+    `/api/v1`, so from here it grows additively and never renames or retypes in place.
+  - **A new `created_by_key_id` column** on `public_api_keys` (D1 migration `0081`, its Drizzle
+    mirror, plus an index), which carries the provenance of a headless mint and is what the
+    revocation cascade follows. The app's key panel renders it, so a provisioned key no longer reads
+    as one whose minter is unknown.
+  - **The SDK chain learned binary responses.** An operation whose success body was neither JSON nor
+    SSE previously generated as a method that returned NOTHING; the IR now marks it `binary`, each
+    of the four transports hands the bytes back in its own idiom, and an unrecognised media type
+    fails generation instead of silently discarding a body.
+  - **A container wiring bug is fixed on both facades**: the HTTP layer's binary-artifact store
+    resolver was built from account settings while the engine's came from `CoreDependencies`, so an
+    override reached one side of the app and not the other.
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+
+## 0.224.1
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+
+## 0.224.0
+
+### Minor Changes
+
+- dd90c1e: A deployment can register its own REWORK PAIR: a producer, and a companion that grades its
+  output and loops that producer back for automatic rework below the step's threshold.
+
+  The companion catalog was a module-global `Map` of four built-ins, so the only way to express
+  "my producer, reviewed and bounced below a bar" was to reach for a judge, a different machine.
+  A judge scores against a rubric and disposes (advance / park / bounce / fail); a companion drives
+  the producer's own bounded rework budget and only then involves a human. The workaround got the
+  scoring and lost the loop.
+
+  The pairing now lives on `AgentKindRegistry` (`registerCompanion`), beside traits, skills, tool
+  servers and variants, rather than on a sixth registry: a companion is a relationship BETWEEN
+  agent kinds. The built-in catalog is pre-loaded, so registering one adds rather than replaces,
+  and module identity stops mattering for a separately-published extension package.
+
+  Two things a reviewer should look at. The free lookups take the registry OPTIONALLY and fall
+  back to the built-ins, copying `isGatableKind`, which means a call site that omits it silently
+  sees built-ins only, so every engine site that could meet a deployment's pair now threads it
+  (dispatch routing, the rework loop's producer search, the step-gating cascade, run-start
+  threshold seeding, pipeline-shape validation, the container job body, the prompt). And the
+  pairing is registered SEPARATELY from the kind, so the snapshot projection asks the registry
+  rather than reading a kind's own definition, which would have missed every one.
+
+  The SPA learns a custom pairing from the snapshot (`customAgentKinds[].companionTargets`) so the
+  builder renders it as an "add companion" toggle on its producer rather than a placeable palette
+  block that pipeline validation would then refuse on save. Built-in pairings win on collision: a
+  deployment cannot silently re-point `coder` at its own reviewer and change what every stock
+  pipeline does.
+
+- 289b3de: Disposer step, and a teardown that is proved rather than assumed
+
+  A run's PR asserts a three-leg proof — the test environment came up, evidence was captured against
+  it, and it was torn down again — and the third leg had two problems.
+
+  Nothing closed it inside the run. Teardown happened only on the TTL sweep, a manual Destroy, a
+  `human-test` resolution, or a re-provision supersede. The sweep fires long after the last step
+  settled, so the report was published saying the environment was still live and corrected later
+  through a back-channel, and only where a provisioning log is retained. TTL is a backstop; it
+  cannot be a proof.
+
+  Worse, the teardowns that did happen were never checked. Success was recorded whenever
+  `provider.teardown()` returned without throwing, which is a different fact from the environment
+  being gone: `HttpEnvironmentProvider` reports `torn_down` unconditionally, so a manifest with no
+  `teardown:` request destroys nothing and still reports success, and a Kubernetes namespace
+  `DELETE` returns while the namespace is still `Terminating`. The section could therefore render a
+  green tick about an environment that was still running and still billing.
+
+  So teardown now has two halves. A new optional `EnvironmentProvider.confirmTeardown` re-probes
+  after the destroy call and the result is recorded as its own `teardown-verify` log row; only a
+  probe that positively finds the environment gone counts as a reclaim. This is deliberately not
+  folded into `status()`, whose implementations are all written to describe a LIVE environment — the
+  generic provider with no `status:` template answers `ready` forever, and the compose mapping reads
+  an empty project as `failed`, both of which are exactly inverted as teardown verdicts. The four
+  outcomes stay distinct because each needs a different person: confirmed, still standing (the
+  teardown was a no-op — fix the config and reclaim by hand), unverifiable (the provider has no way
+  to tell you, and no retry will change that), and unconfirmed (transient; the next sweep re-probes).
+
+  And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
+  its author places it — after the automated tester, or after a human has finished with the live
+  URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+  recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
+  seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+  Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+  each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+  Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+  frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+  after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+  environment the run never provisioned and recorded it as the frame's clean reclaim.
+
+  The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+  ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+  MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+  client decodes the new row as a plain string rather than failing.
+
+  One ordering detail is worth understanding, because getting it wrong made the whole feature
+  unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+  teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+  Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+  publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+  Both writes and the notification therefore happen in one method that takes the confirmation, and
+  the regression test asserts the row count at hook time rather than the final rows, since only that
+  can see the order.
+
+  Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
+  because a missing verify row is treated as "not proved" rather than as a pass, runs whose
+  teardowns predate this change will report unconfirmed rather than confirmed. That is a correction,
+  but a visible one. And the confirmation applies to every teardown path, not just the new step, so
+  a deployment whose provider config makes teardown a silent no-op will start being told so.
+
+- dd90c1e: The pre-dispatch input gate now judges a CUSTOM task type's own required fields, so a deployment
+  registering its own work items gets the same free refusal the built-in types get.
+
+  It reads the declaration the type ALREADY makes: its create-form field descriptors' `required`
+  markers, through the same rule the create form's validator uses, rather than adding a second
+  place to say it. That is the whole design: the two doors agree by construction, which is also why
+  the gate takes the same two stand-downs the create door takes (an unregistered type declares
+  nothing; a `formPanel` type has a bespoke section owning the whole bag). `showWhen` is honoured,
+  so a field the form would have hidden is never required.
+
+  What the gate adds over the create door is WHEN it asks. The create check fires once, against the
+  declaration as it stood that day, on the paths that reach `addTask`. The gate fires at every run
+  against the declaration as it stands now, so a requirement added in a later release reaches the
+  tasks that predate it, and a task created on a node that never registered the type is judged
+  where it runs.
+
+  One new finding code covers every deployment's every type (`required_field_missing`), with WHICH
+  field carried on the finding: a `key` for a machine and the deployment's own `label` for a
+  human. The codes are a closed, persisted vocabulary, so an org registering twenty operations adds
+  nothing to it. Additive on the wire: the `field` is optional and the code is a new enum member,
+  so the SDKs tolerate it by design (OpenAPI `info.version` 1.8.0 → 1.9.0).
+
+  A blocking finding also owes an ANSWER path, and this one did not have it: `taskTypeFields` was
+  write-once, so a parked run's only exit was a human waiving the gate while every surface told the
+  reader to go and fill the field in. So `updateBlockSchema` gains `customTaskTypeFields`, validated
+  through the create door's own `validatedFields`, and the block inspector gains a `task-type-fields`
+  panel rendering the same `DescriptorFields` against the same declaration. The patch is deliberately
+  narrower than the whole `taskTypeFields`: the built-in per-type fields are resolved at creation with
+  side effects the patch path does not repeat (a `review` task's PR reference is verified against the
+  provider), whereas the custom bag is exactly the declared answers.
+
+  Reviewer note: findings are one per unanswered field rather than collapsed, because three
+  missing inputs are three things to go and do. The conformance suite drives BOTH exits, the waiver
+  and the answer-then-recheck release, since a gate whose only exit is "ignore me" is a gate that
+  cannot be satisfied. `review_target_missing` still has the original gap and is now the only
+  blocking finding whose remedy the product does not offer.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+
+## 0.223.0
+
+### Minor Changes
+
+- a675c63: MCP maturation slice 4: a declared tool server can now be TESTED, and the deployment's tool servers are
+  finally visible without reading its source.
+
+  Until now the only way to learn whether a wired MCP tool server actually works was to start a run and
+  read the agent's own prompt. Boot validation rules on the DECLARATION and a dispatch reports what it
+  DROPPED, but a server that survives both — servable harness, allowed transport, credential present —
+  could still be a dead url, a rotated token or a typo'd tool name, and every one of those surfaced as an
+  agent quietly doing worse work without the tool it was promised.
+
+  Two new `secrets.manage`-gated routes under `/workspaces/:ws`: `GET /tool-servers` lists every
+  registered server (which agent kinds get it, which harnesses can serve it, which credentials it asks
+  for by name, whether it can be probed at all), and `POST /tool-servers/:id/test` speaks `initialize` +
+  `tools/list` to it for real. The Infrastructure window's "Capability credentials" tab renders the
+  inventory with a Test button per row, above the credential checklist those credentials belong to.
+
+  What makes the verdict worth having is that the probe resolves credentials through the SAME composed
+  chain a dispatch uses: the per-workspace store in front of the deployment environment, per key, with
+  the reserved-key floor applied before the resolver is asked. So the answer is about THIS board rather
+  than about whoever set the deployment's variable, and the probe can never be the one path that resolves
+  a platform configuration variable and ships it to a third party. The result names a CAUSE rather than a
+  boolean, split by the fix each needs: a missing credential and a rejected one are different rows, and
+  "no answer at all" is kept apart from "answered with a status" because one is the network and the other
+  is usually the token or the path.
+
+  Three things it deliberately refuses rather than approximating. A `stdio` server runs inside the run
+  container, a loopback url means "beside the agent in its own container", and the backend is neither of
+  those places — so those rows say why instead of offering a button, because a probe that reached for the
+  nearest thing it could talk to would answer about the backend's own machine, and a SUCCESS there would
+  mislead more than a failure. The third is the `allowedTools` reconciliation: the probe is the first
+  thing in the platform that can check a declared tool name against reality (every other layer holds it
+  to a NAME pattern, which a well-formed typo passes), and when the server's tool list came back
+  paginated past the probe's page bound the check reports itself as unchecked rather than calling a
+  working tool missing.
+
+  A redirect is followed, and each hop is held to the transport rule and to the DECLARED ORIGIN while a
+  credential is riding. That matches what a run does rather than exceeding it: the Web platform removes
+  `Authorization` on a cross-origin redirect, so an agent's own MCP client reaches such a hop
+  unauthenticated, and a probe that forwarded the token would report on a request no run makes while
+  handing a workspace's credential to whatever the redirect names. The row names the origin change, so
+  the fix reads as the declaration naming the final url. A server needing no credential is followed
+  across origins as before.
+
+  Two smaller fixes ride along. `McpSecretRef` gains `usage`, the operator-facing note the credential
+  checklist has always had a field for and only the generative-integration half ever populated — so a
+  tool server's row can finally say which token type and scopes a key wants. And the checklist's READ was
+  documented as `secrets.manage`-gated in three places while its mount let every member's GET through:
+  `requireWorkspacePermission` passes GET/HEAD by design, so both surfaces now mount the
+  explicitly-named `requireWorkspacePermissionIncludingReads`, with a cross-runtime RBAC assertion each.
+  Both mount it on their OWN path patterns rather than `'*'`: a `'*'` mount inside a routed Hono
+  sub-app lands on `/workspaces/:workspaceId/*` and can refuse a sibling controller's routes, which is
+  survivable while only writes are gated and an outage once reads are.
+
+  `ServerContainer` gains `toolSecretResolver`, the composed credential chain itself, beside the
+  `toolSecretEnvironmentFallback` description it already carried; a facade that wires the chain now
+  surfaces both. `AgentKindRegistry` gains `allToolServers()`, the complement of
+  `kindsWithCapabilities()` and the only way to see a registration attached to no kind at all — a state
+  that previously passed every check while its credentials sat in the operator's checklist as keys no
+  dispatch would ever ask for. Kernel gains `isLoopbackMcpHttpUrl` beside `isAllowedMcpHttpUrl`, a
+  separate predicate on purpose: one rules on the scheme, the other on where the server lives.
+
+  No harness change, so no runner-image bump.
+
+### Patch Changes
+
+- Updated dependencies [a675c63]
+  - @cat-factory/contracts@0.239.0
+
 ## 0.222.0
 
 ### Minor Changes

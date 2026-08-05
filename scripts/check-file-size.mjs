@@ -141,7 +141,11 @@ const LEGACY_ALLOWANCES = new Map([
   // SUPERSEDED this branch's narrower one (`container-notification-webhook.ts`, which moved only
   // the webhook builder): both hoisted the same builder out, so the file was deleted rather than
   // kept beside its replacement, and the platform-alert error hook moved onto the surviving one.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1345],
+  // Ratcheted 1345 -> 1222 by extracting `container-dispatchers.ts`: the repo bootstrapper and
+  // the env-config repairer, the two container dispatchers this root wires beside the step
+  // executor. Job-token scoping made them one concern rather than two, since each hands a real
+  // clone/push credential to a container and so must narrow it to the repo it touches.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1222],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -185,7 +189,11 @@ const LEGACY_ALLOWANCES = new Map([
   // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
   // Ratcheted 1520 → 1450 by extracting `agentContextRecord.ts` (the observability snapshot's
   // allow-list projection) alongside `containerAgentLogging.ts`.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1442],
+  // Ratcheted 1442 → 1368 by moving `resolveAuxiliaryRepos` down to `containerAgentBody.ts`, where
+  // the three resolvers it composes already live, when job-token scoping made the auxiliary
+  // resolution a dispatch INPUT (the token is narrowed to the repos it produces) rather than a
+  // tail step.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1368],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.
@@ -209,8 +217,12 @@ const LEGACY_ALLOWANCES = new Map([
  * ~700 to ~1,850 lines between hand audits; this entry turns that regrowth into a CI failure.
  * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
  * raising the number, and lower the allowance in the same PR when a cleanup lands a win.
+ *
+ * Ratcheted 1100 → 1098 by condensing the role-scoped merge-policy entry back to the charter's
+ * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
+ * restating two ADRs that already own every one of them.
  */
-const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1100]])
+const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1098]])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and

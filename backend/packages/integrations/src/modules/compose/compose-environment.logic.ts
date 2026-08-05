@@ -995,6 +995,19 @@ export function classifyComposePs(output: string): EnvironmentStatus {
 }
 
 /**
+ * How many containers the project still has, for confirming a teardown.
+ *
+ * Deliberately separate from {@link classifyComposePs}, which maps the SAME output for a LIVE
+ * environment and reads an empty project as `failed` ("nothing left ⇒ the stack is gone/crashed").
+ * That reading is right for an environment that is supposed to be up and exactly inverted for one
+ * that is supposed to be gone, which is why the teardown confirmation counts rows itself rather
+ * than reusing the status mapping.
+ */
+export function countComposePs(output: string): number {
+  return parseComposePsRows(output).length
+}
+
+/**
  * The POSIX directory portion of a repo-relative compose path (`''` for a root-level file):
  * `docker-compose.yml` → `''`, `deploy/docker-compose.yml` → `deploy`. Pure string work (no
  * `node:path`, so the integrations package stays runtime-neutral). Build mode writes the rewritten

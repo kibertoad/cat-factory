@@ -75,6 +75,31 @@ export type OperationalCounter =
   | 'tutorial.tour_started'
   | 'tutorial.tour_completed'
   | 'tutorial.tour_abandoned'
+  /**
+   * A run MATERIALISED a catalog pipeline its workspace was never seeded with
+   * (`pipelineAdoption.adoptForRun`). Once per workspace+pipeline, so a standing rate is the
+   * operator's answer to a question the log line cannot reach: the line says WHICH board caught
+   * up, and only the rate says how many are still behind a catalog the deployment already
+   * shipped. A quiet counter after a release means the rollout landed; a long tail means boards
+   * are discovering it one first-run at a time.
+   *
+   * UNDIMENSIONED on purpose. The interesting split would be by pipeline id, and a registered
+   * pipeline's id is whatever a deployment named it, so it is exactly the unbounded dimension
+   * the rule above bans. The id rides the log line at the increment site.
+   */
+  | 'pipeline.adopted'
+  /**
+   * A container dispatch's job token was minted INSTALLATION-WIDE after the run named a repo
+   * scope that could not be expressed as provider repo ids (`buildDispatchTokenMint`). The
+   * dispatch still runs, deliberately: a scope that dropped a leg would mint a token unable to
+   * clone a repo the job body still names. So the widening is invisible in every run-level
+   * signal, and only a standing rate says a repo projection is carrying ids the provider would
+   * not recognise, which is a security property quietly degrading rather than a run failing.
+   *
+   * UNDIMENSIONED: the interesting split would be by installation or repo, both unbounded. The
+   * ids and the run ride the log line at the increment site.
+   */
+  | 'dispatch.token_scope_widened'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns

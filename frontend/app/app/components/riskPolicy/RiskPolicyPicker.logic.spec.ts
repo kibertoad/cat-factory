@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { RiskPolicy } from '~/types/merge'
-import { resolveRiskPolicyPicker } from '~/components/riskPolicy/RiskPolicyPicker.logic'
+import {
+  refusedRiskPolicySelections,
+  resolveRiskPolicyPicker,
+} from '~/components/riskPolicy/RiskPolicyPicker.logic'
 
 // The resolver reads ids only, so the fixture carries just enough to be identifiable.
 const policy = (id: string, name: string) => ({ id, name }) as unknown as RiskPolicy
@@ -71,5 +74,62 @@ describe('resolveRiskPolicyPicker', () => {
       activeId: '',
     })
     expect(state).toEqual({ policy: null, viaWorkspaceDefault: false })
+  })
+})
+
+describe('refusedRiskPolicySelections', () => {
+  const rolePolicy = (id: string, over: Partial<RiskPolicy>) =>
+    ({ id, name: id, classRules: {}, classRulesByRole: {}, dryRunRoles: [], ...over }) as RiskPolicy
+
+  const sandboxed = rolePolicy('mp_sandboxed', { dryRunRoles: ['member'] })
+  const open = rolePolicy('mp_open', {})
+  const member = { role: 'member' as const, managesPolicy: false }
+
+  it('marks the rows a member may not move a sandboxed task to', () => {
+    // The picker must not offer what the backend refuses, including the "workspace default" row,
+    // which is a real policy (here: the open one) and not the absence of a choice.
+    const refused = refusedRiskPolicySelections({
+      options: [sandboxed, open],
+      defaultPolicy: open,
+      modelValue: 'mp_sandboxed',
+      actor: member,
+    })
+    expect(refused.get('mp_open')).toBe('relaxes_role_sandbox')
+    expect(refused.get('')).toBe('relaxes_role_sandbox')
+    expect(refused.has('mp_sandboxed')).toBe(false) // the row already selected
+  })
+
+  it('judges a task that picked nothing against the workspace default, as the engine does', () => {
+    // The create-form shape: nothing selected yet, so the policy being moved AWAY from is the one
+    // the task would have been governed by.
+    const refused = refusedRiskPolicySelections({
+      options: [sandboxed, open],
+      defaultPolicy: sandboxed,
+      modelValue: '',
+      actor: member,
+    })
+    expect(refused.get('mp_open')).toBe('relaxes_role_sandbox')
+    expect(refused.has('mp_sandboxed')).toBe(false)
+  })
+
+  it('refuses nothing to an editor who manages the policy library', () => {
+    const refused = refusedRiskPolicySelections({
+      options: [sandboxed, open],
+      defaultPolicy: open,
+      modelValue: 'mp_sandboxed',
+      actor: { role: 'admin', managesPolicy: true },
+    })
+    expect(refused.size).toBe(0)
+  })
+
+  it('refuses nothing between policies that treat every initiator alike', () => {
+    // Every built-in ships with an empty role layer, so the common case offers the whole library.
+    const refused = refusedRiskPolicySelections({
+      options: [open, rolePolicy('mp_other', {})],
+      defaultPolicy: open,
+      modelValue: 'mp_open',
+      actor: member,
+    })
+    expect(refused.size).toBe(0)
   })
 })

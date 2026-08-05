@@ -13,11 +13,7 @@ import {
   type WorkRunner,
   type ProviderRegistry,
 } from '@cat-factory/kernel'
-import {
-  createTierInstallationResolvers,
-  resolveAgentConfig,
-  isProxyableProvider,
-} from '@cat-factory/agents'
+import { createTierInstallationResolvers } from '@cat-factory/agents'
 import {
   ConfluenceProvider,
   FigmaProvider,
@@ -27,7 +23,6 @@ import {
   JiraProvider,
   LinearDocumentProvider,
   LinearTaskProvider,
-  type EnvironmentBackendRegistry,
   NotionProvider,
   EMAIL_CIPHER_INFO,
   ProvisioningLogRecorder,
@@ -79,13 +74,15 @@ import {
 } from '@cat-factory/orchestration'
 import { ISOLATE_SAFE_APP_CACHES_PROFILE, createAppCaches } from '@cat-factory/caching'
 import {
-  ContainerEnvConfigRepairer,
   makeResolveDeployCloneTarget,
   RunnerJobClient,
   FanOutEventPublisher,
   InAppNotificationChannel,
   PatPreferringAppRegistry,
   buildToolSecretChain,
+  buildDispatchTokenMint,
+  type GitHubAppRegistry,
+  type MintInstallationToken,
   logger,
   buildInfrastructureCapabilities,
   GitHubIdentityResolver,
@@ -97,12 +94,9 @@ import {
 import { type AppConfig, loadConfig } from './config'
 import type { Env } from './env'
 import { requireDb, requireTelemetryDb } from './env'
-import { type ResolveRunnerTransport } from './ai/ContainerAgentExecutor'
 import { CloudflareContainerTransport } from './containers/CloudflareContainerTransport'
 import { HttpRunnerPoolProvider } from './runners/HttpRunnerPoolProvider'
 import { D1RunnerPoolConnectionRepository } from './repositories/D1RunnerPoolConnectionRepository'
-import { ContainerRepoBootstrapper } from './ai/ContainerRepoBootstrapper'
-import { ContainerSessionService } from './containers/ContainerSessionService'
 import { DurableObjectEventPublisher } from './events/DurableObjectEventPublisher'
 import { WorkflowsWorkRunner } from './workflows/WorkflowsWorkRunner'
 import { D1BlockRepository } from './repositories/D1BlockRepository'
@@ -113,14 +107,12 @@ import { D1AccountInvitationRepository } from './repositories/D1AccountInvitatio
 import { D1PasswordResetTokenRepository } from './repositories/D1PasswordResetTokenRepository'
 import { D1EmailConnectionRepository } from './repositories/D1EmailConnectionRepository'
 import { D1GitHubInstallationRepository } from './repositories/D1GitHubInstallationRepository'
-import { D1RepoProjectionRepository } from './repositories/D1RepoProjectionRepository'
 import { D1RateLimitRepository } from './repositories/D1RateLimitRepository'
 import { D1DocumentConnectionRepository } from './repositories/D1DocumentConnectionRepository'
 import { D1DocumentRepository } from './repositories/D1DocumentRepository'
 import { D1EnvironmentConnectionRepository } from './repositories/D1EnvironmentConnectionRepository'
 import { D1CustomManifestTypeRepository } from './repositories/D1CustomManifestTypeRepository'
 import { D1EnvironmentRegistryRepository } from './repositories/D1EnvironmentRegistryRepository'
-import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepository'
 import { D1RequirementReviewRepository } from './repositories/D1RequirementReviewRepository'
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
@@ -845,8 +837,10 @@ export function selectDeployDeps(
   const registry = buildAppRegistry(env, config, db, clock)
   return {
     deployJobClient: new RunnerJobClient(async () => deployTransport),
-    resolveDeployCloneTarget: makeResolveDeployCloneTarget(buildResolveRepoTarget(db), (id) =>
-      registry.installationToken(id),
+    // Narrowed to the repo being rendered, like every other container dispatch.
+    resolveDeployCloneTarget: makeResolveDeployCloneTarget(
+      buildResolveRepoTarget(db),
+      workerDispatchTokenMint(registry),
     ),
   }
 }
@@ -882,126 +876,18 @@ export function selectRunnersDeps(
 }
 
 /**
- * Build the container-backed repo bootstrapper for the "bootstrap repo" task,
- * gated on the same prerequisites as the implementation container (the binding, a
- * configured GitHub App, the proxy's public URL and signing secret). Returns
- * undefined otherwise, leaving reference-architecture CRUD available while the run
- * path reports itself unavailable.
+ * The clone/push credential for a Worker container dispatch: the App registry's mint, narrowed by
+ * the shared builder to the repos that dispatch resolved. Every Worker site that hands a container
+ * a GitHub token goes through this, so none of them can quietly fall back to an installation-wide
+ * one. No `resolveRunInitiatorToken`: the step executor composes its own mint with that chain (see
+ * `container-executor-deps.ts`), while bootstrap, repair and the deploy clone have no initiator to
+ * act as, and saying so once here beats three call sites each omitting it by accident.
  */
-export function selectRepoBootstrapper(
-  env: Env,
-  config: AppConfig,
-  db: D1Database,
-  clock: Clock,
-  idGenerator: IdGenerator,
-  resolveTransport: ResolveRunnerTransport | null,
-): ContainerRepoBootstrapper | undefined {
-  if (
-    !resolveTransport ||
-    !config.github.enabled ||
-    !env.GITHUB_APP_PRIVATE_KEY ||
-    !env.WORKER_PUBLIC_URL ||
-    !env.AUTH_SESSION_SECRET
-  ) {
-    return undefined
-  }
-
-  const installationRepository = new D1GitHubInstallationRepository({ db })
-  const registry = buildAppRegistry(env, config, db, clock)
-  const githubClient = new FetchGitHubClient({
-    registry,
-    rateLimitRepository: new D1RateLimitRepository({ db, idGenerator }),
-    idGenerator,
-    clock,
-    apiBase: config.github.apiBase,
-  })
-
-  // The scaffolder installs dependencies too — forward the workspace's
-  // private-registry entries exactly as the implementation executor does.
-  const resolvePackageRegistries = buildResolvePackageRegistries(env, db)
-
-  return new ContainerRepoBootstrapper({
-    resolveTransport,
-    installationRepository,
-    bootstrapJobRepository: new D1BootstrapJobRepository({ db }),
-    repoRepository: new D1RepoProjectionRepository({ db }),
-    githubClient,
-    mintInstallationToken: (id) => registry.installationToken(id),
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    // Bootstrap is an `architect`-kind run, so it follows that kind's routing
-    // (GLM-5.2 by default) rather than the global default.
-    model: resolveAgentConfig(config.agents.routing, 'architect').ref,
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    githubApiBase: config.github.apiBase,
-    ...(resolvePackageRegistries ? { resolvePackageRegistries } : {}),
-  })
-}
-
-/**
- * Build the live ENVIRONMENT-PROVIDER CONFIG REPAIR agent (PR #416 increment 2) when its
- * prerequisites are met — the same container prerequisites as the bootstrapper PLUS an
- * injected provider that actually supports agent repair (`describeRepairAgent`). A stock
- * deployment runs the generic manifest provider (no repair support), so this stays
- * undefined there; it wires only when a native adapter is injected. Built
- * over the FINAL provider (post-overrides), so the dispatcher repairs through the same
- * provider the engine validates with. NOT to be confused with the repo bootstrapper: this
- * is an ordinary clone→edit→push coding job (no history reset / force-push).
- */
-export function selectEnvConfigRepairer(deps: {
-  env: Env
-  config: AppConfig
-  db: D1Database
-  clock: Clock
-  resolveTransport: ResolveRunnerTransport | null
-  override: CoreDependencies['environmentProvider']
-  environmentBackendRegistry: EnvironmentBackendRegistry
-}): ContainerEnvConfigRepairer | undefined {
-  const { env, config, db, clock, resolveTransport, override, environmentBackendRegistry } = deps
-  const repairUrlPolicy = resolveUrlSafetyPolicy(config.environments)
-  // Prefer the internal override (the conformance suite's fake repair provider) else scan
-  // the env-backend registry for the first repair-capable backend.
-  const environmentProvider = !resolveTransport
-    ? undefined
-    : (override ??
-      environmentBackendRegistry.findRepairCapable(
-        repairUrlPolicy ? { urlPolicy: repairUrlPolicy } : {},
-      ))
-  if (
-    !resolveTransport ||
-    !environmentProvider ||
-    typeof environmentProvider.describeRepairAgent !== 'function' ||
-    !config.github.enabled ||
-    !env.GITHUB_APP_PRIVATE_KEY ||
-    !env.WORKER_PUBLIC_URL ||
-    !env.AUTH_SESSION_SECRET
-  ) {
-    return undefined
-  }
-  // A config fix is coding work, so it follows the `coder` kind's routing. The repair runs on
-  // the Pi harness over the LLM proxy, so the routed model MUST be proxyable. Surface a
-  // misconfiguration HERE (at wiring) rather than letting every repair dispatch throw deep in a
-  // request: if `coder` is routed to a non-proxyable model (e.g. an individual subscription
-  // vendor), leave the fallback unwired — bootstrap then returns the validation issues, exactly
-  // as it does when no provider supports repair.
-  const model = resolveAgentConfig(config.agents.routing, 'coder').ref
-  if (!isProxyableProvider(model.provider)) {
-    logger.warn(
-      'env-config repair: the coder routing model is not proxyable by the LLM proxy; ' +
-        'the agent config-repair fallback is disabled.',
-      { provider: model.provider },
-    )
-    return undefined
-  }
-  const registry = buildAppRegistry(env, config, db, clock)
-  return new ContainerEnvConfigRepairer({
-    resolveTransport,
-    installationRepository: new D1GitHubInstallationRepository({ db }),
-    mintInstallationToken: (id) => registry.installationToken(id),
-    sessionService: new ContainerSessionService({ secret: env.AUTH_SESSION_SECRET }),
-    environmentProvider,
-    model,
-    proxyBaseUrl: `${env.WORKER_PUBLIC_URL.replace(/\/+$/, '')}/v1`,
-    githubApiBase: config.github.apiBase,
+export function workerDispatchTokenMint(registry: GitHubAppRegistry): MintInstallationToken {
+  return buildDispatchTokenMint({
+    mint: (id, opts) => registry.installationToken(id, opts),
+    logger,
+    operationalMetrics,
   })
 }
 

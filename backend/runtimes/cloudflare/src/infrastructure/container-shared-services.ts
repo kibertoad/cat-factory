@@ -24,6 +24,7 @@ import {
   buildPublicApiKeyService,
   buildSubscriptionService,
   buildCapabilityCredentialsService,
+  buildMcpOAuthService,
   buildTestSecretsService,
   buildUserSecretService,
   buildValidationConfigService,
@@ -75,6 +76,9 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
   // CRUD controller and the engine's prompt refs (the executor builds its own value resolver).
   const testSecretsService = buildTestSecretsService(env, db, clock)
   const capabilityCredentialsService = buildCapabilityCredentialsService(env, db, clock)
+  // The per-workspace OAuth grants for remote MCP tool servers — shared by the connect/disconnect
+  // routes, the inventory's connection state, and the executor's dispatch-time token source.
+  const mcpOAuthService = buildMcpOAuthService(env, db, clock)
 
   const validationConfigService = buildValidationConfigService(db, clock)
 
@@ -199,6 +203,7 @@ export function buildWorkerSharedServices(input: WorkerSharedServicesInput) {
     subscriptions,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,

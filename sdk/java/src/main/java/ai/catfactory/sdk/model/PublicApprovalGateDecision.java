@@ -14,6 +14,8 @@ import org.jspecify.annotations.Nullable;
  * @param feedback Always present; {@code null} when the server has no value for it.
  * @param kind the {@code kind} field.
  * @param proposal the {@code proposal} field.
+ * @param recordedApprovals the {@code recordedApprovals} field.
+ * @param requiredApprovals the {@code requiredApprovals} field.
  * @param status the {@code status} field.
  * @param stepIndex the {@code stepIndex} field.
  * @param stepKind the {@code stepKind} field.
@@ -30,6 +32,10 @@ public record PublicApprovalGateDecision(
     @JsonProperty("kind") String kind,
 
     @JsonProperty("proposal") String proposal,
+
+    @JsonProperty("recordedApprovals") Double recordedApprovals,
+
+    @JsonProperty("requiredApprovals") Double requiredApprovals,
 
     @JsonProperty("status") PublicApprovalGateDecisionStatus status,
 
@@ -55,6 +61,8 @@ public record PublicApprovalGateDecision(
         private @Nullable String feedback;
         private @Nullable String kind;
         private @Nullable String proposal;
+        private @Nullable Double recordedApprovals;
+        private @Nullable Double requiredApprovals;
         private @Nullable PublicApprovalGateDecisionStatus status;
         private @Nullable Double stepIndex;
         private @Nullable String stepKind;
@@ -89,6 +97,18 @@ public record PublicApprovalGateDecision(
             return this;
         }
 
+        /** Set {@code recordedApprovals}. */
+        public Builder recordedApprovals(@Nullable Double recordedApprovals) {
+            this.recordedApprovals = recordedApprovals;
+            return this;
+        }
+
+        /** Set {@code requiredApprovals}. */
+        public Builder requiredApprovals(@Nullable Double requiredApprovals) {
+            this.requiredApprovals = requiredApprovals;
+            return this;
+        }
+
         /** Set {@code status}. */
         public Builder status(@Nullable PublicApprovalGateDecisionStatus status) {
             this.status = status;
@@ -109,7 +129,7 @@ public record PublicApprovalGateDecision(
 
         /** Build the {@link PublicApprovalGateDecision}. */
         public PublicApprovalGateDecision build() {
-            return new PublicApprovalGateDecision(approvalId, exceeded, feedback, kind, proposal, status, stepIndex, stepKind);
+            return new PublicApprovalGateDecision(approvalId, exceeded, feedback, kind, proposal, recordedApprovals, requiredApprovals, status, stepIndex, stepKind);
         }
     }
 }

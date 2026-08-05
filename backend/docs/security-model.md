@@ -1,7 +1,8 @@
 # Security model: agents, prompt injection, and the VCS write path
 
 Agents on this platform read untrusted text (repository contents, issue and tracker text, PR
-comments, web search results) and can open pull requests against real repositories. This document
+comments, web search results, and the results of any MCP tool server wired for the run) and can
+open pull requests against real repositories. This document
 answers one question precisely: **if a prompt injection or a hallucinated argument makes an agent
 try to land malicious code, what actually stands between that decision and your repository?**
 
@@ -136,6 +137,25 @@ clean and shipped the deployment's master sealing key to a third party. So:
   `AWS_ACCESS_KEY_ID`). With one name for both jobs, the floor would have made the commonest MCP
   servers unusable, with no workaround open to a deployment, which is the same objection that ruled
   out mandating a `TOOL_` prefix on the lookup side.
+- **An OAuth GRANT is the third shape of the same path, and it moves what a run authenticates AS
+  rather than what it can read.** A remote (`http`) tool server may declare `oauth` instead of a
+  static key; the platform then holds a per-workspace, sealed grant and mints an access token at
+  dispatch, into the same job-body header channel a resolved `secretKeys` value uses. Four things
+  keep it inside the boundary above. The OAuth CLIENT SECRET is looked up through the same chain and
+  held to the same reserved-key floor, so nothing new can be named. The authorization and token
+  endpoints are held to the tool-server URL rule whether DECLARED or DISCOVERED, because a metadata
+  document is a third party naming where this deployment's client secret is posted. The `state` that
+  carries the flow is SEALED rather than signed (it holds the PKCE verifier, which travels the same
+  browser redirect the authorization code does) and binds the user who started it, so an
+  authorization link opened by an admin cannot plant someone else's vendor account as the board's
+  connection. And `secrets.manage` is re-resolved WHEN THE TOKEN IS STORED, not assumed from the
+  Connect press, because a grant takes minutes of human time. Both of those last two are enforceable
+  only because the vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a
+  session-gated endpoint: a backend route receiving a third-party browser navigation directly has no
+  bearer token to resolve a user from, so it would have to sit outside the default-deny session gate
+  and every check it made about the caller would be unreachable code. What OAuth does NOT change: a wired server's
+  results are still untrusted input, and the granted SCOPES are the boundary that actually bounds
+  what a subverted agent can do with the connection.
 - **The dispatch-time check sits at the CALL SITE, not inside the env resolver**, so it holds for
   a deployment's own `ToolSecretResolver` too, which is the one that could genuinely have a value
   stored under such a name.
@@ -152,11 +172,35 @@ clean and shipped the deployment's master sealing key to a third party. So:
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:
 
-| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                      | Lifetime                |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Installation-wide**: every repo the workspace's installation covers, at the permissions the install granted (Contents: read/write, etc.) | ~1h, in-memory only     |
-| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped** (`repository_ids`): only the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged        | ~1h, minted per request |
-| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                             | The PAT's own           |
+| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                                                          | Lifetime                |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Repo-scoped** (`repository_ids`): the repos THIS run resolved (primary + fan-out peers + conflict/merger siblings + reference repos), at the permissions the install granted | ~1h, cached per scope   |
+| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped**: the dispatch's own repos, intersected server-side with the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged             | ~1h, minted per request |
+| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own           |
+
+**The App rows are narrowed by the ENGINE, at dispatch.** `jobTokenRepoIds` collects the repos one
+job body names and `buildDispatchTokenMint` turns them into GitHub's `repository_ids`. A leg on a
+different installation is dropped rather than requested: one job carries one token, so such a repo
+is unreachable either way. A scope that cannot be expressed as repo ids widens to installation-wide
+rather than dropping a leg the harness is about to clone, and says so: a `warn` naming the run plus
+the `dispatch.token_scope_widened` counter, because a security property degrading silently reads
+exactly like one holding.
+
+**"A dispatch" means every path that hands a container a GitHub credential**, not just the step
+executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the deploy
+clone target each name the one repo they touch. They go through the same builder on both facades,
+so neither the two runtimes nor the five dispatchers can drift on whose token it is or how wide.
+That totality is held by the TYPE rather than by review: supplying the run context is what makes a
+mint a dispatch mint, and a context must carry `repoIds`. A dispatcher whose own lookup came back
+empty passes an empty scope, which is a different fact from an engine call naming none, and is
+reported as the widening it is. Engine calls (`RepoFiles` reads, the gate and merge clients) pass
+no context at all and stay installation-wide, deliberately: they act as the deployment, not as a
+run, and nothing they do reaches a container.
+
+Two things this does NOT narrow, both by construction. **Permissions**: the token still carries
+`Contents: write` for the repos it does cover, because GitHub App tokens cannot be branch-scoped.
+**A personal PAT**: `repository_ids` is an App-token mechanism with no PAT equivalent, so a run on
+the initiator's own token is bounded by that token; `allowInitiatorPat` is what bounds that.
 
 **The initiator's personal PAT OUTRANKS whichever row applies, unless the workspace refuses it.**
 Wherever the per-user secret store is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has
@@ -204,13 +248,10 @@ Consequences to internalize:
   to everything you own is exactly that dangerous in this context; use a fine-grained PAT restricted
   to the repos the deployment works on. The same advice applies, per member, to stored personal PATs.
 
-Known gap, candidate hardening: the standard engine dispatch uses the **unscoped** installation
-token, even though the repo-scoped mint mechanism already exists (the mothership delegation path
-uses it). Narrowing the job token to the run's actual repos (primary + peers + references) would
-shrink the worst case of Layer 2's stated limit from "the installation" to "the repos this run was
-about". Until then, the practical mitigation is installation scope itself: see the checklist. Note
-that such a narrowing would not bound an initiator PAT, which the platform does not mint and cannot
-scope; `allowInitiatorPat: false` is what bounds that, by declining to use it at all.
+So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
+installation", but only where the run authenticates as the App. Installation scope still bounds
+what any run in the workspace could ever ask for, and it is what the checklist's item 3 is about;
+it is now a ceiling rather than the blast radius of every single run.
 
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
@@ -252,8 +293,22 @@ With that scoping, the pipeline properties are:
   change the authority it runs under. Narrowing is subtractive by construction
   (`narrowMergeClassRule`), so a role entry can never widen what the base rules allow, and a run
   with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
-  rules rather than being guessed onto a tier. Full model:
-  [ADR 0037](./adr/0037-role-scoped-merge-policy.md).
+  rules rather than being guessed onto a tier. A third field, `submissionClassesByRole`, allowlists
+  the change classes a role may land at all and is refused at both exits too, so a tier can be held
+  short of `source` without being sandboxed on everything; an absent entry is unrestricted and
+  `unknown` stays inert there as well, for the same reason it does above. Full model:
+  [ADR 0037](./adr/0037-role-scoped-merge-policy.md) and
+  [ADR 0039](./adr/0039-role-scoped-submission-allowlists.md).
+- **Which preset governs a task is part of the same policy, so SELECTING one is guarded too.**
+  Editing a preset is admin-tier (`settings.manage`), but a task's `riskPolicyId` is an ordinary
+  member-tier board write, which made re-pointing the task the way around a sandbox nobody had to
+  edit. `refuseRiskPolicySelection` closes it with the narrow-only rule one level up: a selection
+  may not drop a restriction the SELECTOR's own role was under (the sandbox, the submission
+  allowlist, or a class the role layer narrowed), at either door that can carry the field (creating
+  a task and patching one). The arms run in the engine's own precedence order, so the reason it
+  gives names the restriction the run itself would have been refused on. It compares only the ROLE
+  layer, so choosing between presets that treat every initiator alike stays a plain member
+  affordance.
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint
@@ -325,6 +380,14 @@ Do not lean on any of these; the codebase explicitly refuses to:
   secrets ride the job body only, resolved by name through `ToolSecretResolver`), but anything the
   agent can read, assume it can also try to exfiltrate through text it writes, which is why
   Layer 5 scrubs at every exit.
+- **The provenance of a wired MCP tool server.** A server's RESULTS are untrusted input like
+  everything else the agent reads (the threat model above), so wiring one extends the set of
+  parties who can attempt injection to that server's operator and its upstreams; and the run
+  container applies no egress bound on which wired servers an already-subverted agent may call
+  with what it has read, so a wired server is also a potential exfiltration channel.
+  `allowedTools` does not contain this (first bullet). The controls that do exist are which
+  servers a deployment wires for which kinds and the scope of the credential each is handed:
+  see `mcp-tool-servers.md` → Security posture.
 
 ## Operator hardening checklist
 
@@ -351,9 +414,11 @@ is possible at all:
    auto-merge and add class floors for `source` and `schema`. Remember the shipped default
    auto-merges under Balanced ceilings with no floors.
 3. **Scope the GitHub App installation to only the repos the platform should work on.** The job
-   token is installation-wide, so the installation is the blast radius of a fully compromised run:
-   whenever the run is using the App token at all, which item 4 is about. Don't install on "All
-   repositories" of an org that also holds crown jewels.
+   token is now narrowed per dispatch to the repos that run resolved, so the installation is the
+   CEILING on what any run could ask for rather than the blast radius of every one. It still binds:
+   it is what stops a task linked to the wrong repo, or a widened mint that could not be scoped,
+   from reaching further. Don't install on "All repositories" of an org that also holds crown
+   jewels. This applies whenever the run is using the App token at all, which item 4 is about.
 4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
    would otherwise silently widen every run they start to their own whole account.
@@ -431,9 +496,6 @@ is possible at all:
   workspace's events until the socket drops. Severing it needs a revocation signal that reaches
   whichever replica or Durable Object holds the socket; tracked as SEC-12 in
   `docs/initiatives/security-hardening-round-2.md`.
-- **Job tokens are installation-wide on the standard dispatch path.** The repo-scoped mint exists
-  (delegation path) and could be applied at engine dispatch. Until it is, item 3 above is the
-  mitigation.
 - **Outside the reserved-key floor, what a capability credential may read from the deployment's
   environment is unbounded until an operator sets `allowKeys`.** `isReservedPlatformEnvKey` refuses
   the platform's own configuration with no configuration required and cannot be widened, but every

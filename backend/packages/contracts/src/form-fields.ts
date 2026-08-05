@@ -137,6 +137,19 @@ export const descriptorFieldEntries = {
   maxLength: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(DESCRIPTOR_FIELD_VALUE_MAX)),
   ),
+  /**
+   * Inclusive bounds for a `number` value, enforced by the input AND the validator; ignored for
+   * every other type.
+   *
+   * The numeric counterpart of {@link maxLength}, and it exists for the same reason: a declared
+   * bound that only the input enforces is not a bound, because the form is not the only door. A
+   * gate's `maxAttempts` filled over the public API, or typed into a hand-authored pipeline, has
+   * to be refused where the value is FROZEN — otherwise the only remaining defence is the reader
+   * silently clamping it, which turns a configuration mistake into behaviour nobody asked for and
+   * nobody is told about.
+   */
+  min: v.optional(v.number()),
+  max: v.optional(v.number()),
 } as const
 
 /**
@@ -257,6 +270,11 @@ export function validateDescriptorFields(
     if (!isDescriptorFieldVisible(field, values)) continue
     const value = values[field.key]
     if (!isFilled(value)) {
+      // Equivalent to `unfilledRequiredDescriptorFields` by construction: visibility and
+      // filled-ness are already decided by the two lines above, so all that is left of that
+      // predicate here is `required`. Calling it would allocate a list and a Set per validation
+      // to re-derive what this loop has in hand. The shared rule is what the OTHER caller (the
+      // input gate) needs, because it reports the descriptors rather than walking them.
       if (field.required) problems.push(`Field "${field.key}" is required.`)
       continue
     }
@@ -268,6 +286,33 @@ export function validateDescriptorFields(
   }
 
   return problems
+}
+
+/**
+ * The required fields a descriptor form declares that this value bag does NOT answer, in
+ * declaration order.
+ *
+ * Split out of {@link validateDescriptorFields} because two very different doors ask it and must
+ * agree: the create FORM refuses a submission, and the pre-dispatch INPUT GATE parks a run whose
+ * task reached the board some other way (the public API, an initiative spawn, a tracker import
+ * and every path the form never guarded). One rule, so a deployment that marks a field required
+ * cannot have it enforced at one door and ignored at the other.
+ *
+ * VISIBILITY is honoured, and it is the whole subtlety: a field hidden by its own `showWhen`
+ * is not required, because a form that never showed it cannot have asked for it. Parking a run
+ * on such a field would name an input with nowhere to go and fix it.
+ *
+ * Returns the DESCRIPTORS rather than the keys, so a caller rendering a refusal has the human
+ * label without a second lookup against a list it would have to be handed anyway.
+ */
+export function unfilledRequiredDescriptorFields(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorField[] {
+  return fields.filter(
+    (field) =>
+      field.required && isDescriptorFieldVisible(field, values) && !isFilled(values[field.key]),
+  )
 }
 
 /** The per-type semantic checks, once the value is present and structurally right. */
@@ -297,6 +342,14 @@ function semanticProblems(field: DescriptorField, value: DescriptorFieldValue): 
     value.length > field.maxLength
   ) {
     problems.push(`Field "${field.key}" exceeds its maximum length of ${field.maxLength}.`)
+  }
+  if (typeof value === 'number') {
+    if (field.min !== undefined && value < field.min) {
+      problems.push(`Field "${field.key}" must be at least ${field.min}.`)
+    }
+    if (field.max !== undefined && value > field.max) {
+      problems.push(`Field "${field.key}" must be at most ${field.max}.`)
+    }
   }
   return problems
 }

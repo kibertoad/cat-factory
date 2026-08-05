@@ -1,5 +1,222 @@
 # @cat-factory/observability-otel
 
+## 0.13.2
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/kernel@0.243.1
+
+## 0.13.1
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+
+## 0.13.0
+
+### Minor Changes
+
+- f775c1d: Job tokens are scoped to the repos a run resolved, not the whole installation
+
+  A container dispatch's clone/push credential was a GitHub App token minted with no
+  `repository_ids`, so it reached every repository the workspace's installation covered. That made
+  the installation the blast radius of a fully compromised run, and the mitigation was advice
+  (scope the installation narrowly) rather than a mechanism. The narrowing mechanism already
+  existed and was proven on the mothership delegation path; this brings it to every dispatch.
+
+  `jobTokenRepoIds` collects the repos ONE job body names (the primary checkout plus fan-out
+  peers, the conflict-resolver's targeted peer, the merger's combined-diff siblings, and read-only
+  reference repos) and `buildDispatchTokenMint` turns them into `repository_ids`. That builder is
+  shared by both facades, which previously carried byte-identical copies of the "initiator PAT
+  first, else the deployment credential" decision: whose token and how wide are one question, so
+  they now have one implementation and cannot drift.
+
+  **Every path that hands a container a GitHub credential goes through it**, not just the step
+  executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the
+  deploy clone target each name the one repo they touch. That totality is held by the TYPE, not by
+  review. Supplying the run context is what makes a mint a dispatch mint, and a context must carry
+  `repoIds`, so a new dispatcher cannot ship without deciding its scope. Engine calls (`RepoFiles`
+  reads, the gate and merge clients) pass no context and stay installation-wide by design: they act
+  as the deployment, and nothing they do reaches a container.
+
+  Three dispositions are deliberate. A leg on a DIFFERENT installation is dropped rather than
+  requested: one job carries one token, so such a repo is unreachable either way, and naming it
+  would only make GitHub reject the mint. A scope that cannot be expressed as repo ids widens to
+  installation-wide rather than dropping a leg the harness is about to clone, since minting for the
+  parseable remainder would trade a data problem for a run that fails deep in a `git clone`. And a
+  dispatcher whose own lookup came back empty passes an EMPTY scope rather than none, because
+  "could not resolve my repos" and "I am not a dispatch" are opposite facts that an absent field
+  renders identically. Neither widening is silent: a `warn` naming the run plus the new
+  `dispatch.token_scope_widened` counter, because a security property degrading quietly reads
+  exactly like one holding.
+
+  What this does NOT narrow, both by construction: the token still carries `Contents: write` for
+  the repos it covers (App tokens cannot be branch-scoped), and an initiator's personal PAT is
+  unaffected, since `repository_ids` is an App-token mechanism with no PAT equivalent.
+  `allowInitiatorPat` remains what bounds that.
+
+  The mothership delegation endpoint takes the same scope. A node may now name `repositoryIds`,
+  which is INTERSECTED with the installation's App-linked projection server-side: asking narrows
+  and can never widen, nothing left in scope is the existing uniform 404, and a malformed ask falls
+  back to the full linked set rather than a partial one.
+
+  Worth reviewing: what a scoped mint changed about CACHING. `GitHubAppAuth` keyed its in-memory
+  token cache by installation id alone, which made a scoped entry unsafe to store (it would
+  over-grant a later engine call, and be under-granted by one), so scoped mints bypassed the cache
+  entirely. On the delegation path that was already true and cheap; on the standard dispatch path
+  it would have put an RSA signature plus a GitHub round trip on every step and every re-dispatch
+  epoch, where a warm process previously paid one mint per installation per hour. Both sides now
+  key by installation + sorted scope through one `InstallationTokenCache`, so a narrowed token
+  caches beside the unscoped one and neither can serve or poison the other. That cache also evicts
+  lapsed entries, which keying by scope made necessary: a map bounded by the installation count
+  became one bounded by the number of distinct repo SETS a long-running node dispatches over.
+
+  The dispatch also reorders: the auxiliary-checkout resolution moved INTO the parallel I/O wave
+  and the token mint moved out behind it, because the mint's scope is what that resolution
+  produces. One round trip left the wave as another entered it, and the ordering is pinned by a
+  test, so a later latency pass cannot re-parallelise the mint back to installation-wide.
+  `backend/docs/security-model.md` Layer 3 is updated, and the "job tokens are installation-wide"
+  known gap is closed.
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/contracts@0.243.0
+
+## 0.12.3
+
+### Patch Changes
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/kernel@0.241.1
+
+## 0.12.2
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+
+## 0.12.1
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+
+## 0.12.0
+
+### Minor Changes
+
+- dd90c1e: Join the platform's telemetry to a caller's own distributed trace.
+
+  `mountRequestLogging` now adopts an inbound W3C `traceparent`, binding `traceId`/`spanId` onto
+  the request-scoped logger so an SDK client or gateway already collecting a trace sees this
+  deployment's log lines inside it rather than beside it. A line naming a RUN still takes that
+  run's derived trace id: that derivation is the only thing joining a run's logs to its spans, and
+  nothing else asserts it, so the caller's context fills in everywhere else (which is most of what
+  an API request emits). The header is untrusted, so the parse admits only the exact fixed-width
+  hex grammar and refuses the spec's all-zero sentinels; malformed means ignored, never a refused
+  request.
+
+  Not shipped, deliberately, after weighing it: exporting COST over OTLP. It is derived data
+  (`tokens x rates`) in a store that cannot reprice it, so a corrected rate table would leave
+  history permanently wrong with nothing marking it, and it would sit beside `SpendService` as a
+  second answer for money, at a grain that drops `workspace_id` and therefore can never be
+  reconciled against what anyone is billed. The exporter carries the observed facts a downstream
+  consumer prices FROM instead: the model, the three input token classes kept apart, and the
+  output count. The reasoning is recorded in the README's not-emitted list so it is not
+  re-proposed.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/kernel@0.239.0
+
+## 0.11.0
+
+### Minor Changes
+
+- 4e5640d: Adopt a catalog pipeline into the workspace on first run, so no board is stuck behind an advisory.
+
+  Built-in pipelines are copied into each workspace at creation, so a board seeded before a pipeline
+  shipped holds no row for it, and the catalog's own copy is invisible to every read: the library lists
+  rows, the builder edits rows, a run resolves by row. For a human browsing the pipeline library the
+  new-pipeline advisory plus a reseed closes that gap. For anything that PINS a pipeline by id it does
+  not, and a reusable operation does exactly that: the pin resolves off the task-type registry, which
+  knows nothing about rows, so a task of the operation was creatable on an older board and then refused
+  to start with a bare 404 that named nothing the user could act on.
+
+  Run resolution now goes through `pipelineAdoption.adoptForRun`, which returns the stored row or
+  materialises the catalog entry and returns that. It WRITES rather than running off the code copy on
+  purpose: resolving from the catalog without persisting would leave a run executing a pipeline the
+  board's own library cannot show, open in the builder, or attach a schedule to, which is the same
+  dishonesty as rendering an absent thing as an empty one. Only `builtin` catalog entries are adoptable,
+  and that restriction is the safety argument rather than a convenience: a built-in is read-only and
+  becomes deletable only once retired, and a retired id is absent from `seedPipelines` by construction,
+  so "no row plus a live built-in entry" can only mean never adopted. A versionless registered pipeline
+  is deletable, so adopting one would resurrect a deliberate deletion.
+
+  Two adoptions race by construction (two tasks of one operation started at once both resolve "no row"),
+  so this adds `PipelineRepository.insertIfAbsent`, conflict-targeted `DO NOTHING` on the composite key
+  on both runtimes. Deliberately not `INSERT OR IGNORE` on D1, which would also swallow an unrelated
+  constraint failure on that runtime alone and so hide a real bug behind a passing Postgres suite. Both
+  writers write the same catalog definition, so first write wins and the loser has nothing to report.
+  `PipelineService.reseed`'s absent branch moved onto the same method, fixing a pre-existing race of its
+  own, and both now build the row through one shared `adoptedCatalogRow` so adopting and reseeding cannot
+  diverge on labels or archive state.
+
+  Widening what a start resolves means every GATE standing in front of one had to be widened with it,
+  which is where the read-only twin `resolveDefinition` earns its place. Each of these read the bare row
+  and, finding nothing, did not refuse but CONCLUDED, about a pipeline that was about to run anyway:
+
+  - `individualVendorsForBlock` backs the personal-credential gate on the start request, so an un-adopted
+    pipeline resolved to no agent kinds, the gate concluded the run needed no personal subscription, and
+    the run then adopted and started ungated.
+  - The public API's decide-scope check resolves the caller's `pipelineId` to inspect it for parks. A
+    `null` skipped the check entirely, and `start` then adopted and parked the run, so a `write`-only key
+    could set in motion exactly the park that scope exists to withhold. Both public start paths now read
+    `PipelineService.resolveForRun`, which replaces the `get` that served the stored row (nothing wants
+    that read any more). One public-API behaviour change falls out of it, additive: naming a pipeline the
+    board has not adopted starts the run (or is refused for want of `decide`) instead of answering `404`
+    / `pipeline_not_public`, so an integration pinning a pipeline by id no longer waits on a human to
+    reseed the board.
+  - The post-merge auto-start resolved dependents from the workspace's pipeline LIST and dropped any
+    whose pin had no row, silently, so a merge propagated into a task that never began. It now resolves
+    misses through `adoptableCatalog()` (no point read per miss: the list already proves there is no
+    row), and a dependent whose pin resolves to nothing at all is reported rather than dropped.
+
+  So a bare `pipelineRepository.get` on a run-adjacent path is now the smell. Adoption is also COUNTED,
+  through the new `pipeline.adopted` operational counter: the log line says which board caught up, and
+  only the rate says how many are still behind a catalog the deployment already shipped.
+
+  Left refusing on purpose: an initiative policy edit or a recurring schedule naming an un-adopted
+  pipeline. Both are authoring paths where the SPA only offers stored pipelines, so the refusal is
+  reachable headlessly only, and adopting on an authoring write would materialise rows for pipelines
+  nobody ran.
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/contracts@0.239.0
+
 ## 0.10.2
 
 ### Patch Changes

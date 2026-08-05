@@ -706,6 +706,168 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
   })
 })
 
+describe('ContainerAgentExecutor job-token scope', () => {
+  // The job token is narrowed to the repos ONE dispatch resolved, so a fully compromised run
+  // reaches the repos the run was about rather than every repo the installation covers
+  // (`backend/docs/security-model.md`, Layer 3). What the executor owes is the SCOPE; turning
+  // it into GitHub's `repository_ids` is the facade's job (`buildDispatchTokenMint`).
+
+  const OWN = {
+    installationId: 7,
+    repoId: '1001',
+    owner: 'acme',
+    name: 'widgets',
+    baseBranch: 'main',
+  }
+  const PEER = {
+    installationId: 7,
+    repoId: '2002',
+    owner: 'acme',
+    name: 'billing',
+    baseBranch: 'develop',
+  }
+  // A peer the workspace reaches through a DIFFERENT installation: one job carries one token, so
+  // this repo is unreachable with or without scoping and naming it would only make GitHub reject
+  // the mint.
+  const FOREIGN = {
+    installationId: 99,
+    repoId: '3003',
+    owner: 'other',
+    name: 'shared',
+    baseBranch: 'main',
+  }
+
+  function captureScope(depsOverride: Partial<ContainerAgentExecutorDependencies> = {}) {
+    const scopes: (string[] | undefined)[] = []
+    const made = makeExecutor({
+      resolveRepoTarget: async () => OWN,
+      mintInstallationToken: async (_id, ctx) => {
+        scopes.push(ctx?.repoIds)
+        return 'GH-TOKEN'
+      },
+      ...depsOverride,
+    })
+    return { ...made, scopes }
+  }
+
+  it('scopes a single-repo dispatch to the primary repo alone', async () => {
+    const { executor, scopes } = captureScope()
+    await executor.startJob(context('coder'))
+    expect(scopes).toEqual([['1001']])
+  })
+
+  it('scopes a multi-repo fan-out to the primary plus every peer checkout', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'billing' }],
+      } as never),
+    )
+    // The primary is FIRST and always present: a scope missing it would mint a token that cannot
+    // clone the repo the run is about.
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('drops a leg on another installation rather than asking for a token that cannot cover it', async () => {
+    const { executor, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: FOREIGN, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('coder', {}, undefined, {
+        involvedServices: [{ frameId: 'frm_peer', name: 'shared' }],
+      } as never),
+    )
+    expect(scopes).toEqual([['1001']])
+  })
+
+  it('scopes the merger to every peer PR repo it clones as a sibling', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('merger', {
+        pullRequest: PR,
+        peerPullRequests: [
+          {
+            repo: 'acme/billing',
+            frameId: 'frm_peer',
+            ref: {
+              url: 'https://github.com/acme/billing/pull/3',
+              number: 3,
+              branch: 'cat-factory/blk_1',
+            },
+          },
+        ],
+      }),
+    )
+    // Every repo the body tells the harness to clone is in the scope: a leg dropped from the
+    // scope is a clone the harness cannot make. (The converse does NOT hold, deliberately: the
+    // merger REPLACES the fan-out's peers in the body while their ids stay in the scope, so the
+    // scope is a superset. Widening beyond what the body names costs nothing; narrowing below it
+    // breaks the clone.)
+    expect(captured[0]!.spec.peerRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes the conflict-resolver to the peer repo it is retargeted onto', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      } as never),
+    )
+    // The resolver clones the PEER, not the primary. The primary stays in the scope anyway
+    // (`jobTokenRepoIds` always yields it), which is a token slightly wider than this one job
+    // needs and never one that cannot clone what the body names.
+    expect(captured[0]!.spec.repo).toMatchObject({ name: 'billing' })
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes a read-only reference repo the same as a writable leg', async () => {
+    const { executor, captured, scopes } = captureScope()
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [{ repoId: 2002, owner: 'acme', name: 'billing', defaultBranch: 'develop' }],
+    } as never)
+    // A reference repo is cloned read-only, but a token that cannot READ it fails the clone
+    // exactly as one that cannot write does, so it belongs in the scope.
+    expect(captured[0]!.spec.referenceRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+})
+
 describe('ContainerAgentExecutor pre-PR validation checks (job-body gating)', () => {
   // The commands ride the JOB BODY (containers have no DB access), and only for a dispatch that
   // actually OPENS a pull request — that is what "pre-PR" means. An in-place fixer pushing onto
@@ -880,11 +1042,16 @@ describe('ContainerAgentExecutor private package registries', () => {
 })
 
 describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
-  // The independent dispatch resolutions — installation-token mint, work-branch ensure, auth,
-  // package registries, tester secrets, web-search availability — are fanned out in one wave
-  // once the repo target is resolved (audit item 4). This pins that they overlap rather than
-  // running one-after-another, and that a failing context-observability record still never
-  // breaks a dispatch.
+  // The independent dispatch resolutions (work-branch ensure, the auxiliary-checkout resolution,
+  // auth, package registries, tester secrets, web-search availability) are fanned
+  // out in one wave once the repo target is resolved (audit item 4). This pins that they overlap
+  // rather than running one-after-another, and that a failing context-observability record still
+  // never breaks a dispatch.
+  //
+  // The installation-token mint is deliberately NOT in the wave: it is narrowed to the repos the
+  // auxiliary resolution produces, so it cannot start until the wave settles. That ordering is
+  // the security property (`jobTokenRepoIds`), so it is pinned here as its own assertion rather
+  // than left to be re-parallelised by a later latency pass.
 
   // A deferred promise whose resolution we drive from the test, so we can observe which
   // resolvers have STARTED before any of them finishes.
@@ -896,7 +1063,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     return { promise, resolve }
   }
 
-  it('starts the independent dispatch resolvers concurrently (not serialised)', async () => {
+  it('starts the independent dispatch resolvers concurrently, and mints the token after them', async () => {
     const started = { token: false, branch: false, registries: false, search: false }
     const gates = {
       token: deferred<string>(),
@@ -948,14 +1115,19 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     const job = executor.startJob(context('coder'))
     // Let the pending microtasks + a macrotask boundary drain so every resolver has been kicked
     // off (the repo-target/model resolutions precede the wave). None has RESOLVED, so if the
-    // executor were serialising it would be parked on the first resolver only.
+    // executor were serialising it would be parked on the first resolver only. The token mint is
+    // absent for the opposite reason: it is downstream of the whole wave by design.
     await new Promise((r) => setTimeout(r, 0))
-    expect(started).toEqual({ token: true, branch: true, registries: true, search: true })
+    expect(started).toEqual({ token: false, branch: true, registries: true, search: true })
 
-    gates.token.resolve('GH-TOKEN')
     gates.branch.resolve(true)
     gates.registries.resolve([])
     gates.search.resolve({ available: false, provider: null })
+    await new Promise((r) => setTimeout(r, 0))
+    // Only once the wave has settled, which is when the token's repo scope is known.
+    expect(started.token).toBe(true)
+
+    gates.token.resolve('GH-TOKEN')
     await job
   })
 

@@ -70,6 +70,20 @@ These are used near-interchangeably; the definitions are the kernel ports
 - **provider**: a pluggable vendor implementation behind a port (a **model** provider, a
   **CI-status** provider, a **release-health** provider, a **VCS** provider). Not a job runner.
 
+## MCP: one protocol, two unrelated surfaces
+
+"MCP" names two things in this repo that share nothing but the protocol; a search for it hits both.
+
+- **Tool server** (consuming): an MCP server an AGENT may call, registered on the
+  `AgentKindRegistry` (`registerToolServer` / `assignToolServers`) and wired into the run
+  container's agent CLI. Doc: `backend/docs/mcp-tool-servers.md`.
+- **`@cat-factory/mcp-server`** (serving, `sdk/mcp`): the public `/api/v1` surface exposed AS an
+  MCP server for external hosts, both as the `cat-factory-mcp` stdio binary and the hosted
+  `POST /api/v1/mcp` endpoint. Doc: `sdk/mcp/README.md`.
+
+So a "tool server" is always the consuming side; the package literally named `mcp-server` is the
+serving side, and neither imports the other.
+
 ## Concept indexes, where the cross-cutting things live
 
 Short "where X lives" pointers for concepts that are spread across many files with no single

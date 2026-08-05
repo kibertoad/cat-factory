@@ -1,5 +1,271 @@
 # @cat-factory/integrations
 
+## 0.130.2
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/kernel@0.243.1
+
+## 0.130.1
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+
+## 0.130.0
+
+### Minor Changes
+
+- 3857ea4: Close the merge-preset selection escape hatch in the role-scoped merge policy
+
+  ADR 0037 sandboxes a role's runs (`dryRunRoles`) and narrows what they may auto-merge
+  (`classRulesByRole`), reading both off the merge preset the TASK selects, and concluded that a
+  sandboxed member cannot un-sandbox themselves because editing a preset is admin-tier. That covered
+  only one door. Which preset a task is under is `riskPolicyId` on the block patch: a plain
+  `board.write`, member tier, on the same board. Re-pointing the task at a preset that sandboxes
+  nobody was one PATCH or one click in the inspector's picker, and authoring a new task straight onto
+  one was the same escape a door along, since a task that picks nothing is governed by the workspace
+  default. Both built-in presets ship with empty `dryRunRoles`, so an open preset is always to hand.
+
+  Gating preset selection behind `settings.manage` was the obvious fix and the wrong one: the preset
+  library exists to be chosen from per task, and taking that from members would make every preset
+  admin-only on deployments that authored no role policy at all. So the fix applies the feature's own
+  narrow-only property one level up: a selection may not drop a restriction the SELECTOR's own role
+  was under, either the sandbox or a class rule the ROLE LAYER narrowed. It deliberately does not
+  compare the presets' base policy (ceilings, `autoMergeEnabled`, `classRules`), which says the same
+  thing to every tier, so on a workspace whose presets treat every initiator alike, which is every
+  built-in, the guard cannot refuse anything and selection behaves exactly as before.
+
+  Worth reviewing: the refusal binds at `BoardService`, not in a controller, because `riskPolicyId` is
+  writable at creation AND by patch and the escape is whichever door a caller reaches for. The rule
+  itself lives in `@cat-factory/contracts` so the SPA's picker disables an option the engine would
+  refuse rather than offering it and returning a 403. `resolveMergeClassRule` /
+  `resolveRoleScopedMergeClassRule` moved from kernel to contracts for that reason; the engine imports
+  them from there now.
+
+  Internal break, per the pre-1.0 rule: every board-write entry point now requires the acting
+  `BlockEditActor`. `BoardService.addTask` / `updateBlock` / `addServiceTask` and the `BoardWritePort`
+  they satisfy, plus the methods that write blocks on a caller's behalf: `TaskLinkService`'s
+  `createTaskFromIssue` / `spawnEpic`, `DocumentLinkService.spawn` and `BugHuntService.adopt`. Required
+  rather than optional so a new call site cannot inherit an exemption from a default.
+
+  The reason it reaches that far is the part worth reviewing. A service that hardcodes
+  `UNATTRIBUTED_BLOCK_EDITOR` inside itself exempts every route above it while looking correct at the
+  call site, which is how filing a tracker issue, spawning an epic, spawning a document's structure
+  and adopting a hunted bug were all member-tier writes made under no tier. So the decision moves to
+  the layer that can answer it: the acting tier is a fact about the REQUEST, services take it and
+  never invent one, and `blockEditActor.coverage.spec.ts` classifies each site that NAMES an actor
+  (rather than each site that calls a board write, which is what missed those four) as attributed or
+  deliberately unattributed with a reason. None of them can carry a merge preset today, so there is no
+  behaviour change; the point is that the next one to gain the field is judged rather than exempt.
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/contracts@0.243.0
+
+## 0.129.1
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/kernel@0.241.1
+
+## 0.129.0
+
+### Minor Changes
+
+- e7867db: Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
+
+  Everything the platform captured about a run was reachable only from a browser session. A consumer
+  whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+  pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
+  `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
+  pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
+  Getting a key at all still needed a browser.
+
+  Three additions, all `/api/v1`:
+
+  - **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
+    onto the pull request, composed on read by the same code, so the two can never disagree about
+    what a run proved. It answers for runs that never opened a pull request, and it does not consult
+    the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
+    pull request rather than about reading your own evidence back.
+  - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
+    artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
+    allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
+    never an empty list. The blob operation declares every media type it can answer with (the image
+    allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+    so a client generated from the spec can switch on the response honestly.
+  - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
+    that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
+    one link long), and revoking a key now revokes every key it minted, on this surface and in the
+    app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+  Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+  reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+  outlived its bytes, which is a storage fault rather than a bad request) and
+  `binary_artifact_storage_unconfigured`.
+
+  The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
+  run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,
+  served live), both rendered in the prose as well as carried in the JSON, and both built from the
+  deployment's public BACKEND url. Report payload version 5 → 6.
+
+  Worth knowing when upgrading:
+
+  - **The report shape is now part of the STABLE public surface.** It is served verbatim on
+    `/api/v1`, so from here it grows additively and never renames or retypes in place.
+  - **A new `created_by_key_id` column** on `public_api_keys` (D1 migration `0081`, its Drizzle
+    mirror, plus an index), which carries the provenance of a headless mint and is what the
+    revocation cascade follows. The app's key panel renders it, so a provisioned key no longer reads
+    as one whose minter is unknown.
+  - **The SDK chain learned binary responses.** An operation whose success body was neither JSON nor
+    SSE previously generated as a method that returned NOTHING; the IR now marks it `binary`, each
+    of the four transports hands the bytes back in its own idiom, and an unrecognised media type
+    fails generation instead of silently discarding a body.
+  - **A container wiring bug is fixed on both facades**: the HTTP layer's binary-artifact store
+    resolver was built from account settings while the engine's came from `CoreDependencies`, so an
+    override reached one side of the app and not the other.
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+
+## 0.128.1
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+
+## 0.128.0
+
+### Minor Changes
+
+- 289b3de: Disposer step, and a teardown that is proved rather than assumed
+
+  A run's PR asserts a three-leg proof — the test environment came up, evidence was captured against
+  it, and it was torn down again — and the third leg had two problems.
+
+  Nothing closed it inside the run. Teardown happened only on the TTL sweep, a manual Destroy, a
+  `human-test` resolution, or a re-provision supersede. The sweep fires long after the last step
+  settled, so the report was published saying the environment was still live and corrected later
+  through a back-channel, and only where a provisioning log is retained. TTL is a backstop; it
+  cannot be a proof.
+
+  Worse, the teardowns that did happen were never checked. Success was recorded whenever
+  `provider.teardown()` returned without throwing, which is a different fact from the environment
+  being gone: `HttpEnvironmentProvider` reports `torn_down` unconditionally, so a manifest with no
+  `teardown:` request destroys nothing and still reports success, and a Kubernetes namespace
+  `DELETE` returns while the namespace is still `Terminating`. The section could therefore render a
+  green tick about an environment that was still running and still billing.
+
+  So teardown now has two halves. A new optional `EnvironmentProvider.confirmTeardown` re-probes
+  after the destroy call and the result is recorded as its own `teardown-verify` log row; only a
+  probe that positively finds the environment gone counts as a reclaim. This is deliberately not
+  folded into `status()`, whose implementations are all written to describe a LIVE environment — the
+  generic provider with no `status:` template answers `ready` forever, and the compose mapping reads
+  an empty project as `failed`, both of which are exactly inverted as teardown verdicts. The four
+  outcomes stay distinct because each needs a different person: confirmed, still standing (the
+  teardown was a no-op — fix the config and reclaim by hand), unverifiable (the provider has no way
+  to tell you, and no retry will change that), and unconfirmed (transient; the next sweep re-probes).
+
+  And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
+  its author places it — after the automated tester, or after a human has finished with the live
+  URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+  recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
+  seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+  Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+  each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+  Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+  frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+  after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+  environment the run never provisioned and recorded it as the frame's clean reclaim.
+
+  The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+  ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+  MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+  client decodes the new row as a plain string rather than failing.
+
+  One ordering detail is worth understanding, because getting it wrong made the whole feature
+  unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+  teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+  Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+  publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+  Both writes and the notification therefore happen in one method that takes the confirmation, and
+  the regression test asserts the row count at hook time rather than the final rows, since only that
+  can see the order.
+
+  Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
+  because a missing verify row is treated as "not proved" rather than as a pass, runs whose
+  teardowns predate this change will report unconfirmed rather than confirmed. That is a correction,
+  but a visible one. And the confirmation applies to every teardown path, not just the new step, so
+  a deployment whose provider config makes teardown a silent no-op will start being told so.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/kernel@0.239.0
+
+## 0.127.1
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/contracts@0.239.0
+
 ## 0.127.0
 
 ### Minor Changes

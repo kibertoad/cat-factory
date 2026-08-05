@@ -194,6 +194,7 @@ export function defineWorkspaceRbacSuite(harness: ConformanceHarness): void {
 
     registerRbacMemberManagementTests(harness, scenario, bearer, uniq)
     registerRbacAdminTierTests(harness, scenario, bearer, uniq)
+    registerRiskPolicySelectionTests(harness, scenario, bearer)
   })
 }
 
@@ -390,6 +391,11 @@ function registerRbacMemberManagementTests(
       { perm: 'secrets.manage', method: 'DELETE', path: w('/api-keys/none') },
       { perm: 'secrets.manage', method: 'DELETE', path: w('/public-api-keys/none') },
       { perm: 'secrets.manage', method: 'DELETE', path: w('/services/none/test-secrets') },
+      { perm: 'secrets.manage', method: 'DELETE', path: w('/capability-credentials/none') },
+      // The tool-server PROBE. Gated for two reasons, either of which would be enough: the result
+      // names the deployment's credential keys, and the request itself SPENDS an outbound call
+      // against a third party under the deployment's own credential.
+      { perm: 'secrets.manage', method: 'POST', path: w('/tool-servers/none/test') },
     ]
 
     // A plain member is refused every one (403). Fold the route into the asserted value so a
@@ -445,6 +451,43 @@ function registerRbacMemberManagementTests(
 
     // The admin clears the gate on the preflight itself (200 wired / 503 unwired — never 403).
     expect((await app.call('GET', path, undefined, ha)).status).not.toBe(403)
+  })
+
+  it('admin-tier enforcement: the capability-credential and tool-server READS are gated too (MCP maturation slice 4)', async () => {
+    // The other exception to the table's premise, and the opposite shape from the preflight above:
+    // these two controllers mount `requireWorkspacePermissionIncludingReads`, so the whole
+    // controller answers to `secrets.manage` rather than one handler gating itself.
+    //
+    // They must, because on these two the READ is the sensitive half. Both project the credential
+    // KEY NAMES this deployment's capabilities want — which is precisely what the workspace
+    // snapshot withholds from a viewer — and the tool-server inventory adds the endpoints those
+    // credentials are sent to. Asserted explicitly because the ordinary mount passes GET through by
+    // design: for a release both surfaces DOCUMENTED a gated read (in the controller, in the SPA's
+    // tab gate, in the store's 403 branch) while every member's GET was answered in full, and
+    // nothing failed.
+    const app = harness.makeApp()
+    const { adminA, c, wsId } = await scenario(app)
+    const ha = bearer(await app.session({ id: adminA }))
+    await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+    const hc = bearer(await app.session({ id: c }))
+    const reads = [`/workspaces/${wsId}/capability-credentials`, `/workspaces/${wsId}/tool-servers`]
+
+    for (const path of reads) {
+      // A plain member holds `workspace.read` and clears the viewer floor (a GET), so a 403 here is
+      // the controller gate and nothing else.
+      expect({ path, status: (await app.call('GET', path, undefined, hc)).status }).toEqual({
+        path,
+        status: 403,
+      })
+      // The admin resolves PAST the gate: 200 where the module is wired, 503 where it is not, never
+      // a 403 — which is what proves the refusal above is the gate rejecting the member rather than
+      // a route that always rejects.
+      expect({
+        path,
+        forbidden: (await app.call('GET', path, undefined, ha)).status === 403,
+      }).toEqual({ path, forbidden: false })
+    }
   })
 }
 
@@ -675,5 +718,187 @@ function registerRbacAdminTierTests(
     const entry = list.body.find((w) => w.id === wsId)
     expect(entry).toBeTruthy()
     expect(entry?.viewerRole).toBe('viewer')
+  })
+}
+
+/**
+ * The other half of the sandboxed-run mode (ADR 0037), END TO END on both runtimes.
+ *
+ * Editing `dryRunRoles` is admin-tier, which is why the ADR concluded a sandboxed member cannot
+ * un-sandbox themselves. Selecting which preset a TASK is governed by is not: it is a plain
+ * `riskPolicyId` on the block patch, at member tier, on the same board. So the sandbox held only
+ * as long as nobody re-pointed the task, and one PATCH (or one click in the inspector's picker)
+ * was the way around it.
+ *
+ * These drive real presets, a real board write and the real auth gate, because that is the only
+ * place the three meet: a unit test of the rule passes whether or not a door consults it, and a
+ * unit test of the door passes whether or not the facade wired the preset repository to it.
+ */
+function registerRiskPolicySelectionTests(
+  harness: ConformanceHarness,
+  scenario: RbacScenarioSeeder,
+  bearer: (token: string) => { authorization: string },
+): void {
+  interface Refusal {
+    error?: { details?: { reason?: string } }
+  }
+
+  /**
+   * Seed a RESTRICTING default preset plus an open one, and a task governed by the default.
+   *
+   * `restriction` is the role-scoped half under test, so each arm of the selection guard is driven
+   * through the same real HTTP path: the preset is written and read back by the facade's own
+   * repository, which is what makes this a cross-runtime assertion rather than a second unit test.
+   */
+  async function seedPolicySwap(
+    app: ConformanceApp,
+    restriction: Record<string, unknown> = { dryRunRoles: ['member'] },
+  ) {
+    const { adminA, c, wsId } = await scenario(app) // `account` mode: C resolves as a member
+    const ha = bearer(await app.session({ id: adminA }))
+    const preset = async (name: string, over: Record<string, unknown>) =>
+      (
+        await app.call<Row>(
+          'POST',
+          `/workspaces/${wsId}/risk-policies`,
+          {
+            name,
+            maxComplexity: 0.5,
+            maxRisk: 0.4,
+            maxImpact: 0.5,
+            ciMaxAttempts: 10,
+            maxRequirementIterations: 6,
+            maxRequirementConcernAllowed: 'none',
+            ...over,
+          },
+          ha,
+        )
+      ).body.id
+    const sandboxed = await preset('Restricted', { ...restriction, isDefault: true })
+    const open = await preset('Open', {})
+    const frame = await app.call<Row>(
+      'POST',
+      `/workspaces/${wsId}/blocks`,
+      { type: 'service', position: { x: 0, y: 0 } },
+      ha,
+    )
+    const task = await app.call<Row>(
+      'POST',
+      `/workspaces/${wsId}/blocks/${frame.body.id}/tasks`,
+      { title: 'Ship it', riskPolicyId: sandboxed },
+      ha,
+    )
+    return { wsId, frameId: frame.body.id, taskId: task.body.id, sandboxed, open, ha, c }
+  }
+
+  it('a member cannot re-point a sandboxed task at a preset that does not sandbox them', async () => {
+    const app = harness.makeApp()
+    const { wsId, taskId, sandboxed, open, ha, c } = await seedPolicySwap(app)
+    const hc = bearer(await app.session({ id: c }))
+
+    const swap = await app.call<Refusal>(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      hc,
+    )
+    expect(swap.status).toBe(403)
+    expect(swap.body.error?.details?.reason).toBe('relaxes_role_sandbox')
+
+    // Refused BEFORE the write: the task is still governed by the policy that sandboxes them.
+    const after = await app.call<{ blocks: Array<{ id: string; riskPolicyId?: string }> }>(
+      'GET',
+      `/workspaces/${wsId}`,
+      undefined,
+      ha,
+    )
+    expect(after.body.blocks.find((b) => b.id === taskId)?.riskPolicyId).toBe(sandboxed)
+  })
+
+  it('nor author a NEW task straight onto it, which is the same escape one door along', async () => {
+    const app = harness.makeApp()
+    const { wsId, frameId, open, c } = await seedPolicySwap(app)
+    const hc = bearer(await app.session({ id: c }))
+    const created = await app.call<Refusal>(
+      'POST',
+      `/workspaces/${wsId}/blocks/${frameId}/tasks`,
+      { title: 'Fresh start', riskPolicyId: open },
+      hc,
+    )
+    expect(created.status).toBe(403)
+    expect(created.body.error?.details?.reason).toBe('relaxes_role_sandbox')
+  })
+
+  it('an admin makes the same swap, and the member may still pick a STRICTER policy', async () => {
+    // The two halves that keep this a narrowing rule rather than an admin-only picker: whoever
+    // owns the preset library is not restrained by a selection, and adopting more review needs
+    // no permission at all.
+    const app = harness.makeApp()
+    const { wsId, taskId, sandboxed, open, ha, c } = await seedPolicySwap(app)
+    const hc = bearer(await app.session({ id: c }))
+
+    const byAdmin = await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      ha,
+    )
+    expect(byAdmin.status).toBe(200)
+
+    const backToSandbox = await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: sandboxed },
+      hc,
+    )
+    expect(backToSandbox.status).toBe(200)
+  })
+
+  it('nor re-point a task off the submission allowlist their role is held to', async () => {
+    // The same escape through ADR 0039's field: an allowlisted role moving to a preset that
+    // allowlists them nothing reads as unrestricted, which is the widest policy the setting has.
+    const app = harness.makeApp()
+    const { wsId, taskId, sandboxed, open, ha, c } = await seedPolicySwap(app, {
+      submissionClassesByRole: { member: ['docs'] },
+    })
+    const hc = bearer(await app.session({ id: c }))
+
+    const swap = await app.call<Refusal>(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      hc,
+    )
+    expect(swap.status).toBe(403)
+    expect(swap.body.error?.details?.reason).toBe('relaxes_role_submission_allowlist')
+
+    // Refused BEFORE the write, and an admin makes the same swap.
+    const after = await app.call<{ blocks: Array<{ id: string; riskPolicyId?: string }> }>(
+      'GET',
+      `/workspaces/${wsId}`,
+      undefined,
+      ha,
+    )
+    expect(after.body.blocks.find((b) => b.id === taskId)?.riskPolicyId).toBe(sandboxed)
+    const byAdmin = await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      ha,
+    )
+    expect(byAdmin.status).toBe(200)
+  })
+
+  it('leaves an ordinary member edit of the same task untouched', async () => {
+    // The identity that keeps this additive: the guard is about the preset field, not the patch.
+    const app = harness.makeApp()
+    const { wsId, taskId, c } = await seedPolicySwap(app)
+    const renamed = await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { title: 'Renamed by a member' },
+      bearer(await app.session({ id: c })),
+    )
+    expect(renamed.status).toBe(200)
   })
 }

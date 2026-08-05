@@ -1,5 +1,666 @@
 # @cat-factory/orchestration
 
+## 0.212.0
+
+### Minor Changes
+
+- ca213b1: Say when the validation configuration could not be READ, and keep telemetry long enough to read
+
+  Two independent honesty gaps in what a run reports about itself.
+
+  **A failed validation-config read rendered as an unconfigured service.** A dispatch resolves the
+  service frame's pre-PR validation checks, and `validationChecksFor` catches a throw and degrades
+  to "no checks" so a config-store outage (or a mothership node whose server does
+  not reflect `validationConfigRepository`) cannot wedge every coding run. That trade is right and
+  stays. What was wrong is that it was the whole story: the catch was bare, so a service whose checks
+  had silently stopped running produced the exact context of a service that never had any, and the PR
+  verification report then stated in the reviewer's face that "this service configures no check
+  commands", a fabricated fact about somebody's setup, in the one section built to stop an agent
+  asserting things it did not verify.
+
+  The read now degrades loudly. The catch warns with the frame id and the scrubbed cause, and sets
+  `step.validationConfigUnreadable`, which the report reads as `PrReportValidation.configUnreadable`.
+  On an absent section that DISPLACES the unconfigured note rather than qualifying it (a skimming
+  reader must not come away with the wrong one of two opposite readings); on a reported section it is
+  a callout above the verdict, because a later dispatch whose read failed ran unvalidated after the
+  evidence was captured and an unqualified green table would overstate what it covers. The flag is
+  rewritten on every dispatch of the step, so a transient outage that recovered before the PR-opening
+  dispatch leaves no warning behind, and the report scans every step for it, because the failing read
+  is by construction on a step that produced no validation evidence to hang it off.
+
+  Rewrite-per-dispatch is what keeps the flag honest, so only a resolution that actually STARTS a job
+  may perform it: `buildContext` now takes `recordsDispatch` (defaulting to `true`), and the two
+  callers that build a context without dispatching pass `false` — the over-budget exemption probe,
+  and a re-attach to a job an earlier, possibly replayed, dispatch already started. Ungated, a store
+  that recovered between the dispatch and the replay would ERASE the record that the shipped job ran
+  with no checks. The decision is handed to the resolvers as a `StepObservations` seam rather than a
+  boolean each re-reads, and that seam owns every per-dispatch field the builder rewrites, including
+  `selectedFragmentIds`, which carried the same contract and the same latent hole.
+
+  The absent-section note WITHDRAWS the unconfigured claim rather than replacing it with an equally
+  causal one: the flag is scanned run-wide, so all that is known is that some dispatch could not
+  read, and the older-runner-image cause stays named beside it.
+
+  `configUnreadable` is an additive optional field on the run report, which is part of the stable
+  `/api/v1` surface: OpenAPI `info.version` goes to 1.12.0 and the four SDKs plus the MCP facade are
+  regenerated. A consumer built against 1.11.0 keeps parsing.
+
+  **`LLM_CALL_METRICS_RETENTION_DAYS` now defaults to 14 days rather than 3.** The store exists for
+  post-mortems and an investigation into a failed run routinely starts days after it, so the old
+  window expired the record before anyone looked: a run that failed on a Friday was unreadable by
+  Monday. Fourteen matches the provisioning log's default and keeps a working week plus its
+  weekend. The heavy half of the store is the recorded bodies, which are already double-gated behind
+  `LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, so a deployment that records them
+  and wants the old footprint sets the variable back to 3. The window multiplies the store linearly,
+  which is ~4.7x here; `storage-and-retention.md` now sizes that against D1's 10 GB ceiling from
+  bytes-per-row rather than row count, because with bodies off and with bodies on the answer differs
+  by three orders of magnitude.
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/agents@0.112.6
+  - @cat-factory/integrations@0.130.2
+  - @cat-factory/kernel@0.243.1
+  - @cat-factory/prompt-fragments@0.15.71
+  - @cat-factory/sandbox@0.11.67
+  - @cat-factory/spend@0.15.8
+  - @cat-factory/workspaces@0.21.60
+  - @cat-factory/caching@0.14.26
+
+## 0.211.0
+
+### Minor Changes
+
+- d69115d: Role-scoped submission allowlists: what a tier may LAND, per change class
+
+  A merge preset could already narrow a role's per-class auto-merge rules (`classRulesByRole`) or hold
+  a role to dry runs entirely (`dryRunRoles`), and there was a gap exactly between them. A `never`
+  class rule routes a PR to a human, but the human it routes to may be the initiator: the review card
+  carries a merge button and the RBAC write floor is `member`, so a member's run raises its own card
+  and lands on the next tap. The sandbox closes that by refusing both exits, but only for every class
+  at once. So a workspace could not say the thing it most often wants to say: a product manager may
+  land copy and dependency bumps on this service, and may not land source, however good the scores
+  look.
+
+  A preset now carries `submissionClassesByRole`, a per-role allowlist of the change classes it will
+  land at all, refused at BOTH exits like a dry run: the auto-merge arm in `MergeResolver` (above
+  `autoMergeEnabled`, since it is a property of who started the run rather than of the policy about
+  the work) and the manual `mergePr` path, with its own `submission_not_allowed` conflict rather than
+  a borrowed `dry_run_not_mergeable`. Re-running live changes nothing here, so copy that suggested it
+  would be a lie.
+
+  Three readings define it. It is an ALLOWLIST, so a class added to the vocabulary later is refused
+  for a scoped role rather than silently landed by it. Absent means UNRESTRICTED and empty means
+  NOTHING, so `{}` stays the identity and authoring one role's policy cannot bar every other; that
+  distinction is why the editor is a switch plus tick boxes rather than tick boxes alone. And
+  `unknown` is INERT: a diff we could not read is an outage, not evidence about the change, which is
+  the opposite direction from the first reading and deliberately so.
+
+  The built-ins ship it empty, so every existing preset behaves byte-for-byte as before. Internal wire
+  break: `RiskPolicy.submissionClassesByRole` is required rather than optional-with-a-shim (persisted
+  rows get `'{}'` from the column default on both runtimes), and `MergeDecision.reason` gains
+  `submission_not_allowed`.
+
+  Also fixes `RiskPolicyService.update` dropping `classRulesByRole` and `dryRunRoles`: both were on
+  the update contract but never applied, so editing the role layer of an existing preset returned 200
+  and changed nothing.
+
+  The allowlist is role-scoped state, so it takes an arm in `refuseRiskPolicySelection` too
+  (`relaxes_role_submission_allowlist`), on the rule ADR 0037 set when it closed the same escape for
+  the sandbox: a task's `riskPolicyId` is a member-tier board write, so without it a role held to
+  `['docs']` could re-point the task at a preset that allowlists it nothing and land `source` without
+  editing a policy. The arm is the same subset test the others make, and an ABSENT allowlist on the
+  far side relaxes every held one, the empty one included. The three arms run in the merge ladder's
+  own order, so a refused row in the picker names the restriction the run would have been refused on.
+
+  Design: `backend/docs/adr/0039-role-scoped-submission-allowlists.md`.
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+  - @cat-factory/agents@0.112.5
+  - @cat-factory/integrations@0.130.1
+  - @cat-factory/prompt-fragments@0.15.70
+  - @cat-factory/sandbox@0.11.66
+  - @cat-factory/spend@0.15.7
+  - @cat-factory/workspaces@0.21.59
+  - @cat-factory/caching@0.14.25
+
+## 0.210.0
+
+### Minor Changes
+
+- bac6776: Follow-up triage and interview-gate decisions over the public API
+
+  `/api/v1` answered every park a pipeline can carry except three. Two of those were surfaces nobody
+  had built (`docs/initiatives/public-api-additions.md` found them while landing the rest, and left
+  them unranked); this lands both, leaving `human-review` as the only ❌ row, and that one is
+  unanswerable by construction, since its answer is a person approving the pull request on the VCS
+  host rather than an API call.
+
+  **Follow-up triage** (`…/decisions/follow-ups/items/:itemId/{file,send-back,answer,dismiss}`) is the
+  first decision here that is not a park: the Coder streams forward-looking items while it is still
+  running, so the projection lists them whenever any item is `pending` rather than once the run is
+  `blocked`. An integration that triages as they arrive never sees the run stop at all.
+
+  **Interview gates** (`…/decisions/interview/{answer,continue,proceed}`) are ONE route set for every
+  interviewer, keyed by run alone: which interviewer is asking is a property of the parked step, so
+  the server resolves it and the decision's `stepKind` reports it. That needed a new seam: the two
+  built-in gates store their Q&A on entities belonging to their own features, so `InterviewGateKind`
+  now projects a kind-neutral `InterviewView` (the questions and the round budget, deliberately not
+  the brief each one converges on), reached through the narrow `InterviewGate` interface rather than
+  the entity-generic controller. A third interviewer implements `view` and needs no route, projection
+  or decision kind of its own; it does still wire its controller, since an interview gate is built
+  from its feature's own store rather than constructed by a registry. Registered-but-unwired is a
+  real state and reports as one: admission counts the park (it reads the trait), the projection lists
+  nothing, and the routes 503 naming the kind. Its question `status` is derived, not stored: one gate
+  keeps an explicit `dismissed` marker and the other has only the answer, so one derivation is what
+  lets a caller read both through one shape.
+
+  Worth reviewing, because it is a behaviour change rather than an addition: **an interview gate is now
+  a park surface the start rule can see**, read off the step kind's `interview-gate` trait. That closes
+  a hole in the wrong direction: an interviewer is an INLINE step, so a pipeline built out of
+  interview steps satisfied the inline-only rule and was reported `headlessStartable` while every run
+  of it stopped on the first batch of questions. No shipped preset changes hands (`pl_initiative` and
+  `pl_document` both carry a later human gate and were already admitted as parking on it); what
+  changes is that the refusal names the interview, and that a pipeline whose only park is the
+  interview is finally refused for a `write` key.
+
+  **Follow-up triage is deliberately NOT added to that rule**, and the trade-off is stated in
+  `backend/docs/public-api.md` rather than left to be discovered: the companion is on by default on
+  every Coder step, so counting it would make `decide` mandatory for all board work that builds
+  anything and take board starts away from every live `write` key at once. The park now has an answer
+  path, so a run that stops there is recoverable with a `decide` key instead of being app-only.
+
+  Also noted rather than fixed, in the same three places a reader would look: an unbounded human-wait
+  GATE a deployment registers itself is invisible to the start rule, because a gate declares
+  `pollExhaustion` on the object its factory builds from an engine context and nothing can read that
+  at HTTP request time. Such a pipeline is admitted for a `write` key and then parks with nothing on
+  this surface able to name it. The tracker ranks the fix (declare `pollExhaustion` at registration
+  and read the registry, which also retires the hand-kept `HUMAN_WAIT_GATE_KINDS` constant) as its own
+  slice, since it changes the `GateRegistry` seam.
+
+  Public API surface version `1.10.0`, additive: two new decision kinds (`follow-ups`, `interview`) and
+  seven endpoints, all `decide`-scoped.
+
+- 3857ea4: Close the merge-preset selection escape hatch in the role-scoped merge policy
+
+  ADR 0037 sandboxes a role's runs (`dryRunRoles`) and narrows what they may auto-merge
+  (`classRulesByRole`), reading both off the merge preset the TASK selects, and concluded that a
+  sandboxed member cannot un-sandbox themselves because editing a preset is admin-tier. That covered
+  only one door. Which preset a task is under is `riskPolicyId` on the block patch: a plain
+  `board.write`, member tier, on the same board. Re-pointing the task at a preset that sandboxes
+  nobody was one PATCH or one click in the inspector's picker, and authoring a new task straight onto
+  one was the same escape a door along, since a task that picks nothing is governed by the workspace
+  default. Both built-in presets ship with empty `dryRunRoles`, so an open preset is always to hand.
+
+  Gating preset selection behind `settings.manage` was the obvious fix and the wrong one: the preset
+  library exists to be chosen from per task, and taking that from members would make every preset
+  admin-only on deployments that authored no role policy at all. So the fix applies the feature's own
+  narrow-only property one level up: a selection may not drop a restriction the SELECTOR's own role
+  was under, either the sandbox or a class rule the ROLE LAYER narrowed. It deliberately does not
+  compare the presets' base policy (ceilings, `autoMergeEnabled`, `classRules`), which says the same
+  thing to every tier, so on a workspace whose presets treat every initiator alike, which is every
+  built-in, the guard cannot refuse anything and selection behaves exactly as before.
+
+  Worth reviewing: the refusal binds at `BoardService`, not in a controller, because `riskPolicyId` is
+  writable at creation AND by patch and the escape is whichever door a caller reaches for. The rule
+  itself lives in `@cat-factory/contracts` so the SPA's picker disables an option the engine would
+  refuse rather than offering it and returning a 403. `resolveMergeClassRule` /
+  `resolveRoleScopedMergeClassRule` moved from kernel to contracts for that reason; the engine imports
+  them from there now.
+
+  Internal break, per the pre-1.0 rule: every board-write entry point now requires the acting
+  `BlockEditActor`. `BoardService.addTask` / `updateBlock` / `addServiceTask` and the `BoardWritePort`
+  they satisfy, plus the methods that write blocks on a caller's behalf: `TaskLinkService`'s
+  `createTaskFromIssue` / `spawnEpic`, `DocumentLinkService.spawn` and `BugHuntService.adopt`. Required
+  rather than optional so a new call site cannot inherit an exemption from a default.
+
+  The reason it reaches that far is the part worth reviewing. A service that hardcodes
+  `UNATTRIBUTED_BLOCK_EDITOR` inside itself exempts every route above it while looking correct at the
+  call site, which is how filing a tracker issue, spawning an epic, spawning a document's structure
+  and adopting a hunted bug were all member-tier writes made under no tier. So the decision moves to
+  the layer that can answer it: the acting tier is a fact about the REQUEST, services take it and
+  never invent one, and `blockEditActor.coverage.spec.ts` classifies each site that NAMES an actor
+  (rather than each site that calls a board write, which is what missed those four) as attributed or
+  deliberately unattributed with a reason. None of them can carry a merge preset today, so there is no
+  behaviour change; the point is that the next one to gain the field is judged rather than exempt.
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/contracts@0.243.0
+  - @cat-factory/integrations@0.130.0
+  - @cat-factory/agents@0.112.4
+  - @cat-factory/caching@0.14.24
+  - @cat-factory/sandbox@0.11.65
+  - @cat-factory/spend@0.15.6
+  - @cat-factory/workspaces@0.21.58
+  - @cat-factory/prompt-fragments@0.15.69
+
+## 0.209.1
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/agents@0.112.3
+  - @cat-factory/integrations@0.129.1
+  - @cat-factory/kernel@0.241.1
+  - @cat-factory/sandbox@0.11.64
+  - @cat-factory/caching@0.14.23
+  - @cat-factory/spend@0.15.5
+  - @cat-factory/workspaces@0.21.57
+
+## 0.209.0
+
+### Minor Changes
+
+- e7867db: Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
+
+  Everything the platform captured about a run was reachable only from a browser session. A consumer
+  whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+  pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
+  `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
+  pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
+  Getting a key at all still needed a browser.
+
+  Three additions, all `/api/v1`:
+
+  - **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
+    onto the pull request, composed on read by the same code, so the two can never disagree about
+    what a run proved. It answers for runs that never opened a pull request, and it does not consult
+    the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
+    pull request rather than about reading your own evidence back.
+  - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
+    artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
+    allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
+    never an empty list. The blob operation declares every media type it can answer with (the image
+    allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+    so a client generated from the spec can switch on the response honestly.
+  - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
+    that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
+    one link long), and revoking a key now revokes every key it minted, on this surface and in the
+    app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+  Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+  reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+  outlived its bytes, which is a storage fault rather than a bad request) and
+  `binary_artifact_storage_unconfigured`.
+
+  The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
+  run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,
+  served live), both rendered in the prose as well as carried in the JSON, and both built from the
+  deployment's public BACKEND url. Report payload version 5 → 6.
+
+  Worth knowing when upgrading:
+
+  - **The report shape is now part of the STABLE public surface.** It is served verbatim on
+    `/api/v1`, so from here it grows additively and never renames or retypes in place.
+  - **A new `created_by_key_id` column** on `public_api_keys` (D1 migration `0081`, its Drizzle
+    mirror, plus an index), which carries the provenance of a headless mint and is what the
+    revocation cascade follows. The app's key panel renders it, so a provisioned key no longer reads
+    as one whose minter is unknown.
+  - **The SDK chain learned binary responses.** An operation whose success body was neither JSON nor
+    SSE previously generated as a method that returned NOTHING; the IR now marks it `binary`, each
+    of the four transports hands the bytes back in its own idiom, and an unrecognised media type
+    fails generation instead of silently discarding a body.
+  - **A container wiring bug is fixed on both facades**: the HTTP layer's binary-artifact store
+    resolver was built from account settings while the engine's came from `CoreDependencies`, so an
+    override reached one side of the app and not the other.
+
+### Patch Changes
+
+- 00c4d94: Correct the tool-call trajectory's stale ordering and tool-error claims
+
+  The trajectory sink landed and was then re-ordered by review in the same PR (`(jobId, seq)` to
+  `(startedAt, seq)`), and several places still described the pre-review behaviour or the state of
+  the world before the sink existed at all.
+
+  `agentToolCallSchema.jobId` still documented itself as half the sort key, which is the derivation
+  the server exists to prevent a client from making: it now says what `jobId` is for (narrowing to
+  one dispatch) and points at the repository contract that owns the order.
+
+  The `failure_outside_model_calls` signal told a caller that tool-execution errors are recorded
+  nowhere and to go grep prompt deltas. A failing tool call is now a row of its own, so the pointer
+  names the trajectory read first and keeps the delta search behind it for the two cases it genuinely
+  cannot answer: an engine-side failure, which no producer records, and a workspace whose bodies are
+  withheld.
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+  - @cat-factory/integrations@0.129.0
+  - @cat-factory/agents@0.112.2
+  - @cat-factory/prompt-fragments@0.15.68
+  - @cat-factory/sandbox@0.11.63
+  - @cat-factory/spend@0.15.4
+  - @cat-factory/workspaces@0.21.56
+  - @cat-factory/caching@0.14.22
+
+## 0.208.0
+
+### Minor Changes
+
+- c5a1a16: Per-step gate configuration: approver policies, approval quorums, and gate-declared settings
+
+  `Pipeline.gates: boolean[]` said a step paused for "a human" and nothing else. There was nowhere to
+  say which humans, how many of them, or what a registered gate's own knobs should be for this
+  particular step — the built-in gates read their attempt budgets and time windows off the
+  workspace-wide merge preset, and a deployment's own gate had nowhere to put its parameters at all.
+
+  A step now carries `stepOptions.gateConfig` (the extensible per-step bag, so no column and no
+  migration on either runtime), with two halves. The platform owns `approvers` and `minApprovals`: who
+  may resolve the human gate, and how many DISTINCT people must, both snapshotted onto the approval
+  when the gate is raised so an edit to the pipeline cannot move the bar under the people already
+  counted toward it. The GATE owns `fields`, declared on its registration
+  (`register(kind, factory, { configFields })`) as descriptor fields — one declaration driving the
+  save-time validation, the run-start re-validation and the authoring form the builder renders, so a
+  registered gate needs no frontend change to become configurable. The built-ins declare their own
+  (`maxAttempts`, `watchWindowMinutes`, `graceMinutes`) instead of the engine hard-coding them.
+
+  Behaviour changes worth reviewing. The approver policy governs all three resolutions, not just
+  approve: a gate the wrong person can reject is not a gate. A workspace admin always passes a policy
+  (they can cancel the run or edit the pipeline anyway, and refusing them would deadlock a gate whose
+  named approvers have left). A machine key or an auth-disabled caller is refused by any policy — a
+  shared credential is not one of the people a policy named — which also means a quorum above one
+  cannot be met on a deployment running with auth off, since counting distinct approvals needs
+  identities that deployment does not have. All of this is additive: a gate with no config behaves
+  byte-for-byte as it did.
+
+  A quorum votes on ONE artifact, so only the approval that CLEARS the gate may carry a `proposal`
+  edit. An edit on an earlier approval is refused (`proposal_not_editable_until_quorum`) rather than
+  silently rewriting the text under the people already counted toward the bar; the SPA withholds the
+  affordance and says why. Both raise sites for the human gate now go through one `buildStepApproval`
+  builder, so a gated COMPANION step honours the policy and quorum its step configured.
+
+  Public API (`/api/v1`, surface version now `1.9.0`, additive): the `approval-gate` decision projects
+  `requiredApprovals` and `recordedApprovals`, because a quorum makes `approve` legitimately not
+  advance the run and without the tally a caller could not tell that from a failed call.
+
+  Internal break, per the pre-1.0 rule: `ExecutionService.approveStep` / `requestStepChanges` /
+  `rejectStep` now require a `GateActor`. Required rather than optional so an entry point that forgets
+  to supply the acting identity fails to typecheck, instead of silently resolving a gate that names
+  its approvers as though it named nobody.
+
+  Design record: `backend/docs/adr/0038-per-step-gate-config.md` (supersedes the
+  `extensible-custom-gate-config` initiative tracker, removed).
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+  - @cat-factory/agents@0.112.1
+  - @cat-factory/integrations@0.128.1
+  - @cat-factory/prompt-fragments@0.15.67
+  - @cat-factory/sandbox@0.11.62
+  - @cat-factory/spend@0.15.3
+  - @cat-factory/workspaces@0.21.55
+  - @cat-factory/caching@0.14.21
+
+## 0.207.0
+
+### Minor Changes
+
+- dd90c1e: A deployment can register its own REWORK PAIR: a producer, and a companion that grades its
+  output and loops that producer back for automatic rework below the step's threshold.
+
+  The companion catalog was a module-global `Map` of four built-ins, so the only way to express
+  "my producer, reviewed and bounced below a bar" was to reach for a judge, a different machine.
+  A judge scores against a rubric and disposes (advance / park / bounce / fail); a companion drives
+  the producer's own bounded rework budget and only then involves a human. The workaround got the
+  scoring and lost the loop.
+
+  The pairing now lives on `AgentKindRegistry` (`registerCompanion`), beside traits, skills, tool
+  servers and variants, rather than on a sixth registry: a companion is a relationship BETWEEN
+  agent kinds. The built-in catalog is pre-loaded, so registering one adds rather than replaces,
+  and module identity stops mattering for a separately-published extension package.
+
+  Two things a reviewer should look at. The free lookups take the registry OPTIONALLY and fall
+  back to the built-ins, copying `isGatableKind`, which means a call site that omits it silently
+  sees built-ins only, so every engine site that could meet a deployment's pair now threads it
+  (dispatch routing, the rework loop's producer search, the step-gating cascade, run-start
+  threshold seeding, pipeline-shape validation, the container job body, the prompt). And the
+  pairing is registered SEPARATELY from the kind, so the snapshot projection asks the registry
+  rather than reading a kind's own definition, which would have missed every one.
+
+  The SPA learns a custom pairing from the snapshot (`customAgentKinds[].companionTargets`) so the
+  builder renders it as an "add companion" toggle on its producer rather than a placeable palette
+  block that pipeline validation would then refuse on save. Built-in pairings win on collision: a
+  deployment cannot silently re-point `coder` at its own reviewer and change what every stock
+  pipeline does.
+
+- 289b3de: Disposer step, and a teardown that is proved rather than assumed
+
+  A run's PR asserts a three-leg proof — the test environment came up, evidence was captured against
+  it, and it was torn down again — and the third leg had two problems.
+
+  Nothing closed it inside the run. Teardown happened only on the TTL sweep, a manual Destroy, a
+  `human-test` resolution, or a re-provision supersede. The sweep fires long after the last step
+  settled, so the report was published saying the environment was still live and corrected later
+  through a back-channel, and only where a provisioning log is retained. TTL is a backstop; it
+  cannot be a proof.
+
+  Worse, the teardowns that did happen were never checked. Success was recorded whenever
+  `provider.teardown()` returned without throwing, which is a different fact from the environment
+  being gone: `HttpEnvironmentProvider` reports `torn_down` unconditionally, so a manifest with no
+  `teardown:` request destroys nothing and still reports success, and a Kubernetes namespace
+  `DELETE` returns while the namespace is still `Terminating`. The section could therefore render a
+  green tick about an environment that was still running and still billing.
+
+  So teardown now has two halves. A new optional `EnvironmentProvider.confirmTeardown` re-probes
+  after the destroy call and the result is recorded as its own `teardown-verify` log row; only a
+  probe that positively finds the environment gone counts as a reclaim. This is deliberately not
+  folded into `status()`, whose implementations are all written to describe a LIVE environment — the
+  generic provider with no `status:` template answers `ready` forever, and the compose mapping reads
+  an empty project as `failed`, both of which are exactly inverted as teardown verdicts. The four
+  outcomes stay distinct because each needs a different person: confirmed, still standing (the
+  teardown was a no-op — fix the config and reclaim by hand), unverifiable (the provider has no way
+  to tell you, and no retry will change that), and unconfirmed (transient; the next sweep re-probes).
+
+  And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
+  its author places it — after the automated tester, or after a human has finished with the live
+  URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+  recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
+  seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+  Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+  each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+  Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+  frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+  after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+  environment the run never provisioned and recorded it as the frame's clean reclaim.
+
+  The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+  ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+  MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+  client decodes the new row as a plain string rather than failing.
+
+  One ordering detail is worth understanding, because getting it wrong made the whole feature
+  unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+  teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+  Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+  publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+  Both writes and the notification therefore happen in one method that takes the confirmation, and
+  the regression test asserts the row count at hook time rather than the final rows, since only that
+  can see the order.
+
+  Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
+  because a missing verify row is treated as "not proved" rather than as a pass, runs whose
+  teardowns predate this change will report unconfirmed rather than confirmed. That is a correction,
+  but a visible one. And the confirmation applies to every teardown path, not just the new step, so
+  a deployment whose provider config makes teardown a silent no-op will start being told so.
+
+- dd90c1e: The pre-dispatch input gate now judges a CUSTOM task type's own required fields, so a deployment
+  registering its own work items gets the same free refusal the built-in types get.
+
+  It reads the declaration the type ALREADY makes: its create-form field descriptors' `required`
+  markers, through the same rule the create form's validator uses, rather than adding a second
+  place to say it. That is the whole design: the two doors agree by construction, which is also why
+  the gate takes the same two stand-downs the create door takes (an unregistered type declares
+  nothing; a `formPanel` type has a bespoke section owning the whole bag). `showWhen` is honoured,
+  so a field the form would have hidden is never required.
+
+  What the gate adds over the create door is WHEN it asks. The create check fires once, against the
+  declaration as it stood that day, on the paths that reach `addTask`. The gate fires at every run
+  against the declaration as it stands now, so a requirement added in a later release reaches the
+  tasks that predate it, and a task created on a node that never registered the type is judged
+  where it runs.
+
+  One new finding code covers every deployment's every type (`required_field_missing`), with WHICH
+  field carried on the finding: a `key` for a machine and the deployment's own `label` for a
+  human. The codes are a closed, persisted vocabulary, so an org registering twenty operations adds
+  nothing to it. Additive on the wire: the `field` is optional and the code is a new enum member,
+  so the SDKs tolerate it by design (OpenAPI `info.version` 1.8.0 → 1.9.0).
+
+  A blocking finding also owes an ANSWER path, and this one did not have it: `taskTypeFields` was
+  write-once, so a parked run's only exit was a human waiving the gate while every surface told the
+  reader to go and fill the field in. So `updateBlockSchema` gains `customTaskTypeFields`, validated
+  through the create door's own `validatedFields`, and the block inspector gains a `task-type-fields`
+  panel rendering the same `DescriptorFields` against the same declaration. The patch is deliberately
+  narrower than the whole `taskTypeFields`: the built-in per-type fields are resolved at creation with
+  side effects the patch path does not repeat (a `review` task's PR reference is verified against the
+  provider), whereas the custom bag is exactly the declared answers.
+
+  Reviewer note: findings are one per unanswered field rather than collapsed, because three
+  missing inputs are three things to go and do. The conformance suite drives BOTH exits, the waiver
+  and the answer-then-recheck release, since a gate whose only exit is "ignore me" is a gate that
+  cannot be satisfied. `review_target_missing` still has the original gap and is now the only
+  blocking finding whose remedy the product does not offer.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/agents@0.112.0
+  - @cat-factory/kernel@0.239.0
+  - @cat-factory/integrations@0.128.0
+  - @cat-factory/prompt-fragments@0.15.66
+  - @cat-factory/sandbox@0.11.61
+  - @cat-factory/spend@0.15.2
+  - @cat-factory/workspaces@0.21.54
+  - @cat-factory/caching@0.14.20
+
+## 0.206.0
+
+### Minor Changes
+
+- 4e5640d: Adopt a catalog pipeline into the workspace on first run, so no board is stuck behind an advisory.
+
+  Built-in pipelines are copied into each workspace at creation, so a board seeded before a pipeline
+  shipped holds no row for it, and the catalog's own copy is invisible to every read: the library lists
+  rows, the builder edits rows, a run resolves by row. For a human browsing the pipeline library the
+  new-pipeline advisory plus a reseed closes that gap. For anything that PINS a pipeline by id it does
+  not, and a reusable operation does exactly that: the pin resolves off the task-type registry, which
+  knows nothing about rows, so a task of the operation was creatable on an older board and then refused
+  to start with a bare 404 that named nothing the user could act on.
+
+  Run resolution now goes through `pipelineAdoption.adoptForRun`, which returns the stored row or
+  materialises the catalog entry and returns that. It WRITES rather than running off the code copy on
+  purpose: resolving from the catalog without persisting would leave a run executing a pipeline the
+  board's own library cannot show, open in the builder, or attach a schedule to, which is the same
+  dishonesty as rendering an absent thing as an empty one. Only `builtin` catalog entries are adoptable,
+  and that restriction is the safety argument rather than a convenience: a built-in is read-only and
+  becomes deletable only once retired, and a retired id is absent from `seedPipelines` by construction,
+  so "no row plus a live built-in entry" can only mean never adopted. A versionless registered pipeline
+  is deletable, so adopting one would resurrect a deliberate deletion.
+
+  Two adoptions race by construction (two tasks of one operation started at once both resolve "no row"),
+  so this adds `PipelineRepository.insertIfAbsent`, conflict-targeted `DO NOTHING` on the composite key
+  on both runtimes. Deliberately not `INSERT OR IGNORE` on D1, which would also swallow an unrelated
+  constraint failure on that runtime alone and so hide a real bug behind a passing Postgres suite. Both
+  writers write the same catalog definition, so first write wins and the loser has nothing to report.
+  `PipelineService.reseed`'s absent branch moved onto the same method, fixing a pre-existing race of its
+  own, and both now build the row through one shared `adoptedCatalogRow` so adopting and reseeding cannot
+  diverge on labels or archive state.
+
+  Widening what a start resolves means every GATE standing in front of one had to be widened with it,
+  which is where the read-only twin `resolveDefinition` earns its place. Each of these read the bare row
+  and, finding nothing, did not refuse but CONCLUDED, about a pipeline that was about to run anyway:
+
+  - `individualVendorsForBlock` backs the personal-credential gate on the start request, so an un-adopted
+    pipeline resolved to no agent kinds, the gate concluded the run needed no personal subscription, and
+    the run then adopted and started ungated.
+  - The public API's decide-scope check resolves the caller's `pipelineId` to inspect it for parks. A
+    `null` skipped the check entirely, and `start` then adopted and parked the run, so a `write`-only key
+    could set in motion exactly the park that scope exists to withhold. Both public start paths now read
+    `PipelineService.resolveForRun`, which replaces the `get` that served the stored row (nothing wants
+    that read any more). One public-API behaviour change falls out of it, additive: naming a pipeline the
+    board has not adopted starts the run (or is refused for want of `decide`) instead of answering `404`
+    / `pipeline_not_public`, so an integration pinning a pipeline by id no longer waits on a human to
+    reseed the board.
+  - The post-merge auto-start resolved dependents from the workspace's pipeline LIST and dropped any
+    whose pin had no row, silently, so a merge propagated into a task that never began. It now resolves
+    misses through `adoptableCatalog()` (no point read per miss: the list already proves there is no
+    row), and a dependent whose pin resolves to nothing at all is reported rather than dropped.
+
+  So a bare `pipelineRepository.get` on a run-adjacent path is now the smell. Adoption is also COUNTED,
+  through the new `pipeline.adopted` operational counter: the log line says which board caught up, and
+  only the rate says how many are still behind a catalog the deployment already shipped.
+
+  Left refusing on purpose: an initiative policy edit or a recurring schedule naming an un-adopted
+  pipeline. Both are authoring paths where the SPA only offers stored pipelines, so the refusal is
+  reachable headlessly only, and adopting on an authoring write would materialise rows for pipelines
+  nobody ran.
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/contracts@0.239.0
+  - @cat-factory/agents@0.111.0
+  - @cat-factory/caching@0.14.19
+  - @cat-factory/integrations@0.127.1
+  - @cat-factory/sandbox@0.11.60
+  - @cat-factory/spend@0.15.1
+  - @cat-factory/workspaces@0.21.53
+  - @cat-factory/prompt-fragments@0.15.65
+
 ## 0.205.0
 
 ### Minor Changes

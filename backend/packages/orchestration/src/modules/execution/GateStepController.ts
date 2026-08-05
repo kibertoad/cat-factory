@@ -9,6 +9,8 @@ import type {
   RunInitiatorScope,
 } from '@cat-factory/kernel'
 import { isAsyncAgentExecutor } from '@cat-factory/kernel'
+import type { DescriptorField } from '@cat-factory/contracts'
+import { sanitizeDescriptorFields } from '@cat-factory/contracts'
 import type { AgentRunResult } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { GateHelperDispatcher } from './GateHelperDispatcher.js'
@@ -53,6 +55,13 @@ export interface GateStepControllerDeps {
    * wired runs unchanged: an unwired projection costs a dashboard section, never a run.
    */
   recordGateOutcome?: (settled: SettledGate) => Promise<void>
+  /**
+   * The per-step parameters the gate REGISTERED for a step kind declared, so the values frozen
+   * onto the gate state can be reduced to the ones that declaration actually covers. Reads the
+   * app-owned registry the dispatcher already holds rather than a second copy: what the builder
+   * offered, what run admission validated and what a probe reads must be one declaration.
+   */
+  declaredGateFields: (agentKind: string) => readonly DescriptorField[] | undefined
   /** The engine's completion spine, so a passing gate finishes + advances like any step. */
   recordStepResult: (
     workspaceId: string,
@@ -102,10 +111,25 @@ export class GateStepController {
     // task's merge preset (stable across polls once set).
     if (!step.gate) {
       const preset = await this.deps.resolveRiskPolicy(workspaceId, block)
+      // The step's OWN parameters for this gate, validated against the gate's declared fields at
+      // pipeline save and again at run admission. Copied onto the gate state once, alongside the
+      // budget it may itself override, so every subsequent poll reads one settled snapshot rather
+      // than re-deriving from a pipeline definition that is editable mid-run.
+      //
+      // SANITIZED on the way in, not merely validated, because this is where the value is FROZEN
+      // onto the run. Validation deliberately skips a field whose `showWhen` currently fails, so
+      // a stale answer under a hidden field reaches here having passed no type check; freezing it
+      // would hand a gate's probe a value nothing ever inspected. Same rule, and the same helper,
+      // every other descriptor form applies at its own write.
+      const config = sanitizeDescriptorFields(
+        this.deps.declaredGateFields(step.agentKind) ?? [],
+        step.stepOptions?.gateConfig?.fields ?? {},
+      )
       step.gate = {
         phase: 'checking',
         attempts: 0,
-        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset) : preset.ciMaxAttempts,
+        maxAttempts: gate.attemptBudget ? gate.attemptBudget(preset, config) : preset.ciMaxAttempts,
+        ...(Object.keys(config).length ? { config } : {}),
         headSha: null,
         // Stash the watch window once (read on every poll by a time-windowed gate's
         // probe; harmless/unused for the CI/conflicts gates).

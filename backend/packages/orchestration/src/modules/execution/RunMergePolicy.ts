@@ -1,20 +1,20 @@
 import type {
   Block,
+  ChangeClass,
   GroupCacheHandle,
   ReviewEffort,
-  RiskPolicy,
   RiskPolicyCacheValue,
   RiskPolicyRepository,
 } from '@cat-factory/kernel'
-import { DEFAULT_RISK_POLICY } from '@cat-factory/kernel'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
+import { cachedRiskPolicyRead, resolveRiskPolicy } from '../merge/riskPolicyResolution.js'
 import type { ResolvedRunRiskPolicy } from './policy-types.js'
 
 /** The collaborators the merge-policy layer needs; nothing else on the engine. */
 export interface RunMergePolicyDeps {
   /**
    * Optional: resolves a task's merge threshold preset (auto-merge ceilings, the per-class
-   * rules, and the CI-fixer attempt budget). Absent → the built-in {@link DEFAULT_RISK_POLICY}.
+   * rules, and the CI-fixer attempt budget). Absent → the built-in `DEFAULT_RISK_POLICY`.
    */
   riskPolicyRepository?: RiskPolicyRepository
   /**
@@ -49,34 +49,42 @@ export class RunMergePolicy {
 
   /**
    * Resolve the merge threshold preset that governs a task: its explicitly-picked preset, else
-   * the workspace default, else the built-in {@link DEFAULT_RISK_POLICY}. Returns the thresholds
+   * the workspace default, else the built-in `DEFAULT_RISK_POLICY`. Returns the thresholds
    * the engine compares against, the per-class rules, and the CI attempt budget.
+   *
+   * Reads through the `riskPolicy` cache slice when wired: the row is slow-moving admin config
+   * re-read on every gate evaluation. The resolution itself is shared with the board's preset
+   * SELECTION guard (`resolveRiskPolicy`), so the policy a swap is judged against is the same one
+   * this will apply when the run settles.
    */
   async resolve(workspaceId: string, block: Block): Promise<ResolvedRunRiskPolicy> {
-    const repo = this.deps.riskPolicyRepository
-    if (repo) {
-      // Read each preset through the cache slice when wired: the row is slow-moving admin config
-      // re-read on every gate evaluation. Group by workspace (one write drops the whole library),
-      // keyed per resolved id so a picked preset and the default cache separately. A null (deleted
-      // id / unseeded default) caches as a value and still falls through, exactly as an uncached
-      // read would (the `RiskPolicyCacheValue` wrapper).
-      const read = async (
-        key: string,
-        load: () => Promise<RiskPolicy | null>,
-      ): Promise<RiskPolicy | null> => {
-        const cache = this.deps.riskPolicyCache
-        if (!cache) return load()
-        return (await cache.get(key, workspaceId, async () => ({ policy: await load() }))).policy
-      }
-      if (block.riskPolicyId) {
-        const id = block.riskPolicyId
-        const picked = await read(`picked:${id}`, () => repo.get(workspaceId, id))
-        if (picked) return picked
-      }
-      const fallback = await read('default', () => repo.getDefault(workspaceId))
-      if (fallback) return fallback
-    }
-    return DEFAULT_RISK_POLICY
+    return resolveRiskPolicy({
+      repository: this.deps.riskPolicyRepository,
+      workspaceId,
+      riskPolicyId: block.riskPolicyId,
+      read: cachedRiskPolicyRead(this.deps.riskPolicyCache, workspaceId),
+    })
+  }
+
+  /**
+   * The DETERMINISTIC change class of a block's open pull request, for a policy decision that
+   * needs it outside the merger step (the manual-merge guard).
+   *
+   * One VCS call, and `unknown` whenever the class cannot be established: no repository wired,
+   * no PR number, a provider outage. That degradation is the whole reason this is worth a named
+   * method rather than an inline `?.classify(...)`: every consumer of a class MUST treat
+   * `unknown` as inert, and a call site that reached for the classification directly would be
+   * one `??` away from reading an outage as a policy verdict.
+   *
+   * Deliberately re-classifies rather than reading the class back off the recorded merge
+   * decision: a decision row is not guaranteed to exist on every path that reaches the merge
+   * route (a pipeline with no `merger` step raises `pipeline_complete` and records nothing).
+   */
+  async classifyChangeClass(workspaceId: string, block: Block): Promise<ChangeClass> {
+    const svc = this.deps.mergeTrackRecord
+    if (!svc) return 'unknown'
+    // `classify` is best-effort by construction and already degrades to `unknown` on any fault.
+    return (await svc.classify(workspaceId, block)).changeClass
   }
 
   /**

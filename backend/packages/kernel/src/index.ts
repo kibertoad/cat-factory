@@ -47,15 +47,15 @@ export {
 // `narrowMergeClassRule` is NOT re-exported from here: it moved to `@cat-factory/contracts` beside
 // the rule maps it composes, so the preset editor in the SPA narrows by the same implementation the
 // engine applies. A convenience re-export would put two import paths on one rule, which is the
-// shape that lets a second hand-written copy exist.
+// shape that lets a second hand-written copy exist. `resolveMergeClassRule` /
+// `resolveRoleScopedMergeClassRule` followed it there when the SPA's risk-policy picker had to
+// agree about what a role's entry costs that role, and are not re-exported for the same reason.
+// What stays here is the CLASSIFICATION of a diff, which nothing in the SPA decides.
 export {
   CHANGE_CLASS_RANK,
   classifyChangedPath,
   classifyChangedFiles,
-  resolveMergeClassRule,
-  resolveRoleScopedMergeClassRule,
   type ChangeClassification,
-  type RoleScopedMergeClassRule,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
 export {
@@ -360,6 +360,8 @@ export {
   type GateDefinition,
   type GateContext,
   type GateFactory,
+  type GateRegistration,
+  type GateConfigFields,
   recordGateAttempt,
   GateRegistry,
   defaultGateRegistry,
@@ -480,6 +482,31 @@ export {
   renderReleaseEvidence,
 } from './domain/gate-logic.js'
 
+// Per-step human-gate approval: who may resolve a gate and when a quorum is met. The rule lives in
+// `@cat-factory/contracts` because the SPA must agree about the answer (it disables the approve
+// button and renders the tally), and is re-exported here so the engine reaches it alongside the
+// rest of its vocabulary.
+export {
+  type GateActor,
+  type GateApprovalRefusal,
+  UNATTRIBUTED_GATE_ACTOR,
+  foldGateApproval,
+  hasApproverPolicy,
+  refuseGateResolution,
+  requiredGateApprovals,
+} from '@cat-factory/contracts'
+
+// W3C Trace Context: the shared reading of an inbound `traceparent`, so the HTTP boundary that
+// ADOPTS a caller's trace and the OTLP exporter that STAMPS it onto a line agree about the
+// field names and the validity rules. See `domain/trace-context.ts`.
+export type { InboundTraceContext } from './domain/trace-context.js'
+export {
+  SPAN_ID_FIELD,
+  TRACEPARENT_HEADER,
+  TRACE_ID_FIELD,
+  parseTraceparent,
+} from './domain/trace-context.js'
+
 // Infrastructure REACHABILITY: the pure decision the watcher sweep and the board snapshot share
 // — what to record, which transitions to announce, and how a recorded outage folds into the
 // setup projection. See `domain/infra-reachability.ts`.
@@ -571,6 +598,7 @@ export * from './ports/index.js'
 // See `backend/docs/custom-agents.md` → "Capabilities: skills and tools".
 export {
   type McpHttpTransport,
+  type McpOAuthConfig,
   type McpSecretRef,
   type McpServerDefinition,
   type McpStdioTransport,
@@ -581,11 +609,14 @@ export {
   type SkillVersionPin,
   type UnavailableToolServer,
   MCP_HARNESS_TRANSPORTS,
+  MCP_OAUTH_DEFAULT_HEADER,
+  MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
   MCP_TOOL_NAME_PATTERN,
   TOOL_SERVER_BUDGET,
   isAllowedMcpHttpUrl,
+  isLoopbackMcpHttpUrl,
   isValidMcpServerId,
   isValidMcpToolName,
   mcpHarnessServesTransport,

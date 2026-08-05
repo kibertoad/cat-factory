@@ -9,6 +9,7 @@ import type {
   DocumentOrigin,
   PlanFrame,
 } from '@cat-factory/kernel'
+import type { BlockEditActor } from '@cat-factory/contracts'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
@@ -46,10 +47,15 @@ export class DocumentLinkService {
    * Apply a board plan to a workspace. Without `frameId` each planned frame
    * becomes a new top-level frame; with it, the plan's modules and tasks are
    * added inside that existing frame (the planned frames are flattened into it).
+   *
+   * `editor` is whose authority every block below is written under. The STRUCTURE comes from an
+   * imported document, but the write is still made by whoever asked for the spawn, so the tier
+   * comes from the caller rather than being decided here (see {@link BlockEditActor}).
    */
   async spawn(
     workspaceId: string,
     plan: DocumentBoardPlan,
+    editor: BlockEditActor,
     frameId?: string,
   ): Promise<SpawnResult> {
     const result: SpawnResult = { frames: 0, modules: 0, tasks: 0 }
@@ -64,7 +70,7 @@ export class DocumentLinkService {
         throw new ValidationError('Document structure can only be spawned into a service frame')
       }
       for (const frame of plan.frames) {
-        await this.spawnInto(workspaceId, target.id, frame, result)
+        await this.spawnInto(workspaceId, target.id, frame, result, editor)
       }
       return result
     }
@@ -77,11 +83,13 @@ export class DocumentLinkService {
       })
       column += 1
       result.frames += 1
-      await this.deps.boardService.updateBlock(workspaceId, created.id, {
-        title: frame.title,
-        ...(frame.description ? { description: frame.description } : {}),
-      })
-      await this.spawnInto(workspaceId, created.id, frame, result)
+      await this.deps.boardService.updateBlock(
+        workspaceId,
+        created.id,
+        { title: frame.title, ...(frame.description ? { description: frame.description } : {}) },
+        editor,
+      )
+      await this.spawnInto(workspaceId, created.id, frame, result, editor)
     }
     return result
   }
@@ -92,9 +100,10 @@ export class DocumentLinkService {
     frameId: string,
     frame: PlanFrame,
     result: SpawnResult,
+    editor: BlockEditActor,
   ): Promise<void> {
     for (const task of frame.tasks) {
-      await this.addTask(workspaceId, frameId, task, result)
+      await this.addTask(workspaceId, frameId, task, result, editor)
     }
     for (const planModule of frame.modules) {
       const module = await this.deps.boardService.addModule(workspaceId, frameId, {
@@ -102,7 +111,7 @@ export class DocumentLinkService {
       })
       result.modules += 1
       for (const task of planModule.tasks) {
-        await this.addTask(workspaceId, module.id, task, result)
+        await this.addTask(workspaceId, module.id, task, result, editor)
       }
     }
   }
@@ -112,15 +121,22 @@ export class DocumentLinkService {
     containerId: string,
     task: { title: string; description?: string },
     result: SpawnResult,
+    editor: BlockEditActor,
   ): Promise<void> {
-    const created = await this.deps.boardService.addTask(workspaceId, containerId, {
-      title: task.title,
-    })
+    const created = await this.deps.boardService.addTask(
+      workspaceId,
+      containerId,
+      { title: task.title },
+      editor,
+    )
     result.tasks += 1
     if (task.description) {
-      await this.deps.boardService.updateBlock(workspaceId, created.id, {
-        description: task.description,
-      })
+      await this.deps.boardService.updateBlock(
+        workspaceId,
+        created.id,
+        { description: task.description },
+        editor,
+      )
     }
   }
 

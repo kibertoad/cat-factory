@@ -1,10 +1,13 @@
-import { ValidationError } from '@cat-factory/kernel'
+import { hasApproverPolicy, requiredGateApprovals, ValidationError } from '@cat-factory/kernel'
 import type {
+  GateRegistry,
   PipelineAvailability,
+  StepGateConfig,
   StepGating,
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
+import { validateDescriptorFields } from '@cat-factory/contracts'
 import {
   BINARY_OUTPUT_TRAIT,
   companionTargets,
@@ -73,6 +76,11 @@ export function pipelineHasEnabledBugIntake(agentKinds: string[], enabled?: bool
  *  - {@link assertValidBinaryOutputSteps}: a step whose kind carries the `binary-output` trait
  *    must select the foundational service it stores its generated binaries through — a
  *    generator with nowhere to deliver would dispatch and only be able to refuse.
+ *  - {@link assertValidGateConfig}: a step's gate configuration must have a gate to configure —
+ *    an approver set needs the step's approval gate ON, a quorum needs enough named approvers to
+ *    reach it, and gate PARAMETERS must be declared by a gate this deployment registers for that
+ *    step kind. Each failure otherwise lands as a checkpoint that silently does not exist, a run
+ *    that parks forever, or a setting nobody reads.
  *
  * Each check takes the whole shape rather than the two or three arrays it happens to read today:
  * the gating check needed `gates` + the kind registry after the estimate-gating rules were
@@ -98,6 +106,13 @@ export interface PipelineShape {
    * boundary that has the registry — so both real boundaries (builder save, run start) pass it.
    */
   agentKindRegistry?: AgentKindRegistry
+  /**
+   * The app-owned gate registry, so a step's gate PARAMETERS are validated against the fields the
+   * gate itself declared. Absent ⇒ the gate-declared half is not checked, which is correct for a
+   * caller validating a built-in catalog with no registrations in view (the kernel seed test) and
+   * wrong at a real boundary — so both pass one.
+   */
+  gateRegistry?: GateRegistry
 }
 
 export function validatePipelineShape(pipeline: PipelineShape): void {
@@ -107,6 +122,79 @@ export function validatePipelineShape(pipeline: PipelineShape): void {
   assertValidSkillSteps(pipeline)
   assertValidAgentVariants(pipeline)
   assertValidBinaryOutputSteps(pipeline)
+  assertValidGateConfig(pipeline)
+}
+
+/**
+ * Validate every step's gate configuration (`stepOptions[i].gateConfig`) — both halves, each
+ * against the thing that owns it.
+ *
+ *  1. The approval half (`approvers` / `minApprovals`) needs a human gate to configure. On a step
+ *     with no `gates[i]`, an approver set is a checkpoint that silently does not exist: nobody is
+ *     ever asked, and the author has every reason to believe two sign-offs are being collected.
+ *  2. A quorum above 1 counts DISTINCT identities, so it needs more than one possible approver.
+ *     A policy naming exactly one user with `minApprovals: 2` can never be satisfied — the second
+ *     approval has nobody left to come from — and the run would park forever.
+ *  3. The gate-declared half (`fields`) needs a REGISTERED gate on this step's kind, and every
+ *     key must be one that gate declared. An undeclared key is indistinguishable from a typo'd
+ *     one, and both read to whoever typed them as configuration that took effect.
+ *
+ * Skipped when no registry is supplied (the kernel seed test's built-in catalog, which has no
+ * deployment registrations in view); both real boundaries pass one.
+ */
+export function assertValidGateConfig({
+  agentKinds,
+  enabled,
+  gates,
+  stepOptions,
+  gateRegistry,
+}: PipelineShape): void {
+  if (!stepOptions) return
+  for (let i = 0; i < agentKinds.length; i++) {
+    const config = stepOptions[i]?.gateConfig
+    const kind = agentKinds[i]
+    if (!config || kind === undefined || enabled?.[i] === false) continue
+    const configuresApproval =
+      hasApproverPolicy(config.approvers) || config.minApprovals !== undefined
+    if (configuresApproval && gates?.[i] !== true) {
+      throw new ValidationError(
+        `Step '${kind}' configures an approval gate (approvers / required approvals) but carries no approval gate. Turn the step's approval gate on, or drop the configuration.`,
+      )
+    }
+    assertSatisfiableQuorum(kind, config)
+    // The gate-declared half needs the registry to judge it: with none in view the caller is
+    // validating a catalog it cannot resolve registrations for, so it checks the platform half only.
+    if (!gateRegistry || !config.fields || Object.keys(config.fields).length === 0) continue
+    if (!gateRegistry.has(kind)) {
+      throw new ValidationError(
+        `Step '${kind}' carries gate parameters, but this deployment registers no gate for that step kind.`,
+      )
+    }
+    const problems = validateDescriptorFields(gateRegistry.configFields(kind) ?? [], config.fields)
+    if (problems.length) {
+      throw new ValidationError(`Step '${kind}' has invalid gate parameters: ${problems.join(' ')}`)
+    }
+  }
+}
+
+/**
+ * A quorum must be REACHABLE by the policy that narrows it. Counting distinct identities means
+ * an approver set smaller than the quorum can never clear the gate, and the run parks with no
+ * error to explain it — which is exactly the failure mode a save-time refusal is for.
+ *
+ * Only a `userIds`-only policy bounds the approver COUNT: a role names an open-ended set (a
+ * workspace can gain members), so a role-bearing policy is always considered reachable.
+ */
+function assertSatisfiableQuorum(kind: string, config: StepGateConfig): void {
+  const required = requiredGateApprovals(config)
+  if (required <= 1) return
+  const named = config.approvers?.userIds?.length ?? 0
+  if ((config.approvers?.roles?.length ?? 0) > 0 || named === 0) return
+  if (named < required) {
+    throw new ValidationError(
+      `Step '${kind}' asks for ${required} approvals but names only ${named} approver(s), so the gate could never be cleared. Name more approvers, allow a role, or lower the required approvals.`,
+    )
+  }
 }
 
 /**
@@ -223,12 +311,16 @@ export function assertValidSkillSteps({ agentKinds, enabled, stepOptions }: Pipe
  * producer and its companion". Companions are surfaced in the builder as toggles attached to
  * their producer and run immediately after it, so adjacency is required.
  */
-export function assertValidCompanionPlacement({ agentKinds, enabled }: PipelineShape): void {
+export function assertValidCompanionPlacement({
+  agentKinds,
+  enabled,
+  agentKindRegistry,
+}: PipelineShape): void {
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
     const kind = agentKinds[i]
-    if (kind === undefined || !isCompanionKind(kind) || !isEnabled(i)) continue
-    const targets = companionTargets(kind)
+    if (kind === undefined || !isCompanionKind(kind, agentKindRegistry) || !isEnabled(i)) continue
+    const targets = companionTargets(kind, agentKindRegistry)
     // The nearest preceding ENABLED step must be a producer this companion can review.
     let predecessor: string | undefined
     for (let j = i - 1; j >= 0; j--) {

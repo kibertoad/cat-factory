@@ -30,6 +30,14 @@ class FakeRepo implements PublicApiKeyRepository {
     if (r && r.workspaceId === workspaceId && r.revokedAt === null) r.revokedAt = at
     return Promise.resolve()
   }
+  revokeMintedBy(workspaceId: string, minterId: string, at: number) {
+    for (const r of this.rows.values()) {
+      if (r.createdByKeyId === minterId && r.workspaceId === workspaceId && r.revokedAt === null) {
+        r.revokedAt = at
+      }
+    }
+    return Promise.resolve()
+  }
 }
 
 function makeService(now = { t: 1000 }) {
@@ -77,6 +85,55 @@ describe('PublicApiKeyService', () => {
     // A mint with no session (dev-open) stores null rather than an empty string.
     const anon = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'k2')
     expect(anon.record.createdByUserId).toBeNull()
+  })
+
+  it('records the minting KEY for a headless mint, and null for a mint a person made', async () => {
+    const { service } = makeService()
+    const minted = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByKeyId: 'pak_parent' },
+      'per-tenant',
+    )
+    expect(minted.record.createdByKeyId).toBe('pak_parent')
+    // The two attributions are independent: a headless mint has no user, and a person's mint has
+    // no key. Neither is inferred from the other.
+    expect(minted.record.createdByUserId).toBeNull()
+    const byPerson = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByUserId: 'usr_7' },
+      'in-app',
+    )
+    expect(byPerson.record.createdByKeyId).toBeNull()
+  })
+
+  it('revokes the keys a revoked key minted, so a leaked minter leaves nothing behind', async () => {
+    const { service, repo } = makeService()
+    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
+    const child = await service.issue(
+      { accountId: 'a', workspaceId: 'w', createdByKeyId: minter.record.id },
+      'child',
+    )
+    const unrelated = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'unrelated')
+
+    await service.revoke('w', minter.record.id)
+
+    expect(await service.authenticate(minter.secret)).toBeNull()
+    // The whole point: the credential the operator could not see dies with the one they could.
+    expect(await service.authenticate(child.secret)).toBeNull()
+    // And nothing else does.
+    expect(await service.authenticate(unrelated.secret)).not.toBeNull()
+    expect(repo.rows.get(child.record.id)?.revokedAt).toBe(1000)
+  })
+
+  it('does not cascade across workspaces', async () => {
+    const { service } = makeService()
+    const minter = await service.issue({ accountId: 'a', workspaceId: 'w' }, 'provisioner', 'admin')
+    // A row claiming this minter in ANOTHER workspace cannot be reached by the cascade: the
+    // revoke is workspace-scoped on both statements, not only the first.
+    const foreign = await service.issue(
+      { accountId: 'a', workspaceId: 'other', createdByKeyId: minter.record.id },
+      'foreign',
+    )
+    await service.revoke('w', minter.record.id)
+    expect(await service.authenticate(foreign.secret)).not.toBeNull()
   })
 
   it('persists the requested scope and authenticates back with it', async () => {

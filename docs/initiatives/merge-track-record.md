@@ -107,10 +107,12 @@ Precedence in `resolveMergerStep`, most-significant first:
    classification outranks the agent's self-report.
 3. The existing credibility + threshold comparison.
 
-Two rungs were added above this ladder later, keyed on WHO started the run rather than on what the
-change is: a role-scoped narrowing of the class rule, and a sandboxed run mode that merges nothing.
-Both are in [ADR 0037](../../backend/docs/adr/0037-role-scoped-merge-policy.md), which is the authority on
-the composed precedence.
+Three rungs were added above this ladder later, keyed on WHO started the run rather than on what the
+change is: a role-scoped narrowing of the class rule, a sandboxed run mode that merges nothing, and a
+per-role allowlist of the classes a preset will land at all. The first two are in
+[ADR 0037](../../backend/docs/adr/0037-role-scoped-merge-policy.md), the third in
+[ADR 0039](../../backend/docs/adr/0039-role-scoped-submission-allowlists.md), which together are the
+authority on the composed precedence.
 
 Backwards compatibility is a non-goal (see CLAUDE.md), so the wire type gains the field as
 **required** rather than optional-with-a-shim; persisted rows get `'{}'` from the column default and

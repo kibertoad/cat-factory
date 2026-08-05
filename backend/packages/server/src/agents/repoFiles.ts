@@ -288,7 +288,14 @@ export function makeResolveDeployCloneTarget(
   return async (workspaceId, blockId, ref) => {
     const target = await resolveRepoTarget(workspaceId, blockId)
     if (!target) return null
-    const token = await mintInstallationToken(target.installationId)
+    // This token rides into a deploy container, so it is a DISPATCH credential under the same
+    // rule as an agent job's: scoped to the one repo the container clones. The deploy has no
+    // execution of its own to name, so the block it renders identifies it on the mint's log line.
+    const token = await mintInstallationToken(target.installationId, {
+      executionId: `deploy-${blockId}`,
+      workspaceId,
+      repoIds: [target.repoId],
+    })
     const cloneUrl = options?.resolveCloneUrl
       ? options.resolveCloneUrl(target)
       : `${webBase}/${target.owner}/${target.name}.git`

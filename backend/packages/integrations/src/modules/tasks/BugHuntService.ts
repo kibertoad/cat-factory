@@ -1,3 +1,4 @@
+import type { BlockEditActor } from '@cat-factory/contracts'
 import type {
   BugCandidate,
   BugHuntAnalysisStatus,
@@ -162,27 +163,35 @@ export class BugHuntService {
    * Stops there deliberately. Starting the run needs the execution engine (and the initiator's
    * personal-credential gate), which is the HTTP layer's job — this service stays inside the
    * integrations layer, exactly as `BugIntakeService` hands its pickup back to the engine.
+   *
+   * `editor` travels beside `createdBy` and is the same person: an adoption is a member-tier board
+   * write, and the run it leads to is an ATTRIBUTED start (`runInitiatorRole`). The two answers
+   * have to agree, or a tier sandboxed for its runs could still author the task those runs are
+   * governed by (ADR 0037).
    */
-  async adopt(
-    workspaceId: string,
-    source: TaskSourceKind,
-    externalId: string,
-    containerId: string,
-    createdBy: string | null,
-    pipelineId: string,
-  ): Promise<TaskFromIssue> {
+  async adopt(input: {
+    workspaceId: string
+    source: TaskSourceKind
+    externalId: string
+    containerId: string
+    editor: BlockEditActor
+    createdBy: string | null
+    pipelineId: string
+  }): Promise<TaskFromIssue> {
+    const { workspaceId, source, externalId, containerId, editor, createdBy, pipelineId } = input
     await this.deps.importService.import(workspaceId, source, externalId)
-    return this.deps.linkService.createTaskFromIssue(
+    return this.deps.linkService.createTaskFromIssue({
       workspaceId,
       containerId,
       source,
       externalId,
+      editor,
       createdBy,
       // A hunted issue is a bug by construction, and the pipeline the human confirmed is the
       // one the task's Run controls should default to — so the created task carries both
       // rather than landing as a generic `feature` the user has to re-classify.
-      { taskType: 'bug', pipelineId },
-    )
+      shape: { taskType: 'bug', pipelineId },
+    })
   }
 
   /**

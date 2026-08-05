@@ -509,6 +509,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Open {pr} on GitHub",
+      "readOutcome": "Outcome",
+      "readOutcomeHint": "Read what changed, with the evidence behind it",
       "review": "Review",
       "merge": "Merge",
       "mergeConfirm": {
@@ -644,7 +646,8 @@
         "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task",
         "document_already_linked": "Document already attached",
-        "dry_run_not_mergeable": "Dry run cannot be merged"
+        "dry_run_not_mergeable": "Dry run cannot be merged",
+        "submission_not_allowed": "Merge not allowed for this run"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -684,7 +687,8 @@
         "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
-        "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
+        "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge.",
+        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1087,6 +1091,12 @@
       "inherited": "inherited from service",
       "frozen": "Frozen: the agent has started"
     },
+    "taskTypeFields": {
+      "title": "Task type fields",
+      "hint": "The answers this task type declares it needs. A required answer that is missing parks a run before it starts.",
+      "save": "Save",
+      "revert": "Revert"
+    },
     "dependencies": {
       "title": "Depends on",
       "hint": "Tasks that must merge before this one can run. The Run control stays locked until every dependency is done.",
@@ -1126,6 +1136,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Read the outcome",
       "stepState": {
         "pending": "Pending",
         "working": "Working",
@@ -1348,6 +1359,7 @@
         "class_auto_merge": "This preset always auto-merges this class of change, so the scores were not compared.",
         "class_requires_review": "This preset always sends this class of change to a human, whatever the scores.",
         "role_requires_review": "This preset holds runs started by a {role} to human review for this class of change, whatever the scores. A teammate on a higher tier can merge this PR as it stands.",
+        "submission_not_allowed": "This preset lets runs started by a {role} merge only these kinds of change: {classes}. This one is a different kind, so the pull request is waiting for somebody whose role may merge it.",
         "dry_run": "This was a dry run, so the pull request was left open for a human and the scores were not compared. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "scores": "Scores",
@@ -1359,7 +1371,11 @@
       "ceiling": "ceiling {value}",
       "rationale": "Rationale",
       "noAssessment": "The merger did not return a scored assessment.",
-      "noResult": "No merge decision recorded yet."
+      "noResult": "No merge decision recorded yet.",
+      "noSubmittableClasses": "none",
+      "@noSubmittableClasses": {
+        "description": "Substituted into the {classes} slot of `reason.submission_not_allowed` when the role's allowlist is empty, so it reads as a list with no members ('...only these kinds of change: none'), NOT as a standalone sentence or an absence of policy."
+      }
     },
     "testReport": {
       "title": "Test report",
@@ -1538,7 +1554,12 @@
         "attempts": "Attempt {attempts} of {maxAttempts}",
         "omittedTestPaths": "{count} declared test file was dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction. | {count} declared test files were dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction.",
         "@omittedTestPaths": "Plural form required. A dropped file can leave the pre-fix tree without the reproduction, which makes the check pass there and wrongly reads as 'the test does not capture the defect'."
-      }
+      },
+      "quorumProgress": "{recorded} of {required} approvals",
+      "quorumYours": "(yours counted)",
+      "quorumEditLocked": "Corrections can be typed once yours is the approval that clears this gate. Until then, approve as-is or request changes.",
+      "notAnApprover": "This gate names who may resolve it, and you are not one of them.",
+      "approverIdentityRequired": "This gate names who may resolve it, so it has to be resolved by one of those people signed in."
     },
     "inspector": {
       "frameStatus": {
@@ -3002,10 +3023,15 @@
       },
       "roleRules": {
         "heading": "Limits per initiator role",
-        "help": "What a run may do also depends on who started it. A role can be held to stricter rules than the ones above, or to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
-        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the class limits below add nothing. Dry runs still apply: they refuse a manual merge too.",
+        "help": "What a run may do also depends on who started it. A role can be limited to merging only certain kinds of change, held to stricter rules than the ones above, or held to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the per-class limits below add nothing. The merge limit and dry runs still apply: both refuse a manual merge too.",
         "sandboxLabel": "Dry runs only",
-        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so the class rules below cannot hold them to anything stricter.",
+        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so neither limit below can hold them to anything stricter.",
+        "submissionLabel": "Limit which changes this role may merge",
+        "submissionHelp": "When on, only the ticked kinds of change are merged for runs this role starts. Anything else stays open for somebody else, whatever the scores say. The pull request is still opened, and it can still be merged by hand on the git host.",
+        "submissionNone": "Nothing is ticked, so this workspace will not merge any run this role starts.",
+        "submissionBadge": "Merge limited",
+        "classHeading": "Review required per class",
         "noRules": "No class limits",
         "ruleCount": "{count} class limited | {count} classes limited",
         "@ruleCount": {
@@ -3086,6 +3112,73 @@
         "removeFailed": "Could not remove the registry entry"
       }
     },
+    "toolServers": {
+      "heading": "Tool servers (MCP)",
+      "intro": "The MCP servers this deployment registers for its agents. Testing one resolves this board's credentials and speaks the protocol to the server, so the result is what a run would get.",
+      "transport": {
+        "stdio": "In the container",
+        "http": "Remote"
+      },
+      "declaredBy": "Given to: {kinds}",
+      "declaredByNone": "No agent gets this server, so no run will ever start it.",
+      "servableHarnesses": "Works on: {harnesses}",
+      "servableHarnessesNone": "No agent CLI can serve this transport, so this server never applies to any run.",
+      "allowedTools": "Narrowed to: {tools}",
+      "credentials": "Credentials: {keys}",
+      "oauth": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "machineGrant": "Signs in as this deployment",
+        "connectedBy": "Connected by {user}",
+        "scopes": "Granted: {scopes}",
+        "notRefreshable": "The vendor issued no refresh token, so this connection has to be made again once its access token expires.",
+        "lastError": "The last token renewal failed: {detail}",
+        "connect": "Connect",
+        "reconnect": "Reconnect",
+        "disconnect": "Disconnect",
+        "callback": {
+          "working": "Finishing the connection…",
+          "done": "Connected to {server}",
+          "doneHint": "This board's runs can now use the tool server as the account you signed in with.",
+          "back": "Back to the app",
+          "failedTitle": "The connection could not be finished",
+          "failed": "The authorization could not be completed. Start the connection again from the Infrastructure window.",
+          "missingParams": "This link is missing the values the vendor sends back, so there is nothing to complete. Start the connection again."
+        }
+      },
+      "test": "Test",
+      "notProbeable": {
+        "stdio": "Runs inside the agent's container, so it cannot be tested from here.",
+        "containerLocal": "Listens beside the agent in its own container, which is not reachable from here.",
+        "urlNotAllowed": "The address is not one a tool server may be reached at (https, or plain http on localhost)."
+      },
+      "status": {
+        "ok": "Answered",
+        "credentialsMissing": "No credential",
+        "credentialRefused": "Credential refused",
+        "oauthNotConnected": "Not connected",
+        "oauthTokenFailed": "Connection stopped working",
+        "unreachable": "No answer",
+        "httpError": "Rejected the request",
+        "protocolError": "Not an MCP server",
+        "notProbeable": "Cannot be tested from here"
+      },
+      "okDetail": "{name} {version}, protocol {protocol}, {count} tools.",
+      "toolsIncomplete": "The server has more tools than one test reads, so this count is a minimum.",
+      "unmatchedTools": "This server exposes no tool called {tools}, so the agent is told about a tool it cannot call.",
+      "allowedToolsUnchecked": "The tool list was too long to read in full, so the narrowed names could not be checked.",
+      "unresolvedCredentials": "Nothing resolved for {keys}. Fill it in below, or set it in the deployment's environment.",
+      "refusedCredentials": "{keys} names a variable the platform's own configuration owns, so it is never resolved. Change the declaration in the deployment's code.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
+      "toast": {
+        "loadFailed": "Could not load the tool servers",
+        "probeFailed": "Could not test the tool server",
+        "connectFailed": "Could not start the connection",
+        "disconnectFailed": "Could not disconnect the tool server"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Capability credentials",
       "intro": "The secrets this deployment's tool servers and generative integrations ask for by name. Values are stored for this board only, sealed at rest, and handed straight to the agent's process: they never reach a prompt or a log. Values are write-only, so a stored one is replaced by typing a new one and never read back.",
@@ -3137,6 +3230,7 @@
         "neverUsed": "never used",
         "createdBy": "created by {user}",
         "createdByYou": "you",
+        "createdByKey": "API key {id}",
         "revoke": "Revoke token"
       },
       "add": {
@@ -4595,6 +4689,17 @@
       "hint": "The most a single reply from this agent may run to. Leave it empty to inherit the next level up rather than to lift the limit. A pipeline step's own value wins over the workspace default.",
       "inherits": "Inherited",
       "inheritsValue": "Inherited ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Who may approve",
+      "roleAdmin": "Admins",
+      "roleMember": "Members",
+      "namedApproversLabel": "Named approvers",
+      "namedApproversPlaceholder": "Anyone entitled to write",
+      "requiredApprovalsLabel": "Approvals required",
+      "requiredApprovalsHint": "Each from a different person before the run continues.",
+      "anyoneHint": "Anyone who can edit this board may approve this step.",
+      "gateParametersLabel": "Gate settings"
     }
   },
   "agentPrompt": {
@@ -4679,7 +4784,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Applied because this task picks no policy of its own.",
-      "noneHint": "No risk policy configured. Every pull request waits for a human review."
+      "noneHint": "No risk policy configured. Every pull request waits for a human review.",
+      "refused": {
+        "relaxes_role_sandbox": "Not available for your role: this task’s runs are sandboxed, and this policy would let them merge. A workspace admin can change it.",
+        "relaxes_role_submission_allowlist": "Not available for your role: this policy would let you land kinds of change this task holds you back from. A workspace admin can change it.",
+        "relaxes_role_class_rule": "Not available for your role: this policy auto-merges changes you are held to review on this task. A workspace admin can change it."
+      }
     },
     "preview": {
       "defaultBadge": "Default",
@@ -4697,6 +4807,7 @@
       "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up.",
       "roleHeading": "Who started the run",
       "roleSandboxed": "Runs started by {roles} open a pull request and never merge.",
+      "roleScoped": "Runs started by {roles} merge only some kinds of change.",
       "roleNarrowed": "Runs started by {roles} follow stricter rules for some change classes."
     }
   },
@@ -4868,6 +4979,11 @@
       "success_criteria_missing": {
         "title": "No success criteria",
         "hint": "State the question the spike answers, or what a good outcome looks like, so the timebox has a target."
+      },
+      "required_field_missing": {
+        "title": "Missing: {field}",
+        "hint": "This task type requires “{field}”, and the task does not answer it. Fill it in on the task, then re-check.",
+        "unnamedField": "a required field"
       },
       "unknown": {
         "title": "Unrecognised finding",
@@ -5516,6 +5632,110 @@
       "fixRequested": "Fix requested"
     }
   },
+  "outcome": {
+    "title": "Outcome",
+    "subtitle": "What this run changed, and the evidence behind it",
+    "diff": "Open the diff",
+    "diffNumbered": "Open the diff (#{number})",
+    "peerDiff": "Open the diff in {repo}",
+    "disposition": {
+      "merged": "Merged",
+      "awaiting_merge": "Waiting to be merged",
+      "in_flight": "Still running",
+      "needs_attention": "Needs attention",
+      "not_run": "Not run yet",
+      "unknown": "Run not loaded"
+    },
+    "ask": {
+      "title": "What was asked",
+      "none": "This task carries no description, so there is nothing here to compare the result against."
+    },
+    "gap": {
+      "run_unavailable": "This task's run was not loaded, so none of the evidence it recorded can be shown here. That is not the same as a run that recorded nothing."
+    },
+    "requirements": {
+      "title": "Requirements checked",
+      "met": "Met: {count}",
+      "notMet": "Not met: {count}",
+      "notCovered": "Not checked: {count}",
+      "regressions": "Regressions: {count}",
+      "regressionTag": "Regression",
+      "idOnly": "id only",
+      "idOnlyHint": "This id is not in the service specification, so there is no title to show for it.",
+      "spec": {
+        "not_read": "The service specification was not read, so these are the requirement ids the tester reported, without their titles.",
+        "unmatched": "None of these requirement ids appear in the service specification that was read, so only the ids the tester reported are shown."
+      },
+      "verdict": {
+        "met": "Verified",
+        "not_met": "Failed",
+        "not_covered": "Not checked"
+      },
+      "gap": {
+        "no_tester_step": "This pipeline has no tester step, so no requirement was checked.",
+        "tester_not_reported": "The tester has not reported yet, so no requirement has been ruled on.",
+        "no_verdicts": "The tester reported without ruling on any requirement of the service specification."
+      }
+    },
+    "tests": {
+      "title": "How it was tested",
+      "openReport": "Full test report",
+      "summary": "The tester reported: {summary}",
+      "abort": "The tester could not run a meaningful test: {reason}",
+      "counts": "{passed} passed, {failed} failed, {skipped} skipped",
+      "verdict": {
+        "greenlit": "Cleared for release",
+        "concerns": "Concerns raised",
+        "could_not_run": "Could not be tested"
+      },
+      "environment": {
+        "local": "Tested against local dependencies",
+        "ephemeral": "Tested against a preview environment"
+      },
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "gap": {
+        "no_tester_step": "This pipeline has no tester step, so nothing was exercised.",
+        "tester_not_reported": "The tester has not reported yet."
+      }
+    },
+    "visuals": {
+      "title": "What it looks like",
+      "shotAlt": "Screenshot of {view}",
+      "hasReference": "A reference design was supplied for this view",
+      "source": {
+        "visual_confirm": "These views were reviewed against their reference designs.",
+        "tester": "These views were captured while testing. Nobody was asked to review them."
+      },
+      "gap": {
+        "no_visual_step": "Nothing in this pipeline captures the interface, so there is nothing to look at.",
+        "none_captured": "The interface was meant to be captured, but no view was."
+      }
+    },
+    "checks": {
+      "title": "Checks",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Project checks",
+        "reproduction": "Bug reproduction"
+      },
+      "state": {
+        "pass": "passed",
+        "fail": "failed",
+        "pending": "still running",
+        "inconclusive": "inconclusive"
+      }
+    },
+    "empty": {
+      "title": "Nothing to show yet",
+      "body": "This task has produced no result to read."
+    }
+  },
   "focus": {
     "board": "Board",
     "typeSubtitle": "{type} · focus view",
@@ -5568,6 +5788,7 @@
     "operation": {
       "provision": "Spin up",
       "teardown": "Tear down",
+      "teardown-verify": "Teardown check",
       "status": "Status check",
       "dispatch": "Spin up",
       "release": "Tear down",

@@ -1,5 +1,347 @@
 # @cat-factory/local-server
 
+## 0.109.2
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/orchestration@0.212.0
+  - @cat-factory/node-server@0.175.0
+  - @cat-factory/agents@0.112.6
+  - @cat-factory/gitlab@0.15.41
+  - @cat-factory/integrations@0.130.2
+  - @cat-factory/kernel@0.243.1
+  - @cat-factory/server@0.222.2
+  - @cat-factory/executor-harness@1.92.2
+
+## 0.109.1
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+  - @cat-factory/orchestration@0.211.0
+  - @cat-factory/node-server@0.174.0
+  - @cat-factory/agents@0.112.5
+  - @cat-factory/gitlab@0.15.40
+  - @cat-factory/integrations@0.130.1
+  - @cat-factory/server@0.222.1
+  - @cat-factory/executor-harness@1.92.2
+
+## 0.109.0
+
+### Minor Changes
+
+- f775c1d: Job tokens are scoped to the repos a run resolved, not the whole installation
+
+  A container dispatch's clone/push credential was a GitHub App token minted with no
+  `repository_ids`, so it reached every repository the workspace's installation covered. That made
+  the installation the blast radius of a fully compromised run, and the mitigation was advice
+  (scope the installation narrowly) rather than a mechanism. The narrowing mechanism already
+  existed and was proven on the mothership delegation path; this brings it to every dispatch.
+
+  `jobTokenRepoIds` collects the repos ONE job body names (the primary checkout plus fan-out
+  peers, the conflict-resolver's targeted peer, the merger's combined-diff siblings, and read-only
+  reference repos) and `buildDispatchTokenMint` turns them into `repository_ids`. That builder is
+  shared by both facades, which previously carried byte-identical copies of the "initiator PAT
+  first, else the deployment credential" decision: whose token and how wide are one question, so
+  they now have one implementation and cannot drift.
+
+  **Every path that hands a container a GitHub credential goes through it**, not just the step
+  executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the
+  deploy clone target each name the one repo they touch. That totality is held by the TYPE, not by
+  review. Supplying the run context is what makes a mint a dispatch mint, and a context must carry
+  `repoIds`, so a new dispatcher cannot ship without deciding its scope. Engine calls (`RepoFiles`
+  reads, the gate and merge clients) pass no context and stay installation-wide by design: they act
+  as the deployment, and nothing they do reaches a container.
+
+  Three dispositions are deliberate. A leg on a DIFFERENT installation is dropped rather than
+  requested: one job carries one token, so such a repo is unreachable either way, and naming it
+  would only make GitHub reject the mint. A scope that cannot be expressed as repo ids widens to
+  installation-wide rather than dropping a leg the harness is about to clone, since minting for the
+  parseable remainder would trade a data problem for a run that fails deep in a `git clone`. And a
+  dispatcher whose own lookup came back empty passes an EMPTY scope rather than none, because
+  "could not resolve my repos" and "I am not a dispatch" are opposite facts that an absent field
+  renders identically. Neither widening is silent: a `warn` naming the run plus the new
+  `dispatch.token_scope_widened` counter, because a security property degrading quietly reads
+  exactly like one holding.
+
+  What this does NOT narrow, both by construction: the token still carries `Contents: write` for
+  the repos it covers (App tokens cannot be branch-scoped), and an initiator's personal PAT is
+  unaffected, since `repository_ids` is an App-token mechanism with no PAT equivalent.
+  `allowInitiatorPat` remains what bounds that.
+
+  The mothership delegation endpoint takes the same scope. A node may now name `repositoryIds`,
+  which is INTERSECTED with the installation's App-linked projection server-side: asking narrows
+  and can never widen, nothing left in scope is the existing uniform 404, and a malformed ask falls
+  back to the full linked set rather than a partial one.
+
+  Worth reviewing: what a scoped mint changed about CACHING. `GitHubAppAuth` keyed its in-memory
+  token cache by installation id alone, which made a scoped entry unsafe to store (it would
+  over-grant a later engine call, and be under-granted by one), so scoped mints bypassed the cache
+  entirely. On the delegation path that was already true and cheap; on the standard dispatch path
+  it would have put an RSA signature plus a GitHub round trip on every step and every re-dispatch
+  epoch, where a warm process previously paid one mint per installation per hour. Both sides now
+  key by installation + sorted scope through one `InstallationTokenCache`, so a narrowed token
+  caches beside the unscoped one and neither can serve or poison the other. That cache also evicts
+  lapsed entries, which keying by scope made necessary: a map bounded by the installation count
+  became one bounded by the number of distinct repo SETS a long-running node dispatches over.
+
+  The dispatch also reorders: the auxiliary-checkout resolution moved INTO the parallel I/O wave
+  and the token mint moved out behind it, because the mint's scope is what that resolution
+  produces. One round trip left the wave as another entered it, and the ordering is pinned by a
+  test, so a later latency pass cannot re-parallelise the mint back to installation-wide.
+  `backend/docs/security-model.md` Layer 3 is updated, and the "job tokens are installation-wide"
+  known gap is closed.
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/server@0.222.0
+  - @cat-factory/node-server@0.173.0
+  - @cat-factory/contracts@0.243.0
+  - @cat-factory/orchestration@0.210.0
+  - @cat-factory/integrations@0.130.0
+  - @cat-factory/executor-harness@1.92.2
+  - @cat-factory/agents@0.112.4
+  - @cat-factory/gitlab@0.15.39
+
+## 0.108.1
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/executor-harness@1.92.2
+  - @cat-factory/agents@0.112.3
+  - @cat-factory/integrations@0.129.1
+  - @cat-factory/kernel@0.241.1
+  - @cat-factory/node-server@0.172.1
+  - @cat-factory/orchestration@0.209.1
+  - @cat-factory/server@0.221.1
+  - @cat-factory/gitlab@0.15.38
+
+## 0.108.0
+
+### Minor Changes
+
+- e7867db: Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
+
+  Everything the platform captured about a run was reachable only from a browser session. A consumer
+  whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+  pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
+  `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
+  pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
+  Getting a key at all still needed a browser.
+
+  Three additions, all `/api/v1`:
+
+  - **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
+    onto the pull request, composed on read by the same code, so the two can never disagree about
+    what a run proved. It answers for runs that never opened a pull request, and it does not consult
+    the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
+    pull request rather than about reading your own evidence back.
+  - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
+    artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
+    allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
+    never an empty list. The blob operation declares every media type it can answer with (the image
+    allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+    so a client generated from the spec can switch on the response honestly.
+  - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
+    that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
+    one link long), and revoking a key now revokes every key it minted, on this surface and in the
+    app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+  Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+  reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+  outlived its bytes, which is a storage fault rather than a bad request) and
+  `binary_artifact_storage_unconfigured`.
+
+  The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
+  run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,
+  served live), both rendered in the prose as well as carried in the JSON, and both built from the
+  deployment's public BACKEND url. Report payload version 5 → 6.
+
+  Worth knowing when upgrading:
+
+  - **The report shape is now part of the STABLE public surface.** It is served verbatim on
+    `/api/v1`, so from here it grows additively and never renames or retypes in place.
+  - **A new `created_by_key_id` column** on `public_api_keys` (D1 migration `0081`, its Drizzle
+    mirror, plus an index), which carries the provenance of a headless mint and is what the
+    revocation cascade follows. The app's key panel renders it, so a provisioned key no longer reads
+    as one whose minter is unknown.
+  - **The SDK chain learned binary responses.** An operation whose success body was neither JSON nor
+    SSE previously generated as a method that returned NOTHING; the IR now marks it `binary`, each
+    of the four transports hands the bytes back in its own idiom, and an unrecognised media type
+    fails generation instead of silently discarding a body.
+  - **A container wiring bug is fixed on both facades**: the HTTP layer's binary-artifact store
+    resolver was built from account settings while the engine's came from `CoreDependencies`, so an
+    override reached one side of the app and not the other.
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+  - @cat-factory/integrations@0.129.0
+  - @cat-factory/orchestration@0.209.0
+  - @cat-factory/server@0.221.0
+  - @cat-factory/node-server@0.172.0
+  - @cat-factory/agents@0.112.2
+  - @cat-factory/gitlab@0.15.37
+  - @cat-factory/executor-harness@1.92.0
+
+## 0.107.2
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+  - @cat-factory/orchestration@0.208.0
+  - @cat-factory/server@0.220.0
+  - @cat-factory/agents@0.112.1
+  - @cat-factory/gitlab@0.15.36
+  - @cat-factory/integrations@0.128.1
+  - @cat-factory/node-server@0.171.2
+  - @cat-factory/executor-harness@1.92.0
+
+## 0.107.1
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/agents@0.112.0
+  - @cat-factory/orchestration@0.207.0
+  - @cat-factory/server@0.219.0
+  - @cat-factory/kernel@0.239.0
+  - @cat-factory/integrations@0.128.0
+  - @cat-factory/gitlab@0.15.35
+  - @cat-factory/node-server@0.171.1
+  - @cat-factory/executor-harness@1.92.0
+
+## 0.107.0
+
+### Minor Changes
+
+- a675c63: MCP maturation slice 4: a declared tool server can now be TESTED, and the deployment's tool servers are
+  finally visible without reading its source.
+
+  Until now the only way to learn whether a wired MCP tool server actually works was to start a run and
+  read the agent's own prompt. Boot validation rules on the DECLARATION and a dispatch reports what it
+  DROPPED, but a server that survives both — servable harness, allowed transport, credential present —
+  could still be a dead url, a rotated token or a typo'd tool name, and every one of those surfaced as an
+  agent quietly doing worse work without the tool it was promised.
+
+  Two new `secrets.manage`-gated routes under `/workspaces/:ws`: `GET /tool-servers` lists every
+  registered server (which agent kinds get it, which harnesses can serve it, which credentials it asks
+  for by name, whether it can be probed at all), and `POST /tool-servers/:id/test` speaks `initialize` +
+  `tools/list` to it for real. The Infrastructure window's "Capability credentials" tab renders the
+  inventory with a Test button per row, above the credential checklist those credentials belong to.
+
+  What makes the verdict worth having is that the probe resolves credentials through the SAME composed
+  chain a dispatch uses: the per-workspace store in front of the deployment environment, per key, with
+  the reserved-key floor applied before the resolver is asked. So the answer is about THIS board rather
+  than about whoever set the deployment's variable, and the probe can never be the one path that resolves
+  a platform configuration variable and ships it to a third party. The result names a CAUSE rather than a
+  boolean, split by the fix each needs: a missing credential and a rejected one are different rows, and
+  "no answer at all" is kept apart from "answered with a status" because one is the network and the other
+  is usually the token or the path.
+
+  Three things it deliberately refuses rather than approximating. A `stdio` server runs inside the run
+  container, a loopback url means "beside the agent in its own container", and the backend is neither of
+  those places — so those rows say why instead of offering a button, because a probe that reached for the
+  nearest thing it could talk to would answer about the backend's own machine, and a SUCCESS there would
+  mislead more than a failure. The third is the `allowedTools` reconciliation: the probe is the first
+  thing in the platform that can check a declared tool name against reality (every other layer holds it
+  to a NAME pattern, which a well-formed typo passes), and when the server's tool list came back
+  paginated past the probe's page bound the check reports itself as unchecked rather than calling a
+  working tool missing.
+
+  A redirect is followed, and each hop is held to the transport rule and to the DECLARED ORIGIN while a
+  credential is riding. That matches what a run does rather than exceeding it: the Web platform removes
+  `Authorization` on a cross-origin redirect, so an agent's own MCP client reaches such a hop
+  unauthenticated, and a probe that forwarded the token would report on a request no run makes while
+  handing a workspace's credential to whatever the redirect names. The row names the origin change, so
+  the fix reads as the declaration naming the final url. A server needing no credential is followed
+  across origins as before.
+
+  Two smaller fixes ride along. `McpSecretRef` gains `usage`, the operator-facing note the credential
+  checklist has always had a field for and only the generative-integration half ever populated — so a
+  tool server's row can finally say which token type and scopes a key wants. And the checklist's READ was
+  documented as `secrets.manage`-gated in three places while its mount let every member's GET through:
+  `requireWorkspacePermission` passes GET/HEAD by design, so both surfaces now mount the
+  explicitly-named `requireWorkspacePermissionIncludingReads`, with a cross-runtime RBAC assertion each.
+  Both mount it on their OWN path patterns rather than `'*'`: a `'*'` mount inside a routed Hono
+  sub-app lands on `/workspaces/:workspaceId/*` and can refuse a sibling controller's routes, which is
+  survivable while only writes are gated and an outage once reads are.
+
+  `ServerContainer` gains `toolSecretResolver`, the composed credential chain itself, beside the
+  `toolSecretEnvironmentFallback` description it already carried; a facade that wires the chain now
+  surfaces both. `AgentKindRegistry` gains `allToolServers()`, the complement of
+  `kindsWithCapabilities()` and the only way to see a registration attached to no kind at all — a state
+  that previously passed every check while its credentials sat in the operator's checklist as keys no
+  dispatch would ever ask for. Kernel gains `isLoopbackMcpHttpUrl` beside `isAllowedMcpHttpUrl`, a
+  separate predicate on purpose: one rules on the scheme, the other on where the server lives.
+
+  No harness change, so no runner-image bump.
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/orchestration@0.206.0
+  - @cat-factory/server@0.218.0
+  - @cat-factory/node-server@0.171.0
+  - @cat-factory/contracts@0.239.0
+  - @cat-factory/agents@0.111.0
+  - @cat-factory/executor-harness@1.92.0
+  - @cat-factory/gitlab@0.15.34
+  - @cat-factory/integrations@0.127.1
+
 ## 0.106.2
 
 ### Patch Changes

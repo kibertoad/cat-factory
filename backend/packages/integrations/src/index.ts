@@ -259,7 +259,10 @@ export {
 } from './modules/environments/HttpEnvironmentProvider.js'
 export {
   isDeployStep,
+  isDisposeStep,
+  classifyTeardownProbe,
   DEPLOYER_AGENT_KIND,
+  DISPOSER_AGENT_KIND,
   ENVIRONMENT_BLOCK_TYPE,
 } from './modules/environments/environments.logic.js'
 
@@ -564,6 +567,18 @@ export {
   CAPABILITY_CREDENTIALS_CIPHER_INFO,
   type CapabilityCredentialsServiceDependencies,
 } from './modules/capabilityCredentials/CapabilityCredentialsService.js'
+export {
+  McpOAuthService,
+  MCP_OAUTH_CIPHER_INFO,
+  type McpAuthorizationRequest,
+  type McpOAuthServiceDependencies,
+} from './modules/mcpOAuth/McpOAuthService.js'
+export {
+  McpOAuthError,
+  MCP_OAUTH_TIMEOUT_MS,
+  discoverMcpOAuthEndpoints,
+  type McpOAuthEndpoints,
+} from './modules/mcpOAuth/mcpOAuthClient.js'
 export {
   ValidationConfigService,
   type ValidationConfigServiceDependencies,

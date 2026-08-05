@@ -14,6 +14,7 @@ import type {
   ChallengePrReviewFindingInput,
   PipelineStep,
   PullRequestMerger,
+  GateActor,
   StepReviewComment,
   IssueWritebackProvider,
   Logger,
@@ -22,6 +23,7 @@ import type {
   RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
+import type { PrVerificationReport } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
 import {
@@ -72,6 +74,7 @@ import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGate } from './InterviewGateController.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type {
   IterationCapChoice,
@@ -80,12 +83,7 @@ import type {
   BrainstormSession,
   BrainstormStage,
 } from '@cat-factory/kernel'
-import type {
-  BlockRepository,
-  ExecutionRepository,
-  PipelineRepository,
-  WorkspaceRepository,
-} from '@cat-factory/kernel'
+import type { BlockRepository, ExecutionRepository, WorkspaceRepository } from '@cat-factory/kernel'
 import type { Clock, IdGenerator, PreloadedBlocks } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import type { ReviewEffort } from '@cat-factory/kernel'
@@ -98,6 +96,7 @@ import type { SpendService } from '@cat-factory/spend'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { AdvanceOptions, AdvanceResult } from './advance.js'
 import type { ExecutionServiceDependencies } from './ExecutionServiceDependencies.js'
+import { createPipelineAdoption, type PipelineAdoption } from '../pipelines/pipelineAdoption.js'
 import { PrVerificationReportController } from './PrVerificationReportController.js'
 
 // The engine's injected-collaborator contract lives next door (a ~350-line declaration block
@@ -148,10 +147,39 @@ function buildPrReportController(
   })
 }
 
+/**
+ * The engine's logger, normalised. A helper rather than a `this.log` read, because a collaborator
+ * built mid-constructor captures the logger by VALUE into its own dependency literal, and `this.log`
+ * is assigned partway down: reading the field from a factory that runs before that line hands the
+ * collaborator `undefined` and turns its first best-effort warn into a `TypeError`. One normalisation
+ * site, reachable from anywhere in the construction sequence.
+ */
+function engineLogger(deps: ExecutionServiceDependencies): Logger {
+  return deps.logger ?? noopLogger
+}
+
+/**
+ * How a run resolves its pipeline: the workspace's stored row, else the catalog entry the board was
+ * never seeded with, ADOPTED so every other surface can see what ran
+ * (`pipelines/pipelineAdoption.ts`). A reusable operation pins its pipeline by id, so a board older
+ * than the registration would otherwise refuse to start a task it happily created.
+ *
+ * A sibling factory rather than an inline call for the reason {@link buildPrReportController} is
+ * one: the constructor is at its per-function line budget, and a budget is a split trigger.
+ */
+function buildPipelineAdoption(deps: ExecutionServiceDependencies): PipelineAdoption {
+  return createPipelineAdoption({
+    pipelineRepository: deps.pipelineRepository,
+    pipelineRegistry: deps.pipelineRegistry,
+    operationalMetrics: deps.operationalMetrics,
+    logger: deps.logger,
+  })
+}
+
 export class ExecutionService {
   private readonly workspaceRepository: WorkspaceRepository
   private readonly blockRepository: BlockRepository
-  private readonly pipelineRepository: PipelineRepository
+  private readonly pipelineAdoption: PipelineAdoption
   private readonly executionRepository: ExecutionRepository
   private readonly idGenerator: IdGenerator
   private readonly clock: Clock
@@ -281,7 +309,6 @@ export class ExecutionService {
     const {
       workspaceRepository,
       blockRepository,
-      pipelineRepository,
       executionRepository,
       idGenerator,
       clock,
@@ -323,11 +350,11 @@ export class ExecutionService {
     const runInitiatorScopeFn = runInitiatorScope ?? ((_initiatedBy, fn) => fn())
     this.workspaceRepository = workspaceRepository
     this.blockRepository = blockRepository
-    this.pipelineRepository = pipelineRepository
+    this.pipelineAdoption = buildPipelineAdoption(dependencies)
     this.executionRepository = executionRepository
     this.idGenerator = idGenerator
     this.clock = clock
-    this.stepGraph = new StepGraph(clock)
+    this.stepGraph = new StepGraph(clock, agentKindRegistry)
     // The task's merge POLICY (which preset governs a run) + the EVIDENCE behind it (settling the
     // run's merge track record when a human merges or declines), extracted as one collaborator so
     // neither concern re-accretes onto the engine.
@@ -366,7 +393,7 @@ export class ExecutionService {
     const runContext = buildRunContextAndAdmission(dependencies)
     this.contextBuilder = runContext.contextBuilder
     this.admission = runContext.admission
-    this.postMergeBoard = this.buildPostMergeBoard()
+    this.postMergeBoard = this.buildPostMergeBoard(dependencies)
     this.mergeResolver = new MergeResolver({
       blockRepository,
       notificationService,
@@ -376,6 +403,7 @@ export class ExecutionService {
     })
     this.companionController = new CompanionController({
       contextBuilder: this.contextBuilder,
+      agentKindRegistry,
       spend: spendService,
       idGenerator,
       previewStepModel: (ctx) => this.runDispatcher.previewStepModel(ctx),
@@ -465,7 +493,7 @@ export class ExecutionService {
     this.prMerger = pullRequestMerger
     this.notifications = notificationService
     this.issueWriteback = issueWriteback
-    this.log = logger ?? noopLogger
+    this.log = engineLogger(dependencies)
     this.pokeInitiativeLoop = pokeInitiativeLoop
     this.resolveWorkspaceModelDefault = resolveWorkspaceModelDefault
     this.stepDecisions = new StepDecisionController({
@@ -491,13 +519,14 @@ export class ExecutionService {
     // instance. The engine methods they reach into are passed BOUND, as with the gate windows.
     this.runActions = buildRunActionControllers({
       admission: this.admission,
+      agentKindRegistry: this.agentKindRegistry,
       blockRepository: this.blockRepository,
       clock: this.clock,
       contextBuilder: this.contextBuilder,
       events: this.events,
       executionRepository: this.executionRepository,
       idGenerator: this.idGenerator,
-      pipelineRepository: this.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       runStateMachine: this.runStateMachine,
       stepGraph: this.stepGraph,
       workRunner: this.workRunner,
@@ -536,6 +565,24 @@ export class ExecutionService {
   }
 
   /**
+   * The run's verification report, composed for a READER rather than published onto a pull
+   * request: the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
+   * such run, or when the run's block is gone.
+   *
+   * The SAME composition the PR body carries (see
+   * {@link PrVerificationReportController.composeForRun} for the three differences the read
+   * path makes, all of them about audience rather than content).
+   */
+  async composeVerificationReport(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<PrVerificationReport | null> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return null
+    return this.prVerificationReport.composeForRun(workspaceId, instance)
+  }
+
+  /**
    * Assemble the post-merge board controller. A method rather than a literal in the constructor
    * because everything it reads is already a field by the time it runs, so it needs no destructured
    * parameter threaded through — and the constructor is a god-function against its size budget.
@@ -571,10 +618,7 @@ export class ExecutionService {
       architectureBrainstormKind: this.architectureBrainstormKind,
       // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
       // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
-      interviewControllers: [
-        this.initiativeInterviewController,
-        this.docInterviewController,
-      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
+      interviewControllers: this.wiredInterviewGates,
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
@@ -582,15 +626,19 @@ export class ExecutionService {
     })
   }
 
-  private buildPostMergeBoard(): PostMergeBoardController {
+  private buildPostMergeBoard(deps: ExecutionServiceDependencies): PostMergeBoardController {
     // An explicit host literal, not `this`: the fields below are `private`, which makes the class
-    // structurally incompatible with the interface even from inside it.
+    // structurally incompatible with the interface even from inside it. The repository and the
+    // logger come off `deps` rather than off `this`, because this runs partway through the
+    // constructor: neither is an engine field by then (see {@link engineLogger}).
     const host: PostMergeBoardHost = {
       blockRepository: this.blockRepository,
-      pipelineRepository: this.pipelineRepository,
+      pipelineRepository: deps.pipelineRepository,
+      pipelineAdoption: this.pipelineAdoption,
       admission: this.admission,
       board: this.board,
       events: this.events,
+      logger: engineLogger(deps),
     }
     return new PostMergeBoardController(host, {
       // A system-initiated auto-start has no human present to unlock a personal credential, so it
@@ -657,6 +705,38 @@ export class ExecutionService {
     return this.docInterviewController
   }
 
+  /**
+   * Every interview gate this deployment actually wired. ONE list, because the engine's own step
+   * dispatch and {@link interviewGateFor} both have to enumerate the gates and a second copy is
+   * how they would come to disagree: the dispatcher would park a run on a gate the public decision
+   * surface then reports as unwired, which reads to an operator as a run stopped on nothing.
+   *
+   * Wiring a THIRD interviewer is still an edit here (a field on this class, fed from
+   * `reviewSubjects`); what this getter buys is that it is one edit rather than two.
+   */
+  private get wiredInterviewGates(): (InitiativeInterviewController | DocInterviewController)[] {
+    return [this.initiativeInterviewController, this.docInterviewController].filter(
+      (c): c is InitiativeInterviewController | DocInterviewController => !!c,
+    )
+  }
+
+  /**
+   * The interview gate wired for a step's `agentKind`, or undefined when this deployment wired
+   * none. The lookup a caller reaches for when it holds a PARKED STEP rather than a feature: the
+   * public decision surface answers "the interview this run is stopped on" and must not have to
+   * name which gate that is (the getters above are the per-feature reads, for a controller that
+   * already knows, and they keep the entity-typed return this one cannot have).
+   *
+   * Keyed exactly as the engine's own dispatch is, off the same {@link wiredInterviewGates} list.
+   * Note where that stops: admission reads the `interview-gate` TRAIT off the kind registry, so a
+   * deployment's own interviewer is counted as a park the moment it is REGISTERED, while being
+   * answerable here needs its controller WIRED as well. Registered but unwired is the honest 503
+   * the public surface reports, not a state this lookup can paper over.
+   */
+  interviewGateFor(agentKind: string): InterviewGate | undefined {
+    return this.wiredInterviewGates.find((c) => c.agentKind === agentKind)
+  }
+
   private requireWorkspace(workspaceId: string) {
     return requireWorkspace(this.workspaceRepository, workspaceId)
   }
@@ -682,7 +762,11 @@ export class ExecutionService {
     hasPersonalSubscription: HasPersonalSubscription = () => false,
   ): Promise<SubscriptionVendor[]> {
     const block = await this.requireBlock(workspaceId, blockId)
-    const pipeline = await this.pipelineRepository.get(workspaceId, pipelineId)
+    // Through adoption's READ-ONLY resolve, not the bare row: this runs on the start REQUEST, and a
+    // board that has not adopted the pipeline yet has no row, so a row-only read answered "no
+    // agent kinds" and the gate concluded the run needed no personal credential. It would then
+    // adopt and start ungated.
+    const pipeline = await this.pipelineAdoption.resolveDefinition(workspaceId, pipelineId)
     return this.resolveIndividualVendors(
       workspaceId,
       block.modelId,
@@ -1237,14 +1321,21 @@ export class ExecutionService {
     return this.stepDecisions.resolveDecision(workspaceId, executionId, decisionId, choice)
   }
 
-  /** Approve a step's gated proposal (optionally replacing it with the human's edit). */
+  /**
+   * Approve a step's gated proposal (optionally replacing it with the human's edit).
+   *
+   * `actor` is REQUIRED on all three gate resolutions rather than optional, so an entry point that
+   * forgets to supply the acting identity fails to typecheck instead of silently resolving a gate
+   * that names its approvers as though nobody were named. See `GateActor` / `refuseGateResolution`.
+   */
   approveStep(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     opts: { proposal?: string } = {},
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.approveStep(workspaceId, executionId, approvalId, opts)
+    return this.stepDecisions.approveStep(workspaceId, executionId, approvalId, opts, actor)
   }
 
   /** Request changes on a step's gated proposal; the step re-runs with the feedback folded in. */
@@ -1253,8 +1344,15 @@ export class ExecutionService {
     executionId: string,
     approvalId: string,
     review: { feedback?: string; comments?: StepReviewComment[] },
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.requestStepChanges(workspaceId, executionId, approvalId, review)
+    return this.stepDecisions.requestStepChanges(
+      workspaceId,
+      executionId,
+      approvalId,
+      review,
+      actor,
+    )
   }
 
   /** Reject a step's gated proposal; the run stops with a `rejected` failure. */
@@ -1262,9 +1360,10 @@ export class ExecutionService {
     workspaceId: string,
     executionId: string,
     approvalId: string,
-    reason?: string,
+    reason: string | undefined,
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.rejectStep(workspaceId, executionId, approvalId, reason)
+    return this.stepDecisions.rejectStep(workspaceId, executionId, approvalId, reason, actor)
   }
 
   /** Dispatch the human-review gate's fixer from a human's freeform instructions. */

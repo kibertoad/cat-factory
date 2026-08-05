@@ -10,7 +10,7 @@ import type { Hono } from 'hono'
 import type { AppEnv } from '../../../http/env.js'
 import { runWithInitiator } from '../../../github/runInitiatorContext.js'
 import { buildDecisionList } from './projection.js'
-import { failureBody, gateDecisionAction } from './scope.js'
+import { failureBody, gateDecisionAction, publicApiGateActor } from './scope.js'
 
 // The GENERIC approval gate — "pause a run until a human approves" — plus the decisions an agent
 // raises mid-work. Both are answered by an id the caller read from `GET .../decisions`, and both
@@ -41,9 +41,13 @@ export function registerApprovalDecisionRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
-        .executionService.approveStep(workspaceId, scoped.execution.id, approvalId, {
-          proposal: c.req.valid('json').proposal,
-        }),
+        .executionService.approveStep(
+          workspaceId,
+          scoped.execution.id,
+          approvalId,
+          { proposal: c.req.valid('json').proposal },
+          publicApiGateActor(gated.auth),
+        ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -59,9 +63,13 @@ export function registerApprovalDecisionRoutes(app: Hono<AppEnv>): void {
     await runWithInitiator({ workspaceId, initiatedBy: scoped.execution.initiatedBy }, () =>
       c
         .get('container')
-        .executionService.requestStepChanges(workspaceId, scoped.execution.id, approvalId, {
-          feedback: c.req.valid('json').feedback,
-        }),
+        .executionService.requestStepChanges(
+          workspaceId,
+          scoped.execution.id,
+          approvalId,
+          { feedback: c.req.valid('json').feedback },
+          publicApiGateActor(gated.auth),
+        ),
     )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })
@@ -82,6 +90,7 @@ export function registerApprovalDecisionRoutes(app: Hono<AppEnv>): void {
         scoped.execution.id,
         approvalId,
         c.req.valid('json').reason,
+        publicApiGateActor(gated.auth),
       )
     return c.json(await buildDecisionList(c, workspaceId, scoped), 200)
   })

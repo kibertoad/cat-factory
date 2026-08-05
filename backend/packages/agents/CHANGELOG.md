@@ -1,5 +1,209 @@
 # @cat-factory/agents
 
+## 0.112.6
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/kernel@0.243.1
+  - @cat-factory/prompt-fragments@0.15.71
+
+## 0.112.5
+
+### Patch Changes
+
+- Updated dependencies [d69115d]
+  - @cat-factory/contracts@0.244.0
+  - @cat-factory/kernel@0.243.0
+  - @cat-factory/prompt-fragments@0.15.70
+
+## 0.112.4
+
+### Patch Changes
+
+- Updated dependencies [f775c1d]
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/kernel@0.242.0
+  - @cat-factory/contracts@0.243.0
+  - @cat-factory/prompt-fragments@0.15.69
+
+## 0.112.3
+
+### Patch Changes
+
+- 7cf3e70: Refresh the dependency tree and re-roll both runner images.
+
+  **Registry deps** (direct ranges plus a full lockfile re-resolution, so transitives move to the newest
+  release each declared range already admits):
+
+  - **AI SDK family** (held to the major that pairs with `workers-ai-provider`): `ai@^7.0.47 → ^7.0.51`,
+    `@ai-sdk/anthropic`/`@ai-sdk/openai@^4.0.27 → ^4.0.29`, `@ai-sdk/openai-compatible@^3.0.20 → ^3.0.22`,
+    `@ai-sdk/provider@^4.0.4 → ^4.0.5`, `@ai-sdk/amazon-bedrock@^5.0.40 → ^5.0.42`.
+  - **Runtime deps**: `hono@^4.12.33 → ^4.13.0`, `@hono/node-server@^2.0.12 → ^2.1.0`,
+    `pg-boss@^12.26.4 → ^12.27.0`, `undici@^8.9.0 → ^8.10.0`, `ws@^8.21.1 → ^8.21.2`,
+    `@aws-sdk/client-s3@^3.1101.0 → ^3.1102.0`, `nuxt@^4.5.0 → ^4.5.1`.
+  - **Tooling**: `oxlint@^1.76.0 → ^1.77.0`, `oxfmt@^0.61.0 → ^0.62.0`, `publint@^0.3.22 → ^0.3.23`,
+    `vitest@^4.1.8 → ^4.1.10`, `@cloudflare/workers-types@^5.20260801.1 → ^5.20260804.1`.
+
+  **Runner images** (`@cat-factory/executor-harness` 1.92.1, `@cat-factory/deploy-harness` 0.2.10, with
+  all six pinned tags synced):
+
+  - Executor: Claude Code `2.1.220 → 2.1.221`, and the two lockstep Pi extensions
+    `rpiv-todo`/`rpiv-web-tools` `2.3.1 → 2.4.0`. Pi stays at `0.83.0` and Codex at `0.146.0`, both
+    already the latest. Claude Code `2.1.222` exists but was published inside the release-age window, so
+    `2.1.221` is the newest version the supply-chain rule admits.
+  - Deploy: `kubectl v1.36.3`, `helm v4.2.3` and `kustomize v5.8.1` are all already the latest, so the
+    image moves only for the base re-pin below.
+  - Both: the `node:26-trixie-slim` base re-pinned to the current multi-arch index digest.
+
+  No `minimumReleaseAgeExclude` entries were added: every version above already satisfies the gate.
+
+  **Majors**: none were available this sweep except `typescript@6 → 7` for the frontend, which stays on 6
+  for the same reason as last time. `vue-tsc@3.3.9` still resolves its compiler through
+  `require.resolve('typescript/lib/tsc')`, and TypeScript 7's `exports` map publishes no such entry, so
+  the frontend typecheck would fail to resolve at all.
+
+- Updated dependencies [7cf3e70]
+  - @cat-factory/kernel@0.241.1
+
+## 0.112.2
+
+### Patch Changes
+
+- Updated dependencies [e7867db]
+- Updated dependencies [00c4d94]
+  - @cat-factory/contracts@0.242.0
+  - @cat-factory/kernel@0.241.0
+  - @cat-factory/prompt-fragments@0.15.68
+
+## 0.112.1
+
+### Patch Changes
+
+- Updated dependencies [c5a1a16]
+  - @cat-factory/contracts@0.241.0
+  - @cat-factory/kernel@0.240.0
+  - @cat-factory/prompt-fragments@0.15.67
+
+## 0.112.0
+
+### Minor Changes
+
+- dd90c1e: A deployment can register its own REWORK PAIR: a producer, and a companion that grades its
+  output and loops that producer back for automatic rework below the step's threshold.
+
+  The companion catalog was a module-global `Map` of four built-ins, so the only way to express
+  "my producer, reviewed and bounced below a bar" was to reach for a judge, a different machine.
+  A judge scores against a rubric and disposes (advance / park / bounce / fail); a companion drives
+  the producer's own bounded rework budget and only then involves a human. The workaround got the
+  scoring and lost the loop.
+
+  The pairing now lives on `AgentKindRegistry` (`registerCompanion`), beside traits, skills, tool
+  servers and variants, rather than on a sixth registry: a companion is a relationship BETWEEN
+  agent kinds. The built-in catalog is pre-loaded, so registering one adds rather than replaces,
+  and module identity stops mattering for a separately-published extension package.
+
+  Two things a reviewer should look at. The free lookups take the registry OPTIONALLY and fall
+  back to the built-ins, copying `isGatableKind`, which means a call site that omits it silently
+  sees built-ins only, so every engine site that could meet a deployment's pair now threads it
+  (dispatch routing, the rework loop's producer search, the step-gating cascade, run-start
+  threshold seeding, pipeline-shape validation, the container job body, the prompt). And the
+  pairing is registered SEPARATELY from the kind, so the snapshot projection asks the registry
+  rather than reading a kind's own definition, which would have missed every one.
+
+  The SPA learns a custom pairing from the snapshot (`customAgentKinds[].companionTargets`) so the
+  builder renders it as an "add companion" toggle on its producer rather than a placeable palette
+  block that pipeline validation would then refuse on save. Built-in pairings win on collision: a
+  deployment cannot silently re-point `coder` at its own reviewer and change what every stock
+  pipeline does.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/kernel@0.239.0
+  - @cat-factory/prompt-fragments@0.15.66
+
+## 0.111.0
+
+### Minor Changes
+
+- a675c63: MCP maturation slice 4: a declared tool server can now be TESTED, and the deployment's tool servers are
+  finally visible without reading its source.
+
+  Until now the only way to learn whether a wired MCP tool server actually works was to start a run and
+  read the agent's own prompt. Boot validation rules on the DECLARATION and a dispatch reports what it
+  DROPPED, but a server that survives both — servable harness, allowed transport, credential present —
+  could still be a dead url, a rotated token or a typo'd tool name, and every one of those surfaced as an
+  agent quietly doing worse work without the tool it was promised.
+
+  Two new `secrets.manage`-gated routes under `/workspaces/:ws`: `GET /tool-servers` lists every
+  registered server (which agent kinds get it, which harnesses can serve it, which credentials it asks
+  for by name, whether it can be probed at all), and `POST /tool-servers/:id/test` speaks `initialize` +
+  `tools/list` to it for real. The Infrastructure window's "Capability credentials" tab renders the
+  inventory with a Test button per row, above the credential checklist those credentials belong to.
+
+  What makes the verdict worth having is that the probe resolves credentials through the SAME composed
+  chain a dispatch uses: the per-workspace store in front of the deployment environment, per key, with
+  the reserved-key floor applied before the resolver is asked. So the answer is about THIS board rather
+  than about whoever set the deployment's variable, and the probe can never be the one path that resolves
+  a platform configuration variable and ships it to a third party. The result names a CAUSE rather than a
+  boolean, split by the fix each needs: a missing credential and a rejected one are different rows, and
+  "no answer at all" is kept apart from "answered with a status" because one is the network and the other
+  is usually the token or the path.
+
+  Three things it deliberately refuses rather than approximating. A `stdio` server runs inside the run
+  container, a loopback url means "beside the agent in its own container", and the backend is neither of
+  those places — so those rows say why instead of offering a button, because a probe that reached for the
+  nearest thing it could talk to would answer about the backend's own machine, and a SUCCESS there would
+  mislead more than a failure. The third is the `allowedTools` reconciliation: the probe is the first
+  thing in the platform that can check a declared tool name against reality (every other layer holds it
+  to a NAME pattern, which a well-formed typo passes), and when the server's tool list came back
+  paginated past the probe's page bound the check reports itself as unchecked rather than calling a
+  working tool missing.
+
+  A redirect is followed, and each hop is held to the transport rule and to the DECLARED ORIGIN while a
+  credential is riding. That matches what a run does rather than exceeding it: the Web platform removes
+  `Authorization` on a cross-origin redirect, so an agent's own MCP client reaches such a hop
+  unauthenticated, and a probe that forwarded the token would report on a request no run makes while
+  handing a workspace's credential to whatever the redirect names. The row names the origin change, so
+  the fix reads as the declaration naming the final url. A server needing no credential is followed
+  across origins as before.
+
+  Two smaller fixes ride along. `McpSecretRef` gains `usage`, the operator-facing note the credential
+  checklist has always had a field for and only the generative-integration half ever populated — so a
+  tool server's row can finally say which token type and scopes a key wants. And the checklist's READ was
+  documented as `secrets.manage`-gated in three places while its mount let every member's GET through:
+  `requireWorkspacePermission` passes GET/HEAD by design, so both surfaces now mount the
+  explicitly-named `requireWorkspacePermissionIncludingReads`, with a cross-runtime RBAC assertion each.
+  Both mount it on their OWN path patterns rather than `'*'`: a `'*'` mount inside a routed Hono
+  sub-app lands on `/workspaces/:workspaceId/*` and can refuse a sibling controller's routes, which is
+  survivable while only writes are gated and an outage once reads are.
+
+  `ServerContainer` gains `toolSecretResolver`, the composed credential chain itself, beside the
+  `toolSecretEnvironmentFallback` description it already carried; a facade that wires the chain now
+  surfaces both. `AgentKindRegistry` gains `allToolServers()`, the complement of
+  `kindsWithCapabilities()` and the only way to see a registration attached to no kind at all — a state
+  that previously passed every check while its credentials sat in the operator's checklist as keys no
+  dispatch would ever ask for. Kernel gains `isLoopbackMcpHttpUrl` beside `isAllowedMcpHttpUrl`, a
+  separate predicate on purpose: one rules on the scheme, the other on where the server lives.
+
+  No harness change, so no runner-image bump.
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/contracts@0.239.0
+  - @cat-factory/prompt-fragments@0.15.65
+
 ## 0.110.9
 
 ### Patch Changes

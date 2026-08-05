@@ -1,5 +1,232 @@
 # @cat-factory/sdk
 
+## 0.13.0
+
+### Minor Changes
+
+- bac6776: Follow-up triage and interview-gate decisions over the public API
+
+  `/api/v1` answered every park a pipeline can carry except three. Two of those were surfaces nobody
+  had built (`docs/initiatives/public-api-additions.md` found them while landing the rest, and left
+  them unranked); this lands both, leaving `human-review` as the only ❌ row, and that one is
+  unanswerable by construction, since its answer is a person approving the pull request on the VCS
+  host rather than an API call.
+
+  **Follow-up triage** (`…/decisions/follow-ups/items/:itemId/{file,send-back,answer,dismiss}`) is the
+  first decision here that is not a park: the Coder streams forward-looking items while it is still
+  running, so the projection lists them whenever any item is `pending` rather than once the run is
+  `blocked`. An integration that triages as they arrive never sees the run stop at all.
+
+  **Interview gates** (`…/decisions/interview/{answer,continue,proceed}`) are ONE route set for every
+  interviewer, keyed by run alone: which interviewer is asking is a property of the parked step, so
+  the server resolves it and the decision's `stepKind` reports it. That needed a new seam: the two
+  built-in gates store their Q&A on entities belonging to their own features, so `InterviewGateKind`
+  now projects a kind-neutral `InterviewView` (the questions and the round budget, deliberately not
+  the brief each one converges on), reached through the narrow `InterviewGate` interface rather than
+  the entity-generic controller. A third interviewer implements `view` and needs no route, projection
+  or decision kind of its own; it does still wire its controller, since an interview gate is built
+  from its feature's own store rather than constructed by a registry. Registered-but-unwired is a
+  real state and reports as one: admission counts the park (it reads the trait), the projection lists
+  nothing, and the routes 503 naming the kind. Its question `status` is derived, not stored: one gate
+  keeps an explicit `dismissed` marker and the other has only the answer, so one derivation is what
+  lets a caller read both through one shape.
+
+  Worth reviewing, because it is a behaviour change rather than an addition: **an interview gate is now
+  a park surface the start rule can see**, read off the step kind's `interview-gate` trait. That closes
+  a hole in the wrong direction: an interviewer is an INLINE step, so a pipeline built out of
+  interview steps satisfied the inline-only rule and was reported `headlessStartable` while every run
+  of it stopped on the first batch of questions. No shipped preset changes hands (`pl_initiative` and
+  `pl_document` both carry a later human gate and were already admitted as parking on it); what
+  changes is that the refusal names the interview, and that a pipeline whose only park is the
+  interview is finally refused for a `write` key.
+
+  **Follow-up triage is deliberately NOT added to that rule**, and the trade-off is stated in
+  `backend/docs/public-api.md` rather than left to be discovered: the companion is on by default on
+  every Coder step, so counting it would make `decide` mandatory for all board work that builds
+  anything and take board starts away from every live `write` key at once. The park now has an answer
+  path, so a run that stops there is recoverable with a `decide` key instead of being app-only.
+
+  Also noted rather than fixed, in the same three places a reader would look: an unbounded human-wait
+  GATE a deployment registers itself is invisible to the start rule, because a gate declares
+  `pollExhaustion` on the object its factory builds from an engine context and nothing can read that
+  at HTTP request time. Such a pipeline is admitted for a `write` key and then parks with nothing on
+  this surface able to name it. The tracker ranks the fix (declare `pollExhaustion` at registration
+  and read the registry, which also retires the hand-kept `HUMAN_WAIT_GATE_KINDS` constant) as its own
+  slice, since it changes the `GateRegistry` seam.
+
+  Public API surface version `1.10.0`, additive: two new decision kinds (`follow-ups`, `interview`) and
+  seven endpoints, all `decide`-scoped.
+
+## 0.12.0
+
+### Minor Changes
+
+- e7867db: Run evidence and key provisioning on `/api/v1`, and a trajectory link on the PR report
+
+  Everything the platform captured about a run was reachable only from a browser session. A consumer
+  whose job is to JUDGE a run (a trial harness deciding whether to accept a change, an evaluation
+  pipeline scoring a fleet) could scrape the fenced JSON block out of a pull-request body and read
+  `/api/v1/debug/*`, and that was all: the captured screenshots were unreachable, and a run with no
+  pull request (a headless job, a run that failed before it pushed) had no evidence surface at all.
+  Getting a key at all still needed a browser.
+
+  Three additions, all `/api/v1`:
+
+  - **`GET /runs/:runId/report`** serves the engine's verification report: the SAME bundle it writes
+    onto the pull request, composed on read by the same code, so the two can never disagree about
+    what a run proved. It answers for runs that never opened a pull request, and it does not consult
+    the `publishPrVerificationReport` opt-out, which is a statement about writing onto someone else's
+    pull request rather than about reading your own evidence back.
+  - **`GET /runs/:runId/artifacts`** and **`GET /artifacts/:artifactId/blob`** list a run's captured
+    artifacts and stream their bytes, at `read` scope, with the content type clamped to the image
+    allow-list exactly as the session-authed route does. An account with no blob backend gets a 503,
+    never an empty list. The blob operation declares every media type it can answer with (the image
+    allow-list plus an `application/octet-stream` fallback) rather than one standing in for the rest,
+    so a client generated from the spec can switch on the response honestly.
+  - **`GET|POST|DELETE /keys`** provisions keys headlessly at `admin` scope. Two enforced bounds make
+    that safe: a key minted here can never reach the `admin` rung minting requires (so the chain is
+    one link long), and revoking a key now revokes every key it minted, on this surface and in the
+    app alike. Otherwise a leaked provisioning key would survive its own revocation.
+
+  Refusals across the three evidence reads carry `error.details.reason`, so causes needing different
+  reactions stay apart: `run_not_found`, `artifact_not_found`, `artifact_blob_missing` (the row
+  outlived its bytes, which is a storage fault rather than a bad request) and
+  `binary_artifact_storage_unconfigured`.
+
+  The **PR verification report** gained the links a machine needs: `observability.trajectoryUrl` (the
+  run's tool calls in the order the agents made them) and `observability.reportUrl` (this report,
+  served live), both rendered in the prose as well as carried in the JSON, and both built from the
+  deployment's public BACKEND url. Report payload version 5 → 6.
+
+  Worth knowing when upgrading:
+
+  - **The report shape is now part of the STABLE public surface.** It is served verbatim on
+    `/api/v1`, so from here it grows additively and never renames or retypes in place.
+  - **A new `created_by_key_id` column** on `public_api_keys` (D1 migration `0081`, its Drizzle
+    mirror, plus an index), which carries the provenance of a headless mint and is what the
+    revocation cascade follows. The app's key panel renders it, so a provisioned key no longer reads
+    as one whose minter is unknown.
+  - **The SDK chain learned binary responses.** An operation whose success body was neither JSON nor
+    SSE previously generated as a method that returned NOTHING; the IR now marks it `binary`, each
+    of the four transports hands the bytes back in its own idiom, and an unrecognised media type
+    fails generation instead of silently discarding a body.
+  - **A container wiring bug is fixed on both facades**: the HTTP layer's binary-artifact store
+    resolver was built from account settings while the engine's came from `CoreDependencies`, so an
+    override reached one side of the app and not the other.
+
+## 0.11.0
+
+### Minor Changes
+
+- c5a1a16: Per-step gate configuration: approver policies, approval quorums, and gate-declared settings
+
+  `Pipeline.gates: boolean[]` said a step paused for "a human" and nothing else. There was nowhere to
+  say which humans, how many of them, or what a registered gate's own knobs should be for this
+  particular step — the built-in gates read their attempt budgets and time windows off the
+  workspace-wide merge preset, and a deployment's own gate had nowhere to put its parameters at all.
+
+  A step now carries `stepOptions.gateConfig` (the extensible per-step bag, so no column and no
+  migration on either runtime), with two halves. The platform owns `approvers` and `minApprovals`: who
+  may resolve the human gate, and how many DISTINCT people must, both snapshotted onto the approval
+  when the gate is raised so an edit to the pipeline cannot move the bar under the people already
+  counted toward it. The GATE owns `fields`, declared on its registration
+  (`register(kind, factory, { configFields })`) as descriptor fields — one declaration driving the
+  save-time validation, the run-start re-validation and the authoring form the builder renders, so a
+  registered gate needs no frontend change to become configurable. The built-ins declare their own
+  (`maxAttempts`, `watchWindowMinutes`, `graceMinutes`) instead of the engine hard-coding them.
+
+  Behaviour changes worth reviewing. The approver policy governs all three resolutions, not just
+  approve: a gate the wrong person can reject is not a gate. A workspace admin always passes a policy
+  (they can cancel the run or edit the pipeline anyway, and refusing them would deadlock a gate whose
+  named approvers have left). A machine key or an auth-disabled caller is refused by any policy — a
+  shared credential is not one of the people a policy named — which also means a quorum above one
+  cannot be met on a deployment running with auth off, since counting distinct approvals needs
+  identities that deployment does not have. All of this is additive: a gate with no config behaves
+  byte-for-byte as it did.
+
+  A quorum votes on ONE artifact, so only the approval that CLEARS the gate may carry a `proposal`
+  edit. An edit on an earlier approval is refused (`proposal_not_editable_until_quorum`) rather than
+  silently rewriting the text under the people already counted toward the bar; the SPA withholds the
+  affordance and says why. Both raise sites for the human gate now go through one `buildStepApproval`
+  builder, so a gated COMPANION step honours the policy and quorum its step configured.
+
+  Public API (`/api/v1`, surface version now `1.9.0`, additive): the `approval-gate` decision projects
+  `requiredApprovals` and `recordedApprovals`, because a quorum makes `approve` legitimately not
+  advance the run and without the tally a caller could not tell that from a failed call.
+
+  Internal break, per the pre-1.0 rule: `ExecutionService.approveStep` / `requestStepChanges` /
+  `rejectStep` now require a `GateActor`. Required rather than optional so an entry point that forgets
+  to supply the acting identity fails to typecheck, instead of silently resolving a gate that names
+  its approvers as though it named nobody.
+
+  Design record: `backend/docs/adr/0038-per-step-gate-config.md` (supersedes the
+  `extensible-custom-gate-config` initiative tracker, removed).
+
+## 0.10.0
+
+### Minor Changes
+
+- 289b3de: Disposer step, and a teardown that is proved rather than assumed
+
+  A run's PR asserts a three-leg proof — the test environment came up, evidence was captured against
+  it, and it was torn down again — and the third leg had two problems.
+
+  Nothing closed it inside the run. Teardown happened only on the TTL sweep, a manual Destroy, a
+  `human-test` resolution, or a re-provision supersede. The sweep fires long after the last step
+  settled, so the report was published saying the environment was still live and corrected later
+  through a back-channel, and only where a provisioning log is retained. TTL is a backstop; it
+  cannot be a proof.
+
+  Worse, the teardowns that did happen were never checked. Success was recorded whenever
+  `provider.teardown()` returned without throwing, which is a different fact from the environment
+  being gone: `HttpEnvironmentProvider` reports `torn_down` unconditionally, so a manifest with no
+  `teardown:` request destroys nothing and still reports success, and a Kubernetes namespace
+  `DELETE` returns while the namespace is still `Terminating`. The section could therefore render a
+  green tick about an environment that was still running and still billing.
+
+  So teardown now has two halves. A new optional `EnvironmentProvider.confirmTeardown` re-probes
+  after the destroy call and the result is recorded as its own `teardown-verify` log row; only a
+  probe that positively finds the environment gone counts as a reclaim. This is deliberately not
+  folded into `status()`, whose implementations are all written to describe a LIVE environment — the
+  generic provider with no `status:` template answers `ready` forever, and the compose mapping reads
+  an empty project as `failed`, both of which are exactly inverted as teardown verdicts. The four
+  outcomes stay distinct because each needs a different person: confirmed, still standing (the
+  teardown was a no-op — fix the config and reclaim by hand), unverifiable (the provider has no way
+  to tell you, and no retry will change that), and unconfirmed (transient; the next sweep re-probes).
+
+  And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
+  its author places it — after the automated tester, or after a human has finished with the live
+  URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+  recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
+  seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+  Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+  each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+  Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+  frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+  after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+  environment the run never provisioned and recorded it as the frame's clean reclaim.
+
+  The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+  ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+  MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+  client decodes the new row as a plain string rather than failing.
+
+  One ordering detail is worth understanding, because getting it wrong made the whole feature
+  unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+  teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+  Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+  publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+  Both writes and the notification therefore happen in one method that takes the confirmation, and
+  the regression test asserts the row count at hook time rather than the final rows, since only that
+  can see the order.
+
+  Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
+  because a missing verify row is treated as "not proved" rather than as a pass, runs whose
+  teardowns predate this change will report unconfirmed rather than confirmed. That is a correction,
+  but a visible one. And the confirmation applies to every teardown path, not just the new step, so
+  a deployment whose provider config makes teardown a silent no-op will start being told so.
+
 ## 0.9.0
 
 ### Minor Changes

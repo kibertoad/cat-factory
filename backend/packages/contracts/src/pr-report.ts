@@ -22,14 +22,24 @@ import { vcsProviderSchema } from './routes/auth.js'
 // `docs/initiatives/pr-verification-report.md` for the form/shape decisions and
 // `@cat-factory/kernel`'s `domain/pr-report.ts` for the marker-delimited splice that keeps
 // the write idempotent across re-runs and retries.
+//
+// SINCE THIS SHAPE IS ALSO SERVED AT `GET /api/v1/runs/:runId/report`, it is part of the STABLE
+// public surface: it grows by ADDITION (a new section, a new optional field, a new enum member)
+// and never by renaming, retyping or removing in place. That is a tighter rule than the one this
+// schema shipped under, and deliberately so: a consumer that was scraping the fenced block out
+// of a PR body was already depending on it, and publishing the endpoint only made that
+// dependency honest.
 // ---------------------------------------------------------------------------
 
 /**
- * The wire version of the report payload. Bumped when the JSON shape changes in a way an
- * external consumer must notice. Backwards compatibility is a non-goal (see CLAUDE.md), so
- * a bump means "re-read the schema", not "a compatibility shim exists".
+ * The wire version of the report payload. Bumped when the shape gains something an external
+ * consumer would want to notice.
+ *
+ * It is NOT a compatibility switch and never gates two shapes at once: the surface is additive
+ * (see the header), so a bump means "there is more here than there was", and a consumer written
+ * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 5
+export const PR_VERIFICATION_REPORT_VERSION = 6
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -217,12 +227,28 @@ export type PrReportValidationCommand = v.InferOutput<typeof prReportValidationC
  *
  * `absent` splits the causes that need different reactions, per the report's governing rule: a
  * service that configured no checks is a deployment gap, a step that never got that far is a run
- * outcome, and an older runner image that reports nothing is neither.
+ * outcome, an older runner image that reports nothing is neither, and a configuration the
+ * platform could not READ is a fourth (see {@link PrReportValidation.configUnreadable}).
  */
 export const prReportValidationSchema = v.object({
   status: prReportSectionStatusSchema,
   /** Says WHY the section is empty when `status` is `absent` — never a bare blank. */
   note: v.optional(v.nullable(v.string())),
+  /**
+   * Set when a dispatch on this run could not READ the service's validation configuration, so it
+   * ran with no checks and no dependency install without anything being unconfigured.
+   *
+   * It is its own field rather than a shading of `note` because the two readings need different
+   * REACTIONS: "no checks configured" is answered by configuring some, and this is answered by
+   * looking at the config store (or, on a mothership node, at the link to it). Reporting the
+   * second as the first is a fabricated fact about somebody's setup, which is the one thing this
+   * report exists to stop.
+   *
+   * Independent of `status`: a run whose PR-opening dispatch validated normally can still carry a
+   * later dispatch whose read failed, and a reader of a `reported` section deserves to know the
+   * evidence below did not come from every dispatch that followed it.
+   */
+  configUnreadable: v.optional(v.nullable(v.boolean())),
   /** Whether every command in the recorded attempt exited 0 (⇒ the PR was allowed to open). */
   passed: v.optional(v.nullable(v.boolean())),
   /** The agent kind of the step that ran the checks, so a reader knows which dispatch this is. */
@@ -392,6 +418,15 @@ export const prReportEnvironmentTimelineSchema = v.object({
    * environment does not read as a fleet of them.
    */
   teardownFailures: v.number(),
+  /**
+   * How many environments the run stood up whose teardown call SUCCEEDED but whose follow-up
+   * probe did not confirm they are gone. Counted separately from {@link teardownFailures}
+   * because the two are opposite failures of knowledge: a teardown failure is a provider that
+   * said no, this is a provider that said yes and could not be taken at its word. Zero on a
+   * clean, verified reclaim — and zero also when nothing was torn down at all, which is why it
+   * is read beside the teardown verdict rather than on its own.
+   */
+  teardownsUnconfirmed: v.number(),
 })
 export type PrReportEnvironmentTimeline = v.InferOutput<typeof prReportEnvironmentTimelineSchema>
 
@@ -471,7 +506,16 @@ export type PrReportEnvironmentEvidence = v.InferOutput<typeof prReportEnvironme
  *
  * `teardown` prefers the provisioning log's RECORDED attempts, per environment identity, and
  * falls back to the run's live step projection only when there is no log to read:
- *  - `confirmed`      — every environment the run stood up was reclaimed.
+ *  - `confirmed`      — every environment the run stood up was reclaimed, and an INDEPENDENT
+ *                       probe after each teardown found it gone. The only state that earns a
+ *                       tick, because it is the only one backed by an observation rather than
+ *                       by a provider call that returned without complaint.
+ *  - `unconfirmed`    — every environment was torn down, but at least one teardown could not be
+ *                       VERIFIED: the probe found it still standing, could not run, or could not
+ *                       settle the question. Distinct from `confirmed` because a provider whose
+ *                       teardown is a declared no-op reports success having destroyed nothing,
+ *                       and distinct from `pending` because the platform did do its part; see
+ *                       {@link teardownConfirmationSchema} for which of the causes applies.
  *  - `pending`        — at least one is still standing (the run may still be using it).
  *  - `failed`         — an environment's latest teardown attempt FAILED, so it is still standing
  *                       for a reason someone has to act on.
@@ -481,7 +525,7 @@ export const prReportEnvironmentsSchema = v.object({
   status: prReportSectionStatusSchema,
   note: v.optional(v.nullable(v.string())),
   entries: v.array(prReportEnvironmentSchema),
-  teardown: v.picklist(['confirmed', 'pending', 'failed', 'not_applicable']),
+  teardown: v.picklist(['confirmed', 'unconfirmed', 'pending', 'failed', 'not_applicable']),
   timeline: prReportEnvironmentTimelineSchema,
   evidence: prReportEnvironmentEvidenceSchema,
   /**
@@ -520,13 +564,34 @@ export const prReportMergeSchema = v.object({
 export type PrReportMerge = v.InferOutput<typeof prReportMergeSchema>
 
 /**
- * Where a human can inspect what every step actually did — the run's observability panel
- * (Model activity / Provided context). Built from the deployment's public app URL
- * (`appBaseUrl`); null when the deployment configured none, so the report never emits a
- * link to nowhere.
+ * Where the evidence behind this report can be inspected, one link per AUDIENCE.
+ *
+ * `runUrl` is for a person: the run's observability panel (Model activity / Provided context),
+ * built from the deployment's public app URL (`appBaseUrl`). The other two are for a machine
+ * and are built from the deployment's public BACKEND url (`apiBaseUrl`), the same config the
+ * artifact byte links use. The two coincide on a same-origin deployment and diverge the moment
+ * the SPA is served from its own host, and a link built from the wrong one is worse than none.
+ *
+ * Each is null when its base URL is unconfigured, so the report never emits a link to nowhere.
  */
 export const prReportObservabilitySchema = v.object({
   runUrl: v.nullable(v.string()),
+  /**
+   * The run's TOOL-CALL TRAJECTORY: what its agents did, in the order they did it, ordered
+   * server-side and returned whole.
+   *
+   * This is the link that makes the report auditable rather than merely informative. Every
+   * other section is a verdict somebody produced; the trajectory is the record of the work
+   * those verdicts are about, and until it was named here a reader who wanted it had to know
+   * both that the debug API exists and how to address a run on it.
+   */
+  trajectoryUrl: v.nullable(v.string()),
+  /**
+   * THIS report, served live as JSON. What the fenced block below carries is a snapshot taken
+   * when the report was last published; a consumer that wants the current one (or that is
+   * reading a run whose PR body it does not have) fetches it here.
+   */
+  reportUrl: v.nullable(v.string()),
 })
 export type PrReportObservability = v.InferOutput<typeof prReportObservabilitySchema>
 

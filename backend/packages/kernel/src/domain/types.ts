@@ -165,6 +165,9 @@ export type {
   EnvironmentHttpMethod,
   EnvironmentRequestTemplate,
   EnvironmentStatus,
+  // What an independent probe found after a teardown call succeeded — the difference between
+  // the provider accepting the destroy request and the environment actually being gone.
+  TeardownConfirmation,
   EnvironmentAccessScheme,
   EnvironmentAccessMapping,
   EnvironmentResponseMapping,
@@ -412,8 +415,10 @@ export type {
   MergeDecisionThresholds,
   MergeClassRule,
   MergeClassRules,
-  // Role-scoped narrowing of the per-class rules, plus the sandboxed run mode.
+  // Role-scoped narrowing of the per-class rules, the per-role allowlist of landable classes,
+  // and the sandboxed run mode.
   ClassRulesByRole,
+  SubmissionClassesByRole,
   RunMode,
   // Merge track record (per-class human evidence behind the auto-merge policy).
   ChangeClass,
@@ -504,6 +509,11 @@ export type {
   TesterQualityConfig,
   // Extensible per-step options bag (the new home for per-step pipeline parameters).
   StepOptions,
+  // Per-step gate configuration: who may resolve a human gate and how many of them, plus the
+  // parameters of the registered gate the step's kind runs.
+  StepGateConfig,
+  GateApproverPolicy,
+  GateApprovalRecord,
   // Container provisioning vocabulary.
   CloudProvider,
   InstanceSize,

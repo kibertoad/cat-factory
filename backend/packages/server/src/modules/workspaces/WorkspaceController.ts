@@ -19,6 +19,7 @@ import type {
   AgentKindVariant,
   CustomAgentKind,
   CustomTaskType,
+  GateConfigForm,
   InitiativePresetDescriptor,
   RegisteredBinaryGenerator,
   SkillSummary,
@@ -167,6 +168,13 @@ function snapshotCustomAgentKinds(
       // `assignTraits`, and a projection that read the declaration alone would tell the builder
       // a kind needs no storage selection right up until its run is refused at admission.
       ...(hasTrait(def.kind, BINARY_OUTPUT_TRAIT, registry) ? { binaryOutput: true } : {}),
+      // Asked of the REGISTRY for the same reason the trait is: a companion PAIRING is
+      // registered separately from the kind (`registerCompanion`), so reading the kind's own
+      // definition would miss every one of them. Absent for a kind that reviews nothing, which
+      // is what tells the builder to render it as an ordinary palette block.
+      ...(registry.isCompanionKind(def.kind)
+        ? { companionTargets: registry.companionTargets(def.kind) }
+        : {}),
     }))
   // Registered JUDGES (the fourth step-taxonomy bucket) reach the palette through the SAME
   // projection: a judge is a step kind the SPA must be able to place and open a result window
@@ -286,6 +294,7 @@ async function snapshotRegistryProjections(container: ServerContainer): Promise<
   customAgentKinds: CustomAgentKind[] | undefined
   agentKindVariants: AgentKindVariant[] | undefined
   customTaskTypes: CustomTaskType[] | undefined
+  gateConfigForms: GateConfigForm[] | undefined
   binaryGenerators: RegisteredBinaryGenerator[] | undefined
   /** Set only when the set could not be READ — never alongside `binaryGenerators`. */
   binaryGeneratorsUnavailable: true | undefined
@@ -296,6 +305,15 @@ async function snapshotRegistryProjections(container: ServerContainer): Promise<
     customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
     agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
     customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry),
+    // The per-step parameters each registered gate declares, so the pipeline builder can render a
+    // gate's own config form. Read off the SAME registry instance run admission validates against,
+    // so what the builder offers is exactly what a run will accept.
+    gateConfigForms: definedIfPresent(
+      container.gateRegistry.configForms().map(({ kind, fields }) => ({
+        kind,
+        fields: [...fields],
+      })),
+    ),
     binaryGenerators: binaryGenerators.generators,
     binaryGeneratorsUnavailable: binaryGenerators.unavailable,
     // The registered initiative presets (built-in generic + any a deployment mixed in), driving

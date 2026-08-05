@@ -11,6 +11,8 @@ the seams. The worked reference is `backend/internal/example-custom-agent`.
 > For AUTHORING the role itself (how the final system prompt is composed around your
 > text, and how to write the kind's skills and tool-server definitions) see
 > [`custom-agent-roles.md`](./custom-agent-roles.md).
+> For the full MCP tool-server model (registration, harness support, credentials, the
+> probe, security posture, limits) see [`mcp-tool-servers.md`](./mcp-tool-servers.md).
 
 ## The governing principle
 
@@ -274,142 +276,29 @@ an AMBIENT claude-code run (which has no isolated config home to install into).
 
 ### Tool servers (MCP)
 
-A tool server is `stdio` (a child process in the run container) or `http` (a remote endpoint). Its
-credentials are declared BY NAME and resolved at dispatch by the facade-wired kernel
-`ToolSecretResolver`; every facade defaults to `createEnvToolSecretResolver`, which reads each key
-off the deployment's own environment. A deployment needing PER-WORKSPACE credentials implements the
-port itself and registers it through its facade's `createToolSecretResolver` option (`startLocal` /
-`start` / `createWorker`): nothing else in the dispatch path changes. A secret value never reaches
-`AgentRunContext`, a prompt, or the telemetry snapshot: it rides the job body's dedicated
-`mcpServers` field, exactly like the tester's `testSecrets`.
+A tool server is `stdio` (a child process in the run container) or `http` (a remote endpoint) an
+agent kind may call. **The full model lives in [`mcp-tool-servers.md`](./mcp-tool-servers.md)**:
+the no-fork registration path, harness and transport support, the unavailability vocabulary, the
+credential rules, the operability probe, the security posture, the current limits, and the Slack
+runbook. Field-by-field authoring:
+[`custom-agent-roles.md`](./custom-agent-roles.md#tool-servers-authoring-the-mcp-definition).
+What matters from THIS doc's altitude:
 
-#### Which runs actually get the server
+- **Credentials are declared BY NAME** (`secretKeys`) and resolved at dispatch through the kernel
+  `ToolSecretResolver` port; the VALUE rides the job body's dedicated `mcpServers` field only,
+  never `AgentRunContext`, a prompt, or the telemetry snapshot. A workspace's own stored value
+  wins over the deployment's environment, per key
+  ([`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md)).
+- **A declared server that cannot be wired for a run is STATED to the agent** (a closed reason
+  vocabulary rendered in the prompt's tool-server section) and recorded on the run's context
+  snapshot, never silently dropped.
+- **`allowedTools` is SCOPING, never a security boundary.**
+- **A dispatch is budgeted** (`TOOL_SERVER_BUDGET`): the excess is dropped under `over_budget`,
+  and both budget dimensions warn at boot.
 
-**A declared server that is not wired is STATED to the agent, never silently missing** (in the
-prompt's tool-server section) and recorded on the run's context snapshot. Silence would let the
-agent plan around a tool that was never there and discover the gap mid-run. Each reason below is its
-own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders them
-through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
-
-| Reason                  | What happened                                                                                                                    | The fix                                              |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, or the `harnesses` list           |
-| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport         |
-| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value       |
-| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help) |
-| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                         |
-
-Three rules decide which of those a given declaration can hit:
-
-- **Codex is stdio-only, and the platform knows it.** Which transports each CLI's MCP client reaches
-  is a fact about the CLI, held once in kernel's `MCP_HARNESS_TRANSPORTS`, so nothing needs
-  declaring for it. `harnesses` is for narrowing a server to a CLI it makes SENSE on, not for
-  restating a transport limit. Narrowing to a combination no harness can serve (an `http` server on
-  `['codex']`, anything on `['pi']`) is dead configuration a run cannot report, because it never
-  applies rather than being dropped for a reason, so boot warns (`tool_server_unservable`).
-- **Tool servers need a container surface.** An inline LLM step has no agent CLI to wire them into;
-  boot validation warns about that combination. The same warning covers `skills`, for the same
-  reason.
-- **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
-  the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions
-  warn at boot** (`too_many_tool_servers`, `tool_servers_over_byte_budget`) so the deployment learns
-  from its own startup rather than off a run's prompt. The realistic cause is accretion: several
-  packages each calling `assignToolServers` on one kind, none of them individually wrong. Unlike the
-  linked-context corpus (which REFUSES the dispatch), the excess is dropped rather than fatal,
-  because tool servers are deployment CODE: taking a deployment down for a registration fault boot
-  already warned about is worse than running with fewer tools. Two asymmetries are deliberate. The
-  byte warning measures the DECLARATION (`toolServerDeclaredBytes`), a floor on what a dispatch
-  measures on the resolved spec, so it never fires falsely but also cannot name WHICH servers a run
-  will lose: the dispatch keeps every server that still fits, so once bytes are what bind the
-  survivors are not a prefix of the declaration. And the drop list itself has no budget, so past
-  `maxStatedUnavailable` the prompt folds the remainder into a count instead of one line each, while
-  the run context keeps them all.
-
-#### What the agent may call (`allowedTools`)
-
-- **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
-  argument with commas, so `['search_issues,get_issue']` becomes two patterns of which the second
-  matches nothing, while the prompt goes on advertising the name verbatim. Refused at registration
-  (`invalid_tool_server_tool_name`), and dropped at the DISPATCH (where it would otherwise reach the
-  prompt) and again at the job boundary, the same three-layer shape the credential floors have.
-- **It is SCOPING, not a security boundary.** It is always stated in the prompt, and additionally
-  passed to claude-code's `--allowedTools`, but whether that CLI list gates depends on the run's
-  permission mode, and Codex cannot express a per-tool restriction at all. If an agent kind must
-  never reach a server's other tools, do not wire that server for that kind.
-
-#### Credentials
-
-- **An `http` server must be `https`, or loopback.** Its credential rides the request as a header,
-  so a cleartext off-box endpoint is refused at registration (`insecure_tool_server_url`) and again
-  at the harness boundary. A sidecar on `http://127.0.0.1:…` is fine.
-- **`required` defaults to true**, because a tool whose first call 401s is worse than one the agent
-  was told it does not have.
-- **A credential may NOT be LOOKED UP BY a platform configuration variable.** A definition names
-  both the key it wants and the endpoint that key is sent to, so
-  `{ key: 'ENCRYPTION_KEY', header: 'Authorization' }` would boot clean and ship the deployment's
-  master sealing key to a third party. Every variable in `docs/environment-variables.md` is
-  reserved (`isReservedPlatformEnvKey`, case-insensitively, because `process.env` lookup is
-  case-insensitive on Windows). The declaration is refused at boot (`reserved_credential_key`), and
-  refused again at dispatch, where the server is reported unavailable under its own
-  `reserved_secret` reason rather than `missing_secret`: the two need opposite fixes, and setting
-  the variable is precisely what must not help. This floor needs no configuration and cannot be
-  widened.
-- **Use `envName` when the server's own client requires a specific variable.** The floor binds the
-  LOOKUP key, not the variable the value is injected under in the server's process, which reads
-  nothing. That distinction is what keeps the floor affordable: the GitHub MCP server reads
-  `GITHUB_PERSONAL_ACCESS_TOKEN`, the Slack one `SLACK_BOT_TOKEN`, and the platform reads neither
-  while owning both families. Declare
-  `{ key: 'ACME_GITHUB_TOKEN', envName: 'GITHUB_PERSONAL_ACCESS_TOKEN' }` and the value is looked
-  up under a name of your own and injected under the one the SDK wants. `envName` has its own,
-  narrower rule (`isToolchainEnvName`): not `PATH`, `NODE_OPTIONS`, `npm_config_*` or anything else
-  that would reconfigure the process instead of authenticating a call. It applies to `stdio`
-  servers; an `http` server's value goes to its `header`, so an `envName` there is warned about as
-  inert.
-
-- **A workspace's OWN value wins over the deployment's.** Every facade composes the per-workspace
-  capability-credential store (sealed, `secrets.manage`-gated, edited over
-  `/workspaces/:ws/capability-credentials`) in FRONT of the environment resolver, PER KEY, so a
-  tenant supplies its own vendor account and a workspace that has stored nothing resolves exactly
-  as it did before the store existed. The surface is a CHECKLIST, not a blank form: the
-  Infrastructure window's "Capability credentials" tab projects the credentials this deployment's
-  registered capabilities declare, so an operator never has to read the deployment's source to
-  learn what to fill in. It appears only for a caller holding `secrets.manage` and only when
-  something is declared, stored or unreadable, and it saves ONE key at a time
-  (`PUT /workspaces/:ws/capability-credentials/:key`) because it holds no values to re-send. See
-  [`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md).
-
-- **Mind what `secretKeys` can reach BEYOND that floor.** Everything outside the platform's own
-  configuration is a developer's own tooling, and only the deployment knows which of it an
-  integration may see. If a deployment installs agent packages it did not author, wire
-  `createToolSecretResolver: (env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` and
-  keep the credentials behind a dedicated prefix. Note that a deployment resolver REPLACES the
-  chain above rather than being wrapped by it. See ADR 0029 → Consequences.
-
-  **The list gates every SUBJECT that resolver serves**, not only tool servers: a generative binary
-  integration's credential (`BinaryGeneratorRegistry`, below) goes through the same port. So an
-  allow-list holding only `MCP_…` keys silently resolves nothing for a registered image or music
-  generator: the run continues and the agent reports the integration as unavailable, with nothing
-  naming the allow-list as the cause. Cover both families, or list the exact keys.
-
-#### Two things that hold WHEREVER the server was declared
-
-- **A server ASSIGNED to a built-in is checked exactly like a registered kind's own.** Boot
-  validation and the credential checklist enumerate `AgentKindRegistry.kindsWithCapabilities()`:
-  every kind that declares a skill or tool server on its own registration, PLUS every kind named by
-  `assignSkills` / `assignToolServers`. No built-in is a registry entry, and
-  `assignToolServers('coder', …)` is the recommended attachment path, so an `all()` walk skipped the
-  commonest case entirely. Anything new that enumerates "kinds with capabilities" uses that helper,
-  or the hole reopens.
-- **A tool-server call does not count against the agent's no-edit progress bound.** An `mcp__*` call
-  is exempt like a read, because reaching a wired server is what this section's own prompt tells the
-  agent to do. It is bounded by its own consecutive-call cap instead
-  (`JOB_MAX_CONSECUTIVE_MCP_CALLS`, raisable per kind through `tuning.guardLimits`), and by the
-  backstop every exempt family shares (`JOB_MAX_CONSECUTIVE_NON_ACTION_CALLS`): a per-family cap
-  resets on any call outside its family, so raising one is safe while interleaving several would
-  otherwise have been bounded by nothing but the job's wall-clock ceiling.
-
-The worked example (`backend/internal/example-custom-agent`) registers both: a bundled
-`org-security-review` skill and an `org-advisories` tool server, declared on `security-auditor`.
+The worked example (`backend/internal/example-custom-agent`) registers both capability families: a
+bundled `org-security-review` skill and an `org-advisories` tool server, declared on
+`security-auditor`.
 
 ### Binary-output generators (the `binary-output` trait)
 
@@ -584,8 +473,11 @@ registers:
   whole bundle: the small create form whose values reach every agent's prompt, the standing
   context (`defaultFragmentIds`: the org's API guidelines, auth requirements and shared-services
   map), and `defaultPipelineId: pl_org_introduce_api`, whose design + build steps run under the
-  `org:architect-api` / `org:coder-api` variants. Design and the boundary against initiative
-  presets (which are the vehicle when the work must be PLANNED and decomposed):
+  `org:architect-api` / `org:coder-api` variants. That pipeline registers `builtin: true` with an
+  explicit `version`, the shape that makes it a read-only template the org can roll out and later
+  update ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). Design and the
+  boundary against initiative presets (which are the vehicle when the work must be PLANNED and
+  decomposed):
   [`../../docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
 - the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`**, **`pl_org_apply`** and
   **`pl_org_introduce_api`** pipelines chaining them, plus

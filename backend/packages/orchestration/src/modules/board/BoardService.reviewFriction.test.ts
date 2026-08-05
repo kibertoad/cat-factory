@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, Notification, WorkspaceSettings } from '@cat-factory/kernel'
 import { DEFAULT_WORKSPACE_SETTINGS, getErrorReason } from '@cat-factory/kernel'
@@ -82,13 +83,13 @@ describe('BoardService review-debt friction on task creation', () => {
       settings: { reviewFrictionMode: 'off' },
       open: [openCard('a', NOW), openCard('b', NOW), openCard('c', NOW)],
     })
-    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' })
+    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
     expect(task.id).toBe('task_new')
   })
 
   it('seams unwired ⇒ pass-through (no friction, ever)', async () => {
     const svc = build({ wireSeams: false })
-    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' })
+    const task = await svc.addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
     expect(task.id).toBe('task_new')
   })
 
@@ -98,15 +99,20 @@ describe('BoardService review-debt friction on task creation', () => {
       open: [openCard('a', NOW), openCard('b', NOW)],
     }
     const err = await build(cfg)
-      .addTask(WS, 'frame_svc', { title: 'T' })
+      .addTask(WS, 'frame_svc', { title: 'T' }, UNATTRIBUTED_BLOCK_EDITOR)
       .catch((e: unknown) => e)
     expect(getErrorReason(err)).toBe('review_debt_warn')
 
     // Acknowledging lets the author proceed.
-    const task = await build(cfg).addTask(WS, 'frame_svc', {
-      title: 'T',
-      acknowledgeReviewDebt: true,
-    })
+    const task = await build(cfg).addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'T',
+        acknowledgeReviewDebt: true,
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.id).toBe('task_new')
   })
 
@@ -120,7 +126,12 @@ describe('BoardService review-debt friction on task creation', () => {
       open: [openCard('a', NOW - 120 * MINUTE)],
     }
     const err = await build(cfg)
-      .addTask(WS, 'frame_svc', { title: 'T', acknowledgeReviewDebt: true })
+      .addTask(
+        WS,
+        'frame_svc',
+        { title: 'T', acknowledgeReviewDebt: true },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       .catch((e: unknown) => e)
     expect(getErrorReason(err)).toBe('review_debt_blocked')
   })

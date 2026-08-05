@@ -223,9 +223,110 @@ expectMutuallyAssignable<
   sdk.PublicVisualConfirmDecision,
   v.InferOutput<typeof contracts.publicVisualConfirmDecisionSchema>
 >()
+// Follow-up triage and the interview gates. The two nested item shapes are pinned beside their
+// decisions rather than only through them: both are hoisted DTOs a caller names directly when it
+// writes the triage loop, and a widened `kind`/`status` on an item would otherwise be invisible
+// here while being exactly what a caller branches on.
+expectMutuallyAssignable<
+  sdk.PublicFollowUpItem,
+  v.InferOutput<typeof contracts.publicFollowUpItemSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicFollowUpsDecision,
+  v.InferOutput<typeof contracts.publicFollowUpsDecisionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewQuestion,
+  v.InferOutput<typeof contracts.publicInterviewQuestionSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicInterviewDecision,
+  v.InferOutput<typeof contracts.publicInterviewDecisionSchema>
+>()
 expectMutuallyAssignable<
   sdk.PublicRequestGateFix,
   v.InferOutput<typeof contracts.publicRequestGateFixSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerFollowUp,
+  v.InferOutput<typeof contracts.publicAnswerFollowUpSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicAnswerInterview,
+  v.InferOutput<typeof contracts.publicAnswerInterviewSchema>
+>()
+
+// Public-API KEYS: the provisioning surface's own resource. `PublicApiKey` is shared with the
+// session-authed key panel, so this pairing also pins that the two surfaces describe one key.
+expectMutuallyAssignable<sdk.PublicApiKey, v.InferOutput<typeof contracts.publicApiKeySchema>>()
+expectMutuallyAssignable<
+  sdk.PublicApiKeyList,
+  v.InferOutput<typeof contracts.publicApiKeyListResultSchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreatedPublicApiKey,
+  v.InferOutput<typeof contracts.createdPublicApiKeySchema>
+>()
+expectMutuallyAssignable<
+  sdk.CreateHeadlessPublicApiKey,
+  v.InferOutput<typeof contracts.createHeadlessPublicApiKeySchema>
+>()
+
+// Run EVIDENCE. The verification report is the one DTO here the SDK did not gain a new shape for:
+// it is the ENGINE's own report type, served verbatim, so this pairing is what proves the wire
+// shape a consumer parses is the one the engine composes rather than a re-typed copy of it.
+expectMutuallyAssignable<
+  sdk.PublicRunArtifact,
+  v.InferOutput<typeof contracts.publicRunArtifactSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicRunArtifactList,
+  v.InferOutput<typeof contracts.publicRunArtifactListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrVerificationReport,
+  v.InferOutput<typeof contracts.prVerificationReportSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportRun, v.InferOutput<typeof contracts.prReportRunSchema>>()
+expectMutuallyAssignable<sdk.PrReportStep, v.InferOutput<typeof contracts.prReportStepSchema>>()
+expectMutuallyAssignable<sdk.PrReportIssue, v.InferOutput<typeof contracts.prReportIssueSchema>>()
+expectMutuallyAssignable<sdk.PrReportCi, v.InferOutput<typeof contracts.prReportCiSchema>>()
+expectMutuallyAssignable<sdk.PrReportCheck, v.InferOutput<typeof contracts.prReportCheckSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportValidation,
+  v.InferOutput<typeof contracts.prReportValidationSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportValidationCommand,
+  v.InferOutput<typeof contracts.prReportValidationCommandSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportReproduction,
+  v.InferOutput<typeof contracts.prReportReproductionSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportTests, v.InferOutput<typeof contracts.prReportTestsSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportTestOutcome,
+  v.InferOutput<typeof contracts.prReportTestOutcomeSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportTestConcern,
+  v.InferOutput<typeof contracts.prReportTestConcernSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportRequirements,
+  v.InferOutput<typeof contracts.prReportRequirementsSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PrReportEnvironments,
+  v.InferOutput<typeof contracts.prReportEnvironmentsSchema>
+>()
+expectMutuallyAssignable<sdk.PrReportMerge, v.InferOutput<typeof contracts.prReportMergeSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudges, v.InferOutput<typeof contracts.prReportJudgesSchema>>()
+expectMutuallyAssignable<sdk.PrReportJudge, v.InferOutput<typeof contracts.prReportJudgeSchema>>()
+expectMutuallyAssignable<
+  sdk.PrReportObservability,
+  v.InferOutput<typeof contracts.prReportObservabilitySchema>
 >()
 
 // The nested projections a `pr-review` / `visual-confirmation` decision carries. The emitter
@@ -303,7 +404,37 @@ const ASSERTED_COMPONENTS = [
   'PublicHumanTestEnvironment',
   'PublicHumanTestDecision',
   'PublicVisualConfirmDecision',
+  'PublicFollowUpItem',
+  'PublicFollowUpsDecision',
+  'PublicInterviewQuestion',
+  'PublicInterviewDecision',
   'PublicRequestGateFix',
+  'PublicAnswerFollowUp',
+  'PublicAnswerInterview',
+  'PublicApiKey',
+  'PublicApiKeyList',
+  'CreatedPublicApiKey',
+  'CreateHeadlessPublicApiKey',
+  'PublicRunArtifact',
+  'PublicRunArtifactList',
+  'PrVerificationReport',
+  'PrReportRun',
+  'PrReportStep',
+  'PrReportIssue',
+  'PrReportCi',
+  'PrReportCheck',
+  'PrReportValidation',
+  'PrReportValidationCommand',
+  'PrReportReproduction',
+  'PrReportTests',
+  'PrReportTestOutcome',
+  'PrReportTestConcern',
+  'PrReportRequirements',
+  'PrReportEnvironments',
+  'PrReportMerge',
+  'PrReportJudges',
+  'PrReportJudge',
+  'PrReportObservability',
 ] as const
 
 describe('generated models conform to the Valibot contracts', () => {

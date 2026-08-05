@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR n.º {number}",
       "openPrOnGithub": "Abrir {pr} en GitHub",
+      "readOutcome": "Resultado",
+      "readOutcomeHint": "Lee qué cambió, con las pruebas que lo respaldan",
       "review": "Revisar",
       "merge": "Fusionar",
       "mergeConfirm": {
@@ -578,7 +580,8 @@
         "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
         "document_already_linked": "El documento ya está adjunto",
-        "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
+        "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar",
+        "submission_not_allowed": "Fusión no permitida para esta ejecución"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -615,7 +618,8 @@
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
         "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
-        "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
+        "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará.",
+        "submission_not_allowed": "La política de fusión de esta tarea no permite que el rol que inició la ejecución fusione este tipo de cambio. Alguien cuyo rol sí lo permita puede hacerlo, o un administrador puede ampliar la política en el preajuste de fusión."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1003,6 +1007,12 @@
       "inherited": "heredado del servicio",
       "frozen": "Congelado: el agente ya ha comenzado"
     },
+    "taskTypeFields": {
+      "title": "Campos del tipo de tarea",
+      "hint": "Las respuestas que este tipo de tarea declara necesitar. Si falta una respuesta obligatoria, la ejecución se detiene antes de empezar.",
+      "save": "Guardar",
+      "revert": "Descartar"
+    },
     "dependencies": {
       "title": "Depende de",
       "hint": "Tareas que deben fusionarse antes de que esta pueda ejecutarse. El control Ejecutar permanece bloqueado hasta que todas las dependencias estén completas.",
@@ -1038,6 +1048,7 @@
       },
       "prNumber": "PR n.º {number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Leer el resultado",
       "stepState": {
         "pending": "Pendiente",
         "working": "Trabajando",
@@ -1263,6 +1274,7 @@
         "class_auto_merge": "Este preajuste fusiona siempre esta categoría de cambio de forma automática, así que no se compararon las puntuaciones.",
         "class_requires_review": "Este preajuste envía siempre esta categoría de cambio a una persona, sean cuales sean las puntuaciones.",
         "role_requires_review": "Esta configuración obliga a que las ejecuciones iniciadas por un {role} pasen por revisión humana para este tipo de cambio, sean cuales sean las puntuaciones. Un compañero con un nivel superior puede fusionar este PR tal como está.",
+        "submission_not_allowed": "Este preajuste solo deja que las ejecuciones iniciadas por un {role} fusionen estos tipos de cambio: {classes}. Este es de otro tipo, así que la pull request espera a alguien cuyo rol pueda fusionarla.",
         "dry_run": "Esta fue una ejecución de prueba, así que la pull request quedó abierta para una persona y no se compararon las puntuaciones. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "scores": "Puntuaciones",
@@ -1274,7 +1286,8 @@
       "ceiling": "límite {value}",
       "rationale": "Justificación",
       "noAssessment": "El fusionador no devolvió una evaluación puntuada.",
-      "noResult": "Aún no se ha registrado ninguna decisión de fusión."
+      "noResult": "Aún no se ha registrado ninguna decisión de fusión.",
+      "noSubmittableClasses": "ninguno"
     },
     "testReport": {
       "title": "Informe de pruebas",
@@ -1449,7 +1462,12 @@
         "notRun": "no ejecutado",
         "attempts": "Intento {attempts} de {maxAttempts}",
         "omittedTestPaths": "Se descartó {count} archivo de prueba declarado antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta. | Se descartaron {count} archivos de prueba declarados antes de ejecutar la prueba, por lo que el árbol previo a la corrección se reconstruyó a partir de una reproducción incompleta."
-      }
+      },
+      "quorumProgress": "{recorded} de {required} aprobaciones",
+      "quorumYours": "(la tuya está contada)",
+      "quorumEditLocked": "Podrás escribir correcciones cuando tu aprobación sea la que libere esta puerta. Hasta entonces, aprueba tal cual o solicita cambios.",
+      "notAnApprover": "Esta compuerta designa quién puede resolverla y tú no estás en la lista.",
+      "approverIdentityRequired": "Esta compuerta designa quién puede resolverla, así que debe resolverla una de esas personas con la sesión iniciada."
     },
     "inspector": {
       "frameStatus": {
@@ -2757,10 +2775,15 @@
       },
       "roleRules": {
         "heading": "Límites según el rol que inicia",
-        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede quedar sujeto a reglas más estrictas que las de arriba, o solo a ejecuciones de prueba: la canalización trabaja y abre una pull request, pero no se fusiona nada. Un rol solo puede endurecer esta política, nunca relajarla.",
-        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request ya pasa por una persona y los límites de categoría de abajo no añaden nada. Las ejecuciones de prueba siguen aplicándose: también rechazan una fusión manual.",
+        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede limitarse a ciertos tipos de cambio, someterse a reglas más estrictas que las de arriba, o limitarse a ejecuciones de prueba: la pipeline trabaja y abre una pull request, y no se fusiona nada. Un rol solo puede restringir esta política, nunca ampliarla.",
+        "autoMergeOffWarning": "La fusión automática está desactivada en este preajuste, así que cada pull request ya pasa por una persona y los límites por clase de abajo no añaden nada. El límite de fusión y las ejecuciones de prueba siguen aplicándose: ambos rechazan también la fusión manual.",
         "sandboxLabel": "Solo ejecuciones de prueba",
-        "sandboxNote": "Las ejecuciones iniciadas por este rol abren una pull request y no fusionan nada, así que las reglas por categoría de abajo no pueden restringirlas más.",
+        "sandboxNote": "Las ejecuciones de este rol abren una pull request y no fusionan nada, así que ninguno de los límites de abajo puede restringirlas más.",
+        "submissionLabel": "Limitar qué cambios puede fusionar este rol",
+        "submissionHelp": "Cuando está activo, solo se fusionan los tipos marcados en las ejecuciones que inicia este rol. El resto queda abierto para otra persona, sin importar las puntuaciones. La pull request se abre igualmente y se puede fusionar a mano en el host de git.",
+        "submissionNone": "No hay nada marcado, así que este espacio de trabajo no fusionará ninguna ejecución de este rol.",
+        "submissionBadge": "Fusión limitada",
+        "classHeading": "Revisión necesaria por tipo de cambio",
         "noRules": "Sin límites por categoría",
         "ruleCount": "{count} categoría limitada | {count} categorías limitadas",
         "inherit": "Igual que esta política",
@@ -2838,6 +2861,73 @@
         "removeFailed": "No se pudo eliminar la entrada del registro"
       }
     },
+    "toolServers": {
+      "heading": "Servidores de herramientas (MCP)",
+      "intro": "Los servidores MCP que esta instalación registra para sus agentes. Al probar uno se resuelven las credenciales de este tablero y se habla el protocolo con el servidor, así que el resultado es el que obtendría una ejecución.",
+      "transport": {
+        "stdio": "En el contenedor",
+        "http": "Remoto"
+      },
+      "declaredBy": "Asignado a: {kinds}",
+      "declaredByNone": "Ningún agente recibe este servidor, así que ninguna ejecución lo iniciará.",
+      "servableHarnesses": "Funciona con: {harnesses}",
+      "servableHarnessesNone": "Ninguna CLI de agente puede servir este transporte, así que este servidor nunca se aplica a una ejecución.",
+      "allowedTools": "Limitado a: {tools}",
+      "credentials": "Credenciales: {keys}",
+      "oauth": {
+        "connected": "Conectado",
+        "notConnected": "Sin conexión",
+        "machineGrant": "Se identifica como este despliegue",
+        "connectedBy": "Conectado por {user}",
+        "scopes": "Concedido: {scopes}",
+        "notRefreshable": "El proveedor no emitió un token de actualización, así que habrá que volver a conectar cuando caduque el token de acceso.",
+        "lastError": "La última renovación del token falló: {detail}",
+        "connect": "Conectar",
+        "reconnect": "Volver a conectar",
+        "disconnect": "Desconectar",
+        "callback": {
+          "working": "Finalizando la conexión…",
+          "done": "Conectado a {server}",
+          "doneHint": "Las ejecuciones de este tablero ya pueden usar el servidor de herramientas con la cuenta con la que iniciaste sesión.",
+          "back": "Volver a la aplicación",
+          "failedTitle": "No se pudo finalizar la conexión",
+          "failed": "No se pudo completar la autorización. Vuelve a iniciar la conexión desde la ventana de Infraestructura.",
+          "missingParams": "A este enlace le faltan los valores que devuelve el proveedor, así que no hay nada que completar. Vuelve a iniciar la conexión."
+        }
+      },
+      "test": "Probar",
+      "notProbeable": {
+        "stdio": "Se ejecuta dentro del contenedor del agente, así que no puede probarse desde aquí.",
+        "containerLocal": "Escucha junto al agente en su propio contenedor, que no es accesible desde aquí.",
+        "urlNotAllowed": "Esta dirección no es válida para un servidor de herramientas (https, o http simple solo en localhost)."
+      },
+      "status": {
+        "ok": "Respondió",
+        "credentialsMissing": "Sin credencial",
+        "credentialRefused": "Credencial rechazada",
+        "oauthNotConnected": "Sin conexión",
+        "oauthTokenFailed": "La conexión dejó de funcionar",
+        "unreachable": "Sin respuesta",
+        "httpError": "Rechazó la solicitud",
+        "protocolError": "No es un servidor MCP",
+        "notProbeable": "No se puede probar desde aquí"
+      },
+      "okDetail": "{name} {version}, protocolo {protocol}, {count} herramientas.",
+      "toolsIncomplete": "El servidor tiene más herramientas de las que lee una prueba, así que este número es un mínimo.",
+      "unmatchedTools": "Este servidor no expone ninguna herramienta llamada {tools}, así que al agente se le anuncia una herramienta que no puede invocar.",
+      "allowedToolsUnchecked": "La lista de herramientas era demasiado larga para leerla completa, así que no se pudieron comprobar los nombres limitados.",
+      "unresolvedCredentials": "No se resolvió nada para {keys}. Rellénalo abajo o defínelo en el entorno de la instalación.",
+      "refusedCredentials": "{keys} nombra una variable que pertenece a la configuración de la propia plataforma, así que nunca se resuelve. Cambia la declaración en el código de la instalación.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Ver detalles",
+      "hideDetails": "Ocultar detalles",
+      "toast": {
+        "loadFailed": "No se pudieron cargar los servidores de herramientas",
+        "probeFailed": "No se pudo probar el servidor de herramientas",
+        "connectFailed": "No se pudo iniciar la conexión",
+        "disconnectFailed": "No se pudo desconectar el servidor de herramientas"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Credenciales de capacidades",
       "intro": "Los secretos que los servidores de herramientas y las integraciones generativas de esta instalación piden por nombre. Los valores se guardan solo para este tablero, cifrados en reposo, y se entregan directamente al proceso del agente: nunca llegan a un prompt ni a un registro. Los valores son de solo escritura, así que uno guardado se sustituye escribiendo otro y nunca se vuelve a leer.",
@@ -2889,6 +2979,7 @@
         "neverUsed": "nunca usado",
         "createdBy": "creado por {user}",
         "createdByYou": "ti",
+        "createdByKey": "la clave de API {id}",
         "revoke": "Revocar token"
       },
       "add": {
@@ -4462,6 +4553,17 @@
       "hint": "El maximo al que puede llegar una sola respuesta de este agente. Dejarlo vacio hereda del nivel superior; no elimina el limite. El valor propio de un paso del pipeline prevalece sobre el predeterminado del espacio de trabajo.",
       "inherits": "Heredado",
       "inheritsValue": "Heredado ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Quién puede aprobar",
+      "roleAdmin": "Administradores",
+      "roleMember": "Miembros",
+      "namedApproversLabel": "Aprobadores designados",
+      "namedApproversPlaceholder": "Cualquiera con permiso de escritura",
+      "requiredApprovalsLabel": "Aprobaciones necesarias",
+      "requiredApprovalsHint": "Cada una de una persona distinta antes de que la ejecución continúe.",
+      "anyoneHint": "Cualquiera que pueda editar este tablero puede aprobar este paso.",
+      "gateParametersLabel": "Ajustes de la compuerta"
     }
   },
   "agentPrompt": {
@@ -4660,6 +4762,11 @@
       "success_criteria_missing": {
         "title": "Sin criterios de éxito",
         "hint": "Indica la pregunta que responde el spike, o cómo sería un buen resultado, para que el tiempo acotado tenga un objetivo."
+      },
+      "required_field_missing": {
+        "title": "Falta: {field}",
+        "hint": "Este tipo de tarea requiere «{field}» y la tarea no lo responde. Complétalo en la tarea y vuelve a comprobar.",
+        "unnamedField": "un campo obligatorio"
       },
       "unknown": {
         "title": "Hallazgo no reconocido",
@@ -5265,6 +5372,110 @@
       "fixRequested": "Corrección solicitada"
     }
   },
+  "outcome": {
+    "title": "Resultado",
+    "subtitle": "Qué cambió esta ejecución, y las pruebas que lo respaldan",
+    "diff": "Abrir el diff",
+    "diffNumbered": "Abrir el diff (#{number})",
+    "peerDiff": "Abrir el diff en {repo}",
+    "disposition": {
+      "merged": "Fusionado",
+      "awaiting_merge": "Esperando la fusión",
+      "in_flight": "Todavía en curso",
+      "needs_attention": "Requiere atención",
+      "not_run": "Aún sin ejecutar",
+      "unknown": "Ejecución no cargada"
+    },
+    "ask": {
+      "title": "Qué se pidió",
+      "none": "Esta tarea no tiene descripción, así que no hay nada con lo que comparar el resultado."
+    },
+    "gap": {
+      "run_unavailable": "La ejecución de esta tarea no se cargó, así que aquí no pueden mostrarse las pruebas que registró. No es lo mismo que una ejecución que no registró nada."
+    },
+    "requirements": {
+      "title": "Requisitos comprobados",
+      "met": "Cumplidos: {count}",
+      "notMet": "Sin cumplir: {count}",
+      "notCovered": "Sin comprobar: {count}",
+      "regressions": "Regresiones: {count}",
+      "regressionTag": "Regresión",
+      "idOnly": "solo id",
+      "idOnlyHint": "Este identificador no está en la especificación del servicio, así que no hay ningún título que mostrar.",
+      "spec": {
+        "not_read": "No se leyó la especificación del servicio, así que estos son los identificadores de requisito que informó el probador, sin sus títulos.",
+        "unmatched": "Ninguno de estos identificadores de requisito aparece en la especificación del servicio que se leyó, así que solo se muestran los identificadores que informó el probador."
+      },
+      "verdict": {
+        "met": "Verificado",
+        "not_met": "Fallido",
+        "not_covered": "Sin comprobar"
+      },
+      "gap": {
+        "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se comprobó ningún requisito.",
+        "tester_not_reported": "El tester aún no ha informado, así que no se ha resuelto ningún requisito.",
+        "no_verdicts": "El tester informó sin pronunciarse sobre ningún requisito de la especificación del servicio."
+      }
+    },
+    "tests": {
+      "title": "Cómo se probó",
+      "openReport": "Informe completo de pruebas",
+      "summary": "El tester informa: {summary}",
+      "abort": "El tester no pudo realizar una prueba significativa: {reason}",
+      "counts": "{passed} superadas, {failed} fallidas, {skipped} omitidas",
+      "verdict": {
+        "greenlit": "Aprobado para publicar",
+        "concerns": "Con reservas",
+        "could_not_run": "No se pudo probar"
+      },
+      "environment": {
+        "local": "Probado contra dependencias locales",
+        "ephemeral": "Probado contra un entorno de vista previa"
+      },
+      "severity": {
+        "low": "Baja",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Crítica"
+      },
+      "gap": {
+        "no_tester_step": "Esta canalización no tiene paso de pruebas, así que no se ejercitó nada.",
+        "tester_not_reported": "El tester aún no ha informado."
+      }
+    },
+    "visuals": {
+      "title": "Qué aspecto tiene",
+      "shotAlt": "Captura de {view}",
+      "hasReference": "Se aportó un diseño de referencia para esta vista",
+      "source": {
+        "visual_confirm": "Estas vistas se compararon con sus diseños de referencia.",
+        "tester": "Estas vistas se capturaron durante las pruebas. No se pidió a nadie que las revisara."
+      },
+      "gap": {
+        "no_visual_step": "Nada en esta canalización captura la interfaz, así que no hay nada que mirar.",
+        "none_captured": "La interfaz debía capturarse, pero no se capturó ninguna vista."
+      }
+    },
+    "checks": {
+      "title": "Comprobaciones",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Comprobaciones del proyecto",
+        "reproduction": "Reproducción del fallo"
+      },
+      "state": {
+        "pass": "superada",
+        "fail": "fallida",
+        "pending": "en curso",
+        "inconclusive": "sin conclusión"
+      }
+    },
+    "empty": {
+      "title": "Todavía no hay nada que mostrar",
+      "body": "Esta tarea aún no ha producido un resultado que leer."
+    }
+  },
   "focus": {
     "board": "Tablero",
     "typeSubtitle": "{type} · vista de enfoque",
@@ -5317,6 +5528,7 @@
     "operation": {
       "provision": "Arrancar",
       "teardown": "Desmontar",
+      "teardown-verify": "Comprobación de desmontaje",
       "status": "Comprobación de estado",
       "dispatch": "Arrancar",
       "release": "Desmontar",
@@ -5952,7 +6164,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Se aplica porque esta tarea no elige una política propia.",
-      "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana."
+      "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana.",
+      "refused": {
+        "relaxes_role_sandbox": "No disponible para tu rol: las ejecuciones de esta tarea están en un entorno aislado y esta política permitiría fusionarlas. Un administrador del espacio de trabajo puede cambiarlo.",
+        "relaxes_role_submission_allowlist": "No disponible para tu rol: esta política te permitiría fusionar tipos de cambio que esta tarea te restringe. Un administrador del espacio de trabajo puede cambiarlo.",
+        "relaxes_role_class_rule": "No disponible para tu rol: esta política fusiona automáticamente cambios que tú debes revisar en esta tarea. Un administrador del espacio de trabajo puede cambiarlo."
+      }
     },
     "preview": {
       "defaultBadge": "Predeterminada",
@@ -5970,6 +6187,7 @@
       "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse.",
       "roleHeading": "Quién inició la ejecución",
       "roleSandboxed": "Las ejecuciones iniciadas por {roles} abren una pull request y nunca se fusionan.",
+      "roleScoped": "Las ejecuciones iniciadas por {roles} solo fusionan ciertos tipos de cambio.",
       "roleNarrowed": "Las ejecuciones iniciadas por {roles} siguen reglas más estrictas en algunas categorías de cambio."
     }
   },

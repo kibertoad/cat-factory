@@ -183,6 +183,55 @@ export interface EnvironmentTeardownRequest {
 }
 
 /**
+ * What a provider found when asked, AFTER a successful teardown, whether the environment is
+ * actually gone. A three-way answer rather than a boolean, because "I looked and it is still
+ * there" and "I cannot look" are different facts that need different people to do different
+ * things, and collapsing them is what lets an environment nobody can see be reported as
+ * reclaimed (see {@link EnvironmentProvider.confirmTeardown}).
+ *
+ *  - `gone`:    the resource is not there. This is the ONLY answer that proves a teardown.
+ *  - `present`: the resource is still there. Either the teardown destroyed nothing, or it is
+ *               mid-flight; `terminating` says which, because a namespace with finalizers
+ *               running is on its way out and an `Active` one is not.
+ *  - `unknown`: the provider could not establish either — it has no endpoint to ask, the probe
+ *               errored, or there was no addressable resource to ask about. `reason` is
+ *               surfaced verbatim to an operator, so it must name what could not be done.
+ *
+ * `retryable` on the unknown answer is what keeps a deployment's PERMANENT inability to verify
+ * (no `status:` template in the manifest, a provider with nothing to observe) from reading like a
+ * blip. The two want opposite reactions: a blip is worth re-probing on the next sweep, and a
+ * configuration fact will answer identically forever and is only ever fixed by a human editing
+ * the manifest. Without the split, an operator watching a permanently unverifiable environment
+ * waits for a confirmation that is never coming.
+ */
+export type TeardownProbe =
+  | { state: 'gone' }
+  | { state: 'present'; terminating: boolean; detail?: string }
+  | { state: 'unknown'; reason: string; retryable: boolean }
+
+/**
+ * OPTIONALLY confirm that a torn-down environment is really gone.
+ *
+ * This exists because {@link EnvironmentProvider.teardown} returning without throwing does not
+ * mean anything was destroyed. The generic manifest provider whose manifest omits a `teardown:`
+ * template calls nothing and reports `torn_down`; a Kubernetes namespace `DELETE` returns while
+ * the namespace is still `Terminating`. A platform that records the call's success as the
+ * environment's death reports reclaimed infrastructure that is still running and still billing,
+ * on the very pull request a reviewer trusts for that fact.
+ *
+ * Deliberately NOT folded into {@link EnvironmentProvider.status}: `status` answers "how is my
+ * environment doing" and every implementation is written to describe a LIVE one, so its answers
+ * for a destroyed resource are incidental — the generic provider with no `status` template
+ * returns `ready` forever, which as a teardown verdict is a confident lie in the direction that
+ * matters most. A separate method makes the question explicit and lets a provider that cannot
+ * answer it say so, rather than having an answer inferred from a call meant for something else.
+ *
+ * Absent ⇒ the provider offers no confirmation and the platform records the teardown as
+ * `unverifiable`, which is reported as such and never as a reclaim.
+ */
+export type ConfirmTeardown = (req: EnvironmentTeardownRequest) => Promise<TeardownProbe>
+
+/**
  * One STACK-RECIPE step's outcome, streamed to the provisioning log as it completes (a
  * multi-step compose bring-up — env-file materialization, `up`, `composer install`, seed
  * import, migrations, index builds, the health gate). Each entry is best-effort: a log-write
@@ -403,6 +452,12 @@ export interface EnvironmentProvider {
   provision(req: ProvisionEnvironmentRequest): Promise<ProvisionedEnvironment>
   status(req: EnvironmentStatusRequest): Promise<ProvisionedEnvironment>
   teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }>
+  /**
+   * Positively confirm a torn-down environment is gone. Optional — absent ⇒ this provider
+   * cannot verify its own teardowns and they are recorded `unverifiable`. See
+   * {@link ConfirmTeardown} for why this is not `status()`.
+   */
+  confirmTeardown?: ConfirmTeardown
   /**
    * Optional asynchronous, container-backed provisioning. Present ⇒ the provider stands
    * environments up in a deploy container ({@link AsyncProvisionCapability}); absent ⇒ it is

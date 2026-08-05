@@ -9,6 +9,7 @@ import {
   type InlineLlmCallRecorder,
   type PlatformAlertSink,
   type SubscriptionVendor,
+  type ToolSecretResolver,
 } from '@cat-factory/kernel'
 import { type CoreDependencies, createCore } from '@cat-factory/orchestration'
 import {
@@ -22,6 +23,7 @@ import {
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
+  mcpOAuthContainerFields,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -312,6 +314,8 @@ interface PostAssemblyContext extends PreviewModuleContext {
   options: NodeContainerOptions
   resolveTransport: NodeTransportDeployResult['resolveTransport']
   githubInstallationRepository: GitHubInstallationRepository
+  /** Routed through `sourced`, so a mothership node reads the projection over the RPC. */
+  repoProjectionRepository: DrizzleRepoProjectionRepository
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   remoteRepos: Record<string, unknown> | undefined
@@ -352,6 +356,7 @@ function applyNodePostAssemblyWiring(
     config,
     resolveTransport: ctx.resolveTransport,
     installationRepository: ctx.githubInstallationRepository,
+    repoRepository: ctx.repoProjectionRepository,
     mintInstallationToken: ctx.bootstrapMintInstallationToken,
     override: dependencies.environmentProvider,
     environmentBackendRegistry: ctx.environmentBackendRegistry,
@@ -394,11 +399,16 @@ interface NodeServerContainerBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  mcpOAuthService: NodeRunServicesResult['mcpOAuthService']
   /**
-   * Whether the composed capability-credential chain reads this node's environment behind the
-   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
+   * resolver the tool-server probe resolves through, plus whether this node's environment answers
+   * behind the per-workspace store. The description is ABSENT (not undefined) when a deployment
+   * replaced the chain with its own resolver, because the checklist renders three states off that
+   * distinction.
    */
-  toolSecretEnvironmentFallback: boolean | undefined
+  toolSecretEnvironmentFallback?: boolean
+  toolSecretResolver: ToolSecretResolver
   validationConfigService: NodeRunServicesResult['validationConfigService']
   subscriptions: NodeModelDepsResult['subscriptions']
   personalSubscriptions: NodeModelDepsResult['personalSubscriptions']
@@ -446,7 +456,9 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     subscriptions,
     personalSubscriptions,
@@ -563,7 +575,14 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     consensusSessionRepository: repos.consensusSessionRepository,
     // Resolves the per-account binary-artifact store (screenshots) for the artifact
     // controllers + the visual-confirmation gate (configured per-account in the UI).
-    resolveBinaryArtifactStore,
+    //
+    // Read off `dependencies`, NOT the account-composed value beside it: an override supplied to
+    // the container (a deployment swapping the backend, the conformance harness driving the
+    // public artifact reads) is applied to the engine's deps and would otherwise reach the ENGINE
+    // and not the HTTP layer, leaving two answers to "where do this workspace's artifacts live", which
+    // is a split nothing above this line could see.
+    resolveBinaryArtifactStore:
+      dependencies.resolveBinaryArtifactStore ?? resolveBinaryArtifactStore,
     // Stock/remote Node has NO built-in container runtime, so container agents run ONLY on a
     // self-hosted runner pool — an unregistered pool means no agent can run, which the infra-setup
     // banner should surface. Local mode injects its own per-run-host-container `resolveTransport`
@@ -592,11 +611,24 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
-    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
-    // describes the real chain instead of asserting the default beside it. Undefined when a
-    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
-    // what that consults.
+    // The per-workspace MCP OAuth grant store the tool-server connect/disconnect routes and the
+    // inventory's connection state read. Present when the shared ENCRYPTION_KEY is configured;
+    // absent, the routes refuse with a 503 naming the key rather than pretending a grant can be
+    // kept somewhere.
+    // The per-workspace MCP OAuth grant store, plus the redirect URL a vendor's authorization
+    // server sends the browser back to. Operator-set rather than derived from the request, because
+    // a third party holds this exact string and a `Host`-derived one differs behind every proxy.
+    ...mcpOAuthContainerFields({
+      oauth: mcpOAuthService,
+      redirectUrl: env.MCP_OAUTH_REDIRECT_URL,
+    }),
+    // The composed capability-credential chain: the resolver the tool-server probe resolves through,
+    // and what sits BEHIND the store, so the credential checklist describes the real chain instead of
+    // asserting the default beside it. Both arrive already projected by
+    // `toolSecretContainerFields`, so the description stays ABSENT rather than undefined when a
+    // deployment supplied its own resolver and nothing here can describe what that consults.
     ...(toolSecretEnvironmentFallback === undefined ? {} : { toolSecretEnvironmentFallback }),
+    toolSecretResolver,
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (nothing sealed — the commands run inside the run's own container).
     validationConfig: validationConfigService,
@@ -709,11 +741,16 @@ interface NodeContainerFinalizeBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  mcpOAuthService: NodeRunServicesResult['mcpOAuthService']
   /**
-   * Whether the composed capability-credential chain reads this node's environment behind the
-   * per-workspace store. Undefined when a deployment replaced the chain with its own resolver.
+   * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
+   * resolver the tool-server probe resolves through, plus whether this node's environment answers
+   * behind the per-workspace store. The description is ABSENT (not undefined) when a deployment
+   * replaced the chain with its own resolver, because the checklist renders three states off that
+   * distinction.
    */
-  toolSecretEnvironmentFallback: boolean | undefined
+  toolSecretEnvironmentFallback?: boolean
+  toolSecretResolver: ToolSecretResolver
   validationConfigService: NodeRunServicesResult['validationConfigService']
   publicApiKeys: NodeModelDepsResult['publicApiKeys']
   userSecrets: NodeModelDepsResult['userSecrets']
@@ -776,7 +813,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     publicApiKeys,
     userSecrets,
@@ -911,6 +950,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     config,
     repos,
     resolveRepoTarget,
+    repoProjectionRepository,
     baseDeployMint,
     resolveTransport,
     githubInstallationRepository,
@@ -937,7 +977,9 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
+    toolSecretResolver,
     validationConfigService,
     subscriptions,
     personalSubscriptions,

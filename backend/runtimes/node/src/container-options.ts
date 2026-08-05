@@ -213,8 +213,16 @@ export interface NodeContainerOptions {
    * static credential instead of an App installation (e.g. a PAT in local mode). The
    * `installationId` argument is then ignored. Undefined → mint via the GitHub App
    * (requires `GITHUB_APP_PRIVATE_KEY`).
+   *
+   * `opts.repositoryIds` carries the dispatch's repo scope. An override backed by a static PAT
+   * cannot narrow anything and ignores it; one that reaches a real App mint (mothership-mode
+   * delegation) forwards it, so the container gets the same narrow token a hosted deployment's
+   * own dispatch would mint.
    */
-  mintInstallationToken?: (installationId: number) => Promise<string>
+  mintInstallationToken?: (
+    installationId: number,
+    opts?: { repositoryIds?: number[] },
+  ) => Promise<string>
   /**
    * A GitHub client used to wire the CI gate + the merge / mergeability providers
    * (so a run gates on real CI and merges for real). When provided, the

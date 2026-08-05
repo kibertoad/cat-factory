@@ -23,12 +23,15 @@ import type {
   PublicApiKeyService,
   TestSecretsService,
   CapabilityCredentialsService,
+  McpOAuthService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
 import { AuditService } from '@cat-factory/integrations'
 import {
   logger,
+  mcpOAuthContainerFields,
+  mcpOAuthExecutorDeps,
   operationalMetrics,
   runWithInitiator,
   resolveWorkspaceCapabilities,
@@ -37,6 +40,7 @@ import {
   type PersistenceRegistry,
   type ServerContainer,
   type ToolSecretChain,
+  toolSecretContainerFields,
   type WebSearchUpstream,
 } from '@cat-factory/server'
 import {
@@ -46,6 +50,7 @@ import {
 } from '@cat-factory/gates'
 import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
+import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
 import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
@@ -111,14 +116,12 @@ import {
   selectDeployDeps,
   selectDocumentsDeps,
   selectEmailInvitationDeps,
-  selectEnvConfigRepairer,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
   selectIncidentEnrichmentDeps,
   selectMergeLifecycleDeps,
   selectPackageRegistryDeps,
   selectReleaseHealthDeps,
-  selectRepoBootstrapper,
   selectRequirementsDeps,
   selectRunnersDeps,
   selectSandboxDeps,
@@ -158,6 +161,13 @@ export interface WorkerContainerAssemblyInput {
   subscriptions: ProviderSubscriptionService | undefined
   testSecretsService: TestSecretsService | undefined
   capabilityCredentialsService: CapabilityCredentialsService | undefined
+  /**
+   * The per-workspace OAuth grant store for remote MCP tool servers, or undefined when the Worker
+   * has no ENCRYPTION_KEY. Feeds the connect/disconnect routes, the inventory's connection state
+   * and the executor's token source — absent, an OAuth server is stated as `oauth_not_connected`
+   * rather than dispatched without its token.
+   */
+  mcpOAuthService: McpOAuthService | undefined
   validationConfigService: ValidationConfigService
   personalSubscriptions: PersonalSubscriptionService | undefined
   apiKeys: ApiKeyService | undefined
@@ -400,6 +410,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     resolveTransport,
     subscriptions,
     testSecretsService,
+    mcpOAuthService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -508,6 +519,13 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
           resolvePackageRegistries: executorPackageRegistries,
           webSearchAccountSettings,
           resolveToolSecrets: toolSecretChain.resolver,
+          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
+          // what resolves the OAuth client secret.
+          ...mcpOAuthExecutorDeps({
+            oauth: mcpOAuthService,
+            resolveToolSecrets: toolSecretChain.resolver,
+            logger,
+          }),
         }),
         env,
         config,
@@ -665,6 +683,7 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     subscriptions,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretChain,
     validationConfigService,
     personalSubscriptions,
@@ -828,9 +847,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
-    // Resolves the per-account binary-artifact store (screenshots) for the artifact
-    // controllers + the visual-confirmation gate (configured per-account in the UI).
-    resolveBinaryArtifactStore,
+    // Per-account binary-artifact store. Read off `dependencies`, not the value beside it, so an
+    // override reaches the HTTP layer as well as the engine; the Node facade's twin states why.
+    resolveBinaryArtifactStore:
+      dependencies.resolveBinaryArtifactStore ?? resolveBinaryArtifactStore,
     // The Worker's only test-env backend is the `environment-provider` (its UI-test container is
     // torn down with the run — no long-lived in-container compose default), so a missing provider
     // IS a real gap the "test environment not configured" banner should surface. Derived from the
@@ -839,16 +859,12 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The sensitive per-service test-credential store the shared test-secrets controller reads;
     // present when the shared ENCRYPTION_KEY is configured.
     ...(testSecretsService ? { testSecrets: testSecretsService } : {}),
-    ...(capabilityCredentialsService
-      ? { capabilityCredentials: capabilityCredentialsService }
-      : {}),
-    // What sits BEHIND that store in the chain this facade composed, so the credential checklist
-    // describes the real chain instead of asserting the default beside it. Undefined when a
-    // deployment supplied its own resolver: it replaced the chain, and nothing here can describe
-    // what that consults.
-    ...(toolSecretChain.environmentFallback === undefined
-      ? {}
-      : { toolSecretEnvironmentFallback: toolSecretChain.environmentFallback }),
+    ...workerCapabilityCredentialFields({
+      env,
+      capabilityCredentialsService,
+      mcpOAuthService,
+      toolSecretChain,
+    }),
     // The per-service pre-PR validation-check store the shared controller reads. Always present
     // (no secret material), unlike the sealed stores around it.
     validationConfig: validationConfigService,
@@ -906,5 +922,43 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
       // (keys moved out of env into the per-account settings store), so no boot-time
       // gateway upstream is wired here.
     },
+  }
+}
+
+/**
+ * Everything a workspace's CAPABILITY CREDENTIALS contribute to the container: the sealed
+ * credential store, the sealed MCP OAuth grant store plus its redirect URL, and the composed
+ * resolver chain with the description the credential checklist renders.
+ *
+ * One projection because they are one surface. Both stores are optional on the same condition
+ * (`ENCRYPTION_KEY`), the OAuth token source resolves its client secret through the very chain
+ * beside it, and the chain's `environmentFallback` is a THREE-state answer the container must
+ * carry as ABSENT rather than as `undefined` — an absent description and a `false` one send an
+ * operator opposite ways. The Node facade projects the same fields from its own root.
+ */
+function workerCapabilityCredentialFields(input: {
+  env: Env
+  capabilityCredentialsService: CapabilityCredentialsService | undefined
+  mcpOAuthService: McpOAuthService | undefined
+  toolSecretChain: ToolSecretChain
+}): Pick<
+  ServerContainer,
+  | 'capabilityCredentials'
+  | 'mcpOAuth'
+  | 'mcpOAuthRedirectUrl'
+  | 'toolSecretResolver'
+  | 'toolSecretEnvironmentFallback'
+> {
+  return {
+    ...(input.capabilityCredentialsService
+      ? { capabilityCredentials: input.capabilityCredentialsService }
+      : {}),
+    ...mcpOAuthContainerFields({
+      oauth: input.mcpOAuthService,
+      redirectUrl: input.env.MCP_OAUTH_REDIRECT_URL,
+    }),
+    // The probe resolves through the SAME chain a dispatch does, or it reports on a tenant's value
+    // that is not this board's.
+    ...toolSecretContainerFields(input.toolSecretChain),
   }
 }

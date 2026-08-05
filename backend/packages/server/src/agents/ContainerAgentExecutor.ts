@@ -11,6 +11,7 @@ import {
   type Logger,
   type ModelFlavor,
   type ModelRef,
+  type McpOAuthTokenSource,
   type OperationalMetrics,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
@@ -46,7 +47,11 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
-import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
+import {
+  dispatchToolServerDeps,
+  resolveDispatchToolServers,
+  type ResolvedToolServers,
+} from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
@@ -65,11 +70,7 @@ import {
   buildCommonBody,
   buildRepoSpec,
   githubRepoOrigin,
-  resolveConflictResolverPeer,
-  resolveMergerCombinedDiff,
-  resolveMultiRepoFanout,
-  resolveReferenceBranches,
-  resolveReferenceRepos,
+  resolveAuxiliaryRepos,
 } from './containerAgentBody.js'
 
 // Re-exported for the composition root + tests that wire this executor by name.
@@ -85,6 +86,7 @@ import type {
   ResolveRepoOrigin,
   ResolveRepoTarget,
 } from './repoTargeting.js'
+import { jobTokenRepoIds } from './repoTargeting.js'
 export type {
   EnsureWorkBranch,
   JobPackageRegistrySpec,
@@ -94,6 +96,7 @@ export type {
   ResolveRepoOrigin,
   ResolveRepoTarget,
 } from './repoTargeting.js'
+export { jobTokenRepoIds } from './repoTargeting.js'
 
 /** A subscription token leased from the workspace's pool for a vendor. */
 interface LeasedSubscriptionToken {
@@ -346,6 +349,14 @@ export interface ContainerAgentExecutorDependencies {
    * reported to the agent as unavailable rather than started without its credential.
    */
   resolveToolSecrets?: ToolSecretResolver
+  /**
+   * Mint the ACCESS TOKEN an OAuth-authenticated remote tool server needs, per dispatch. Wired by
+   * every facade that has a grant store (which needs `ENCRYPTION_KEY`); absent ⇒ a server
+   * declaring `oauth` is reported to the agent as `oauth_not_connected` rather than dispatched
+   * without its `Authorization` header. The value rides the job body only, exactly like a resolved
+   * `secretKeys` value.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
   /**
    * The facade logger, used for the best-effort degradations around agent capabilities (an
    * unregistered tool-server id, a credential lookup that failed). Absent ⇒ those are silent,
@@ -934,29 +945,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // re-attaches to the prior round's completed job on a container-reusing transport.
     const jobId = stepJobId(executionId, context.agentKind, context.dispatchEpoch)
 
-    // "Subscriptions always win": a subscription-only model carries its harness; a
-    // dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed to Claude
-    // Code when the workspace has a pooled token for the vendor. Shared with
-    // isQuotaBased so the dispatch and the spend gate agree on what the step runs.
-    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
+    const { ref, harness, subscriptionVendor } = await this.resolveDispatchModel(
       context,
       workspaceId,
     )
-    const harness: HarnessKind = ref.harness ?? 'pi'
-
-    // The Pi harness reaches models through the LLM proxy, so its model must be a
-    // provider the proxy can serve; locking it here stops the container choosing
-    // another. The subscription harnesses (Claude Code / Codex) talk direct to the
-    // vendor with a pooled token, so the proxyable guard does not apply to them.
-    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
-      throw new Error(
-        `Container implementation needs a model the LLM proxy can serve ` +
-          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
-          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
-          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
-          `runner (Ollama / LM Studio / …) and pick that model.`,
-      )
-    }
 
     const repo = await this.deps.resolveRepoTarget(workspaceId, blockId)
     if (!repo) {
@@ -966,27 +958,32 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       )
     }
 
-    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed
-    // here because the token mint below is repo-scoped while the branch ensure needs the
-    // resolved name, and both are fanned out in the wave that follows.
+    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed here
+    // because the branch ensure needs the resolved name, and it is fanned out in the wave below.
     const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
     const workBranch = aprioriWork ?? `cat-factory/${blockId}`
 
     // These dispatch I/O steps are mutually independent once the repo target is resolved: the
-    // installation-token mint + the work-branch ensure are repo-scoped, while auth resolution,
-    // private-registry auth, tester secrets, and web-search availability are workspace/block-
-    // scoped. Serialising them added ~6 round-trips of latency to EVERY step dispatch (and
-    // every tester→fixer re-dispatch epoch), so fan them out in one wave instead. `auth` (the
-    // proxy session token for Pi, or a leased subscription token for Claude Code / Codex) is
-    // spread into every job body so the per-kind bodies can't drift on which auth they forward.
-    const [ghToken, workBranchReady, authResult, packageRegistries, resolvedTestSecrets, search] =
+    // work-branch ensure and the auxiliary-checkout resolution are repo-scoped, while auth
+    // resolution, private-registry auth, tester secrets, and web-search availability are
+    // workspace/block-scoped. Serialising them added ~6 round-trips of latency to EVERY step
+    // dispatch (and every tester→fixer re-dispatch epoch), so fan them out in one wave instead.
+    // `auth` (the proxy session token for Pi, or a leased subscription token for Claude Code /
+    // Codex) is spread into every job body so the per-kind bodies can't drift on which auth
+    // they forward.
+    const [workBranchReady, aux, authResult, packageRegistries, resolvedTestSecrets, search] =
       await Promise.all([
-        this.deps.mintInstallationToken(repo.installationId, {
-          executionId,
-          workspaceId,
-          ...(context.initiatedByUserId ? { initiatedBy: context.initiatedByUserId } : {}),
-        }),
         this.resolveWorkBranchReady(repo, workBranch, aprioriWork, context),
+        // The auxiliary checkouts + their prompt sections: the multi-repo fan-out (coder /
+        // ci-fixer), the conflict-resolver's peer targeting, the merger's combined-diff siblings,
+        // and the read-only reference repos/branches. It rides the wave rather than the tail of
+        // this method because the token mint below is narrowed to the repos it resolves.
+        resolveAuxiliaryRepos(
+          context,
+          { workspaceId, blockId, repo, workBranch },
+          this.deps,
+          this.agentKindRegistry,
+        ),
         this.resolveAuth(context, {
           harness,
           ref,
@@ -1010,6 +1007,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
           : Promise.resolve<WebSearchAvailability>({ available: false, provider: null }),
       ])
     const { auth, subscriptionTokenId } = authResult
+
+    // The clone/push credential, minted AFTER the wave because it is narrowed to the repos this
+    // dispatch actually resolved (primary + fan-out peers + conflict/merger siblings + reference
+    // repos) rather than to everything the installation covers. It is the one step that cannot
+    // join the wave: the scope is what the wave produces. One round trip left the wave as the
+    // auxiliary resolution entered it, so what changed is the ORDERING, not the work, and a warm
+    // process still hits the App-token cache (keyed by scope: `installationTokenCache.ts`). A
+    // PAT-backed facade ignores `repoIds` (`backend/docs/security-model.md`, Layer 3).
+    const ghToken = await this.deps.mintInstallationToken(repo.installationId, {
+      executionId,
+      workspaceId,
+      ...(context.initiatedByUserId ? { initiatedBy: context.initiatedByUserId } : {}),
+      repoIds: jobTokenRepoIds(repo, aux.repoTargets),
+    })
 
     // The fields EVERY harness job body carries, built once so the per-kind bodies
     // can't drift on which jobId/model/auth/repo/proxy fields they forward.
@@ -1035,12 +1046,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // (native) claude-code takes the checkout path too — it has no isolated config home to install
     // into — so the prompt must carry the instructions rather than point at an install.
     const skillRender = renderSkillsForHarness(context.skills, harness, auth.ambientAuth === true)
-    const tools = await this.resolveToolServersFor(context, {
-      harness,
-      ambientAuth: auth.ambientAuth === true,
-      workspaceId,
-      blockId,
-    })
+    // Tool servers (MCP) the running kind declared, narrowed to what THIS harness and auth mode can
+    // serve and whose credentials (static or granted) resolve. Never throws: an unwirable server is
+    // stated to the agent as unavailable rather than turned into a failed dispatch. The binding of
+    // the injected deps onto the resolution lives beside the resolution, because each new credential
+    // channel adds another optional dep and this file sits at its size ratchet.
+    const tools = await resolveDispatchToolServers(
+      dispatchToolServerDeps(this.deps, this.agentKindRegistry),
+      context,
+      {
+        harness,
+        ambientAuth: auth.ambientAuth === true,
+        workspaceId,
+        blockId,
+      },
+    )
     const { testSecretEnv, generatorSecrets } = await this.resolveJobSecretEnv(context, {
       workspaceId,
       blockId,
@@ -1100,26 +1120,20 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       ...(search.available ? { webSearch: true } : {}),
     }
 
-    // The auxiliary checkouts + their prompt sections: the multi-repo fan-out (coder/ci-fixer),
-    // the conflict-resolver's peer targeting, the merger's combined-diff siblings, and the
-    // read-only reference repos/branches. Extracted to keep `buildJobBody` under the complexity
-    // ceiling; it returns the per-kind repo target + `common` override and every section.
     const {
       peerRepos,
       multiRepoSection,
-      commonForKind,
+      repoSpecOverride,
       repoForKind,
       referenceRepos,
       referenceReposSection,
       referenceBranches,
       referenceBranchesSection,
-    } = await this.resolveAuxiliaryRepos(context, {
-      workspaceId,
-      blockId,
-      repo,
-      common,
-      workBranch,
-    })
+    } = aux
+    // The multi-repo fan-out re-roots the checkout at the repo root, and the conflict-resolver
+    // swaps in a peer repo; either way only `common.repo` changes, so the override is applied
+    // here rather than having the resolvers rebuild a `common` that did not exist when they ran.
+    const commonForKind = repoSpecOverride ? { ...common, repo: repoSpecOverride } : common
 
     const { body, kind } = buildKindBody(
       promptContext,
@@ -1196,128 +1210,36 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   }
 
   /**
-   * Tool servers (MCP) the running kind declared: narrowed to what THIS harness/auth mode can
-   * serve and whose credentials resolve, split into the prompt-facing projection (folded onto the
-   * prompt context by the caller, so it reaches the prompt AND the agent-context snapshot) and the
-   * job-body `mcpServers` field carrying the transports + their secrets. Never throws — an
-   * unwirable server is reported to the agent as unavailable, not turned into a failed dispatch.
+   * The model this dispatch runs and the harness that will run it, resolved together because
+   * the second is a property of the first. "Subscriptions always win": a subscription-only model
+   * carries its harness; a dual-mode GLM/Kimi step pinned to its Cloudflare base is auto-routed
+   * to Claude Code when the workspace has a pooled token for the vendor. Shared with
+   * `isQuotaBased` so the dispatch and the spend gate agree on what the step runs.
    *
-   * A thin binding of the executor's injected deps onto the pure {@link resolveToolServers};
-   * separated so `buildJobBody` stays under its complexity ceiling.
+   * The Pi harness reaches models through the LLM proxy, so its model must be a provider the
+   * proxy can serve; locking it here stops the container choosing another. The subscription
+   * harnesses (Claude Code / Codex) talk direct to the vendor with a pooled token, so the
+   * proxyable guard does not apply to them.
    */
-  private resolveToolServersFor(
+  private async resolveDispatchModel(
     context: AgentRunContext,
-    args: { harness: HarnessKind; ambientAuth: boolean; workspaceId: string; blockId: string },
-  ): Promise<ResolvedToolServers> {
-    return resolveToolServers({
+    workspaceId: string,
+  ): Promise<{ ref: ModelRef; harness: HarnessKind; subscriptionVendor?: SubscriptionVendor }> {
+    const { ref, subscriptionVendor } = await this.modelRouter.resolveEffectiveRef(
       context,
-      agentKindRegistry: this.agentKindRegistry,
-      harness: args.harness,
-      ...(args.ambientAuth ? { ambientAuth: true } : {}),
-      workspaceId: args.workspaceId,
-      blockId: args.blockId,
-      ...(this.deps.resolveToolSecrets ? { resolveToolSecrets: this.deps.resolveToolSecrets } : {}),
-      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
-    })
-  }
-
-  /**
-   * Resolve the auxiliary checkouts + their prompt sections for a job: the multi-repo fan-out
-   * (coder / ci-fixer over connected involved services), the conflict-resolver's PEER targeting,
-   * the merger's combined-diff sibling checkouts, and the read-only reference repos + branches.
-   * Returns the per-kind repo target + `common` override (root-cwd / peer-repo swaps) alongside
-   * every resolved section. Extracted from `buildJobBody` to keep it under the complexity ceiling.
-   */
-  private async resolveAuxiliaryRepos(
-    context: AgentRunContext,
-    deps: {
-      workspaceId: string
-      blockId: string
-      repo: RepoTarget
-      common: Record<string, unknown>
-      workBranch: string
-    },
-  ): Promise<{
-    peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
-    multiRepoSection?: string
-    commonForKind: Record<string, unknown>
-    repoForKind: RepoTarget
-    referenceRepos?: { repo: Record<string, unknown> }[]
-    referenceReposSection?: string
-    referenceBranches?: string[]
-    referenceBranchesSection?: string
-  }> {
-    const { workspaceId, blockId, repo, common, workBranch } = deps
-    // Multi-repo fan-out (coder / ci-fixer over connected involved services): peer sibling
-    // checkouts + the layout section + the root-cwd `common` swap. See {@link resolveMultiRepoFanout}.
-    const {
-      peerRepos: fanoutPeerRepos,
-      multiRepoSection: fanoutSection,
-      commonForKind: fanoutCommon,
-    } = await resolveMultiRepoFanout(
-      context,
-      { workspaceId, blockId, repo, common },
-      this.deps,
-      this.agentKindRegistry,
+      workspaceId,
     )
-    let peerRepos = fanoutPeerRepos
-    let multiRepoSection = fanoutSection
-    let commonForKind = fanoutCommon
-    // The repo target the per-kind body builds against — the task's own service by default, but
-    // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
-    // service (see {@link resolveConflictResolverPeer}).
-    let repoForKind = repo
-
-    // Conflict-resolver PEER targeting: point the (single-repo) resolver at the conflicted peer
-    // repo — swapping `repo`/`common.repo` — instead of the task's own service. No-op (undefined)
-    // for an own-repo conflict.
-    const conflict = await resolveConflictResolverPeer(
-      context,
-      { workspaceId, blockId, repo, common },
-      this.deps,
-    )
-    if (conflict) {
-      repoForKind = conflict.repoForKind
-      commonForKind = conflict.commonForKind
+    const harness: HarnessKind = ref.harness ?? 'pi'
+    if (harness === 'pi' && !isProxyableProvider(ref.provider)) {
+      throw new Error(
+        `Container implementation needs a model the LLM proxy can serve ` +
+          `(Workers AI, a direct OpenAI-compatible provider, or a local runner); ` +
+          `'${ref.provider}' is not supported. Pick a Workers AI model, configure a ` +
+          `provider key (QWEN_API_KEY / DEEPSEEK_API_KEY / MOONSHOT_API_KEY), or add a local ` +
+          `runner (Ollama / LM Studio / …) and pick that model.`,
+      )
     }
-
-    // Merger combined-diff: clone every peer PR's repo as a read-only sibling at its PR branch and
-    // name the sibling diff commands. Overrides the fan-out peers/section when it fires (undefined
-    // otherwise — the fan-out result stands). See {@link resolveMergerCombinedDiff}.
-    const merger = await resolveMergerCombinedDiff(
-      context,
-      { workspaceId, blockId, repo, common, workBranch },
-      this.deps,
-    )
-    if (merger) {
-      peerRepos = merger.peerRepos
-      multiRepoSection = merger.multiRepoSection
-    }
-
-    // Read-only reference repos + apriori reference branches: both independent of the fan-out above.
-    // Extracted to keep this method under the complexity ceiling; the branch flag reflects whether
-    // the job is already multi-repo (a fan-out section OR reference-repo section is present).
-    const { referenceRepos, referenceReposSection } = resolveReferenceRepos(
-      context,
-      repo,
-      this.deps,
-    )
-    const { referenceBranches, referenceBranchesSection } = await resolveReferenceBranches(
-      context,
-      { repo, workBranch, multiRepo: Boolean(multiRepoSection || referenceReposSection) },
-      this.deps,
-    )
-
-    return {
-      ...(peerRepos ? { peerRepos } : {}),
-      ...(multiRepoSection ? { multiRepoSection } : {}),
-      commonForKind,
-      repoForKind,
-      ...(referenceRepos ? { referenceRepos } : {}),
-      ...(referenceReposSection ? { referenceReposSection } : {}),
-      ...(referenceBranches ? { referenceBranches } : {}),
-      ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
-    }
+    return { ref, harness, ...(subscriptionVendor ? { subscriptionVendor } : {}) }
   }
 
   /**

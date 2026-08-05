@@ -104,7 +104,13 @@ export {
   type MintInstallationToken,
   type EnsureWorkBranch,
   type JobPackageRegistrySpec,
+  jobTokenRepoIds,
 } from './agents/ContainerAgentExecutor.js'
+// The one place a facade decides WHOSE token a dispatch carries and HOW WIDE it is minted.
+export {
+  buildDispatchTokenMint,
+  type DispatchTokenMintDependencies,
+} from './agents/dispatchTokenMint.js'
 export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the
@@ -127,10 +133,32 @@ export {
   buildToolSecretChain,
   createWorkspaceToolSecretResolver,
   composeToolSecretResolvers,
+  toolSecretContainerFields,
   type ToolSecretChain,
   type ToolSecretChainInput,
+  type ToolSecretContainerFields,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
+// The OAuth half of the same seam: the kernel `McpOAuthTokenSource` a facade wires, joining the
+// sealed per-workspace grant store to the credential chain above (which resolves the OAuth client
+// secret). Every facade builds it beside `buildToolSecretChain`, so a deployment with a grant
+// store dispatches with a live token and one without states the server as `oauth_not_connected`.
+export {
+  createMcpOAuthTokenSource,
+  mcpOAuthContainerFields,
+  mcpOAuthExecutorDeps,
+  type McpOAuthContainerFields,
+  type McpOAuthTokenSourceOptions,
+} from './agents/mcpOAuthTokenSource.js'
+export {
+  resolveOAuthClientSecret,
+  type OAuthClientSecretResolution,
+  type ResolveOAuthClientSecretInput,
+} from './agents/mcpOAuthClientSecret.js'
+export {
+  MCP_OAUTH_CALLBACK_PATH,
+  requireMcpOAuthRedirectUrl,
+} from './modules/toolServers/mcpOAuthRedirect.js'
 export {
   buildCapabilityCredentialsView,
   collectDeclaredCapabilityCredentials,

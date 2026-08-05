@@ -23,6 +23,8 @@ public abstract class Resources {
     private final UsageClient usage;
     private final DecisionsClient decisions;
     private final DebugClient debug;
+    private final EvidenceClient evidence;
+    private final KeysClient keys;
 
     protected Resources(Transport transport) {
         this.jobs = new JobsClient(transport);
@@ -34,6 +36,8 @@ public abstract class Resources {
         this.usage = new UsageClient(transport);
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
+        this.evidence = new EvidenceClient(transport);
+        this.keys = new KeysClient(transport);
     }
 
     /** Headless jobs (a public, inline pipeline run against a brief): start, poll or stream one. */
@@ -71,7 +75,7 @@ public abstract class Resources {
         return usage;
     }
 
-    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
+    /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
     public DecisionsClient decisions() {
         return decisions;
     }
@@ -79,5 +83,15 @@ public abstract class Resources {
     /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
     public DebugClient debug() {
         return debug;
+    }
+
+    /** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+    public EvidenceClient evidence() {
+        return evidence;
+    }
+
+    /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
+    public KeysClient keys() {
+        return keys;
     }
 }

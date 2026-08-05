@@ -1,4 +1,5 @@
 import type { PipelineStep, StepGating, TaskEstimate } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { isCompanionKind } from '@cat-factory/agents'
 
 /**
@@ -53,8 +54,12 @@ export function shouldRunGatedStep(
  * companion (it would have no producer, which the shape validation rejects), so a missing
  * predecessor yields `false` rather than a skip.
  */
-export function producerWasSkipped(steps: readonly PipelineStep[], index: number): boolean {
+export function producerWasSkipped(
+  steps: readonly PipelineStep[],
+  index: number,
+  registry?: AgentKindRegistry,
+): boolean {
   const step = steps[index]
-  if (!step || !isCompanionKind(step.agentKind)) return false
+  if (!step || !isCompanionKind(step.agentKind, registry)) return false
   return steps[index - 1]?.skipped === true
 }

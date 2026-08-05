@@ -23,15 +23,24 @@ export const provisioningSubsystemSchema = v.picklist(['environment', 'runner-po
 export type ProvisioningSubsystem = v.InferOutput<typeof provisioningSubsystemSchema>
 
 /**
- * The lifecycle operation an event records. `provision`/`teardown`/`status` are
- * the ephemeral-environment verbs; `dispatch`/`release` are the runner-pool /
+ * The lifecycle operation an event records. `provision`/`teardown`/`teardown-verify`/`status`
+ * are the ephemeral-environment verbs; `dispatch`/`release` are the runner-pool /
  * container spin-up / spin-down verbs; `poll-failure` captures a failure (an
  * eviction / crash) detected while polling a running job — routine successful
  * polls are deliberately NOT logged (they would swamp the store).
+ *
+ * `teardown-verify` is deliberately a SECOND row rather than a richer `teardown` one, because
+ * the two record different observers: `teardown` says the provider accepted the destroy call,
+ * `teardown-verify` says an INDEPENDENT probe afterwards found the resource gone. Collapsing
+ * them would restore exactly the conflation this split exists to end — a provider whose
+ * teardown is a declared no-op (the manifest omits a `teardown:` template, so
+ * `HttpEnvironmentProvider` returns `torn_down` having called nothing) returns success, and a
+ * single row would report a reclaimed environment that is still running and still billing.
  */
 export const provisioningOperationSchema = v.picklist([
   'provision',
   'teardown',
+  'teardown-verify',
   'status',
   'dispatch',
   'release',

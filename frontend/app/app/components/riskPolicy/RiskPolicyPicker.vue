@@ -14,7 +14,10 @@
 import { computed, ref } from 'vue'
 import type { RiskPolicy } from '~/types/merge'
 import RiskPolicyPreview from '~/components/riskPolicy/RiskPolicyPreview.vue'
-import { resolveRiskPolicyPicker } from '~/components/riskPolicy/RiskPolicyPicker.logic'
+import {
+  refusedRiskPolicySelections,
+  resolveRiskPolicyPicker,
+} from '~/components/riskPolicy/RiskPolicyPicker.logic'
 
 const props = withDefaults(
   defineProps<{
@@ -37,6 +40,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'update:modelValue': [string] }>()
 const { t } = useI18n()
+const access = useWorkspaceAccess()
 
 const open = ref(false)
 // The row the pointer or the keyboard is currently on, driving the right-column preview.
@@ -57,6 +61,39 @@ const preview = computed(() =>
 )
 
 /**
+ * The policies this user may not move THIS task to, and why (ADR 0037): a selection may not
+ * relax what the selector's own role is held to, and the backend refuses one that does. Offering
+ * the row anyway would be telling someone they made a choice the engine then discards.
+ *
+ * Empty on every workspace whose policies treat each initiator alike (which is every built-in),
+ * and always empty for someone holding `settings.manage`, who owns the library.
+ */
+const refused = computed(() =>
+  refusedRiskPolicySelections({
+    options: props.options,
+    defaultPolicy: props.defaultPolicy,
+    modelValue: props.modelValue,
+    actor: { role: access.role.value, managesPolicy: access.canManageSettings.value },
+  }),
+)
+
+/** The reason the previewed row is refused, if it is: the pane explains what the row cannot. */
+const previewRefusal = computed(() => refused.value.get(activeId.value ?? props.modelValue))
+
+/**
+ * The same reason as a tooltip on the row itself, `undefined` when the row is selectable.
+ *
+ * A refused row is `aria-disabled`, NOT `disabled`: a disabled button is unfocusable, so keyboard
+ * users could never land on it, and landing on it is precisely what puts the reason in the detail
+ * pane (the `@focus` handler below drives the preview). Refusing the click is `choose`'s job, so
+ * the row stays reachable by both routes and explains itself on both.
+ */
+function refusalText(id: string): string | undefined {
+  const refusal = refused.value.get(id)
+  return refusal ? t(`riskPolicy.picker.refused.${refusal}`) : undefined
+}
+
+/**
  * Tabbing BETWEEN two rows fires `focusout` on the one being left, so only focus leaving the
  * panel altogether may drop the preview back to the selection.
  */
@@ -68,6 +105,7 @@ function onPanelFocusOut(event: FocusEvent) {
 }
 
 function choose(id: string) {
+  if (refused.value.has(id)) return
   emit('update:modelValue', id)
   open.value = false
 }
@@ -101,14 +139,22 @@ function choose(id: string) {
           <li>
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue ? 'text-slate-300' : 'text-slate-100'"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
+              :class="[
+                refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
+                modelValue ? 'text-slate-300' : 'text-slate-100',
+              ]"
+              :aria-disabled="refused.has('')"
+              :title="refusalText('')"
               data-testid="risk-policy-option-none"
               @mouseenter="activeId = ''"
               @focus="activeId = ''"
               @click="choose('')"
             >
-              <UIcon name="i-lucide-rotate-ccw" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon
+                :name="refused.has('') ? 'i-lucide-lock' : 'i-lucide-rotate-ccw'"
+                class="h-4 w-4 shrink-0 text-slate-400"
+              />
               <span class="flex-1 truncate">{{ noneLabel }}</span>
               <UIcon
                 v-if="!modelValue"
@@ -120,14 +166,22 @@ function choose(id: string) {
           <li v-for="p in options" :key="p.id">
             <button
               type="button"
-              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm hover:bg-slate-800/60"
-              :class="modelValue === p.id ? 'text-slate-100' : 'text-slate-300'"
+              class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-sm"
+              :class="[
+                refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
+                modelValue === p.id ? 'text-slate-100' : 'text-slate-300',
+              ]"
+              :aria-disabled="refused.has(p.id)"
+              :title="refusalText(p.id)"
               :data-testid="`risk-policy-option-${p.id}`"
               @mouseenter="activeId = p.id"
               @focus="activeId = p.id"
               @click="choose(p.id)"
             >
-              <UIcon name="i-lucide-git-merge" class="h-4 w-4 shrink-0 text-slate-400" />
+              <UIcon
+                :name="refused.has(p.id) ? 'i-lucide-lock' : 'i-lucide-git-merge'"
+                class="h-4 w-4 shrink-0 text-slate-400"
+              />
               <span class="flex-1 truncate">{{ p.name }}</span>
               <UIcon
                 v-if="modelValue === p.id"
@@ -141,6 +195,13 @@ function choose(id: string) {
         <!-- right: what the active (or selected) policy actually does -->
         <div class="w-1/2 overflow-y-auto p-3">
           <template v-if="preview.policy">
+            <p
+              v-if="previewRefusal"
+              class="mb-2 text-[11px] leading-snug text-amber-400"
+              data-testid="risk-policy-refusal"
+            >
+              {{ t(`riskPolicy.picker.refused.${previewRefusal}`) }}
+            </p>
             <p
               v-if="preview.viaWorkspaceDefault"
               class="mb-2 text-[11px] leading-snug text-slate-500"

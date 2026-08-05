@@ -15,6 +15,8 @@ import {
   type AgentKindRegistry,
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   CLARITY_REVIEW_AGENT_KIND,
+  hasTrait,
+  INTERVIEW_GATE_TRAIT,
   isInlineModelStep,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
   REQUIREMENTS_REVIEW_AGENT_KIND,
@@ -66,6 +68,28 @@ export const APPROVAL_GATE_PARK_SURFACE = 'approval-gate'
 export const INPUT_GATE_PARK_SURFACE = 'input-gate'
 
 /**
+ * The park surface an INTERVIEW GATE presents: an inline interviewer asks a batch of clarifying
+ * questions and the run waits while a human answers them.
+ *
+ * A FOURTH mechanism, read off the step kind's `interview-gate` TRAIT rather than a list of
+ * interviewer kinds, which is what makes a deployment's OWN registered interviewer visible to
+ * admission with no edit here, the opposite of the wait-gate gap {@link HUMAN_WAIT_GATE_KINDS}
+ * documents. Being visible HERE is not the same as being answerable: the decision surface needs the
+ * gate's controller wired too (`ExecutionService.interviewGateFor`), and a kind registered without
+ * one is admitted as a park and 503s when answered. That order is the safe one (the refusal
+ * over-counts rather than under-counts), but it is why the two checks are not one.
+ *
+ * Missing it was reachable rather than theoretical, and in the worst direction: an interviewer is
+ * an INLINE step, so a pipeline built out of interview steps was reported `headlessStartable`
+ * (the flag that tells a caller a `write` key can drive the pipeline end to end with no follow-up)
+ * while every run of it stopped on the first batch of questions. No SHIPPED preset changes hands
+ * here, because both built-in interview pipelines already carry a human gate on a later step and
+ * were admitted as parking on that; what changes is that the refusal now names the interview, and
+ * that a pipeline whose only park is the interview is finally seen.
+ */
+export const INTERVIEW_PARK_SURFACE = 'interview'
+
+/**
  * POLLING-GATE kinds that park on a human, re-exported from `@cat-factory/contracts` so every park
  * surface this module enumerates is reachable from one place.
  *
@@ -79,6 +103,24 @@ export const INPUT_GATE_PARK_SURFACE = 'input-gate'
  * Missing it was a real hole rather than a theoretical one: `human-review` is not answerable through
  * `/api/v1/runs/:runId/decisions` at all, so a plain `write` key could start the platform's flagship
  * board preset and have it park forever on the one surface with no public answer path.
+ *
+ * ONLY BUILT-IN GATES ARE IN IT, and a deployment that registers its own unbounded-wait gate
+ * through the public `GateRegistry` seam is therefore INVISIBLE to this check: such a pipeline is
+ * admitted for a plain `write` key and then parks with nothing here able to name it. That is a
+ * limit of what a request-time check can read, not an oversight: a gate's `pollExhaustion` is
+ * declared inside the object its FACTORY builds from an engine context, and standing a fake
+ * context up per admission call to interrogate a static declaration would be a shortcut, not a
+ * design. So the deployment that registered the gate owns the answer to it, in whatever surface
+ * it registered it for, and the run reports `parked: true` with an empty decision list until then.
+ *
+ * Note what the neighbouring surfaces do NOT share this limit: {@link INTERVIEW_PARK_SURFACE} is
+ * read off an AGENT KIND's trait, and follow-up triage would be readable off the pipeline's own
+ * per-step toggles (it has no constant here because it is deliberately not enumerated, see
+ * {@link parkSurfacesOf}), both of which a deployment's own registrations flow through, so a custom
+ * interviewer is seen here and a custom wait gate is not. Closing the gap means a gate declaring
+ * `pollExhaustion` at REGISTRATION time rather than only on the built definition; that is a change
+ * to the registry seam, ranked in `docs/initiatives/public-api-additions.md` rather than smuggled
+ * in behind a park-surface slice.
  */
 export { HUMAN_WAIT_GATE_KINDS }
 
@@ -116,6 +158,7 @@ export const PUBLICLY_ANSWERABLE_PARK_SURFACES = new Set<string>([
   ARCHITECTURE_BRAINSTORM_AGENT_KIND,
   INPUT_GATE_PARK_SURFACE,
   APPROVAL_GATE_PARK_SURFACE,
+  INTERVIEW_PARK_SURFACE,
 ])
 
 /** The pipeline shape admission reasons about — the step chain plus its parallel flag arrays. */
@@ -154,31 +197,62 @@ export function isInlineOnlyPipeline(
  * {@link HUMAN_WAIT_GATE_KINDS} unbounded-wait gates. Parking is not a defect: it is the
  * clarification loop. It just needs an answerer, which is what the `decide` scope asserts.
  */
-export function canParkOnHuman(pipeline: AdmissiblePipelineShape): boolean {
-  return parkSurfacesOf(pipeline).length > 0
+export function canParkOnHuman(
+  pipeline: AdmissiblePipelineShape,
+  registry: AgentKindRegistry,
+): boolean {
+  return parkSurfacesOf(pipeline, registry).length > 0
 }
 
 /**
  * Every park surface an ENABLED step of `pipeline` can put the run on, in step order and deduped.
- * Three mechanisms, each a separate check because each parks for a different reason:
+ * Four mechanisms, each a separate check because each parks for a different reason:
  *
  *  1. an approval gate flag on the step ({@link APPROVAL_GATE_PARK_SURFACE});
  *  2. the step's own kind being an inline review/brainstorm ({@link PARKING_INLINE_KINDS});
  *  3. the step's own kind being a polling gate that waits on a human with no deadline
- *     ({@link HUMAN_WAIT_GATE_KINDS}).
+ *     ({@link HUMAN_WAIT_GATE_KINDS});
+ *  4. the step's own kind carrying the `interview-gate` TRAIT ({@link INTERVIEW_PARK_SURFACE}).
  *
  * This is the single enumeration {@link canParkOnHuman} derives its boolean from, so the predicate
  * and the explanation a caller is given can never disagree about what parks.
  *
- * Note what is deliberately NOT here: a park raised dynamically mid-run (an agent-raised decision, a
- * judge `park` disposition) is not knowable from the step chain at start time, so the rule cannot
- * see it and does not pretend to. See ADR 0032.
+ * Case 4 arrived after the first three had shipped, which is the lesson the human-wait gates
+ * already taught repeating itself: an enumeration written against the park mechanisms somebody
+ * thought of misses the ones they did not, so ask what each entry is DERIVED from. Cases 2, 3 and 4
+ * each derive from a declaration (a kind list, a `pollExhaustion` value pinned by a drift guard, a
+ * registered trait) rather than from a hand-kept list of pipelines. Whatever is added next should
+ * be derivable too.
+ *
+ * THREE THINGS ARE DELIBERATELY NOT HERE, and they are absent for three different reasons:
+ *
+ *  - A park raised dynamically mid-run (an agent-raised decision, a judge `park` disposition) is
+ *    not knowable from the step chain at start time, so the rule cannot see it and does not pretend
+ *    to. ADR 0032.
+ *  - An unbounded human-wait gate a DEPLOYMENT registered itself cannot be read at request time;
+ *    see the note on {@link HUMAN_WAIT_GATE_KINDS}. It is the only mechanism here a deployment's own
+ *    registration escapes: a custom interviewer carries the trait case 4 reads and IS seen.
+ *  - FOLLOW-UP TRIAGE is knowable (the companion is seeded on a Coder step unless the pipeline's
+ *    per-step `followUps` toggle turns it off) and is deliberately left out anyway, because
+ *    counting it would refuse a plain `write` key EVERY board pipeline that builds anything: the
+ *    companion is on by default on every Coder step, so `pl_simple` and `pl_build` (the presets
+ *    whose selling point is that they never pause) would become `decide`-only. Taking that much
+ *    capability off live keys is a bigger break than the gap it closes, and the gap is no longer
+ *    the one this rule exists to prevent: the park HAS a public answer path now
+ *    (`…/decisions/follow-ups/items/:itemId/*`), so a run that stops there is recoverable with a
+ *    `decide` key instead of being app-only. Reconsider if the companion's default ever flips off.
+ *    Recorded in `docs/initiatives/public-api-additions.md` so it is not re-proposed as an
+ *    oversight.
  */
-export function parkSurfacesOf(pipeline: AdmissiblePipelineShape): string[] {
+export function parkSurfacesOf(
+  pipeline: AdmissiblePipelineShape,
+  registry: AgentKindRegistry,
+): string[] {
   const surfaces = new Set<string>()
   for (const { kind, i } of enabledSteps(pipeline)) {
     if (pipeline.gates?.[i]) surfaces.add(APPROVAL_GATE_PARK_SURFACE)
     if (PARKING_INLINE_KINDS.has(kind) || HUMAN_WAIT_GATE_KINDS.has(kind)) surfaces.add(kind)
+    if (hasTrait(kind, INTERVIEW_GATE_TRAIT, registry)) surfaces.add(INTERVIEW_PARK_SURFACE)
   }
   return [...surfaces]
 }
@@ -236,9 +310,10 @@ export function parkingRefusalMessage(surfaces: string[], options: { cancelPath:
  */
 export function publicRunParkSurfaces(
   pipeline: AdmissiblePipelineShape,
+  registry: AgentKindRegistry,
   options: { inputGateBlocks: boolean },
 ): string[] {
-  const surfaces = parkSurfacesOf(pipeline)
+  const surfaces = parkSurfacesOf(pipeline, registry)
   // Prepended: the gate parks BEFORE the first dispatch, so if it is going to hold this run it
   // holds it before any of the pipeline's own park surfaces are reached.
   return options.inputGateBlocks ? [INPUT_GATE_PARK_SURFACE, ...surfaces] : surfaces
@@ -254,5 +329,5 @@ export function isHeadlessInlinePipeline(
   pipeline: AdmissiblePipelineShape,
   registry: AgentKindRegistry,
 ): boolean {
-  return isInlineOnlyPipeline(pipeline, registry) && !canParkOnHuman(pipeline)
+  return isInlineOnlyPipeline(pipeline, registry) && !canParkOnHuman(pipeline, registry)
 }

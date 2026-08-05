@@ -525,10 +525,15 @@
       },
       "roleRules": {
         "heading": "Limiti per ruolo di chi avvia",
-        "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere soggetto a regole più severe di quelle sopra, oppure alle sole prove: la pipeline lavora e apre una pull request, ma non viene unito nulla. Un ruolo può solo restringere questo criterio, mai allargarlo.",
-        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per categoria qui sotto non aggiungono nulla. Le prove restano valide: rifiutano anche un'unione manuale.",
+        "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere limitato a certi tipi di modifica, tenuto a regole più severe di quelle sopra, oppure limitato alle prove: la pipeline lavora e apre una pull request, e non viene unito nulla. Un ruolo può solo restringere questa politica, mai ampliarla.",
+        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per classe qui sotto non aggiungono nulla. Il limite di unione e le prove restano validi: entrambi rifiutano anche l'unione manuale.",
         "sandboxLabel": "Solo prove",
-        "sandboxNote": "Le esecuzioni avviate da questo ruolo aprono una pull request e non uniscono nulla, quindi le regole per categoria qui sotto non possono restringerle ulteriormente.",
+        "sandboxNote": "Le esecuzioni di questo ruolo aprono una pull request e non uniscono nulla, quindi nessuno dei limiti qui sotto può renderle più severe.",
+        "submissionLabel": "Limita quali modifiche questo ruolo può unire",
+        "submissionHelp": "Se attivo, nelle esecuzioni avviate da questo ruolo vengono unite solo le tipologie selezionate. Il resto resta aperto per qualcun altro, quali che siano i punteggi. La pull request viene comunque aperta e può essere unita a mano sull'host git.",
+        "submissionNone": "Non è selezionato nulla, quindi questo spazio di lavoro non unirà nessuna esecuzione di questo ruolo.",
+        "submissionBadge": "Unione limitata",
+        "classHeading": "Revisione richiesta per tipo di modifica",
         "noRules": "Nessun limite per categoria",
         "ruleCount": "{count} categoria limitata | {count} categorie limitate",
         "inherit": "Come questo criterio",
@@ -606,6 +611,73 @@
         "removeFailed": "Impossibile rimuovere la voce del registry"
       }
     },
+    "toolServers": {
+      "heading": "Server di strumenti (MCP)",
+      "intro": "I server MCP che questa installazione registra per i suoi agenti. Provarne uno risolve le credenziali di questa bacheca e parla il protocollo con il server, quindi il risultato è quello che otterrebbe un’esecuzione.",
+      "transport": {
+        "stdio": "Nel container",
+        "http": "Remoto"
+      },
+      "declaredBy": "Assegnato a: {kinds}",
+      "declaredByNone": "Nessun agente riceve questo server, quindi nessuna esecuzione lo avvierà.",
+      "servableHarnesses": "Funziona con: {harnesses}",
+      "servableHarnessesNone": "Nessuna CLI di agente può servire questo trasporto, quindi questo server non si applica a nessuna esecuzione.",
+      "allowedTools": "Limitato a: {tools}",
+      "credentials": "Credenziali: {keys}",
+      "oauth": {
+        "connected": "Collegato",
+        "notConnected": "Non collegato",
+        "machineGrant": "Si autentica come questo deployment",
+        "connectedBy": "Collegato da {user}",
+        "scopes": "Concesso: {scopes}",
+        "notRefreshable": "Il fornitore non ha emesso un token di aggiornamento, quindi il collegamento andrà rifatto alla scadenza del token di accesso.",
+        "lastError": "L’ultimo rinnovo del token non è riuscito: {detail}",
+        "connect": "Collega",
+        "reconnect": "Ricollega",
+        "disconnect": "Scollega",
+        "callback": {
+          "working": "Completamento della connessione…",
+          "done": "Collegato a {server}",
+          "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
+          "back": "Torna all’app",
+          "failedTitle": "Non è stato possibile completare la connessione",
+          "failed": "Non è stato possibile completare l’autorizzazione. Riavvia la connessione dalla finestra Infrastruttura.",
+          "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
+        }
+      },
+      "test": "Prova",
+      "notProbeable": {
+        "stdio": "Gira dentro il container dell’agente, quindi non può essere provato da qui.",
+        "containerLocal": "Ascolta accanto all’agente nel suo container, che non è raggiungibile da qui.",
+        "urlNotAllowed": "Questo indirizzo non è consentito per un server di strumenti (https, oppure http semplice solo su localhost)."
+      },
+      "status": {
+        "ok": "Ha risposto",
+        "credentialsMissing": "Nessuna credenziale",
+        "credentialRefused": "Credenziale rifiutata",
+        "oauthNotConnected": "Non collegato",
+        "oauthTokenFailed": "Il collegamento ha smesso di funzionare",
+        "unreachable": "Nessuna risposta",
+        "httpError": "Richiesta respinta",
+        "protocolError": "Non è un server MCP",
+        "notProbeable": "Non provabile da qui"
+      },
+      "okDetail": "{name} {version}, protocollo {protocol}, {count} strumenti.",
+      "toolsIncomplete": "Il server ha più strumenti di quanti una prova ne legga, quindi questo numero è un minimo.",
+      "unmatchedTools": "Questo server non espone alcuno strumento chiamato {tools}, quindi all’agente viene annunciato uno strumento che non può invocare.",
+      "allowedToolsUnchecked": "L’elenco degli strumenti era troppo lungo per leggerlo tutto, quindi i nomi limitati non hanno potuto essere verificati.",
+      "unresolvedCredentials": "Nulla è stato risolto per {keys}. Inseriscilo qui sotto, oppure impostalo nell’ambiente dell’installazione.",
+      "refusedCredentials": "{keys} nomina una variabile che appartiene alla configurazione della piattaforma stessa, quindi non viene mai risolta. Modifica la dichiarazione nel codice dell’installazione.",
+      "httpStatus": "HTTP {status}",
+      "showDetails": "Mostra dettagli",
+      "hideDetails": "Nascondi dettagli",
+      "toast": {
+        "loadFailed": "Impossibile caricare i server di strumenti",
+        "probeFailed": "Impossibile provare il server di strumenti",
+        "connectFailed": "Impossibile avviare il collegamento",
+        "disconnectFailed": "Impossibile scollegare il server di strumenti"
+      }
+    },
     "capabilityCredentials": {
       "tab": "Credenziali delle capacità",
       "intro": "I segreti che i server di strumenti e le integrazioni generative di questo deployment richiedono per nome. I valori vengono salvati solo per questa board, cifrati a riposo, e consegnati direttamente al processo dell'agente: non finiscono mai in un prompt né in un log. I valori sono di sola scrittura, quindi uno salvato si sostituisce digitandone uno nuovo e non viene mai riletto.",
@@ -657,6 +729,7 @@
         "neverUsed": "mai utilizzato",
         "createdBy": "creato da {user}",
         "createdByYou": "te",
+        "createdByKey": "la chiave API {id}",
         "revoke": "Revoca token"
       },
       "add": {
@@ -1491,6 +1564,12 @@
       "inherited": "ereditato dal servizio",
       "frozen": "Congelato: l'agente e' partito"
     },
+    "taskTypeFields": {
+      "title": "Campi del tipo di attività",
+      "hint": "Le risposte che questo tipo di attività dichiara necessarie. Una risposta obbligatoria mancante mette in pausa l'esecuzione prima che inizi.",
+      "save": "Salva",
+      "revert": "Ripristina"
+    },
     "dependencies": {
       "title": "Dipende da",
       "hint": "Attivita' che devono essere unite prima che questa possa essere eseguita. Il controllo Esegui resta bloccato finche' ogni dipendenza non e' completata.",
@@ -1530,6 +1609,7 @@
       },
       "prNumber": "PR n. {number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Leggi l'esito",
       "stepState": {
         "pending": "In attesa",
         "working": "In lavorazione",
@@ -1751,6 +1831,7 @@
         "class_auto_merge": "Questo preset unisce sempre automaticamente questa categoria di modifica, quindi i punteggi non sono stati confrontati.",
         "class_requires_review": "Questo preset invia sempre questa categoria di modifica a una persona, indipendentemente dai punteggi.",
         "role_requires_review": "Questa impostazione sottopone a revisione umana le esecuzioni avviate da un {role} per questo tipo di modifica, qualunque siano i punteggi. Un collega di livello superiore può unire questa PR così com’è.",
+        "submission_not_allowed": "Questo preset consente alle esecuzioni avviate da un {role} di unire solo questi tipi di modifica: {classes}. Questa è di un altro tipo, quindi la pull request attende qualcuno il cui ruolo possa unirla.",
         "dry_run": "Questa era una prova, quindi la pull request è rimasta aperta per una persona e i punteggi non sono stati confrontati. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "scores": "Punteggi",
@@ -1762,7 +1843,8 @@
       "ceiling": "limite massimo {value}",
       "rationale": "Motivazione",
       "noAssessment": "Il merger non ha restituito una valutazione con punteggio.",
-      "noResult": "Nessuna decisione di merge ancora registrata."
+      "noResult": "Nessuna decisione di merge ancora registrata.",
+      "noSubmittableClasses": "nessuno"
     },
     "testReport": {
       "title": "Report di test",
@@ -1937,7 +2019,12 @@
         "notRun": "non eseguito",
         "attempts": "Tentativo {attempts} di {maxAttempts}",
         "omittedTestPaths": "{count} file di test dichiarato è stato scartato prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta. | {count} file di test dichiarati sono stati scartati prima dell’esecuzione della prova, quindi l’albero precedente alla correzione è stato ricostruito da una riproduzione incompleta."
-      }
+      },
+      "quorumProgress": "{recorded} di {required} approvazioni",
+      "quorumYours": "(la tua è conteggiata)",
+      "quorumEditLocked": "Le correzioni si potranno scrivere quando la tua approvazione sarà quella che sblocca questo gate. Fino ad allora, approva così com'è o richiedi modifiche.",
+      "notAnApprover": "Questo gate indica chi può risolverlo e tu non sei tra loro.",
+      "approverIdentityRequired": "Questo gate indica chi può risolverlo, quindi deve farlo una di quelle persone dopo aver effettuato l’accesso."
     },
     "inspector": {
       "frameStatus": {
@@ -2873,6 +2960,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Apri {pr} su GitHub",
+      "readOutcome": "Esito",
+      "readOutcomeHint": "Leggi che cosa è cambiato, con le prove che lo sostengono",
       "review": "Rivedi",
       "merge": "Unisci",
       "mergeConfirm": {
@@ -4081,6 +4170,17 @@
       "hint": "Il massimo a cui puo arrivare una singola risposta di questo agente. Lasciarlo vuoto eredita dal livello superiore, non toglie il limite. Il valore di uno step della pipeline prevale sul predefinito dello spazio di lavoro.",
       "inherits": "Ereditato",
       "inheritsValue": "Ereditato ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Chi può approvare",
+      "roleAdmin": "Amministratori",
+      "roleMember": "Membri",
+      "namedApproversLabel": "Approvatori designati",
+      "namedApproversPlaceholder": "Chiunque abbia permessi di scrittura",
+      "requiredApprovalsLabel": "Approvazioni richieste",
+      "requiredApprovalsHint": "Ciascuna da una persona diversa prima che l'esecuzione prosegua.",
+      "anyoneHint": "Chiunque possa modificare questa board può approvare questo passo.",
+      "gateParametersLabel": "Impostazioni del gate"
     }
   },
   "agentPrompt": {
@@ -5206,7 +5306,8 @@
         "input_gate_parked": "Rispondi nel controllo di input dell'attività",
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
-        "dry_run_not_mergeable": "Una prova non può essere unita"
+        "dry_run_not_mergeable": "Una prova non può essere unita",
+        "submission_not_allowed": "Unione non consentita per questa esecuzione"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5243,7 +5344,8 @@
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
-        "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
+        "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
+        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -5518,6 +5620,11 @@
       "success_criteria_missing": {
         "title": "Nessun criterio di successo",
         "hint": "Indica la domanda a cui risponde lo spike, o come si presenta un buon esito, così il tempo riservato ha un obiettivo."
+      },
+      "required_field_missing": {
+        "title": "Manca: {field}",
+        "hint": "Questo tipo di attività richiede «{field}» e l’attività non lo compila. Inseriscilo nell’attività, poi ricontrolla.",
+        "unnamedField": "un campo obbligatorio"
       },
       "unknown": {
         "title": "Rilievo non riconosciuto",
@@ -5820,6 +5927,110 @@
       "fixRequested": "Correzione richiesta"
     }
   },
+  "outcome": {
+    "title": "Esito",
+    "subtitle": "Che cosa ha cambiato questa esecuzione, e le prove che lo sostengono",
+    "diff": "Apri il diff",
+    "diffNumbered": "Apri il diff (#{number})",
+    "peerDiff": "Apri il diff in {repo}",
+    "disposition": {
+      "merged": "Unito",
+      "awaiting_merge": "In attesa di essere unito",
+      "in_flight": "Ancora in corso",
+      "needs_attention": "Richiede attenzione",
+      "not_run": "Non ancora eseguito",
+      "unknown": "Esecuzione non caricata"
+    },
+    "ask": {
+      "title": "Che cosa era stato chiesto",
+      "none": "Questa attività non ha una descrizione, quindi non c'è nulla con cui confrontare l'esito."
+    },
+    "gap": {
+      "run_unavailable": "L'esecuzione di questa attività non è stata caricata, quindi le prove che ha registrato non possono essere mostrate qui. Non è la stessa cosa di un'esecuzione che non ha registrato nulla."
+    },
+    "requirements": {
+      "title": "Requisiti verificati",
+      "met": "Soddisfatti: {count}",
+      "notMet": "Non soddisfatti: {count}",
+      "notCovered": "Non verificati: {count}",
+      "regressions": "Regressioni: {count}",
+      "regressionTag": "Regressione",
+      "idOnly": "solo id",
+      "idOnlyHint": "Questo identificatore non è nella specifica del servizio, quindi non c'è alcun titolo da mostrare.",
+      "spec": {
+        "not_read": "La specifica del servizio non è stata letta, quindi questi sono gli identificatori dei requisiti riportati dal tester, senza i loro titoli.",
+        "unmatched": "Nessuno di questi identificatori di requisito compare nella specifica del servizio che è stata letta, quindi vengono mostrati solo gli identificatori riportati dal tester."
+      },
+      "verdict": {
+        "met": "Verificato",
+        "not_met": "Fallito",
+        "not_covered": "Non verificato"
+      },
+      "gap": {
+        "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato verificato alcun requisito.",
+        "tester_not_reported": "Il tester non ha ancora riportato nulla, quindi nessun requisito è stato deciso.",
+        "no_verdicts": "Il tester ha riportato senza pronunciarsi su alcun requisito della specifica."
+      }
+    },
+    "tests": {
+      "title": "Come è stato testato",
+      "openReport": "Rapporto di test completo",
+      "summary": "Il tester riferisce: {summary}",
+      "abort": "Il tester non è riuscito a eseguire un test significativo: {reason}",
+      "counts": "{passed} superati, {failed} falliti, {skipped} saltati",
+      "verdict": {
+        "greenlit": "Pronto per il rilascio",
+        "concerns": "Sollevati dei dubbi",
+        "could_not_run": "Non è stato possibile testarlo"
+      },
+      "environment": {
+        "local": "Testato con dipendenze locali",
+        "ephemeral": "Testato su un ambiente di anteprima"
+      },
+      "severity": {
+        "low": "Bassa",
+        "medium": "Media",
+        "high": "Alta",
+        "critical": "Critica"
+      },
+      "gap": {
+        "no_tester_step": "Questa pipeline non ha un passo di test, quindi non è stato eseguito nulla.",
+        "tester_not_reported": "Il tester non ha ancora riportato nulla."
+      }
+    },
+    "visuals": {
+      "title": "Che aspetto ha",
+      "shotAlt": "Schermata di {view}",
+      "hasReference": "Per questa vista è stato fornito un progetto di riferimento",
+      "source": {
+        "visual_confirm": "Queste viste sono state confrontate con i progetti di riferimento.",
+        "tester": "Queste viste sono state catturate durante i test. Nessuno è stato invitato a rivederle."
+      },
+      "gap": {
+        "no_visual_step": "In questa pipeline nulla cattura l'interfaccia, quindi non c'è nulla da guardare.",
+        "none_captured": "L'interfaccia doveva essere catturata, ma non è stata catturata alcuna vista."
+      }
+    },
+    "checks": {
+      "title": "Controlli",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Controlli del progetto",
+        "reproduction": "Riproduzione del bug"
+      },
+      "state": {
+        "pass": "superato",
+        "fail": "fallito",
+        "pending": "ancora in corso",
+        "inconclusive": "non conclusivo"
+      }
+    },
+    "empty": {
+      "title": "Ancora nulla da mostrare",
+      "body": "Questa attività non ha ancora prodotto un esito da leggere."
+    }
+  },
   "focus": {
     "board": "Board",
     "typeSubtitle": "{type} · vista focus",
@@ -5872,6 +6083,7 @@
     "operation": {
       "provision": "Avvio",
       "teardown": "Smantellamento",
+      "teardown-verify": "Verifica dello smantellamento",
       "status": "Controllo dello stato",
       "dispatch": "Avvio",
       "release": "Smantellamento",
@@ -6085,7 +6297,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Si applica perche questa attivita non sceglie un criterio proprio.",
-      "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana."
+      "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana.",
+      "refused": {
+        "relaxes_role_sandbox": "Non disponibile per il tuo ruolo: le esecuzioni di questa attività sono isolate e questo criterio ne consentirebbe il merge. Un amministratore dello spazio di lavoro può cambiarlo.",
+        "relaxes_role_submission_allowlist": "Non disponibile per il tuo ruolo: questo criterio ti permetterebbe di unire tipi di modifica che questa attività ti preclude. Un amministratore dello spazio di lavoro può cambiarlo.",
+        "relaxes_role_class_rule": "Non disponibile per il tuo ruolo: questo criterio unisce automaticamente modifiche che devi revisionare in questa attività. Un amministratore dello spazio di lavoro può cambiarlo."
+      }
     },
     "preview": {
       "defaultBadge": "Predefinito",
@@ -6103,6 +6320,7 @@
       "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi.",
       "roleHeading": "Chi ha avviato l'esecuzione",
       "roleSandboxed": "Le esecuzioni avviate da {roles} aprono una pull request e non vengono mai unite.",
+      "roleScoped": "Le esecuzioni avviate da {roles} uniscono solo alcuni tipi di modifica.",
       "roleNarrowed": "Le esecuzioni avviate da {roles} seguono regole più severe per alcune categorie di modifica."
     }
   },

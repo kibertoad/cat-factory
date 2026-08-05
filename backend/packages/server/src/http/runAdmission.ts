@@ -1,5 +1,7 @@
 import type { Context } from 'hono'
 import type { WorkspaceRole } from '@cat-factory/contracts'
+import type { GateActor } from '@cat-factory/kernel'
+import { UNATTRIBUTED_GATE_ACTOR } from '@cat-factory/kernel'
 import type { AppEnv } from './env.js'
 
 /**
@@ -27,4 +29,31 @@ import type { AppEnv } from './env.js'
  */
 export function runInitiatorRole<E extends AppEnv>(c: Context<E>): WorkspaceRole | null {
   return c.get('workspaceAccess')?.role ?? null
+}
+
+/**
+ * The identity RESOLVING a parked gate, for the approver policy a pipeline step may configure
+ * (`stepOptions.gateConfig.approvers`) and the quorum it may demand.
+ *
+ * A total accessor for the same reason {@link runInitiatorRole} is: the engine requires an actor
+ * on every gate resolution, so a route that read it as a nullable would restate the same
+ * "who is this, and what if nobody" branch, and the one that got it wrong would resolve a gate
+ * naming its approvers as though it named nobody.
+ *
+ * Under dev-open there is no signed-in user and no resolved role, and this returns the
+ * `unattributed` actor rather than inventing one. That is a REAL state with a real consequence:
+ * a gate that names approvers refuses it, and a quorum above one can never be reached, because
+ * counting distinct approvals needs identities the deployment does not have.
+ */
+export function gateActor<E extends AppEnv>(c: Context<E>): GateActor {
+  const user = c.get('user')
+  if (!user) {
+    return { id: UNATTRIBUTED_GATE_ACTOR, kind: 'unattributed', role: runInitiatorRole(c) }
+  }
+  return {
+    id: user.id,
+    kind: 'user',
+    role: runInitiatorRole(c),
+    label: user.name ?? user.login,
+  }
 }

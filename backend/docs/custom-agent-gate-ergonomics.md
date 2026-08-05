@@ -91,6 +91,28 @@ Pass `{ shapeHint }` to override the auto-derived hint for an unusual shape.
 Kernel's `AgentStepSpec.output` keeps its plain-string shape; only the derived spec crosses into
 it: the schema/parser stays in the agents registration layer.
 
+## Companions (registering a rework pair)
+
+A companion GRADES the immediately-preceding producer's output and, below the step's threshold,
+loops THAT producer back for automatic rework on a bounded budget before any human is asked.
+Choose it over a [judge](../../docs/initiatives/judge-registry.md) when the remedy is the producer
+running again rather than a verdict being disposed.
+
+Register it with `AgentKindRegistry.registerCompanion`, beside the kind's own registration: a
+companion is a relationship BETWEEN kinds, so it lives on the kind registry rather than a registry
+of its own. Three things bite:
+
+- **The pairing is registered SEPARATELY from the kind**, so every read goes through the registry.
+  A projection built off the kind's own definition sees no companions at all.
+- **The free lookups take the registry OPTIONALLY** and fall back to the built-ins (the shape
+  `isGatableKind` uses), so a call site that omits it silently sees built-in pairs only. That is a
+  wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
+- **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
+  immediate predecessor, so a companion separated from its producer would grade whatever happens to
+  sit in front of it. The same reasoning drives the cascade-skip rule in
+  [`pipeline-catalog-collapse.md`](../../docs/initiatives/pipeline-catalog-collapse.md), where a
+  skipped producer takes its companion with it.
+
 ## Boot-time registration validation
 
 `validateRegistrations()` (`@cat-factory/orchestration`) cross-checks the registries and throws an
@@ -130,6 +152,43 @@ runtime-neutral, so warnings go to an `onWarn` callback the facade backs with it
   and register the component in `StepResultViewHost.vue`. A structured agent with no bespoke UI
   uses `generic-structured`.
 
+## Per-step gate settings (declared, not hard-coded)
+
+A gate's knobs belong to the gate, not to the engine or to the workspace merge preset. Declare them
+on the REGISTRATION as descriptor fields and they drive three things at once: validation at pipeline
+save, re-validation at run start, and the authoring form the SPA renders in the pipeline builder
+(projected onto the board snapshot as `gateConfigForms`, rendered by the shared
+`DescriptorFields.vue`).
+
+```ts
+gateRegistry.register(MY_GATE_KIND, myGate, {
+  configFields: [
+    { key: 'maxAttempts', label: 'Helper attempts', type: 'number', min: 0, max: 20 },
+    { key: 'soakMinutes', label: 'Soak window (minutes)', type: 'number', min: 1, max: 1440 },
+  ],
+})
+```
+
+The filled values are validated (unknown keys and out-of-range numbers are refused at SAVE, not
+clamped at read) and copied onto the live gate state once on first entry, so the gate reads them off
+`gateState.config` on every poll with no plumbing per parameter:
+
+```ts
+probe: async (workspaceId, blockId, gateState) => {
+  const soak = gateConfigNumber(gateState.config, 'soakMinutes') ?? DEFAULT_SOAK_MINUTES
+  …
+},
+// The GATE decides how its own budget is overridden — the engine never learns the field's name.
+attemptBudget: (preset, config) => gateConfigNumber(config, 'maxAttempts') ?? preset.ciMaxAttempts,
+```
+
+A gate that declares nothing accepts no per-step fields, which is the honest default: an undeclared
+key is indistinguishable from a typo'd one. The built-ins are the worked example
+(`@cat-factory/gates`' `gateConfigFields.ts`); the design record is
+[ADR 0038](./adr/0038-per-step-gate-config.md), which also covers the OTHER half of a step's gate
+config — the approver policy and quorum on a human approval gate, which the platform owns rather
+than the gate.
+
 ## Runtime symmetry rules (recap)
 
 Per CLAUDE.md: any provider wiring or validation hook lands in BOTH `runtimes/cloudflare` and
@@ -143,6 +202,7 @@ The gates package depends only on kernel + contracts, never on orchestration.
    the surface drives the prompt directives and the container requirement; `presentation.resultView`
    (if set) must be a `RESULT_VIEW_IDS` id.
 3. For a gate: `defineProviderToken` + a one-line `wireX(registry, impl)`; `gateRegistry.register(kind, ctx => ({ wired: () => ctx.isProviderWired(token), probe: () => …ctx.requireProvider(token)…, helperKind, onExhausted }))`.
-   The `helperKind` must be a registered container kind (or a built-in helper).
+   The `helperKind` must be a registered container kind (or a built-in helper). Pass
+   `{ configFields }` for anything a pipeline step should be able to tune per step.
 4. `pipelineRegistry.register(...)` to chain the kinds.
 5. The facade wires the provider impl onto its `providerRegistry` at startup and (already) calls `validateRegistrationsOnce()`.

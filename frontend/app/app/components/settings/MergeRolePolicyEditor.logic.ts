@@ -23,6 +23,7 @@ import type {
   MergeClassRule,
   MergeClassRules,
   RuleableChangeClass,
+  SubmissionClassesByRole,
   WorkspaceRole,
 } from '~/types/merge'
 
@@ -130,4 +131,75 @@ export function toggleDryRunRole(
 /** How many classes a role has authored a rule for (the collapsed group's summary). */
 export function roleNarrowedCount(entry: MergeClassRules | undefined): number {
   return entry ? Object.keys(entry).length : 0
+}
+
+// ---------------------------------------------------------------------------
+// The per-role SUBMISSION ALLOWLIST: which change classes a role may LAND at all. A third
+// setting rather than a fourth rule value, because it answers a different question: a class rule
+// decides how much review landing takes, where this decides whether the platform lands it at all,
+// and it is refused at BOTH exits, the manual merge included.
+//
+// The editing shape follows the wire shape's own distinction: an ABSENT entry is unrestricted
+// and an EMPTY list is "this role lands nothing", which are different policies. So the row is a
+// switch (scoped / not) plus a set of tick boxes, never a set of tick boxes alone. With tick
+// boxes alone, "unrestricted" and "lands nothing" would be the same rendered state.
+// ---------------------------------------------------------------------------
+
+/** One class's tick box inside one role's allowlist. */
+export interface RoleSubmissionRow {
+  changeClass: RuleableChangeClass
+  allowed: boolean
+}
+
+/** Whether this role carries an allowlist at all (as opposed to being unrestricted). */
+export function roleSubmissionScoped(
+  byRole: SubmissionClassesByRole,
+  role: WorkspaceRole,
+): boolean {
+  return byRole[role] !== undefined
+}
+
+/** One role's tick boxes, in the shared class order. Empty rows for an unscoped role. */
+export function roleSubmissionRows(entry: readonly RuleableChangeClass[]): RoleSubmissionRow[] {
+  return RULEABLE_CHANGE_CLASSES.map((changeClass) => ({
+    changeClass,
+    allowed: entry.includes(changeClass),
+  }))
+}
+
+/**
+ * Turn the allowlist on or off for a role. Turning it ON seeds the classes that are landable
+ * TODAY, which is behaviourally where the role already was, so the operator subtracts from a
+ * known state rather than starting from a policy ("lands nothing") they did not ask for.
+ *
+ * That seeded list is NOT the identity, and deliberately: from here on the role is scoped, so a
+ * class the vocabulary gains in a later release falls outside it. Opting in is what earns that.
+ */
+export function setRoleSubmissionScoped(
+  byRole: SubmissionClassesByRole,
+  role: WorkspaceRole,
+  scoped: boolean,
+): SubmissionClassesByRole {
+  const next: SubmissionClassesByRole = { ...byRole }
+  if (scoped) next[role] = [...RULEABLE_CHANGE_CLASSES]
+  else delete next[role]
+  return next
+}
+
+/**
+ * Tick or untick one class for a role that is already scoped, keeping the shared class order so
+ * two presets carrying the same policy carry the same array. Unticking the last class leaves an
+ * EMPTY list rather than removing the entry: that is the real policy "this role lands nothing",
+ * and silently promoting it to unrestricted would be the exact inversion of what was clicked.
+ */
+export function toggleSubmissionClass(
+  byRole: SubmissionClassesByRole,
+  role: WorkspaceRole,
+  changeClass: RuleableChangeClass,
+  allowed: boolean,
+): SubmissionClassesByRole {
+  const current = new Set(byRole[role] ?? [])
+  if (allowed) current.add(changeClass)
+  else current.delete(changeClass)
+  return { ...byRole, [role]: RULEABLE_CHANGE_CLASSES.filter((c) => current.has(c)) }
 }

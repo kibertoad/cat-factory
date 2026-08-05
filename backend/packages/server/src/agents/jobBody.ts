@@ -203,7 +203,7 @@ export function buildKindBody(
   // CompanionAssessment by `CompanionController.resolveContainerVerdict`. The companion
   // review system prompt (which already instructs the JSON shape and, for these kinds, to
   // read the checkout) wins in `systemPromptFor`, so no per-kind prompt wiring is needed.
-  if (isContainerBackedCompanion(context.agentKind)) {
+  if (isContainerBackedCompanion(context.agentKind, registry)) {
     return buildRegisteredAgentBody(
       context,
       parts,

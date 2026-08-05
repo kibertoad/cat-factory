@@ -63,6 +63,35 @@ import {
   workspaces,
 } from '../../db/schema.js'
 
+/**
+ * The `pipelines` row a domain pipeline becomes. Shared by `insert` and `insertIfAbsent` so the
+ * twenty-column projection is written once: the two differ only in what they do on a conflict.
+ */
+function pipelineValues(workspaceId: string, pipeline: Pipeline) {
+  return {
+    workspace_id: workspaceId,
+    id: pipeline.id,
+    name: pipeline.name,
+    description: pipeline.description ?? null,
+    agent_kinds: JSON.stringify(pipeline.agentKinds),
+    gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
+    thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
+    enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
+    consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
+    gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
+    follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
+    tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
+    step_options: pipeline.stepOptions ? JSON.stringify(pipeline.stepOptions) : null,
+    labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
+    archived: pipeline.archived ? 1 : null,
+    builtin: pipeline.builtin ? 1 : null,
+    version: pipeline.version ?? null,
+    public: pipeline.public ? 1 : null,
+    availability: pipeline.availability ?? null,
+    purpose: pipeline.purpose ?? null,
+  }
+}
+
 export class DrizzlePipelineRepository implements PipelineRepository {
   constructor(private readonly db: DrizzleDb) {}
 
@@ -88,28 +117,16 @@ export class DrizzlePipelineRepository implements PipelineRepository {
   }
 
   async insert(workspaceId: string, pipeline: Pipeline): Promise<void> {
-    await this.db.insert(pipelines).values({
-      workspace_id: workspaceId,
-      id: pipeline.id,
-      name: pipeline.name,
-      description: pipeline.description ?? null,
-      agent_kinds: JSON.stringify(pipeline.agentKinds),
-      gates: pipeline.gates ? JSON.stringify(pipeline.gates) : null,
-      thresholds: pipeline.thresholds ? JSON.stringify(pipeline.thresholds) : null,
-      enabled: pipeline.enabled ? JSON.stringify(pipeline.enabled) : null,
-      consensus: pipeline.consensus ? JSON.stringify(pipeline.consensus) : null,
-      gating: pipeline.gating ? JSON.stringify(pipeline.gating) : null,
-      follow_ups: pipeline.followUps ? JSON.stringify(pipeline.followUps) : null,
-      tester_quality: pipeline.testerQuality ? JSON.stringify(pipeline.testerQuality) : null,
-      step_options: pipeline.stepOptions ? JSON.stringify(pipeline.stepOptions) : null,
-      labels: pipeline.labels ? JSON.stringify(pipeline.labels) : null,
-      archived: pipeline.archived ? 1 : null,
-      builtin: pipeline.builtin ? 1 : null,
-      version: pipeline.version ?? null,
-      public: pipeline.public ? 1 : null,
-      availability: pipeline.availability ?? null,
-      purpose: pipeline.purpose ?? null,
-    })
+    await this.db.insert(pipelines).values(pipelineValues(workspaceId, pipeline))
+  }
+
+  async insertIfAbsent(workspaceId: string, pipeline: Pipeline): Promise<void> {
+    // Conflict-TARGETED on the composite key, so losing the adoption race is a no-op while a
+    // genuine constraint violation still throws (see the port's contract).
+    await this.db
+      .insert(pipelines)
+      .values(pipelineValues(workspaceId, pipeline))
+      .onConflictDoNothing({ target: [pipelines.workspace_id, pipelines.id] })
   }
 
   async update(workspaceId: string, pipeline: Pipeline): Promise<void> {

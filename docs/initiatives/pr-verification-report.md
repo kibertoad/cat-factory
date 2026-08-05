@@ -1,9 +1,13 @@
 # Initiative: PR verification report
 
-**Status:** phase 1 in progress · **Owner:** core · **Started:** 2026-07-26
+**Status:** phases 1 + 2 landed; slices 11 + 12 open · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
+
+The report itself ships: every slice that produces it has landed. What keeps this tracker alive
+rather than converted to an ADR is slice 11 (peer-PR reports) and slice 12, which cannot start
+until global-search slice 4 lands elsewhere. Convert once both close.
 
 ## Goal & rationale
 
@@ -188,6 +192,24 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   apart from `undeclared` (it did not say). Guessing either way turns an unknown into a claim in
   the one section whose whole job is provenance.
 
+- **A section may only claim an absence it actually observed.** The validation section used to
+  answer "nothing to show" with "this service configures no check commands", which is a fact about
+  somebody's setup that the composer does not have: the dispatch degrades to no-checks when the
+  config-store read FAILS as well, and the two states are byte-identical on the context. The engine
+  now records the difference at the read (`step.validationConfigUnreadable`) and the section carries
+  it as `configUnreadable`, which DISPLACES the unconfigured note rather than qualifying it. It is
+  reported on a `reported` section too: a later dispatch whose read failed ran unvalidated after the
+  evidence was captured, so an unqualified green table would overstate what it covers. Any other
+  section composed from an absence has the same obligation, and the test is whether the producing
+  path can reach that absence by failing.
+
+  The replacement note WITHDRAWS the claim instead of making a second one. `configUnreadable` is
+  scanned across every step (the failing read is by construction on a step that produced no
+  evidence), so the section knows a read failed SOMEWHERE on the run, not that this absence is what
+  it caused. Saying "the read failed, so nothing ran" would be the same over-claim one layer down.
+  Read run-wide, state run-wide: a flag whose scan is broader than the sentence it licenses is the
+  shape to watch for when the next section grows one.
+
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).
@@ -211,6 +233,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                                                      | ⬜ todo |      |
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ todo |      |
 | 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done | this |
+| 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 
@@ -242,6 +265,34 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   reproduction section: its Phase-B notes hold the renderer's non-obvious obligations, above all
   that an ABSENT `final` run is normal for an inconclusive verdict and that the producer's own
   `note` is rendered VERBATIM rather than re-derived from `base.passed`.
+
+### Machine reachability (slice 14)
+
+The report told a reader what happened and, for a person, where to browse it (`runUrl`, the app's
+observability panel). It named nothing a MACHINE could follow, so a consumer holding the report had
+to already know the debug API exists (and how to address a run on it) to reach the record behind
+any claim in it. `observability` now carries two more links, both built from `apiBaseUrl` (the
+BACKEND url, like the artifact byte links, never the SPA one beside it):
+
+- **`trajectoryUrl`** → `/api/v1/debug/runs/:runId/tool-calls?order=trajectory`: what the run's
+  agents actually did, in the order they did it. This is the link that makes the report auditable
+  rather than merely informative: every other section is a verdict somebody produced, and this is
+  the record those verdicts are about.
+- **`reportUrl`** → `/api/v1/runs/:runId/report`: this same report, served live. The fenced block in
+  the PR body is a snapshot from the last publish; a consumer that wants the current one (or that is
+  looking at a run whose PR body it does not have) fetches it.
+
+Three things about it are deliberate:
+
+- **Both are rendered in the PROSE as well as carried in the JSON.** A trajectory nobody can find is
+  not an audit trail, and the reader who wants to check a claim is often a person.
+- **Both endpoints stay key-authenticated**, so a report on a public repository names them without
+  making anything public; a reader without a credential gets a 401, the same honest outcome the app
+  deep link already produces.
+- **The read endpoint behind `reportUrl` composes from the same code**
+  (`PrVerificationReportController.composeForRun`), so the live JSON and the PR body cannot state
+  different facts about one run. It is also why the report shape is now part of the STABLE public
+  surface: see [`public-api-additions.md`](./public-api-additions.md) (E1).
 
 ### Evidence reachability (landed with slices 9 + 10)
 

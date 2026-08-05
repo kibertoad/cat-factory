@@ -30,7 +30,19 @@ Two tables live there: `llm_call_metrics` (per-call LLM telemetry) and
 `agent_context_snapshots` (the complete, redacted context provided to each container
 agent; composed prompts, folded-in fragment bodies, and the full content of the files
 injected into the container). Both are pruned to the same window
-(`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days).
+(`LLM_CALL_METRICS_RETENTION_DAYS`, default 14 days). The window is sized for POST-MORTEMS
+rather than for live debugging: an investigation into a failed run routinely starts days after
+it, and the earlier 3-day default expired the record first.
+
+**Sizing it against the 10 GB ceiling.** The window multiplies the store linearly, so raising it
+from 3 to 14 days is ~4.7x the steady-state footprint, and the number that decides whether that
+matters is bytes-per-call, not rows: with bodies OFF a row is metadata (~0.5 KB), so even a busy
+deployment at 10k calls/day sits around 70 MB and the ceiling is not in view. With bodies ON a row
+carries a full prompt + response and runs three orders of magnitude larger (a few hundred KB for a
+long coding turn), where the same 10k calls/day reaches the ceiling inside the window. So the
+variable to tune is the one that is already double-gated: a deployment recording bodies
+(`LLM_RECORD_PROMPTS` plus the per-workspace `storeAgentContext`) should size this window against
+its own observed row width rather than take the default, and 3 restores the previous footprint.
 
 ## The audit log lives in its own store too, for the OPPOSITE reason
 

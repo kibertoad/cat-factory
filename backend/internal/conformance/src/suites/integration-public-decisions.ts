@@ -1,4 +1,6 @@
-import type { ExecutionInstance, Pipeline } from '@cat-factory/kernel'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import { PipelineRegistry } from '@cat-factory/kernel'
+import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -36,7 +38,414 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
     registerApprovalAnsweringTests(harness)
     registerDialogueAnsweringTests(harness)
     registerStaleRunTests(harness)
+    registerCompanionAnsweringTests(harness)
+    registerCompanionEdgeTests(harness)
     registerScopeAndCancelTests(harness)
+  })
+}
+
+/**
+ * The two parks that were reachable only from the app until the surface was finished: FOLLOW-UP
+ * TRIAGE and the INTERVIEW gates.
+ *
+ * Both belong here rather than only in unit tests, and for the same reason the clarity loop does:
+ * what is per-facade is everything AROUND the shared logic. The follow-up state rides the run's
+ * step JSON through each facade's own execution mapper, and an interview's questions live in a
+ * separate per-runtime store (D1 ⇄ Drizzle) reached through a module a facade has to wire. A
+ * facade that mounted the routes and forgot either would answer every call with a 404 or a 503
+ * while the shared projection stayed green.
+ */
+function registerCompanionAnsweringTests(harness: ConformanceHarness): void {
+  it('lists parked FOLLOW-UPS, decides every item, and releases the run', async () => {
+    // Driven the way the engine really produces them: the async Coder streams two items, the
+    // engine folds them onto the step live, and the companion gate holds the run at the Coder's
+    // completion. The public surface then does what the SPA window does.
+    const app = harness.makeApp({
+      confidence: 1,
+      asyncKinds: ['coder'],
+      followUps: [
+        { kind: 'follow_up', title: 'Dedupe the retry helper', detail: 'two copies exist' },
+        { kind: 'question', title: 'Which timeout?', detail: '30s or 60s?' },
+      ],
+    })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: 'pl_simple',
+    })
+    const parked = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(parked.status).toBe('blocked')
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      decisions: {
+        kind: string
+        stepKind?: string
+        maxLoops?: number
+        items?: { itemId: string; kind: string; status: string; title: string }[]
+      }[]
+    }>('GET', `/api/v1/runs/${parked.id}/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    const triage = listed.body.decisions.find((d) => d.kind === 'follow-ups')!
+    expect(triage).toBeDefined()
+    expect(triage.stepKind).toBe('coder')
+    // The park is reported as ITS OWN kind, never as the generic approval gate it rides: the
+    // trap `dedicatedParkSurface` exists to close, asserted per park because the classifier is
+    // read at run time rather than baked into the projection.
+    expect(listed.body.decisions.some((d) => d.kind === 'approval-gate')).toBe(false)
+    // Both items crossed the wire with the id every verb addresses and the kind that decides
+    // which verbs apply.
+    const followUp = triage.items!.find((i) => i.kind === 'follow_up')!
+    const question = triage.items!.find((i) => i.kind === 'question')!
+    expect(followUp.status).toBe('pending')
+    expect(question.status).toBe('pending')
+
+    const dismissed = await app.call<{ decisions: { kind: string }[] }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/follow-ups/items/${followUp.itemId}/dismiss`,
+      {},
+      decideAuth,
+    )
+    expect(dismissed.status).toBe(200)
+    // One item decided is not the batch decided: the run is still asking, so the decision stays.
+    expect(dismissed.body.decisions.some((d) => d.kind === 'follow-ups')).toBe(true)
+
+    const answered = await app.call<{ decisions: { kind: string }[] }>(
+      'POST',
+      `/api/v1/runs/${parked.id}/decisions/follow-ups/items/${question.itemId}/answer`,
+      { answer: '30s' },
+      decideAuth,
+    )
+    expect(answered.status).toBe(200)
+    // Every item decided: nothing left to ask, so the entry is gone rather than reported settled.
+    expect(answered.body.decisions.some((d) => d.kind === 'follow-ups')).toBe(false)
+
+    // The answer really steered the engine, not just the row: the Coder loops for it and the run
+    // finishes, the same outcome the SPA-driven twin in `execution-gates.ts` asserts.
+    const final = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    expect(final.status).toBe('done')
+    const coder = final.steps.find((s) => s.agentKind === 'coder')!
+    expect(coder.followUps?.items.find((i) => i.id === question.itemId)?.status).toBe('answered')
+  })
+
+  it('lists a parked INTERVIEW and records an answer into the gate’s own store', async () => {
+    // The interviewer LLM is off in conformance (as everywhere here), so the PARK is seeded rather
+    // than driven: a `doc-interviewer` step waiting on its decision, plus the session row the gate
+    // reads its questions out of. That is exactly the seam worth asserting per facade: the
+    // questions are NOT on the step, so the projection resolves the wired gate and reads a
+    // per-runtime store, and the answer writes back through it.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.docInterviewRepository().upsert(wsId, {
+      id: 'dis_pub',
+      blockId: 'task_login',
+      status: 'awaiting',
+      round: 1,
+      maxRounds: 4,
+      qa: [{ id: 'diq_pub', question: 'Who is the audience?', answer: '' }],
+      brief: null,
+      model: null,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    })
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_interview',
+      blockId: 'task_login',
+      pipelineId: 'pl_document',
+      pipelineName: 'Document',
+      steps: [
+        {
+          agentKind: 'doc-interviewer',
+          state: 'waiting_decision',
+          progress: 0,
+          decision: null,
+          approval: { id: 'apr_interview', status: 'pending', proposal: '' },
+        },
+      ],
+      currentStep: 0,
+      status: 'blocked',
+      initiatedBy: null,
+    })
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      decisions: {
+        kind: string
+        stepKind?: string
+        round?: number
+        maxRounds?: number
+        questions?: { questionId: string | null; question: string; status: string }[]
+      }[]
+    }>('GET', `/api/v1/runs/exec_interview/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+    const interview = listed.body.decisions.find((d) => d.kind === 'interview')!
+    expect(interview).toBeDefined()
+    // `stepKind` is the ONE field a caller branches on, since one route set serves every gate.
+    expect(interview.stepKind).toBe('doc-interviewer')
+    expect(interview.round).toBe(1)
+    expect(interview.maxRounds).toBe(4)
+    expect(interview.questions).toEqual([
+      { questionId: 'diq_pub', question: 'Who is the audience?', answer: '', status: 'open' },
+    ])
+    // Not the generic approval gate, for the same reason as above.
+    expect(listed.body.decisions.some((d) => d.kind === 'approval-gate')).toBe(false)
+
+    const answered = await app.call<{
+      decisions: { kind: string; questions?: { status: string; answer: string }[] }[]
+    }>(
+      'POST',
+      `/api/v1/runs/exec_interview/decisions/interview/answer`,
+      { questionId: 'diq_pub', answer: 'Platform engineers' },
+      decideAuth,
+    )
+    expect(answered.status).toBe(200)
+    // Re-read from the projection: the status is DERIVED from the answer, so this pins the
+    // derivation as well as the write.
+    const after = answered.body.decisions.find((d) => d.kind === 'interview')!
+    expect(after.questions).toEqual([
+      {
+        questionId: 'diq_pub',
+        question: 'Who is the audience?',
+        answer: 'Platform engineers',
+        status: 'answered',
+      },
+    ])
+    // …and it landed in the gate's own store, not only in the response.
+    const stored = await app.docInterviewRepository().getByBlock(wsId, 'task_login')
+    expect(stored?.qa[0]?.answer).toBe('Platform engineers')
+  })
+
+  it('refuses an interview answer on a run that is not parked on one', async () => {
+    // The two refusals this surface has to keep apart: no live interview is a 404, where an
+    // interviewer the deployment never wired would be a 503 naming the kind. Collapsing them
+    // would tell an operator staring at a stopped run that it is not stopped.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_no_interview',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [{ agentKind: 'coder', state: 'working', progress: 0, decision: null }],
+      currentStep: 0,
+      status: 'running',
+      initiatedBy: null,
+    })
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/runs/exec_no_interview/decisions/interview/continue`,
+      {},
+      decideAuth,
+    )
+    expect(refused.status).toBe(404)
+    expect(refused.body.error.code).toBe('no_interview')
+  })
+}
+
+/**
+ * The three edges of the two companion surfaces that the happy paths above cannot show, each a
+ * claim the code makes elsewhere in prose:
+ *
+ *  - follow-up triage is listed while the run is still RUNNING (the only decision kind that is);
+ *  - a verb refuses on its own terms (409) instead of hiding the run (404) or the deployment (503);
+ *  - an interviewer kind a deployment REGISTERED but never WIRED is unanswerable and says so.
+ *
+ * All three seed their run rather than driving one, because each is about a state the engine passes
+ * through or cannot reach at all with the built-ins: a run mid-Coder with items already streamed,
+ * and a park on a kind no facade has a controller for.
+ */
+function registerCompanionEdgeTests(harness: ConformanceHarness): void {
+  /** A `coder` step mid-run with one follow-up and one question already streamed onto it. */
+  const codingStepWithItems = (now: number) => ({
+    agentKind: 'coder',
+    state: 'working' as const,
+    progress: 0.5,
+    decision: null,
+    followUps: {
+      enabled: true,
+      items: [
+        {
+          id: 'fu_loose_end',
+          kind: 'follow_up' as const,
+          title: 'Dedupe the retry helper',
+          detail: 'two copies exist',
+          status: 'pending' as const,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'fu_question',
+          kind: 'question' as const,
+          title: 'Which timeout?',
+          detail: '30s or 60s?',
+          status: 'pending' as const,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      loops: 0,
+      maxLoops: 3,
+    },
+  })
+
+  it('lists FOLLOW-UPS on a run that has NOT parked, and sends one back', async () => {
+    // The rule the whole projection change turns on, and the one the happy-path test cannot see
+    // because it drives the run to its park first: items accrue LIVE, so `parked` is false while
+    // the decision is listed. An integration that triages here never sees the run stop, which is
+    // the point of the companion; one that waits for `parked` still works, it just waits.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_live_followups',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [codingStepWithItems(1_000)],
+      currentStep: 0,
+      status: 'running',
+      initiatedBy: null,
+    })
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      status: string
+      decisions: { kind: string; loops?: number; maxLoops?: number }[]
+    }>('GET', `/api/v1/runs/exec_live_followups/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.status).toBe('running')
+    expect(listed.body.parked).toBe(false)
+    const triage = listed.body.decisions.find((d) => d.kind === 'follow-ups')!
+    expect(triage).toBeDefined()
+    // The send-back budget is projected as the ENGINE will read it, so a caller can tell whether a
+    // send-back will re-run the Coder or just advance the run.
+    expect(triage.maxLoops).toBe(3)
+    expect(triage.loops).toBe(0)
+
+    const sentBack = await app.call<{
+      parked: boolean
+      decisions: { kind: string; items?: { itemId: string; status: string }[] }[]
+    }>(
+      'POST',
+      `/api/v1/runs/exec_live_followups/decisions/follow-ups/items/fu_loose_end/send-back`,
+      {},
+      decideAuth,
+    )
+    expect(sentBack.status).toBe(200)
+    // Still listed and still not parked: one item decided is not the batch decided, and the run
+    // was never stopped to begin with.
+    const after = sentBack.body.decisions.find((d) => d.kind === 'follow-ups')!
+    expect(sentBack.body.parked).toBe(false)
+    expect(after.items?.find((i) => i.itemId === 'fu_loose_end')?.status).toBe('queued')
+    expect(after.items?.find((i) => i.itemId === 'fu_question')?.status).toBe('pending')
+    // …and it landed on the step itself, not only in the response.
+    const stored = await app.executionRepository().get(wsId, 'exec_live_followups')
+    expect(stored?.steps[0]?.followUps?.items.find((i) => i.id === 'fu_loose_end')?.status).toBe(
+      'queued',
+    )
+  })
+
+  it('refuses a follow-up verb on its own terms: 409, not 404 and not 503', async () => {
+    // Which refusal a verb gives is what a caller acts on. `file` with no tracker connected and
+    // `answer` against a `follow_up` are both "this run is answerable, this VERB is not": a 409,
+    // where a 404 would say the run is gone and a 503 would send an operator to wire a module the
+    // remedy does not need. Both are the ENGINE's refusals, reaching the wire unre-mapped.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_followup_refusals',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [codingStepWithItems(2_000)],
+      currentStep: 0,
+      status: 'running',
+      initiatedBy: null,
+    })
+    const decideAuth = await mintKey(app, wsId, 'decide')
+
+    const base = `/api/v1/runs/exec_followup_refusals/decisions/follow-ups/items`
+    const filed = await app.call('POST', `${base}/fu_loose_end/file`, {}, decideAuth)
+    expect(filed.status).toBe(409)
+    const misanswered = await app.call(
+      'POST',
+      `${base}/fu_loose_end/answer`,
+      { answer: 'not a question' },
+      decideAuth,
+    )
+    expect(misanswered.status).toBe(409)
+    // The item is untouched by either refusal: a rejected verb decides nothing.
+    const stored = await app.executionRepository().get(wsId, 'exec_followup_refusals')
+    expect(stored?.steps[0]?.followUps?.items.find((i) => i.id === 'fu_loose_end')?.status).toBe(
+      'pending',
+    )
+  })
+
+  it('reports a REGISTERED but unwired interviewer as unanswerable, never as absent', async () => {
+    // The asymmetry between the two halves of an interview gate, asserted rather than only
+    // documented: admission reads the `interview-gate` TRAIT off the kind registry, so a
+    // deployment's own interviewer counts as a park the moment it is registered, while ANSWERING it
+    // needs its controller wired as well (`ExecutionService.interviewGateFor`). A kind with no
+    // controller is exactly this state, and both halves must tell the truth about it: the run
+    // reports `parked: true` with an EMPTY list (the loud case), and the verb 503s NAMING the kind
+    // rather than 404ing, which would tell an operator staring at a stopped run it is not stopped.
+    const agentKindRegistry = defaultAgentKindRegistry()
+    agentKindRegistry.register({
+      kind: 'org-interviewer',
+      systemPrompt: 'You interview.',
+      agent: { surface: 'inline' },
+      traits: ['interview-gate'],
+    })
+    const app = harness.makeApp({}, { agentKindRegistry })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_unwired_interview',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [
+        {
+          agentKind: 'org-interviewer',
+          state: 'waiting_decision',
+          progress: 0,
+          decision: null,
+          approval: { id: 'apr_unwired', status: 'pending', proposal: '' },
+        },
+      ],
+      currentStep: 0,
+      status: 'blocked',
+      initiatedBy: null,
+    })
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'GET',
+      `/api/v1/runs/exec_unwired_interview/decisions`,
+      undefined,
+      decideAuth,
+    )
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+    expect(listed.body.decisions).toEqual([])
+
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/runs/exec_unwired_interview/decisions/interview/proceed`,
+      {},
+      decideAuth,
+    )
+    expect(refused.status).toBe(503)
+    expect(refused.body.error.code).toBe('unavailable')
+    expect(refused.body.error.message).toContain('org-interviewer')
   })
 }
 
@@ -165,6 +574,60 @@ function registerAdmissionTests(harness: ConformanceHarness): void {
       decideAuth,
     )
     expect(started.status).toBe(202)
+  })
+
+  it('applies the decide-scope rule to a pipeline the board has not ADOPTED yet', async () => {
+    // The check above resolves the caller's `pipelineId` to inspect it for parks, and a board can
+    // legitimately hold no row for a pipeline a run will nonetheless launch: run resolution ADOPTS a
+    // catalog built-in the workspace was never seeded with. Reading the stored row alone therefore
+    // found nothing to inspect, skipped the refusal, and let `start` adopt and park the run anyway —
+    // so a plain `write` key set in motion exactly the park the scope ladder withholds. Over the
+    // wire on both facades, because the pipeline read the check runs against is facade-wired.
+    const PIPELINE_ID = 'pl_conf_unadopted_parking'
+    const before = harness.makeApp()
+    const { workspace } = await before.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+
+    // The org ships a read-only catalog pipeline that PARKS (an approval gate on its only step),
+    // after this board was seeded, so the board holds no row for it.
+    const registry = new PipelineRegistry()
+    registry.register({
+      id: PIPELINE_ID,
+      name: 'Gated coder',
+      builtin: true,
+      version: 1,
+      agentKinds: ['coder'],
+      gates: [true],
+    })
+    const app = harness.makeApp(undefined, { pipelineRegistry: registry })
+    const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(snapshot.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    const writeAuth = await mintKey(app, wsId, 'write')
+    const refused = await app.call<{ error: { code: string } }>(
+      'POST',
+      `/api/v1/tasks/task_login/start`,
+      { pipelineId: PIPELINE_ID },
+      writeAuth,
+    )
+    expect(refused.status).toBe(403)
+    expect(refused.body.error.code).toBe('pipeline_requires_decide_scope')
+    // Refused BEFORE any side effect: a rejected start must not leave the adoption behind, or the
+    // board's library would gain a pipeline nothing was allowed to run.
+    const after = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(after.body.pipelines.map((p) => p.id)).not.toContain(PIPELINE_ID)
+
+    // And the same key ladder still ADMITS it: a `decide` key starts the run, which adopts the row.
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const started = await app.call(
+      'POST',
+      `/api/v1/tasks/task_login/start`,
+      { pipelineId: PIPELINE_ID },
+      decideAuth,
+    )
+    expect(started.status).toBe(202)
+    const adopted = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect(adopted.body.pipelines.map((p) => p.id)).toContain(PIPELINE_ID)
   })
 
   it('refuses a write key on a human-review pipeline, and admits a non-parking one', async () => {

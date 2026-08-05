@@ -299,6 +299,29 @@ function buildContainerRegistryOptions(opts: ConformanceAppOpts | undefined) {
  * `drive`). A thin adapter over the shared conformance harness, identical to the Node
  * helper apart from `buildLocalContainer`.
  */
+/**
+ * Issue a request whose success carries BYTES (the artifact blob endpoint), through the facade's
+ * real `app.fetch`.
+ *
+ * Module-level rather than a closure inside {@link makeConformanceApp}, which the JSON `call` is:
+ * that one needs nothing but `app`, and the builder is already at its function-size budget.
+ */
+export async function callBinaryThrough(
+  app: { fetch: (request: Request, ...rest: never[]) => Response | Promise<Response> },
+  method: string,
+  path: string,
+  extraHeaders?: Record<string, string>,
+): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }> {
+  const res = await app.fetch(
+    new Request(`${BASE}${path}`, { method, headers: { ...extraHeaders } }),
+  )
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type'),
+    bytes: new Uint8Array(await res.arrayBuffer()),
+  }
+}
+
 export function makeConformanceApp(
   db: DrizzleDb,
   agentOptions?: FakeAgentOptions,
@@ -349,6 +372,9 @@ export function makeConformanceApp(
     const text = await res.text()
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
   }
+
+  const callBinary = (method: string, path: string, extraHeaders?: Record<string, string>) =>
+    callBinaryThrough(app, method, path, extraHeaders)
 
   async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
     return (await call<WorkspaceSnapshot>('POST', '/workspaces', options)).body
@@ -459,6 +485,7 @@ export function makeConformanceApp(
 
   return {
     call,
+    callBinary,
     createWorkspace,
     createOrgWorkspace,
     authEnabled: Boolean(TEST_ENV.AUTH_SESSION_SECRET),

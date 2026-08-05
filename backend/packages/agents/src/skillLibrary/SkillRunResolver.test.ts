@@ -86,9 +86,10 @@ function makeResolver(opts: {
   const githubClient = {
     getFileContent:
       opts.getFileContent ??
-      vi.fn(
-        async (): Promise<RepoFileContent | null> => ({ content: 'REPORT BODY', sha: 'sha-r' }),
-      ),
+      vi.fn(async (): Promise<RepoFileContent | null> => ({
+        content: 'REPORT BODY',
+        sha: 'sha-r',
+      })),
     // Default: the source dir head equals the last-synced commit → the probe reports "unchanged"
     // and no re-sync fires, so the non-freshness tests are unaffected.
     latestCommitSha: opts.latestCommitSha ?? vi.fn(async () => sourceRecord().lastSyncedCommit),

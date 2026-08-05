@@ -20,10 +20,6 @@ const requirements = useRequirementsStore()
 const access = useWorkspaceAccess()
 const { t } = useI18n()
 
-// When the selected task block backs a recurring pipeline, the inspector shows the
-// schedule controls + history, and "Delete" removes the schedule (block + history).
-const schedule = computed(() => (block.value ? recurring.byBlock(block.value.id) : undefined))
-
 onMounted(() => {
   fragments.ensureLoaded()
   github.ensureLoaded()
@@ -32,6 +28,10 @@ onMounted(() => {
 const block = computed<Block | undefined>(() =>
   ui.selectedBlockId ? board.getBlock(ui.selectedBlockId) : undefined,
 )
+
+// When the selected task block backs a recurring pipeline, the inspector shows the
+// schedule controls + history, and "Delete" removes the schedule (block + history).
+const schedule = computed(() => (block.value ? recurring.byBlock(block.value.id) : undefined))
 const level = computed(() => block.value?.level ?? 'frame')
 const isFrame = computed(() => level.value === 'frame')
 

@@ -5,10 +5,14 @@ import type {
   ExecutionInstance,
   RequirementReview,
 } from '@cat-factory/contracts'
+import type { GateActor } from '@cat-factory/kernel'
+import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import type { Context } from 'hono'
+import { findParkedInterviewStep } from '@cat-factory/orchestration'
 import type {
   BrainstormModule,
   ClarityModule,
+  InterviewGate,
   RequirementsModule,
 } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../../http/env.js'
@@ -94,7 +98,7 @@ export function failureBody(fail: GateFailure['fail']): {
 export async function gateDecisionAction<E extends AppEnv>(
   c: Context<E>,
   runId: string,
-): Promise<{ workspaceId: string; scoped: ScopedRun } | GateFailure> {
+): Promise<{ workspaceId: string; scoped: ScopedRun; auth: PublicApiKeyAuth } | GateFailure> {
   // `decide` — the same rung that admits a parking pipeline in the first place. Answering injects
   // caller-supplied prose into the requirements every downstream agent then implements, so it sits
   // above ordinary `write` task authoring.
@@ -105,7 +109,19 @@ export async function gateDecisionAction<E extends AppEnv>(
   if (!scoped) {
     return { fail: { status: 404, code: 'not_found', message: 'Run not found' } }
   }
-  return { workspaceId, scoped }
+  return { workspaceId, scoped, auth: gate.auth }
+}
+
+/**
+ * The gate-resolving IDENTITY behind a public-API call: the key itself, never a person.
+ *
+ * That distinction is the whole point rather than a limitation. A step whose gate NAMES its
+ * approvers cannot be cleared by a shared credential — `refuseGateResolution` refuses any
+ * non-user actor against a policy — and a key that clears an unpoliced gate occupies exactly one
+ * quorum slot, so a key cannot satisfy a two-person checkpoint by calling twice either.
+ */
+export function publicApiGateActor(auth: PublicApiKeyAuth): GateActor {
+  return { id: auth.keyId, kind: 'api-key', role: null }
 }
 
 /** The settled context an iterative-review route acts on, for one review kind. */
@@ -201,6 +217,48 @@ export async function gateBrainstormAction<E extends AppEnv>(
     return noReview(`This run has no ${stage} brainstorm`)
   }
   return { workspaceId, scoped, brainstorm, stage, review }
+}
+
+/** The settled context an interview route acts on: which gate, and the run it is parked on. */
+export interface InterviewAction {
+  workspaceId: string
+  scoped: ScopedRun
+  gate: InterviewGate
+  /** The parked step's kind, so a refusal can name the interviewer the caller reached for. */
+  stepKind: string
+}
+
+/**
+ * Gate an interview action: the shared {@link gateDecisionAction} preamble, plus the run's PARKED
+ * interview step and the gate wired for its kind.
+ *
+ * Which interviewer is asking is resolved from the RUN rather than taken from the caller, which is
+ * what lets one route set serve every interview gate. Two distinct refusals fall out of that, and
+ * keeping them apart is the point: a run parked on no interview is a 404 (there is nothing to
+ * answer), while a run parked on an interviewer this deployment never wired is a 503 naming the
+ * kind (there is something to answer and this deployment cannot). Collapsing them would tell an
+ * operator staring at a stopped run that it is not stopped.
+ */
+export async function gateInterviewAction<E extends AppEnv>(
+  c: Context<E>,
+  runId: string,
+): Promise<InterviewAction | GateFailure> {
+  const gated = await gateDecisionAction(c, runId)
+  if ('fail' in gated) return gated
+  const { workspaceId, scoped } = gated
+  const container = c.get('container')
+  const parked = findParkedInterviewStep(scoped.execution, container.agentKindRegistry)
+  if (!parked) {
+    return {
+      fail: { status: 404, code: 'no_interview', message: 'This run has no live interview' },
+    }
+  }
+  const stepKind = parked.step.agentKind
+  const gate = container.executionService.interviewGateFor(stepKind)
+  if (!gate) {
+    return moduleUnavailable(`The ${stepKind} interviewer is not configured`)
+  }
+  return { workspaceId, scoped, gate, stepKind }
 }
 
 /** A deployment that never wired the module behind a park cannot answer it: 503, naming what. */

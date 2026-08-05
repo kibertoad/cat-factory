@@ -22,6 +22,10 @@
 import { NAMESPACED_ID_PATTERN, isNamespacedId } from './primitives.js'
 
 export const RESULT_VIEW_IDS = [
+  // The run's NON-CODE outcome summary: what the run changed in product terms, with the
+  // evidence the platform captured for it. Opened for a RUN rather than for a step (like
+  // `service-spec` / `initiative-tracker`), so no agent kind declares it.
+  'outcome',
   'requirements-review',
   'clarity-review',
   'brainstorm',

@@ -176,7 +176,11 @@
   installation-wide**: the mint passes GitHub `repository_ids` narrowed to the live App-linked
   rows of the `github_repos` projection for that installation (the batched
   `repoProjectionRepository.listByInstallation` read, mirrored D1 ⇄ Drizzle; `user_pat`-linked
-  rows excluded, not App-reachable; no linked repos ⇒ the same uniform 404). A scoped mint
+  rows excluded, not App-reachable; no linked repos ⇒ the same uniform 404). A caller may narrow
+  FURTHER by naming `repositoryIds` (a container dispatch asks for only the repos its run
+  resolved) and the request is INTERSECTED with that linked set, so asking narrows and can never
+  widen; nothing left in scope is the same 404, and a malformed ask falls back to the full linked
+  set rather than a partial one. A scoped mint
   bypasses the mothership's unscoped in-memory engine token cache in BOTH directions (no
   over-grant from a cached unscoped token, no poisoning of the engine path), and every mint /
   denial / failure is audit-logged with the node + user ids (the client-facing 500 stays opaque).
@@ -184,7 +188,10 @@
   in-process memo, `forceRefresh` pass-through): `composeMothership` builds it on the SAME machine
   token as the persistence RPC, and `buildLocalContainer`, when NO `GITHUB_PAT` is set, wires it
   as BOTH the executor's push/clone-token mint and a full `FetchGitHubClient` (gates, merge,
-  repo-link, `resolveRunRepoContext`/RepoFiles). So a mothership-mode node runs on the org's
+  repo-link, `resolveRunRepoContext`/RepoFiles). The executor forwards its dispatch scope through
+  that seam, so a mothership-mode container gets the same per-run narrowing a hosted deployment
+  mints; the client's memo is keyed by installation + SORTED scope, because an installation-keyed
+  entry would serve one run another run's scope. So a mothership-mode node runs on the org's
   GitHub App installation with no PAT and no App key on the machine: only short-lived (~1h),
   repo-scoped installation tokens. An explicit PAT still wins.
   (2) **`environmentTestRunRepository` goes remote** (`get`/`update`/`listRunningByWorkspace` via
@@ -925,7 +932,7 @@ never remotely invocable (mothership-internal cron).
 | `workspaceRepository`                    | ✅ done | board reads + rename/setDescription; `create` onboarding, `delete` sweeper                         |
 | `blockRepository`                        | ◑ part  | board/run reads+writes + public-API `countActiveInternal`; unbatched `listByService` unused        |
 | `executionRepository` (CAS/rev)          | ◑ part  | run surface; `listByService` pending, `listStale` sweeper                                          |
-| `pipelineRepository`                     | ✅ done | full CRUD                                                                                          |
+| `pipelineRepository`                     | ✅ done | full CRUD + `insertIfAbsent` (run-path catalog adoption)                                           |
 | `accountRepository`                      | ✅ done | reads only; `rename`/`updateSettings` admin, `create`/`ensurePersonal` onboarding                  |
 | `membershipRepository`                   | ✅ done | reads only; `upsert`/`remove` admin                                                                |
 | `userSettingsRepository`                 | ✅ done | self-scoped get/upsert (user-tier budget)                                                          |
@@ -1049,10 +1056,11 @@ modes look like success:
 - **GitHub installation tokens** ✅ landed. `POST /internal/github/installation-token` (machine-authed,
   rate-limited per node, scoped by the installation's account binding) mints the mothership App's
   short-lived installation tokens for the laptop, **repo-scoped** via `repository_ids` to the live
-  App-linked `github_repos` projection for the installation; `DelegatedAppTokenSource` consumes them
-  as the push-token mint + the `FetchGitHubClient` token source when no `GITHUB_PAT` is set. The App
-  private key never leaves the mothership, and a delegated token never grants more than the
-  mothership projects. (Projection WRITES (sync ingest, `setMonorepo`, cursors) remain
+  App-linked `github_repos` projection for the installation, INTERSECTED with whatever narrower set
+  the caller asked for (a container dispatch asks for its run's repos);
+  `DelegatedAppTokenSource` consumes them as the push-token mint + the `FetchGitHubClient` token
+  source when no `GITHUB_PAT` is set. The App private key never leaves the mothership, and a
+  delegated token never grants more than the mothership projects. (Projection WRITES (sync ingest, `setMonorepo`, cursors) remain
   mothership-owned; the repo-write projection-refresh slice is still open.)
 
   > **Reality check (code vs plan).** GitHub token delegation (above), the persistence RPC, real-time

@@ -48,6 +48,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `bug-intake` / `initiative-committer`),
   `DeployerStepController` (the deployer provision fan-out + env projection; the fourth
   one-shot step, which had its own controller first),
+  `DisposerStepController` (the deployer's counterpart: reclaims the environments THIS RUN stood
+  up, by the id the deployer recorded on `step.deployEnvs` — never re-resolved from the frame,
+  because that read falls back to the block's frame-less manual/`human-test` environment — and is
+  best-effort, so a teardown hiccup never fails a shipped run),
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
   human merges or declines), `PostMergeBoardController` (the BOARD-shaped follow-up a merged task
@@ -118,6 +122,15 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `promptMessages.ts` owns the lenient `?view=messages` parse of a stored prompt delta into
   independently-budgeted per-message rows. Every bound lives in the contract or the SQL, never
   here. See `backend/docs/debug-api.md`.
+- `pipelines/pipelineAdoption.ts`: reconciling a workspace's stored pipeline rows with the CODE
+  catalog. `adoptForRun` resolves a run's pipeline and MATERIALISES a catalog built-in the board was
+  never seeded with (a reusable operation pins its pipeline by id, so an older board would otherwise
+  refuse to start a task it created); `resolveDefinition` is the read-only twin for a question about
+  a prospective run (every gate in front of a start, so a bare `pipelineRepository.get` there is the
+  smell); `adoptableCatalog` is the bulk form for a caller already holding the workspace's whole
+  list. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
+  `PipelineService.reseed` shares its row builder. See
+  `backend/docs/pipeline-catalog-lifecycle.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

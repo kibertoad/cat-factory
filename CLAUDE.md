@@ -573,13 +573,13 @@ folder is not wired up by existing): [`docs/releases.md`](./docs/releases.md).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
-- `node scripts/check-component-imports.mjs`: requires every layer component used in a Vue
-  template to be imported by path (a bare tag renders nothing, silently). See
-  [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
-- `node scripts/check-reserved-env-keys.mjs`: requires every variable documented in
-  `docs/environment-variables.md` to be RESERVED, so it cannot be named as a capability credential
-  and resolved into an agent process.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all four).
+- `node scripts/check-component-imports.mjs`: every layer component used in a Vue template is
+  imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
+- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
+  RESERVED, so it can never be named as a capability credential.
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
+  `buildStepApproval`.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
@@ -668,13 +668,14 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   reverts), settling the gate without re-probing.
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
-- **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
-  threshold, disposing: advance / park / bounce the producing step with findings as `rework` / fail.
-  **Adding a judge is a new registry entry** (`JudgeDefinition`; one driver,
-  `JudgeStepController.evaluate`, owns the state machine). State rides `step.judge` and survives
-  `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
-  precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
-  Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Judges**: an inline LLM scores work against a rubric, disposing: advance / park / bounce the
+  producing step with findings as `rework` / fail. **Adding a judge is a new registry entry**
+  (`JudgeDefinition`). Model, and why it is neither a gate nor a `StepCompletionResolver`:
+  [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Companions**: a REWORK PAIR looping the preceding producer back on a bounded budget before a
+  human is asked; **added with `AgentKindRegistry.registerCompanion`**. Trap: the pairing is stored
+  SEPARATELY from the kind and the lookups take the registry OPTIONALLY, so a read off a kind's own
+  definition sees built-in pairs only. Doc: [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md).
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
@@ -698,8 +699,11 @@ flows established are stated once above (concurrency/idempotency, untrusted text
 harness rules).
 
 **Built-in catalog lifecycle**: built-ins are COPIED into each workspace at creation and reconciled
-against the CATALOG, never the stored row. Trap: retiring a built-in is TWO edits (delete the definition
-AND name it in `buildRetiredPipelines()`); doing only the first is a silent no-op. Doc:
+against the CATALOG, never the stored row; a run ADOPTS an entry the board was never seeded with, so a
+PINNED pipeline is never stuck behind an advisory. Traps: retiring a built-in is TWO edits (delete the
+definition AND name it in `buildRetiredPipelines()`), doing only the first being a silent no-op; and a
+bare `pipelineRepository.get` on a run-adjacent path is the smell, since every gate in front of a start
+resolves the pipeline and then CONCLUDES from it. Doc:
 [`pipeline-catalog-lifecycle.md`](./backend/docs/pipeline-catalog-lifecycle.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
@@ -806,15 +810,15 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   raises `merge_review`. A pipeline with no merger raises `pipeline_complete` instead of auto-`done`.
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
-- **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`). Traps:
-  narrowing is subtractive; absent is not a rule; the role and mode are PINNED at admission and a pin is
-  only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
-  starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
-  `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
-  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
-- **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
-  the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
-  a VCS outage can't change policy. Doc:
+- **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`,
+  `submissionClassesByRole`), and a bar on LANDING is refused at BOTH exits (auto-merge AND
+  `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin PERSISTS
+  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads as
+  a run with no policy rather than as an error. Docs:
+  [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
+  [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
+- **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
+  yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
   [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
 - **Notifications** are a human-actionable surface behind the `NotificationChannel` port; the same
   registered webhook endpoint also carries run-lifecycle events through the `RunLifecycleSink` port,
@@ -830,6 +834,12 @@ step settlement, not a pipeline step, and it composes from state already in memo
 RECORDED verdict, never a re-probe). Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
+**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
+it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
+being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass.
+Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`
 port is vendor-neutral (per-vendor adapters, today only Datadog); credentials live sealed in
@@ -843,7 +853,8 @@ A deployment ships its own agent kinds without forking and without rebuilding th
 Governing principle: **zero `switch(agentKind)` in the container**. The harness is a generic
 LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Full model:
 [`custom-agents.md`](./backend/docs/custom-agents.md); role authoring:
-[`custom-agent-roles.md`](./backend/docs/custom-agent-roles.md); capabilities:
+[`custom-agent-roles.md`](./backend/docs/custom-agent-roles.md); tool servers (MCP):
+[`mcp-tool-servers.md`](./backend/docs/mcp-tool-servers.md); design record:
 [ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS committing a
@@ -888,11 +899,10 @@ full model (revision log, generation-setting sibling store, variant composition,
 
 ## Telemetry & agent-context observability
 
-Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`)
-live in a dedicated telemetry store, separate from the transactional domain: a required `TELEMETRY_DB` D1 database on
-Cloudflare and a `telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`.
-The full model, and the authority for anything recording an LLM call:
-[`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite new work:
+Four sinks (`llm_call_metrics`, `agent_context_snapshots`, `agent_search_queries`, `agent_tool_calls`) live in a
+dedicated telemetry store, not the transactional one: a required `TELEMETRY_DB` D1 database on Cloudflare and a
+`telemetry` Postgres schema on Node, pruned to `LLM_CALL_METRICS_RETENTION_DAYS`. The authority for anything
+recording an LLM call: [`llm-telemetry.md`](./backend/docs/llm-telemetry.md). The rules that most often bite:
 
 - **Three producers converge on the ONE `LlmObservabilityService` and a new one must too**: the proxy,
   the subscription harnesses, and inline calls through the kernel `InlineLlmCallRecorder` port. A model
@@ -970,11 +980,11 @@ faked. Spec-writing mechanics and the Specs table:
   REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin
   it with a unit test. Never paper over it in the spec (no sleep, no bumped timeout, no reload), and the
   bar for "fixed" is a high-count `--repeat-each` pass plus the root-cause fix in the same change.
-- **Most of those flakes are one product bug: a stale full-snapshot refresh clobbering newer live
-  state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic refreshes, the
-  optimistic-echo trap and `execution.echoAfter`) live in
-  [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber);
-  pin regressions with the store-level unit tests named there.
+- **A flake is either a SPEC asserting state the product only passes THROUGH (the e2e README names
+  the untestable transients) or the recurring product bug: a stale full-snapshot refresh clobbering
+  newer live state.** The delivery-shape rules (coarse `board` events vs targeted upserts, monotonic
+  refreshes, the optimistic-echo trap and `execution.echoAfter`) plus the store-level unit tests that
+  pin them live in [`frontend/app/README.md`](./frontend/app/README.md#real-time-store-coherence-avoid-the-full-refresh-clobber).
 
 ## Basic vs advanced interface mode (frontend)
 
@@ -1058,9 +1068,8 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment:
   some reasoning models emit the whole answer into their private channel and return an empty visible reply,
   which the harness reads as unusable and fails the run. Do NOT append it to side-effect agents whose
-  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright,
-  business-documenter): they legitimately end with no final text. Editing a versioned prompt means bumping
-  its number.
+  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter):
+  they legitimately end with no final text. Editing a versioned prompt means bumping its number.
 - **Frontend extension seams** are all contributed through the one `registerAppModule` registry
   (`app/modular/registry.ts`), the frontend analogue of the backend registries: result views, inspector
   panels (`PanelEntry<Block>` in the `inspectorPanels` slot), overlays (`appOverlays` +

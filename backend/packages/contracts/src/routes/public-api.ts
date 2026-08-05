@@ -1,5 +1,6 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import {
+  createHeadlessPublicApiKeySchema,
   createPublicApiKeySchema,
   createdPublicApiKeySchema,
   publicApiKeyListResultSchema,
@@ -38,6 +39,7 @@ import { errorResponses, singleStringParam } from './_shared.js'
 // ---------------------------------------------------------------------------
 
 const idParams = singleStringParam('id')
+const keyIdParams = singleStringParam('keyId')
 const serviceIdParams = singleStringParam('serviceId')
 const taskIdParams = singleStringParam('taskId')
 
@@ -256,4 +258,50 @@ export const getPublicUsageContract = defineApiContract({
   method: 'get',
   pathResolver: () => '/api/v1/usage',
   responsesByStatusCode: { 200: publicUsageSchema, ...errorResponses },
+})
+
+// ---- headless key provisioning (`admin` scope) -----------------------------
+// The external counterpart of the session-authed `/public-api-keys` routes above, and the same
+// class of gap the outbound webhook had: a deployment whose operator is headless could reach
+// every part of this API except the act of GETTING a key, so an integration that provisions
+// per-tenant or per-environment credentials had to route a human through the app for each one.
+//
+// Two bounds make it safe to offer, both stated where they are enforced: a minted key can never
+// reach the `admin` rung provisioning itself requires (so the mint chain is one link long), and
+// revoking a key revokes everything it minted (so a leaked provisioning key cannot outlive its
+// own revocation). See `HEADLESS_MINTABLE_SCOPES`.
+
+/** List the workspace's live keys: metadata only; a secret is never readable back. */
+export const listPublicKeysContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/keys',
+  responsesByStatusCode: { 200: publicApiKeyListResultSchema, ...errorResponses },
+})
+
+/**
+ * Mint a key for the calling key's own workspace, returning the raw secret exactly once.
+ * Omitting `scope` mints a `write` key. `admin` is refused: see the section note above.
+ */
+export const createPublicKeyContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/api/v1/keys',
+  requestBodySchema: createHeadlessPublicApiKeySchema,
+  responsesByStatusCode: { 201: createdPublicApiKeySchema, ...errorResponses },
+})
+
+/**
+ * Revoke a key, and with it every key that key minted. Idempotent.
+ *
+ * It may name the CALLING key, which is how a provisioning credential retires itself at the end of
+ * a run: the request is already authorized by the time it lands, and the cascade takes the keys it
+ * handed out with it. Note which key that can be: revoking needs `admin`, and `admin` is not
+ * mintable here, so the key that retires itself is always one a person minted in the app. A key
+ * provisioned over this API cannot revoke ITSELF (or anything else); its holder hands it back by
+ * asking whoever provisioned it, or the provisioner revokes itself and takes it along.
+ */
+export const revokePublicKeyContract = defineApiContract({
+  method: 'delete',
+  requestPathParamsSchema: keyIdParams,
+  pathResolver: ({ keyId }) => `/api/v1/keys/${keyId}`,
+  responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
 })

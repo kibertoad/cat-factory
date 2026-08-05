@@ -81,6 +81,12 @@ const UNAVAILABLE_REASONS: Record<
   // the log line and the boot warning.
   transport_unsupported: 'not supported by the agent runtime this run uses',
   missing_secret: 'its credential is not configured for this deployment',
+  // Both OAuth reasons render the same sentence, on the same argument as the transport pair above:
+  // the agent's disposition is identical (the tool is absent and no retry produces it), and the
+  // distinction — nobody has granted this board access, versus a grant that stopped producing
+  // tokens — is the OPERATOR's, carried by the log line, the connection panel and the probe.
+  oauth_not_connected: 'this deployment is not authorised to use it',
+  oauth_token_failed: 'this deployment is not authorised to use it',
   // A cap, not a fault, so the phrasing does not invite the agent to retry or work around it: the
   // tool exists and this run simply did not get it.
   over_budget: 'not wired for this run (too many tool servers were declared)',

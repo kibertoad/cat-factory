@@ -176,6 +176,40 @@ describe('POST /internal/github/installation-token', () => {
     expect(mintCalls[0]!.repositoryIds).toEqual([101, 103])
   })
 
+  it('INTERSECTS a caller-requested narrowing with the linked set (asking narrows, never widens)', async () => {
+    const mintCalls: MintCall[] = []
+    const res = await mint(makeApp({ mintCalls }), await machineToken(), {
+      installationId: 11,
+      // 103 is linked; 999 is not (a repo unlinked between the node's read and this mint), and
+      // 102 is `user_pat`, reachable only through a member's own token.
+      repositoryIds: [103, 999, 102],
+    })
+    expect(res.status).toBe(200)
+    expect(mintCalls[0]!.repositoryIds).toEqual([103])
+  })
+
+  it('refuses when NOTHING the caller asked for is linked (404, same uniform denial)', async () => {
+    const mintCalls: MintCall[] = []
+    const res = await mint(makeApp({ mintCalls }), await machineToken(), {
+      installationId: 11,
+      repositoryIds: [999],
+    })
+    expect(res.status).toBe(404)
+    expect(mintCalls).toHaveLength(0)
+  })
+
+  it('falls back to the whole linked scope when the requested ids are malformed', async () => {
+    const mintCalls: MintCall[] = []
+    const res = await mint(makeApp({ mintCalls }), await machineToken(), {
+      installationId: 11,
+      repositoryIds: [103, 'nope'],
+    })
+    // Ignoring a garbled ask can never widen past what the installation links, and honouring
+    // half of one would mint a token missing a repo the caller is about to clone.
+    expect(res.status).toBe(200)
+    expect(mintCalls[0]!.repositoryIds).toEqual([101, 103])
+  })
+
   it('refuses an in-scope installation with NO linked repos (404 — nothing to grant)', async () => {
     const mintCalls: MintCall[] = []
     const res = await mint(makeApp({ mintCalls }), await machineToken(), { installationId: 44 })
@@ -331,6 +365,46 @@ describe('DelegatedAppTokenSource (client side)', () => {
     expect(mintedTokens).toHaveLength(2)
     // The refreshed token replaces the memo entry.
     expect(await source.installationToken(11)).toBe(fresh)
+  })
+
+  it('memoises per SCOPE, so a narrowed dispatch never serves (or poisons) the unscoped entry', async () => {
+    const mintedTokens: string[] = []
+    const mintCalls: MintCall[] = []
+    const token = await machineToken()
+    const app = makeApp({ mintedTokens, mintCalls })
+    const fetchImpl: typeof fetch = async (input, init) =>
+      app.fetch(new Request(input as RequestInfo, init))
+    const nowRef = { now: 1_000 }
+    const source = new DelegatedAppTokenSource(
+      { baseUrl: 'http://mothership.test', token: () => token, fetchImpl },
+      () => nowRef.now,
+    )
+
+    const wide = await source.installationToken(11)
+    const narrow = await source.installationToken(11, { repositoryIds: [103] })
+    expect(narrow).not.toBe(wide)
+    expect(mintCalls.map((c) => c.repositoryIds)).toEqual([[101, 103], [103]])
+
+    // Both entries stand on their own, and the scope's ORDER does not mint a third.
+    expect(await source.installationToken(11)).toBe(wide)
+    expect(await source.installationToken(11, { repositoryIds: [103] })).toBe(narrow)
+    expect(mintedTokens).toHaveLength(2)
+  })
+
+  it('forwards a multi-repo scope in a stable order (memo key sorts, request narrows)', async () => {
+    const mintCalls: MintCall[] = []
+    const token = await machineToken()
+    const app = makeApp({ mintCalls })
+    const fetchImpl: typeof fetch = async (input, init) =>
+      app.fetch(new Request(input as RequestInfo, init))
+    const source = new DelegatedAppTokenSource(
+      { baseUrl: 'http://mothership.test', token: () => token, fetchImpl },
+      () => 1_000,
+    )
+    const first = await source.installationToken(11, { repositoryIds: [103, 101] })
+    // Same SET, different order: one mint, served from the same memo entry.
+    expect(await source.installationToken(11, { repositoryIds: [101, 103] })).toBe(first)
+    expect(mintCalls).toHaveLength(1)
   })
 
   it('surfaces the mothership refusal as a thrown error (no token fabricated)', async () => {

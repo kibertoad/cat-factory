@@ -15,13 +15,17 @@ import type {
 } from '@cat-factory/kernel'
 import {
   type AppConfig,
+  type DispatchTokenMintDependencies,
   type GitHubAppRegistry,
   type JobPackageRegistrySpec,
   type ResolveRepoOrigin,
   type ResolveRepoTarget,
   type ResolveRunnerTransport,
   RunnerJobClient,
+  buildDispatchTokenMint,
+  logger,
   makeResolveDeployCloneTarget,
+  operationalMetrics,
 } from '@cat-factory/server'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 import {
@@ -51,7 +55,7 @@ export interface NodeTransportDeployInput {
   resolveTransportOverride?: ResolveRunnerTransport | null
   runnerPoolProvider?: Parameters<typeof buildNodeResolveTransport>[5]
   skipProvisioningLogWrap?: boolean
-  mintInstallationToken?: (installationId: number) => Promise<string>
+  mintInstallationToken?: DispatchTokenMintDependencies['mint']
   deployJobClientOverride?: DeployJobClient
   disableDefaultDeployJobClient?: boolean
   resolveDeployCloneTargetOverride?: (
@@ -133,9 +137,12 @@ export function buildNodeTransportDeploy(input: NodeTransportDeployInput) {
   // origin from the App registry. The local facade injects BOTH (a deploy-dedicated native/
   // container transport + a PAT/GitLab clone target) via `options`, which win here. Absent any
   // backend ⇒ unwired, so a render-needing config fails loudly (the raw REST path is unaffected).
-  const baseDeployMint =
-    mintInstallationToken ??
-    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  // The deploy clone token goes into a container, so it rides the shared builder and is narrowed
+  // to the repo being rendered, like every other container dispatch.
+  const baseDeployMintSource = mintInstallationToken ?? appRegistryMint(appRegistry)
+  const baseDeployMint = baseDeployMintSource
+    ? buildDispatchTokenMint({ mint: baseDeployMintSource, logger, operationalMetrics })
+    : undefined
   const deployJobClient: DeployJobClient | undefined =
     deployJobClientOverride ??
     (disableDefaultDeployJobClient || !resolveTransport
@@ -146,7 +153,7 @@ export function buildNodeTransportDeploy(input: NodeTransportDeployInput) {
     (baseDeployMint
       ? makeResolveDeployCloneTarget(
           resolveRepoTarget,
-          (id) => baseDeployMint(id),
+          baseDeployMint,
           resolveRepoOrigin ? { resolveCloneUrl: (t) => resolveRepoOrigin(t).cloneUrl } : {},
         )
       : undefined)
@@ -170,7 +177,7 @@ export interface NodeBootstrapperInput {
   repoProjectionRepository: RepoProjectionRepository
   appRegistry: GitHubAppRegistry | undefined
   githubClient: GitHubClient | undefined
-  mintInstallationToken?: (installationId: number) => Promise<string>
+  mintInstallationToken?: DispatchTokenMintDependencies['mint']
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
   caches?: AppCaches
 }
@@ -202,9 +209,15 @@ export function buildNodeBootstrapper(input: NodeBootstrapperInput) {
     'bootstrapJobRepository',
     (d) => new DrizzleBootstrapJobRepository(d),
   )
-  const bootstrapMintInstallationToken =
-    mintInstallationToken ??
-    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+  // The deployment credential behind the bootstrap/repair dispatches: a facade override (local
+  // mode's static PAT, the mothership delegation client) else the App registry. Wrapped in the
+  // shared builder so those two dispatches narrow their token to the one repo they touch, and
+  // report a scope they could not apply, exactly as the step executor's does. No
+  // `resolveRunInitiatorToken`: neither dispatch has an initiator to act as.
+  const baseBootstrapMint = mintInstallationToken ?? appRegistryMint(appRegistry)
+  const bootstrapMintInstallationToken = baseBootstrapMint
+    ? buildDispatchTokenMint({ mint: baseBootstrapMint, logger, operationalMetrics })
+    : undefined
   const repoBootstrapper = selectNodeRepoBootstrapper({
     env,
     config,
@@ -219,4 +232,12 @@ export function buildNodeBootstrapper(input: NodeBootstrapperInput) {
   })
 
   return { bootstrapJobRepository, bootstrapMintInstallationToken, repoBootstrapper }
+}
+
+/** The App registry's mint as a {@link DispatchTokenMintDependencies['mint']}, when one is wired. */
+function appRegistryMint(
+  appRegistry: GitHubAppRegistry | undefined,
+): DispatchTokenMintDependencies['mint'] | undefined {
+  if (!appRegistry) return undefined
+  return (id, opts) => appRegistry.installationToken(id, opts)
 }
