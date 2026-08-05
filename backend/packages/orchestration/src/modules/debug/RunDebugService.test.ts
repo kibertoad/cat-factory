@@ -309,6 +309,35 @@ describe('RunDebugService.listToolCalls', () => {
     expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
   })
 
+  it('forwards the outcome narrowing INTO the store query, on both orders', async () => {
+    // The half no integration test can see on a run that recorded nothing: an unforwarded
+    // `outcome` returns 200 with a well-formed page of EVERY row, which reads as a run whose
+    // every tool call failed. Asserted on both orders because they take different query paths.
+    const { service, listPage, listByExecution } = toolCallRepo()
+
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, outcome: 'error' })
+    expect(listPage).toHaveBeenCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 21,
+      outcome: 'error',
+    })
+
+    await service.listToolCalls('ws', 'exec_1', { limit: 20, order: 'trajectory', outcome: 'ok' })
+    expect(listByExecution).toHaveBeenCalledWith('ws', {
+      executionId: 'exec_1',
+      limit: 20,
+      outcome: 'ok',
+    })
+  })
+
+  it('omits the narrowing entirely when none was asked for', async () => {
+    // Absent is NOT `ok`: a service that defaulted the key would hide every failing row from
+    // the unfiltered read, which is the one an operator starts from.
+    const { service, listPage } = toolCallRepo()
+    await service.listToolCalls('ws', 'exec_1', { limit: 20 })
+    expect(listPage).toHaveBeenCalledWith('ws', { executionId: 'exec_1', limit: 21 })
+  })
+
   it('reports an unwired sink as empty rather than throwing', async () => {
     const service = new RunDebugService({
       executionRepository: executionRepo([run('exec_1', 1)]),

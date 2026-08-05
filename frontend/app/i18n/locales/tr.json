@@ -1645,10 +1645,12 @@
       "lastErroredCall": "Başarısız olan son model çağrısı",
       "moreErroredCalls": "ve daha önceki {count} başarısız çağrı | ve daha önceki {count} başarısız çağrı",
       "lastFailedToolCall": "Başarısız olan son araç çağrısı",
+      "aFailedToolCall": "Başarısız bir araç çağrısı",
       "moreFailedToolCalls": "ve daha önceki {count} başarısız araç çağrısı | ve daha önceki {count} başarısız araç çağrısı",
       "toolReturnedNothing": "Araç hiçbir şey döndürmedi.",
       "toolBodiesWithheld": "Bu çalışma için argümanlar ve sonuçlar kaydedilmedi, bu yüzden aracın kendi hata metni mevcut değil.",
       "noFailingCall": {
+        "sink-unreachable": "Bu çalıştırmanın telemetrisinin bir kısmı yüklenemedi, bu yüzden neyin başarısız olduğu hakkında bir sonuca varılamaz.",
         "recorded-clean": "Ne bir model çağrısı ne de bir araç çağrısı hata bildirdi, yani neden iki kaynağın hiçbirinde satır bırakmadı: motora, başarısız adımın konteyner otopsisine ve sağlama günlüğüne bakın.",
         "partial-calls-only": "Hiçbir model çağrısı hata bildirmedi ve bu çalışma için araç çağrısı kaydedilmedi, bu yüzden yörünge bu soruyu yanıtlayamaz.",
         "partial-tools-only": "Hiçbir araç çağrısı hata bildirmedi ve bu çalışma için model çağrısı kaydedilmedi.",
@@ -1669,7 +1671,9 @@
       "bodiesWithheld": "Argümanlar ve sonuçlar kaydedilmedi, bu yüzden yokluklarından bir sonuç çıkarılamaz.",
       "arguments": "Argümanlar",
       "result": "Sonuç",
-      "dropped": "Kayıt sırasında {chars} karakter atıldı"
+      "dropped": "Kayıt sırasında {chars} karakter atıldı",
+      "truncated": "Bu çalıştırmanın ilk {shown} çağrısı gösteriliyor. Yukarıdaki sayılar çalıştırmanın tamamına aittir; hepsini görmek için başarısızlara daraltın.",
+      "failuresTruncated": "İlk {shown} başarısız çağrı gösteriliyor. Yukarıdaki sayı çalıştırmanın tamamına aittir."
     }
   },
   "platformObservability": {

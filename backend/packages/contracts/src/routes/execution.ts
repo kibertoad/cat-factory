@@ -49,14 +49,55 @@ const searchQueriesResponseSchema = v.object({
   searchQueries: v.array(agentSearchQuerySchema),
 })
 
-// The tool-call trajectory response, `{ executionId, toolCalls }`: oldest first, in the order
-// the run's agents actually made the calls. Bounded server-side like every other read here; the
-// panel filters and pins client-side off the rows it holds, because the whole point of the
-// surface is that the failing call is visible WITHOUT another request.
+// The tool-call trajectory response: oldest first, in the order the run's agents actually made
+// the calls, bounded server-side like every other read here.
+//
+// `truncated` is not decoration. The bound takes the OLDEST end, so a long run's rows are a
+// PREFIX — its opening moves, not its trouble — and a reader that cannot tell a prefix from a
+// whole run concludes "these are the calls this run made" from its first two hundred. This is
+// the same rule the LLM export follows for the same reason (`buildLlmMetricsExport`'s
+// `truncated`), and the reason the failure read below is a SEPARATE request rather than
+// something derived from these rows.
 const toolCallsResponseSchema = v.object({
   executionId: v.string(),
   toolCalls: v.array(agentToolCallSchema),
+  /** True when the run made more calls than `toolCalls` holds: it is a prefix, not the run. */
+  truncated: v.boolean(),
 })
+
+// What the panel PINS: the run's failing tool calls and the exact counts behind them.
+//
+// Deliberately not folded into the trajectory response, for two reasons that both come down to
+// the prefix above. It must be EXACT: `failed` is a SQL aggregate over the whole run, so the
+// headline never disagrees with the debug overview's `sinks.toolCalls.failed` on a long run.
+// And it must be CHEAP: the trajectory carries every argument and result the run captured, so
+// binding the panel's first answer to that payload would make the one number an operator opens
+// the panel for wait on megabytes it may never scroll.
+const toolCallFailuresResponseSchema = v.object({
+  executionId: v.string(),
+  /** Every tool call the run made, counted in SQL — not the length of any list here. */
+  total: v.number(),
+  /** How many of them reported failure, from the SAME aggregate pass, so it can never exceed. */
+  failed: v.number(),
+  /** The failing calls themselves, in trajectory order, narrowed in SQL and bounded. */
+  failures: v.array(agentToolCallSchema),
+  /** True when `failed` exceeds what `failures` holds. `failed` stays the honest number. */
+  failuresTruncated: v.boolean(),
+})
+
+/**
+ * The two reads' payloads, named so the engine service that BUILDS them and the SPA that renders
+ * them are typed against one declaration. A service returning a structurally-similar object of
+ * its own is how a `truncated` flag ends up computed in one place and forgotten in the other.
+ */
+export type RunToolCallTrajectory = Omit<
+  v.InferOutput<typeof toolCallsResponseSchema>,
+  'executionId'
+>
+export type RunToolCallFailures = Omit<
+  v.InferOutput<typeof toolCallFailuresResponseSchema>,
+  'executionId'
+>
 
 // ---- run lifecycle --------------------------------------------------------
 
@@ -137,6 +178,13 @@ export const getExecutionToolCallsContract = defineApiContract({
   requestPathParamsSchema: executionIdParams,
   pathResolver: ({ executionId }) => `/executions/${executionId}/tool-calls`,
   responsesByStatusCode: { 200: toolCallsResponseSchema, ...errorResponses },
+})
+
+export const getExecutionToolCallFailuresContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}/tool-call-failures`,
+  responsesByStatusCode: { 200: toolCallFailuresResponseSchema, ...errorResponses },
 })
 
 export const exportExecutionLlmMetricsContract = defineApiContract({

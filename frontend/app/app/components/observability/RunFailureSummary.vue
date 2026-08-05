@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import type { RunFailureEvidence } from '~/utils/observability'
 import { noFailingCallReason } from '~/utils/observability'
 import { agentKindMeta } from '~/utils/catalog'
+import { FAILURE_KIND_KEYS } from '~/utils/failureKinds'
+import FailureDetail from '~/components/board/FailureDetail.vue'
 
 // The panel's FIRST section: what broke, pinned above the call list instead of found by
 // scrolling it.
@@ -20,16 +22,19 @@ import { agentKindMeta } from '~/utils/catalog'
 // come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
 // `startedAt`), so "which happened last" is not a comparison this can make honestly, and a
 // confident wrong ordering here is worse than none: the whole section exists to be believed.
-const props = defineProps<{
-  evidence: RunFailureEvidence
-  /** Whether the model-call sink is still loading, so an empty list is not read as an answer. */
-  loading: boolean
-}>()
+//
+// Every count it prints is a run-level SQL aggregate rather than the length of a list the panel
+// happens to hold, and any bound it renders under says so. Counting off the loaded rows would be
+// the same mistake one layer up as filtering a bounded prefix in JS, and it fails the same way:
+// silently, on exactly the long runs worth opening this panel for.
+const props = defineProps<{ evidence: RunFailureEvidence }>()
 const emit = defineEmits<{
   /** Open the model call with this id in the call list. */
   showCall: [callId: string]
   /** Open the tool-call trajectory, narrowed to the failures. */
   showFailingTools: []
+  /** Re-request whichever telemetry read failed. */
+  retry: []
 }>()
 
 const { t, d } = useI18n()
@@ -45,6 +50,19 @@ function agentMeta(kind: string) {
 }
 
 /**
+ * The failure's kind as translated copy.
+ *
+ * Through the shared `FAILURE_KIND_KEYS` map, never the raw enum: `job_failed` and
+ * `companion_rejected` are storage spellings, and the map is an exhaustive
+ * `Record<AgentFailureKind, …>` so a kind added to the contract fails the typecheck here instead
+ * of surfacing as a code in the middle of a sentence.
+ */
+const failureKindLabel = computed(() => {
+  const failure = props.evidence.failure
+  return failure ? t(FAILURE_KIND_KEYS[failure.kind]) : ''
+})
+
+/**
  * A tool call's result text, or null when there is nothing honest to show.
  *
  * `withheld` is NOT an empty result: the bodies were never captured (the deployment switch or
@@ -56,6 +74,11 @@ const failedToolResult = computed(() => {
   if (!call || call.bodies !== 'stored') return null
   return call.result || null
 })
+
+/** How many failing tool calls precede the pinned one, or null when it is the only one. */
+const earlierFailedToolCalls = computed(() =>
+  props.evidence.failedToolCallCount > 1 ? props.evidence.failedToolCallCount - 1 : null,
+)
 </script>
 
 <template>
@@ -72,18 +95,22 @@ const failedToolResult = computed(() => {
         <template v-if="evidence.failure">
           <p class="mt-1 text-[13px] text-slate-200">{{ evidence.failure.message }}</p>
           <div class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
-            <span>{{ t('observability.failure.kind', { kind: evidence.failure.kind }) }}</span>
+            <span>{{ t('observability.failure.kind', { kind: failureKindLabel }) }}</span>
             <span v-if="evidence.failure.stepIndex != null">
               {{ t('observability.failure.atStep', { index: evidence.failure.stepIndex + 1 }) }}
             </span>
             <span>{{ clock(evidence.failure.occurredAt) }}</span>
           </div>
-          <p
-            v-if="evidence.failure.detail"
-            class="mt-2 whitespace-pre-wrap text-[12px] text-slate-400"
-          >
-            {{ evidence.failure.detail }}
-          </p>
+          <!-- The shared disclosure the failure banner and the prior-errors history use:
+               collapsed, copyable, and silent when the detail merely repeats the message. A
+               pinned triage header is the last place an unbounded stack trace should sit
+               expanded by default, pushing the failing call it exists to surface off-screen. -->
+          <FailureDetail
+            :detail="evidence.failure.detail"
+            :message="evidence.failure.message"
+            summary-class="text-[11px] text-slate-500 hover:text-slate-300"
+            pre-class="bg-slate-950/60 text-[11px] text-slate-400"
+          />
           <p v-if="evidence.failure.hint" class="mt-1.5 text-[12px] text-slate-300">
             {{ evidence.failure.hint }}
           </p>
@@ -145,7 +172,14 @@ const failedToolResult = computed(() => {
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-baseline gap-x-2 text-[12px]">
             <span class="font-medium text-slate-200">
-              {{ t('observability.failure.lastFailedToolCall') }}
+              <!-- "One of the failing calls" when even the failures were bounded: the row is
+                   real either way, but calling it the LAST would be a claim about rows this
+                   read never saw. -->
+              {{
+                evidence.failedToolCallsTruncated
+                  ? t('observability.failure.aFailedToolCall')
+                  : t('observability.failure.lastFailedToolCall')
+              }}
             </span>
             <span class="font-mono text-slate-300">{{ evidence.lastFailedToolCall.tool }}</span>
             <span class="text-slate-500">
@@ -163,12 +197,12 @@ const failedToolResult = computed(() => {
                 : t('observability.failure.toolBodiesWithheld')
             }}
           </p>
-          <p v-if="evidence.failedToolCallCount > 1" class="mt-0.5 text-[11px] text-slate-500">
+          <p v-if="earlierFailedToolCalls" class="mt-0.5 text-[11px] text-slate-500">
             {{
               t(
                 'observability.failure.moreFailedToolCalls',
-                { count: evidence.failedToolCallCount - 1 },
-                evidence.failedToolCallCount - 1,
+                { count: earlierFailedToolCalls },
+                earlierFailedToolCalls,
               )
             }}
           </p>
@@ -179,14 +213,31 @@ const failedToolResult = computed(() => {
       <!-- Nothing failing to point at. Which of the reasons it is decides what an operator should
            do next, so each gets its own sentence rather than one shared shrug. `emptyReason` is
            null whenever EITHER sink held a failure, so it already covers the model-call arm
-           above; the loading guard is what stops a sink that has not answered yet from being
-           reported as one that answered clean. -->
-      <p
-        v-else-if="!loading && emptyReason"
-        class="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-[12px] text-slate-400"
+           above, and null while a sink is still loading, which is what stops a read that has not
+           come back from being reported as one that came back clean. -->
+      <div
+        v-else-if="emptyReason"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-[12px]"
+        :class="
+          emptyReason === 'sink-unreachable'
+            ? 'border-amber-900/60 text-amber-300'
+            : 'border-slate-800 text-slate-400'
+        "
       >
-        {{ t(`observability.failure.noFailingCall.${emptyReason}`) }}
-      </p>
+        <span>{{ t(`observability.failure.noFailingCall.${emptyReason}`) }}</span>
+        <!-- The one empty state with an action attached: the others are answers, this one is the
+             absence of one. -->
+        <UButton
+          v-if="emptyReason === 'sink-unreachable'"
+          icon="i-lucide-rotate-cw"
+          color="neutral"
+          variant="soft"
+          size="xs"
+          @click="emit('retry')"
+        >
+          {{ t('common.retry') }}
+        </UButton>
+      </div>
     </div>
   </section>
 </template>

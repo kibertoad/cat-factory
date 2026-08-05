@@ -1740,10 +1740,12 @@
       "lastErroredCall": "Last failed model call",
       "moreErroredCalls": "and {count} earlier failed call | and {count} earlier failed calls",
       "lastFailedToolCall": "Last failed tool call",
+      "aFailedToolCall": "A failed tool call",
       "moreFailedToolCalls": "and {count} earlier failed tool call | and {count} earlier failed tool calls",
       "toolReturnedNothing": "The tool returned nothing.",
       "toolBodiesWithheld": "Arguments and results were not captured for this run, so the tool's own error text is not available.",
       "noFailingCall": {
+        "sink-unreachable": "Part of this run's telemetry could not be loaded, so nothing can be concluded about what failed.",
         "recorded-clean": "No model call and no tool call reported failure, so the cause left no row in either sink: look at the engine, the container post-mortem on the failing step, and the provisioning log.",
         "partial-calls-only": "No model call reported failure, and no tool calls were recorded for this run, so the trajectory cannot say whether one did.",
         "partial-tools-only": "No tool call reported failure, and no model calls were recorded for this run.",
@@ -1764,7 +1766,9 @@
       "bodiesWithheld": "Arguments and results were not captured, so nothing can be concluded from their absence.",
       "arguments": "Arguments",
       "result": "Result",
-      "dropped": "{chars} characters dropped at capture"
+      "dropped": "{chars} characters dropped at capture",
+      "truncated": "Showing the first {shown} calls of this run. The counts above are for the whole run; narrow to the failures to see all of them.",
+      "failuresTruncated": "Showing the first {shown} failing calls. The count above is for the whole run."
     }
   },
   "platformObservability": {

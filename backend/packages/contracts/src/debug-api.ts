@@ -4,10 +4,12 @@ import { runDiagnosticsSchema } from './run-provenance.js'
 import {
   agentSearchQuerySchema,
   agentToolCallSchema,
+  llmCallOutcomeSchema,
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
   toolCallOutcomeSchema,
+  type LlmCallOutcome,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
 
@@ -414,9 +416,16 @@ export type DebugRunOverview = v.InferOutput<typeof debugRunOverviewSchema>
 // 3./4. LLM calls — `GET /api/v1/debug/runs/:runId/llm-calls`, `GET /api/v1/debug/llm-calls/:callId`
 // ---------------------------------------------------------------------------
 
-/** Classification of a recorded call, precomputed so a caller need not re-derive it. */
-export const debugCallOutcomeSchema = v.picklist(['ok', 'warning', 'error'])
-export type DebugCallOutcome = v.InferOutput<typeof debugCallOutcomeSchema>
+/**
+ * Classification of a recorded call, precomputed so a caller need not re-derive it.
+ *
+ * THE SAME picklist the panel badges and both filters narrow by ({@link llmCallOutcomeSchema}),
+ * aliased rather than restated: two declarations of one closed vocabulary is a member added to
+ * one and missing from the other, and on this surface that reads as a debug client being told a
+ * whole class of call does not exist.
+ */
+export const debugCallOutcomeSchema = llmCallOutcomeSchema
+export type DebugCallOutcome = LlmCallOutcome
 
 /** Chronological direction a call page walks in. */
 export const debugCallOrderSchema = v.picklist(['newest', 'oldest'])

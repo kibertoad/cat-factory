@@ -49,6 +49,8 @@ export type {
   ReportsView,
   AgentSearchQuery,
   AgentToolCall,
+  RunToolCallFailures,
+  RunToolCallTrajectory,
   ToolCallBodiesState,
   ToolCallOutcome,
   WebSearchAvailability,

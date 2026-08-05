@@ -24,8 +24,8 @@ import type {
 } from '@cat-factory/contracts'
 import {
   cacheHitRate,
-  classifyCall,
-  isWarningFinishReason,
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
   outputHeadroomRatio,
   transportOverheadRatio,
 } from '../observability/observability.logic.js'
@@ -182,7 +182,7 @@ export function toDebugLlmCall(call: LlmCallMetricPage, bodyOffset = 0): DebugLl
     provider: call.provider,
     model: call.model,
     createdAt: call.createdAt,
-    outcome: classifyCall(call),
+    outcome: classifyLlmCallOutcome(call),
     ok: call.ok,
     httpStatus: call.httpStatus,
     errorMessage: call.errorMessage,
@@ -476,13 +476,16 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     totals.truncatedCalls === 0
   ) {
     // The trajectory sink has already COUNTED the failing tool calls by the time this fires, so
-    // the pointer states what is there rather than sending the caller to look. The two answers
-    // need different next steps, which is why they are different sentences: rows to read, versus
-    // a cause with no row anywhere.
-    const toolLead =
-      sinks.toolCalls.failed > 0
+    // the pointer states what is there rather than sending the caller to look. FOUR answers, not
+    // one, because each sends a reader somewhere different — and the split between the last two
+    // is the one worth spelling out: a sink this deployment never wired records nothing BY
+    // CONSTRUCTION, where a wired one that holds nothing is a fact about the run. Collapsing
+    // them would tell an operator to go looking at a container for the absence of a table.
+    const toolLead = !sinks.toolCalls.available
+      ? 'The tool-call sink is not wired on this deployment, so it can say nothing either way about the container (see the telemetry_unavailable signal).'
+      : sinks.toolCalls.failed > 0
         ? `${sinks.toolCalls.failed} of its ${sinks.toolCalls.count} TOOL call(s) did fail: read those first, in the order they happened (GET /debug/runs/:runId/tool-calls?order=trajectory&outcome=error).`
-        : sinks.toolCalls.available && sinks.toolCalls.count > 0
+        : sinks.toolCalls.count > 0
           ? `None of its ${sinks.toolCalls.count} tool call(s) failed either, so the cause left no row in any sink: look at the engine.`
           : 'No tool calls were recorded for it, so the trajectory cannot answer this one: the container may have died before the harness numbered any calls, or the image predates the sink.'
     push(
@@ -559,5 +562,9 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
   return signals
 }
 
-/** Re-exported so the service and its tests classify a call exactly as the SPA does. */
-export { classifyCall, isWarningFinishReason }
+/**
+ * Re-exported so the service and its tests classify a call exactly as the SPA does — which
+ * they now do by construction: both names resolve to the ONE implementation in
+ * `@cat-factory/contracts`, which the SPA imports directly.
+ */
+export { classifyLlmCallOutcome, isLlmWarningFinishReason }

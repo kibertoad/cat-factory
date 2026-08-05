@@ -30,11 +30,13 @@ They come from different clocks (a call's recorded `createdAt`, a tool span's ha
 `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
 wrong ordering is worse than none in a section whose whole job is to be believed.
 
-**When nothing failing can be pinned, it says which of three things that means.** Both sinks
-answered and nothing failed (the cause left no row: look at the engine), neither sink recorded
-anything (the run died before any agent work), or one answered and the other stayed silent. A single
-"no failures found" would render a clean bill of health over a run that died with no telemetry at
-all, which is the same false picture in the opposite direction.
+**When nothing failing can be pinned, it says which of four things that means.** A sink's read
+FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+before any agent work); or one answered with rows and the other did not. A single "no failures
+found" would render a clean bill of health over a run that died with no telemetry at all, which is
+the same false picture in the opposite direction. A read still in flight is none of the four: the
+section withholds every verdict until both sinks have answered.
 
 **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
 with live counts, split that way because a failed call and a truncated one need different fixes
@@ -56,7 +58,20 @@ breaks: `AgentToolCallRepository.countByExecution` returns `{ total, failed }` (
 so the two can never be read at different instants and disagree), and the trajectory/page queries
 gain an `outcome` field.
 
-`LLM_WARNING_FINISH_REASONS` and the call-outcome classification move to `@cat-factory/contracts`
-(kernel re-exports them, so its SQL aggregations are untouched). The SPA had a hand-copied list,
-which was tolerable while it only picked a badge colour and stopped being so the moment the filter
-decides which rows an operator is shown.
+**The panel obeys the same prefix rule the stores do.** It reads the sink through two
+workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+every captured argument and result the run produced. Folding them into one read would either make
+the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+the run's name, and the second is the same false all-clear from the other direction. The trajectory
+now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+everything the run did.
+
+**One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+`debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.

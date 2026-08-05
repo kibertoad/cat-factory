@@ -5,6 +5,7 @@ import {
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
+  getExecutionToolCallFailuresContract,
   getExecutionToolCallsContract,
   getWorkspaceUsageContract,
   mergeBlockContract,
@@ -168,9 +169,20 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
 
     // The tool-call trajectory: what the run's agents DID, oldest first. The half of a
     // failure no model call reports: a tool that errors leaves the call that asked for it
-    // reporting `ok`. Empty when the sink is not wired / storing is off.
+    // reporting `ok`. Bounded, and says so via `truncated`. Empty when the sink is not wired /
+    // storing is off. The BROWSE read: fetched when the trajectory is opened, since it carries
+    // every argument and result the run captured.
     getToolCalls: (workspaceId: string, executionId: string) =>
       send(getExecutionToolCallsContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
+      }),
+
+    // The run's failing tool calls plus its exact `{ total, failed }`, counted in SQL rather
+    // than off any list. The panel's headline read, made on open: cheap enough to front the
+    // page, and exact enough that it never disagrees with the debug overview on a long run.
+    getToolCallFailures: (workspaceId: string, executionId: string) =>
+      send(getExecutionToolCallFailuresContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
       }),

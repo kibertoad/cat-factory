@@ -1645,10 +1645,12 @@
       "lastErroredCall": "Última llamada al modelo fallida",
       "moreErroredCalls": "y {count} llamada fallida anterior | y {count} llamadas fallidas anteriores",
       "lastFailedToolCall": "Última llamada a herramienta fallida",
+      "aFailedToolCall": "Una llamada de herramienta fallida",
       "moreFailedToolCalls": "y {count} llamada a herramienta fallida anterior | y {count} llamadas a herramienta fallidas anteriores",
       "toolReturnedNothing": "La herramienta no devolvió nada.",
       "toolBodiesWithheld": "Los argumentos y resultados no se capturaron en esta ejecución, así que no se dispone del texto de error de la herramienta.",
       "noFailingCall": {
+        "sink-unreachable": "No se pudo cargar parte de la telemetría de esta ejecución, así que no se puede concluir nada sobre qué falló.",
         "recorded-clean": "Ninguna llamada al modelo ni a herramientas informó de un fallo, así que la causa no dejó ningún registro en ninguna de las dos fuentes: revise el motor, la autopsia del contenedor del paso fallido y el registro de aprovisionamiento.",
         "partial-calls-only": "Ninguna llamada al modelo informó de un fallo, y no se registraron llamadas a herramientas en esta ejecución, así que la trayectoria no puede decir si alguna falló.",
         "partial-tools-only": "Ninguna llamada a herramienta informó de un fallo, y no se registraron llamadas al modelo en esta ejecución.",
@@ -1669,7 +1671,9 @@
       "bodiesWithheld": "Los argumentos y resultados no se capturaron, así que su ausencia no permite concluir nada.",
       "arguments": "Argumentos",
       "result": "Resultado",
-      "dropped": "{chars} caracteres descartados al capturar"
+      "dropped": "{chars} caracteres descartados al capturar",
+      "truncated": "Se muestran las primeras {shown} llamadas de esta ejecución. Los recuentos de arriba corresponden a la ejecución completa; filtra por los fallos para verlos todos.",
+      "failuresTruncated": "Se muestran las primeras {shown} llamadas fallidas. El recuento de arriba corresponde a la ejecución completa."
     }
   },
   "platformObservability": {

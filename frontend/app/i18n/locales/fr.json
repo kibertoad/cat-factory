@@ -1645,10 +1645,12 @@
       "lastErroredCall": "Dernier appel de modèle en échec",
       "moreErroredCalls": "et {count} appel en échec antérieur | et {count} appels en échec antérieurs",
       "lastFailedToolCall": "Dernier appel d'outil en échec",
+      "aFailedToolCall": "Un appel d'outil en échec",
       "moreFailedToolCalls": "et {count} appel d'outil en échec antérieur | et {count} appels d'outil en échec antérieurs",
       "toolReturnedNothing": "L'outil n'a rien renvoyé.",
       "toolBodiesWithheld": "Les arguments et les résultats n'ont pas été capturés pour cette exécution, le texte d'erreur de l'outil n'est donc pas disponible.",
       "noFailingCall": {
+        "sink-unreachable": "Une partie de la télémétrie de cette exécution n'a pas pu être chargée : rien ne peut être conclu sur ce qui a échoué.",
         "recorded-clean": "Aucun appel de modèle ni d'outil ne signale d'échec : la cause n'a laissé de trace dans aucune des deux sources. Regardez du côté du moteur, de l'autopsie du conteneur de l'étape en échec et du journal de provisionnement.",
         "partial-calls-only": "Aucun appel de modèle ne signale d'échec, et aucun appel d'outil n'a été enregistré pour cette exécution : la trajectoire ne peut donc pas répondre.",
         "partial-tools-only": "Aucun appel d'outil ne signale d'échec, et aucun appel de modèle n'a été enregistré pour cette exécution.",
@@ -1669,7 +1671,9 @@
       "bodiesWithheld": "Les arguments et les résultats n'ont pas été capturés : leur absence ne permet donc rien de conclure.",
       "arguments": "Arguments",
       "result": "Résultat",
-      "dropped": "{chars} caractères supprimés à la capture"
+      "dropped": "{chars} caractères supprimés à la capture",
+      "truncated": "Affichage des {shown} premiers appels de cette exécution. Les compteurs ci-dessus portent sur l'exécution entière ; filtrez sur les échecs pour tous les voir.",
+      "failuresTruncated": "Affichage des {shown} premiers appels en échec. Le compteur ci-dessus porte sur l'exécution entière."
     }
   },
   "platformObservability": {

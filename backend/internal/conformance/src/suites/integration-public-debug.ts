@@ -32,6 +32,83 @@ async function mintKey(
   return { authorization: `Bearer ${created.body.secret}` }
 }
 
+/**
+ * The tool-call sink's three routes: the public debug list's `?outcome=` narrowing, and the two
+ * workspace-scoped reads the SPA panel makes.
+ *
+ * Lifted out of the detail-list test as one piece because it is one concern, and because that
+ * test had grown past the statement budget — the ratchet's intended outcome, not a number to
+ * raise.
+ */
+async function assertToolCallReads(
+  app: Awaited<ReturnType<ConformanceHarness['makeApp']>>,
+  opts: { wsId: string; runId: string; auth: Record<string, string> },
+): Promise<void> {
+  const { wsId, runId, auth } = opts
+  // The outcome narrowing is ACCEPTED on both orders and REFUSED outside its picklist.
+  //
+  // Scoped deliberately: this run recorded no tool calls (the conformance agent is a fake
+  // that makes none), so what a 200 here can prove is that each facade mounts the parameter,
+  // not that a store honoured it. The two halves that matter live where rows exist —
+  // `agent-tool-calls-suite` drives the real SQL on all three stores, and
+  // `RunDebugService.listToolCalls`'s own test pins that the service forwards `outcome` INTO
+  // the query rather than parsing it and dropping it, which is the failure that would answer
+  // 200 with every row and read as a run whose every tool call failed.
+  for (const url of [
+    `/api/v1/debug/runs/${runId}/tool-calls?outcome=error&limit=5`,
+    `/api/v1/debug/runs/${runId}/tool-calls?order=trajectory&outcome=error&limit=5`,
+  ]) {
+    const failing = await app.call<{ toolCalls: { ok: boolean }[] }>('GET', url, undefined, auth)
+    expect(failing.status).toBe(200)
+    expect(Array.isArray(failing.body.toolCalls)).toBe(true)
+    // Vacuous on this run by construction, and kept because it is the assertion that stops
+    // being vacuous the moment a facade's fake agent starts reporting spans.
+    expect(failing.body.toolCalls.every((c) => c.ok === false)).toBe(true)
+  }
+  // Outside the picklist is a 400, not a silently unfiltered page: a caller that asked for
+  // the failures and got every row back would read the run as all-failing.
+  const badOutcome = await app.call(
+    'GET',
+    `/api/v1/debug/runs/${runId}/tool-calls?outcome=warning`,
+    undefined,
+    auth,
+  )
+  expect(badOutcome.status).toBe(400)
+
+  // The SPA reads the SAME sink through its own workspace-scoped routes, and both hang off
+  // `container.toolCallObservability` — a module the engine builds from the tool-call
+  // repository. An unbuilt module does not error, it answers empty, which on this surface is
+  // the "nothing failed in the container" claim the panel prints at the top of the page. So
+  // the assertion that matters is that both routes EXIST and answer, on both facades.
+  const panelRead = await app.call<{
+    executionId: string
+    toolCalls: unknown[]
+    truncated: boolean
+  }>('GET', `/workspaces/${wsId}/executions/${runId}/tool-calls`)
+  expect(panelRead.status).toBe(200)
+  expect(panelRead.body.executionId).toBe(runId)
+  expect(Array.isArray(panelRead.body.toolCalls)).toBe(true)
+  // A bound that is not being hit still has to SAY so: `truncated` absent from the payload
+  // and `truncated: false` are the same value to a reader and opposite facts about the read.
+  expect(panelRead.body.truncated).toBe(false)
+
+  // The panel's headline read: exact run-level counts, never derived from the prefix above.
+  const failureRead = await app.call<{
+    executionId: string
+    total: number
+    failed: number
+    failures: unknown[]
+    failuresTruncated: boolean
+  }>('GET', `/workspaces/${wsId}/executions/${runId}/tool-call-failures`)
+  expect(failureRead.status).toBe(200)
+  expect(failureRead.body.executionId).toBe(runId)
+  // Counted in ONE aggregate pass, so `failed` above `total` is not a representable state on
+  // any facade — the same invariant the debug overview's sink status is pinned to.
+  expect(failureRead.body.failed).toBeLessThanOrEqual(failureRead.body.total)
+  expect(failureRead.body.failures.length).toBeLessThanOrEqual(failureRead.body.failed)
+  expect(failureRead.body.failuresTruncated).toBe(false)
+}
+
 export function definePublicDebugConformance(harness: ConformanceHarness): void {
   describe('public API — run debugging', () => {
     it("indexes the workspace's runs and pages them with an opaque cursor", async () => {
@@ -255,39 +332,7 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       )
       expect(resumedRecent.status).toBe(200)
 
-      // The outcome narrowing rides BOTH orders (its SQL semantics are pinned by the per-store
-      // suite; what only this can see is that each facade wired the param through to the query,
-      // which is the difference between a filter and a parameter the controller silently drops).
-      for (const url of [
-        `/api/v1/debug/runs/${runId}/tool-calls?outcome=error&limit=5`,
-        `/api/v1/debug/runs/${runId}/tool-calls?order=trajectory&outcome=error&limit=5`,
-      ]) {
-        const failing = await app.call<{ toolCalls: unknown[] }>('GET', url, undefined, auth)
-        expect(failing.status).toBe(200)
-        expect(Array.isArray(failing.body.toolCalls)).toBe(true)
-      }
-      // Outside the picklist is a 400, not a silently unfiltered page: a caller that asked for
-      // the failures and got every row back would read the run as all-failing.
-      const badOutcome = await app.call(
-        'GET',
-        `/api/v1/debug/runs/${runId}/tool-calls?outcome=warning`,
-        undefined,
-        auth,
-      )
-      expect(badOutcome.status).toBe(400)
-
-      // The SPA reads the SAME sink through its own workspace-scoped route, and that route hangs
-      // off `container.toolCallObservability` — a module the engine builds from the tool-call
-      // repository. An unbuilt module does not error, it answers `[]`, which on this surface is
-      // the "nothing failed in the container" claim the panel prints at the top of the page. So
-      // the assertion that matters is that the route EXISTS and answers, on both facades.
-      const panelRead = await app.call<{ executionId: string; toolCalls: unknown[] }>(
-        'GET',
-        `/workspaces/${wsId}/executions/${runId}/tool-calls`,
-      )
-      expect(panelRead.status).toBe(200)
-      expect(panelRead.body.executionId).toBe(runId)
-      expect(Array.isArray(panelRead.body.toolCalls)).toBe(true)
+      await assertToolCallReads(app, { wsId, runId, auth })
 
       // The search and ordering narrowings ride the same route (their SQL semantics are pinned
       // by the per-store suite; what only this can see is that each facade wired the params).

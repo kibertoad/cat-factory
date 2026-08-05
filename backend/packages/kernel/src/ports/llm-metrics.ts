@@ -19,6 +19,11 @@
  */
 export { LLM_WARNING_FINISH_REASONS } from '@cat-factory/contracts'
 
+// The outcome vocabulary itself, for the same reason and from the same place. Kernel names it
+// so the port's query types read in kernel's own terms without owning a second copy.
+import type { LlmCallOutcome } from '@cat-factory/contracts'
+export type { LlmCallOutcome }
+
 /** One proxied LLM call, with its full prompt/response and timing breakdown. */
 export interface LlmCallMetric {
   id: string
@@ -299,8 +304,15 @@ export interface LlmCallMetricPage extends Omit<
   reasoning: LlmCallBodySlice
 }
 
-/** Outcome classes a call page may narrow to, applied in SQL. */
-export type LlmCallOutcomeFilter = 'ok' | 'warning' | 'error'
+/**
+ * Outcome classes a call page may narrow to, applied in SQL.
+ *
+ * An ALIAS of the shared {@link LlmCallOutcome} vocabulary, not a restatement: each store turns
+ * these members into a `WHERE` predicate that must select exactly what
+ * `classifyLlmCallOutcome` puts in the class, so a union that could drift from the classifier
+ * is a filter that silently disagrees with the badge on the row it returned.
+ */
+export type LlmCallOutcomeFilter = LlmCallOutcome
 
 /** A bounded, keyset-paginated query over one run's calls. */
 export interface LlmCallPageQuery {

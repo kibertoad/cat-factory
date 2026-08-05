@@ -9,6 +9,7 @@ import type {
   LlmCallMetric,
   LlmCallOutcome,
   PipelineStep,
+  RunToolCallFailures,
   StepMetrics,
   StepPhaseMetrics,
 } from '~/types/execution'
@@ -232,10 +233,55 @@ export function filterToolCallsByOutcome(
 }
 
 /**
+ * What one telemetry sink was able to say about this run.
+ *
+ * A sink that has not answered and a sink that answered "nothing" are different facts, and the
+ * one thing this surface must never do is render them alike. A bare row count cannot hold the
+ * difference: zero rows is what a still-loading read, a failed read, an unwired sink and a
+ * genuinely quiet run all look like from the outside.
+ *
+ * - `pending`: no answer yet — in flight, or never requested. Not evidence, and never a clean
+ *   bill of health.
+ * - `unreachable`: the read FAILED. The strongest of the four, because it means no conclusion is
+ *   available at all — an HTTP error rendered as "no rows recorded" is a claim about the run
+ *   made out of a claim about the network.
+ * - `answered`: the sink spoke. `rows` may be 0, and THAT is the honest "nothing was recorded".
+ */
+export type SinkAnswer =
+  | { status: 'pending' }
+  | { status: 'unreachable' }
+  | { status: 'answered'; rows: number }
+
+/**
+ * Read one sink's answer off the store flags that describe it.
+ *
+ * The precedence is the point. An in-flight read is PENDING even when a previous answer or a
+ * previous error is still in hand, because what the panel says next depends on what is coming
+ * back, not on what it happened to be holding. Never-requested collapses into pending for the
+ * same reason: both are "nobody has answered", which is exactly what must not be rendered as
+ * "the answer was nothing".
+ */
+export function sinkAnswer(input: {
+  loading: boolean
+  error: string | null
+  loaded: boolean
+  rows: number
+}): SinkAnswer {
+  if (input.loading) return { status: 'pending' }
+  if (input.error) return { status: 'unreachable' }
+  return input.loaded ? { status: 'answered', rows: input.rows } : { status: 'pending' }
+}
+
+/** Whether a sink answered and holds at least one row for the run. */
+function answeredWithRows(answer: SinkAnswer): boolean {
+  return answer.status === 'answered' && answer.rows > 0
+}
+
+/**
  * What the run's telemetry says about its failure, ready to render.
  *
  * `failure` is the run's own structured record (the `agent_runs.failure` JSON the engine writes);
- * the two `*Evidence` rows are the calls that ACTUALLY failed, which is the part the operator
+ * the two evidence rows are the calls that ACTUALLY failed, which is the part the operator
  * otherwise finds by scrolling. They are independent: a run can fail with neither (the engine
  * died, or the container never came up), with one, or with both.
  */
@@ -248,79 +294,114 @@ export interface RunFailureEvidence {
   erroredCallCount: number
   /** The last tool call that reported failure, or null when none did. */
   lastFailedToolCall: AgentToolCall | null
-  /** How many of the run's loaded tool calls reported failure. */
+  /**
+   * How many of the run's tool calls reported failure — the SQL aggregate over the whole run,
+   * not the length of any list held here.
+   *
+   * This is the number that must not be counted off the trajectory. That read is a bounded
+   * PREFIX, so a run whose failures came after its opening moves would be counted at zero, which
+   * is the confident all-clear this whole section exists to refuse.
+   */
   failedToolCallCount: number
   /**
-   * Whether the two sinks hold ANY row for this run.
-   *
-   * This is what keeps "nothing failed" apart from "nothing was recorded". A run whose container
-   * died before the harness reported anything has zero failing calls in both sinks, exactly like
-   * a run whose every call succeeded, and only these flags tell the panel which sentence to
-   * write. An unwired sink, a workspace that turned capture off and a run that predates the sink
-   * all land here as `false`, and the panel says the trajectory cannot answer, not that it did.
+   * Whether {@link lastFailedToolCall} was picked from a bounded slice of the run's failures
+   * rather than all of them, so a "last" that is only the last one HELD says so.
    */
-  hasCalls: boolean
-  hasToolCalls: boolean
+  failedToolCallsTruncated: boolean
+  /** What each sink was able to say. See {@link SinkAnswer}. */
+  calls: SinkAnswer
+  tools: SinkAnswer
 }
 
 /**
  * Fold a run's failure record and its two telemetry sinks into the evidence the panel pins.
  *
- * The calls arrive NEWEST-first (the metrics list's own order) and the tool calls OLDEST-first
- * (trajectory order), so "the last one that failed" is the FIRST match in one and the LAST in
- * the other. Reading either in the wrong direction still returns a failing call, which is why it
- * is worth stating: it would just be the wrong one, and the row nearest the failure is the whole
- * reason to pin one at all.
+ * The model calls arrive NEWEST-first (the metrics list's own order) and the tool-call failures
+ * OLDEST-first (trajectory order), so "the last one that failed" is the FIRST match in one and
+ * the LAST in the other. Reading either in the wrong direction still returns a failing call,
+ * which is why it is worth stating: it would just be the wrong one, and the row nearest the
+ * failure is the whole reason to pin one at all.
+ *
+ * The tool side is handed the run's FAILURES and its exact count, never the trajectory: the two
+ * are separate reads precisely so the count here is about the run rather than about the prefix
+ * the browse tab happens to be holding.
  */
 export function deriveRunFailureEvidence(input: {
   failure?: AgentFailure | null
   calls: readonly LlmCallMetric[]
-  toolCalls: readonly AgentToolCall[]
+  callsAnswer: SinkAnswer
+  toolFailures: RunToolCallFailures | null
+  toolsAnswer: SinkAnswer
 }): RunFailureEvidence {
   const errored = input.calls.filter((call) => !call.ok)
-  const failedTools = input.toolCalls.filter((call) => !call.ok)
+  const failures = input.toolFailures?.failures ?? []
   return {
     failure: input.failure ?? null,
     lastErroredCall: errored[0] ?? null,
     erroredCallCount: errored.length,
-    lastFailedToolCall: failedTools[failedTools.length - 1] ?? null,
-    failedToolCallCount: failedTools.length,
-    hasCalls: input.calls.length > 0,
-    hasToolCalls: input.toolCalls.length > 0,
+    lastFailedToolCall: failures[failures.length - 1] ?? null,
+    failedToolCallCount: input.toolFailures?.failed ?? 0,
+    failedToolCallsTruncated: input.toolFailures?.failuresTruncated ?? false,
+    calls: input.callsAnswer,
+    tools: input.toolsAnswer,
   }
 }
 
-/** Whether the pinned failure section has anything to say about this run. */
+/**
+ * Whether the pinned failure section has anything to say about this run.
+ *
+ * An UNREACHABLE sink counts: "part of this run's telemetry could not be read" is exactly the
+ * kind of thing an operator must be told before they conclude anything from the rest of the
+ * page, and staying silent about it is how the page's other numbers get believed whole.
+ */
 export function hasFailureEvidence(evidence: RunFailureEvidence): boolean {
-  return !!evidence.failure || evidence.erroredCallCount > 0 || evidence.failedToolCallCount > 0
+  return (
+    !!evidence.failure ||
+    evidence.erroredCallCount > 0 ||
+    evidence.failedToolCallCount > 0 ||
+    evidence.calls.status === 'unreachable' ||
+    evidence.tools.status === 'unreachable'
+  )
 }
 
 /**
  * Why the pinned section can point at no failing call, as a discriminated reason rather than a
  * bare absence. Each needs different words and a different next step from the operator:
  *
- * - `recorded-clean`: both sinks hold rows and none of them failed, so the cause sits where no
- *   producer records anything (the engine, or a container that died between calls).
- * - `no-telemetry`: neither sink holds a row for this run at all, so the run failed before (or
- *   outside of) any agent work, and this panel is the wrong place to look.
- * - `partial-calls-only` / `partial-tools-only`: one sink answered and the other did not, named
- *   by the one that DID. Which is silent matters, because a silent sink is not evidence of
+ * - `sink-unreachable`: a read FAILED, so nothing can be concluded. Named first because it
+ *   OUTRANKS every statement below: each of those is a claim about the run, and this is the one
+ *   case where the panel does not have the standing to make one.
+ * - `recorded-clean`: both sinks answered, both hold rows, and none of them failed — so the
+ *   cause sits where no producer records anything (the engine, or a container that died between
+ *   calls).
+ * - `no-telemetry`: both answered and neither holds a row, so the run failed before (or outside
+ *   of) any agent work, and this panel is the wrong place to look.
+ * - `partial-calls-only` / `partial-tools-only`: both answered but only one holds rows, named by
+ *   the one that DID. Which sink is empty matters, because an empty sink is not evidence of
  *   anything and the panel must not let it read as a clean bill.
  *
- * Null when a failing call WAS found: there is nothing to explain.
+ * Null when a failing call WAS found (nothing to explain) or while a sink is still loading (an
+ * answer nobody has given yet must never be reported as one that came back clean).
  */
 export type NoFailingCallReason =
+  | 'sink-unreachable'
   | 'recorded-clean'
   | 'no-telemetry'
   | 'partial-calls-only'
   | 'partial-tools-only'
 
-/** Why nothing failing could be pinned, or null when something was. */
+/** Why nothing failing could be pinned, or null when something was (or nothing is settled). */
 export function noFailingCallReason(evidence: RunFailureEvidence): NoFailingCallReason | null {
+  if (evidence.calls.status === 'unreachable' || evidence.tools.status === 'unreachable') {
+    return 'sink-unreachable'
+  }
   if (evidence.erroredCallCount > 0 || evidence.failedToolCallCount > 0) return null
-  if (evidence.hasCalls && evidence.hasToolCalls) return 'recorded-clean'
-  if (evidence.hasCalls) return 'partial-calls-only'
-  if (evidence.hasToolCalls) return 'partial-tools-only'
+  if (evidence.calls.status === 'pending' || evidence.tools.status === 'pending') return null
+  const hasCalls = answeredWithRows(evidence.calls)
+  const hasTools = answeredWithRows(evidence.tools)
+  if (hasCalls && hasTools) return 'recorded-clean'
+  if (hasCalls) return 'partial-calls-only'
+  if (hasTools) return 'partial-tools-only'
   return 'no-telemetry'
 }
 

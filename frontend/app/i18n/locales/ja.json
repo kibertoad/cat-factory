@@ -1645,10 +1645,12 @@
       "lastErroredCall": "最後に失敗したモデル呼び出し",
       "moreErroredCalls": "ほかに、それ以前の失敗した呼び出しが {count} 件 | ほかに、それ以前の失敗した呼び出しが {count} 件",
       "lastFailedToolCall": "最後に失敗したツール呼び出し",
+      "aFailedToolCall": "失敗したツール呼び出し",
       "moreFailedToolCalls": "ほかに、それ以前の失敗したツール呼び出しが {count} 件 | ほかに、それ以前の失敗したツール呼び出しが {count} 件",
       "toolReturnedNothing": "ツールは何も返しませんでした。",
       "toolBodiesWithheld": "この実行では引数と結果が記録されていないため、ツール自身のエラーテキストは参照できません。",
       "noFailingCall": {
+        "sink-unreachable": "この実行のテレメトリの一部を読み込めなかったため、何が失敗したかは判断できません。",
         "recorded-clean": "モデル呼び出しもツール呼び出しも失敗を報告していません。原因はどちらの記録にも行を残していないため、エンジン、失敗したステップのコンテナ事後解析、プロビジョニングログを確認してください。",
         "partial-calls-only": "モデル呼び出しに失敗はなく、この実行ではツール呼び出しが記録されていないため、軌跡からは判断できません。",
         "partial-tools-only": "ツール呼び出しに失敗はなく、この実行ではモデル呼び出しが記録されていません。",
@@ -1669,7 +1671,9 @@
       "bodiesWithheld": "引数と結果は記録されていないため、その不在からは何も判断できません。",
       "arguments": "引数",
       "result": "結果",
-      "dropped": "記録時に {chars} 文字を破棄"
+      "dropped": "記録時に {chars} 文字を破棄",
+      "truncated": "この実行の最初の {shown} 件の呼び出しを表示しています。上の件数は実行全体のものです。すべての失敗を見るには失敗で絞り込んでください。",
+      "failuresTruncated": "最初の {shown} 件の失敗した呼び出しを表示しています。上の件数は実行全体のものです。"
     }
   },
   "platformObservability": {

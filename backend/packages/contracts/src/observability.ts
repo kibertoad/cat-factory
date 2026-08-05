@@ -95,7 +95,17 @@ export type LlmCallMetric = v.InferOutput<typeof llmCallMetricSchema>
  */
 export const LLM_WARNING_FINISH_REASONS = ['length', 'content_filter'] as const
 
-/** How one recorded model call turned out: the vocabulary the badge and the filter share. */
+/**
+ * How one recorded model call turned out: THE outcome vocabulary, in the one place every layer
+ * can see it.
+ *
+ * Four copies of this picklist existed before it landed here: kernel's `LlmCallOutcomeFilter`
+ * (what a page may narrow to), the orchestration classifier's own union, `debugCallOutcomeSchema`
+ * on the wire, and a hand-written list in the SPA. All four now derive from this one, because
+ * the members are not merely a shared spelling: each store turns them into a SQL predicate and
+ * the panel turns them into a filter, so a member that exists in one copy and not another is
+ * rows an operator is told do not exist.
+ */
 export const llmCallOutcomeSchema = v.picklist(['ok', 'warning', 'error'])
 export type LlmCallOutcome = v.InferOutput<typeof llmCallOutcomeSchema>
 
@@ -107,6 +117,10 @@ export type LlmCallOutcome = v.InferOutput<typeof llmCallOutcomeSchema>
  * or spend-gate trouble, while a truncated one is an output-limit or task-size conversation),
  * and collapsing them into one "not ok" bucket is what made the truncated calls invisible in the
  * summary they were already counted in.
+ *
+ * This is the ONLY implementation of the rule. The backend classified through its own copy in
+ * `observability.logic.ts` and the SPA through a third, which is the arrangement that decides a
+ * badge colour harmlessly right up to the day it decides which rows a filter hides.
  */
 export function classifyLlmCallOutcome(call: {
   ok: boolean

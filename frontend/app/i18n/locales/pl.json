@@ -1645,10 +1645,12 @@
       "lastErroredCall": "Ostatnie nieudane wywołanie modelu",
       "moreErroredCalls": "oraz {count} wcześniejsze nieudane wywołanie | oraz {count} wcześniejsze nieudane wywołania | oraz {count} wcześniejszych nieudanych wywołań",
       "lastFailedToolCall": "Ostatnie nieudane wywołanie narzędzia",
+      "aFailedToolCall": "Nieudane wywołanie narzędzia",
       "moreFailedToolCalls": "oraz {count} wcześniejsze nieudane wywołanie narzędzia | oraz {count} wcześniejsze nieudane wywołania narzędzia | oraz {count} wcześniejszych nieudanych wywołań narzędzi",
       "toolReturnedNothing": "Narzędzie nic nie zwróciło.",
       "toolBodiesWithheld": "Argumenty i wyniki nie zostały zapisane dla tego uruchomienia, więc treść błędu samego narzędzia jest niedostępna.",
       "noFailingCall": {
+        "sink-unreachable": "Części telemetrii tego uruchomienia nie udało się wczytać, więc nie można wyciągnąć żadnych wniosków o tym, co zawiodło.",
         "recorded-clean": "Ani wywołanie modelu, ani wywołanie narzędzia nie zgłosiło błędu, więc przyczyna nie zostawiła wpisu w żadnym z tych źródeł: sprawdź silnik, raport pośmiertny kontenera na kroku, który zawiódł, oraz dziennik provisioningu.",
         "partial-calls-only": "Żadne wywołanie modelu nie zgłosiło błędu, a dla tego uruchomienia nie zapisano wywołań narzędzi, więc trajektoria nie może na to odpowiedzieć.",
         "partial-tools-only": "Żadne wywołanie narzędzia nie zgłosiło błędu, a dla tego uruchomienia nie zapisano wywołań modelu.",
@@ -1669,7 +1671,9 @@
       "bodiesWithheld": "Argumenty i wyniki nie zostały zapisane, więc z ich braku nic nie wynika.",
       "arguments": "Argumenty",
       "result": "Wynik",
-      "dropped": "{chars} znaków odrzuconych przy zapisie"
+      "dropped": "{chars} znaków odrzuconych przy zapisie",
+      "truncated": "Pokazano pierwsze {shown} wywołań tego uruchomienia. Liczby powyżej dotyczą całego uruchomienia; zawęź do nieudanych, aby zobaczyć wszystkie.",
+      "failuresTruncated": "Pokazano pierwsze {shown} nieudanych wywołań. Liczba powyżej dotyczy całego uruchomienia."
     }
   },
   "platformObservability": {

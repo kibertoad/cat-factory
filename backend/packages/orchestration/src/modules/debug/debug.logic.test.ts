@@ -510,6 +510,19 @@ describe('deriveSignals', () => {
       count: 4,
     })
 
+    // A sink this deployment never wired is a FOURTH statement, and the one that must not be
+    // collapsed into "no tool calls were recorded": that phrasing sends a reader to look at a
+    // container for what is actually the absence of a table.
+    const unwiredTools = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      sinks: { ...base.sinks, toolCalls: { available: false, count: 0, failed: 0 } },
+      ...foldLlmRollup([summary({ calls: 40, errors: 0, truncatedCalls: 0 })]),
+    })
+    const unwiredPointer = unwiredTools.find((s) => s.code === 'failure_outside_model_calls')
+    expect(unwiredPointer!.message).toContain('not wired on this deployment')
+    expect(unwiredPointer!.message).not.toContain('No tool calls were recorded')
+
     // A trajectory that answered and found nothing failing is a THIRD statement, distinct from
     // both: the cause left no row in any sink at all.
     const cleanTools = deriveSignals({

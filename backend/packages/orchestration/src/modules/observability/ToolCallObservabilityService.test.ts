@@ -7,6 +7,13 @@ import {
   makeToolCallRecorder,
 } from './ToolCallObservabilityService.js'
 
+/**
+ * A repo that HONOURS `limit` and `outcome` the way every real store does.
+ *
+ * A fake that ignores them cannot fail the tests worth having here: the reads under test are
+ * exactly the ones whose job is to notice that a bound bit, and a stub returning `[]` agrees
+ * with every possible answer.
+ */
 function fakeRepo() {
   const rows: AgentToolCall[] = []
   return {
@@ -15,11 +22,43 @@ function fakeRepo() {
       recordMany: async (calls: AgentToolCall[]) => {
         rows.push(...calls)
       },
-      listByExecution: async () => [],
+      listByExecution: async (
+        _ws: string,
+        query: { executionId: string; limit: number; outcome?: 'ok' | 'error' },
+      ) =>
+        rows
+          .filter((r) => r.executionId === query.executionId)
+          .filter((r) => (query.outcome ? r.ok === (query.outcome === 'ok') : true))
+          .slice(0, query.limit),
       listPage: async () => [],
-      countByExecution: async () => ({ total: 0, failed: 0 }),
+      countByExecution: async (_ws: string, executionId: string) => {
+        const mine = rows.filter((r) => r.executionId === executionId)
+        return { total: mine.length, failed: mine.filter((r) => !r.ok).length }
+      },
       deleteOlderThan: async () => 0,
     },
+  }
+}
+
+/** One stored row, positioned in a run's trajectory. */
+function row(overrides: Partial<AgentToolCall> & Pick<AgentToolCall, 'id'>): AgentToolCall {
+  return {
+    workspaceId: 'ws',
+    executionId: 'run',
+    agentKind: 'coder',
+    jobId: 'job',
+    seq: 0,
+    tool: 'bash',
+    startedAt: 1,
+    endedAt: 2,
+    ok: true,
+    bodies: 'stored',
+    args: '',
+    result: '',
+    argsDropped: 0,
+    resultDropped: 0,
+    createdAt: 1,
+    ...overrides,
   }
 }
 
@@ -184,5 +223,56 @@ describe('makeToolCallRecorder', () => {
     // Reading that image's silence as `stored` would present its empty `args` as a tool that
     // took none.
     expect(recorded[0]?.[0]).toMatchObject({ bodies: 'withheld', args: '' })
+  })
+})
+
+describe('the panel reads', () => {
+  /** Build a service over `count` rows, every `failEvery`-th one a failure. */
+  function serviceOver(count: number, failEvery = 0) {
+    const { rows, repo } = fakeRepo()
+    for (let i = 0; i < count; i++) {
+      rows.push(row({ id: `c${i}`, seq: i, ok: failEvery === 0 || i % failEvery !== 0 }))
+    }
+    return new ToolCallObservabilityService({
+      agentToolCallRepository: repo,
+      clock: { now: () => 5_000 },
+    })
+  }
+
+  it('reports an untruncated trajectory as the whole run', () => {
+    // `truncated` is read off a row fetched PAST the cap, never off `length === limit`, which
+    // guesses wrong on the run whose call count lands exactly on the bound.
+    return serviceOver(10)
+      .listForRun('ws', 'run')
+      .then((trajectory) => {
+        expect(trajectory.toolCalls).toHaveLength(10)
+        expect(trajectory.truncated).toBe(false)
+      })
+  })
+
+  it('SAYS a long run was cut to a prefix, and hands back exactly the cap', async () => {
+    const trajectory = await serviceOver(2_100).listForRun('ws', 'run')
+    expect(trajectory.toolCalls).toHaveLength(2_000)
+    expect(trajectory.truncated).toBe(true)
+    // A prefix, so the run's OPENING calls: the bound takes the oldest end, which is what makes
+    // a truncated read a genuine beginning rather than an arbitrary slice.
+    expect(trajectory.toolCalls[0]?.id).toBe('c0')
+  })
+
+  it('counts failures over the WHOLE run while returning a bounded list of them', async () => {
+    // The split this read exists for. 4,000 calls, every other one failing: the count is a SQL
+    // aggregate over all of them, the rows are capped, and the two disagreeing is stated rather
+    // than hidden — a panel that counted the rows would report 200 failures out of 2,000.
+    const failures = await serviceOver(4_000, 2).failuresForRun('ws', 'run')
+    expect(failures.total).toBe(4_000)
+    expect(failures.failed).toBe(2_000)
+    expect(failures.failures).toHaveLength(200)
+    expect(failures.failuresTruncated).toBe(true)
+    expect(failures.failures.every((c) => !c.ok)).toBe(true)
+  })
+
+  it('answers a clean run with zero failures and no truncation', async () => {
+    const failures = await serviceOver(5).failuresForRun('ws', 'run')
+    expect(failures).toEqual({ total: 5, failed: 0, failures: [], failuresTruncated: false })
   })
 })

@@ -5,8 +5,9 @@ import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
-  AgentToolCall,
   LlmCallMetric,
+  RunToolCallFailures,
+  RunToolCallTrajectory,
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
@@ -21,12 +22,19 @@ import {
   formatTokens,
   hasFailureEvidence,
   pct,
+  sinkAnswer,
   sumCosts,
   totalInputTokens,
 } from '~/utils/observability'
 import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
 import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
 import ToolCallList from '~/components/observability/ToolCallList.vue'
+
+/** No run selected: the same empty, NOT-truncated trajectory the store answers with. */
+const EMPTY_TRAJECTORY: RunToolCallTrajectory = Object.freeze({
+  toolCalls: Object.freeze([]) as never,
+  truncated: false,
+})
 
 // Drill-down overlay for a run's LLM activity. Opened via
 // `ui.openObservability(instanceId)` from a step surface; loads the full per-call
@@ -89,8 +97,15 @@ const searchLoading = computed(
   () => !!executionId.value && observability.isSearchQueriesLoading(executionId.value),
 )
 
-const toolCalls = computed<AgentToolCall[]>(() =>
-  executionId.value ? observability.toolCallsFor(executionId.value) : [],
+// The tool-call sink is read TWICE, at two different bounds, and the split is the point.
+//
+// `toolFailures` is the run-level answer: exact `{ total, failed }` counted in SQL plus the
+// failing rows themselves, cheap enough to front the panel. `trajectory` is the browse view: a
+// bounded prefix carrying every argument and result the run captured, loaded only when someone
+// opens it. Folding them into one read would either make the headline wait on megabytes or make
+// its numbers a statement about the prefix, and the second one is a false all-clear.
+const trajectory = computed<RunToolCallTrajectory>(() =>
+  executionId.value ? observability.toolCallsFor(executionId.value) : EMPTY_TRAJECTORY,
 )
 const toolCallsLoading = computed(
   () => !!executionId.value && observability.isToolCallsLoading(executionId.value),
@@ -98,8 +113,40 @@ const toolCallsLoading = computed(
 const toolCallError = computed(() =>
   executionId.value ? (observability.toolCallErrors[executionId.value] ?? null) : null,
 )
+const toolFailures = computed<RunToolCallFailures | null>(() =>
+  executionId.value ? observability.toolCallFailuresFor(executionId.value) : null,
+)
+const toolFailuresLoading = computed(
+  () => !!executionId.value && observability.isToolCallFailuresLoading(executionId.value),
+)
+const toolFailureError = computed(() =>
+  executionId.value ? (observability.toolCallFailureErrors[executionId.value] ?? null) : null,
+)
 function retryToolCalls() {
   if (executionId.value) void observability.loadToolCalls(executionId.value)
+}
+function retryToolCallFailures() {
+  if (executionId.value) void observability.loadToolCallFailures(executionId.value)
+}
+/** Re-request whatever the pinned summary could not read. Both, when both failed. */
+function retryFailureEvidence() {
+  const id = executionId.value
+  if (!id) return
+  if (observability.toolCallFailureErrors[id]) void observability.loadToolCallFailures(id)
+  if (observability.errors[id]) void observability.load(id)
+}
+
+/**
+ * Load the trajectory the first time it is actually looked at.
+ *
+ * Deferred because it is the one read on this panel whose size scales with how much the run DID
+ * rather than with how it ended, and an operator who opens the panel to see what broke may never
+ * scroll it. What they do see immediately is the failure read, which is issued on open.
+ */
+function ensureTrajectoryLoaded() {
+  const id = executionId.value
+  if (!id || observability.hasToolCalls(id) || observability.isToolCallsLoading(id)) return
+  void observability.loadToolCalls(id)
 }
 
 // --- failing-call-first triage ------------------------------------------------------------
@@ -134,14 +181,29 @@ const visibleCalls = computed(() => filterCallsByOutcome(calls.value, callFilter
 
 /**
  * What the panel pins at the top: the run's structured failure record plus the last call that
- * failed in each sink. Derived from the loaded rows, so it sharpens as the two lists arrive
- * rather than blocking on both.
+ * failed in each sink. Sharpens as each read lands rather than blocking on both.
+ *
+ * Each sink is passed its own ANSWER, not merely its rows, because zero rows is what a loading
+ * read, a failed read, an unwired sink and a genuinely quiet run all look like from here, and
+ * only the first two must never be rendered as "nothing failed".
  */
 const failureEvidence = computed(() =>
   deriveRunFailureEvidence({
     failure: instance.value?.failure ?? null,
     calls: calls.value,
-    toolCalls: toolCalls.value,
+    callsAnswer: sinkAnswer({
+      loading: loading.value,
+      error: error.value,
+      loaded: !!executionId.value && executionId.value in observability.callsByExecution,
+      rows: calls.value.length,
+    }),
+    toolFailures: toolFailures.value,
+    toolsAnswer: sinkAnswer({
+      loading: toolFailuresLoading.value,
+      error: toolFailureError.value,
+      loaded: !!toolFailures.value,
+      rows: toolFailures.value?.total ?? 0,
+    }),
   }),
 )
 /**
@@ -164,10 +226,17 @@ async function revealCall(callId: string) {
   await nextTick()
   document.getElementById(callRowId(callId))?.scrollIntoView({ block: 'center' })
 }
-/** Open the trajectory narrowed to the failures, from the pinned summary. */
+/**
+ * Open the trajectory narrowed to the failures, from the pinned summary.
+ *
+ * The failing rows are already in hand (they come from the failure read), so this renders
+ * immediately; the prefix load it kicks off is what fills in the surrounding calls an operator
+ * widens to when they want the context around one.
+ */
 function revealFailingToolCalls() {
   view.value = 'tools'
   toolFilter.value = 'error'
+  ensureTrajectoryLoaded()
 }
 function callRowId(callId: string): string {
   return `obs-call-${callId}`
@@ -211,10 +280,11 @@ watch(
       void observability.load(id)
       void observability.loadContext(id)
       void observability.loadSearchQueries(id)
-      // Loaded on OPEN rather than when the tools tab is first shown: the pinned failure summary
-      // reads this sink, and it is the one holding the failure class no other number reveals.
-      // Deferring it would make the panel's headline answer arrive a tab-click late.
-      void observability.loadToolCalls(id)
+      // The FAILURE read on open, the trajectory on demand. This one is what the pinned summary
+      // speaks from — the failure class no other number on the panel reveals — and it is two
+      // aggregates and a handful of rows, so the headline answer costs a tab-click less than the
+      // browse view it used to ride along with.
+      void observability.loadToolCallFailures(id)
     }
   },
   // Lazy v-if mount: the panel mounts with executionId already set, so load immediately.
@@ -407,7 +477,10 @@ function exportJson() {
                     ? 'bg-slate-800 text-slate-100'
                     : 'text-slate-400 hover:text-slate-200'
                 "
-                @click="view = 'tools'"
+                @click="
+                  view = 'tools'
+                  ensureTrajectoryLoaded()
+                "
               >
                 {{ t('observability.toolCalls.title') }}
               </button>
@@ -466,9 +539,9 @@ function exportJson() {
             <RunFailureSummary
               v-if="showFailureSummary"
               :evidence="failureEvidence"
-              :loading="loading || toolCallsLoading"
               @show-call="revealCall"
               @show-failing-tools="revealFailingToolCalls"
+              @retry="retryFailureEvidence"
             />
 
             <!-- run-level summary -->
@@ -877,16 +950,20 @@ function exportJson() {
             <RunFailureSummary
               v-if="showFailureSummary"
               :evidence="failureEvidence"
-              :loading="loading || toolCallsLoading"
               @show-call="revealCall"
               @show-failing-tools="revealFailingToolCalls"
+              @retry="retryFailureEvidence"
             />
             <ToolCallList
               v-model:filter="toolFilter"
-              :tool-calls="toolCalls"
+              :trajectory="trajectory"
+              :failures="toolFailures"
               :loading="toolCallsLoading"
               :error="toolCallError"
+              :failures-loading="toolFailuresLoading"
+              :failures-error="toolFailureError"
               @retry="retryToolCalls"
+              @retry-failures="retryToolCallFailures"
             />
           </div>
 

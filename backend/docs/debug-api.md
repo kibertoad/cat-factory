@@ -179,13 +179,16 @@ The failure classes and where each one's evidence lives:
 - **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
   is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
   reason, so it fires on a failure the model side cannot explain: tool execution inside the
-  container, or the engine. The signal states which, because the overview has already counted the
-  failing tool calls. With `sinks.toolCalls.failed > 0`, read those first
+  container, or the engine. The signal states which of FOUR it is looking at, because the overview
+  has already counted the failing tool calls. With `sinks.toolCalls.failed > 0`, read those first
   (`/tool-calls?order=trajectory&outcome=error`, `?jobId=` to narrow to the dispatch that died):
   each is a row of its own with the tool's own error text in `result`. With `failed: 0` on a sink
-  that HELD rows, the cause left no row anywhere and the engine is the place to look. Two gaps
-  stay behind it, and both are the search workflow below: a workspace with bodies `withheld` gives
-  the failing call but not what it said, and an ENGINE-side failure records no call anywhere.
+  that HELD rows, the cause left no row anywhere and the engine is the place to look. With a sink
+  that held NOTHING, the trajectory cannot answer. And with `available: false` it says so plainly
+  rather than sending a reader to inspect a container for what is the absence of a table. Two
+  gaps stay behind it, and both are the search workflow below: a workspace with bodies `withheld`
+  gives the failing call but not what it said, and an ENGINE-side failure records no call
+  anywhere.
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately: a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.

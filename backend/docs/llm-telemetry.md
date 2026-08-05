@@ -181,11 +181,30 @@ the backend drains a window's worth on its existing job poll and sends it to two
   trajectory read is bounded to a PREFIX, so a post-filter would report no failures on any run
   whose failures came after its opening moves.
 
-The SPA reads the same trajectory through `GET /workspaces/:ws/executions/:id/tool-calls`
-(bounded, oldest-first) and the observability panel pins the last failing call from this sink and
-from `llm_call_metrics` above its lists, beside the run's own structured `failure` record. It
-holds the three apart deliberately: no failing call recorded, and no rows recorded at all, are
-different statements, and rendering them alike puts a clean bill of health over a run that died.
+The SPA reads this sink through TWO workspace-scoped routes, at two different bounds, and the
+split is load-bearing rather than an optimisation:
+
+- `GET /workspaces/:ws/executions/:id/tool-call-failures` is the panel's HEADLINE, made on open.
+  It answers `{ total, failed, failures, failuresTruncated }`: the counts are the store's one
+  aggregate pass over the whole run, and the rows are the failing calls, narrowed in SQL and
+  bounded separately from the trajectory. Every number the pinned "what failed" section prints
+  comes from here.
+- `GET /workspaces/:ws/executions/:id/tool-calls` is the BROWSE read, made when the trajectory is
+  actually opened. Oldest-first, bounded, and carrying every captured argument and result, which
+  is why it is not on the panel's critical path.
+
+The reason they are separate is the prefix. The trajectory's bound takes the oldest end, so a
+long run's rows are its opening moves; counting failures off them would report zero on exactly
+the runs whose failures came later. That is the same mistake a post-read filter makes in the
+store, one layer up, and it fails the same way: silently, with a confident all-clear. So the
+trajectory reports `truncated` rather than presenting a prefix as a run, and the panel's counts
+never come from it.
+
+The panel holds four statements apart, not one: a failing call was found; both sinks answered and
+nothing failed; a sink answered with nothing recorded; and a sink DID NOT ANSWER (its read
+failed). The last outranks the rest, because each of the others is a claim about the run and that
+one is the case where there is no standing to make one. Rendering any of them alike puts a clean
+bill of health over a run that died.
 
 On the trace side the bodies ride span EVENTS (`gen_ai.tool.arguments` / `gen_ai.tool.result`)
 rather than attributes, like a generation's prompt and for the same reason: they are payloads,

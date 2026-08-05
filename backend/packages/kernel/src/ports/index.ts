@@ -114,6 +114,7 @@ export type {
   LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcome,
   LlmCallOutcomeFilter,
   LlmCallPageQuery,
   LlmCallRollupTotals,
