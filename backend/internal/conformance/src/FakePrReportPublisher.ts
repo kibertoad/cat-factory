@@ -30,8 +30,14 @@ const OWN_TARGET: PrReportTarget = {
  * peers carried the own-service report.
  */
 export class FakePrReportPublisher implements PrVerificationReportPublisher {
-  /** The current "PR body" per `<blockId> <repo>#<number>`. See {@link bodyKey}. */
-  readonly bodies = new Map<string, string>()
+  /**
+   * The current "PR body" per `<blockId> <repo>#<number>`. PRIVATE, and keyed rather than seeded
+   * directly, because the key is not something a caller should have to know: it used to be the
+   * block id alone, and a suite that kept setting it that way would silently seed a body no
+   * publish ever reads (the report then lands on an empty one and the "the agent's own prose
+   * survives" assertion tests nothing). Go through {@link seedBody} / {@link body}.
+   */
+  private readonly bodies = new Map<string, string>()
   /** Every publish call, in order, for asserting how many remote writes were attempted. */
   readonly calls: {
     workspaceId: string
@@ -51,6 +57,25 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
    * block unless a suite seeds one, so a single-repo assertion is untouched by this existing.
    */
   readonly peers = new Map<string, PrReportTarget[]>()
+
+  /**
+   * Seed the OWN-SERVICE pull request's body — the coder's own description, as it stands before
+   * the engine ever touches it. Use this rather than writing the map directly.
+   */
+  seedBody(blockId: string, body: string): void {
+    this.bodies.set(bodyKey(blockId, OWN_TARGET), body)
+  }
+
+  /** The full current body of a block's own-service PR (prose + any managed region). */
+  body(blockId: string): string | undefined {
+    return this.bodies.get(bodyKey(blockId, OWN_TARGET))
+  }
+
+  /** The full current body of one of the block's PEER pull requests. */
+  peerBody(blockId: string, repo: string): string | undefined {
+    const target = this.peers.get(blockId)?.find((t) => t.repo === repo)
+    return target ? this.bodies.get(bodyKey(blockId, target)) : undefined
+  }
 
   /** Seed a block's peer PR (the multi-repo case), returning the target it will resolve. */
   addPeer(blockId: string, repo: string, prNumber: number, frameId?: string): PrReportTarget {

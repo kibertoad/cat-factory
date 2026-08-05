@@ -118,7 +118,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
       it('updates the report in place on a retry instead of appending a second copy', async () => {
         const publisher = new FakePrReportPublisher()
         // The coder's own PR description, written before the engine ever touched the body.
-        publisher.bodies.set('task_login', 'Implements the login task.\n')
+        publisher.seedBody('task_login', 'Implements the login task.\n')
         const app = harness.makeApp(
           { asyncKinds: ['coder'], pullRequest: PR },
           {
@@ -146,7 +146,7 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         const second = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(second.status).toBe('done')
 
-        const body = publisher.bodies.get('task_login')!
+        const body = publisher.body('task_login')!
         // Exactly ONE managed region, and the agent's own prose above it is untouched.
         expect(body.split(PR_REPORT_MARKER_START).length - 1).toBe(1)
         expect(body.startsWith('Implements the login task.')).toBe(true)
