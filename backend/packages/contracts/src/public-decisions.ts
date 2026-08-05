@@ -682,23 +682,33 @@ export const publicDecisionSchema = v.variant('kind', [
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
 /**
- * A run's currently-parked decisions. `parked` is the single flag a caller polls or reacts to:
- * true when the run is `blocked` awaiting one of the decisions listed. An empty list with
- * `parked: false` is the ordinary case for a run that is simply still working.
+ * What a run is currently asking a human, and whether it has STOPPED to ask. The two are related
+ * but not the same question, and a caller that treats `parked` as a gate on reading `decisions`
+ * gets the common case right and the useful case wrong:
  *
- * `parked: true` with an EMPTY list is the deliberately loud case: the run is waiting on a
- * surface this projection does not model, and the honest report of that is an empty list rather
- * than a silent `parked: false`. Two parks are still expected to produce it: `human-review`, whose
- * answer is a person approving the PR on the VCS host rather than an API call; and an unbounded
- * human-wait GATE a deployment registered itself, which this projection has no way to read and
- * whose answer lives wherever that deployment put it.
+ * - `parked: true`, non-empty list: the ordinary park. The run is `blocked` and will not move
+ *   until one of these is answered.
+ * - `parked: false`, non-empty list: the run is still working and asking anyway. Today only
+ *   `follow-ups` does this: the Coder streams its items mid-run and they can be decided before it
+ *   finishes, so an integration that polls `decisions` regardless of `parked` never sees the run
+ *   stop at all. One that reads `decisions` only when `parked` is true still works, it just waits.
+ * - `parked: true`, EMPTY list: the deliberately loud case. The run is waiting on a surface this
+ *   projection does not model, and an empty list is the honest report of that rather than a silent
+ *   `parked: false`. Two parks are still expected to produce it: `human-review`, whose answer is a
+ *   person approving the PR on the VCS host rather than an API call; and an unbounded human-wait
+ *   GATE a deployment registered itself, which this projection has no way to read and whose answer
+ *   lives wherever that deployment put it.
+ * - `parked: false`, empty list: the run is simply still working.
  */
 export const publicDecisionListSchema = v.object({
   runId: v.string(),
   taskId: v.string(),
   /** The run's raw status — `blocked` is the parked state. */
   status: publicRunStatusSchema,
-  /** Whether the run is currently parked awaiting a human decision. */
+  /**
+   * Whether the run has STOPPED awaiting a human decision (`status === 'blocked'`). Not a
+   * precondition for `decisions` being non-empty: see the note above.
+   */
   parked: v.boolean(),
   decisions: v.array(publicDecisionSchema),
 })
@@ -890,6 +900,15 @@ export type PublicAnswerFollowUpInput = v.InferOutput<typeof publicAnswerFollowU
  * gates ride this route (the planning and the document interviewer) and each declares its own
  * internal body, so aliasing either one would privilege that gate's bounds on a surface serving
  * both, and a bound that is right for one and wrong for the other refuses valid input.
+ *
+ * The numbers are therefore taken from what the two gates STORE rather than from what either one
+ * accepts: an exchange lives in `initiativeQaSchema` / `docInterviewQaSchema`, both of which cap an
+ * id at 80 and an answer at 2000, so a question this surface can name is a question these bounds
+ * can address. They are stated as literals rather than derived from those constants because this
+ * is a published contract: deriving it would let an internal cap SHRINK the public bound silently,
+ * which is the one direction `/api/v1` may not move. `publicAnswerInterviewBounds` in
+ * `public-decisions.test.ts` asserts the relation instead, so a gate that widens its own storage
+ * fails a test here rather than refusing valid input in production.
  *
  * An EMPTY `answer` is accepted, because both services accept it: it clears an answer recorded by
  * mistake, where a minimum length would leave a caller no way to undo one.

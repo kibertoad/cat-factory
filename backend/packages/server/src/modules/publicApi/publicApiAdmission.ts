@@ -74,7 +74,10 @@ export const INPUT_GATE_PARK_SURFACE = 'input-gate'
  * A FOURTH mechanism, read off the step kind's `interview-gate` TRAIT rather than a list of
  * interviewer kinds, which is what makes a deployment's OWN registered interviewer visible to
  * admission with no edit here, the opposite of the wait-gate gap {@link HUMAN_WAIT_GATE_KINDS}
- * documents.
+ * documents. Being visible HERE is not the same as being answerable: the decision surface needs the
+ * gate's controller wired too (`ExecutionService.interviewGateFor`), and a kind registered without
+ * one is admitted as a park and 503s when answered. That order is the safe one (the refusal
+ * over-counts rather than under-counts), but it is why the two checks are not one.
  *
  * Missing it was reachable rather than theoretical, and in the worst direction: an interviewer is
  * an INLINE step, so a pipeline built out of interview steps was reported `headlessStartable`
@@ -111,9 +114,10 @@ export const INTERVIEW_PARK_SURFACE = 'interview'
  * it registered it for, and the run reports `parked: true` with an empty decision list until then.
  *
  * Note what the neighbouring surfaces do NOT share this limit: {@link INTERVIEW_PARK_SURFACE} is
- * read off an AGENT KIND's trait and {@link FOLLOW_UPS_PARK_SURFACE} off the pipeline's own
- * toggles, both of which a deployment's own registrations flow through, so a custom interviewer is
- * seen here and a custom wait gate is not. Closing the gap means a gate declaring
+ * read off an AGENT KIND's trait, and follow-up triage would be readable off the pipeline's own
+ * per-step toggles (it has no constant here because it is deliberately not enumerated, see
+ * {@link parkSurfacesOf}), both of which a deployment's own registrations flow through, so a custom
+ * interviewer is seen here and a custom wait gate is not. Closing the gap means a gate declaring
  * `pollExhaustion` at REGISTRATION time rather than only on the built definition; that is a change
  * to the registry seam, ranked in `docs/initiatives/public-api-additions.md` rather than smuggled
  * in behind a park-surface slice.

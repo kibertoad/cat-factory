@@ -62,7 +62,6 @@ const BLOB_MEDIA_TYPES = [
 /** OpenAPI's spelling of "opaque bytes". */
 const BINARY_SCHEMA = { type: 'string', format: 'binary' }
 
-
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
  * shared schemas aren't inlined N times): OpenAPI component name → the exported Valibot

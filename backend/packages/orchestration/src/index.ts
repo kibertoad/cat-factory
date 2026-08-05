@@ -102,10 +102,8 @@ export {
   findParkedInterviewStep,
   type DedicatedParkSurface,
 } from './modules/execution/step-park.logic.js'
-export type {
-  InterviewGateController,
-  InterviewView,
-} from './modules/execution/InterviewGateController.js'
+export type { InterviewGate, InterviewView } from './modules/execution/InterviewGateController.js'
+export { followUpLoopBudget } from './modules/execution/followUp.logic.js'
 export {
   POST_RELEASE_HEALTH_AGENT_KIND,
   ON_CALL_AGENT_KIND,

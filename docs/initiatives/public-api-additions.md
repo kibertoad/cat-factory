@@ -228,7 +228,7 @@ them meant the table stayed a list of known holes rather than a record of a fini
   which interviewer is asking is a property of the parked step, so the server resolves it instead of
   making the caller name a gate it read out of the same projection a moment earlier.
 
-Five things worth reading before extending either:
+Six things worth reading before extending either:
 
 - **A7 is the first decision that is NOT a park.** Follow-up items accrue live while the Coder is
   still running and can be decided before it finishes, so the projection lists them whenever any item
@@ -242,7 +242,17 @@ Five things worth reading before extending either:
   it: the shared `InterviewView` carries the loop (questions, round budget) and deliberately NOT the
   product each gate converges on (an authoring brief; a goal / constraints / non-goals), because
   that is the part that genuinely differs and the part nobody answers. A third interviewer
-  implements `view` and gets the public surface for free.
+  implements `view` and needs no route, projection or decision kind of its own.
+- **What a third interviewer DOES still need, because the two halves have different reach.**
+  Admission reads the `interview-gate` trait off the agent-kind registry, so a deployment's own
+  interviewer counts as a park the moment it is REGISTERED. Answering it needs its controller WIRED
+  as well: `ExecutionService.wiredInterviewGates` is a hand-kept list of the controllers this
+  deployment built, because an interview gate is not registry-constructed the way an agent kind is
+  (it needs its feature's store and service). Registered-but-unwired is therefore a real state, and
+  it is reported honestly rather than papered over: admission refuses a plain `write` key, the
+  projection lists nothing, and the routes 503 naming the kind. Closing that gap means giving
+  interview gates a registration seam of their own, which is a bigger change than this slice and is
+  not blocking anyone today (both built-ins are wired by both facades).
 - **A question's `status` is DERIVED, not read.** The planning interviewer keeps an explicit
   `open`/`dismissed` marker beside the answer; the document interviewer has only the answer. One
   derivation (`dismissed` → dismissed, else non-empty answer → `answered`) is what lets a caller

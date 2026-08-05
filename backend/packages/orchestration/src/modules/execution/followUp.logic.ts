@@ -35,10 +35,33 @@ export function followUpsToSendBack(state: FollowUpsStepState): FollowUpItem[] {
   )
 }
 
+/**
+ * The send-back budget as the engine READS it: passes spent, and the ceiling they stop at.
+ *
+ * Both fields are typed required (the wire schema defaults them: 0 and
+ * {@link DEFAULT_FOLLOW_UP_MAX_LOOPS}), and both are nonetheless read defensively, because step
+ * state is persisted as one JSON blob and read back with `JSON.parse` rather than a schema parse,
+ * so a row written before a field existed reaches this code missing it, defaults and all. A missing
+ * ceiling reads as 0, which stops the loop rather than running it unbounded: the safe direction for
+ * a value that spends model calls.
+ *
+ * Stated once because two callers must agree on it. {@link shouldLoopCoder} decides with these
+ * numbers and the public decision projection REPORTS them, so a projection that defaulted the
+ * ceiling differently would tell a caller it had budget for a send-back the engine was never going
+ * to spend, and the run would advance instead of looping with no error anywhere.
+ */
+export function followUpLoopBudget(state: FollowUpsStepState): {
+  loops: number
+  maxLoops: number
+} {
+  return { loops: state.loops ?? 0, maxLoops: state.maxLoops ?? 0 }
+}
+
 /** Whether the gate should loop the Coder now: there are unsent send-back items and budget remains. */
 export function shouldLoopCoder(state: FollowUpsStepState): boolean {
   if (hasPendingFollowUps(state)) return false
-  return followUpsToSendBack(state).length > 0 && (state.loops ?? 0) < (state.maxLoops ?? 0)
+  const budget = followUpLoopBudget(state)
+  return followUpsToSendBack(state).length > 0 && budget.loops < budget.maxLoops
 }
 
 /**

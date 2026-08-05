@@ -58,6 +58,28 @@ export interface InterviewView {
   questions: InterviewQuestionView[]
 }
 
+/**
+ * The KIND-NEUTRAL half of an interview gate: what a caller holding a PARKED STEP can do without
+ * knowing which feature owns the interview. {@link InterviewGateController} implements it for
+ * every gate, so a surface that resolved a gate by `agentKind` depends on this rather than on the
+ * controller generic.
+ *
+ * That distinction is the point rather than tidiness. The controller is generic over the ENTITY
+ * each feature stores its interview on, and a lookup keyed by step kind cannot know which entity it
+ * is about to get back; typing such a lookup `InterviewGateController<unknown>` compiles only
+ * because TypeScript's method parameters are bivariant, and it hands the caller `answer(): unknown`
+ * as the shape of an entity it must then not use. This interface says what is actually on offer,
+ * and the entity-typed reads stay on the per-feature getters that already know the answer.
+ */
+export interface InterviewGate {
+  /** The pipeline-step `agentKind` this gate runs as, which is what a lookup keys on. */
+  readonly agentKind: string
+  getView(workspaceId: string, blockId: string): Promise<InterviewView | null>
+  answer(workspaceId: string, blockId: string, questionId: string, answer: string): Promise<unknown>
+  continue(workspaceId: string, blockId: string): Promise<unknown>
+  proceed(workspaceId: string, blockId: string): Promise<unknown>
+}
+
 /** The durable-driver collaborators every interview gate needs (shared with every other gate). */
 export interface InterviewGateDeps {
   blockRepository: BlockRepository
@@ -117,7 +139,7 @@ export interface InterviewGateKind<TEntity> {
   view(entity: TEntity): InterviewView | null
 }
 
-export class InterviewGateController<TEntity> {
+export class InterviewGateController<TEntity> implements InterviewGate {
   constructor(
     private readonly deps: InterviewGateDeps,
     private readonly kind: InterviewGateKind<TEntity>,

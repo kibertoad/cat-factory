@@ -1,3 +1,4 @@
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
 import { PipelineRegistry } from '@cat-factory/kernel'
 import type { ExecutionInstance, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
@@ -38,6 +39,7 @@ export function definePublicDecisionsConformance(harness: ConformanceHarness): v
     registerDialogueAnsweringTests(harness)
     registerStaleRunTests(harness)
     registerCompanionAnsweringTests(harness)
+    registerCompanionEdgeTests(harness)
     registerScopeAndCancelTests(harness)
   })
 }
@@ -243,6 +245,207 @@ function registerCompanionAnsweringTests(harness: ConformanceHarness): void {
     )
     expect(refused.status).toBe(404)
     expect(refused.body.error.code).toBe('no_interview')
+  })
+}
+
+/**
+ * The three edges of the two companion surfaces that the happy paths above cannot show, each a
+ * claim the code makes elsewhere in prose:
+ *
+ *  - follow-up triage is listed while the run is still RUNNING (the only decision kind that is);
+ *  - a verb refuses on its own terms (409) instead of hiding the run (404) or the deployment (503);
+ *  - an interviewer kind a deployment REGISTERED but never WIRED is unanswerable and says so.
+ *
+ * All three seed their run rather than driving one, because each is about a state the engine passes
+ * through or cannot reach at all with the built-ins: a run mid-Coder with items already streamed,
+ * and a park on a kind no facade has a controller for.
+ */
+function registerCompanionEdgeTests(harness: ConformanceHarness): void {
+  /** A `coder` step mid-run with one follow-up and one question already streamed onto it. */
+  const codingStepWithItems = (now: number) => ({
+    agentKind: 'coder',
+    state: 'working' as const,
+    progress: 0.5,
+    decision: null,
+    followUps: {
+      enabled: true,
+      items: [
+        {
+          id: 'fu_loose_end',
+          kind: 'follow_up' as const,
+          title: 'Dedupe the retry helper',
+          detail: 'two copies exist',
+          status: 'pending' as const,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'fu_question',
+          kind: 'question' as const,
+          title: 'Which timeout?',
+          detail: '30s or 60s?',
+          status: 'pending' as const,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+      loops: 0,
+      maxLoops: 3,
+    },
+  })
+
+  it('lists FOLLOW-UPS on a run that has NOT parked, and sends one back', async () => {
+    // The rule the whole projection change turns on, and the one the happy-path test cannot see
+    // because it drives the run to its park first: items accrue LIVE, so `parked` is false while
+    // the decision is listed. An integration that triages here never sees the run stop, which is
+    // the point of the companion; one that waits for `parked` still works, it just waits.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_live_followups',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [codingStepWithItems(1_000)],
+      currentStep: 0,
+      status: 'running',
+      initiatedBy: null,
+    })
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{
+      parked: boolean
+      status: string
+      decisions: { kind: string; loops?: number; maxLoops?: number }[]
+    }>('GET', `/api/v1/runs/exec_live_followups/decisions`, undefined, decideAuth)
+    expect(listed.status).toBe(200)
+    expect(listed.body.status).toBe('running')
+    expect(listed.body.parked).toBe(false)
+    const triage = listed.body.decisions.find((d) => d.kind === 'follow-ups')!
+    expect(triage).toBeDefined()
+    // The send-back budget is projected as the ENGINE will read it, so a caller can tell whether a
+    // send-back will re-run the Coder or just advance the run.
+    expect(triage.maxLoops).toBe(3)
+    expect(triage.loops).toBe(0)
+
+    const sentBack = await app.call<{
+      parked: boolean
+      decisions: { kind: string; items?: { itemId: string; status: string }[] }[]
+    }>(
+      'POST',
+      `/api/v1/runs/exec_live_followups/decisions/follow-ups/items/fu_loose_end/send-back`,
+      {},
+      decideAuth,
+    )
+    expect(sentBack.status).toBe(200)
+    // Still listed and still not parked: one item decided is not the batch decided, and the run
+    // was never stopped to begin with.
+    const after = sentBack.body.decisions.find((d) => d.kind === 'follow-ups')!
+    expect(sentBack.body.parked).toBe(false)
+    expect(after.items?.find((i) => i.itemId === 'fu_loose_end')?.status).toBe('queued')
+    expect(after.items?.find((i) => i.itemId === 'fu_question')?.status).toBe('pending')
+    // …and it landed on the step itself, not only in the response.
+    const stored = await app.executionRepository().get(wsId, 'exec_live_followups')
+    expect(stored?.steps[0]?.followUps?.items.find((i) => i.id === 'fu_loose_end')?.status).toBe(
+      'queued',
+    )
+  })
+
+  it('refuses a follow-up verb on its own terms: 409, not 404 and not 503', async () => {
+    // Which refusal a verb gives is what a caller acts on. `file` with no tracker connected and
+    // `answer` against a `follow_up` are both "this run is answerable, this VERB is not": a 409,
+    // where a 404 would say the run is gone and a 503 would send an operator to wire a module the
+    // remedy does not need. Both are the ENGINE's refusals, reaching the wire unre-mapped.
+    const app = harness.makeApp()
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_followup_refusals',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [codingStepWithItems(2_000)],
+      currentStep: 0,
+      status: 'running',
+      initiatedBy: null,
+    })
+    const decideAuth = await mintKey(app, wsId, 'decide')
+
+    const base = `/api/v1/runs/exec_followup_refusals/decisions/follow-ups/items`
+    const filed = await app.call('POST', `${base}/fu_loose_end/file`, {}, decideAuth)
+    expect(filed.status).toBe(409)
+    const misanswered = await app.call(
+      'POST',
+      `${base}/fu_loose_end/answer`,
+      { answer: 'not a question' },
+      decideAuth,
+    )
+    expect(misanswered.status).toBe(409)
+    // The item is untouched by either refusal: a rejected verb decides nothing.
+    const stored = await app.executionRepository().get(wsId, 'exec_followup_refusals')
+    expect(stored?.steps[0]?.followUps?.items.find((i) => i.id === 'fu_loose_end')?.status).toBe(
+      'pending',
+    )
+  })
+
+  it('reports a REGISTERED but unwired interviewer as unanswerable, never as absent', async () => {
+    // The asymmetry between the two halves of an interview gate, asserted rather than only
+    // documented: admission reads the `interview-gate` TRAIT off the kind registry, so a
+    // deployment's own interviewer counts as a park the moment it is registered, while ANSWERING it
+    // needs its controller wired as well (`ExecutionService.interviewGateFor`). A kind with no
+    // controller is exactly this state, and both halves must tell the truth about it: the run
+    // reports `parked: true` with an EMPTY list (the loud case), and the verb 503s NAMING the kind
+    // rather than 404ing, which would tell an operator staring at a stopped run it is not stopped.
+    const agentKindRegistry = defaultAgentKindRegistry()
+    agentKindRegistry.register({
+      kind: 'org-interviewer',
+      systemPrompt: 'You interview.',
+      agent: { surface: 'inline' },
+      traits: ['interview-gate'],
+    })
+    const app = harness.makeApp({}, { agentKindRegistry })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    await app.executionRepository().upsert(wsId, {
+      id: 'exec_unwired_interview',
+      blockId: 'task_login',
+      pipelineId: 'pl_simple',
+      pipelineName: 'Simple build',
+      steps: [
+        {
+          agentKind: 'org-interviewer',
+          state: 'waiting_decision',
+          progress: 0,
+          decision: null,
+          approval: { id: 'apr_unwired', status: 'pending', proposal: '' },
+        },
+      ],
+      currentStep: 0,
+      status: 'blocked',
+      initiatedBy: null,
+    })
+
+    const decideAuth = await mintKey(app, wsId, 'decide')
+    const listed = await app.call<{ parked: boolean; decisions: { kind: string }[] }>(
+      'GET',
+      `/api/v1/runs/exec_unwired_interview/decisions`,
+      undefined,
+      decideAuth,
+    )
+    expect(listed.status).toBe(200)
+    expect(listed.body.parked).toBe(true)
+    expect(listed.body.decisions).toEqual([])
+
+    const refused = await app.call<{ error: { code: string; message: string } }>(
+      'POST',
+      `/api/v1/runs/exec_unwired_interview/decisions/interview/proceed`,
+      {},
+      decideAuth,
+    )
+    expect(refused.status).toBe(503)
+    expect(refused.body.error.code).toBe('unavailable')
+    expect(refused.body.error.message).toContain('org-interviewer')
   })
 }
 

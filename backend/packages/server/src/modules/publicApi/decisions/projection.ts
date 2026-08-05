@@ -4,7 +4,11 @@ import {
   CLARITY_REVIEW_AGENT_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
 } from '@cat-factory/agents'
-import { dedicatedParkSurface, findParkedInterviewStep } from '@cat-factory/orchestration'
+import {
+  dedicatedParkSurface,
+  findParkedInterviewStep,
+  followUpLoopBudget,
+} from '@cat-factory/orchestration'
 import type { InterviewView } from '@cat-factory/orchestration'
 import type {
   BrainstormSession,
@@ -373,6 +377,10 @@ function unclassifiedPhase(_phase: never): boolean {
  * The whole list rather than only the `pending` ones, because a caller triaging item by item has
  * to see what it already decided (and what a filed item became) to know what is left, and the
  * list is bounded by what one Coder pass streamed.
+ *
+ * The send-back budget comes from the engine's own {@link followUpLoopBudget} rather than being
+ * re-defaulted here: a caller reads these two numbers to decide whether a `send-back` will actually
+ * re-run the Coder, so reporting a ceiling the gate would not honour is worse than reporting none.
  */
 export function toFollowUpsDecision(
   step: PipelineStep,
@@ -394,8 +402,7 @@ export function toFollowUpsDecision(
       ticketExternalId: item.ticketExternalId ?? null,
       ticketUrl: item.ticketUrl ?? null,
     })),
-    loops: state.loops ?? 0,
-    maxLoops: state.maxLoops ?? 0,
+    ...followUpLoopBudget(state),
   }
 }
 

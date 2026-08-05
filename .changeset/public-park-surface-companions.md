@@ -24,10 +24,14 @@ interviewer, keyed by run alone: which interviewer is asking is a property of th
 the server resolves it and the decision's `stepKind` reports it. That needed a new seam: the two
 built-in gates store their Q&A on entities belonging to their own features, so `InterviewGateKind`
 now projects a kind-neutral `InterviewView` (the questions and the round budget, deliberately not
-the brief each one converges on). A third interviewer implements `view` and gets the public surface
-with no further work. Its question `status` is derived, not stored: one gate keeps an explicit
-`dismissed` marker and the other has only the answer, so one derivation is what lets a caller read
-both through one shape.
+the brief each one converges on), reached through the narrow `InterviewGate` interface rather than
+the entity-generic controller. A third interviewer implements `view` and needs no route, projection
+or decision kind of its own; it does still wire its controller, since an interview gate is built
+from its feature's own store rather than constructed by a registry. Registered-but-unwired is a
+real state and reports as one: admission counts the park (it reads the trait), the projection lists
+nothing, and the routes 503 naming the kind. Its question `status` is derived, not stored: one gate
+keeps an explicit `dismissed` marker and the other has only the answer, so one derivation is what
+lets a caller read both through one shape.
 
 Worth reviewing, because it is a behaviour change rather than an addition: **an interview gate is now
 a park surface the start rule can see**, read off the step kind's `interview-gate` trait. That closes

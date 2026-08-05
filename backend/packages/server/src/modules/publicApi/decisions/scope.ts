@@ -12,7 +12,7 @@ import { findParkedInterviewStep } from '@cat-factory/orchestration'
 import type {
   BrainstormModule,
   ClarityModule,
-  InterviewGateController,
+  InterviewGate,
   RequirementsModule,
 } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../../http/env.js'
@@ -223,7 +223,7 @@ export async function gateBrainstormAction<E extends AppEnv>(
 export interface InterviewAction {
   workspaceId: string
   scoped: ScopedRun
-  gate: InterviewGateController<unknown>
+  gate: InterviewGate
   /** The parked step's kind, so a refusal can name the interviewer the caller reached for. */
   stepKind: string
 }
