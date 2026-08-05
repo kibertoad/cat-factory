@@ -109,16 +109,17 @@ type DebugInfraLogEntry struct {
 type DebugInfraLogEntryOperation string
 
 const (
-	DebugInfraLogEntryOperationProvision   DebugInfraLogEntryOperation = "provision"
-	DebugInfraLogEntryOperationTeardown    DebugInfraLogEntryOperation = "teardown"
-	DebugInfraLogEntryOperationStatus      DebugInfraLogEntryOperation = "status"
-	DebugInfraLogEntryOperationDispatch    DebugInfraLogEntryOperation = "dispatch"
-	DebugInfraLogEntryOperationRelease     DebugInfraLogEntryOperation = "release"
-	DebugInfraLogEntryOperationPollFailure DebugInfraLogEntryOperation = "poll-failure"
+	DebugInfraLogEntryOperationProvision      DebugInfraLogEntryOperation = "provision"
+	DebugInfraLogEntryOperationTeardown       DebugInfraLogEntryOperation = "teardown"
+	DebugInfraLogEntryOperationTeardownVerify DebugInfraLogEntryOperation = "teardown-verify"
+	DebugInfraLogEntryOperationStatus         DebugInfraLogEntryOperation = "status"
+	DebugInfraLogEntryOperationDispatch       DebugInfraLogEntryOperation = "dispatch"
+	DebugInfraLogEntryOperationRelease        DebugInfraLogEntryOperation = "release"
+	DebugInfraLogEntryOperationPollFailure    DebugInfraLogEntryOperation = "poll-failure"
 )
 
 // DebugInfraLogEntryOperationValues lists every DebugInfraLogEntryOperation this SDK release knows.
-var DebugInfraLogEntryOperationValues = []DebugInfraLogEntryOperation{DebugInfraLogEntryOperationProvision, DebugInfraLogEntryOperationTeardown, DebugInfraLogEntryOperationStatus, DebugInfraLogEntryOperationDispatch, DebugInfraLogEntryOperationRelease, DebugInfraLogEntryOperationPollFailure}
+var DebugInfraLogEntryOperationValues = []DebugInfraLogEntryOperation{DebugInfraLogEntryOperationProvision, DebugInfraLogEntryOperationTeardown, DebugInfraLogEntryOperationTeardownVerify, DebugInfraLogEntryOperationStatus, DebugInfraLogEntryOperationDispatch, DebugInfraLogEntryOperationRelease, DebugInfraLogEntryOperationPollFailure}
 
 // DebugInfraLogEntryOutcome is the `DebugInfraLogEntryOutcome` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must

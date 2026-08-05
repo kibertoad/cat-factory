@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 public enum DebugInfraLogEntryOperation {
     PROVISION("provision"),
     TEARDOWN("teardown"),
+    TEARDOWN_VERIFY("teardown-verify"),
     STATUS("status"),
     DISPATCH("dispatch"),
     RELEASE("release"),

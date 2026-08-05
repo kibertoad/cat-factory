@@ -229,6 +229,21 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'human-test',
   },
   {
+    // The `deployer`'s counterpart at the other end of the environment lifecycle, and a PALETTE
+    // block rather than a system kind precisely because deciding WHEN the environment goes away
+    // is the point of it: after the automated tester, or after a human has finished with the live
+    // URL. Without one, the TTL sweep reclaims environments on a timer long after the run
+    // settled, which is a fine backstop and cannot close the run's own teardown proof.
+    kind: 'disposer',
+    tier: 'intermediate',
+    label: 'Disposer',
+    icon: 'i-lucide-cloud-off',
+    color: '#34d399',
+    category: 'test',
+    description:
+      'Reclaims the ephemeral environments this run provisioned, and confirms they are actually gone. Place it after the last step that needs the environment.',
+  },
+  {
     kind: 'visual-confirmation',
     tier: 'advanced',
     label: 'Visual Confirmation',

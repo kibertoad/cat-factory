@@ -15,6 +15,7 @@ import {
   type ProvisionFields,
   type ProvisionedEnvironment,
   type SecretResolver,
+  type TeardownProbe,
   type UrlSafetyPolicy,
   STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
@@ -109,6 +110,70 @@ export class HttpEnvironmentProvider implements EnvironmentProvider {
     )
     const mapped = this.mapResponse(req.manifest, json, 'ready')
     return { ...mapped, externalId: mapped.externalId ?? req.externalId }
+  }
+
+  /**
+   * Confirm a torn-down environment is gone, as far as a manifest can say.
+   *
+   * This provider is the reason the confirmation seam exists. Its {@link teardown} reports
+   * `torn_down` unconditionally, so a manifest that declares no `teardown:` template destroys
+   * nothing and still returns success — and before this, that was recorded as a reclaimed
+   * environment. Both halves of the manifest are therefore checked, and each missing one is
+   * reported as the distinct thing it is:
+   *
+   *  - No `teardown:` template ⇒ `present`, NOT unknown. Nothing was called, so the environment
+   *    is definitionally still there; this is the one case the provider can be certain about
+   *    without asking anyone, and it is exactly the case that was being reported as a reclaim.
+   *  - No `status:` template ⇒ `unknown`. A teardown really ran and there is no endpoint to ask
+   *    about the result. Note that `status()` would answer `ready` here (its documented fallback
+   *    for a live environment), which as a teardown verdict would wrongly read as still-standing.
+   *  - Otherwise the `status:` template is run, and a mapped terminal state (or a 404-shaped
+   *    failure) is the proof.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    if (!req.manifest.teardown) {
+      return {
+        state: 'present',
+        terminating: false,
+        detail:
+          'This environment manifest declares no `teardown:` request, so nothing was destroyed.',
+      }
+    }
+    if (!req.manifest.status) {
+      return {
+        state: 'unknown',
+        // Permanent until somebody adds a `status:` request to the manifest.
+        retryable: false,
+        reason:
+          'This environment manifest declares no `status:` request, so the teardown cannot be verified.',
+      }
+    }
+    let mapped: ProvisionedEnvironment
+    try {
+      mapped = await this.status({
+        manifest: req.manifest,
+        externalId: req.externalId,
+        provisionFields: req.provisionFields,
+        resolveSecret: req.resolveSecret,
+      })
+    } catch (err) {
+      // A management API that 404s a destroyed environment is the common shape, and it surfaces
+      // here as a throw. It is still reported as `unknown` rather than `gone`: a 404 from a
+      // misconfigured base URL and a 404 from a reclaimed environment are the same response, and
+      // this provider cannot tell them apart. Under-claiming is the only safe direction for a
+      // signal whose whole purpose is to be trusted.
+      return {
+        state: 'unknown',
+        retryable: true,
+        reason: err instanceof Error ? err.message : String(err),
+      }
+    }
+    if (mapped.status === 'torn_down' || mapped.status === 'expired') return { state: 'gone' }
+    return {
+      state: 'present',
+      terminating: mapped.status === 'tearing_down',
+      detail: `The management API still reports this environment as '${mapped.status}'.`,
+    }
   }
 
   async teardown(req: EnvironmentTeardownRequest): Promise<{ status: EnvironmentStatus }> {

@@ -389,6 +389,7 @@ class DebugInfraLogEntryOperation(StrEnum):
     """
     PROVISION = "provision"
     TEARDOWN = "teardown"
+    TEARDOWN_VERIFY = "teardown-verify"
     STATUS = "status"
     DISPATCH = "dispatch"
     RELEASE = "release"

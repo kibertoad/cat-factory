@@ -5370,6 +5370,7 @@
     "operation": {
       "provision": "Démarrer",
       "teardown": "Démanteler",
+      "teardown-verify": "Vérification du démantèlement",
       "status": "Vérification de l'état",
       "dispatch": "Démarrer",
       "release": "Démanteler",

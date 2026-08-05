@@ -13,6 +13,7 @@ import {
   type RepoValidationRequest,
   type RepoValidationResult,
   type SecretResolver,
+  type TeardownProbe,
   type UrlSafetyPolicy,
   STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
@@ -220,6 +221,25 @@ export class CloudflareEnvironmentProvider implements EnvironmentProvider {
       )
     }
     return { status: 'torn_down' }
+  }
+
+  /**
+   * This provider has nothing to confirm the absence of.
+   *
+   * Its teardown marks a GitHub deployment `inactive`; it does not destroy a Cloudflare preview,
+   * which Cloudflare itself retains and reclaims on its own schedule. So there is no resource
+   * whose disappearance could be observed, and reporting `gone` would be claiming a reclaim that
+   * this provider never performs. Stated here rather than left unimplemented so the reason
+   * travels with the answer: an absent `confirmTeardown` means "this provider never said", where
+   * this means "there is nothing to say, by design".
+   */
+  async confirmTeardown(): Promise<TeardownProbe> {
+    return {
+      state: 'unknown',
+      retryable: false,
+      reason:
+        'Cloudflare preview deployments are reclaimed by Cloudflare, not by this teardown, which only marks the GitHub deployment inactive. There is no resource whose removal can be confirmed.',
+    }
   }
 
   async testConnection(req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {

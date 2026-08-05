@@ -490,7 +490,13 @@ export class DeployerStepController {
       })
     }
     const done = step.deployEnvs ?? {}
-    step.deployEnvs = { ...done, [target.frameId]: { status: 'ready', url: handle.url } }
+    // The env's ID rides the record beside its URL: it is what the `disposer` reclaims by at the
+    // other end of the lifecycle, and this is the only moment the run can state WHICH environment
+    // it stood up for this frame without re-resolving (and mis-resolving) it later.
+    step.deployEnvs = {
+      ...done,
+      [target.frameId]: { status: 'ready', url: handle.url, environmentId: handle.id },
+    }
     // Persist this frame's TERMINAL outcome BEFORE provisioning the next frame (see the infraless
     // branch) so a crash/replay resumes at the first un-settled frame, not re-provisioning this one.
     await this.runStateMachine.casPersist(workspaceId, instance)

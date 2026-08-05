@@ -5561,6 +5561,7 @@
                             "enum": [
                               "provision",
                               "teardown",
+                              "teardown-verify",
                               "status",
                               "dispatch",
                               "release",

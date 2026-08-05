@@ -48,6 +48,10 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `bug-intake` / `initiative-committer`),
   `DeployerStepController` (the deployer provision fan-out + env projection; the fourth
   one-shot step, which had its own controller first),
+  `DisposerStepController` (the deployer's counterpart: reclaims the environments THIS RUN stood
+  up, by the id the deployer recorded on `step.deployEnvs` — never re-resolved from the frame,
+  because that read falls back to the block's frame-less manual/`human-test` environment — and is
+  best-effort, so a teardown hiccup never fails a shipped run),
   `FollowUpGateController` (the follow-up companion gate + its human-action API),
   `RunMergePolicy` (which merge preset governs a run + settling its merge track record when a
   human merges or declines), `PostMergeBoardController` (the BOARD-shaped follow-up a merged task

@@ -18,7 +18,18 @@ describe('isInlineModelStep', () => {
 
   it('is false for container agent kinds and non-LLM gate/one-shot kinds', () => {
     const registry = new AgentKindRegistry()
-    for (const kind of ['coder', 'architect', 'merger', 'ci', 'conflicts', 'tracker', 'deployer']) {
+    for (const kind of [
+      'coder',
+      'architect',
+      'merger',
+      'ci',
+      'conflicts',
+      'tracker',
+      'deployer',
+      // The deployer's counterpart: an operational step that reclaims environments through the
+      // provider. No prompt, no model, so it must never be classified as an inline model step.
+      'disposer',
+    ]) {
       expect(isInlineModelStep(kind, registry)).toBe(false)
     }
   })

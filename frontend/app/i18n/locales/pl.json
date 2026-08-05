@@ -5370,6 +5370,7 @@
     "operation": {
       "provision": "Uruchom",
       "teardown": "Zatrzymaj",
+      "teardown-verify": "Sprawdzenie zatrzymania",
       "status": "Sprawdzenie stanu",
       "dispatch": "Uruchom",
       "release": "Zatrzymaj",

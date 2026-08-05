@@ -88,6 +88,7 @@ onBeforeUnmount(() => {
 const OPERATION_LABEL = computed<Record<ProvisioningOperation, string>>(() => ({
   provision: t('provisioning.operation.provision'),
   teardown: t('provisioning.operation.teardown'),
+  'teardown-verify': t('provisioning.operation.teardown-verify'),
   status: t('provisioning.operation.status'),
   dispatch: t('provisioning.operation.dispatch'),
   release: t('provisioning.operation.release'),

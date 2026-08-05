@@ -428,6 +428,8 @@ export type {
   ProvisionEnvironmentRequest,
   EnvironmentStatusRequest,
   EnvironmentTeardownRequest,
+  ConfirmTeardown,
+  TeardownProbe,
   ProvisionedEnvironment,
   RecipeStepLog,
   RecipeStepRecorder,

@@ -843,6 +843,12 @@ step settlement, not a pipeline step, and it composes from state already in memo
 RECORDED verdict, never a re-probe). Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
+**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
+it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
+being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass. Doc:
+[`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`
 port is vendor-neutral (per-vendor adapters, today only Datadog); credentials live sealed in

@@ -92,10 +92,10 @@ export interface DebugInfraLogEntry {
   workspaceId: string
 }
 
-export type DebugInfraLogEntryOperation = 'provision' | 'teardown' | 'status' | 'dispatch' | 'release' | 'poll-failure'
+export type DebugInfraLogEntryOperation = 'provision' | 'teardown' | 'teardown-verify' | 'status' | 'dispatch' | 'release' | 'poll-failure'
 
 /** Every `DebugInfraLogEntryOperation` value, for exhaustive handling and runtime validation. */
-export const DEBUG_INFRA_LOG_ENTRY_OPERATION_VALUES = ['provision', 'teardown', 'status', 'dispatch', 'release', 'poll-failure'] as const
+export const DEBUG_INFRA_LOG_ENTRY_OPERATION_VALUES = ['provision', 'teardown', 'teardown-verify', 'status', 'dispatch', 'release', 'poll-failure'] as const
 
 export type DebugInfraLogEntryOutcome = 'success' | 'failure'
 
