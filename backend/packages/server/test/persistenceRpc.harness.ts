@@ -488,6 +488,15 @@ function buildReviewAndIntegrationRepos() {
       deleteIfRev: async (ws: string) => ({ ws }),
       delete: async () => undefined,
     },
+    // The per-workspace MCP OAUTH GRANT store, same sealed-blob shape one level finer: keyed by
+    // (workspace, server), so every read carries the server id after the workspace it is scoped on.
+    mcpOAuthGrantRepository: {
+      get: async (ws: string, serverId: string) => ({ ws, serverId }),
+      listByWorkspace: async (ws: string) => [{ ws }],
+      upsert: async () => undefined,
+      compareAndSwap: async () => true,
+      delete: async () => undefined,
+    },
     // The Kaizen screen read surface: grading history + per-run status + the verified-combo
     // library. Each echoes its workspaceId (arg0); the run-path `getByStep`/`upsert` +
     // combo `getByKey` were exposed earlier.

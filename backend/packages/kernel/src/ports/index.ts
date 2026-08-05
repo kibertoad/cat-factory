@@ -206,7 +206,12 @@ export type {
   AsyncAgentExecutor,
 } from './agent-executor.js'
 export { isAsyncAgentExecutor } from './agent-executor.js'
-export type { ToolSecretResolver, ToolSecretSubject } from './agent-tools.js'
+export type {
+  McpOAuthTokenResult,
+  McpOAuthTokenSource,
+  ToolSecretResolver,
+  ToolSecretSubject,
+} from './agent-tools.js'
 export { type WorkRunner, NoopWorkRunner } from './work-runner.js'
 export { type ExecutionEventPublisher, NoopEventPublisher } from './execution-events.js'
 export type {
@@ -635,6 +640,7 @@ export type {
   CapabilityCredentialRecord,
   CapabilityCredentialRepository,
 } from './capability-credential-repositories.js'
+export type { McpOAuthGrantRecord, McpOAuthGrantRepository } from './mcp-oauth-repositories.js'
 export type {
   ValidationConfigRecord,
   ValidationConfigRepository,

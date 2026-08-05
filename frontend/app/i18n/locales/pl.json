@@ -2874,6 +2874,27 @@
       "servableHarnessesNone": "Żadne CLI agenta nie obsługuje tego transportu, więc ten serwer nie dotyczy żadnego przebiegu.",
       "allowedTools": "Zawężone do: {tools}",
       "credentials": "Dane uwierzytelniające: {keys}",
+      "oauth": {
+        "connected": "Połączono",
+        "notConnected": "Niepołączony",
+        "machineGrant": "Loguje się jako to wdrożenie",
+        "connectedBy": "Połączone przez {user}",
+        "scopes": "Przyznano: {scopes}",
+        "notRefreshable": "Dostawca nie wydał tokenu odświeżania, więc połączenie trzeba będzie nawiązać ponownie, gdy token dostępu wygaśnie.",
+        "lastError": "Ostatnie odnowienie tokenu nie powiodło się: {detail}",
+        "connect": "Połącz",
+        "reconnect": "Połącz ponownie",
+        "disconnect": "Rozłącz",
+        "callback": {
+          "working": "Kończenie połączenia…",
+          "done": "Połączono z {server}",
+          "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
+          "back": "Powrót do aplikacji",
+          "failedTitle": "Nie udało się zakończyć połączenia",
+          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
+        }
+      },
       "test": "Testuj",
       "notProbeable": {
         "stdio": "Działa w kontenerze agenta, więc nie można go przetestować z tego miejsca.",
@@ -2884,6 +2905,8 @@
         "ok": "Odpowiedział",
         "credentialsMissing": "Brak danych uwierzytelniających",
         "credentialRefused": "Dane uwierzytelniające odrzucone",
+        "oauthNotConnected": "Niepołączony",
+        "oauthTokenFailed": "Połączenie przestało działać",
         "unreachable": "Brak odpowiedzi",
         "httpError": "Odrzucił żądanie",
         "protocolError": "To nie serwer MCP",
@@ -2900,7 +2923,9 @@
       "hideDetails": "Ukryj szczegóły",
       "toast": {
         "loadFailed": "Nie udało się wczytać serwerów narzędzi",
-        "probeFailed": "Nie udało się przetestować serwera narzędzi"
+        "probeFailed": "Nie udało się przetestować serwera narzędzi",
+        "connectFailed": "Nie udało się rozpocząć łączenia",
+        "disconnectFailed": "Nie udało się rozłączyć serwera narzędzi"
       }
     },
     "capabilityCredentials": {

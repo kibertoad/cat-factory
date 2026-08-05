@@ -624,6 +624,27 @@
       "servableHarnessesNone": "Nessuna CLI di agente può servire questo trasporto, quindi questo server non si applica a nessuna esecuzione.",
       "allowedTools": "Limitato a: {tools}",
       "credentials": "Credenziali: {keys}",
+      "oauth": {
+        "connected": "Collegato",
+        "notConnected": "Non collegato",
+        "machineGrant": "Si autentica come questo deployment",
+        "connectedBy": "Collegato da {user}",
+        "scopes": "Concesso: {scopes}",
+        "notRefreshable": "Il fornitore non ha emesso un token di aggiornamento, quindi il collegamento andrà rifatto alla scadenza del token di accesso.",
+        "lastError": "L’ultimo rinnovo del token non è riuscito: {detail}",
+        "connect": "Collega",
+        "reconnect": "Ricollega",
+        "disconnect": "Scollega",
+        "callback": {
+          "working": "Completamento della connessione…",
+          "done": "Collegato a {server}",
+          "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
+          "back": "Torna all’app",
+          "failedTitle": "Non è stato possibile completare la connessione",
+          "failed": "Non è stato possibile completare l’autorizzazione. Riavvia la connessione dalla finestra Infrastruttura.",
+          "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
+        }
+      },
       "test": "Prova",
       "notProbeable": {
         "stdio": "Gira dentro il container dell’agente, quindi non può essere provato da qui.",
@@ -634,6 +655,8 @@
         "ok": "Ha risposto",
         "credentialsMissing": "Nessuna credenziale",
         "credentialRefused": "Credenziale rifiutata",
+        "oauthNotConnected": "Non collegato",
+        "oauthTokenFailed": "Il collegamento ha smesso di funzionare",
         "unreachable": "Nessuna risposta",
         "httpError": "Richiesta respinta",
         "protocolError": "Non è un server MCP",
@@ -650,7 +673,9 @@
       "hideDetails": "Nascondi dettagli",
       "toast": {
         "loadFailed": "Impossibile caricare i server di strumenti",
-        "probeFailed": "Impossibile provare il server di strumenti"
+        "probeFailed": "Impossibile provare il server di strumenti",
+        "connectFailed": "Impossibile avviare il collegamento",
+        "disconnectFailed": "Impossibile scollegare il server di strumenti"
       }
     },
     "capabilityCredentials": {
