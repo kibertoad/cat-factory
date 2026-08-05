@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, Service, WorkspaceMount } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -77,7 +78,12 @@ describe('BoardService — frame responses carry this board’s layout override'
   it('returns the mounted position from a size-only update (the resize jump)', async () => {
     const { service, stored } = build(frame())
 
-    const updated = await service.updateBlock(WS, 'frame_1', { size: { w: 900, h: 700 } })
+    const updated = await service.updateBlock(
+      WS,
+      'frame_1',
+      { size: { w: 900, h: 700 } },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
 
     expect(updated.position).toEqual(MOUNTED_AT)
     expect(updated.size).toEqual({ w: 900, h: 700 })
@@ -88,7 +94,12 @@ describe('BoardService — frame responses carry this board’s layout override'
   it('returns the mounted position from any other frame edit', async () => {
     const { service } = build(frame())
 
-    const updated = await service.updateBlock(WS, 'frame_1', { title: 'renamed' })
+    const updated = await service.updateBlock(
+      WS,
+      'frame_1',
+      { title: 'renamed' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
 
     expect(updated.title).toBe('renamed')
     expect(updated.position).toEqual(MOUNTED_AT)
@@ -98,7 +109,12 @@ describe('BoardService — frame responses carry this board’s layout override'
     const task = frame({ id: 'task_1', level: 'task', parentId: 'frame_1' })
     const { service } = build(task)
 
-    const updated = await service.updateBlock(WS, 'task_1', { title: 'renamed' })
+    const updated = await service.updateBlock(
+      WS,
+      'task_1',
+      { title: 'renamed' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
 
     expect(updated.position).toEqual(CREATED_AT)
   })

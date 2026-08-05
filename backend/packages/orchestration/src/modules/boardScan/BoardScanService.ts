@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type { BlueprintService, BoardScanSpawnResult } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardService } from '../board/BoardService.js'
@@ -45,10 +46,14 @@ export class BoardScanService {
       type: service.type,
       position: { x: 80, y: 80 },
     })
-    await this.deps.boardService.updateBlock(workspaceId, frame.id, {
-      title: service.name,
-      description: describeNode(service.summary, service.references),
-    })
+    // Unattributed: the engine reconciling a blueprint is not a person acting under a workspace
+    // tier, and none of these patches names a merge preset (see `BlockEditActor`).
+    await this.deps.boardService.updateBlock(
+      workspaceId,
+      frame.id,
+      { title: service.name, description: describeNode(service.summary, service.references) },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
 
     const planModules = service.modules ?? []
     // One batched insert for the whole map, not an addModule (→ full board list) per module.
@@ -62,9 +67,12 @@ export class BoardScanService {
       if (!moduleBlock) continue
       const moduleDescription = describeNode(planModule.summary, planModule.references)
       if (moduleDescription) {
-        await this.deps.boardService.updateBlock(workspaceId, moduleBlock.id, {
-          description: moduleDescription,
-        })
+        await this.deps.boardService.updateBlock(
+          workspaceId,
+          moduleBlock.id,
+          { description: moduleDescription },
+          UNATTRIBUTED_BLOCK_EDITOR,
+        )
       }
     }
     return { frameId: frame.id, modules: planModules.length }
@@ -94,9 +102,12 @@ export class BoardScanService {
     // which a human may have renamed.
     const frameDescription = describeNode(service.summary, service.references)
     if (frameDescription && frameDescription !== frame.description) {
-      await this.deps.boardService.updateBlock(workspaceId, frame.id, {
-        description: frameDescription,
-      })
+      await this.deps.boardService.updateBlock(
+        workspaceId,
+        frame.id,
+        { description: frameDescription },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
     }
 
     const moduleBlocks = blocks.filter((b) => b.parentId === frame.id && b.level === 'module')
@@ -130,9 +141,12 @@ export class BoardScanService {
       modules += 1
       const moduleDescription = describeNode(planModule.summary, planModule.references)
       if (moduleDescription && moduleDescription !== moduleBlock.description) {
-        await this.deps.boardService.updateBlock(workspaceId, moduleBlock.id, {
-          description: moduleDescription,
-        })
+        await this.deps.boardService.updateBlock(
+          workspaceId,
+          moduleBlock.id,
+          { description: moduleDescription },
+          UNATTRIBUTED_BLOCK_EDITOR,
+        )
       }
     }
     return { frameId: frame.id, modules }

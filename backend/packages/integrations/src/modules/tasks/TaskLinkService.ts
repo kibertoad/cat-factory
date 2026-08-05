@@ -7,6 +7,7 @@ import type {
   TaskRecord,
   TaskSourceKind,
 } from '@cat-factory/kernel'
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
@@ -224,6 +225,9 @@ export class TaskLinkService {
         ...(shape?.taskType ? { taskType: shape.taskType } : {}),
         ...(shape?.pipelineId ? { pipelineId: shape.pipelineId } : {}),
       },
+      // Filing a tracker issue as a task selects no merge preset, so there is nothing for the
+      // selection guard to judge and no tier to thread down here (see `BlockEditActor`).
+      UNATTRIBUTED_BLOCK_EDITOR,
       createdBy ?? null,
     )
     // Link the issue to the new task so agents get the full issue (description,
@@ -302,6 +306,7 @@ export class TaskLinkService {
           description: issueTaskDescription(content),
           epicId: epic.id,
         },
+        UNATTRIBUTED_BLOCK_EDITOR,
         createdBy ?? null,
       )
       await this.deps.taskRepository.linkBlock(workspaceId, source, content.externalId, block.id)

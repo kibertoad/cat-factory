@@ -4743,7 +4743,11 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Applied because this task picks no policy of its own.",
-      "noneHint": "No risk policy configured. Every pull request waits for a human review."
+      "noneHint": "No risk policy configured. Every pull request waits for a human review.",
+      "refused": {
+        "relaxes_role_sandbox": "Not available for your role: this task’s runs are sandboxed, and this policy would let them merge. A workspace admin can change it.",
+        "relaxes_role_class_rule": "Not available for your role: this policy auto-merges changes you are held to review on this task. A workspace admin can change it."
+      }
     },
     "preview": {
       "defaultBadge": "Default",

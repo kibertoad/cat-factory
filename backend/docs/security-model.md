@@ -254,6 +254,14 @@ With that scoping, the pipeline properties are:
   with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
   rules rather than being guessed onto a tier. Full model:
   [ADR 0037](./adr/0037-role-scoped-merge-policy.md).
+- **Which preset governs a task is part of the same policy, so SELECTING one is guarded too.**
+  Editing a preset is admin-tier (`settings.manage`), but a task's `riskPolicyId` is an ordinary
+  member-tier board write, which made re-pointing the task the way around a sandbox nobody had to
+  edit. `refuseRiskPolicySelection` closes it with the narrow-only rule one level up: a selection
+  may not drop a restriction the SELECTOR's own role was under (the sandbox, or a class the role
+  layer narrowed), at either door that can carry the field (creating a task and patching one).
+  It compares only the ROLE layer, so choosing between presets that treat every initiator alike
+  stays a plain member affordance.
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint

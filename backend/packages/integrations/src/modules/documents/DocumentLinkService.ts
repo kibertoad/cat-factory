@@ -9,6 +9,10 @@ import type {
   DocumentOrigin,
   PlanFrame,
 } from '@cat-factory/kernel'
+// Every board write below MATERIALISES external structure (an imported document's plan), so it
+// carries no workspace tier: nothing here selects a merge preset, and there is no role for a
+// selection to escape. See `BlockEditActor`.
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { DocumentRepository } from '@cat-factory/kernel'
@@ -77,10 +81,12 @@ export class DocumentLinkService {
       })
       column += 1
       result.frames += 1
-      await this.deps.boardService.updateBlock(workspaceId, created.id, {
-        title: frame.title,
-        ...(frame.description ? { description: frame.description } : {}),
-      })
+      await this.deps.boardService.updateBlock(
+        workspaceId,
+        created.id,
+        { title: frame.title, ...(frame.description ? { description: frame.description } : {}) },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       await this.spawnInto(workspaceId, created.id, frame, result)
     }
     return result
@@ -113,14 +119,20 @@ export class DocumentLinkService {
     task: { title: string; description?: string },
     result: SpawnResult,
   ): Promise<void> {
-    const created = await this.deps.boardService.addTask(workspaceId, containerId, {
-      title: task.title,
-    })
+    const created = await this.deps.boardService.addTask(
+      workspaceId,
+      containerId,
+      { title: task.title },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     result.tasks += 1
     if (task.description) {
-      await this.deps.boardService.updateBlock(workspaceId, created.id, {
-        description: task.description,
-      })
+      await this.deps.boardService.updateBlock(
+        workspaceId,
+        created.id,
+        { description: task.description },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
     }
   }
 

@@ -1,4 +1,5 @@
-import type { AddTaskInput } from '@cat-factory/contracts'
+import type { AddTaskInput, BlockEditActor } from '@cat-factory/contracts'
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type { Block, BlockRepository, BlockStatus } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { serviceOf } from './board.logic.js'
@@ -23,6 +24,7 @@ export interface PublicBoardReadsDeps {
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
+    editor: BlockEditActor,
     createdBy: string | null,
   ): Promise<Block>
 }
@@ -70,7 +72,10 @@ export class PublicBoardReads {
     input: AddTaskInput,
   ): Promise<Block> {
     await this.assertTaskContainer(workspaceId, serviceId)
-    return this.deps.addTask(workspaceId, serviceId, input, null)
+    // Unattributed by the same reading a headless `/api/v1` RUN start gets (ADR 0037): the caller
+    // authenticated as an API key, which holds scopes rather than a workspace tier, so there is no
+    // role for a merge preset to sandbox or narrow, and none for a preset selection to escape.
+    return this.deps.addTask(workspaceId, serviceId, input, UNATTRIBUTED_BLOCK_EDITOR, null)
   }
 
   /**
