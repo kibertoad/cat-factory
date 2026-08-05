@@ -35,7 +35,7 @@ existing settings and refused at the same two exits `dry_run` is.
 2. **Absent means UNRESTRICTED, not empty.** Silence is not an empty allowlist, exactly as it is
    not a `thresholds` rule in `classRulesByRole` ("absent is not a rule", ADR 0037). Only a role
    somebody wrote an entry for is scoped, so `{}` stays the identity the wire contract says it is.
-3. **`unknown` is INERT — never refused.** An unreadable diff must not sandbox a run that would
+3. **`unknown` is INERT, never refused.** An unreadable diff must not sandbox a run that would
    otherwise have landed, the same reading `resolveMergeClassRule` takes: a VCS outage cannot
    change policy. Note this is the OPPOSITE direction from rule 1, and deliberately so.
 4. **A run with no pinned role matches no entry**, exactly as `dryRunForcedForRole` reads one.
@@ -46,21 +46,21 @@ existing settings and refused at the same two exits `dry_run` is.
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                     | Status  | PR  |
-| --- | --------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | `submissionClassesByRoleSchema` + `submissionAllowedForRole` in contracts, with unit tests                | ⬜ todo |     |
-| 2   | Persistence: `submission_classes_by_role` column (D1 migration ⇄ Drizzle + `db:generate`), both repos     | ⬜ todo |     |
-| 3   | `RiskPolicyService` + `catalog.ts` defaults (EMPTY on every built-in, so the default is unchanged)        | ⬜ todo |     |
-| 4   | `MergeResolver`: the auto-merge refusal + its recorded reason on the decision                             | ⬜ todo |     |
-| 5   | `StepDecisionController.assertSubmissionAllowed`, beside `assertNotDryRun`, with its own conflict reason  | ⬜ todo |     |
-| 6   | SPA preset editor (per-role class allowlist) + the refusal copy, i18n across all locales                  | ⬜ todo |     |
-| 7   | Cross-runtime conformance: allowed lands, disallowed is refused at BOTH exits, `unknown` still lands      | ⬜ todo |     |
+| #   | Slice                                                                                                    | Status  | PR  |
+| --- | -------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | `submissionClassesByRoleSchema` + `submissionAllowedForRole` in contracts, with unit tests               | ⬜ todo |     |
+| 2   | Persistence: `submission_classes_by_role` column (D1 migration ⇄ Drizzle + `db:generate`), both repos    | ⬜ todo |     |
+| 3   | `RiskPolicyService` + `catalog.ts` defaults (EMPTY on every built-in, so the default is unchanged)       | ⬜ todo |     |
+| 4   | `MergeResolver`: the auto-merge refusal + its recorded reason on the decision                            | ⬜ todo |     |
+| 5   | `StepDecisionController.assertSubmissionAllowed`, beside `assertNotDryRun`, with its own conflict reason | ⬜ todo |     |
+| 6   | SPA preset editor (per-role class allowlist) + the refusal copy, i18n across all locales                 | ⬜ todo |     |
+| 7   | Cross-runtime conformance: allowed lands, disallowed is refused at BOTH exits, `unknown` still lands     | ⬜ todo |     |
 
 ## Conventions & gotchas
 
 - **The class is only known at MERGER SETTLEMENT**, not at start. `MergeTrackRecordService.classify`
   derives it from the PR's changed files, so this cannot be an admission-time refusal the way
-  `dryRunRoles` is: the PR is already open by the time the class exists. That is not a defect —
+  `dryRunRoles` is: the PR is already open by the time the class exists. That is not a defect:
   the pull request opening is not the harm; the platform LANDING it is. Say so in the refusal copy,
   which must not claim the change cannot land at all (a human with write access on the host can
   always merge it there, exactly as the `dry_run` copy already concedes).
@@ -73,7 +73,7 @@ existing settings and refused at the same two exits `dry_run` is.
   allowlist; a role with an allowlist is sandboxed per class. Merging them would make the narrower
   setting unable to express the broader one without listing every class.
 - **`classRulesByRole` and this are ORTHOGONAL, and both apply.** A class may be `always` under the
-  role's class rules and still outside its submission allowlist, and the allowlist wins — it is a
+  role's class rules and still outside its submission allowlist, and the allowlist wins: it is a
   bar on landing at all, where the class rule only decides how much review landing takes. The
   precedence ladder in `MergeResolver` therefore gains an arm ABOVE `autoMergeEnabled` and beside
   `dry_run`, for the same reason `dry_run` sits there: it is a property of who started the run

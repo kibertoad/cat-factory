@@ -978,7 +978,7 @@ export interface MappedLogRecord {
   traceId?: string
   /**
    * The span this line belongs BESIDE, present only alongside {@link traceId} and only when the
-   * trace was ADOPTED from an inbound `traceparent` — it is the caller's own span id.
+   * trace was ADOPTED from an inbound `traceparent`: it is the caller's own span id.
    *
    * A run-derived trace never sets it: that trace's spans are emitted by this package, and
    * pointing a line at one of them would mean picking which (the run root? the step? the

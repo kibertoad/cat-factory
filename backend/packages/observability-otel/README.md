@@ -168,7 +168,7 @@ load-bearing here:
 | `gen_ai.usage.cache_read_input_tokens`                                    | The convention lumps input into one count. These are priced ~0.1x and ~1.25–2x      |
 | `gen_ai.usage.cache_creation_input_tokens`                                | base input, so summing them hides whether a loop rides a warm cache or rewrites it. |
 | `gen_ai.token.type` values `cache_read` / `cache_write`                   | The same split on the counter's dimension.                                          |
-| `cat_factory.workspace_id`                                                | Tenant scope. Spans only — unbounded, so never a metric dimension.                  |
+| `cat_factory.workspace_id`                                                | Tenant scope. Spans only; unbounded, so never a metric dimension.                   |
 | `cat_factory.execution_id`                                                | The run. Searchable, since the trace id is a hash of it rather than the id itself.  |
 | `cat_factory.agent_kind`                                                  | Kept beside `gen_ai.agent.name` because it is also a bounded METRIC dimension.      |
 | `cat_factory.pipeline` / `cat_factory.step_count`                         | The run span's pipeline, and the step span's fold size.                             |
@@ -182,7 +182,7 @@ load-bearing here:
 - **COST, in any form.** A span or a counter carrying money would be DERIVED data (`tokens x
 rates`) in a store that cannot reprice it: a corrected rate table leaves the history
   permanently wrong with nothing marking it, and the figure would sit beside the platform's own
-  spend ledger (`SpendService` / `priceRollupCells`) as a second, un-reconcilable answer — at a
+  spend ledger (`SpendService` / `priceRollupCells`) as a second, un-reconcilable answer, at a
   grain that deliberately drops `workspace_id`, so it could never be checked against what anyone
   is billed. What this exporter emits are the OBSERVED facts a downstream consumer prices FROM:
   `gen_ai.request.model` plus the three input classes and the output count, kept apart rather
@@ -309,7 +309,7 @@ a test comparing one log record to another would let the span side drift with ev
 request; `mountRequestLogging` parses it once through kernel's `parseTraceparent` and binds
 `traceId` + `spanId` onto the request-scoped child logger, so every line the request emits is
 exported into the caller's trace, pointing at the caller's own span. Malformed or absent means
-ignored — a bad correlation header is not a reason to refuse real work, and the request falls
+ignored: a bad correlation header is not a reason to refuse real work, and the request falls
 back to the correlation it always had.
 
 **The run wins when a line has both**, and that precedence is load-bearing. The derived trace id
@@ -317,12 +317,12 @@ is the only thing joining a run's lines to the spans this package emits for it; 
 at the caller's trace would leave the run's spans with no logs and its logs with no spans. The
 two are true statements at different scopes (the caller's trace covers the REQUEST, the derived
 one covers the RUN it touched) and the run is the narrower answer. Nothing is lost either way:
-the adopted ids stay queryable as attributes. Only an adopted context names a `spanId` — a
+the adopted ids stay queryable as attributes. Only an adopted context names a `spanId`: a
 run-derived trace has no single span a line belongs to, so it attaches to the trace and lets the
 backend place it.
 
 Deliberately not here: **emitting** a `traceparent` of our own, and carrying `tracestate`. Both
-are things a producer of spans owes its callees, and the request boundary produces no span — its
+are things a producer of spans owes its callees, and the request boundary produces no span: its
 evidence is the log line. Adding them is the slice that adds a request span.
 
 **Draining is the facade's job, and the two runtimes differ only there:**

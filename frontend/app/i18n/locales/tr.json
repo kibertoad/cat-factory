@@ -1003,6 +1003,12 @@
       "inherited": "hizmetten devralındı",
       "frozen": "Donduruldu: ajan başladı"
     },
+    "taskTypeFields": {
+      "title": "Görev türü alanları",
+      "hint": "Bu görev türünün gerekli olduğunu bildirdiği yanıtlar. Eksik bir zorunlu yanıt, çalıştırmayı başlamadan önce duraklatır.",
+      "save": "Kaydet",
+      "revert": "Geri al"
+    },
     "dependencies": {
       "title": "Şuna bağlı",
       "hint": "Bu görev çalışmadan önce birleştirilmesi gereken görevler. Tüm bağımlılıklar tamamlanana kadar Çalıştır kontrolü kilitli kalır.",

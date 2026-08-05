@@ -42,7 +42,7 @@ export interface InputGateControllerDeps {
    * The app-owned custom task-type registry, read for the create-form fields a deployment's own
    * task type declares REQUIRED. Required here (a facade with no custom types passes an EMPTY
    * registry, which says so in code) rather than optional, because an absent one would silently
-   * mean "this deployment's task types declare nothing" — indistinguishable from a correct
+   * mean "this deployment's task types declare nothing", indistinguishable from a correct
    * answer until somebody's required field stopped being checked.
    */
   taskTypeRegistry: TaskTypeRegistry

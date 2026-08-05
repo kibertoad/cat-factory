@@ -10,7 +10,7 @@ A deployment can register its own REWORK PAIR: a producer, and a companion that 
 output and loops that producer back for automatic rework below the step's threshold.
 
 The companion catalog was a module-global `Map` of four built-ins, so the only way to express
-"my producer, reviewed and bounced below a bar" was to reach for a judge — a different machine.
+"my producer, reviewed and bounced below a bar" was to reach for a judge, a different machine.
 A judge scores against a rubric and disposes (advance / park / bounce / fail); a companion drives
 the producer's own bounded rework budget and only then involves a human. The workaround got the
 scoring and lost the loop.
@@ -21,7 +21,7 @@ agent kinds. The built-in catalog is pre-loaded, so registering one adds rather 
 and module identity stops mattering for a separately-published extension package.
 
 Two things a reviewer should look at. The free lookups take the registry OPTIONALLY and fall
-back to the built-ins, copying `isGatableKind` — which means a call site that omits it silently
+back to the built-ins, copying `isGatableKind`, which means a call site that omits it silently
 sees built-ins only, so every engine site that could meet a deployment's pair now threads it
 (dispatch routing, the rework loop's producer search, the step-gating cascade, run-start
 threshold seeding, pipeline-shape validation, the container job body, the prompt). And the

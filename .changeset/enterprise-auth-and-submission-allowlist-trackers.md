@@ -8,7 +8,7 @@ code rather than sketched.
 per-vendor integrations, reusing the already provider-keyed `user_identities` table as-is). It
 carries a finding that changes how its paired slice should be sized: the paired revocation
 tracker assumed the generation check could fold into "the user resolution the request already
-performs", and there is no such resolution — `requireAuth` verifies the HMAC and never touches
+performs", and there is no such resolution: `requireAuth` verifies the HMAC and never touches
 the user row. So revocation is a deliberate trade between a cached read on the auth hot path and
 a bounded revocation window, with a user-row column behind it either way. Both trackers now say
 so, and `backend/docs/auth.md` points at them.

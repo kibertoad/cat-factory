@@ -1087,6 +1087,12 @@
       "inherited": "inherited from service",
       "frozen": "Frozen: the agent has started"
     },
+    "taskTypeFields": {
+      "title": "Task type fields",
+      "hint": "The answers this task type declares it needs. A required answer that is missing parks a run before it starts.",
+      "save": "Save",
+      "revert": "Revert"
+    },
     "dependencies": {
       "title": "Depends on",
       "hint": "Tasks that must merge before this one can run. The Run control stays locked until every dependency is done.",

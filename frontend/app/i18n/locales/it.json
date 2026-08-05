@@ -1533,6 +1533,12 @@
       "inherited": "ereditato dal servizio",
       "frozen": "Congelato: l'agente e' partito"
     },
+    "taskTypeFields": {
+      "title": "Campi del tipo di attività",
+      "hint": "Le risposte che questo tipo di attività dichiara necessarie. Una risposta obbligatoria mancante mette in pausa l'esecuzione prima che inizi.",
+      "save": "Salva",
+      "revert": "Ripristina"
+    },
     "dependencies": {
       "title": "Dipende da",
       "hint": "Attivita' che devono essere unite prima che questa possa essere eseguita. Il controllo Esegui resta bloccato finche' ogni dipendenza non e' completata.",

@@ -51,7 +51,7 @@ export const INPUT_GATE_SEVERITY: Record<InputGateIssueCode, InputGateSeverity> 
   // around; a custom type's pipeline is one this file has never seen, so the org that wrote it
   // is the only party that can know. A deployment wanting the softer reading marks the field
   // OPTIONAL and lets its reviewer ask, which is the same "when in doubt, advisory" trade the
-  // built-ins make — expressed by the declaration rather than by a second severity knob.
+  // built-ins make, expressed by the declaration rather than by a second severity knob.
   required_field_missing: 'blocking',
 }
 
@@ -93,7 +93,7 @@ export interface InputGateInput {
   /**
    * The create-form fields the task's CUSTOM type declares, resolved from the deployment's
    * `TaskTypeRegistry` by {@link inputGateInputOf}. Empty for every built-in type, and for a
-   * namespaced type no deployment registered (stale data after an extension was removed) — the
+   * namespaced type no deployment registered (stale data after an extension was removed): the
    * honest answer there, since a gone registration declares nothing to require.
    *
    * Passed IN rather than looked up here so the evaluation stays a pure reduction over data: the
@@ -329,7 +329,7 @@ type PendingIssue = Omit<InputGateIssue, 'severity'>
  * The per-TYPE checks for the BUILT-IN types. Each states what that type's pipeline
  * structurally consumes, so a gap here means a downstream step has no input rather than a weak
  * one. A type this file does not know yields nothing here, which is the honest answer: the
- * platform cannot have an opinion about what somebody else's task type needs — only the
+ * platform cannot have an opinion about what somebody else's task type needs: only the
  * deployment that registered it can, and it states that through {@link customFieldFindings}.
  */
 function typeFindings(input: InputGateInput): InputGateIssueCode[] {
@@ -364,7 +364,7 @@ function typeFindings(input: InputGateInput): InputGateIssueCode[] {
  * deployment already made rather than a second place to make it. A registered type's field
  * descriptors drive the create form; marking one required there and having the gate ignore it
  * would mean the same task is refused through the browser and accepted through the public API,
- * an initiative spawn or a tracker import — which is exactly the set of paths that produce the
+ * an initiative spawn or a tracker import, which is exactly the set of paths that produce the
  * empty tasks this gate exists for.
  *
  * The requiredness rule itself is `unfilledRequiredDescriptorFields` in contracts, shared with
@@ -431,9 +431,19 @@ export function hasBlockingInputIssues(issues: readonly InputGateIssue[]): boole
  * PROSE rather than data: the parked step's proposal text and the run's log line. Every
  * user-facing surface renders from the CODES instead (the SPA maps them to translated copy),
  * so this is a detail line, never the explanation somebody is expected to read.
+ *
+ * A code that is about a NAMED input carries its `field.key`, because it is the only code that
+ * can repeat: three unanswered fields render as `required_field_missing(impact),
+ * required_field_missing(sev), ...` rather than the same word three times, which states a count
+ * and nothing else. The KEY, not the label: this line is read by an operator grepping logs, and
+ * the key is the stable identifier, where the label is deployment prose that may be re-worded
+ * between releases. It is not scrubbed because a field key is a declared schema identifier, not
+ * a value: the ANSWERS never reach this line.
  */
 export function describeInputGateIssues(issues: readonly InputGateIssue[]): string {
-  const blocking = issues.filter((issue) => issue.severity === 'blocking').map((i) => i.code)
-  const shown = blocking.length > 0 ? blocking : issues.map((i) => i.code)
-  return shown.join(', ')
+  const blocking = issues.filter((issue) => issue.severity === 'blocking')
+  const shown = blocking.length > 0 ? blocking : issues
+  return shown
+    .map((issue) => (issue.field ? `${issue.code}(${issue.field.key})` : issue.code))
+    .join(', ')
 }

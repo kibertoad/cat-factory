@@ -16,7 +16,7 @@
   override, the same shape as `kinds/read-only.ts` and `kinds/tuning.ts`, because the built-in
   kinds are not registry entries. A kind is NOT gatable by default; the set's comments say why
   each exclusion (`merger`, `deployer`, `conflicts`/`ci`, `bug-intake`) would break a run.
-  `kinds/companions.ts` holds the COMPANION pairing vocabulary — a companion grades the
+  `kinds/companions.ts` holds the COMPANION pairing vocabulary: a companion grades the
   immediately-preceding producer and loops it back for automatic rework below the step's
   threshold. Same shape as `gatable.ts`: a `COMPANIONS` built-in catalog beside
   `AgentKindRegistry.registerCompanion`, with registry-aware free lookups (`isCompanionKind`,

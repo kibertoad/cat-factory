@@ -1533,6 +1533,12 @@
       "inherited": "vom Service geerbt",
       "frozen": "Eingefroren: der Agent hat gestartet"
     },
+    "taskTypeFields": {
+      "title": "Aufgabentyp-Felder",
+      "hint": "Die Antworten, die dieser Aufgabentyp benötigt. Fehlt eine Pflichtangabe, wird ein Lauf vor dem Start angehalten.",
+      "save": "Speichern",
+      "revert": "Zurücksetzen"
+    },
     "dependencies": {
       "title": "Hängt ab von",
       "hint": "Aufgaben, die gemergt sein müssen, bevor diese laufen kann. Das Run-Steuerelement bleibt gesperrt, bis jede Abhängigkeit erledigt ist.",

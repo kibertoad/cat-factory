@@ -1003,6 +1003,12 @@
       "inherited": "hérité du service",
       "frozen": "Figé : l'agent a démarré"
     },
+    "taskTypeFields": {
+      "title": "Champs du type de tâche",
+      "hint": "Les réponses que ce type de tâche déclare nécessaires. Une réponse obligatoire manquante met l'exécution en pause avant son démarrage.",
+      "save": "Enregistrer",
+      "revert": "Rétablir"
+    },
     "dependencies": {
       "title": "Dépend de",
       "hint": "Tâches qui doivent être fusionnées avant que celle-ci puisse s'exécuter. Le contrôle Exécuter reste verrouillé tant que toutes les dépendances ne sont pas terminées.",

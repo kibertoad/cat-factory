@@ -80,7 +80,7 @@ describe('mountRequestLogging', () => {
   it('ignores a malformed traceparent rather than refusing the request', async () => {
     const { app, logger } = buildApp()
     // A bad correlation header is not a reason to fail real work, and the value is echoed into
-    // every exported line — so it is dropped, not sanitised into something almost-valid.
+    // every exported line, so it is dropped, not sanitised into something almost-valid.
     const res = await app.request('/workspaces/ws1/blocks', {
       headers: { traceparent: 'nonsense' },
     })

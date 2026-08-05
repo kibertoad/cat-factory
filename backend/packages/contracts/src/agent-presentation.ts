@@ -129,7 +129,7 @@ export const customAgentKindSchema = v.object({
    * producer back for automatic rework before any human is asked.
    *
    * The pipeline builder needs it and has no other way to know. A companion is not a standalone
-   * palette block — it renders as an "add companion" toggle ON its producer, and the builder
+   * palette block: it renders as an "add companion" toggle ON its producer, and the builder
    * inserts/removes it immediately after. Without this the SPA would either show a deployment's
    * companion as a placeable block (which pipeline validation then refuses on save, because the
    * adjacency rule is enforced server-side) or not show it at all.

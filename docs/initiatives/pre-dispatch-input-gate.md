@@ -141,25 +141,42 @@ a model could not have acted on either.
   takes (a type this process does not register declares nothing; a type with a `formPanel` has a
   bespoke section owning the whole bag, so its descriptors are not what was collected), because
   the doors agreeing is the entire argument for reusing the declaration. `showWhen` is honoured,
-  so a field the form would have hidden is never required — parking on an input with nowhere to
+  so a field the form would have hidden is never required: parking on an input with nowhere to
   go and fill it in is the exact false park this gate must not produce. And the findings are ONE
   PER FIELD, unlike the description checks which collapse to a single reading: three unanswered
   fields are three things to go and do, and a human told "a required field is missing" would fix
   one and be parked again.
 - **What the gate adds over the create door is WHEN it asks.** The create check fires once,
   against the declaration as it stood that day, on the paths that reach `addTask`. The gate fires
-  at every run, against the declaration as it stands now — so a requirement a deployment adds in
+  at every run, against the declaration as it stands now, so a requirement a deployment adds in
   a later release reaches the tasks that predate it, and a task created on a node that did not
   register the type is still judged where it runs (normal in a two-process deployment). That is
   the case the conformance assertion drives, because it is the one no create-time check can cover.
 - **A deployment gets ONE code, not one per type.** `required_field_missing` covers every
   registered type's every field; WHICH field rides on the finding's `field` (`key` for a machine,
   deployment-supplied `label` for a human). The codes are a closed, PERSISTED vocabulary, so an
-  org registering twenty operations must add nothing to it — and the SPA's exhaustive `ISSUE_KEYS`
+  org registering twenty operations must add nothing to it, and the SPA's exhaustive `ISSUE_KEYS`
   Record stays a fixed size. Severity is `blocking` because the deployment said the field was
   required, which is the only authority available: this file classifies the built-ins by its own
   judgement about what a model can work around, and a custom type's pipeline is one it has never
   seen. A deployment wanting the softer reading marks the field optional and lets its reviewer ask.
+- **A BLOCKING finding owes an answer path, not just an override.** `required_field_missing` was
+  the first finding naming an input that could not be supplied after creation: `taskTypeFields` was
+  write-once, so `recheck` re-read the same unanswered bag forever and waiving the gate was the
+  only exit, while every surface told the reader to go and fill the field in. The fix is the
+  `customTaskTypeFields` patch field on `updateBlockSchema`, validated through the create door's own
+  `validatedFields`, plus the `task-type-fields` inspector panel rendering the same
+  `DescriptorFields` against the same declaration. Two rules fall out of it. The patch is
+  deliberately narrower than the whole `taskTypeFields`, because the BUILT-IN per-type fields are
+  resolved at creation with side effects the patch path does not repeat (a `review` task's PR
+  reference is verified against the provider and folded into the description); the custom bag has no
+  such resolution, which is what makes it the half that can be patched. And the panel is
+  basic-tier, ungated: unparking a run is the everyday delivery loop, and hiding the control behind
+  advanced mode would rebuild the dead end it exists to remove. The conformance suite drives both
+  exits, `proceed` and the answer-then-`recheck` release, because a gate whose only exit is "ignore
+  me" is a gate that cannot be satisfied.
+  `review_target_missing` still has the original gap (a `review` task's PR reference is not
+  patchable), which is now the only blocking finding whose remedy the product does not offer.
 - **The reproduction-cue scan is deliberately GENEROUS** (a `stepsToReproduce` field, any of a
   list of cue words, or a list of two or more items). Missing a cue parks a task whose author did
   the work, which is worse than letting a thin bug report reach a reviewer that can ask about it

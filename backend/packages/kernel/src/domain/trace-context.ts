@@ -37,31 +37,35 @@ export interface InboundTraceContext {
    * log line points at so it lands beside the caller's span rather than loose in the trace.
    */
   spanId: string
-  /**
-   * Whether the caller marked the trace SAMPLED (the low bit of its trace flags).
-   *
-   * Carried rather than assumed, because it is the caller's decision to make: a deployment
-   * that exports every line regardless still owes the backend an honest answer about what the
-   * upstream chose, and a backend uses it to decide whether the trace being pointed at is one
-   * it should expect to hold.
-   */
-  sampled: boolean
 }
 
-const TRACEPARENT_PATTERN = /^([\da-f]{2})-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})$/
+// The four leading fields, plus whatever a future version appends. `00` is EXACTLY these four
+// (the spec fixes it at 55 characters), so the trailing group is refused for it below; a higher
+// version may carry more `-`-delimited fields and the spec requires a parser to read the four it
+// understands and ignore the rest. Anchored at both ends with fixed widths, so the only thing
+// that ever matches is the exact grammar.
+const TRACEPARENT_PATTERN = /^([\da-f]{2})-([\da-f]{32})-([\da-f]{16})-([\da-f]{2})(-[\da-f-]*)?$/
+const VERSION_00 = '00'
 const ALL_ZERO_TRACE_ID = '0'.repeat(32)
 const ALL_ZERO_SPAN_ID = '0'.repeat(16)
-/** W3C `sampled`, the low bit of the trace-flags byte. */
-const TRACE_FLAG_SAMPLED = 0x01
+/**
+ * The longest header worth looking at, checked BEFORE the value is normalised or matched.
+ *
+ * Version `00` is 55 characters and a future version adds `-`-delimited fields to that, so this
+ * is generous by an order of magnitude and still refuses a megabyte header outright rather than
+ * lower-casing it first. The regex is anchored and would fail such input anyway; this keeps the
+ * work proportional to the header a real caller sends, on a path that runs on every request.
+ */
+const MAX_TRACEPARENT_LENGTH = 512
 
 /**
  * Parse a `traceparent` header value, or null when it is absent or malformed.
  *
- * The header is UNTRUSTED input on any public deployment, and what it buys an attacker is
- * worth naming: the value is echoed into every exported line for the request, so the parse is
- * strict by shape (a fixed-width, fully anchored hex pattern) rather than lenient, and the
- * length is bounded by that pattern before the regex ever runs. There is nothing to sanitise
- * afterwards, which is the point of accepting only the exact grammar.
+ * The header is UNTRUSTED input on any public deployment, and what it buys an attacker is worth
+ * naming: the value is echoed into every exported line for the request. So the length is bounded
+ * first, the parse is strict by shape (fixed-width, fully anchored hex) rather than lenient, and
+ * only the matched GROUPS are returned. There is nothing to sanitise afterwards, which is the
+ * point of accepting only the exact grammar.
  *
  * Malformed means IGNORED, never rejected: the request is real work and a bad correlation
  * header is not a reason to refuse it. The line then falls back to its own correlation (the
@@ -69,20 +73,27 @@ const TRACE_FLAG_SAMPLED = 0x01
  * the header existed.
  *
  * Forward-compatible on VERSION, per the spec: an unknown future version still has these four
- * fields at the front, so it is parsed rather than dropped. `ff` is the one reserved value and
- * is refused. Both all-zero ids are refused too, being the spec's own "invalid" sentinels — a
- * broken instrumentation library upstream emits them, and adopting one would file every such
- * request into one enormous shared trace.
+ * fields at the front, so it is parsed rather than dropped even when it appends fields we do not
+ * understand. Version `00` is the one that may NOT, being fixed at exactly four. `ff` is the one
+ * reserved value and is refused. Both all-zero ids are refused too, being the spec's own
+ * "invalid" sentinels: a broken instrumentation library upstream emits them, and adopting one
+ * would file every such request into one enormous shared trace.
+ *
+ * The trace-flags byte is VALIDATED (it is part of the grammar) but its `sampled` bit is not
+ * returned, because nothing here may act on it. This deployment has no sampler: a line that
+ * reaches the exporter is one it chose to export, and the exported record's flags state THAT
+ * decision rather than the caller's. Carrying the bit with no consumer would be a field whose
+ * documented purpose no code performs. It belongs to the slice that emits a span of our own,
+ * which is the first thing that would have a sampling decision to inherit.
  */
 export function parseTraceparent(raw: string | undefined | null): InboundTraceContext | null {
-  const match = TRACEPARENT_PATTERN.exec(raw?.trim().toLowerCase() ?? '')
+  const value = raw?.trim()
+  if (!value || value.length > MAX_TRACEPARENT_LENGTH) return null
+  const match = TRACEPARENT_PATTERN.exec(value.toLowerCase())
   if (!match) return null
-  const [, version, traceId, spanId, flags] = match
+  const [, version, traceId, spanId, , extra] = match
   if (version === 'ff') return null
+  if (version === VERSION_00 && extra !== undefined) return null
   if (traceId === ALL_ZERO_TRACE_ID || spanId === ALL_ZERO_SPAN_ID) return null
-  return {
-    traceId: traceId!,
-    spanId: spanId!,
-    sampled: (Number.parseInt(flags!, 16) & TRACE_FLAG_SAMPLED) !== 0,
-  }
+  return { traceId: traceId!, spanId: spanId! }
 }

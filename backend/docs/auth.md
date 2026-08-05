@@ -47,7 +47,7 @@ Sessions are **stateless**: the token is `base64url(JSON).base64url(HMAC)` with
 an absolute expiry, verified per request (see `infrastructure/auth/signing.ts`).
 There is no server-side session store: logout is a client-side token drop, and
 expiry bounds the blast radius. (User-session revocation remains a possible
-follow-up — it is NOT free, because nothing on this path reads the user row:
+follow-up, and it is NOT free, because nothing on this path reads the user row:
 see [`audit-log-and-session-revocation.md`](../../docs/initiatives/audit-log-and-session-revocation.md).
 MACHINE tokens are revocable, below.)
 

@@ -1,4 +1,4 @@
-import { shallowRef } from 'vue'
+import { computed, shallowRef } from 'vue'
 import type {
   AgentArchetype,
   AgentCategory,
@@ -347,10 +347,28 @@ const COMPANION_KINDS: ReadonlySet<string> = new Set(COMPANION_ARCHETYPES.map((a
  * A `shallowRef` for the same reason {@link customAgentKindMeta} is one: the pure lookups below
  * must resolve a registered companion, and re-render when the catalog changes, without importing
  * the store (circular) or mutating the frozen built-in map. Empty until the store first
- * populates it, so a custom companion degrades to "not a companion" — an ordinary palette block
- * — exactly as before registration.
+ * populates it, so a custom companion degrades to "not a companion" (an ordinary palette block),
+ * exactly as before registration.
  */
 const customCompanionTargets = shallowRef<Record<string, readonly AgentKind[]>>({})
+
+/**
+ * The same projection INVERTED: producer kind → the companion that reviews it, the direction
+ * {@link companionForProducer} actually asks in. Derived rather than scanned per call, because
+ * that lookup runs once per step of every pipeline the builder renders.
+ *
+ * Inverting is also where an ambiguity has to be RESOLVED rather than left to iteration order:
+ * two registered companions may both claim a producer, and only one toggle can hang off it.
+ * First registration wins, stated here once, instead of "whichever `Object.entries` reached
+ * first" being the answer at each call site.
+ */
+const customCompanionByProducer = computed<Record<string, AgentKind>>(() => {
+  const out: Record<string, AgentKind> = {}
+  for (const [companion, targets] of Object.entries(customCompanionTargets.value)) {
+    for (const producer of targets) if (!(producer in out)) out[producer] = companion
+  }
+  return out
+})
 
 /** Replace the custom companion projection (called only by the agents store). */
 export function setCustomCompanionTargets(map: Record<string, readonly AgentKind[]>): void {
@@ -371,17 +389,12 @@ export function __resetCustomCompanionTargetsForTest(): void {
  * on, and a silent re-point would change what every stock pipeline does.
  */
 export function companionForProducer(kind: string): AgentKind | undefined {
-  const builtin = COMPANION_FOR_PRODUCER[kind]
-  if (builtin) return builtin
-  for (const [companion, targets] of Object.entries(customCompanionTargets.value)) {
-    if (targets.includes(kind)) return companion
-  }
-  return undefined
+  return COMPANION_FOR_PRODUCER[kind] ?? customCompanionByProducer.value[kind]
 }
 
 /**
  * Whether a kind is a dependent producer-companion (reviewer / architect-companion /
- * spec-companion, or a deployment's own) — rendered as a toggle on its producer, not a
+ * spec-companion, or a deployment's own): rendered as a toggle on its producer, not a
  * standalone palette block. Distinct from `pipelineRender`'s `isCompanionKind`, which also
  * counts the Tester's `fixer`.
  */

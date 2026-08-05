@@ -17,7 +17,7 @@ request.
 
 Not shipped, deliberately, after weighing it: exporting COST over OTLP. It is derived data
 (`tokens x rates`) in a store that cannot reprice it, so a corrected rate table would leave
-history permanently wrong with nothing marking it — and it would sit beside `SpendService` as a
+history permanently wrong with nothing marking it, and it would sit beside `SpendService` as a
 second answer for money, at a grain that drops `workspace_id` and therefore can never be
 reconciled against what anyone is billed. The exporter carries the observed facts a downstream
 consumer prices FROM instead: the model, the three input token classes kept apart, and the

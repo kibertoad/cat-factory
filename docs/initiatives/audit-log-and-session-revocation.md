@@ -77,7 +77,7 @@ revocation via a per-user session-generation check.
   into: `requireAuth` → `verifySession` verifies the HMAC and reads the claims, and never
   touches the user row. That is what makes the current design fast and what makes revocation
   cost something, so slice 5 must pick DELIBERATELY between a cached generation read through
-  the `AppCaches` seam (invalidated on bump — but the Worker's isolate-safe profile passes
+  the `AppCaches` seam (invalidated on bump, but the Worker's isolate-safe profile passes
   through for our own mutable state, so it reads live there, a real per-request D1 read on the
   hot path) and short session TTLs plus a bump, which adds no read and accepts a bounded
   revocation window. Either way there is a user-row column behind it (D1 migration ⇄ Drizzle),

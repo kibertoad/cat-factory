@@ -1003,6 +1003,12 @@
       "inherited": "odziedziczone z usługi",
       "frozen": "Zamrożone: agent został uruchomiony"
     },
+    "taskTypeFields": {
+      "title": "Pola typu zadania",
+      "hint": "Odpowiedzi, których wymaga ten typ zadania. Brak wymaganej odpowiedzi wstrzymuje uruchomienie przed startem.",
+      "save": "Zapisz",
+      "revert": "Przywróć"
+    },
     "dependencies": {
       "title": "Zależy od",
       "hint": "Zadania, które muszą zostać scalone, zanim to będzie mogło się uruchomić. Przycisk uruchamiania pozostaje zablokowany, dopóki wszystkie zależności nie będą gotowe.",

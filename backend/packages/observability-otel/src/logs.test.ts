@@ -337,7 +337,7 @@ describe('mapLogRecord', () => {
     )
     expect(mapped.traceId).toBe('a'.repeat(32))
     // The caller's span is named exactly, so the line lands beside it rather than loose in the
-    // trace — an adopted context is the one case where there is an unambiguous span to point at.
+    // trace: an adopted context is the one case where there is an unambiguous span to point at.
     expect(mapped.spanId).toBe('b'.repeat(16))
     expect(mapped.traceFlags).toBe(1)
   })

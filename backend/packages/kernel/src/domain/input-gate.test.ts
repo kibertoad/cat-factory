@@ -218,6 +218,30 @@ describe('describeInputGateIssues', () => {
     const verdict = evaluateInputGate(task({ description: 'make it faster' }), 'standard')
     expect(describeInputGateIssues(verdict.issues)).toBe('description_thin')
   })
+
+  it('names WHICH field a repeatable finding is about', () => {
+    // `required_field_missing` is the one code that can appear more than once, so on its own it
+    // renders as the same word repeated: a count, and nothing an operator reading the log line
+    // or the parked step's detail could act on. The KEY rides along (stable, greppable), not the
+    // deployment's label (prose that gets re-worded).
+    const verdict = evaluateInputGate(
+      {
+        title: 'EU shard outage',
+        description: 'The EU shard started refusing writes at 14:02 and recovered at 14:19.',
+        level: 'task',
+        taskType: 'acme:incident',
+        customFields: [
+          { key: 'impact', label: 'Customer impact', required: true },
+          { key: 'sev', label: 'Severity', required: true },
+        ],
+        taskTypeFields: { custom: {} },
+      },
+      'standard',
+    )
+    expect(describeInputGateIssues(verdict.issues)).toBe(
+      'required_field_missing(impact), required_field_missing(sev)',
+    )
+  })
 })
 
 describe('evaluateInputGate: a custom task type’s own required fields', () => {
@@ -308,7 +332,7 @@ describe('evaluateInputGate: a custom task type’s own required fields', () => 
 
   it('finds nothing for a namespaced type no deployment registered', () => {
     // Stale data after an extension was removed. A gone registration declares nothing, which is
-    // the honest answer — inventing a requirement for a type nothing can describe would park a
+    // the honest answer: inventing a requirement for a type nothing can describe would park a
     // run on a field no form will ever offer.
     const verdict = evaluateInputGate(
       task({ taskType: 'acme:incident', taskTypeFields: { custom: {} } }),
@@ -371,5 +395,37 @@ describe('inputGateInputOf', () => {
       defaultTaskTypeRegistry(),
     )
     expect(input.customFields).toBeUndefined()
+  })
+
+  it('stands down for a type whose bespoke formPanel owns the whole bag', () => {
+    // The second of the two stand-downs this shares with the CREATE door
+    // (`taskTypeCreationDefaults`'s `checkCustomFields`), and the one with no other test: a
+    // `formPanel` type's descriptor fields are not what its bespoke section collected, so
+    // requiring them would park a run on inputs the form it was authored in never offered.
+    // The doors agreeing is the entire argument for reading the existing declaration instead of
+    // adding a second one, so a drift here is the argument quietly failing.
+    const registry = defaultTaskTypeRegistry()
+    const presentation = {
+      label: 'Incident',
+      icon: 'i-lucide-siren',
+      color: 'red',
+      description: 'An incident.',
+    }
+    const fields = [{ key: 'impact', label: 'Customer impact', required: true }]
+    registry.register({ taskType: 'acme:incident', presentation, fields, formPanel: 'acme:form' })
+    const block = {
+      title: 'Shard outage',
+      description: 'x'.repeat(40),
+      level: 'task' as const,
+      taskType: 'acme:incident',
+    }
+    expect(inputGateInputOf(block, registry).customFields).toBeUndefined()
+    expect(evaluateInputGate(inputGateInputOf(block, registry), 'standard').status).toBe('passed')
+
+    // ...and the SAME declaration without the panel is required, so the stand-down is what is
+    // being asserted rather than the fields being unreadable.
+    const plain = defaultTaskTypeRegistry()
+    plain.register({ taskType: 'acme:incident', presentation, fields })
+    expect(evaluateInputGate(inputGateInputOf(block, plain), 'standard').status).toBe('blocked')
   })
 })

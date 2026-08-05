@@ -36,7 +36,7 @@ credentials, and its people sign in with it. Optionally, group claims map onto w
    and PingFederate are all OIDC providers; a discovery document (`/.well-known/openid-configuration`)
    plus a client id/secret is the whole configuration. Shipping "Okta support" and "Entra support"
    as separate code paths is the mistake the VCS layer already learned not to make
-   (see the git-provider-agnostic rules in CLAUDE.md) — one adapter, configuration per deployment.
+   (see the git-provider-agnostic rules in CLAUDE.md): one adapter, configuration per deployment.
 2. **It reuses `user_identities` as-is.** That table is already `(provider, subject)` keyed with a
    `metadata` blob, which is exactly an OIDC issuer + `sub`. So there is NO new identity table and
    no change to how a person keeps one canonical `usr_*` across login methods.
@@ -52,14 +52,14 @@ credentials, and its people sign in with it. Optionally, group claims map onto w
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                  | Status  | PR  |
-| --- | -------------------------------------------------------------------------------------------------------- | ------- | --- |
-| 1   | OIDC config (discovery URL, client id/secret, scopes) + a cached discovery/JWKS fetch                    | ⬜ todo |     |
-| 2   | `/auth/oidc/login` + `/auth/oidc/callback`: PKCE, signed `state`, ID-token verification against JWKS     | ⬜ todo |     |
+| #   | Slice                                                                                                     | Status  | PR  |
+| --- | --------------------------------------------------------------------------------------------------------- | ------- | --- |
+| 1   | OIDC config (discovery URL, client id/secret, scopes) + a cached discovery/JWKS fetch                     | ⬜ todo |     |
+| 2   | `/auth/oidc/login` + `/auth/oidc/callback`: PKCE, signed `state`, ID-token verification against JWKS      | ⬜ todo |     |
 | 3   | Identity linking through `user_identities` (`provider: 'oidc'`, subject = `iss#sub`) + first-login create | ⬜ todo |     |
-| 4   | SPA sign-in button + the "which methods are configured" projection it reads                             | ⬜ todo |     |
-| 5   | Group-claim → workspace-role mapping (opt-in), applied on each sign-in                                  | ⬜ todo |     |
-| 6   | Offboarding: revoke live sessions when a sign-in is refused or a role is withdrawn                      | ⬜ todo |     |
+| 4   | SPA sign-in button + the "which methods are configured" projection it reads                               | ⬜ todo |     |
+| 5   | Group-claim → workspace-role mapping (opt-in), applied on each sign-in                                    | ⬜ todo |     |
+| 6   | Offboarding: revoke live sessions when a sign-in is refused or a role is withdrawn                        | ⬜ todo |     |
 
 ## Conventions & gotchas
 
@@ -94,7 +94,7 @@ So the check is not free, and the honest options are:
 
 - **A cached generation read through `AppCaches`**, invalidated on bump. Cheap per request after
   the first, and the invalidation is the coherence story (CLAUDE.md's caching rule). On the Worker
-  the isolate-safe profile passes through for our own mutable state, so this reads live there —
+  the isolate-safe profile passes through for our own mutable state, so this reads live there,
   which is a real per-request D1 read on the hot path, and the slice must state whether that is
   acceptable rather than discovering it in production.
 - **Short session TTLs plus a bump**, accepting a bounded window instead of instant revocation.

@@ -253,12 +253,16 @@ export function validateDescriptorFields(
     if (!byKey.has(key)) problems.push(`Unknown field "${key}".`)
   }
 
-  const unfilled = new Set(unfilledRequiredDescriptorFields(fields, values).map((f) => f.key))
   for (const field of fields) {
     if (!isDescriptorFieldVisible(field, values)) continue
     const value = values[field.key]
     if (!isFilled(value)) {
-      if (unfilled.has(field.key)) problems.push(`Field "${field.key}" is required.`)
+      // Equivalent to `unfilledRequiredDescriptorFields` by construction: visibility and
+      // filled-ness are already decided by the two lines above, so all that is left of that
+      // predicate here is `required`. Calling it would allocate a list and a Set per validation
+      // to re-derive what this loop has in hand. The shared rule is what the OTHER caller (the
+      // input gate) needs, because it reports the descriptors rather than walking them.
+      if (field.required) problems.push(`Field "${field.key}" is required.`)
       continue
     }
     if (!valueMatchesFieldType(field, value)) {
@@ -278,7 +282,7 @@ export function validateDescriptorFields(
  * Split out of {@link validateDescriptorFields} because two very different doors ask it and must
  * agree: the create FORM refuses a submission, and the pre-dispatch INPUT GATE parks a run whose
  * task reached the board some other way (the public API, an initiative spawn, a tracker import
- * — every path the form never guarded). One rule, so a deployment that marks a field required
+ * and every path the form never guarded). One rule, so a deployment that marks a field required
  * cannot have it enforced at one door and ignored at the other.
  *
  * VISIBILITY is honoured, and it is the whole subtlety: a field hidden by its own `showWhen`

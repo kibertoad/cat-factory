@@ -100,7 +100,7 @@ export function mountRequestLogging<E extends AppEnv>(app: Hono<E>, base: Logger
     // A caller that is already collecting a distributed trace (an SDK client, a gateway, a
     // sibling service) tells us so with `traceparent`. Adopting it binds the correlation onto
     // the request's child logger, so every line this request produces is exported INTO the
-    // caller's trace instead of alongside it — the join an operator otherwise has to make by
+    // caller's trace instead of alongside it: the join an operator otherwise has to make by
     // hand, from a request id they had to think to copy.
     //
     // Bound HERE rather than resolved at the exporter because this is the only scope that can

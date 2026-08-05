@@ -23,7 +23,7 @@ export class StepGraph {
     /**
      * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion's targets are
      * found by the same producer search the built-ins use. Optional because a unit test
-     * exercising the pure step mutators has no registry to give and needs none — the built-in
+     * exercising the pure step mutators has no registry to give and needs none: the built-in
      * catalog answers for every built-in companion.
      */
     private readonly agentKindRegistry?: AgentKindRegistry,

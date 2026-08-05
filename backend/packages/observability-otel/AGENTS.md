@@ -30,7 +30,7 @@ Two things in `src/mapping.ts` bind changes here:
 - **This exporter carries OBSERVED facts, never DERIVED money.** Cost is deliberately absent
   (see the README's not-emitted list): it is `tokens x rates` in a store that cannot reprice it,
   and it would sit beside the spend ledger as a second, un-reconcilable answer. What ships is
-  what a downstream consumer prices FROM — the model plus the three input classes and the output
+  what a downstream consumer prices FROM: the model plus the three input classes and the output
   count, kept apart rather than lumped.
 
 Also exports the **log exporter** (`src/logs.ts`, `createOtelLogExporter`): the kernel `LogSink`

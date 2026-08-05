@@ -4,7 +4,7 @@ import type { AgentKindRegistry } from './registry.js'
 
 // The BUILT-IN companion catalog. The lookups live on the app-owned `AgentKindRegistry`
 // (which pre-loads this list in its constructor), so a deployment registers its own
-// producer/reviewer rework pair through the same seam the built-ins arrive by — see
+// producer/reviewer rework pair through the same seam the built-ins arrive by; see
 // `registry.registerCompanion`. Nothing here is a module-global `Map` any more, so module
 // identity stops mattering for a separately-published extension package and a test builds a
 // fresh registry instead of clearing shared state.
@@ -98,7 +98,7 @@ const BUILTIN_BY_KIND: ReadonlyMap<string, CompanionDefinition> = new Map(
 
 // The registry-aware lookups. Each mirrors `isGatableKind`: the REGISTRY answers when it is
 // present, and the built-in catalog answers otherwise. `registry` is optional for the same
-// reason it is there — a caller validating a built-in catalog (the kernel seed test, a pure
+// reason it is there: a caller validating a built-in catalog (the kernel seed test, a pure
 // shape check) genuinely has none, while every boundary that could meet a deployment's own
 // companion (pipeline save, run start, dispatch, prompt assembly) passes one. A site that
 // omits it silently sees built-ins only, which is why the ones that must not are threaded.
@@ -127,9 +127,6 @@ export function companionTargets(kind: AgentKind, registry?: AgentKindRegistry):
  * companion through the container path, the engine uses to keep it off the inline companion
  * path, and the prompt uses to tell it to read the checkout.
  */
-export function isContainerBackedCompanion(
-  kind: AgentKind,
-  registry?: AgentKindRegistry,
-): boolean {
+export function isContainerBackedCompanion(kind: AgentKind, registry?: AgentKindRegistry): boolean {
   return companionFor(kind, registry)?.surface === 'container-explore'
 }

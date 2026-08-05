@@ -79,8 +79,8 @@ export const inputGateIssueFieldSchema = v.object({
 export type InputGateIssueField = v.InferOutput<typeof inputGateIssueFieldSchema>
 
 /**
- * One structural finding: its code, the severity it carried in THIS evaluation, and — for the
- * codes that are about a NAMED input rather than the task as a whole — which one.
+ * One structural finding: its code, the severity it carried in THIS evaluation, and, for the
+ * codes that are about a NAMED input rather than the task as a whole, which one.
  *
  * `field` is optional because most codes need it to be absent, not empty: `description_missing`
  * is about the description and says so by its code alone. Only `required_field_missing` carries
