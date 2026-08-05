@@ -8,8 +8,9 @@ behaviour nothing pins, which is the exact shape of the bugs this repo's rules k
 threshold compared at the wrong boundary, a refusal that quietly became a pass-through, an
 `ignoreStatic`-style default nothing forces.
 
-**It is nightly-only and non-blocking.** Never part of `pnpm test:run`, never part of a merge gate,
-never expected on a developer's laptop.
+**It runs nightly and it is non-blocking.** Never part of `pnpm test:run`, never part of a merge
+gate, never expected on a developer's laptop. The one other trigger is a PR that changes the mutation
+flow itself, so the flow is provable before it merges.
 
 ## How it runs
 
