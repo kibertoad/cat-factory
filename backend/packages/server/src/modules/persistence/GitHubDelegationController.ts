@@ -29,7 +29,9 @@ import { UnavailableError, RateLimitedError } from '@cat-factory/kernel'
  *   narrowed to the live App-linked repos the mothership projects for the installation
  *   (`github_repos`), so a delegated token can never reach repos the platform doesn't
  *   even track. `user_pat`-linked rows are excluded (not reachable through the App
- *   installation). No linked repos ⇒ 404 — there is nothing in scope to grant.
+ *   installation). A caller may narrow FURTHER by naming `repositoryIds` (a container
+ *   dispatch names the repos its run resolved), which is INTERSECTED with the linked set:
+ *   asking narrows, never widens. Nothing left in scope ⇒ 404.
  * - Every mint (and every denial/failure) is audit-logged with the token's nodeId +
  *   userId; the client-facing 500 stays opaque.
  *
@@ -64,6 +66,23 @@ export interface GitHubDelegationControllerOptions {
  * fan-out, forceRefresh after a grant change) while braking a runaway loop.
  */
 const DEFAULT_RATE_LIMIT: GitHubDelegationRateLimit = { limit: 30, windowMs: 60_000 }
+
+/**
+ * The caller's requested narrowing, or `undefined` when it asked for none. A malformed entry
+ * makes the whole field `undefined` (⇒ the full linked scope) rather than a partial list: the
+ * request is only ever intersected with what the mothership links, so ignoring a garbled ask can
+ * never widen past the installation's own repos, while honouring half of one would mint a token
+ * missing a repo the caller is about to clone.
+ */
+function readRequestedRepositoryIds(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const ids: number[] = []
+  for (const value of raw) {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return undefined
+    ids.push(value)
+  }
+  return ids
+}
 
 export function githubDelegationController(
   options: GitHubDelegationControllerOptions = {},
@@ -110,7 +129,7 @@ export function githubDelegationController(
       throw new UnavailableError('GitHub token delegation is not enabled on this deployment')
     }
 
-    let body: { installationId?: unknown; forceRefresh?: unknown }
+    let body: { installationId?: unknown; forceRefresh?: unknown; repositoryIds?: unknown }
     try {
       body = (await c.req.json()) as typeof body
     } catch {
@@ -157,16 +176,28 @@ export function githubDelegationController(
       // the App installation, and GitHub would reject their ids on the mint. The same
       // repo linked by several workspaces projects one row each, so dedupe by githubId.
       const repos = (await repoProjection.listByInstallation(installationId)) as GitHubRepo[]
-      const repositoryIds = [
-        ...new Set(
-          (repos ?? [])
-            .filter((repo) => (repo.linkedVia ?? 'app') !== 'user_pat')
-            .map((repo) => repo.githubId),
-        ),
-      ]
+      const linked = new Set(
+        (repos ?? [])
+          .filter((repo) => (repo.linkedVia ?? 'app') !== 'user_pat')
+          .map((repo) => repo.githubId),
+      )
+      // A caller may ask for LESS: a container dispatch requests only the repos its run resolved
+      // (`jobTokenRepoIds`), so the delegated token is as narrow as the engine's own would be on a
+      // hosted deployment. The request is INTERSECTED with the linked set, never unioned — the
+      // node's ask is a narrowing hint, and the mothership's projection stays the authority on
+      // what may be granted. An unscoped request (the engine's gate/merge calls) takes the whole
+      // linked set, as before.
+      const requested = readRequestedRepositoryIds(body.repositoryIds)
+      const repositoryIds = requested ? requested.filter((id) => linked.has(id)) : [...linked]
       if (repositoryIds.length === 0) {
-        // Nothing in scope to grant — same uniform denial as an out-of-scope installation.
-        log.warn('github delegation: no linked repos to scope, denied', { installationId })
+        // Nothing in scope to grant — same uniform denial as an out-of-scope installation. It
+        // covers both "this installation links nothing" and "nothing the caller asked for is
+        // linked"; the log line separates them, the response deliberately does not.
+        log.warn('github delegation: no linked repos to scope, denied', {
+          installationId,
+          linkedCount: linked.size,
+          ...(requested ? { requestedCount: requested.length } : {}),
+        })
         return denied()
       }
 
@@ -175,11 +206,15 @@ export function githubDelegationController(
         forceRefresh,
         repositoryIds,
       })
-      // Audit trail: who minted what, scoped how wide. NEVER log the token itself.
+      // Audit trail: who minted what, scoped how wide. `requestedCount` beside `repoCount` is
+      // what shows a caller asking for a repo this installation does not link (a repo unlinked
+      // between the node's read and this mint) — the token is still granted, narrower than asked,
+      // and the harness would fail to clone the missing leg. NEVER log the token itself.
       log.info('github delegation: minted repo-scoped installation token', {
         installationId,
         forceRefresh,
         repoCount: repositoryIds.length,
+        ...(requested ? { requestedCount: requested.length } : {}),
       })
       return c.json({ token: minted }, 200)
     } catch (error) {

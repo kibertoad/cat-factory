@@ -47,11 +47,51 @@ export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promis
  * be used is a per-WORKSPACE policy (`allowInitiatorPat`), and an installation id can serve
  * several workspaces — so it is supplied here rather than derived, where deriving it would
  * mean guessing which workspace's policy governs the run.
+ *
+ * `repoIds` is the dispatch's TOKEN SCOPE: the repos this one job may reach, in the neutral
+ * `VcsRepoRef.repoId` vocabulary (see {@link jobTokenRepoIds}). A facade minting a GitHub App
+ * token narrows it with `repository_ids`; a facade whose credential is a PAT (local mode, a
+ * GitLab connection, the run initiator's own token) cannot narrow anything and ignores it,
+ * which is why this is a HINT on the ctx rather than a required argument. Absent ⇒ the caller
+ * does not know the run's repo set (the bootstrapper, the env-config repairer, tests) and the
+ * mint stays installation-wide.
  */
 export type MintInstallationToken = (
   installationId: number,
-  ctx?: { executionId: string; workspaceId: string; initiatedBy?: string },
+  ctx?: {
+    executionId: string
+    workspaceId: string
+    initiatedBy?: string
+    repoIds?: string[]
+  },
 ) => Promise<string>
+
+/**
+ * The repos ONE dispatch's job token must reach: the primary checkout plus every auxiliary leg
+ * the job body carries (multi-repo fan-out peers, the conflict-resolver's targeted peer, the
+ * merger's combined-diff siblings, read-only reference repos). Deduped, in the neutral
+ * `VcsRepoRef.repoId` vocabulary, so a facade can narrow the mint to exactly this set instead of
+ * handing the container an installation-wide credential (`backend/docs/security-model.md`,
+ * Layer 3).
+ *
+ * Legs on a DIFFERENT installation are dropped rather than added: one job carries one token,
+ * minted for `primary.installationId`, so a leg outside that installation is unreachable with or
+ * without scoping — including it would only make GitHub reject the mint and turn a pre-existing
+ * (documented) limitation into a failed dispatch.
+ *
+ * The PRIMARY is always first and always present: a scope that omitted it would mint a token
+ * that cannot clone the repo the run is about, which is a broken dispatch rather than a narrow
+ * one. That is also why this returns the ids rather than a boolean "should we scope" — the
+ * decision of what an id MEANS belongs to whichever facade mints, not here.
+ */
+export function jobTokenRepoIds(primary: RepoTarget, auxiliary: readonly RepoTarget[]): string[] {
+  const ids = new Set<string>([primary.repoId])
+  for (const leg of auxiliary) {
+    if (leg.installationId !== primary.installationId) continue
+    ids.add(leg.repoId)
+  }
+  return [...ids]
+}
 
 /**
  * One private package-registry entry as it rides the harness job body: the decrypted

@@ -152,11 +152,24 @@ clean and shipped the deployment's master sealing key to a third party. So:
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:
 
-| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                      | Lifetime                |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Installation-wide**: every repo the workspace's installation covers, at the permissions the install granted (Contents: read/write, etc.) | ~1h, in-memory only     |
-| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped** (`repository_ids`): only the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged        | ~1h, minted per request |
-| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                             | The PAT's own           |
+| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                                                          | Lifetime                 |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Repo-scoped** (`repository_ids`): the repos THIS run resolved (primary + fan-out peers + conflict/merger siblings + reference repos), at the permissions the install granted | ~1h, minted per dispatch |
+| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped**: the dispatch's own repos, intersected server-side with the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged             | ~1h, minted per request  |
+| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own            |
+
+**The App rows are narrowed by the ENGINE, at dispatch.** `jobTokenRepoIds` collects the repos one
+job body names and `buildDispatchTokenMint` (shared by both facades, so they cannot drift) turns
+them into GitHub's `repository_ids`. A leg on a different installation is dropped rather than
+requested: one job carries one token, so such a repo is unreachable either way. A scope that
+cannot be expressed as repo ids widens to installation-wide rather than dropping a leg the harness
+is about to clone, and says so: a `warn` naming the run plus the `dispatch.token_scope_widened`
+counter, because a security property degrading silently reads exactly like one holding.
+
+Two things this does NOT narrow, both by construction. **Permissions**: the token still carries
+`Contents: write` for the repos it does cover, because GitHub App tokens cannot be branch-scoped.
+**A personal PAT**: `repository_ids` is an App-token mechanism with no PAT equivalent, so a run on
+the initiator's own token is bounded by that token; `allowInitiatorPat` is what bounds that.
 
 **The initiator's personal PAT OUTRANKS whichever row applies, unless the workspace refuses it.**
 Wherever the per-user secret store is wired (it needs `ENCRYPTION_KEY`), a run whose initiator has
@@ -204,13 +217,10 @@ Consequences to internalize:
   to everything you own is exactly that dangerous in this context; use a fine-grained PAT restricted
   to the repos the deployment works on. The same advice applies, per member, to stored personal PATs.
 
-Known gap, candidate hardening: the standard engine dispatch uses the **unscoped** installation
-token, even though the repo-scoped mint mechanism already exists (the mothership delegation path
-uses it). Narrowing the job token to the run's actual repos (primary + peers + references) would
-shrink the worst case of Layer 2's stated limit from "the installation" to "the repos this run was
-about". Until then, the practical mitigation is installation scope itself: see the checklist. Note
-that such a narrowing would not bound an initiator PAT, which the platform does not mint and cannot
-scope; `allowInitiatorPat: false` is what bounds that, by declining to use it at all.
+So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
+installation" — but only where the run authenticates as the App. Installation scope still bounds
+what any run in the workspace could ever ask for, and it is what the checklist's item 3 is about;
+it is now a ceiling rather than the blast radius of every single run.
 
 ## Layer 4: no agent DECISION merges to the default branch (mechanism + configuration, given Layer 2)
 
@@ -351,9 +361,11 @@ is possible at all:
    auto-merge and add class floors for `source` and `schema`. Remember the shipped default
    auto-merges under Balanced ceilings with no floors.
 3. **Scope the GitHub App installation to only the repos the platform should work on.** The job
-   token is installation-wide, so the installation is the blast radius of a fully compromised run:
-   whenever the run is using the App token at all, which item 4 is about. Don't install on "All
-   repositories" of an org that also holds crown jewels.
+   token is now narrowed per dispatch to the repos that run resolved, so the installation is the
+   CEILING on what any run could ask for rather than the blast radius of every one. It still binds:
+   it is what stops a task linked to the wrong repo, or a widened mint that could not be scoped,
+   from reaching further. Don't install on "All repositories" of an org that also holds crown
+   jewels. This applies whenever the run is using the App token at all, which item 4 is about.
 4. **Govern stored personal PATs, or item 3 does not bind.** An initiator's stored `github_pat`
    outranks the App token on the standard dispatch path, so a member with a classic-scope PAT
    would otherwise silently widen every run they start to their own whole account.
@@ -431,9 +443,6 @@ is possible at all:
   workspace's events until the socket drops. Severing it needs a revocation signal that reaches
   whichever replica or Durable Object holds the socket; tracked as SEC-12 in
   `docs/initiatives/security-hardening-round-2.md`.
-- **Job tokens are installation-wide on the standard dispatch path.** The repo-scoped mint exists
-  (delegation path) and could be applied at engine dispatch. Until it is, item 3 above is the
-  mitigation.
 - **Outside the reserved-key floor, what a capability credential may read from the deployment's
   environment is unbounded until an operator sets `allowKeys`.** `isReservedPlatformEnvKey` refuses
   the platform's own configuration with no configuration required and cannot be widened, but every

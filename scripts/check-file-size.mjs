@@ -185,7 +185,11 @@ const LEGACY_ALLOWANCES = new Map([
   // normalisation in `containerAgentResult.ts` — so the executor ratchets down on both counts.
   // Ratcheted 1520 → 1450 by extracting `agentContextRecord.ts` (the observability snapshot's
   // allow-list projection) alongside `containerAgentLogging.ts`.
-  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1442],
+  // Ratcheted 1442 → 1368 by moving `resolveAuxiliaryRepos` down to `containerAgentBody.ts`, where
+  // the three resolvers it composes already live, when job-token scoping made the auxiliary
+  // resolution a dispatch INPUT (the token is narrowed to the repos it produces) rather than a
+  // tail step.
+  ['backend/packages/server/src/agents/ContainerAgentExecutor.ts', 1368],
   // The two `/search/*` endpoints (issue + code search) and their response shapes moved to
   // `github/searchApi.ts` when the bug hunt needed the issue search to surface the extra
   // fields its response already carries — so the client ratchets DOWN.

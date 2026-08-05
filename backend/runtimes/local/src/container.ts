@@ -362,7 +362,13 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
     ...(gitToken
       ? { mintInstallationToken: async () => gitToken }
       : delegatedGitHub
-        ? { mintInstallationToken: (id: number) => delegatedGitHub.installationToken(id) }
+        ? {
+            // Forward the dispatch's repo scope: the mothership intersects it with what it links
+            // for the installation, so a mothership-mode container gets the same narrowed token a
+            // hosted deployment's own dispatch mints.
+            mintInstallationToken: (id: number, opts?: { repositoryIds?: number[] }) =>
+              delegatedGitHub.installationToken(id, opts),
+          }
         : {}),
     // The PAT-backed VCS client wires the CI gate + merge / mergeability providers, so a local
     // pipeline gates on real CI and merges the PR/MR for real, AND serves the read/link

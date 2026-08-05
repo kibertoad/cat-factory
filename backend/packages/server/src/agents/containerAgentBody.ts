@@ -168,9 +168,13 @@ export function buildCommonBody(
  * (jobBody drops the peer `pr` on the fixer path). A service co-located in the primary's own repo
  * (same monorepo) has no separate checkout; it rides the own-service PR and is named in the section
  * so the agent edits its subtree. Any involved service present ⇒ the agent works at the repo ROOT
- * (not just its own service subdir), so `commonForKind` swaps `repo`. Extracted from
- * `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity ceiling;
- * `commonForKind` defaults to the passed `common` when nothing fans out.
+ * (not just its own service subdir), so the returned `repoSpecOverride` replaces `common.repo`.
+ * Extracted from `ContainerAgentExecutor.resolveAuxiliaryRepos` to keep it under the complexity
+ * ceiling.
+ *
+ * Returns the repo SPEC to override `common.repo` with rather than a rebuilt `common`, and the
+ * resolved `repoTargets` beside it: the job's token is minted AFTER this resolution and narrowed
+ * to exactly those repos ({@link jobTokenRepoIds}), so `common` does not exist yet when this runs.
  */
 export async function resolveMultiRepoFanout(
   context: AgentRunContext,
@@ -178,21 +182,22 @@ export async function resolveMultiRepoFanout(
     workspaceId: string
     blockId: string
     repo: RepoTarget
-    common: Record<string, unknown>
   },
   deps: ContainerAgentExecutorDependencies,
   agentKindRegistry: AgentKindRegistry,
 ): Promise<{
   peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
   multiRepoSection?: string
-  commonForKind: Record<string, unknown>
+  repoSpecOverride?: Record<string, unknown>
+  repoTargets: RepoTarget[]
 }> {
-  const { workspaceId, blockId, repo, common } = args
+  const { workspaceId, blockId, repo } = args
   let peerRepos:
     | { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
     | undefined
   let multiRepoSection: string | undefined
-  let commonForKind = common
+  let repoSpecOverride: Record<string, unknown> | undefined
+  const repoTargets: RepoTarget[] = []
   const involvedServices = context.involvedServices ?? []
   const fansOutMultiRepo =
     MULTI_REPO_FANOUT_BUILTIN_KINDS.has(context.agentKind) ||
@@ -219,6 +224,7 @@ export async function resolveMultiRepoFanout(
           repo: buildRepoSpec(c.target, origin(c.target)),
           ...(c.involved[0]?.frameId ? { frameId: c.involved[0].frameId } : {}),
         }))
+        repoTargets.push(...peerCheckouts.map((c: RepoCheckout) => c.target))
       }
       multiRepoSection = renderMultiRepoWorkspaceSection(checkouts, involvedServices)
       // Work at the repo ROOT: drop the primary's own-service subdir scoping so the agent
@@ -226,17 +232,15 @@ export async function resolveMultiRepoFanout(
       // subdirectory each service lives in.
       if (primaryCheckout) {
         const { serviceDirectory: _drop, ...rootTarget } = primaryCheckout.target
-        commonForKind = {
-          ...common,
-          repo: buildRepoSpec(rootTarget, origin(rootTarget)),
-        }
+        repoSpecOverride = buildRepoSpec(rootTarget, origin(rootTarget))
       }
     }
   }
   return {
     ...(peerRepos ? { peerRepos } : {}),
     ...(multiRepoSection ? { multiRepoSection } : {}),
-    commonForKind,
+    ...(repoSpecOverride ? { repoSpecOverride } : {}),
+    repoTargets,
   }
 }
 
@@ -256,11 +260,10 @@ export async function resolveConflictResolverPeer(
     workspaceId: string
     blockId: string
     repo: RepoTarget
-    common: Record<string, unknown>
   },
   deps: ContainerAgentExecutorDependencies,
-): Promise<{ repoForKind: RepoTarget; commonForKind: Record<string, unknown> } | undefined> {
-  const { workspaceId, blockId, repo, common } = args
+): Promise<{ repoForKind: RepoTarget; repoSpecOverride: Record<string, unknown> } | undefined> {
+  const { workspaceId, blockId, repo } = args
   const conflictFrameId =
     context.agentKind === CONFLICT_RESOLVER_AGENT_KIND ? context.conflictTarget?.frameId : undefined
   if (!conflictFrameId || !deps.resolveRepoTargets) return undefined
@@ -282,7 +285,7 @@ export async function resolveConflictResolverPeer(
   const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
   return {
     repoForKind: peer.target,
-    commonForKind: { ...common, repo: buildRepoSpec(peer.target, origin(peer.target)) },
+    repoSpecOverride: buildRepoSpec(peer.target, origin(peer.target)),
   }
 }
 
@@ -303,7 +306,6 @@ export async function resolveMergerCombinedDiff(
     workspaceId: string
     blockId: string
     repo: RepoTarget
-    common: Record<string, unknown>
     workBranch: string
   },
   deps: ContainerAgentExecutorDependencies,
@@ -311,6 +313,7 @@ export async function resolveMergerCombinedDiff(
   | {
       peerRepos: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
       multiRepoSection: string
+      repoTargets: RepoTarget[]
     }
   | undefined
 > {
@@ -359,6 +362,7 @@ export async function resolveMergerCombinedDiff(
         baseBranch: l.target.baseBranch,
       })),
     ]),
+    repoTargets: legs.map((l) => l.target),
   }
 }
 
@@ -421,10 +425,14 @@ export function resolveReferenceRepos(
   context: AgentRunContext,
   repo: RepoTarget,
   deps: ContainerAgentExecutorDependencies,
-): { referenceRepos?: { repo: Record<string, unknown> }[]; referenceReposSection?: string } {
+): {
+  referenceRepos?: { repo: Record<string, unknown> }[]
+  referenceReposSection?: string
+  repoTargets: RepoTarget[]
+} {
   const attachedReferenceRepos = context.referenceRepos ?? []
   if (attachedReferenceRepos.length === 0 || !REFERENCE_REPO_KINDS.has(context.agentKind)) {
-    return {}
+    return { repoTargets: [] }
   }
   const origin = deps.resolveRepoOrigin ?? githubRepoOrigin
   // Dedup against the primary and each other by the harness's sibling-checkout key
@@ -450,11 +458,12 @@ export function resolveReferenceRepos(
     })
   }
   if (targets.length === 0) {
-    return {}
+    return { repoTargets: [] }
   }
   return {
     referenceRepos: targets.map((t) => ({ repo: buildRepoSpec(t, origin(t)) })),
     referenceReposSection: renderReferenceReposSection(repo, targets),
+    repoTargets: targets,
   }
 }
 
@@ -498,5 +507,106 @@ export async function resolveReferenceBranches(
   return {
     referenceBranches: present,
     referenceBranchesSection: renderReferenceBranchesSection(present, { multiRepo }),
+  }
+}
+
+/**
+ * The auxiliary checkouts a dispatch carries beside its primary repo, resolved together: the
+ * multi-repo fan-out, the conflict-resolver's peer targeting, the merger's combined-diff siblings,
+ * and the read-only reference repos/branches. Moved here from `ContainerAgentExecutor` (which was
+ * at its size budget) to sit with the resolvers it composes.
+ *
+ * It resolves REPOS, never `common`: it returns the repo spec that should override `common.repo`
+ * plus the `repoTargets` every leg landed on, and the caller applies both once the job token is
+ * minted. That ordering is the point — the token is narrowed to exactly these repos
+ * ({@link jobTokenRepoIds}), so it cannot be minted until the legs are known, and `common` (which
+ * carries the token) cannot be built until then either.
+ */
+export async function resolveAuxiliaryRepos(
+  context: AgentRunContext,
+  args: {
+    workspaceId: string
+    blockId: string
+    repo: RepoTarget
+    workBranch: string
+  },
+  deps: ContainerAgentExecutorDependencies,
+  agentKindRegistry: AgentKindRegistry,
+): Promise<{
+  peerRepos?: { repo: Record<string, unknown>; frameId?: string; cloneBranch?: string }[]
+  multiRepoSection?: string
+  repoSpecOverride?: Record<string, unknown>
+  repoForKind: RepoTarget
+  referenceRepos?: { repo: Record<string, unknown> }[]
+  referenceReposSection?: string
+  referenceBranches?: string[]
+  referenceBranchesSection?: string
+  /** Every repo the job's legs touch, for the token scope. Excludes the primary (the caller has it). */
+  repoTargets: RepoTarget[]
+}> {
+  const { workspaceId, blockId, repo, workBranch } = args
+  // Multi-repo fan-out (coder / ci-fixer over connected involved services): peer sibling
+  // checkouts + the layout section + the root-cwd repo-spec swap. See {@link resolveMultiRepoFanout}.
+  const fanout = await resolveMultiRepoFanout(
+    context,
+    { workspaceId, blockId, repo },
+    deps,
+    agentKindRegistry,
+  )
+  let peerRepos = fanout.peerRepos
+  let multiRepoSection = fanout.multiRepoSection
+  let repoSpecOverride = fanout.repoSpecOverride
+  const repoTargets = [...fanout.repoTargets]
+  // The repo target the per-kind body builds against — the task's own service by default, but
+  // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
+  // service (see {@link resolveConflictResolverPeer}). No-op (undefined) for an own-repo conflict.
+  let repoForKind = repo
+  const conflict = await resolveConflictResolverPeer(context, { workspaceId, blockId, repo }, deps)
+  if (conflict) {
+    repoForKind = conflict.repoForKind
+    repoSpecOverride = conflict.repoSpecOverride
+    repoTargets.push(conflict.repoForKind)
+  }
+
+  // Merger combined-diff: clone every peer PR's repo as a read-only sibling at its PR branch and
+  // name the sibling diff commands. Overrides the fan-out peers/section when it fires (undefined
+  // otherwise — the fan-out result stands). See {@link resolveMergerCombinedDiff}.
+  const merger = await resolveMergerCombinedDiff(
+    context,
+    { workspaceId, blockId, repo, workBranch },
+    deps,
+  )
+  if (merger) {
+    peerRepos = merger.peerRepos
+    multiRepoSection = merger.multiRepoSection
+    // Additive, not a replacement: the fan-out's peers stopped riding the BODY, but the token was
+    // already going to be scoped to whatever this dispatch resolved, and a leg dropped from the
+    // scope is a clone the harness cannot make.
+    repoTargets.push(...merger.repoTargets)
+  }
+
+  // Read-only reference repos + apriori reference branches: both independent of the fan-out above.
+  // The branch flag reflects whether the job is already multi-repo (a fan-out section OR a
+  // reference-repo section is present).
+  const references = resolveReferenceRepos(context, repo, deps)
+  repoTargets.push(...references.repoTargets)
+  const { referenceBranches, referenceBranchesSection } = await resolveReferenceBranches(
+    context,
+    { repo, workBranch, multiRepo: Boolean(multiRepoSection || references.referenceReposSection) },
+    deps,
+  )
+
+  return {
+    ...(peerRepos ? { peerRepos } : {}),
+    ...(multiRepoSection ? { multiRepoSection } : {}),
+    ...(repoSpecOverride ? { repoSpecOverride } : {}),
+    repoForKind,
+    ...(references.referenceRepos ? { referenceRepos: references.referenceRepos } : {}),
+    ...(references.referenceReposSection
+      ? { referenceReposSection: references.referenceReposSection }
+      : {}),
+    ...(referenceBranches ? { referenceBranches } : {}),
+    ...(referenceBranchesSection ? { referenceBranchesSection } : {}),
+    repoTargets,
   }
 }

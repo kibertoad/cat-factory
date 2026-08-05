@@ -44,7 +44,7 @@ export interface GitHubDelegationClientOptions {
  */
 export class DelegatedAppTokenSource implements AppTokenSource {
   readonly defaultAppId = ''
-  private readonly memo = new Map<number, { token: string; fetchedAt: number }>()
+  private readonly memo = new Map<string, { token: string; fetchedAt: number }>()
 
   constructor(
     private readonly opts: GitHubDelegationClientOptions,
@@ -68,14 +68,20 @@ export class DelegatedAppTokenSource implements AppTokenSource {
 
   async installationToken(
     installationId: number,
-    opts?: { forceRefresh?: boolean },
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
+    // The memo is keyed by the SCOPE, not the installation: a container dispatch asks for a token
+    // narrowed to the repos its run resolved, and serving that from an installation-keyed entry
+    // would hand one run another run's scope — too wide or too narrow, and silently either way.
+    // A key per distinct scope keeps the mothership's per-node rate limit comfortable, because a
+    // pipeline's dispatches repeat the same handful of repo sets.
+    const key = memoKey(installationId, opts?.repositoryIds)
     if (!opts?.forceRefresh) {
-      const cached = this.memo.get(installationId)
+      const cached = this.memo.get(key)
       if (cached && this.now() - cached.fetchedAt < DELEGATED_TOKEN_MEMO_MS) return cached.token
     }
-    const token = await this.mint(installationId, opts?.forceRefresh === true)
-    this.memo.set(installationId, { token, fetchedAt: this.now() })
+    const token = await this.mint(installationId, opts?.forceRefresh === true, opts?.repositoryIds)
+    this.memo.set(key, { token, fetchedAt: this.now() })
     return token
   }
 
@@ -86,7 +92,11 @@ export class DelegatedAppTokenSource implements AppTokenSource {
     return Promise.resolve({})
   }
 
-  private async mint(installationId: number, forceRefresh: boolean): Promise<string> {
+  private async mint(
+    installationId: number,
+    forceRefresh: boolean,
+    repositoryIds: number[] | undefined,
+  ): Promise<string> {
     const fetchImpl = this.opts.fetchImpl ?? fetch
     const machineToken = typeof this.opts.token === 'function' ? this.opts.token() : this.opts.token
     const res = await fetchImpl(
@@ -97,7 +107,14 @@ export class DelegatedAppTokenSource implements AppTokenSource {
           'content-type': 'application/json',
           authorization: `Bearer ${machineToken ?? ''}`,
         },
-        body: JSON.stringify({ installationId, ...(forceRefresh ? { forceRefresh } : {}) }),
+        body: JSON.stringify({
+          installationId,
+          ...(forceRefresh ? { forceRefresh } : {}),
+          // The mothership INTERSECTS this with the repos it links for the installation, so
+          // asking narrows and can never widen. Omitted ⇒ the whole linked set, which is what
+          // the engine's own gate/merge calls want.
+          ...(repositoryIds?.length ? { repositoryIds } : {}),
+        }),
       },
     )
     const body = (await res.json().catch(() => null)) as {
@@ -111,4 +128,15 @@ export class DelegatedAppTokenSource implements AppTokenSource {
     }
     return body.token
   }
+}
+
+/**
+ * The memo key for one delegated mint: the installation plus the SORTED repo scope, so two
+ * requests for the same set share an entry regardless of the order the legs resolved in, and an
+ * unscoped request (the engine's own calls) keeps its own entry rather than colliding with a
+ * scoped one.
+ */
+function memoKey(installationId: number, repositoryIds: number[] | undefined): string {
+  if (!repositoryIds?.length) return `${installationId}`
+  return `${installationId}:${[...repositoryIds].sort((a, b) => a - b).join(',')}`
 }
