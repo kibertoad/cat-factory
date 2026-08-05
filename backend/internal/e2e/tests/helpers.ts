@@ -72,6 +72,17 @@ export async function setFakeProfile(
 export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as const
 
 /**
+ * The pull request the faked GitHub integration serves a diff for, and the one a `review` task
+ * points at (source of truth: `src/fakeGitHub.ts` — `E2E_REVIEWED_PR`). Its diff touches
+ * `src/auth.ts` lines 10-13 on the head side, so a review finding anchored in that range can be
+ * posted as an INLINE comment rather than folded into the summary.
+ */
+export const GITHUB_REVIEWED_PR = {
+  number: 42,
+  url: 'https://github.com/octo/demo/pull/42',
+} as const
+
+/**
  * Make `workspaceId` a GitHub-connected workspace with the seeded repo + branches (see
  * `src/fakeGitHub.ts`), by writing the installation + projection rows over the control channel.
  * Call BEFORE opening the board so the SPA loads the connected state. The GitHub App is faked
@@ -80,6 +91,30 @@ export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as 
 export async function seedGitHub(request: APIRequestContext, workspaceId: string): Promise<void> {
   const res = await request.post(`${CONTROL_URL}/github-seed`, { data: { workspaceId } })
   if (!res.ok()) throw new Error(`github-seed control ${res.status()}: ${await res.text()}`)
+}
+
+/**
+ * Seed a repo that belongs to THIS workspace alone, and return it.
+ *
+ * Use this (not {@link GITHUB_REPO}) when a spec needs a repo-LINKED service frame. A `Service` is
+ * ACCOUNT-owned, so importing the shared repo dedupes across every board in the account and MOUNTS
+ * the frame that another spec's workspace already owns — a frame this workspace cannot start runs
+ * under. Seeding an own repo removes the collision at its source (source of truth for the
+ * derivation: `src/fakeGitHub.ts` — `ownRepoFor`).
+ */
+export async function seedOwnRepo(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<{ githubId: number; owner: string; name: string; defaultBranch: string }> {
+  const res = await request.post(`${CONTROL_URL}/github-seed-own-repo`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-seed-own-repo control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as {
+    githubId: number
+    owner: string
+    name: string
+    defaultBranch: string
+  }
 }
 
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
@@ -171,6 +206,18 @@ interface Block {
 interface Pipeline {
   id: string
 }
+/**
+ * A pipeline as the workspace snapshot carries it, with the two fields that say what the engine
+ * will actually DO with it: the ordered step kinds and the parallel per-step human-gate flags.
+ * Read back by {@link findPipelineByName} so a spec that authored a pipeline in the BUILDER can
+ * assert the persisted wire shape matches what was drawn.
+ */
+export interface PipelineShape {
+  id: string
+  name: string
+  agentKinds: string[]
+  gates?: boolean[]
+}
 // The full board read; only the fields the specs touch are typed.
 export interface WorkspaceSnapshot {
   workspace: Workspace
@@ -205,9 +252,17 @@ async function json<T>(res: {
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
+  /**
+   * The board's name. Worth setting when a spec drives the board SWITCHER, whose rows are labelled
+   * by name: the sample architecture uses fixed block ids, so two seeded boards are otherwise
+   * indistinguishable on screen.
+   */
+  name?: string,
 ): Promise<WorkspaceSnapshot> {
   const snapshot = await json<WorkspaceSnapshot>(
-    await request.post(`${BACKEND_URL}/workspaces`, { data: { seed: true } }),
+    await request.post(`${BACKEND_URL}/workspaces`, {
+      data: { seed: true, ...(name ? { name } : {}) },
+    }),
   )
   await seedGitHub(request, snapshot.workspace.id)
   // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
@@ -238,6 +293,25 @@ export async function createSimplePipeline(
       data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
+}
+
+/**
+ * Find a workspace pipeline by NAME off the board snapshot, or null.
+ *
+ * By name rather than by id because the caller is a spec that created the pipeline through the
+ * SPA (the builder), where the id is minted backend-side and never shown: the name is the only
+ * handle the test typed. Returns the persisted shape, so the spec can assert that what was drawn
+ * in the builder is what the engine will run.
+ */
+export async function findPipelineByName(
+  request: APIRequestContext,
+  workspaceId: string,
+  name: string,
+): Promise<PipelineShape | null> {
+  const snapshot = await json<{ pipelines?: PipelineShape[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.pipelines ?? []).find((p) => p.name === name) ?? null
 }
 
 /** An initiative as the create endpoint returns it (only the fields the specs read). */

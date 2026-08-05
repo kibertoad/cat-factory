@@ -362,7 +362,12 @@ async function copyOutput() {
               <UIcon :name="agent.icon" class="h-5 w-5" :style="{ color: agent.color }" />
             </div>
             <div class="min-w-0">
-              <h1 class="truncate text-base font-semibold text-white">{{ agent.label }}</h1>
+              <h1
+                class="truncate text-base font-semibold text-white"
+                data-testid="step-detail-agent"
+              >
+                {{ agent.label }}
+              </h1>
               <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
             </div>
             <div class="ms-auto flex items-center gap-1.5">
