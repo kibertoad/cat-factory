@@ -21,14 +21,26 @@ import {
   serializeServedOpenApiDoc,
 } from './generate-openapi.mjs'
 
-/** Compare one committed artifact against what the generator would write now. */
+/**
+ * Compare one committed artifact against what the generator would write now.
+ *
+ * An ABSENT file and an unreadable one get different messages, because they need different fixes and
+ * only one of them is the dev's: `pnpm gen:openapi` writes a file that is missing and does nothing
+ * at all for a permission error or a truncated checkout. Collapsing the two sent a reader to
+ * regenerate, see no change, and distrust the guard.
+ */
 async function checkArtifact(path, expected) {
   const rel = relative(process.cwd(), path)
   let committed
   try {
     committed = await readFile(path, 'utf8')
-  } catch {
-    console.error(`::error file=${rel}::${rel} is missing. Run \`pnpm gen:openapi\` and commit it.`)
+  } catch (error) {
+    console.error(
+      error?.code === 'ENOENT'
+        ? `::error file=${rel}::${rel} is missing. Run \`pnpm gen:openapi\` and commit it.`
+        : `::error file=${rel}::${rel} could not be read (${error?.code ?? error?.message}). ` +
+            'This is not a drift failure: the file exists but this process cannot read it.',
+    )
     return false
   }
   if (committed !== expected) {

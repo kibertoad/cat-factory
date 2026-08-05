@@ -344,6 +344,14 @@ third mode cannot inherit a fail-open rule written for someone else's cost model
   states the subject it reached. What the parser must still never do is guess: a comment naming no
   id falls back to the review that is still WAITING, and a settled one is acknowledged as settled.
 
+  One ticket can now carry BOTH reviews' question comments, so a reporter answering both sets in one
+  comment is the ordinary mistake rather than an edge case. The resolution drives exactly one review
+  (the first whose ids the comment names, in declaration order), and the other's ids are rejected
+  with a reason that says so: `finding X belongs to the other review on this ticket, answer it in a
+separate comment`. The distinction is load-bearing in both directions, so the `ReplyTarget` carries
+  the OTHER candidates' ids for it. "No finding X" told a reporter an id printed on their own ticket
+  was not real; the true reason has a remedy they can act on, and a typo must still read as a typo.
+
 - **No per-provider comment formatting.** The ack is markdown through the existing per-provider
   comment paths, like the question comment before it. Worth a Jira-ADF variant only if a reader
   complains.
