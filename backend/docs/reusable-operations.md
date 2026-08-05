@@ -322,6 +322,15 @@ registerMyOrgOperations({ agentKindRegistry, pipelineRegistry, taskTypeRegistry 
 start({ agentKindRegistry, pipelineRegistry, taskTypeRegistry /* …the rest */ })
 ```
 
+> Two things a deployment outside this repo needs to know about that snippet. The whole
+> vocabulary it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
+> descriptor-field rules, the `*_PIPELINE_ID` constants) is re-exported from
+> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed. And
+> `pipelineRegistry` is NOT yet an option on `start()` / `startLocal()`: on the Node facade it
+> currently rides `buildContainer`, and on the local facade a registered pipeline is unreachable.
+> That gap and the rest of what a consumer build hit are tracked in
+> [`deployment-extension-seam-gaps.md`](../../docs/initiatives/deployment-extension-seam-gaps.md).
+
 Inside, order matters for boot validation rather than for behaviour: register the fragments and
 the variants, then the pipeline that selects them, then the task type that names the pipeline, so
 `validateRegistrations` resolves every reference.
