@@ -38,20 +38,65 @@ export interface RepoTarget {
 export type ResolveRepoTarget = (workspaceId: string, blockId: string) => Promise<RepoTarget | null>
 
 /**
- * Mint a GitHub token for repo work. The optional run context lets a facade prefer
- * the run initiator's personal access token over the App/env default (see
- * `ResolveUserGitHubToken`). Optional ⇒ callers that don't know the run (the
- * bootstrapper, tests) call `mint(installationId)` unchanged.
+ * Mint a GitHub token for repo work.
+ *
+ * **Supplying the run context is what makes a mint a DISPATCH mint**, and the ctx is
+ * all-or-nothing on purpose. Passing one says two things at once: this token is going to a
+ * container, so a facade may prefer the run initiator's personal access token over the App/env
+ * default (see `ResolveUserGitHubToken`); and these are the repos it may reach. Omitting it says
+ * the opposite: an ENGINE call the platform makes on its own behalf (`RepoFiles` reads, the
+ * gate/merge clients), which is attributed to the deployment and stays installation-wide.
  *
  * `workspaceId` rides alongside `initiatedBy` because whether the initiator's own token may
  * be used is a per-WORKSPACE policy (`allowInitiatorPat`), and an installation id can serve
- * several workspaces — so it is supplied here rather than derived, where deriving it would
+ * several workspaces, so it is supplied here rather than derived, where deriving it would
  * mean guessing which workspace's policy governs the run.
+ *
+ * `repoIds` is the dispatch's TOKEN SCOPE: the repos this one job may reach, in the neutral
+ * `VcsRepoRef.repoId` vocabulary (see {@link jobTokenRepoIds}). It is REQUIRED rather than a
+ * hint, because a container dispatch that does not state its scope is not a special case worth
+ * having: it is the installation-wide token this seam exists to retire, and an optional field is
+ * how one comes back silently. A dispatch that genuinely could not resolve its repos passes an
+ * EMPTY array, which is a different fact from "reaches one repo" and is reported as such
+ * (`buildDispatchTokenMint` widens loudly). A facade whose credential is a PAT (local mode, a
+ * GitLab connection, the initiator's own token) cannot narrow anything and ignores the field.
  */
 export type MintInstallationToken = (
   installationId: number,
-  ctx?: { executionId: string; workspaceId: string; initiatedBy?: string },
+  ctx?: {
+    executionId: string
+    workspaceId: string
+    initiatedBy?: string
+    repoIds: string[]
+  },
 ) => Promise<string>
+
+/**
+ * The repos ONE dispatch's job token must reach: the primary checkout plus every auxiliary leg
+ * the job body carries (multi-repo fan-out peers, the conflict-resolver's targeted peer, the
+ * merger's combined-diff siblings, read-only reference repos). Deduped, in the neutral
+ * `VcsRepoRef.repoId` vocabulary, so a facade can narrow the mint to exactly this set instead of
+ * handing the container an installation-wide credential (`backend/docs/security-model.md`,
+ * Layer 3).
+ *
+ * Legs on a DIFFERENT installation are dropped rather than added: one job carries one token,
+ * minted for `primary.installationId`, so a leg outside that installation is unreachable with or
+ * without scoping. Including it would only make GitHub reject the mint and turn a pre-existing
+ * (documented) limitation into a failed dispatch.
+ *
+ * The PRIMARY is always first and always present: a scope that omitted it would mint a token
+ * that cannot clone the repo the run is about, which is a broken dispatch rather than a narrow
+ * one. That is also why this returns the ids rather than a boolean "should we scope": the
+ * decision of what an id MEANS belongs to whichever facade mints, not here.
+ */
+export function jobTokenRepoIds(primary: RepoTarget, auxiliary: readonly RepoTarget[]): string[] {
+  const ids = new Set<string>([primary.repoId])
+  for (const leg of auxiliary) {
+    if (leg.installationId !== primary.installationId) continue
+    ids.add(leg.repoId)
+  }
+  return [...ids]
+}
 
 /**
  * One private package-registry entry as it rides the harness job body: the decrypted

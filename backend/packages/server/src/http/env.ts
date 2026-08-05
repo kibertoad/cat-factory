@@ -410,8 +410,9 @@ export interface ServerContainer extends Core {
 
 /**
  * Mints a GitHub App installation token for a machine-authed mothership-mode node.
- * `repositoryIds` narrows the mint to those repos (GitHub's `repository_ids` scoping) —
- * the delegation controller always passes the in-scope projection's repo ids, so a
+ * `repositoryIds` narrows the mint to those repos (GitHub's `repository_ids` scoping). The
+ * delegation controller always passes a NON-EMPTY set drawn from the in-scope projection (the
+ * installation's linked repos, intersected with whatever narrower set the node asked for), so a
  * delegated token never grants more than the mothership projects for that installation.
  */
 export interface GitHubTokenDelegation {

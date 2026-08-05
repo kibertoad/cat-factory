@@ -740,6 +740,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'tutorial.tour_completed': 'cat_factory.platform.tutorial_tours_completed',
   'tutorial.tour_abandoned': 'cat_factory.platform.tutorial_tours_abandoned',
   'pipeline.adopted': 'cat_factory.platform.pipelines_adopted',
+  'dispatch.token_scope_widened': 'cat_factory.platform.dispatch_token_scope_widened',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -773,6 +774,8 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   // Neither a run nor a failure: one board catching up with the catalog, which is why it reads
   // as a backlog draining rather than as run volume.
   'pipeline.adopted': '{adoption}',
+  // One MINT that could not be narrowed, not one run: the unit names the token handed out.
+  'dispatch.token_scope_widened': '{token}',
 }
 
 /**

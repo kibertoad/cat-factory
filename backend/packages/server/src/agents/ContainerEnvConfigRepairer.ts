@@ -6,10 +6,12 @@ import type {
   EnvironmentProvider,
   GitHubInstallationRepository,
   ModelRef,
+  RepoProjectionRepository,
 } from '@cat-factory/kernel'
 import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
+import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
@@ -50,8 +52,19 @@ export interface ContainerEnvConfigRepairerDependencies {
   resolveTransport: ResolveRunnerTransport
   /** Resolve which GitHub installation a workspace's repos live under (clone + push). */
   installationRepository: Pick<GitHubInstallationRepository, 'getByWorkspace'>
-  /** Mints a short-lived GitHub installation token for clone + push. */
-  mintInstallationToken: (installationId: number) => Promise<string>
+  /**
+   * Mints a short-lived GitHub installation token for clone + push, scoped to the single repo
+   * being repaired. A repair has no run initiator, so it names no `initiatedBy` and always runs
+   * on the deployment credential.
+   */
+  mintInstallationToken: MintInstallationToken
+  /**
+   * The workspace's repo projection, read to turn the request's `owner`/`repo` into the numeric
+   * id the token scope is expressed in. Required rather than optional: this is the only thing
+   * standing between a repair container and an installation-wide credential, and an optional
+   * dependency is how a facade forgets to wire one without anything failing.
+   */
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
   /** Mints the signed, model-locked LLM-proxy session token the container uses. */
   sessionService: ContainerSessionService
   /** The provider whose `describeRepairAgent` supplies the repair prompt. */
@@ -117,7 +130,16 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
       throw new Error('The environment provider does not support agent-based config repair.')
     }
 
-    const ghToken = await this.deps.mintInstallationToken(installation.installationId)
+    // The token is scoped to the one repo the agent clones, edits and pushes back onto. The
+    // request names it by owner/name, so the numeric id comes off the workspace's projection;
+    // a repo the projection has not caught up with yields an EMPTY scope, which widens the mint
+    // installation-wide and says so, rather than failing a repair over a stale read.
+    const repoIds = await this.resolveRepoScope(workspaceId, owner, repo)
+    const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
+      executionId: jobId,
+      workspaceId,
+      repoIds,
+    })
     const sessionToken = await this.deps.sessionService.mint({
       workspaceId,
       executionId: jobId,
@@ -216,5 +238,28 @@ export class ContainerEnvConfigRepairer implements EnvConfigRepairer {
    */
   async stopRepair(handle: EnvConfigRepairHandle): Promise<void> {
     await this.jobs.release(handle.workspaceId, { runId: handle.jobId, jobId: handle.jobId })
+  }
+
+  /**
+   * The repo the repair token may reach, as the neutral id the mint's scope speaks in.
+   *
+   * A repair request identifies its target by `owner`/`repo` because that is what the bootstrap
+   * flow that raises it has, so the numeric id is read off the workspace's own projection. An
+   * empty result is returned rather than thrown: the projection lagging behind a just-linked repo
+   * is a reason to widen the token and report it (`buildDispatchTokenMint`), not to refuse a
+   * repair the operator asked for.
+   */
+  private async resolveRepoScope(
+    workspaceId: string,
+    owner: string,
+    repo: string,
+  ): Promise<string[]> {
+    const projected = await this.deps.repoRepository.list(workspaceId)
+    const match = projected.find(
+      (row) =>
+        row.owner.toLowerCase() === owner.toLowerCase() &&
+        row.name.toLowerCase() === repo.toLowerCase(),
+    )
+    return match ? [String(match.githubId)] : []
   }
 }
