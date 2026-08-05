@@ -1,5 +1,18 @@
 # @cat-factory/local-server
 
+## 0.111.2
+
+### Patch Changes
+
+- Updated dependencies [cad3408]
+- Updated dependencies [eee42e9]
+- Updated dependencies [cad3408]
+  - @cat-factory/server@0.227.0
+  - @cat-factory/integrations@0.134.0
+  - @cat-factory/node-server@0.177.3
+  - @cat-factory/executor-harness@1.92.2
+  - @cat-factory/orchestration@0.216.1
+
 ## 0.111.1
 
 ### Patch Changes

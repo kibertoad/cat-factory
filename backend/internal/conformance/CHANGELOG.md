@@ -1,5 +1,16 @@
 # @cat-factory/conformance
 
+## 0.31.4
+
+### Patch Changes
+
+- Updated dependencies [cad3408]
+- Updated dependencies [eee42e9]
+- Updated dependencies [cad3408]
+  - @cat-factory/server@0.227.0
+  - @cat-factory/integrations@0.134.0
+  - @cat-factory/orchestration@0.216.1
+
 ## 0.31.3
 
 ### Patch Changes
