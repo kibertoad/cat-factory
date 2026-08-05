@@ -27,6 +27,7 @@ const policy = (over: Partial<RiskPolicy> = {}): RiskPolicy =>
     classRules: {},
     classRulesByRole: {},
     dryRunRoles: [],
+    submissionClassesByRole: {},
     isDefault: true,
     version: 1,
     createdAt: 0,
@@ -61,7 +62,7 @@ describe('riskPolicyCeilings', () => {
 
 describe('rolePolicySummary', () => {
   it('is empty on a policy that treats every initiator alike', () => {
-    expect(rolePolicySummary(policy())).toEqual({ sandboxed: [], narrowed: [] })
+    expect(rolePolicySummary(policy())).toEqual({ sandboxed: [], narrowed: [], scoped: [] })
   })
 
   it('lists both layers in the shared role order', () => {
@@ -72,6 +73,7 @@ describe('rolePolicySummary', () => {
     expect(rolePolicySummary(p)).toEqual({
       sandboxed: ['member', 'viewer'],
       narrowed: ['admin'],
+      scoped: [],
     })
   })
 
@@ -79,6 +81,23 @@ describe('rolePolicySummary', () => {
   // limit that changes nothing about what that role's runs can do.
   it('does not also report class rules for a role the policy sandboxes', () => {
     const p = policy({ dryRunRoles: ['member'], classRulesByRole: { member: { docs: 'never' } } })
-    expect(rolePolicySummary(p)).toEqual({ sandboxed: ['member'], narrowed: [] })
+    expect(rolePolicySummary(p)).toEqual({ sandboxed: ['member'], narrowed: [], scoped: [] })
+  })
+
+  it('lists a role allowlisted to a subset of change classes', () => {
+    const p = policy({ submissionClassesByRole: { member: ['docs'] } })
+    expect(rolePolicySummary(p)).toEqual({ sandboxed: [], narrowed: [], scoped: ['member'] })
+  })
+
+  // The most restrictive policy this setting can express, and the one a summary must not drop:
+  // an EMPTY allowlist is scoped, where an absent entry is unrestricted.
+  it('lists a role allowlisted to NOTHING', () => {
+    const p = policy({ submissionClassesByRole: { viewer: [] } })
+    expect(rolePolicySummary(p).scoped).toEqual(['viewer'])
+  })
+
+  it('does not also report an allowlist for a role the policy sandboxes', () => {
+    const p = policy({ dryRunRoles: ['member'], submissionClassesByRole: { member: ['docs'] } })
+    expect(rolePolicySummary(p)).toEqual({ sandboxed: ['member'], narrowed: [], scoped: [] })
   })
 })

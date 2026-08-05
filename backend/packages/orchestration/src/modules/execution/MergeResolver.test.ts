@@ -479,3 +479,115 @@ describe('MergeResolver: dry run', () => {
     expect(finalizeMerge).toHaveBeenCalledOnce()
   })
 })
+
+describe('MergeResolver: per-role submission allowlist', () => {
+  it('lands a class the initiator’s role allowlists', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: ['docs', 'dependency'] } },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ outcome: 'auto_merged', reason: 'within_thresholds' })
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+    // Recorded even though the allowlist PERMITTED this one: the scope is what explains why the
+    // same role's next PR on `source` will not land.
+    expect(decision?.thresholds.submissionClasses).toEqual(['docs', 'dependency'])
+  })
+
+  it('refuses a class outside the allowlist, even on scores that would have merged', async () => {
+    const { resolver, finalizeMerge, raise } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: ['docs'] } },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({
+      outcome: 'awaiting_review',
+      reason: 'submission_not_allowed',
+    })
+    expect(finalizeMerge).not.toHaveBeenCalled()
+    expect(raise).toHaveBeenCalledOnce()
+  })
+
+  // The whole point of the setting: it is a bar on LANDING, where a class rule only decides how
+  // much review landing takes. A class rule cannot express this, because `always` under
+  // `classRules` is exactly the case that has to keep being refused.
+  it('outranks an `always` class rule and the master switch alike', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: {
+        ...PRESET,
+        classRules: { source: 'always' },
+        submissionClassesByRole: { member: ['docs'] },
+      },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ reason: 'submission_not_allowed' })
+    expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  it('reports the sandbox first when a run is BOTH sandboxed and outside the allowlist', async () => {
+    // Both refuse, but only one of them is fixable by re-running: telling someone their role may
+    // not land this class, when a live run of the same task would have landed it, is a lie.
+    const { resolver } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: ['docs'] } },
+      changeClass: 'source',
+    })
+    const decision = await resolver.resolveMergerStep(
+      'ws',
+      runBy('member', 'dry_run'),
+      assessment(),
+    )
+    expect(decision).toMatchObject({ reason: 'dry_run' })
+  })
+
+  it('names the policy, not the thresholds, in the review card it raises', async () => {
+    const { resolver, raise } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: ['docs'] } },
+      changeClass: 'source',
+    })
+    await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    const body = raise.mock.calls[0]?.[1]?.body as string
+    expect(body).toContain('source')
+    expect(body).not.toContain('outside the task')
+  })
+
+  it('leaves an unscoped role, and an unattributed run, landing exactly as before', async () => {
+    // Silence is not an empty allowlist: authoring one role's scope must not bar every other.
+    const preset = { ...PRESET, submissionClassesByRole: { viewer: ['docs'] } }
+    const scoped = makeResolver({ preset, changeClass: 'source' })
+    const admin = await scoped.resolver.resolveMergerStep('ws', runBy('admin'), assessment())
+    expect(admin).toMatchObject({ outcome: 'auto_merged' })
+    expect(admin?.thresholds.submissionClasses).toBeUndefined()
+
+    const anonymous = makeResolver({ preset, changeClass: 'source' })
+    const unattributed = await anonymous.resolver.resolveMergerStep(
+      'ws',
+      runBy(undefined),
+      assessment(),
+    )
+    expect(unattributed).toMatchObject({ outcome: 'auto_merged' })
+  })
+
+  it('refuses every class for a role scoped to an EMPTY allowlist', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: [] } },
+      changeClass: 'docs',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ reason: 'submission_not_allowed' })
+    expect(decision?.thresholds.submissionClasses).toEqual([])
+    expect(finalizeMerge).not.toHaveBeenCalled()
+  })
+
+  // The opposite disposition from the allowlist itself, and the one that keeps a VCS outage from
+  // changing policy: a diff nobody could read is not evidence that the change is out of scope.
+  it('lands an `unknown` classification whatever the allowlist says', async () => {
+    const { resolver, finalizeMerge } = makeResolver({
+      preset: { ...PRESET, submissionClassesByRole: { member: [] } },
+      changeClass: 'unknown',
+    })
+    const decision = await resolver.resolveMergerStep('ws', runBy('member'), assessment())
+    expect(decision).toMatchObject({ outcome: 'auto_merged', reason: 'within_thresholds' })
+    expect(finalizeMerge).toHaveBeenCalledOnce()
+  })
+})

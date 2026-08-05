@@ -578,7 +578,8 @@
         "input_gate_parked": "Görevin girdi kontrolünden yanıtlayın",
         "ticket_already_linked": "Bu kayda ait bir görev zaten var",
         "document_already_linked": "Belge zaten ekli",
-        "dry_run_not_mergeable": "Prova çalışması birleştirilemez"
+        "dry_run_not_mergeable": "Prova çalışması birleştirilemez",
+        "submission_not_allowed": "Bu çalışma için birleştirmeye izin verilmiyor"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -615,7 +616,8 @@
         "input_gate_parked": "Bu çalıştırma girdi kontrolünde bekliyor ve onay akışı bunu yanıtlayamaz. Çalıştırmadaki bildirimi kullanın: görevi düzeltip yeniden kontrol edin ya da yine de çalıştırın.",
         "ticket_already_linked": "Bir kayıt yalnızca tek bir görevi besleyebilir; yeniden bağlamak mevcut görevi oluşturulduğu bağlamdan yoksun bırakır. Bunun yerine o görevi açın ya da önce kaydın bağlantısını kaldırın.",
         "document_already_linked": "Bu belge başka bir göreve ekli. Önce oradan ayırın ya da ayrı bir kopya ekleyin.",
-        "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
+        "dry_run_not_mergeable": "Bu pull request bir prova çalışmasından geliyor, bu yüzden buradan birleştirilemez. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın.",
+        "submission_not_allowed": "Bu görevin birleştirme politikası, çalışmayı başlatan rolün bu tür bir değişikliği birleştirmesine izin vermiyor. Rolü buna izin veren bir takım arkadaşı birleştirebilir ya da bir yönetici birleştirme ön ayarındaki politikayı genişletebilir."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",
@@ -1269,6 +1271,7 @@
         "class_auto_merge": "Bu ön ayar bu değişiklik kategorisini her zaman otomatik birleştirir, bu yüzden puanlar karşılaştırılmadı.",
         "class_requires_review": "Bu ön ayar, puanlar ne olursa olsun bu değişiklik kategorisini her zaman bir kişiye gönderir.",
         "role_requires_review": "Bu ön ayar, bir {role} tarafından başlatılan çalışmaları bu tür değişiklikler için puanlardan bağımsız olarak insan incelemesine yönlendirir. Daha yetkili bir ekip arkadaşı bu PR’ı olduğu gibi birleştirebilir.",
+        "submission_not_allowed": "Bu ön ayar, bir {role} tarafından başlatılan çalışmaların yalnızca şu değişiklik türlerini birleştirmesine izin veriyor: {classes}. Bu farklı bir tür, bu yüzden pull request rolü buna izin veren birini bekliyor.",
         "dry_run": "Bu bir prova çalışmasıydı; bu nedenle pull request bir insan için açık bırakıldı ve puanlar karşılaştırılmadı. Bu çalışma alanının birleştireceği bir pull request üretmek için görevi gerçek çalışma olarak yeniden başlatın."
       },
       "scores": "Puanlar",
@@ -1280,7 +1283,8 @@
       "ceiling": "üst sınır {value}",
       "rationale": "Gerekçe",
       "noAssessment": "Birleştirici puanlı bir değerlendirme döndürmedi.",
-      "noResult": "Henüz bir birleştirme kararı kaydedilmedi."
+      "noResult": "Henüz bir birleştirme kararı kaydedilmedi.",
+      "noSubmittableClasses": "yok"
     },
     "testReport": {
       "title": "Test raporu",
@@ -2909,10 +2913,15 @@
       },
       "roleRules": {
         "heading": "Başlatan role göre sınırlar",
-        "help": "Bir çalıştırmanın ne yapabileceği, onu kimin başlattığına da bağlıdır. Bir rol yukarıdaki kurallardan daha katı kurallara ya da yalnızca prova çalışmalarına tabi tutulabilir: pipeline çalışır ve bir pull request açar, hiçbir şey birleştirilmez. Bir rol bu ilkeyi yalnızca sıkılaştırabilir, asla gevşetemez.",
-        "autoMergeOffWarning": "Bu ön ayarda otomatik birleştirme kapalı, bu yüzden her pull request zaten bir kişiye gidiyor ve aşağıdaki kategori sınırları bir şey eklemiyor. Prova çalışmaları yine geçerli: elle birleştirmeyi de reddederler.",
+        "help": "Bir çalışmanın ne yapabileceği, onu kimin başlattığına da bağlıdır. Bir rol yalnızca belirli değişiklik türleriyle sınırlanabilir, yukarıdakilerden daha katı kurallara bağlanabilir ya da yalnızca prova çalışmalarıyla sınırlanabilir: hat çalışır ve bir pull request açar, hiçbir şey birleştirilmez. Bir rol bu politikayı yalnızca daraltabilir, asla genişletemez.",
+        "autoMergeOffWarning": "Bu ön ayarda otomatik birleştirme kapalı, yani her pull request zaten bir insana gidiyor ve aşağıdaki sınıf sınırları bir şey eklemiyor. Birleştirme sınırı ve prova çalışmaları geçerliliğini koruyor: ikisi de elle birleştirmeyi de reddeder.",
         "sandboxLabel": "Yalnızca prova çalışmaları",
-        "sandboxNote": "Bu rolün başlattığı çalıştırmalar bir pull request açar ve hiçbir şeyi birleştirmez, bu nedenle aşağıdaki kategori kuralları onları daha da katılaştıramaz.",
+        "sandboxNote": "Bu rolün çalışmaları bir pull request açar ve hiçbir şeyi birleştirmez, bu yüzden aşağıdaki sınırların hiçbiri onları daha katı hâle getiremez.",
+        "submissionLabel": "Bu rolün hangi değişiklikleri birleştirebileceğini sınırla",
+        "submissionHelp": "Açıkken, bu rolün başlattığı çalışmalarda yalnızca işaretli değişiklik türleri birleştirilir. Diğerleri, puanlar ne olursa olsun başka birini bekler. Pull request yine de açılır ve git sunucusunda elle birleştirilebilir.",
+        "submissionNone": "Hiçbir şey işaretli değil, bu yüzden bu çalışma alanı bu rolün hiçbir çalışmasını birleştirmez.",
+        "submissionBadge": "Birleştirme sınırlı",
+        "classHeading": "Değişiklik türüne göre gereken inceleme",
         "noRules": "Kategori sınırı yok",
         "ruleCount": "{count} kategori sınırlandırıldı | {count} kategori sınırlandırıldı",
         "inherit": "Bu ilkeyle aynı",
@@ -6042,6 +6051,7 @@
       "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler.",
       "refused": {
         "relaxes_role_sandbox": "Rolün için kullanılamaz: bu görevin çalışmaları yalıtılmış çalışır ve bu ilke birleştirmelerine izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
+        "relaxes_role_submission_allowlist": "Rolün için kullanılamaz: bu ilke, bu görevde sana kapalı olan değişiklik türlerini birleştirmene izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
         "relaxes_role_class_rule": "Rolün için kullanılamaz: bu ilke, bu görevde incelemen gereken değişiklikleri otomatik birleştirir. Bir çalışma alanı yöneticisi bunu değiştirebilir."
       }
     },
@@ -6061,6 +6071,7 @@
       "ciAttempts": "Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir. | Çalıştırma, kırmızı bir CI'yi yeşile çevirmek için pes etmeden önce {count} deneme yapabilir.",
       "roleHeading": "Çalıştırmayı kim başlattı",
       "roleSandboxed": "{roles} tarafından başlatılan çalıştırmalar bir pull request açar ve asla birleştirilmez.",
+      "roleScoped": "{roles} tarafından başlatılan çalışmalar yalnızca belirli değişiklik türlerini birleştirir.",
       "roleNarrowed": "{roles} tarafından başlatılan çalıştırmalar bazı değişiklik kategorilerinde daha katı kurallara tabidir."
     }
   },

@@ -11,6 +11,7 @@ const policy = (over: Partial<RolePolicyView> = {}): RolePolicyView => ({
   classRules: {},
   classRulesByRole: {},
   dryRunRoles: [],
+  submissionClassesByRole: {},
   ...over,
 })
 
@@ -131,6 +132,98 @@ describe('refuseRiskPolicySelection: the class-rule arm', () => {
         actor: member,
       }),
     ).toBe('relaxes_role_class_rule')
+  })
+})
+
+describe('refuseRiskPolicySelection: the submission-allowlist arm', () => {
+  it('refuses a swap onto a preset that allowlists the role nothing at all', () => {
+    // The same escape hatch as the sandbox arm, through the field ADR 0039 added: a member the
+    // preset holds to docs cannot re-point the task at one that leaves them unrestricted.
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        to: policy(),
+        actor: member,
+      }),
+    ).toBe('relaxes_role_submission_allowlist')
+  })
+
+  it('refuses a swap that ADDS a class to the allowlist the selector was under', () => {
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        to: policy({ submissionClassesByRole: { member: ['docs', 'source'] } }),
+        actor: member,
+      }),
+    ).toBe('relaxes_role_submission_allowlist')
+  })
+
+  // The distinction the editor is a switch plus tick boxes to preserve: an EMPTY allowlist lands
+  // nothing and an ABSENT one lands everything, so a swap between them is the widest relaxation
+  // the setting can express, not a no-op between two falsy values.
+  it('refuses moving off an EMPTY allowlist to an absent one', () => {
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { member: [] } }),
+        to: policy(),
+        actor: member,
+      }),
+    ).toBe('relaxes_role_submission_allowlist')
+  })
+
+  it('allows a swap that narrows the allowlist, or keeps it', () => {
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { member: ['docs', 'source'] } }),
+        to: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        actor: member,
+      }),
+    ).toBeNull()
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        to: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        actor: member,
+      }),
+    ).toBeNull()
+  })
+
+  it('allows a swap INTO an allowlist from an unrestricted preset', () => {
+    // Narrow-only cuts one way here too: the selector was under no allowlist, so the move takes
+    // capability away rather than granting it.
+    expect(
+      refuseRiskPolicySelection({
+        from: policy(),
+        to: policy({ submissionClassesByRole: { member: ['docs'] } }),
+        actor: member,
+      }),
+    ).toBeNull()
+  })
+
+  it('reads an allowlist on ANOTHER tier as no restriction on this one', () => {
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({ submissionClassesByRole: { viewer: ['docs'] } }),
+        to: policy(),
+        actor: member,
+      }),
+    ).toBeNull()
+  })
+
+  it('names the allowlist ahead of a class rule the same swap also relaxes', () => {
+    // The arms run in the engine's own precedence order, so a swap that drops both restrictions
+    // reports the one that bars LANDING rather than the one that only demands review.
+    expect(
+      refuseRiskPolicySelection({
+        from: policy({
+          classRules: { source: 'always' },
+          classRulesByRole: { member: { source: 'never' } },
+          submissionClassesByRole: { member: ['docs'] },
+        }),
+        to: policy({ classRules: { source: 'always' } }),
+        actor: member,
+      }),
+    ).toBe('relaxes_role_submission_allowlist')
   })
 })
 

@@ -6,6 +6,7 @@ import type {
   ModelPreset,
   RequirementConcernLevel,
   StepGating,
+  SubmissionClassesByRole,
   WorkspaceRole,
   WorkspaceSettings,
 } from './types.js'
@@ -125,6 +126,14 @@ export const DEFAULT_CLASS_RULES_BY_ROLE: ClassRulesByRole = {}
 export const DEFAULT_DRY_RUN_ROLES: readonly WorkspaceRole[] = []
 
 /**
+ * Nor any per-role submission allowlist: every role may land every class until an operator says
+ * otherwise. The identity here is an ABSENT entry per role rather than an empty list, which is
+ * why this is `{}` and not a map of full lists: an explicit list would silently bar whatever
+ * class the vocabulary gains next, and a seed may not make that call for a deployment.
+ */
+export const DEFAULT_SUBMISSION_CLASSES_BY_ROLE: SubmissionClassesByRole = {}
+
+/**
  * A built-in merge-preset template (no `createdAt` yet, but with a STABLE id so a
  * workspace's persisted copy can be matched against the catalog and reseeded). The
  * service stamps each with `createdAt` on first seed; {@link seedRiskPolicies} lists
@@ -159,6 +168,8 @@ export interface RiskPolicySeed {
   classRulesByRole: ClassRulesByRole
   /** Roles whose runs are forced into dry-run mode; empty on the built-ins. */
   dryRunRoles: WorkspaceRole[]
+  /** Per-role allowlist of landable change classes; empty on the built-ins. */
+  submissionClassesByRole: SubmissionClassesByRole
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: boolean
   /**
@@ -199,6 +210,7 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     classRules: { ...DEFAULT_MERGE_CLASS_RULES },
     classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
+    submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
     isDefault: true,
     version: 6,
   },
@@ -230,6 +242,10 @@ export const RISK_POLICY_SEEDS: RiskPolicySeed[] = [
     // subtract from a preset that already routes every PR to a human.
     classRulesByRole: { ...DEFAULT_CLASS_RULES_BY_ROLE },
     dryRunRoles: [...DEFAULT_DRY_RUN_ROLES],
+    // Nor an allowlist. This preset already routes every PR to a human, but the allowlist is the
+    // one role setting that would still bite here (it refuses the MANUAL merge too), and seeding
+    // one would be this catalog deciding which tier a deployment trusts with what.
+    submissionClassesByRole: { ...DEFAULT_SUBMISSION_CLASSES_BY_ROLE },
     isDefault: false,
     version: 6,
   },

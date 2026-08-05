@@ -7,6 +7,9 @@
   (`@cat-factory/app`)
 
 Supersedes the `role-scoped-merge-policy` initiative tracker, whose committed scope is complete.
+Extended by [ADR 0039](./0039-role-scoped-submission-allowlists.md), which closes the gap this ADR
+names below: a per-role allowlist of the change classes a preset will land at all, so a tier can be
+held short of `source` without being sandboxed on everything.
 
 ## Context
 
@@ -223,10 +226,11 @@ Gating the SELECTION behind `settings.manage` was the obvious fix and the wrong 
 library exists to be chosen from per task, and taking that from members would make every preset
 admin-only on deployments that authored no role policy at all. `refuseRiskPolicySelection`
 (contracts) instead applies this feature's own narrow-only property one level up: **a selection may
-not drop a restriction the selector's own role was under.** Two arms, and both are role-scoped:
-losing the sandbox, or losing a class rule the ROLE LAYER narrowed (keyed on `narrowedByRole`, the
-same test `thresholds.roleRule` already uses, so a class the two presets merely differ on in their
-BASE map is not a refusal).
+not drop a restriction the selector's own role was under.** Two arms when this ADR landed, and both
+are role-scoped: losing the sandbox, or losing a class rule the ROLE LAYER narrowed (keyed on
+`narrowedByRole`, the same test `thresholds.roleRule` already uses, so a class the two presets
+merely differ on in their BASE map is not a refusal). ADR 0039 adds the third, over the submission
+allowlist, on the rule stated here: every role-scoped restriction owes this guard an arm.
 
 That last exclusion is the design decision, not an oversight. `classRules` and the ceilings say the
 same thing to every tier, so moving a task between them is the per-task policy choice the library

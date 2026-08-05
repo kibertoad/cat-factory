@@ -38,6 +38,9 @@ const REFUSAL_MESSAGE: Record<RiskPolicySelectionRefusal, string> = {
   relaxes_role_sandbox:
     'This task runs sandboxed for your role, and the merge policy you picked does not. Ask a ' +
     'workspace admin to change the policy or to run this task themselves.',
+  relaxes_role_submission_allowlist:
+    'The merge policy you picked would let your role land kinds of change this task holds it ' +
+    'back from. Ask a workspace admin to change the policy or to run this task themselves.',
   relaxes_role_class_rule:
     'The merge policy you picked auto-merges changes your role is held to review on this task. ' +
     'Ask a workspace admin to change the policy or to run this task themselves.',

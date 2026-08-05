@@ -1,0 +1,13 @@
+-- Per-role SUBMISSION ALLOWLIST on the merge preset.
+--
+-- `submission_classes_by_role` is a JSON partial map from workspace role (`admin` | `member` |
+-- `viewer`) to the list of change classes that role's runs may LAND at all. It sits above the
+-- per-class rules rather than beside them: a class may be `always` under `class_rules_by_role`
+-- and still outside the role's allowlist, and the allowlist wins, because it bars landing where
+-- a class rule only decides how much review landing takes.
+--
+-- An ABSENT role entry means unrestricted (not empty), so the `{}` default leaves every
+-- existing row on exactly its previous behaviour: nobody is scoped. An EMPTY array is a real and
+-- different policy (that role lands nothing). Mirrored on Node by the `submission_classes_by_role`
+-- text column on the Drizzle `merge_threshold_presets` table.
+ALTER TABLE merge_threshold_presets ADD COLUMN submission_classes_by_role TEXT NOT NULL DEFAULT '{}';

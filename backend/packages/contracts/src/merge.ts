@@ -1,6 +1,11 @@
 import * as v from 'valibot'
 import { stepGatingSchema } from './consensus.js'
-import { changeClassSchema, RULEABLE_CHANGE_CLASSES, type ChangeClass } from './mergeTrackRecord.js'
+import {
+  changeClassSchema,
+  RULEABLE_CHANGE_CLASSES,
+  type ChangeClass,
+  type RuleableChangeClass,
+} from './mergeTrackRecord.js'
 import { DEFAULT_JUDGE_MAX_BOUNCES, DEFAULT_JUDGE_MIN_SCORE } from './judge.js'
 import { WORKSPACE_ROLES, workspaceRoleSchema, type WorkspaceRole } from './workspace-members.js'
 
@@ -125,6 +130,51 @@ export type ClassRulesByRole = v.InferOutput<typeof classRulesByRoleSchema>
  */
 export const dryRunRolesSchema = v.array(workspaceRoleSchema)
 export type DryRunRoles = v.InferOutput<typeof dryRunRolesSchema>
+
+/** A picklist over the classes a rule (or an allowlist entry) may be authored for. */
+const ruleableChangeClassSchema = v.picklist(RULEABLE_CHANGE_CLASSES)
+
+/**
+ * The change classes a preset will LAND at all for a given role: a partial map from
+ * {@link workspaceRoleSchema} to the list of classes that role's runs may submit.
+ *
+ * This is the third role-scoped setting, and it answers a question neither of its siblings can.
+ * `classRulesByRole` with `never` routes a class to a human, but the human it routes to may be
+ * the initiator themselves: the review card carries a merge button and the RBAC write floor is
+ * `member`, so a member's run can raise its own card and land on the next tap. `dryRunRoles`
+ * closes that by refusing both exits, but only for EVERY class at once. Between them sits the
+ * thing a workspace most often wants to say: a product manager may land copy and dependency
+ * bumps on this service, and may not land source, however good the scores look.
+ *
+ * Three readings define it, and each is deliberate:
+ *
+ *  - **An ALLOWLIST, never a denylist.** A class nobody thought about is OUTSIDE the list, so a
+ *    class added to the vocabulary in a later release is refused for a scoped role rather than
+ *    silently landed by it. Same safety property as {@link narrowMergeClassRule}: authoring one
+ *    can subtract capability, never add it.
+ *  - **Absent means UNRESTRICTED, not empty.** Silence is not an empty allowlist, exactly as an
+ *    absent class is not a `thresholds` rule in {@link classRulesByRoleSchema}. Only a role
+ *    somebody wrote an entry for is scoped, so `{}` is the identity the wire contract says it is
+ *    (and an EMPTY array is a real, different policy: that role lands nothing).
+ *  - **`unknown` is INERT.** An unreadable diff must not hold back a run that would otherwise
+ *    have landed, the same reading `resolveMergeClassRule` takes: a VCS outage cannot change
+ *    policy. This is the OPPOSITE direction from the first reading, and deliberately so: a class
+ *    we have never heard of is a policy gap, while a class we could not READ is an outage, and
+ *    only one of those is evidence about the change.
+ */
+export const submissionClassesByRoleSchema = v.partial(
+  // STRICT for the same reason both rule maps are: a caller who thinks they authored an
+  // allowlist must not be told it worked when the role name was a typo.
+  v.strictObject(
+    Object.fromEntries(WORKSPACE_ROLES.map((r) => [r, v.array(ruleableChangeClassSchema)])) as {
+      [K in (typeof WORKSPACE_ROLES)[number]]: v.ArraySchema<
+        typeof ruleableChangeClassSchema,
+        undefined
+      >
+    },
+  ),
+)
+export type SubmissionClassesByRole = v.InferOutput<typeof submissionClassesByRoleSchema>
 
 /**
  * How much review a rule DEMANDS, higher is stricter. The ordering is the point of the scale:
@@ -258,6 +308,49 @@ export function dryRunForcedForRole(
   return !!role && !!dryRunRoles?.includes(role)
 }
 
+/**
+ * The allowlist that governs one run, or `undefined` when nothing does.
+ *
+ * Kept apart from {@link submissionAllowedForRole} because the two questions differ: "is this run
+ * scoped at all" decides whether the merge path owes a classification (one VCS call), and only
+ * then does "may it land THIS class" have anything to compare. Reading the boolean first and the
+ * verdict second is what keeps an unscoped preset paying for neither.
+ */
+export function submissionAllowlistForRole(
+  byRole: SubmissionClassesByRole | null | undefined,
+  role: WorkspaceRole | null | undefined,
+): readonly RuleableChangeClass[] | undefined {
+  // A run with no pinned role matches no entry, exactly as `dryRunForcedForRole` reads one: a
+  // schedule fire / public-API start / auth-disabled dev is not a tier, and treating it as one
+  // would scope every unattributed run in a deployment the day somebody first scopes a role.
+  if (!role) return undefined
+  return byRole?.[role]
+}
+
+/**
+ * Whether a preset lets a run started by `role` LAND a change of `changeClass`.
+ *
+ * Every absence answers `true`, and each for its own reason: no pinned role matches no entry, a
+ * role with no authored entry is unrestricted, and an `unknown` class is an unreadable diff
+ * rather than evidence about the change. Only a role that HAS an allowlist, on a diff that
+ * classified, can be refused, and then the list is exhaustive, so a class outside it is refused
+ * whether the operator excluded it on purpose or the vocabulary gained it after they wrote the
+ * policy.
+ *
+ * It lives in contracts, beside the map it reads, because the SPA has to state the same verdict:
+ * a merge control that offered to land a change the engine will refuse would be advertising a
+ * capability the person does not have.
+ */
+export function submissionAllowedForRole(
+  byRole: SubmissionClassesByRole | null | undefined,
+  role: WorkspaceRole | null | undefined,
+  changeClass: ChangeClass,
+): boolean {
+  if (changeClass === 'unknown') return true
+  const allowed = submissionAllowlistForRole(byRole, role)
+  return !allowed || allowed.includes(changeClass)
+}
+
 export const mergeAssessmentSchema = v.object({
   /** How intricate the change is (size, coupling, subtlety). */
   complexity: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
@@ -376,6 +469,14 @@ export const riskPolicySchema = v.object({
    * and the PR opens, but nothing merges. Empty on the built-ins.
    */
   dryRunRoles: dryRunRolesSchema,
+  /**
+   * Per-ROLE allowlist of the change classes this preset will land at all
+   * ({@link submissionClassesByRoleSchema}). Orthogonal to `classRulesByRole`, and both apply: a
+   * class may be `always` under the role's class rules and still outside its allowlist, and the
+   * allowlist wins, because it bars landing rather than deciding how much review landing takes.
+   * A role with no entry is unrestricted, so `{}` is the identity. Empty on the built-ins.
+   */
+  submissionClassesByRole: submissionClassesByRoleSchema,
   /** The workspace's fallback preset, used by tasks that pick none. Exactly one is true. */
   isDefault: v.boolean(),
   /**
@@ -425,6 +526,8 @@ export const createRiskPolicySchema = v.object({
   classRulesByRole: v.optional(classRulesByRoleSchema, {}),
   /** Roles whose runs are forced into dry-run mode; absent ⇒ nobody is sandboxed. */
   dryRunRoles: v.optional(dryRunRolesSchema, []),
+  /** Per-role allowlist of landable change classes; absent ⇒ every role is unrestricted. */
+  submissionClassesByRole: v.optional(submissionClassesByRoleSchema, {}),
   /** Make this the workspace default (demotes the previous default). */
   isDefault: v.optional(v.boolean(), false),
 })
@@ -453,6 +556,8 @@ export const updateRiskPolicySchema = v.object({
   classRulesByRole: v.optional(classRulesByRoleSchema),
   /** Replaces the whole list, so un-sandboxing a role is a plain omission. */
   dryRunRoles: v.optional(dryRunRolesSchema),
+  /** Replaces the whole map, so un-scoping a role is a plain omission (never an empty array). */
+  submissionClassesByRole: v.optional(submissionClassesByRoleSchema),
   isDefault: v.optional(v.boolean()),
 })
 export type UpdateRiskPolicyInput = v.InferOutput<typeof updateRiskPolicySchema>
@@ -504,6 +609,17 @@ export const mergeDecisionThresholdsSchema = v.object({
    * someone else".
    */
   roleRule: v.optional(mergeClassRuleSchema),
+  /**
+   * The change classes the initiator's role may land at all, recorded whenever that role carried
+   * a submission allowlist, not only when the allowlist is what held the PR back.
+   *
+   * Present-means-scoped is the useful reading here (the opposite of `roleRule` above, which is
+   * recorded only when it changed the outcome): an allowlist that PERMITTED this class is the
+   * fact that explains why an otherwise identical PR on another class will not land, and a
+   * banner that mentioned the scope only on the refusal would make the permission look like an
+   * absence of policy.
+   */
+  submissionClasses: v.optional(v.array(ruleableChangeClassSchema)),
 })
 export type MergeDecisionThresholds = v.InferOutput<typeof mergeDecisionThresholdsSchema>
 
@@ -533,6 +649,12 @@ export const mergeDecisionSchema = v.object({
    *    `class_requires_review` because the two need opposite fixes: one is a policy about the
    *    KIND of change (edit the class rule), the other about WHO started it (a teammate on a
    *    higher tier can merge this PR as it stands).
+   *  - `submission_not_allowed`: review; the initiator's role carries a submission allowlist and
+   *    this run's change class is outside it, so the platform will not land the work whatever the
+   *    scores or the class rules say. Kept apart from `role_requires_review` because the remedies
+   *    differ in kind: that one is satisfied by ANY reviewer merging the PR through this
+   *    platform, while this one refuses the platform merge path outright (the PR is still a real
+   *    PR, and someone with write access on the host can merge it there).
    *  - `dry_run`: review; the run was a DRY RUN, so no outcome of the assessment could have
    *    merged it. The master switch above every other reason, including `auto_merge_disabled`:
    *    a preset that would otherwise auto-merge must not report a dry run's PR as "held back by
@@ -549,6 +671,7 @@ export const mergeDecisionSchema = v.object({
     'class_auto_merge',
     'class_requires_review',
     'role_requires_review',
+    'submission_not_allowed',
     'dry_run',
   ]),
   /** The merger's assessment (absent only when it produced no parseable one). */
