@@ -160,16 +160,19 @@ describe('isPlatformAuthoredComment', () => {
     })
     expect(isPlatformAuthoredComment(ack)).toBe(true)
 
-    const questions = renderReviewQuestionsComment({
-      workspaceId: 'ws1',
-      subject: 'requirements',
-      reviewId: 'rrv_1',
-      iteration: 1,
-      maxIterations: 3,
-      issueRef: 'jira:ENG-1',
-      runId: 'run_1',
-      findings: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
-    } as never)
+    const questions = renderReviewQuestionsComment(
+      {
+        workspaceId: 'ws1',
+        subject: 'requirements',
+        reviewId: 'rrv_1',
+        iteration: 1,
+        maxIterations: 3,
+        issueRef: 'jira:ENG-1',
+        runId: 'run_1',
+        findings: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
+      } as never,
+      { ticketReplies: true },
+    )
     expect(isPlatformAuthoredComment(questions)).toBe(true)
   })
 

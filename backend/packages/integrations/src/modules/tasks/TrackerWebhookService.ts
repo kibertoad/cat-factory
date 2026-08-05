@@ -108,6 +108,16 @@ interface ReplyTarget {
   subject: ReviewQuestionSubject
   gateway: ReviewReplyGateway
   review: ReplyableReview
+  /**
+   * Finding ids that are real but belong to one of the block's OTHER live reviews.
+   *
+   * Carried from the resolution (which held every candidate) so the apply loop can tell
+   * "there is no such finding" from "that finding is in the other loop on this ticket". Both are
+   * rejections, but only the second has a remedy the reporter can act on, and a comment answering
+   * both reviews at once is the ordinary way to produce one: they are reading a single ticket
+   * carrying both sets of ids.
+   */
+  foreignItemIds: ReadonlySet<string>
 }
 
 /**
@@ -117,6 +127,15 @@ interface ReplyTarget {
  * here too instead of being silently unreachable from a ticket.
  */
 const REPLY_SUBJECTS = Object.keys(REVIEW_QUESTION_POLICIES) as ReviewQuestionSubject[]
+
+/** The finding ids a comment's commands name, across every id-addressed verb. */
+function namedItemIds(commands: readonly ReviewReplyCommand[]): ReadonlySet<string> {
+  return new Set(
+    commands.flatMap((command) =>
+      command.verb === 'answer' || command.verb === 'dismiss' ? [command.itemId] : [],
+    ),
+  )
+}
 
 export interface TrackerWebhookServiceDependencies {
   taskRepository: TaskRepository
@@ -319,6 +338,10 @@ export class TrackerWebhookService {
    *
    *  1. **A named finding id decides it.** The ids are platform-minted and unique across both
    *     stores, so a comment that names one is unambiguous no matter how many reviews are live.
+   *     A comment naming ids from BOTH reviews still resolves to one of them, and `applyCommands`
+   *     then rejects the other's ids as belonging to another review — reported in the ack rather
+   *     than dropped, because "that id is real, just not in the loop you are answering" is the one
+   *     rejection a reporter can act on.
    *  2. **Otherwise the review PARKED ON A HUMAN decides it** (`reviewAwaitsHuman`). A bare
    *     `proceed` is about the loop that stopped the run, which is the one holding a human's
    *     answer and not merely the one that has not settled: `incorporating` / `reviewing` are the
@@ -327,6 +350,10 @@ export class TrackerWebhookService {
    *  3. **Otherwise the declaration order.** Reached only by a control verb sent to a block whose
    *     every review is settled or mid-cycle, where the ack says what it did (`settled`, or the
    *     current state) whichever one is picked, so the choice cannot mislead.
+   *
+   * Deliberately NO special case for a single candidate. Tie-break 1 already answers the one-review
+   * case correctly (there is nothing to break a tie between), so a `length <= 1` short-circuit
+   * would only create a second path that could answer differently from the general one.
    *
    * Reads every wired subject's store in parallel: they are independent point lookups on a path
    * that has already established the comment carries commands.
@@ -337,6 +364,7 @@ export class TrackerWebhookService {
     commands: ReviewReplyCommand[],
     gateways: Partial<Record<ReviewQuestionSubject, ReviewReplyGateway>>,
   ): Promise<ReplyTarget | null> {
+    type Candidate = Omit<ReplyTarget, 'foreignItemIds'>
     const candidates = (
       await Promise.all(
         REPLY_SUBJECTS.map(async (subject) => {
@@ -346,20 +374,22 @@ export class TrackerWebhookService {
           return review ? { subject, gateway, review } : null
         }),
       )
-    ).filter((candidate): candidate is ReplyTarget => candidate !== null)
-    if (candidates.length <= 1) return candidates[0] ?? null
+    ).filter((candidate): candidate is Candidate => candidate !== null)
 
-    const named = new Set(
-      commands.flatMap((command) =>
-        command.verb === 'answer' || command.verb === 'dismiss' ? [command.itemId] : [],
-      ),
-    )
-    return (
+    const named = namedItemIds(commands)
+    const chosen =
       candidates.find((c) => c.review.items.some((item) => named.has(item.id))) ??
       candidates.find((c) => reviewAwaitsHuman(c.review.status)) ??
-      candidates[0] ??
-      null
-    )
+      candidates[0]
+    if (!chosen) return null
+    return {
+      ...chosen,
+      foreignItemIds: new Set(
+        candidates
+          .filter((c) => c !== chosen)
+          .flatMap((c) => c.review.items.map((item) => item.id)),
+      ),
+    }
   }
 
   /**
@@ -375,7 +405,7 @@ export class TrackerWebhookService {
     target: ReplyTarget,
     commands: ReviewReplyCommand[],
   ): Promise<ReviewReplyAck> {
-    const { subject, gateway, review } = target
+    const { subject, gateway, review, foreignItemIds } = target
     const runId = (await this.deps.resolveRunId?.(workspaceId, blockId)) ?? ''
     if (review.status === 'incorporated') {
       return {
@@ -391,6 +421,17 @@ export class TrackerWebhookService {
     }
 
     const byId = new Map(review.items.map((item) => [item.id, item]))
+    /**
+     * Why an id-addressed command found no finding. A ticket can carry the question comments of
+     * BOTH live reviews, so an id that is real but in the other loop is the likely mistake, and it
+     * has a remedy: a separate comment naming only that review's ids resolves to that review.
+     * Reporting it as "no finding" would tell a reporter an id they can see is not real.
+     */
+    const missingReason = (itemId: string): string =>
+      foreignItemIds.has(itemId)
+        ? `finding \`${itemId}\` belongs to the other review on this ticket — answer it in a ` +
+          'separate comment naming only its findings'
+        : `no finding \`${itemId}\``
     const answered: string[] = []
     const dismissed: string[] = []
     const rejected: ReviewReplyRejection[] = []
@@ -401,7 +442,7 @@ export class TrackerWebhookService {
       switch (command.verb) {
         case 'answer': {
           if (!byId.has(command.itemId)) {
-            rejected.push({ command: command.line, reason: `no finding \`${command.itemId}\`` })
+            rejected.push({ command: command.line, reason: missingReason(command.itemId) })
             break
           }
           const reply = (redactSecrets(command.text) ?? '').trim().slice(0, MAX_REPLY_CHARS)
@@ -415,7 +456,7 @@ export class TrackerWebhookService {
         }
         case 'dismiss': {
           if (!byId.has(command.itemId)) {
-            rejected.push({ command: command.line, reason: `no finding \`${command.itemId}\`` })
+            rejected.push({ command: command.line, reason: missingReason(command.itemId) })
             break
           }
           current = await gateway.setItemStatus(

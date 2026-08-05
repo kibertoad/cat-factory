@@ -424,6 +424,62 @@ describe('TrackerWebhookService — which review a reply reaches', () => {
       reason: 'replies_not_wired',
     })
   })
+
+  it('tells a reporter an id is in the OTHER review, not that it does not exist', async () => {
+    // One ticket carries both reviews' question comments, so answering both sets in one comment is
+    // the ordinary mistake. Only one review is driven; the other's ids are rejected — and "no
+    // finding `clri_a`" would tell the reporter an id they can see on the ticket is not real, where
+    // the truth has a remedy they can act on.
+    const requirements = makeGateway(review([item('req_a')]))
+    const clarity = makeClarity([item('clri_a')])
+    const ack = vi.fn(makeAckSpy)
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: requirements.gateway, clarity: clarity.gateway },
+      issueWriteback: { postReviewReplyAck: ack },
+    })
+    await service.handle(
+      'ws1',
+      comment('@cat-factory answer req_a eur only\n@cat-factory answer clri_a chrome 120'),
+    )
+    // Declaration order put requirements first, and its own id was answered for real.
+    expect(requirements.calls).toEqual(['reply:req_a', 'incorporate'])
+    expect(clarity.calls).toEqual([])
+    const { rejected } = ack.mock.calls[0]![2]
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]!.reason).toContain('the other review on this ticket')
+    expect(rejected[0]!.reason).not.toContain('no finding')
+  })
+
+  it('still says "no finding" for an id that exists in NEITHER review', async () => {
+    // The distinction has to stay a distinction: a typo is not a cross-review mix-up, and telling
+    // a reporter to re-send an invented id in its own comment would be a dead end.
+    const requirements = makeGateway(review([item('req_a')]))
+    const clarity = makeClarity([item('clri_a')])
+    const ack = vi.fn(makeAckSpy)
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: requirements.gateway, clarity: clarity.gateway },
+      issueWriteback: { postReviewReplyAck: ack },
+    })
+    await service.handle('ws1', comment('@cat-factory answer req_typo eur only'))
+    const { rejected } = ack.mock.calls[0]![2]
+    expect(rejected[0]!.reason).toContain('no finding `req_typo`')
+  })
+
+  it('resolves a lone review through the SAME tie-breaks, with no short-circuit', async () => {
+    // There used to be a `candidates.length <= 1` fast path, which meant the one-review case and
+    // the many-review case were two code paths that could answer differently. Tie-break 1 already
+    // handles it (nothing to break a tie between), so the behaviour is asserted here instead: a
+    // named id is honoured, and an unknown one is a plain rejection rather than a mis-drive.
+    const requirements = makeGateway(review([item('req_a')]))
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: requirements.gateway },
+    })
+    expect(await service.handle('ws1', comment('@cat-factory answer req_a eur only'))).toEqual({
+      kind: 'reply',
+      outcome: 'incorporating',
+    })
+    expect(requirements.calls).toEqual(['reply:req_a', 'incorporate'])
+  })
 })
 
 describe('TrackerWebhookService — ingest safety', () => {

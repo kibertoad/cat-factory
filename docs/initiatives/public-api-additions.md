@@ -330,6 +330,14 @@ only packaging", and packaging is exactly where the work was:
 - **Authenticated**, at `read`. The document leaks no workspace state, but an anonymous route here
   would be the one endpoint a probe could confirm without a key, and the spec is the map of
   everything else.
+- **It puts the spec on every future addition's growth path**, which is worth naming before someone
+  hits it under pressure. Both facades bundle that string, and Cloudflare's limit is on the
+  COMPRESSED bundle, where a JSON spec does very well, so there is no problem today and no reason to
+  pre-optimise. The escape hatch when there is one is to gzip at generate time and inflate through a
+  `DecompressionStream` in the handler, which both runtimes have: that keeps the endpoint answering
+  with bytes and the drift guard diffing one artifact, where a runtime read of `docs/openapi.json`
+  (the obvious alternative) is the thing neither facade can do. Recorded so the first person to see
+  a bundle warning does not re-litigate the generated-module decision.
 
 ### B3: name the parks the decision list cannot model ✅
 
