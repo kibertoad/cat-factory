@@ -58,7 +58,7 @@ else imports its **ports** and domain types from here.
   than being dropped. It stops at a NAMESPACED id, though: a built-in carrying a `custom` bag is a
   malformed row rather than drift, and the raw-id fallback would head a section over keys nothing
   declared, inventing an operation instead of naming a withdrawn one.
-  See `docs/initiatives/reusable-operations.md`.
+  See `backend/docs/reusable-operations.md`.
 - `domain/llm-phase.ts`: `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
   **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
   free-form and comes from producers the platform does not fully author (a proxy request path, a

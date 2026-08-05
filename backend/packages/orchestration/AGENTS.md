@@ -131,6 +131,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   list. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
   `PipelineService.reseed` shares its row builder. See
   `backend/docs/pipeline-catalog-lifecycle.md`.
+- `board/taskTypeCreationDefaults.ts`: everything a new task's TYPE implies for the row
+  `BoardService.addTask` writes, together because all three are one `TaskTypeRegistry` lookup read
+  three times: the best-practice fragment union (service picks ⊕ per-type defaults ⊕ a registered
+  REUSABLE OPERATION's standing context), the default-pipeline pin, and the check of the collected
+  `custom` bag against the descriptor. Three cases pass the check through on purpose (a built-in
+  type, an unregistered namespaced one, a `formPanel` descriptor). See
+  `backend/docs/reusable-operations.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

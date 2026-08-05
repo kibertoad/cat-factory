@@ -13,6 +13,9 @@ the seams. The worked reference is `backend/internal/example-custom-agent`.
 > [`custom-agent-roles.md`](./custom-agent-roles.md).
 > For the full MCP tool-server model (registration, harness support, credentials, the
 > probe, security posture, limits) see [`mcp-tool-servers.md`](./mcp-tool-servers.md).
+> A deployment's own TASK TYPES register on the same kind of app-owned registry, and one
+> carrying a per-case form plus its standing context plus its own canned pipeline is a
+> **reusable operation**: see [`reusable-operations.md`](./reusable-operations.md).
 
 ## The governing principle
 
@@ -484,10 +487,9 @@ registers:
   map), and `defaultPipelineId: pl_org_introduce_api`, whose design + build steps run under the
   `org:architect-api` / `org:coder-api` variants. That pipeline registers `builtin: true` with an
   explicit `version`, the shape that makes it a read-only template the org can roll out and later
-  update ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). Design and the
+  update ([`pipeline-catalog-lifecycle.md`](./pipeline-catalog-lifecycle.md)). The model, and the
   boundary against initiative presets (which are the vehicle when the work must be PLANNED and
-  decomposed):
-  [`../../docs/initiatives/reusable-operations.md`](../../docs/initiatives/reusable-operations.md).
+  decomposed): [`reusable-operations.md`](./reusable-operations.md).
 - the **`pl_org_audit`**, **`pl_org_scope`**, **`pl_org_research`**, **`pl_org_apply`** and
   **`pl_org_introduce_api`** pipelines chaining them, plus
   the **`preset_org_audit`** and **`preset_org_research`** initiative presets (see
