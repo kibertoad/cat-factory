@@ -6,6 +6,7 @@ import type {
   PipelineStep,
   PrReportCheck,
   PrReportIssue,
+  PrReportJudge,
   PrReportRequirement,
   PrReportScope,
   PrVerificationReport,
@@ -558,6 +559,9 @@ function composeJudges(
       bounces: judge.bounces ?? 0,
       maxBounces: judge.maxBounces ?? 0,
       model: judge.model ?? null,
+      // Carried only when the registration named a model: a rubric authored for one model and
+      // scored by another is a fact about the verdict, not about the deployment's settings page.
+      ...(judge.modelPin ? { modelPin: judge.modelPin } : {}),
     }
   })
   return { status: 'reported', verdicts }
@@ -827,6 +831,18 @@ function renderMerge(merge: PrVerificationReport['merge']): string[] {
   return [...out, '']
 }
 
+/**
+ * The registration's model pin, rendered beside the model that actually ran. Only the case a
+ * reviewer must act on gets words: a pin this deployment could not serve means the rubric was
+ * scored by a model its author did not choose, which the model name alone cannot show. An
+ * `applied` pin adds nothing the model name doesn't already say, and `overridden` is the normal
+ * outcome of a task or workspace making a more specific choice.
+ */
+function renderJudgeModelPin(pin: PrReportJudge['modelPin']): string {
+  if (pin?.status !== 'unavailable') return ''
+  return ` · ⚠️ rubric pinned \`${hostMarkdown.cell(pin.requested)}\`, unavailable in this deployment`
+}
+
 function renderJudges(judges: PrVerificationReport['judges']): string[] {
   const out = ['### Rubric reviews', '']
   if (judges.status === 'absent') return [...out, absentNote(judges.note), '']
@@ -841,7 +857,8 @@ function renderJudges(judges: PrVerificationReport['judges']): string[] {
         (verdict.disposition ? ` · **${verdict.disposition}**` : '') +
         (verdict.rubricOverridden ? ' · workspace rubric' : '') +
         (verdict.maxBounces > 0 ? ` · rework ${verdict.bounces}/${verdict.maxBounces}` : '') +
-        (verdict.model ? ` · \`${hostMarkdown.cell(verdict.model)}\`` : ''),
+        (verdict.model ? ` · \`${hostMarkdown.cell(verdict.model)}\`` : '') +
+        renderJudgeModelPin(verdict.modelPin),
     )
     if (verdict.summary) out.push('', hostMarkdown.prose(verdict.summary))
     if (verdict.findings.length) {

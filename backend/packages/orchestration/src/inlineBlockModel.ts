@@ -1,4 +1,4 @@
-import type { ModelFlavor, ModelRef } from '@cat-factory/kernel'
+import type { JudgeModelPin, ModelFlavor, ModelRef } from '@cat-factory/kernel'
 import { inlineModelRef } from '@cat-factory/kernel'
 import type { PresetRouting } from './modules/modelPresets/ModelPresetService.js'
 
@@ -81,15 +81,68 @@ export async function resolveInlineBlockModelRef(
   agentKind: string,
   selection: InlineModelSelection,
 ): Promise<ModelRef | undefined> {
+  return (await resolveInlineBlockModel(deps, workspaceId, agentKind, selection)).ref
+}
+
+/** A resolution plus what became of the caller's own declared default, when it had one. */
+export interface InlineModelResolution {
+  /** The ref the call runs on, or undefined when nothing resolved and no routing default exists. */
+  ref?: ModelRef
+  /**
+   * Present only when `declaredModelId` was passed: the id asked for and its fate. Typed as the
+   * judge contract's pin because a judge is the only caller that declares one today and that is
+   * the shape the step persists; a second such caller reuses it rather than minting a twin that
+   * could drift from what the window and the PR report render.
+   */
+  pin?: JudgeModelPin
+}
+
+/**
+ * {@link resolveInlineBlockModelRef} with room for a caller-DECLARED default (the model a
+ * registration authored its work for, today a judge's rubric pin), slotted between the two
+ * halves of the preset that a bare `modelId` collapses:
+ *
+ *   task pin → preset override NAMING the kind → declared default → preset base → routing default
+ *
+ * The seam exists because the preset's base model always resolves, so a default placed after the
+ * preset could never be reached, and one placed before it would be a deployment constant no
+ * workspace could relax. Both failures are silent, which is why the fate of the declared id is
+ * RETURNED rather than left for the caller to re-derive: an id this deployment cannot serve is
+ * reported as `unavailable` instead of quietly becoming the base model.
+ */
+export async function resolveInlineBlockModel(
+  deps: InlineBlockModelDeps,
+  workspaceId: string,
+  agentKind: string,
+  selection: InlineModelSelection,
+  declaredModelId?: string,
+): Promise<InlineModelResolution> {
   const fallback = deps.modelRef
   const runsInline = deps.runsInline
   const degrade = (ref: ModelRef): ModelRef =>
     inlineModelRef(ref, fallback ?? ref, runsInline ? { runsInline } : {})
   const routing = await deps.resolvePresetRouting?.(workspaceId, agentKind, selection.modelPresetId)
   const preference = routing?.providerPreference
+  // Resolved up front, and independently of who wins below: an unservable declared id is a
+  // misconfiguration worth reporting even on a run whose task pinned its own model.
+  const declared = declaredModelId
+    ? deps.resolveBlockModel?.(declaredModelId, preference)
+    : undefined
+  const pinned = (status: JudgeModelPin['status']): JudgeModelPin['status'] =>
+    declaredModelId && !declared ? 'unavailable' : status
+  const withPin = (ref: ModelRef | undefined, status: JudgeModelPin['status']) => ({
+    ...(ref ? { ref } : {}),
+    ...(declaredModelId ? { pin: { requested: declaredModelId, status: pinned(status) } } : {}),
+  })
+
   const fromBlock = deps.resolveBlockModel?.(selection.modelId, preference)
-  if (fromBlock) return degrade(fromBlock)
-  const fromDefault = deps.resolveBlockModel?.(routing?.modelId, preference)
-  if (fromDefault) return degrade(fromDefault)
-  return fallback
+  if (fromBlock) return withPin(degrade(fromBlock), 'overridden')
+  // The preset answers with ONE id either way (its override for the kind, else its base), so it
+  // is resolved once here and consulted twice below: before the declared default when the preset
+  // named this kind, after it when the id is just the base model.
+  const fromPreset = deps.resolveBlockModel?.(routing?.modelId, preference)
+  if (fromPreset && routing?.pinnedForKind) return withPin(degrade(fromPreset), 'overridden')
+  if (declared) return withPin(degrade(declared), 'applied')
+  if (fromPreset) return withPin(degrade(fromPreset), 'overridden')
+  return withPin(fallback, 'overridden')
 }

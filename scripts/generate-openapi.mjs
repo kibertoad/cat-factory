@@ -35,10 +35,6 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-// 1.11.0, not 1.10.0: main reached 1.10.0 while this branch was in flight (the run-evidence and
-// key-provisioning operations), and that number is already published against a surface WITHOUT the
-// follow-up and interview operations added here. The same collision the note above describes, the
-// second time in three releases.
 // 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
 // so a consumer built against 1.11.0 keeps parsing.
 // 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
@@ -47,12 +43,18 @@ const API_PREFIX = '/api/v1'
 // as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
 // only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
 // that clean merge.
-// 1.14.0, not 1.13.0: main published 1.13.0 for the run-debugging surface while this branch was
-// in flight. The run report gains an optional `scope` here, naming WHICH of a multi-repo run's
-// pull requests a given copy is written onto. Additive — a consumer written against 1.13 reads
-// every field it knows, and an absent `scope` means what it always meant (the own-service PR).
-// Third release running that this note has had to be written; the re-check is the process.
-const API_VERSION = '1.14.0'
+// 1.14.0: additive only, an optional `modelPin` on the report's judge verdicts (which model the
+// rubric was authored for, and whether the run got it). Third number this branch has held: it was
+// written against 1.12.0, moved to 1.13.0 when the validation field took that, and moves again now
+// that the debug surface took 1.13.0. Every one of those was found by re-reading this line after a
+// merge, which is the only thing that catches it.
+// 1.15.0, not 1.14.0: the per-judge model pin took 1.14.0 on main while this branch was in flight.
+// The run report gains an optional `scope` here, naming WHICH of a multi-repo run's pull requests a
+// given copy is written onto. Additive — a consumer written against 1.14 reads every field it
+// knows, and an absent `scope` means what it always meant (the own-service PR). FOURTH number this
+// one addition has held (1.12 → 1.13 → 1.14 → 1.15), every collision caught by re-reading this line
+// after the merge rather than by trusting a clean auto-merge of the VERSION itself.
+const API_VERSION = '1.15.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

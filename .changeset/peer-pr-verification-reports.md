@@ -21,7 +21,7 @@ validation, the bugfix reproduction proof and the `spec/` requirement join) are 
 copy, with a note naming the own-service PR where they live: restating them would attribute one repo's
 evidence to another repo's diff.
 
-The report payload gains an optional `scope` (`PR_VERIFICATION_REPORT_VERSION` 7, OpenAPI 1.13.0),
+The report payload gains an optional `scope` (`PR_VERIFICATION_REPORT_VERSION` 7, OpenAPI 1.15.0),
 which is additive: absent means the own-service PR, exactly as before. `GET /api/v1/runs/:runId/report`
 keeps answering the complete own-service copy.
 

@@ -15,6 +15,7 @@ import {
   ConflictError,
   DEFAULT_MODEL_PRESET_ID,
   modelForKindFromPreset,
+  presetOverrideForKind,
   requireWorkspace,
   seedModelPresets,
   ValidationError,
@@ -295,6 +296,13 @@ export async function resolvePresetProviderPreference(
 export interface PresetRouting {
   /** The model id `agentKind` resolves to (`overrides[kind] ?? baseModelId`). */
   modelId: string
+  /**
+   * Whether the preset NAMED this agent kind, rather than answering with its base model. A
+   * caller carrying a model default of its own (a judge registration's pin) needs the two apart:
+   * an override is a statement about this kind and outranks such a default, a base model is a
+   * blanket one and does not.
+   */
+  pinnedForKind: boolean
   /** The preset's route order; undefined ⇒ the deployment's default order. */
   providerPreference?: readonly ModelFlavor[]
 }
@@ -320,6 +328,7 @@ export async function resolvePresetRouting(
   const preference = preferenceOf(preset)
   return {
     modelId: modelForKindFromPreset(preset, agentKind),
+    pinnedForKind: presetOverrideForKind(preset, agentKind) !== undefined,
     ...(preference ? { providerPreference: preference } : {}),
   }
 }
