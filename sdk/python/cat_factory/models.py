@@ -4101,6 +4101,8 @@ class PrReportValidation:
     #: May be absent entirely.
     at: float | None = None
     #: May be absent entirely.
+    config_unreadable: bool | None = None
+    #: May be absent entirely.
     max_attempts: float | None = None
     #: May be absent entirely.
     note: str | None = None
@@ -4117,12 +4119,13 @@ class PrReportValidation:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PrReportValidation":
         """Decode a `PrReportValidation` from its JSON object."""
-        known = {"attempts", "commands", "status", "at", "maxAttempts", "note", "passed", "stepKind"}
+        known = {"attempts", "commands", "status", "at", "configUnreadable", "maxAttempts", "note", "passed", "stepKind"}
         return cls(
             attempts=data.get("attempts"),
             commands=[PrReportValidationCommand.from_dict(item) for item in data.get("commands") or []],
             status=_enum(PrReportCiStatus, data.get("status")),
             at=data.get("at"),
+            config_unreadable=data.get("configUnreadable"),
             max_attempts=data.get("maxAttempts"),
             note=data.get("note"),
             passed=data.get("passed"),
@@ -4138,6 +4141,8 @@ class PrReportValidation:
         out["status"] = _encode(self.status)
         if self.at is not None:
             out["at"] = self.at
+        if self.config_unreadable is not None:
+            out["configUnreadable"] = self.config_unreadable
         if self.max_attempts is not None:
             out["maxAttempts"] = self.max_attempts
         if self.note is not None:

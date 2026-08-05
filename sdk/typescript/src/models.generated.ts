@@ -989,6 +989,7 @@ export interface PrReportValidation {
   at?: number | null
   attempts: number
   commands: PrReportValidationCommand[]
+  configUnreadable?: boolean | null
   maxAttempts?: number | null
   note?: string | null
   passed?: boolean | null

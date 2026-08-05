@@ -1966,6 +1966,16 @@
             },
             "type": "array"
           },
+          "configUnreadable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "maxAttempts": {
             "anyOf": [
               {

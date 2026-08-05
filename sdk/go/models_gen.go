@@ -1600,6 +1600,8 @@ type PrReportValidation struct {
 	At       *float64                    `json:"at,omitempty"`
 	Attempts float64                     `json:"attempts"`
 	Commands []PrReportValidationCommand `json:"commands"`
+	// ConfigUnreadable may be absent entirely.
+	ConfigUnreadable *bool `json:"configUnreadable,omitempty"`
 	// MaxAttempts may be absent entirely.
 	MaxAttempts *float64 `json:"maxAttempts,omitempty"`
 	// Note may be absent entirely.
