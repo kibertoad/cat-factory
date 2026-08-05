@@ -47,7 +47,6 @@ a tracker document](../../CLAUDE.md).
 - [Bug-triage pipeline](./bug-triage-pipeline.md)
 - [Configurable per-agent-kind output budgets](./configurable-agent-output-budgets.md)
 - [Custom initiative definitions (org-registered presets)](./custom-initiative-definitions.md)
-- [Extensible custom-gate config](./extensible-custom-gate-config.md)
 - [Judge registry (the verdict-gate family)](./judge-registry.md)
 - [Library frame support](./library-frame-support.md)
 - [Merge track record](./merge-track-record.md)

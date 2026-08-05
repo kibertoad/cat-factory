@@ -11,7 +11,7 @@ import type {
   StepOptions,
   TesterQualityConfig,
 } from '@cat-factory/kernel'
-import type { PipelineRegistry } from '@cat-factory/kernel'
+import type { GateRegistry, PipelineRegistry } from '@cat-factory/kernel'
 import {
   assertFound,
   ConflictError,
@@ -69,6 +69,13 @@ export interface PipelineServiceDependencies {
    */
   agentKindRegistry?: AgentKindRegistry
   /**
+   * The app-owned gate registry, so a save validates a step's gate PARAMETERS against the fields
+   * the gate itself declared — the same registry, and so the same answer, the run-start guard
+   * reaches. Optional for the same reason as {@link agentKindRegistry}; absent ⇒ gate parameters
+   * are not checked here, and run admission still refuses them.
+   */
+  gateRegistry?: GateRegistry
+  /**
    * Resolves whether the workspace has any observability integration enabled (today: a
    * Datadog connection). When absent (no observability persistence wired at all), the
    * observability-gated step can never be added.
@@ -116,6 +123,7 @@ export class PipelineService {
   private readonly pipelineScheduleRepository?: PipelineScheduleRepository
   private readonly pipelineRegistry?: PipelineRegistry
   private readonly agentKindRegistry?: AgentKindRegistry
+  private readonly gateRegistry?: GateRegistry
   private readonly adoption: PipelineAdoption
 
   constructor({
@@ -126,6 +134,7 @@ export class PipelineService {
     pipelineScheduleRepository,
     pipelineRegistry,
     agentKindRegistry,
+    gateRegistry,
   }: PipelineServiceDependencies) {
     this.workspaceRepository = workspaceRepository
     this.pipelineRepository = pipelineRepository
@@ -134,6 +143,7 @@ export class PipelineService {
     this.pipelineScheduleRepository = pipelineScheduleRepository
     this.pipelineRegistry = pipelineRegistry
     this.agentKindRegistry = agentKindRegistry
+    this.gateRegistry = gateRegistry
     // The same collaborator the engine resolves runs through, so an admission read and the run it
     // admits can never disagree about what a pipeline id means. `noopOperationalMetrics` rather
     // than a threaded sink because this instance only ever answers the READ half: adoption's
@@ -209,6 +219,7 @@ export class PipelineService {
       testerQuality: input.testerQuality,
       stepOptions: input.stepOptions,
       agentKindRegistry: this.agentKindRegistry,
+      gateRegistry: this.gateRegistry,
     })
     // Launch-constraint validation (no origin — a save, not a launch): a `bug-intake` step
     // requires a recurring pipeline. `availability` absent ⇒ `'both'` (unrestricted). Evaluated
@@ -259,6 +270,7 @@ export class PipelineService {
       testerQuality: source.testerQuality,
       stepOptions: source.stepOptions,
       agentKindRegistry: this.agentKindRegistry,
+      gateRegistry: this.gateRegistry,
     })
     // Same launch-constraint guarantee create/update give: a clone preserves the source's
     // agentKinds + availability, so re-check that the pair is launchable (e.g. a bug-intake step
@@ -345,6 +357,7 @@ export class PipelineService {
         testerQuality,
         stepOptions,
         agentKindRegistry: this.agentKindRegistry,
+        gateRegistry: this.gateRegistry,
       })
       await this.assertObservabilityGatedStepAllowed(workspaceId, agentKinds, enabled)
     }

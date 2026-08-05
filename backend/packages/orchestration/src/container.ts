@@ -621,15 +621,17 @@ export function createCore(injected: CoreDependencies): Core {
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
     })
-  // Both registries are passed from the RESOLVED set, not spread in from `injected`: a facade may
-  // leave either unset and `resolveCoreRuntime` supplies the default. That matters most for
-  // `agentKindRegistry`, which decides whether a step's kind may be estimate-gated — the run-start
-  // guard (`RunAdmission`) reads the resolved instance, so a save reading `undefined` here could
-  // refuse a shape the engine accepts, or accept one it refuses.
+  // All three registries are passed from the RESOLVED set, not spread in from `injected`: a facade
+  // may leave any unset and `resolveCoreRuntime` supplies the default. That matters most for
+  // `agentKindRegistry`, which decides whether a step's kind may be estimate-gated, and for
+  // `gateRegistry`, which decides what a step's gate may be configured with — the run-start guard
+  // (`RunAdmission`) reads the resolved instances, so a save reading `undefined` here could refuse
+  // a shape the engine accepts, or accept one it refuses.
   const pipelineService = new PipelineService({
     ...dependencies,
     pipelineRegistry,
     agentKindRegistry,
+    gateRegistry,
   })
   const spendService = new SpendService({
     tokenUsageRepository: dependencies.tokenUsageRepository,

@@ -7,7 +7,8 @@ import { defaultConsensusConfig, type PipelinesContext } from './context'
  * consensus-GROUP tier set), the human approval gate, the estimate gate on a companion step, the
  * follow-up and test-QC companions, the per-step enable flag, and the `StepOptions` bag
  * (requirements auto-recommendation, the picked skill, the picked agent-kind variant, the
- * per-step output-token ceiling, the binary-output storage/context selection).
+ * per-step output-token ceiling, the binary-output storage/context selection). The step's GATE
+ * configuration is the sibling `./draftGateConfig`, which explains why it is not here.
  *
  * Split out of `./draftActions`, which owns the draft's STRUCTURE (insert / remove / reorder /
  * units). Every function here reads and writes one of the parallel per-step arrays at an index and

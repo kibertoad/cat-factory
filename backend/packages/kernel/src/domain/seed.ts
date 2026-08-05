@@ -1,6 +1,7 @@
+import { hasApproverPolicy } from '@cat-factory/contracts'
 import type { PipelineRegistry } from './pipeline-registry.js'
 import type { TaskTypeRegistry } from './task-type-registry.js'
-import type { Block, Pipeline, StepGating } from './types.js'
+import type { Block, Pipeline, StepGateConfig, StepGating, StepOptions } from './types.js'
 
 // Sample architecture used to populate a workspace on creation. Mirrors the
 // frontend's `app/utils/seed.ts`. Block ids are stable strings; because blocks
@@ -128,20 +129,43 @@ export function seedBlocks(): Block[] {
  * `gating` (skip the step unless the task estimate clears a threshold). This replaces the fragile
  * index-aligned `gates`/`enabled`/`gating` arrays: each is declared BY NAME on its own step, so
  * inserting a step (e.g. a `deployer` before the tester) can never shift a positional flag onto the
- * wrong step. `gate` is intentionally the extension seam — a custom gate can carry its own config
- * here (see the ambient-augmentation note in docs/initiatives/deployer-single-provisioner.md).
+ * wrong step.
+ *
+ * `gate` is the extension seam it was always meant to be: `true` is a plain human checkpoint, and
+ * an OBJECT is that step's gate CONFIGURATION, lowering into `stepOptions[i].gateConfig`, so a
+ * configured gate needs no new array and no new column. See
+ * `backend/docs/adr/0038-per-step-gate-config.md`.
+ *
+ * The object form does NOT imply a human checkpoint by itself, because the two halves of
+ * `StepGateConfig` answer different questions. `approvers` / `minApprovals` configure the human
+ * gate and therefore raise `gates[i]`; `fields` configures the REGISTERED gate the step's kind
+ * already runs (a `ci` step's attempt budget, a `post-release-health` step's watch window), which
+ * has nothing to do with pausing for a person. Lowering `{ fields: … }` into `gates[i] = true`
+ * would bolt a human approval pause onto a `ci` step whose author only wanted three fixer rounds
+ * silently, since nothing downstream can tell an intended checkpoint from an inferred one.
+ * `assertValidGateConfig` draws the same line at the other door: it requires `gates[i]` for the
+ * approval half and never for `fields`.
  *
  * `gate` and `gating` are mutually exclusive on one step, and `validatePipelineShape` enforces
  * that rather than this type: the estimate may ADD a human checkpoint but never cancel an approval
  * pause the author asked for. A pipeline declaring both fails the kernel seed test.
  */
-type SeedStep = string | { kind: string; gate?: boolean; enabled?: boolean; gating?: StepGating }
+type SeedStep =
+  | string
+  | {
+      kind: string
+      gate?: boolean | StepGateConfig
+      enabled?: boolean
+      gating?: StepGating
+      /** Non-gate per-step options a built-in needs (merged under any `gate` config it declares). */
+      options?: StepOptions
+    }
 
 /**
  * Lower a named-step pipeline spec into the wire {@link Pipeline} (index-aligned
- * `agentKinds`/`gates`/`enabled`/`gating`). Each array is emitted ONLY when a step actually declares
- * the corresponding flag, so a plain all-enabled, gate-less pipeline stays as bare `agentKinds` —
- * its persisted shape is byte-identical to the hand-authored form.
+ * `agentKinds`/`gates`/`enabled`/`gating`/`stepOptions`). Each array is emitted ONLY when a step
+ * actually declares the corresponding flag, so a plain all-enabled, gate-less pipeline stays as
+ * bare `agentKinds` — its persisted shape is byte-identical to the hand-authored form.
  */
 function definePipeline(spec: {
   id: string
@@ -155,9 +179,24 @@ function definePipeline(spec: {
   public?: boolean
 }): Pipeline {
   const norm = spec.steps.map((s) => (typeof s === 'string' ? { kind: s } : s))
-  const gates = norm.map((s) => s.gate === true)
+  // A human checkpoint is `gate: true`, or an object configuring the APPROVAL half. An object that
+  // only carries `fields` configures the step's registered gate and raises no checkpoint. See the
+  // `SeedStep` docs for why conflating the two would be a silent pause nobody authored.
+  const gates = norm.map(
+    (s) =>
+      s.gate === true ||
+      (typeof s.gate === 'object' &&
+        (hasApproverPolicy(s.gate.approvers) || s.gate.minApprovals !== undefined)),
+  )
   const enabled = norm.map((s) => s.enabled !== false)
   const gating = norm.map((s) => s.gating ?? null)
+  const stepOptions = norm.map((s) => {
+    const options: StepOptions = {
+      ...s.options,
+      ...(typeof s.gate === 'object' ? { gateConfig: s.gate } : {}),
+    }
+    return Object.keys(options).length ? options : null
+  })
   return {
     id: spec.id,
     name: spec.name,
@@ -166,6 +205,7 @@ function definePipeline(spec: {
     ...(gates.some(Boolean) ? { gates } : {}),
     ...(enabled.some((e) => !e) ? { enabled } : {}),
     ...(gating.some((g) => g !== null) ? { gating } : {}),
+    ...(stepOptions.some((o) => o !== null) ? { stepOptions } : {}),
     ...(spec.availability ? { availability: spec.availability } : {}),
     ...(spec.purpose ? { purpose: spec.purpose } : {}),
     ...(spec.labels ? { labels: spec.labels } : {}),

@@ -388,6 +388,14 @@ jobs:
       - name: Guard reserved credential keys
         run: node scripts/check-reserved-env-keys.mjs
 
+      # Requires every human-approval-gate raise to go through `buildStepApproval`. Two engine
+      # settle paths raise the same checkpoint, and the one that hand-rolled the literal silently
+      # stopped snapshotting the step's approver policy and quorum: a gate naming two approvers
+      # then resolved as one anyone could clear. Fails OPEN, so nothing else catches it. Its
+      # fixtures run in the `node --test` step above. Pure node, no install.
+      - name: Guard gate-approval raises
+        run: node scripts/check-gate-approval-raise.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

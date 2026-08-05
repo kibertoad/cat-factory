@@ -41,9 +41,11 @@ never `{ autoRecommend: true }`), so an all-default pipeline persists no `step_o
 all: exactly like the legacy aligners.
 
 **Fields added on this seam since the pilot** (each needing no column and no migration, which is
-the seam paying off): `skillId` (the `skill` step's picked repo-sourced skill) and
-`maxOutputTokens` (a step's own output-token ceiling; the narrowest tier of
-[`configurable-agent-output-budgets.md`](./configurable-agent-output-budgets.md)).
+the seam paying off): `skillId` (the `skill` step's picked repo-sourced skill), `maxOutputTokens`
+(a step's own output-token ceiling; the narrowest tier of
+[`configurable-agent-output-budgets.md`](./configurable-agent-output-budgets.md)), and `gateConfig`
+(who may clear the step's human gate, how many of them, and the parameters its registered gate
+declares — [ADR 0038](../../backend/docs/adr/0038-per-step-gate-config.md)).
 
 ## Migration checklist: fold each legacy array into `stepOptions.<field>`
 
@@ -75,7 +77,10 @@ cross-runtime conformance assertion. Do them one at a time, parity-gated.
   - `pipelineHasEnabledBugIntake` to read `stepOptions[i].enabled` while still re-indexing by the
     original position. Do it last.
 - **`gates` has a per-run override seam** (`gatesOverride` from initiative presets) that wins over
-  the pipeline value in `ExecutionService`. Preserve that precedence when it moves.
+  the pipeline value in `ExecutionService`. Preserve that precedence when it moves. Note the target
+  field name `gate` is already half-taken in spirit: `stepOptions.gateConfig` holds the step's gate
+  CONFIGURATION (ADR 0038). When the flag moves, fold it INTO `gateConfig` rather than adding a
+  sibling `gate` boolean beside it — the two answer one question.
 - **Built-in seeds** (`definePipeline` / `SeedStep`) only express `gate`/`enabled` today. Extend
   `SeedStep` to emit `stepOptions` if a built-in ever needs a non-default field.
 - **Validation stays option-agnostic where possible**: `alignedStepOptions` must not learn about

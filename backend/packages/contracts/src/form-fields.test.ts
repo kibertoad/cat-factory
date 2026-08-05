@@ -134,6 +134,27 @@ describe('validateDescriptorFields: the shared maxLength bound', () => {
   })
 })
 
+describe('validateDescriptorFields: the shared numeric bounds', () => {
+  it('enforces declared min/max where the value is FROZEN, not only in the input', () => {
+    // The bound a gate declares for `maxAttempts` has to hold for a value filled over the API or
+    // typed into a hand-authored pipeline, or the only remaining defence is the reader silently
+    // clamping — behaviour nobody asked for and nobody is told about.
+    const fields = [field({ key: 'maxAttempts', type: 'number', min: 1, max: 10 })]
+    expect(validateDescriptorFields(fields, { maxAttempts: 3 })).toEqual([])
+    expect(validateDescriptorFields(fields, { maxAttempts: 0 })).toEqual([
+      'Field "maxAttempts" must be at least 1.',
+    ])
+    expect(validateDescriptorFields(fields, { maxAttempts: 11 })).toEqual([
+      'Field "maxAttempts" must be at most 10.',
+    ])
+  })
+
+  it('ignores min/max for a non-numeric answer', () => {
+    const fields = [field({ key: 'name', type: 'text', min: 5 })]
+    expect(validateDescriptorFields(fields, { name: 'ab' })).toEqual([])
+  })
+})
+
 describe('the rules read the same on a task type as on a preset', () => {
   const fields = [
     field({ key: 'style', type: 'select', options: [{ value: 'action', label: 'Action' }] }),

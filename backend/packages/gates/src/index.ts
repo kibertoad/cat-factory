@@ -14,6 +14,13 @@ import {
   humanReviewGate,
   postReleaseHealthGate,
 } from './gates.js'
+import {
+  CI_GATE_CONFIG_FIELDS,
+  CONFLICTS_GATE_CONFIG_FIELDS,
+  DOC_QUALITY_GATE_CONFIG_FIELDS,
+  HUMAN_REVIEW_GATE_CONFIG_FIELDS,
+  POST_RELEASE_HEALTH_GATE_CONFIG_FIELDS,
+} from './gateConfigFields.js'
 
 // ---------------------------------------------------------------------------
 // The built-in polling-gate suite, authored ENTIRELY through the public gate-registry
@@ -65,6 +72,14 @@ export {
   docQualityGate,
 } from './gates.js'
 export {
+  CI_GATE_CONFIG_FIELDS,
+  CONFLICTS_GATE_CONFIG_FIELDS,
+  DOC_QUALITY_GATE_CONFIG_FIELDS,
+  HUMAN_REVIEW_GATE_CONFIG_FIELDS,
+  POST_RELEASE_HEALTH_GATE_CONFIG_FIELDS,
+  gateConfigNumber,
+} from './gateConfigFields.js'
+export {
   classifyHumanReview,
   isApproved,
   outstandingThreads,
@@ -81,11 +96,19 @@ export {
  * built-in by re-registering the same kind.
  */
 export function registerBuiltinGates(registry: GateRegistry): void {
-  registry.register(CI_AGENT_KIND, ciGate)
-  registry.register(CONFLICTS_AGENT_KIND, conflictsGate)
-  registry.register(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate)
-  registry.register(HUMAN_REVIEW_AGENT_KIND, humanReviewGate)
-  registry.register(DOC_QUALITY_AGENT_KIND, docQualityGate)
+  registry.register(CI_AGENT_KIND, ciGate, { configFields: CI_GATE_CONFIG_FIELDS })
+  registry.register(CONFLICTS_AGENT_KIND, conflictsGate, {
+    configFields: CONFLICTS_GATE_CONFIG_FIELDS,
+  })
+  registry.register(POST_RELEASE_HEALTH_AGENT_KIND, postReleaseHealthGate, {
+    configFields: POST_RELEASE_HEALTH_GATE_CONFIG_FIELDS,
+  })
+  registry.register(HUMAN_REVIEW_AGENT_KIND, humanReviewGate, {
+    configFields: HUMAN_REVIEW_GATE_CONFIG_FIELDS,
+  })
+  registry.register(DOC_QUALITY_AGENT_KIND, docQualityGate, {
+    configFields: DOC_QUALITY_GATE_CONFIG_FIELDS,
+  })
 }
 
 /**

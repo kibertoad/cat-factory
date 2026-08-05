@@ -73,6 +73,11 @@ export type {
   DescriptorField,
   DescriptorFieldValue,
   DescriptorFieldValues,
+  // Per-step GATE configuration: who may resolve a human approval gate, how many of them, and
+  // the parameters the step's registered gate declares (`contracts/src/gate-config.ts`).
+  GateApproverPolicy,
+  GateConfigForm,
+  StepGateConfig,
   Pipeline,
   PipelinePurpose,
   SpendStatus,

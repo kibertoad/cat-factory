@@ -2285,6 +2285,12 @@
           "proposal": {
             "type": "string"
           },
+          "recordedApprovals": {
+            "type": "number"
+          },
+          "requiredApprovals": {
+            "type": "number"
+          },
           "status": {
             "enum": [
               "pending",
@@ -2309,6 +2315,8 @@
           "status",
           "proposal",
           "feedback",
+          "requiredApprovals",
+          "recordedApprovals",
           "exceeded"
         ],
         "type": "object"

@@ -6,6 +6,7 @@ import type {
   RiskPolicy,
   PipelineStep,
 } from './types.js'
+import type { DescriptorField, DescriptorFieldValues } from '@cat-factory/contracts'
 import type { AgentRunResult } from '../ports/agent-executor.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
@@ -184,10 +185,19 @@ export interface GateDefinition {
    */
   probe(workspaceId: string, blockId: string, gateState: GateStepState): Promise<GateProbe>
   /**
-   * Optional: the attempt budget for this gate, resolved from the task's merge preset.
-   * Defaults to `ciMaxAttempts` when omitted (the CI/conflicts gates use that).
+   * Optional: the attempt budget for this gate, resolved from the task's merge preset and the
+   * STEP's own gate config (`stepOptions.gateConfig.fields`, already validated against
+   * {@link GateRegistration.configSchema}). Defaults to `ciMaxAttempts` when omitted (the
+   * CI/conflicts gates use that).
+   *
+   * The per-step override is resolved BY THE GATE rather than by the engine on purpose: the
+   * engine has no business knowing that this gate calls its budget `maxAttempts` and the next
+   * one does not, which is the hard-coding the config schema exists to stop.
    */
-  attemptBudget?(preset: Pick<RiskPolicy, 'ciMaxAttempts' | 'releaseMaxAttempts'>): number
+  attemptBudget?(
+    preset: Pick<RiskPolicy, 'ciMaxAttempts' | 'releaseMaxAttempts'>,
+    config: GateConfigFields,
+  ): number
   /**
    * Optional extra context handed to the helper agent on escalation (the CI gate
    * passes the failing-check summary; the conflicts gate passes nothing).
@@ -290,22 +300,76 @@ export type GateFactory = (ctx: GateContext) => GateDefinition
  * dogfood — the platform's own gates register through the same public seam as anyone's.
  */
 export class GateRegistry {
-  private readonly registry = new Map<string, GateFactory>()
+  private readonly registry = new Map<string, GateRegistration>()
 
   /**
    * Register a polling gate, keyed by the step `agentKind` it gates. A later registration of
    * the same kind replaces the earlier one (so a deployment can override a built-in). The
    * `kind` is passed explicitly because the factory's result isn't built until the engine
    * invokes it.
+   *
+   * `options.configFields` declares the gate's own per-step parameters (see
+   * {@link GateRegistration.configFields}). They sit on the REGISTRATION rather than on the
+   * {@link GateDefinition} because the boundary that needs them most — pipeline save — has no
+   * {@link GateContext} to build a definition with, and a declaration reachable only after the
+   * engine has booted could not refuse a bad pipeline at authoring time.
    */
-  register(kind: string, factory: GateFactory): void {
-    this.registry.set(kind, factory)
+  register(
+    kind: string,
+    factory: GateFactory,
+    options: { configFields?: readonly DescriptorField[] } = {},
+  ): void {
+    this.registry.set(kind, { factory, ...options })
   }
 
   /** The registered gates (registration order). */
   factories(): { kind: string; factory: GateFactory }[] {
-    return [...this.registry].map(([kind, factory]) => ({ kind, factory }))
+    return [...this.registry].map(([kind, { factory }]) => ({ kind, factory }))
   }
+
+  /** Whether a gate is registered for this step kind — the "may this step carry gate config" test. */
+  has(kind: string): boolean {
+    return this.registry.has(kind)
+  }
+
+  /**
+   * The per-step parameters a gate declared, or `undefined` when it declared none. A gate with no
+   * declaration accepts NO per-step fields: an undeclared field is indistinguishable from a
+   * typo'd one, and both read to whoever typed them as configuration that took effect.
+   */
+  configFields(kind: string): readonly DescriptorField[] | undefined {
+    return this.registry.get(kind)?.configFields
+  }
+
+  /** Every gate that declares an authoring form, for the snapshot projection the builder renders. */
+  configForms(): { kind: string; fields: readonly DescriptorField[] }[] {
+    return [...this.registry].flatMap(([kind, { configFields }]) =>
+      configFields?.length ? [{ kind, fields: configFields }] : [],
+    )
+  }
+}
+
+/**
+ * A gate's per-step parameters, as filled by a pipeline author and validated against its
+ * {@link GateRegistration.configFields}. The repo's shared descriptor-form value bag, not a
+ * gate-specific one: a gate config form is collected, validated, frozen and rendered by the same
+ * machinery as an initiative preset's form.
+ */
+export type GateConfigFields = DescriptorFieldValues
+
+/** What a {@link GateRegistry} stores per kind: the factory, plus what the gate declares about itself. */
+export interface GateRegistration {
+  factory: GateFactory
+  /**
+   * The gate's own per-step parameters, declared as descriptor fields so ONE declaration drives
+   * validation at pipeline save, re-validation at run start, and the authoring form the SPA
+   * renders (projected onto the workspace snapshot). Absent ⇒ the gate takes no per-step
+   * configuration.
+   *
+   * A `password` field has no place here: these values live in the pipeline row and are copied
+   * onto the run's step, so a secret belongs in the per-workspace capability-credential store.
+   */
+  configFields?: readonly DescriptorField[]
 }
 
 /**

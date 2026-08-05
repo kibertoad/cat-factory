@@ -1455,7 +1455,12 @@
         "notRun": "çalıştırılmadı",
         "attempts": "{maxAttempts} denemeden {attempts}. deneme",
         "omittedTestPaths": "Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu. | Kanıt çalıştırılmadan önce bildirilen {count} test dosyası atıldı; bu yüzden düzeltme öncesi ağaç eksik bir yeniden üretimden kuruldu."
-      }
+      },
+      "quorumProgress": "{required} onaydan {recorded} tanesi",
+      "quorumYours": "(seninki sayıldı)",
+      "quorumEditLocked": "Bu geçidi açan onay sizinki olduğunda düzeltme yazabilirsiniz. O ana kadar olduğu gibi onaylayın ya da değişiklik isteyin.",
+      "notAnApprover": "Bu kapı kimlerin karar verebileceğini belirtiyor ve sen bunlardan biri değilsin.",
+      "approverIdentityRequired": "Bu kapı kimlerin karar verebileceğini belirtiyor; bu kişilerden biri oturum açarak karar vermeli."
     },
     "inspector": {
       "frameStatus": {
@@ -4511,6 +4516,17 @@
       "hint": "Bu ajanın tek bir yanıtının ulaşabileceği üst sınır. Boş bırakmak sınırı kaldırmaz, bir üst seviyeden devralır. Pipeline adımının kendi değeri çalışma alanı varsayılanını geçersiz kılar.",
       "inherits": "Devralındı",
       "inheritsValue": "Devralındı ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Kimler onaylayabilir",
+      "roleAdmin": "Yöneticiler",
+      "roleMember": "Üyeler",
+      "namedApproversLabel": "Adı geçen onaylayıcılar",
+      "namedApproversPlaceholder": "Yazma yetkisi olan herkes",
+      "requiredApprovalsLabel": "Gereken onay sayısı",
+      "requiredApprovalsHint": "Çalışma devam etmeden önce her biri farklı bir kişiden.",
+      "anyoneHint": "Bu panoyu düzenleyebilen herkes bu adımı onaylayabilir.",
+      "gateParametersLabel": "Kapı ayarları"
     }
   },
   "agentPrompt": {

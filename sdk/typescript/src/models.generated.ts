@@ -1063,6 +1063,8 @@ export interface PublicApprovalGateDecision {
   feedback: string | null
   kind: 'approval-gate'
   proposal: string
+  recordedApprovals: number
+  requiredApprovals: number
   status: PublicApprovalGateDecisionStatus
   stepIndex: number
   stepKind: string

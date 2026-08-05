@@ -32,6 +32,7 @@ import {
   isInlineModelStep,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import type { GateRegistry } from '@cat-factory/kernel'
 import type { BinaryGeneratorSelectionIssue } from '@cat-factory/kernel'
 import {
   binaryGeneratorSelectionIssues,
@@ -68,6 +69,13 @@ export interface RunAdmissionDeps {
   executionRepository: ExecutionRepository
   contextBuilder: AgentContextBuilder
   agentKindRegistry: AgentKindRegistry
+  /**
+   * The app-owned gate registry, so a step's gate PARAMETERS are re-validated at run start against
+   * the fields the gate declared — the same check the builder makes at save. Required (not
+   * optional like the seams below) for the reason `agentKindRegistry` is: the two boundaries
+   * answering from different registries is how a pipeline passes one and is refused by the other.
+   */
+  gateRegistry: GateRegistry
   spend: SpendService
   /** Optional — see the matching {@link ExecutionServiceDependencies} docs; each guard is a
    *  pass-through when its seam is unwired (tests / unconfigured facades). */
@@ -118,6 +126,7 @@ export class RunAdmission {
   private readonly executionRepository: ExecutionRepository
   private readonly contextBuilder: AgentContextBuilder
   private readonly agentKindRegistry: AgentKindRegistry
+  private readonly gateRegistry: GateRegistry
   private readonly spend: SpendService
   private readonly environmentProvisioning?: EnvironmentProvisioningService
   private readonly workspaceSettingsService?: WorkspaceSettingsService
@@ -143,6 +152,7 @@ export class RunAdmission {
     this.executionRepository = deps.executionRepository
     this.contextBuilder = deps.contextBuilder
     this.agentKindRegistry = deps.agentKindRegistry
+    this.gateRegistry = deps.gateRegistry
     this.spend = deps.spend
     this.environmentProvisioning = deps.environmentProvisioning
     this.workspaceSettingsService = deps.workspaceSettingsService
@@ -185,7 +195,13 @@ export class RunAdmission {
     // these at save, but a pipeline can become invalid out of band. The agent-kind registry rides
     // along so a DEPLOYMENT-registered kind's own `gatable` flag is honoured here exactly as it is
     // at save — without it, a registered gatable kind would pass the builder and be refused here.
-    validatePipelineShape({ ...shape, agentKindRegistry: this.agentKindRegistry })
+    // The gate registry rides along for the same reason, so a step's gate parameters are judged
+    // against the same declaration at both doors.
+    validatePipelineShape({
+      ...shape,
+      agentKindRegistry: this.agentKindRegistry,
+      gateRegistry: this.gateRegistry,
+    })
 
     // The Initiative Planning kinds run ONLY on an `initiative`-level block, and an
     // initiative block accepts ONLY such a chain — bidirectional, and here in the shared
