@@ -59,6 +59,7 @@ a model could not have acted on either.
 | 7   | Tell the AGENTS what was waived (`AgentRunContext`), so an overridden run's prompt states the gap | ⬜ todo |     |
 | 8   | Per-task-type findings for deployment-registered types (a `TaskTypeRegistry` hook)                | ✅ done |     |
 | 9   | Count the parks (`OperationalMetrics`), so "is this catching more than it was" is answerable      | ⬜ todo |     |
+| 10  | E2E: the park, the named finding, and BOTH exits through the real notice (`input-gate.spec.ts`)   | ✅ done |     |
 
 ## Conventions & gotchas
 

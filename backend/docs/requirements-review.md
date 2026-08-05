@@ -62,6 +62,11 @@ its JSON output contract.
 
 ## Related
 
+- The loop is driven end to end through the real window by
+  [`requirements-review.spec.ts`](../internal/e2e/tests/requirements-review.spec.ts). Its three
+  inline calls are scripted by prompt SHAPE (the e2e backend has no model), so a change to
+  `buildReviewPrompt` / `buildReworkPrompt` can break that fake: see the seam's own drift guard in
+  [`the e2e README`](../internal/e2e/README.md#inline-llm-calls-the-e2einlinemodels-seam).
 - Prompt overrides and the role/directives split:
   [`agent-prompt-overrides.md`](./agent-prompt-overrides.md).
 - The merge preset that carries the cap and tolerance knobs: CLAUDE.md, "Merge lifecycle".

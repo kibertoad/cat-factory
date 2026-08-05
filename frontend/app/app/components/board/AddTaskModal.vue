@@ -59,12 +59,7 @@ const { t } = useI18n()
 
 const { linkPending, presentLinkFailures } = useContextLinking()
 
-const open = computed({
-  get: () => ui.addTaskContainerId !== null,
-  set: (v: boolean) => {
-    if (!v) void requestClose()
-  },
-})
+const open = computed(() => ui.addTaskContainerId !== null)
 
 const container = computed(() =>
   ui.addTaskContainerId ? board.getBlock(ui.addTaskContainerId) : undefined,
@@ -591,6 +586,15 @@ const { requestClose } = useUnsavedGuard({
   }),
 })
 
+// The template's v-model binding: dismissal (Escape / backdrop) routes through the guard.
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const modalOpen = computed({
+  get: () => open.value,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
+})
+
 // A recurring task only needs a target frame (its details are filled in the schedule
 // modal); every other type needs a title. A review task additionally needs a target PR.
 // The Ralph loop's completion criterion (its `ralph.validationCommand` agent-config id). The
@@ -757,7 +761,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('board.addTask.title')">
+  <UModal v-model:open="modalOpen" :title="t('board.addTask.title')">
     <template #body>
       <div class="space-y-4" data-testid="add-task-modal">
         <p v-if="container" class="text-xs text-slate-400">
@@ -891,6 +895,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                     : t('board.addTask.descriptionPlaceholder')
                 "
                 class="w-full"
+                data-testid="add-task-description"
               />
             </UFormField>
           </template>

@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Otwórz {pr} na GitHub",
+      "readOutcome": "Wynik",
+      "readOutcomeHint": "Przeczytaj, co się zmieniło, wraz z dowodami",
       "review": "Przejrzyj",
       "merge": "Scal",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Przeczytaj wynik",
       "stepState": {
         "pending": "Oczekuje",
         "working": "Praca",
@@ -1817,9 +1820,25 @@
       "signInFailed": "Logowanie nie powiodło się. Sprawdź swoje dane i spróbuj ponownie.",
       "genericError": "Coś poszło nie tak. Spróbuj ponownie.",
       "notConfiguredTitle": "Uwierzytelnianie nie jest skonfigurowane",
-      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
+      "notConfiguredBody": "To wdrożenie nie ma włączonej żadnej metody logowania, więc nie możesz się zalogować ani uzyskać dostępu do swoich przestrzeni roboczych. Administrator musi skonfigurować dostawcę uwierzytelniania (logowanie jednokrotne przez dostawcę tożsamości Twojej organizacji, OAuth GitHub lub Google albo logowanie e-mailem i hasłem).",
       "patPlaceholder": "Osobisty token dostępu {provider}",
       "signInWithPat": "Zaloguj się tokenem PAT {provider}"
+    },
+    "sso": {
+      "continueWith": "Kontynuuj z {provider}",
+      "failedTitle": "Nie udało się ukończyć logowania jednokrotnego",
+      "errors": {
+        "stateInvalid": "Ta próba logowania wygasła lub została już użyta. Zacznij ponownie z tej strony.",
+        "providerDenied": "Twój dostawca tożsamości odrzucił logowanie. Jeśli nie anulowałeś go samodzielnie, zapytaj zespół IT, czy ta aplikacja jest do Ciebie przypisana.",
+        "exchangeFailed": "To wdrożenie nie mogło zakończyć wymiany z dostawcą tożsamości. Administrator musi sprawdzić sekret klienta i adres przekierowania logowania jednokrotnego.",
+        "tokenInvalid": "Nie udało się zweryfikować odpowiedzi dostawcy tożsamości. Administrator musi sprawdzić konfigurację logowania jednokrotnego tego wdrożenia.",
+        "subjectMissing": "Dostawca tożsamości nie zwrócił identyfikatora użytkownika, więc nie udało się ustalić konta. Administrator musi sprawdzić, które oświadczenia (claims) są udostępniane.",
+        "groupRequired": "Logowanie się udało, ale nie należysz do żadnej grupy katalogowej uprawnionej do korzystania z tego wdrożenia. Poproś zespół IT o dodanie Cię.",
+        "domainNotAllowed": "Twoja domena e-mail nie ma uprawnień do logowania w tym wdrożeniu. Zapytaj zespół IT, którego konta użyć.",
+        "emailRequired": "To wdrożenie ogranicza logowanie do wybranych domen e-mail, ale dostawca tożsamości nie udostępnił zweryfikowanego adresu e-mail. Administrator musi włączyć oświadczenie e-mail.",
+        "providerUnreachable": "Twój dostawca tożsamości nie odpowiedział podczas kończenia logowania, więc on sam lub połączenie z nim może być niedostępne. Spróbuj ponownie po chwili, a jeśli problem się powtarza, powiadom administratora.",
+        "unknown": "Logowanie jednokrotne nie powiodło się z powodu, którego ta wersja nie rozpoznaje. Spróbuj ponownie, a jeśli problem się powtarza, powiadom administratora."
+      }
     },
     "resetPassword": {
       "title": "Zresetuj hasło",
@@ -2871,6 +2890,27 @@
       "servableHarnessesNone": "Żadne CLI agenta nie obsługuje tego transportu, więc ten serwer nie dotyczy żadnego przebiegu.",
       "allowedTools": "Zawężone do: {tools}",
       "credentials": "Dane uwierzytelniające: {keys}",
+      "oauth": {
+        "connected": "Połączono",
+        "notConnected": "Niepołączony",
+        "machineGrant": "Loguje się jako to wdrożenie",
+        "connectedBy": "Połączone przez {user}",
+        "scopes": "Przyznano: {scopes}",
+        "notRefreshable": "Dostawca nie wydał tokenu odświeżania, więc połączenie trzeba będzie nawiązać ponownie, gdy token dostępu wygaśnie.",
+        "lastError": "Ostatnie odnowienie tokenu nie powiodło się: {detail}",
+        "connect": "Połącz",
+        "reconnect": "Połącz ponownie",
+        "disconnect": "Rozłącz",
+        "callback": {
+          "working": "Kończenie połączenia…",
+          "done": "Połączono z {server}",
+          "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
+          "back": "Powrót do aplikacji",
+          "failedTitle": "Nie udało się zakończyć połączenia",
+          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
+        }
+      },
       "test": "Testuj",
       "notProbeable": {
         "stdio": "Działa w kontenerze agenta, więc nie można go przetestować z tego miejsca.",
@@ -2881,6 +2921,8 @@
         "ok": "Odpowiedział",
         "credentialsMissing": "Brak danych uwierzytelniających",
         "credentialRefused": "Dane uwierzytelniające odrzucone",
+        "oauthNotConnected": "Niepołączony",
+        "oauthTokenFailed": "Połączenie przestało działać",
         "unreachable": "Brak odpowiedzi",
         "httpError": "Odrzucił żądanie",
         "protocolError": "To nie serwer MCP",
@@ -2897,7 +2939,9 @@
       "hideDetails": "Ukryj szczegóły",
       "toast": {
         "loadFailed": "Nie udało się wczytać serwerów narzędzi",
-        "probeFailed": "Nie udało się przetestować serwera narzędzi"
+        "probeFailed": "Nie udało się przetestować serwera narzędzi",
+        "connectFailed": "Nie udało się rozpocząć łączenia",
+        "disconnectFailed": "Nie udało się rozłączyć serwera narzędzi"
       }
     },
     "capabilityCredentials": {
@@ -5342,6 +5386,110 @@
     "history": {
       "heading": "Historia ({count} runda) | Historia ({count} rundy) | Historia ({count} rund)",
       "fixRequested": "Poproszono o poprawkę"
+    }
+  },
+  "outcome": {
+    "title": "Wynik",
+    "subtitle": "Co zmienił ten przebieg i jakie są na to dowody",
+    "diff": "Otwórz diff",
+    "diffNumbered": "Otwórz diff (#{number})",
+    "peerDiff": "Otwórz diff w {repo}",
+    "disposition": {
+      "merged": "Scalone",
+      "awaiting_merge": "Czeka na scalenie",
+      "in_flight": "Wciąż trwa",
+      "needs_attention": "Wymaga uwagi",
+      "not_run": "Jeszcze nie uruchomiono",
+      "unknown": "Przebieg nie został wczytany"
+    },
+    "ask": {
+      "title": "O co proszono",
+      "none": "To zadanie nie ma opisu, więc nie ma do czego porównać wyniku."
+    },
+    "gap": {
+      "run_unavailable": "Przebieg tego zadania nie został wczytany, więc zapisane w nim dowody nie są tutaj pokazane. To co innego niż przebieg, który niczego nie zapisał."
+    },
+    "requirements": {
+      "title": "Sprawdzone wymagania",
+      "met": "Spełnione: {count}",
+      "notMet": "Niespełnione: {count}",
+      "notCovered": "Niesprawdzone: {count}",
+      "regressions": "Regresje: {count}",
+      "regressionTag": "Regresja",
+      "idOnly": "sam identyfikator",
+      "idOnlyHint": "Tego identyfikatora nie ma w specyfikacji usługi, więc nie ma nazwy do pokazania.",
+      "spec": {
+        "not_read": "Specyfikacja usługi nie została odczytana, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
+        "unmatched": "Żaden z tych identyfikatorów wymagań nie występuje w odczytanej specyfikacji usługi, więc pokazane są tylko identyfikatory zgłoszone przez testera."
+      },
+      "verdict": {
+        "met": "Potwierdzone",
+        "not_met": "Niespełnione",
+        "not_covered": "Niesprawdzone"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc nie sprawdzono żadnego wymagania.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu, więc żadne wymaganie nie zostało rozstrzygnięte.",
+        "no_verdicts": "Tester zgłosił raport, nie rozstrzygając żadnego wymagania ze specyfikacji."
+      }
+    },
+    "tests": {
+      "title": "Jak to przetestowano",
+      "openReport": "Pełny raport z testów",
+      "summary": "Tester zgłasza: {summary}",
+      "abort": "Tester nie mógł przeprowadzić sensownego testu: {reason}",
+      "counts": "{passed} zaliczonych, {failed} niezaliczonych, {skipped} pominiętych",
+      "verdict": {
+        "greenlit": "Gotowe do wydania",
+        "concerns": "Zgłoszono zastrzeżenia",
+        "could_not_run": "Nie dało się przetestować"
+      },
+      "environment": {
+        "local": "Przetestowane na lokalnych zależnościach",
+        "ephemeral": "Przetestowane na środowisku podglądu"
+      },
+      "severity": {
+        "low": "Niski",
+        "medium": "Średni",
+        "high": "Wysoki",
+        "critical": "Krytyczny"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc niczego nie sprawdzono.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu."
+      }
+    },
+    "visuals": {
+      "title": "Jak to wygląda",
+      "shotAlt": "Zrzut ekranu widoku {view}",
+      "hasReference": "Dla tego widoku dostarczono projekt referencyjny",
+      "source": {
+        "visual_confirm": "Te widoki porównano z projektami referencyjnymi.",
+        "tester": "Te widoki zarejestrowano podczas testów. Nikogo nie poproszono o ich ocenę."
+      },
+      "gap": {
+        "no_visual_step": "Nic w tym potoku nie rejestruje interfejsu, więc nie ma na co patrzeć.",
+        "none_captured": "Interfejs miał zostać zarejestrowany, ale nie zapisano żadnego widoku."
+      }
+    },
+    "checks": {
+      "title": "Sprawdzenia",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Sprawdzenia projektu",
+        "reproduction": "Odtworzenie błędu"
+      },
+      "state": {
+        "pass": "zaliczone",
+        "fail": "niezaliczone",
+        "pending": "wciąż trwa",
+        "inconclusive": "bez rozstrzygnięcia"
+      }
+    },
+    "empty": {
+      "title": "Nie ma jeszcze czego pokazać",
+      "body": "To zadanie nie wytworzyło jeszcze wyniku do przeczytania."
     }
   },
   "focus": {

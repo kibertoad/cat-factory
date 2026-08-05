@@ -96,13 +96,15 @@ agent plan around a tool that was never there and discover the gap mid-run. Each
 its own member of a closed vocabulary, because each needs a DIFFERENT fix, and the prompt renders
 them through an exhaustive `Record`, so adding one fails the typecheck rather than rendering blank:
 
-| Reason                  | What happened                                                                                                                    | The fix                                              |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, or the `harnesses` list           |
-| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport         |
-| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value       |
-| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help) |
-| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                         |
+| Reason                  | What happened                                                                                                                    | The fix                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `harness_unsupported`   | This CLI speaks no MCP (Pi), the definition's `harnesses` excludes it, or it is an ambient Codex run with no per-run config home | The run's harness, or the `harnesses` list            |
+| `transport_unsupported` | The CLI speaks MCP but its client cannot reach this transport (Codex is stdio-only)                                              | A second declaration for the other transport          |
+| `missing_secret`        | A `required` credential did not resolve                                                                                          | Set the variable, or store the workspace value        |
+| `reserved_secret`       | The credential's LOOKUP key names a platform variable                                                                            | The DECLARATION (setting the variable must not help)  |
+| `oauth_not_connected`   | The server authenticates with OAuth and this workspace holds no grant (or the deployment has no `ENCRYPTION_KEY` to keep one in) | Press Connect on the board, and sign in at the vendor |
+| `oauth_token_failed`    | A grant IS on file and produced no access token: revoked/expired refresh, an authorization server that refused, discovery failed | Reconnect, or wait out the vendor's outage            |
+| `over_budget`           | Nothing is wrong with the server; the kind declares more than a dispatch carries                                                 | Trim the kind's declarations                          |
 
 **A dispatch carries at most `TOOL_SERVER_BUDGET.maxServers` servers**, plus a total byte cap on
 the job-body field. Past either the excess is dropped under `over_budget`, and **both dimensions
@@ -188,6 +190,142 @@ the run context keeps them all.
   generator: the run continues and the agent reports the integration as unavailable, with nothing
   naming the allow-list as the cause. Cover both families, or list the exact keys.
 
+## OAuth: connecting an OAuth-protected remote server
+
+Most of the hosted MCP ecosystem (Linear, Atlassian, Figma, Slack's remote server) authenticates
+with OAuth rather than a static token, so a declaration that can only name a key reaches none of
+it. A remote (`http`) server may therefore declare `oauth` instead of, or beside, its
+`secretKeys`:
+
+```ts
+registry.registerToolServer({
+  id: 'linear',
+  label: 'Linear',
+  guidance: 'Read the issue behind a task before guessing at its intent. Never file or edit.',
+  transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
+  oauth: {
+    grant: 'authorization_code',
+    clientId: 'the client id you registered at the vendor',
+    // Public client (PKCE only) when omitted, which is what most remote MCP servers expect.
+    clientSecretKey: 'MCP_LINEAR_CLIENT_SECRET',
+    scopes: ['read'],
+    // authorizationUrl / tokenUrl omitted ⇒ DISCOVERED from the server url (see below).
+  },
+})
+registry.assignToolServers('coder', ['linear'])
+```
+
+**The split is the same one the static path has, one level up.** A `secretKeys` declaration names
+a credential and the tenant supplies its VALUE; an `oauth` declaration names a CLIENT and the
+tenant supplies its GRANT. Registration stays deployment code either way, so the trust boundary
+does not move: a workspace can authorise its own vendor account, and cannot point the deployment
+at a different endpoint.
+
+**Two grants, and only one of them involves a person.**
+
+| Grant                | Who authorises                                        | What a board does                                 |
+| -------------------- | ----------------------------------------------------- | ------------------------------------------------- |
+| `authorization_code` | A human with `secrets.manage`, in the vendor's own UI | Presses Connect once; the grant is then refreshed |
+| `client_credentials` | Nobody: the deployment's own client authenticates     | Nothing; the token is minted on first dispatch    |
+
+`client_credentials` is what makes an OAuth-protected INTERNAL or partner server reachable on a
+deployment with no one to press a button (a cron-driven install, a CI environment). It needs no
+redirect URL and shows no Connect button.
+
+### Endpoints: discovered, or declared
+
+Omit `authorizationUrl` / `tokenUrl` and the platform discovers them the way the MCP authorization
+spec prescribes: the server's protected-resource metadata (RFC 9728, tried at the path-aware
+well-known location first) names its authorization server, and that server's metadata (RFC 8414,
+falling back to OpenID Connect discovery) names the endpoints. A server that publishes no
+protected-resource document is treated as its own issuer, which is what makes the pre-RFC-9728
+generation of servers reachable.
+
+**Declaring an endpoint WINS over discovery**, half a pair included: pinning one and discovering
+the other is a legitimate declaration for a vendor whose metadata is right about one and stale
+about the other. Pin both when you do not want a third party's metadata document deciding where
+your client secret is sent.
+
+**A discovered endpoint is held to the same URL floor a declared one is** (https, or plain http on
+loopback; never a cloud instance-metadata address). A metadata document is a third party telling
+this deployment where to send its client secret and receive its tokens, so that is the one rule
+discovery may not relax. The floor runs on EVERY url the walk touches, each candidate and each
+redirect hop, because checking the first one and following whatever it points at is not checking.
+
+**The token endpoint's redirects are refused rather than followed.** That request body carries the
+client secret and the grant, and while `fetch` strips an `Authorization` header across origins it
+never strips a form body, so following a 30x there would hand the client secret to wherever it
+pointed. A metadata GET carries no credential and does follow, up to three re-validated hops.
+
+### What a deployment has to configure
+
+- **`ENCRYPTION_KEY`**, because a grant is sealed at rest like every other credential in the
+  platform. Without it there is nowhere to keep one, and every OAuth server is stated to its agent
+  as `oauth_not_connected` rather than dispatched without a token.
+- **`MCP_OAUTH_REDIRECT_URL`**, for the interactive grant only: this deployment's public app URL
+  followed by `/mcp-oauth-callback`, and the SAME string registered as the client's redirect URI at
+  the vendor. It points at the SPA, not at the backend, for the reason the security notes below
+  give. Operator-set rather than derived from the request, because a `Host`-derived value differs
+  behind every proxy and preview URL a deployment sits behind, and the vendor then refuses the
+  exchange with `redirect_uri_mismatch`, which names nothing on this side. Unset ⇒ Connect refuses
+  with a 503 naming the variable, before the browser leaves the app.
+- **The client secret**, when the client has one. It is looked up through the SAME
+  capability-credential chain a `secretKeys` entry uses (the workspace store in front of the
+  environment, per key), so a tenant can bring its own OAuth client through the credential
+  checklist rather than through a second mechanism. It is held to the same reserved-key floor.
+
+### What a board sees, and what a run gets
+
+The tool-server row in Infrastructure → Capability credentials carries the connection: Connect /
+Reconnect / Disconnect, who granted it, the scopes the vendor actually granted, and — beside
+`connected` rather than instead of it — the last token renewal that failed. That pairing is the
+point: a grant that is on file and no longer producing tokens is precisely the state that reads as
+working and is not.
+
+At dispatch the access token is refreshed if it is close to spent and folded into the header the
+declaration names (`Authorization: Bearer …` by default). It rides the job body only, exactly like
+a resolved `secretKeys` value: never a prompt, never the agent-context snapshot.
+
+Three things worth knowing before you wire one:
+
+- **A refresh token the vendor did not rotate is carried forward.** Servers differ, and dropping
+  the old one on a non-rotating server would turn a working grant into a single-use one.
+- **A grant with NO refresh token is reported as such** (`refreshable: false`), before its access
+  token expires rather than after. It has to be granted again by hand when it does.
+- **Disconnect is not gated on the declaration still existing.** A grant outlives the registration
+  that created it (a retired server, a rename in a refactor), and the row is then a live vendor
+  token nobody can reach, so the one action that removes it always works.
+
+### Security notes specific to OAuth
+
+- **The vendor's redirect lands on the SPA, and the backend never receives one.** This is the
+  load-bearing choice of the whole flow. A redirect target is reached by a top-level browser
+  navigation a third party triggers, and sessions here are BEARER TOKENS, which such a navigation
+  cannot carry, so a backend route receiving the redirect directly sees no user on every request,
+  on an authenticated deployment exactly as in dev-open, and any "same user" or "still permitted"
+  check written there is unreachable code that reads like protection. The page at
+  `/mcp-oauth-callback` re-presents the `code` and `state` to `POST /mcp/oauth/complete`, which is
+  ordinary session-gated API, so the two checks below actually run. (It also means the completion
+  route is behind the shared default-deny gate rather than exempted from it.)
+- **The `state` is SEALED, not signed.** It carries the PKCE verifier, so it is encrypted under the
+  deployment's own key rather than merely authenticated: the state travels through the same browser
+  redirect the authorization code does. It also carries the user who STARTED the flow, and the
+  completion refuses anyone else. Without that binding, getting an admin to open an attacker's
+  authorization link plants the attacker's vendor account as the board's connection.
+- **`secrets.manage` is re-resolved when the token is stored**, not assumed from the Connect press.
+  A grant takes minutes of human time and the permission can be revoked inside that window. It goes
+  through the same single `loadWorkspaceAccess` the workspace gate uses; that gate cannot do it
+  itself, because the board is sealed into the state rather than named in the path.
+- **A grant row is reclaimed with the board.** `mcp_oauth_grants` is in the workspace-delete
+  cascade, so deleting a workspace does not leave live vendor tokens behind. Neither disconnect nor
+  delete REVOKES at the vendor (no RFC 7009 call is made), so revoke there too when that matters.
+- **The `resource` indicator (RFC 8707) is always sent**, defaulting to the server's own url, so a
+  token minted for one MCP server is not replayable against another behind the same authorization
+  server.
+- **Everything the security posture section says about a wired server still applies.** OAuth
+  changes who the run authenticates AS; it does not make the server's results trusted input, and
+  the granted scopes are the boundary you actually control. Grant read-only scopes at the vendor.
+
 ## Testing one for real (the probe)
 
 Boot validation rules on the DECLARATION and a dispatch reports what it DROPPED. Neither can tell you
@@ -201,15 +339,17 @@ environment, per key, with the reserved-key floor applied before the resolver is
 `initialize` + `tools/list` to the server. So the verdict is about THIS board rather than about
 whoever set the deployment's variable.
 
-| Verdict               | What it means                                                                                                    | The fix                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `ok`                  | The handshake completed and the tool list came back                                                              | Nothing; the row names the server, its version and its tool count |
-| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                                                     | Store the value for this board, or set the variable               |
-| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                                                | The DECLARATION (setting the variable must not help)              |
-| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline (including a body that stalls after its 200) | The endpoint, or the network between here and it                  |
-| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)                                | The credential's value, or the url's path                         |
-| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect)                               | The url almost certainly names something else                     |
-| `not_probeable`       | The backend has no vantage point (see below)                                                                     | Verify from a run, or change the transport                        |
+| Verdict               | What it means                                                                                                      | The fix                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `ok`                  | The handshake completed and the tool list came back                                                                | Nothing; the row names the server, its version and its tool count |
+| `credentials_missing` | A `required` credential did not resolve, so NOTHING was sent                                                       | Store the value for this board, or set the variable               |
+| `credential_refused`  | A credential's LOOKUP key names a platform configuration variable                                                  | The DECLARATION (setting the variable must not help)              |
+| `oauth_not_connected` | The server authenticates with OAuth and this board has not granted it, so NOTHING was sent                         | Press Connect and sign in at the vendor                           |
+| `oauth_token_failed`  | A grant is on file and produced no token (revoked refresh, an authorization server that refused, failed discovery) | Reconnect; the row's detail carries the cause                     |
+| `unreachable`         | No answer at all: DNS, TLS, connection refused, or the 10s deadline (including a body that stalls after its 200)   | The endpoint, or the network between here and it                  |
+| `http_error`          | Something answered with a status rather than an MCP frame (`401` ⇒ a WRONG token)                                  | The credential's value, or the url's path                         |
+| `protocol_error`      | It answered, but not as an MCP server (non-JSON, a JSON-RPC error, a bad redirect)                                 | The url almost certainly names something else                     |
+| `not_probeable`       | The backend has no vantage point (see below)                                                                       | Verify from a run, or change the transport                        |
 
 Three declarations are refused BY NAME instead of being probed, because a probe from the backend would
 answer about the wrong process: a `stdio` server is a child of the harness inside the run container; a
@@ -280,10 +420,11 @@ by text it read. Three facts follow for tool servers specifically:
 Every entry here has a disposition in [`mcp-maturation.md`](../../docs/initiatives/mcp-maturation.md);
 this list exists so an adopting deployment learns the ceiling from the docs rather than from a run.
 
-- **No OAuth for remote servers** (tracker slice 7). Credentials are static values resolved by
-  name, so the OAuth-first vendor remote servers (Figma, Atlassian, Slack and Linear remote MCP,
-  and most of the current hosted ecosystem) cannot be connected today. Reachable now: any server
-  taking a static token (header or env), and anything you run yourself.
+- **No dynamic client registration** (RFC 7591). OAuth works from a client the deployment
+  registered at the vendor and named in code; a server that offers ONLY dynamic registration
+  cannot be connected. Registering a client at runtime would be deployment state with no home in a
+  composition-root registration and no operator-visible identity at the vendor, which is why it is
+  deferred rather than absent by accident.
 - **Runner-pool images must be current, or the run is BLIND** (slice 5 carries the handshake that
   closes this). A self-hosted runner image older than the backend parses the job body without the
   `mcpServers` field and runs with the prompt still promising the tools; nothing states the gap.

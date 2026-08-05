@@ -59,6 +59,10 @@ const WINDOWS: Record<string, { width: ResultWindowWidth; why: string }> = {
     why: 'tracker column + run-metadata rail, and it hands its whole body to the three-column plan review while a plan is parked',
   },
   'judge/JudgeResultView.vue': { width: '3xl', why: 'a rubric verdict — one column, short' },
+  'outcome/OutcomeSummaryWindow.vue': {
+    width: '3xl',
+    why: 'the run outcome summary: one column of short evidence sections, no rail to lay out beside it',
+  },
   'panels/GenericStructuredResultView.vue': {
     width: '4xl',
     why: 'the fallback structured-result reader, one column of sections',

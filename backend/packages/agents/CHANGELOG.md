@@ -1,5 +1,54 @@
 # @cat-factory/agents
 
+## 0.113.0
+
+### Minor Changes
+
+- 4e4d1b4: OAuth for external MCP tool servers, so the OAuth-first hosted ecosystem (Linear, Atlassian,
+  Figma, Slack's remote server) is reachable at all. A remote (`http`) declaration may now carry
+  `oauth`: the `authorization_code` grant, which a `secrets.manage` holder completes once per board
+  from the Infrastructure window, and `client_credentials`, which needs no human and covers an
+  internal or partner server. Endpoints are discovered per the MCP authorization spec (RFC 9728 →
+  RFC 8414 → OIDC discovery) with a declaration override, PKCE and the RFC 8707 `resource` indicator
+  are always used, and the grant is sealed per (workspace, server) and refreshed on the dispatch
+  path. The access token rides the job body's header channel only, never a prompt or the telemetry
+  snapshot.
+
+  Two new unavailability reasons (`oauth_not_connected`, `oauth_token_failed`) and the matching probe
+  verdicts keep "nobody connected", "the connection stopped working" and "no credential configured"
+  apart, since each sends an operator somewhere different. New table `mcp_oauth_grants` on both
+  runtimes (D1 migration 0082 ⇄ a Drizzle migration), in the mothership `remote` bucket and in the
+  workspace-delete cascade. Interactive grants need `MCP_OAUTH_REDIRECT_URL` set to the deployment's
+  public app URL followed by `/mcp-oauth-callback` and `ENCRYPTION_KEY` for the sealed store; without
+  either, an OAuth server is stated to its agent as unavailable rather than dispatched without a
+  token.
+
+  The vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a session-gated
+  `POST /mcp/oauth/complete`. A backend route receiving the redirect directly could not be gated:
+  sessions are bearer tokens and a third-party browser navigation carries none, so it would have to
+  sit outside the default-deny session gate, and the "same user who started the flow" and "still
+  holds `secrets.manage`" checks would never execute. Routing it through the app is what makes both
+  enforceable.
+
+### Patch Changes
+
+- Updated dependencies [ec96387]
+- Updated dependencies [7f5ed08]
+- Updated dependencies [4e4d1b4]
+  - @cat-factory/contracts@0.246.0
+  - @cat-factory/kernel@0.244.0
+  - @cat-factory/prompt-fragments@0.15.72
+
+## 0.112.6
+
+### Patch Changes
+
+- Updated dependencies [10e7a15]
+- Updated dependencies [ca213b1]
+  - @cat-factory/contracts@0.245.0
+  - @cat-factory/kernel@0.243.1
+  - @cat-factory/prompt-fragments@0.15.71
+
 ## 0.112.5
 
 ### Patch Changes

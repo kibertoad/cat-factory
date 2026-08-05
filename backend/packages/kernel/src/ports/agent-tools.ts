@@ -1,4 +1,4 @@
-import type { McpSecretRef } from '../domain/agent-capabilities.js'
+import type { McpOAuthConfig, McpSecretRef } from '../domain/agent-capabilities.js'
 
 /**
  * WHAT a credential is being resolved for. A discriminated subject rather than a bare id,
@@ -51,4 +51,59 @@ export interface ToolSecretResolver {
     /** The secrets the subject declared. */
     keys: McpSecretRef[]
   }): Promise<Record<string, string>>
+}
+
+/**
+ * What an {@link McpOAuthTokenSource} answered for one dispatch. A DISCRIMINATED result rather
+ * than a nullable token, because the three outcomes need three different things said: a working
+ * header, "nobody has authorised this board", and "we hold a grant and it did not produce a
+ * token". Collapsing the last two into a bare absence is the "absent and zero must never render
+ * the same" rule applied to a credential — the first is a person pressing Connect and the second
+ * is an outage or a revocation.
+ */
+export type McpOAuthTokenResult =
+  /** A live access token, already folded into the header its declaration named. */
+  | { status: 'ok'; header: string; value: string }
+  /**
+   * `authorization_code` only: this workspace holds no grant for this server. Not an error and
+   * not transient — the remedy is the grant flow, and the dispatch states it to the agent as
+   * `oauth_not_connected`.
+   */
+  | { status: 'not_connected' }
+  /**
+   * A grant (or a client-credentials client) is on file and no access token came out of it: the
+   * refresh token was revoked or expired, the authorization server refused or was unreachable, the
+   * client secret did not resolve, or discovery failed. `error` is operator-facing prose, already
+   * scrubbed at the emit site.
+   */
+  | { status: 'token_failed'; error: string }
+
+/**
+ * Mints the access token a remote (`http`) tool server's OAuth declaration asks for, per dispatch.
+ *
+ * A PORT rather than a direct call for the same reason {@link ToolSecretResolver} is one: the
+ * grant lives in a sealed per-workspace store that only a facade can build (it needs the
+ * deployment's `ENCRYPTION_KEY`), while the code that decides what a dispatch carries is
+ * runtime-neutral. A facade that wired no store passes nothing, and every OAuth server is then
+ * reported to the agent as unavailable rather than dispatched with no `Authorization` header,
+ * which would surface as the server 401ing mid-run.
+ *
+ * Contract: called once per dispatch per server, never throws (a failure is a `token_failed`
+ * result), and the value it returns is written STRAIGHT into the job body's `mcpServers` field. It
+ * never touches `AgentRunContext`, a prompt, or the telemetry snapshot — the same channel a
+ * resolved `secretKeys` value rides, for the same reason.
+ *
+ * Refreshing is this port's business, not its caller's: the implementation decides whether the
+ * stored access token is still usable and exchanges the refresh token when it is not.
+ */
+export interface McpOAuthTokenSource {
+  accessToken(input: {
+    workspaceId: string
+    /** The tool server's id — the grant is stored per (workspace, server). */
+    serverId: string
+    /** The remote server's url, which is the default `resource` indicator and discovery root. */
+    serverUrl: string
+    /** The declaration's OAuth half. */
+    oauth: McpOAuthConfig
+  }): Promise<McpOAuthTokenResult>
 }

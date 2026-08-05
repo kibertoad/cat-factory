@@ -14,6 +14,7 @@ import {
   EMAIL_CIPHER_INFO,
   createEmailSender,
   TicketTrackerService,
+  AuditService,
 } from '@cat-factory/integrations'
 import {
   type DocumentSourceProvider,
@@ -173,6 +174,15 @@ export function assembleNodeCoreDependencies(bundle: NodeCoreDepsBundle): CoreDe
     // The counter half of the same obligation, wired in the same position for the same reason:
     // an un-wired collector reads as "none of this ever happened".
     operationalMetrics,
+    // The third member of that obligation: where privileged actions are RECORDED for an account
+    // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
+    // anything", which is the assurance it exists to give.
+    auditRecorder: new AuditService({
+      auditEventRepository: bundle.repos.auditEventRepository,
+      idGenerator: bundle.idGenerator,
+      clock: bundle.clock,
+      logger,
+    }),
     ...buildNodeStoreDeps(bundle),
     ...buildNodeServiceDeps(bundle),
   }

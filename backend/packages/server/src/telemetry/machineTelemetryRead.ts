@@ -3,6 +3,7 @@ import type {
   AgentContextSnapshotIndex,
   AgentSearchQuery,
   AgentToolCall,
+  AgentToolCallSummary,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricSummary,
@@ -135,7 +136,12 @@ export const TELEMETRY_READ_METHODS = {
       maxLimit: 100,
       timeoutMs: 10_000,
     },
-    countByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
+    /**
+     * The `(agentKind, tool)` aggregate. No row cap to declare: the response is one cell per
+     * DISTINCT tool a run's agents called, which a run bounds far below any page limit, and
+     * every cell is four small fields with no body among them.
+     */
+    summarizeByExecution: { args: 'id', maxArgs: 1, limit: null, timeoutMs: 5_000 },
   },
 } as const satisfies Record<string, Record<string, TelemetryReadBound>>
 
@@ -297,7 +303,7 @@ export interface TelemetryReadResults {
   'agentSearchQueryRepository.countByExecution': number
   'agentToolCallRepository.listPage': AgentToolCall[]
   'agentToolCallRepository.listByExecution': AgentToolCall[]
-  'agentToolCallRepository.countByExecution': number
+  'agentToolCallRepository.summarizeByExecution': AgentToolCallSummary[]
 }
 
 /** The client half: performs one bounded telemetry read against the mothership. */

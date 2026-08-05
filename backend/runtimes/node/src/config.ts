@@ -12,6 +12,7 @@ import type {
   EmailConfig,
   GitLabConfig,
   PrivilegedAppConfig,
+  SsoConfig,
   TasksConfig,
 } from '@cat-factory/server'
 import {
@@ -26,6 +27,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolveSsoConfig,
   resolveTrustedProxyHops,
   resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
@@ -419,6 +421,7 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   googleEnabled: boolean
   passwordEnabled: boolean
   authEnabled: boolean
+  sso: SsoConfig | undefined
 } {
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
@@ -439,7 +442,14 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
   const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
 
-  const authEnabled = githubEnabled || googleEnabled || passwordEnabled
+  // Enterprise SSO: parsed by the SHARED resolver the Worker facade calls too, so the nine
+  // variables and the four boot refusals live in ONE place. Resolved BEFORE the generic
+  // `assertNodeAuthConfigured` guards below so a partial/unsafe SSO combination reports its own
+  // specific problem (which variable, and why) rather than surfacing as the generic
+  // "no login provider configured".
+  const sso = resolveSsoConfig(env, { strongSessionSecret: strongSecret, devOpen })
+
+  const authEnabled = githubEnabled || googleEnabled || passwordEnabled || sso !== undefined
   assertNodeAuthConfigured({ clientId, clientSecret, sessionSecret, devOpen, authEnabled })
 
   return {
@@ -455,6 +465,7 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
     googleEnabled,
     passwordEnabled,
     authEnabled,
+    sso,
   }
 }
 
@@ -472,6 +483,7 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
     googleEnabled,
     passwordEnabled,
     authEnabled,
+    sso,
   } = resolveNodeAuthEnablement(env)
 
   return {
@@ -509,6 +521,7 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
           },
         }
       : {}),
+    ...(sso ? { sso } : {}),
     allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
     allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
     allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),
@@ -595,11 +608,17 @@ function buildRetentionConfig(env: NodeJS.ProcessEnv): AppConfig['retention'] {
       7,
     ),
     commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
-    // Heavy full per-call prompt/response; pruned aggressively (default 3 days).
+    // Heavy full per-call prompt/response, so the window is a trade between disk and how far
+    // back a post-mortem can reach. Default 14 days: the 3 days it replaced expired the record
+    // before most investigations start (a run that failed over a weekend was already gone), and
+    // a post-mortem that cannot read the calls it is about is the same as no telemetry at all.
+    // Bodies are the heavy half and they are double-gated (`LLM_RECORD_PROMPTS` plus the
+    // per-workspace `storeAgentContext`), so a deployment that stores them and wants the old
+    // footprint sets this back to 3.
     llmCallMetricsMs: retentionMs(
       'LLM_CALL_METRICS_RETENTION_DAYS',
       env.LLM_CALL_METRICS_RETENTION_DAYS,
-      3,
+      14,
     ),
     // High-churn provisioning event log; pruned aggressively (default 14 days).
     provisioningLogMs: retentionMs(

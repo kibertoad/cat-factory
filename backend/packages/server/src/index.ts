@@ -82,7 +82,10 @@ export {
 } from './auth/GoogleOAuth.js'
 export { LinearOAuth, type LinearOAuthDependencies } from './auth/LinearOAuth.js'
 export { WebCryptoPasswordHasher } from './crypto/WebCryptoPasswordHasher.js'
-export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'
+export { authController } from './modules/auth/AuthController.js'
+// The shared browser-login mechanics (the allow-listed post-login redirect, the session mint),
+// used by every redirecting provider and by the local mothership-connect controller.
+export { mintSession, pickPostLoginRedirect } from './modules/auth/loginFlow.js'
 export { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 export {
   ContainerSessionService,
@@ -139,6 +142,26 @@ export {
   type ToolSecretContainerFields,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
+// The OAuth half of the same seam: the kernel `McpOAuthTokenSource` a facade wires, joining the
+// sealed per-workspace grant store to the credential chain above (which resolves the OAuth client
+// secret). Every facade builds it beside `buildToolSecretChain`, so a deployment with a grant
+// store dispatches with a live token and one without states the server as `oauth_not_connected`.
+export {
+  createMcpOAuthTokenSource,
+  mcpOAuthContainerFields,
+  mcpOAuthExecutorDeps,
+  type McpOAuthContainerFields,
+  type McpOAuthTokenSourceOptions,
+} from './agents/mcpOAuthTokenSource.js'
+export {
+  resolveOAuthClientSecret,
+  type OAuthClientSecretResolution,
+  type ResolveOAuthClientSecretInput,
+} from './agents/mcpOAuthClientSecret.js'
+export {
+  MCP_OAUTH_CALLBACK_PATH,
+  requireMcpOAuthRedirectUrl,
+} from './modules/toolServers/mcpOAuthRedirect.js'
 export {
   buildCapabilityCredentialsView,
   collectDeclaredCapabilityCredentials,
@@ -441,8 +464,22 @@ export type {
   RetentionConfig,
   RunnerPoolConfig,
   SlackConfig,
+  SsoConfig,
   TasksConfig,
 } from './config/types.js'
+// Enterprise SSO (generic OIDC): the shared env resolver both facades call, and the pieces a
+// facade or a test needs to reach the flow without going through the HTTP routes.
+export { resolveSsoConfig, type SsoEnv } from './config/sso.js'
+export { OidcProviderDirectory, readProviderMetadata } from './auth/oidc/discovery.js'
+export { OidcClient, OidcFlowError, createPkcePair, type PkcePair } from './auth/oidc/OidcClient.js'
+export {
+  judgeSsoAdmission,
+  needsUserinfo,
+  readGroupClaim,
+  readSsoIdentity,
+  type SsoAdmission,
+  type SsoIdentity,
+} from './auth/oidc/claims.js'
 export {
   parsePlatformObservabilityWindow,
   resolvePlatformAlertConfig,

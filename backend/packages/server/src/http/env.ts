@@ -32,6 +32,7 @@ import type {
   RunnerBackendRegistry,
   TestSecretsService,
   CapabilityCredentialsService,
+  McpOAuthService,
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
@@ -174,6 +175,31 @@ export interface ServerContainer extends Core {
    * same state, rather than a probe that silently succeeds against an unauthenticated endpoint.
    */
   toolSecretResolver?: ToolSecretResolver
+  /**
+   * The per-workspace OAUTH GRANT store for remote (`http`) MCP tool servers (sealed). Present
+   * only when a facade wired the repository, which needs `ENCRYPTION_KEY` like every other sealed
+   * store.
+   *
+   * Backs three things: the connect/disconnect routes, the connection state the tool-server
+   * inventory renders per declaration, and the dispatch-time token source the executor mints an
+   * `Authorization` header from. Absent ⇒ a declaration that authenticates with OAuth has nowhere
+   * to keep a grant, so the routes refuse with a 503 naming the key and a dispatch states the
+   * server as `oauth_not_connected` — never a request sent without its token.
+   */
+  mcpOAuth?: McpOAuthService
+  /**
+   * The redirect URL a vendor's authorization server sends the operator's browser back to
+   * (`MCP_OAUTH_REDIRECT_URL`), which must match what the deployment registered as its OAuth
+   * client's redirect URI.
+   *
+   * Operator-configured rather than derived from the incoming request, because it is a value a
+   * THIRD PARTY has on file: deriving it from a `Host` header would produce a different string
+   * behind every proxy, preview URL and private hostname a deployment sits behind, and the
+   * authorization server rejects the exchange when it does not match to the byte. Absent ⇒ the
+   * interactive grant is refused with a 503 naming the variable; the client-credentials grant
+   * needs no redirect and works without it.
+   */
+  mcpOAuthRedirectUrl?: string
   /**
    * The per-service PRE-PR VALIDATION CHECK store: the commands the harness runs against the
    * checkout before opening a PR. Present only when the facade wired the validation-config

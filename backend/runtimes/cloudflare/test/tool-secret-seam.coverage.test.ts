@@ -88,9 +88,18 @@ const SOURCES: Record<string, [string, string[]]> = {
   // the container through the one shared `toolSecretContainerFields`, so the credential checklist
   // describes the chain the dispatch path actually got and the tool-server probe resolves through
   // that same chain rather than some other tenant's credential…
+  // …plus the OAuth half, which rides that same chain (it resolves the client secret through it)
+  // and reaches the container as a store-and-redirect-URL pair. Both links are optional fields, so
+  // dropping either compiles: absent, every OAuth server is stated as `oauth_not_connected` on a
+  // deployment that has a grant store, and Connect answers 503 on one that has a redirect URL.
   'src/infrastructure/container-assembly.ts': [
     assemblySource,
-    ['toolSecretChain.resolver', 'toolSecretContainerFields'],
+    [
+      'toolSecretChain.resolver',
+      'toolSecretContainerFields',
+      'mcpOAuthExecutorDeps',
+      'mcpOAuthContainerFields',
+    ],
   ],
   // …and taken by the executor as a REQUIRED dependency. This link is the one the type system now
   // pins by itself: the field carried a bare Worker-vars default until it was made required, and

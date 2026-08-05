@@ -28,9 +28,9 @@ Cloudflare Workers Observability. Two tables carry everything you need:
   `turn_index` NULL, `http_status` NULL, `phase=''`, and `upstream_ms = total_ms` — a genuine
   0 overhead, because there is no proxy hop. None of those nulls means data was lost.
 
-Retention: `llm_call_metrics` is pruned aggressively (default 3 days,
-`LLM_CALL_METRICS_RETENTION_DAYS`) because the full bodies are heavy; `agent_runs`
-lives longer. Investigate recent runs promptly.
+Retention: `llm_call_metrics` is pruned to `LLM_CALL_METRICS_RETENTION_DAYS` (default 14
+days) because the full bodies are heavy; `agent_runs` lives longer. A deployment may have
+lowered it, so an empty result for an older run can mean pruned rather than never recorded.
 
 ## How to query
 

@@ -34,6 +34,15 @@ export const TOKEN_AUDIENCE = {
   session: 'session',
   /** OAuth login `state` nonce. */
   oauthState: 'oauth-state',
+  /**
+   * Enterprise-SSO round-trip cookie. Deliberately NOT `oauthState`, even though both are one
+   * login round-trip's CSRF state: the OAuth value travels in the URL (so any user holds a
+   * validly-signed one), while this one is an httpOnly cookie carrying the PKCE `code_verifier`
+   * and the OIDC `nonce`. Sharing an audience would let the public value verify as the secret
+   * container, leaving the two secrets `undefined` and the flow resting on the provider to
+   * refuse a PKCE mismatch. Pinned so it cannot.
+   */
+  ssoState: 'sso-state',
   /** Implementation-container → LLM proxy token. */
   container: 'llm-proxy',
   /** Single-workspace WebSocket event-stream ticket. */

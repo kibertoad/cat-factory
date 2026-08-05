@@ -120,7 +120,7 @@ export const ENV_HELP = {
     summary:
       'A remote deployment has no anonymous tier, so at least one login provider must be configured or every protected route fails closed.',
     remedy:
-      'Enable one of: GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth (GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login (AUTH_PASSWORD_ENABLED=true) — each alongside a 32+ character AUTH_SESSION_SECRET. For local dev or tests, set AUTH_DEV_OPEN=true in a non-production ENVIRONMENT instead.',
+      'Enable one of: enterprise SSO (AUTH_SSO_ISSUER_URL + AUTH_SSO_CLIENT_ID + AUTH_SSO_CLIENT_SECRET — one generic OIDC adapter serving Okta, Entra ID, Auth0, Keycloak, PingFederate and the like), GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth (GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login (AUTH_PASSWORD_ENABLED=true) — each alongside a 32+ character AUTH_SESSION_SECRET. For local dev or tests, set AUTH_DEV_OPEN=true in a non-production ENVIRONMENT instead.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
   },
   DB: {
@@ -135,6 +135,13 @@ export const ENV_HELP = {
       'The dedicated telemetry D1 database (per-LLM-call metrics + agent-context snapshots) — kept separate from the transactional data so its append-heavy, short-retention writes never contend with domain reads.',
     remedy:
       'Add a `[[d1_databases]]` entry with `binding = "TELEMETRY_DB"` to your wrangler.toml and create the database with `wrangler d1 create`.',
+    docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.storageRetention),
+  },
+  AUDIT_DB: {
+    summary:
+      'The dedicated audit-log D1 database (who did what, when, for privileged account actions) — kept separate from the transactional data because it is the one table that grows with run volume AND is retained for years, and D1 caps each database at 10 GB.',
+    remedy:
+      'Add a `[[d1_databases]]` entry with `binding = "AUDIT_DB"` to your wrangler.toml and create the database with `wrangler d1 create`.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.storageRetention),
   },
   AGENT_MODELS: {
