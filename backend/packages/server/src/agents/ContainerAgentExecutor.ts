@@ -945,9 +945,8 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       )
     }
 
-    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed
-    // here because the branch ensure needs the resolved name, and it is fanned out in the
-    // wave that follows.
+    // The name of the shared per-task work branch (see `resolveWorkBranchReady`). Computed here
+    // because the branch ensure needs the resolved name, and it is fanned out in the wave below.
     const aprioriWork = resolveAprioriWorkingBranch(context.aprioriBranches, repo.baseBranch)
     const workBranch = aprioriWork ?? `cat-factory/${blockId}`
 
@@ -999,9 +998,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // The clone/push credential, minted AFTER the wave because it is narrowed to the repos this
     // dispatch actually resolved (primary + fan-out peers + conflict/merger siblings + reference
     // repos) rather than to everything the installation covers. It is the one step that cannot
-    // join the wave: the scope is what the wave produces. Net latency is a wash — the mint left
-    // the wave as the auxiliary resolution entered it. A facade whose credential is a PAT cannot
-    // narrow anything and ignores `repoIds` (`backend/docs/security-model.md`, Layer 3).
+    // join the wave: the scope is what the wave produces. One round trip left the wave as the
+    // auxiliary resolution entered it, so what changed is the ORDERING, not the work, and a warm
+    // process still hits the App-token cache (keyed by scope: `installationTokenCache.ts`). A
+    // PAT-backed facade ignores `repoIds` (`backend/docs/security-model.md`, Layer 3).
     const ghToken = await this.deps.mintInstallationToken(repo.installationId, {
       executionId,
       workspaceId,

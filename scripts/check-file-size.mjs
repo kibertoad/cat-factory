@@ -141,7 +141,11 @@ const LEGACY_ALLOWANCES = new Map([
   // SUPERSEDED this branch's narrower one (`container-notification-webhook.ts`, which moved only
   // the webhook builder): both hoisted the same builder out, so the file was deleted rather than
   // kept beside its replacement, and the platform-alert error hook moved onto the surviving one.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1345],
+  // Ratcheted 1345 -> 1222 by extracting `container-dispatchers.ts`: the repo bootstrapper and
+  // the env-config repairer, the two container dispatchers this root wires beside the step
+  // executor. Job-token scoping made them one concern rather than two, since each hands a real
+  // clone/push credential to a container and so must narrow it to the repo it touches.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1222],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

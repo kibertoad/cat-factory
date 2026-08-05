@@ -183,14 +183,14 @@ export function githubDelegationController(
       )
       // A caller may ask for LESS: a container dispatch requests only the repos its run resolved
       // (`jobTokenRepoIds`), so the delegated token is as narrow as the engine's own would be on a
-      // hosted deployment. The request is INTERSECTED with the linked set, never unioned — the
+      // hosted deployment. The request is INTERSECTED with the linked set, never unioned: the
       // node's ask is a narrowing hint, and the mothership's projection stays the authority on
       // what may be granted. An unscoped request (the engine's gate/merge calls) takes the whole
       // linked set, as before.
       const requested = readRequestedRepositoryIds(body.repositoryIds)
       const repositoryIds = requested ? requested.filter((id) => linked.has(id)) : [...linked]
       if (repositoryIds.length === 0) {
-        // Nothing in scope to grant — same uniform denial as an out-of-scope installation. It
+        // Nothing in scope to grant, the same uniform denial as an out-of-scope installation. It
         // covers both "this installation links nothing" and "nothing the caller asked for is
         // linked"; the log line separates them, the response deliberately does not.
         log.warn('github delegation: no linked repos to scope, denied', {
@@ -208,7 +208,7 @@ export function githubDelegationController(
       })
       // Audit trail: who minted what, scoped how wide. `requestedCount` beside `repoCount` is
       // what shows a caller asking for a repo this installation does not link (a repo unlinked
-      // between the node's read and this mint) — the token is still granted, narrower than asked,
+      // between the node's read and this mint). The token is still granted, narrower than asked,
       // and the harness would fail to clone the missing leg. NEVER log the token itself.
       log.info('github delegation: minted repo-scoped installation token', {
         installationId,

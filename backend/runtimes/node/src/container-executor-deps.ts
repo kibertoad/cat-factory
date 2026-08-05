@@ -26,6 +26,7 @@ import type {
   GitHubClient,
   GitHubInstallationRepository,
   ProvisioningSubsystem,
+  RepoProjectionRepository,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   StoreAgentContextGate,
@@ -497,7 +498,7 @@ export function selectNodeRepoBootstrapper(deps: {
     typeof ContainerRepoBootstrapper
   >[0]['repoProjectionCache']
   githubClient: GitHubClient | undefined
-  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  mintInstallationToken: MintInstallationToken | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
@@ -544,7 +545,9 @@ export function selectNodeEnvConfigRepairer(deps: {
   config: AppConfig
   resolveTransport: ResolveRunnerTransport | null
   installationRepository: GitHubInstallationRepository
-  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  /** The workspace's repo projection: turns the request's owner/repo into the token's scope. */
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
+  mintInstallationToken: MintInstallationToken | undefined
   override: CoreDependencies['environmentProvider']
   environmentBackendRegistry: EnvironmentBackendRegistry
 }): ContainerEnvConfigRepairer | undefined {
@@ -588,6 +591,7 @@ export function selectNodeEnvConfigRepairer(deps: {
   return new ContainerEnvConfigRepairer({
     resolveTransport: deps.resolveTransport,
     installationRepository: deps.installationRepository,
+    repoRepository: deps.repoRepository,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     environmentProvider,

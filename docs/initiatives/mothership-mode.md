@@ -177,8 +177,8 @@
   rows of the `github_repos` projection for that installation (the batched
   `repoProjectionRepository.listByInstallation` read, mirrored D1 ⇄ Drizzle; `user_pat`-linked
   rows excluded, not App-reachable; no linked repos ⇒ the same uniform 404). A caller may narrow
-  FURTHER by naming `repositoryIds` — a container dispatch asks for only the repos its run
-  resolved — and the request is INTERSECTED with that linked set, so asking narrows and can never
+  FURTHER by naming `repositoryIds` (a container dispatch asks for only the repos its run
+  resolved) and the request is INTERSECTED with that linked set, so asking narrows and can never
   widen; nothing left in scope is the same 404, and a malformed ask falls back to the full linked
   set rather than a partial one. A scoped mint
   bypasses the mothership's unscoped in-memory engine token cache in BOTH directions (no

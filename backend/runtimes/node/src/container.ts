@@ -313,6 +313,8 @@ interface PostAssemblyContext extends PreviewModuleContext {
   options: NodeContainerOptions
   resolveTransport: NodeTransportDeployResult['resolveTransport']
   githubInstallationRepository: GitHubInstallationRepository
+  /** Routed through `sourced`, so a mothership node reads the projection over the RPC. */
+  repoProjectionRepository: DrizzleRepoProjectionRepository
   bootstrapMintInstallationToken: NodeBootstrapperResult['bootstrapMintInstallationToken']
   environmentBackendRegistry: NodeAppRegistriesResult['environmentBackendRegistry']
   remoteRepos: Record<string, unknown> | undefined
@@ -353,6 +355,7 @@ function applyNodePostAssemblyWiring(
     config,
     resolveTransport: ctx.resolveTransport,
     installationRepository: ctx.githubInstallationRepository,
+    repoRepository: ctx.repoProjectionRepository,
     mintInstallationToken: ctx.bootstrapMintInstallationToken,
     override: dependencies.environmentProvider,
     environmentBackendRegistry: ctx.environmentBackendRegistry,
@@ -931,6 +934,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     config,
     repos,
     resolveRepoTarget,
+    repoProjectionRepository,
     baseDeployMint,
     resolveTransport,
     githubInstallationRepository,

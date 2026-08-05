@@ -17,6 +17,7 @@ import { failureKindFromHarnessCause } from '@cat-factory/kernel'
 import { isProxyableProvider } from '@cat-factory/agents'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import type { JobPackageRegistrySpec } from './ContainerAgentExecutor.js'
+import type { MintInstallationToken } from './repoTargeting.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import { logger } from '../observability/logger.js'
 
@@ -40,8 +41,12 @@ export interface ContainerRepoBootstrapperDependencies {
   repoProjectionCache?: GroupCacheHandle<GitHubRepo[]>
   /** Resolves/validates the pre-created target repository (existence + emptiness). */
   githubClient: GitHubClient
-  /** Mints a short-lived GitHub installation token for clone + push. */
-  mintInstallationToken: (installationId: number) => Promise<string>
+  /**
+   * Mints a short-lived GitHub installation token for clone + push, scoped to the single repo
+   * being bootstrapped. Bootstrap has no run initiator, so it names no `initiatedBy` and always
+   * runs on the deployment credential.
+   */
+  mintInstallationToken: MintInstallationToken
   /** Mints the signed, model-locked LLM-proxy session token the container uses. */
   sessionService: ContainerSessionService
   /** Model the bootstrapper agent runs with (must be proxyable). */
@@ -185,7 +190,14 @@ export class ContainerRepoBootstrapper implements RepoBootstrapper {
       )
     }
 
-    const ghToken = await this.deps.mintInstallationToken(installation.installationId)
+    // Scoped to the one repo being bootstrapped: the run clones and force-pushes exactly this
+    // target and touches nothing else, so there is no leg to widen for. `target` came from the
+    // pre-flight `getRepo` above, which is why this costs no extra read.
+    const ghToken = await this.deps.mintInstallationToken(installation.installationId, {
+      executionId: request.jobId,
+      workspaceId: request.workspaceId,
+      repoIds: [String(target.githubId)],
+    })
     // Private-registry auth for the scaffolder's installs, exactly as the
     // implementation executor forwards it.
     const packageRegistries =

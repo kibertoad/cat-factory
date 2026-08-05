@@ -152,19 +152,30 @@ clean and shipped the deployment's master sealing key to a third party. So:
 
 This is the hard bound on a _fully_ compromised run. What the token is varies by deployment shape:
 
-| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                                                          | Lifetime                 |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Repo-scoped** (`repository_ids`): the repos THIS run resolved (primary + fan-out peers + conflict/merger siblings + reference repos), at the permissions the install granted | ~1h, minted per dispatch |
-| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped**: the dispatch's own repos, intersected server-side with the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged             | ~1h, minted per request  |
-| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own            |
+| Deployment shape           | Credential on the job                                                   | Scope                                                                                                                                                                          | Lifetime                |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Cloudflare / Node engine   | GitHub App installation token minted at dispatch (`GitHubAppAuth`)      | **Repo-scoped** (`repository_ids`): the repos THIS run resolved (primary + fan-out peers + conflict/merger siblings + reference repos), at the permissions the install granted | ~1h, cached per scope   |
+| Mothership-mode local node | Repo-scoped mint over the delegation RPC (`GitHubDelegationController`) | **Repo-scoped**: the dispatch's own repos, intersected server-side with the App-linked repos in the account's scope; empty scope ⇒ denial; every mint audit-logged             | ~1h, minted per request |
+| Local mode (PAT)           | The deployment's shared `GITHUB_PAT`                                    | Whatever the human who created the PAT gave it                                                                                                                                 | The PAT's own           |
 
 **The App rows are narrowed by the ENGINE, at dispatch.** `jobTokenRepoIds` collects the repos one
-job body names and `buildDispatchTokenMint` (shared by both facades, so they cannot drift) turns
-them into GitHub's `repository_ids`. A leg on a different installation is dropped rather than
-requested: one job carries one token, so such a repo is unreachable either way. A scope that
-cannot be expressed as repo ids widens to installation-wide rather than dropping a leg the harness
-is about to clone, and says so: a `warn` naming the run plus the `dispatch.token_scope_widened`
-counter, because a security property degrading silently reads exactly like one holding.
+job body names and `buildDispatchTokenMint` turns them into GitHub's `repository_ids`. A leg on a
+different installation is dropped rather than requested: one job carries one token, so such a repo
+is unreachable either way. A scope that cannot be expressed as repo ids widens to installation-wide
+rather than dropping a leg the harness is about to clone, and says so: a `warn` naming the run plus
+the `dispatch.token_scope_widened` counter, because a security property degrading silently reads
+exactly like one holding.
+
+**"A dispatch" means every path that hands a container a GitHub credential**, not just the step
+executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the deploy
+clone target each name the one repo they touch. They go through the same builder on both facades,
+so neither the two runtimes nor the five dispatchers can drift on whose token it is or how wide.
+That totality is held by the TYPE rather than by review: supplying the run context is what makes a
+mint a dispatch mint, and a context must carry `repoIds`. A dispatcher whose own lookup came back
+empty passes an empty scope, which is a different fact from an engine call naming none, and is
+reported as the widening it is. Engine calls (`RepoFiles` reads, the gate and merge clients) pass
+no context at all and stay installation-wide, deliberately: they act as the deployment, not as a
+run, and nothing they do reaches a container.
 
 Two things this does NOT narrow, both by construction. **Permissions**: the token still carries
 `Contents: write` for the repos it does cover, because GitHub App tokens cannot be branch-scoped.
@@ -218,7 +229,7 @@ Consequences to internalize:
   to the repos the deployment works on. The same advice applies, per member, to stored personal PATs.
 
 So the worst case of Layer 2's stated limit is "the repos this run was about" rather than "the
-installation" — but only where the run authenticates as the App. Installation scope still bounds
+installation", but only where the run authenticates as the App. Installation scope still bounds
 what any run in the workspace could ever ask for, and it is what the checklist's item 3 is about;
 it is now a ceiling rather than the blast radius of every single run.
 

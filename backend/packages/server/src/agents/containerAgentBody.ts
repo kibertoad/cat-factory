@@ -518,7 +518,7 @@ export async function resolveReferenceBranches(
  *
  * It resolves REPOS, never `common`: it returns the repo spec that should override `common.repo`
  * plus the `repoTargets` every leg landed on, and the caller applies both once the job token is
- * minted. That ordering is the point — the token is narrowed to exactly these repos
+ * minted. That ordering is the point: the token is narrowed to exactly these repos
  * ({@link jobTokenRepoIds}), so it cannot be minted until the legs are known, and `common` (which
  * carries the token) cannot be built until then either.
  */
@@ -557,7 +557,7 @@ export async function resolveAuxiliaryRepos(
   let multiRepoSection = fanout.multiRepoSection
   let repoSpecOverride = fanout.repoSpecOverride
   const repoTargets = [...fanout.repoTargets]
-  // The repo target the per-kind body builds against — the task's own service by default, but
+  // The repo target the per-kind body builds against: the task's own service by default, but
   // swapped to a PEER repo when the conflicts gate targets the conflict-resolver at a connected
   // service (see {@link resolveConflictResolverPeer}). No-op (undefined) for an own-repo conflict.
   let repoForKind = repo
@@ -570,7 +570,7 @@ export async function resolveAuxiliaryRepos(
 
   // Merger combined-diff: clone every peer PR's repo as a read-only sibling at its PR branch and
   // name the sibling diff commands. Overrides the fan-out peers/section when it fires (undefined
-  // otherwise — the fan-out result stands). See {@link resolveMergerCombinedDiff}.
+  // otherwise, leaving the fan-out result to stand). See {@link resolveMergerCombinedDiff}.
   const merger = await resolveMergerCombinedDiff(
     context,
     { workspaceId, blockId, repo, workBranch },

@@ -46,6 +46,7 @@ import {
 } from '@cat-factory/gates'
 import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
+import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
@@ -109,14 +110,12 @@ import {
   selectDeployDeps,
   selectDocumentsDeps,
   selectEmailInvitationDeps,
-  selectEnvConfigRepairer,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
   selectIncidentEnrichmentDeps,
   selectMergeLifecycleDeps,
   selectPackageRegistryDeps,
   selectReleaseHealthDeps,
-  selectRepoBootstrapper,
   selectRequirementsDeps,
   selectRunnersDeps,
   selectSandboxDeps,

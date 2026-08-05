@@ -94,7 +94,7 @@ export type OperationalCounter =
    * dispatch still runs, deliberately: a scope that dropped a leg would mint a token unable to
    * clone a repo the job body still names. So the widening is invisible in every run-level
    * signal, and only a standing rate says a repo projection is carrying ids the provider would
-   * not recognise — which is a security property quietly degrading, not a run failing.
+   * not recognise, which is a security property quietly degrading rather than a run failing.
    *
    * UNDIMENSIONED: the interesting split would be by installation or repo, both unbounded. The
    * ids and the run ride the log line at the increment site.

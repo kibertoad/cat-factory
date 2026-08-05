@@ -709,7 +709,7 @@ describe('ContainerAgentExecutor multi-repo gate/merge targeting', () => {
 describe('ContainerAgentExecutor job-token scope', () => {
   // The job token is narrowed to the repos ONE dispatch resolved, so a fully compromised run
   // reaches the repos the run was about rather than every repo the installation covers
-  // (`backend/docs/security-model.md`, Layer 3). What the executor owes is the SCOPE — turning
+  // (`backend/docs/security-model.md`, Layer 3). What the executor owes is the SCOPE; turning
   // it into GitHub's `repository_ids` is the facade's job (`buildDispatchTokenMint`).
 
   const OWN = {
@@ -824,8 +824,46 @@ describe('ContainerAgentExecutor job-token scope', () => {
       }),
     )
     // Every repo the body tells the harness to clone is in the scope: a leg dropped from the
-    // scope is a clone the harness cannot make.
+    // scope is a clone the harness cannot make. (The converse does NOT hold, deliberately: the
+    // merger REPLACES the fan-out's peers in the body while their ids stay in the scope, so the
+    // scope is a superset. Widening beyond what the body names costs nothing; narrowing below it
+    // breaks the clone.)
     expect(captured[0]!.spec.peerRepos).toMatchObject([{ repo: { name: 'billing' } }])
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes the conflict-resolver to the peer repo it is retargeted onto', async () => {
+    const { executor, captured, scopes } = captureScope({
+      resolveRepoTargets: async (_ws, _blk, frameIds) => ({
+        checkouts: [
+          { target: OWN, primary: true, involved: [] },
+          ...(frameIds.includes('frm_peer')
+            ? [{ target: PEER, primary: false, involved: [{ frameId: 'frm_peer' }] }]
+            : []),
+        ],
+      }),
+    })
+    await executor.startJob(
+      context('conflict-resolver', { pullRequest: PR }, undefined, {
+        conflictTarget: { repo: 'acme/billing', frameId: 'frm_peer' },
+      } as never),
+    )
+    // The resolver clones the PEER, not the primary. The primary stays in the scope anyway
+    // (`jobTokenRepoIds` always yields it), which is a token slightly wider than this one job
+    // needs and never one that cannot clone what the body names.
+    expect(captured[0]!.spec.repo).toMatchObject({ name: 'billing' })
+    expect(scopes).toEqual([['1001', '2002']])
+  })
+
+  it('scopes a read-only reference repo the same as a writable leg', async () => {
+    const { executor, captured, scopes } = captureScope()
+    await executor.startJob({
+      ...context('doc-writer'),
+      referenceRepos: [{ repoId: 2002, owner: 'acme', name: 'billing', defaultBranch: 'develop' }],
+    } as never)
+    // A reference repo is cloned read-only, but a token that cannot READ it fails the clone
+    // exactly as one that cannot write does, so it belongs in the scope.
+    expect(captured[0]!.spec.referenceRepos).toMatchObject([{ repo: { name: 'billing' } }])
     expect(scopes).toEqual([['1001', '2002']])
   })
 })
@@ -1004,8 +1042,8 @@ describe('ContainerAgentExecutor private package registries', () => {
 })
 
 describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
-  // The independent dispatch resolutions — work-branch ensure, the auxiliary-checkout
-  // resolution, auth, package registries, tester secrets, web-search availability — are fanned
+  // The independent dispatch resolutions (work-branch ensure, the auxiliary-checkout resolution,
+  // auth, package registries, tester secrets, web-search availability) are fanned
   // out in one wave once the repo target is resolved (audit item 4). This pins that they overlap
   // rather than running one-after-another, and that a failing context-observability record still
   // never breaks a dispatch.
@@ -1086,7 +1124,7 @@ describe('ContainerAgentExecutor dispatch I/O parallelism', () => {
     gates.registries.resolve([])
     gates.search.resolve({ available: false, provider: null })
     await new Promise((r) => setTimeout(r, 0))
-    // Only once the wave has settled — which is when the token's repo scope is known.
+    // Only once the wave has settled, which is when the token's repo scope is known.
     expect(started.token).toBe(true)
 
     gates.token.resolve('GH-TOKEN')

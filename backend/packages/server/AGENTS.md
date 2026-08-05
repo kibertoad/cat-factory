@@ -78,10 +78,15 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   `dispatchTokenMint.ts`, owns the dispatch CREDENTIAL: it is the one place that decides whose
   token a job carries (the run initiator's PAT, else the deployment's) and how wide it is minted
   (`repository_ids` narrowed to `jobTokenRepoIds`, the repos that dispatch resolved). Both facades
-  build their mint through it, because the two decisions interact — scoping applies only to the
-  App token, a PAT cannot be narrowed at all — and they previously held byte-identical copies of
-  half of it. `containerAgentBody.ts` holds the auxiliary-repo resolution the scope reads, which
-  is why that resolution is a dispatch INPUT rather than a tail step. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
+  build their mint through it, because the two decisions interact (scoping applies only to the App
+  token, a PAT cannot be narrowed at all) and they previously held byte-identical copies of half of
+  it. EVERY path that hands a container a GitHub credential goes through it: the step executor, the
+  repo bootstrapper, the env-config repairer, preview jobs and the deploy clone target. What holds
+  that totality is the `MintInstallationToken` ctx, whose presence is what marks a mint as a
+  DISPATCH mint and whose `repoIds` is required, so a new dispatcher cannot ship without deciding
+  its scope; an engine call passes no ctx and stays installation-wide. `containerAgentBody.ts`
+  holds the auxiliary-repo resolution the scope reads, which is why that resolution is a dispatch
+  INPUT rather than a tail step. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has

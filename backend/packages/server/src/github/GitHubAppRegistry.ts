@@ -101,7 +101,7 @@ export class GitHubAppRegistry {
   /**
    * An installation token, minted by the App that owns the installation.
    * `repositoryIds` narrows the mint to those repos (the container dispatch's job token and
-   * the mothership GitHub-delegation path — see `GitHubAppAuth.installationToken`); the
+   * the mothership GitHub-delegation path, see `GitHubAppAuth.installationToken`); the
    * engine's own calls pass none and stay installation-wide.
    */
   async installationToken(
