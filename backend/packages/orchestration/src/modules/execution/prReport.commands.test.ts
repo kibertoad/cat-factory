@@ -88,6 +88,11 @@ describe('composeValidation', () => {
     // qualified: a reader who skims must not come away with the wrong one of the two.
     expect(section.note).toContain('could not READ')
     expect(section.note).not.toContain('configures no check commands')
+    // But it WITHDRAWS the claim rather than swapping in an equally causal one. The flag is
+    // scanned run-wide, so all that is known is that some dispatch could not read; the older
+    // runner image stays named as the other live possibility.
+    expect(section.note).toContain('cannot say why')
+    expect(section.note).toContain('runner image')
   })
 
   it('bounds what a REPORTED section covers when a later read failed', () => {

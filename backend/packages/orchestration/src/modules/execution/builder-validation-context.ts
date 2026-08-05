@@ -1,5 +1,6 @@
 import type { Block, ExecutionInstance, Logger, PipelineStep } from '@cat-factory/kernel'
-import { describeError } from '@cat-factory/kernel'
+import { describeError, noopLogger } from '@cat-factory/kernel'
+import type { StepObservations } from './builder-step-observations.js'
 import type { ResolvedReproduction, ResolvedValidationChecks } from '@cat-factory/contracts'
 import { resolveReproductionSpec } from './reproductionProof.logic.js'
 
@@ -26,6 +27,11 @@ export interface ValidationContextDeps {
     workspaceId: string,
     frameId: string,
   ) => Promise<ResolvedValidationChecks | null>
+  /**
+   * Where a read failure is reported to the operator. Optional for a standalone unit test only:
+   * every facade wires it (`CoreDependencies.logger` is required), and it is normalised to
+   * {@link noopLogger} ONCE below rather than optional-called per site.
+   */
   logger?: Logger
 }
 
@@ -43,17 +49,24 @@ export interface ValidationContextDeps {
  * is written on the step (the same observability mutation `resolveFragments` makes under this
  * wave, persisted by the dispatch that follows), which is what lets the PR verification report say
  * the configuration could not be read instead of asserting the service declared nothing.
+ *
+ * Writing it goes through {@link StepObservations} rather than straight onto the step, because the
+ * rewrite-per-dispatch contract that makes the flag honest is also what makes a resolution that
+ * starts NO job dangerous. The WARNING is outside that gate: a store that cannot be read is an
+ * outage whether or not this particular resolution shipped, and `recordedOnStep` on the line says
+ * whether the PR verification report will carry the fact.
  */
 export async function validationChecksFor(
   deps: ValidationContextDeps,
   workspaceId: string,
   frame: Block | null,
   step: PipelineStep,
+  observations: StepObservations,
 ): Promise<{ validationChecks?: ResolvedValidationChecks; dependencyInstall?: string }> {
   // Rewritten on EVERY dispatch, so a re-dispatch whose read succeeds clears a flag an earlier
   // one set: the field describes the read behind the tree THIS step pushed, not a high-water
   // mark of every read the step has ever made.
-  delete step.validationConfigUnreadable
+  observations.validationConfigUnreadable(false)
   if (!frame) return {}
   try {
     const resolved = await deps.resolveValidationChecks?.(workspaceId, frame.id)
@@ -79,10 +92,19 @@ export async function validationChecksFor(
     // what carries it onto the PR verification report for the human reviewing the pull request
     // this dispatch opens. Neither is optional: an unwired logger would leave a service whose
     // checks silently stopped running with no trace anywhere.
-    step.validationConfigUnreadable = true
-    deps.logger?.warn(
+    observations.validationConfigUnreadable(true)
+    ;(deps.logger ?? noopLogger).warn(
       'Validation config read failed; dispatching with no checks and no dependency install',
-      { workspaceId, frameId: frame.id, stepAgentKind: step.agentKind, ...describeError(error) },
+      {
+        workspaceId,
+        frameId: frame.id,
+        stepAgentKind: step.agentKind,
+        // Whether the PR verification report will carry this: a resolution that starts no job
+        // leaves the step's record alone, so the operator reading this line knows to look at the
+        // dispatch's own line rather than at a report that will not mention it.
+        recordedOnStep: observations.records,
+        ...describeError(error),
+      },
     )
     return {}
   }

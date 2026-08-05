@@ -183,8 +183,8 @@ repo almost always shells out to the command the Go detector already suggested.
   it for a red BASE branch would be wrong and would burn the whole repair budget re-running an
   agent that already declined to act.
 - **A config-store read failure DEGRADES, it does not fail the run, and it SAYS SO.**
-  `AgentContextBuilder.validationChecksFor` catches a resolver throw and falls back to "no
-  checks": the unconfigured behaviour. A mothership node whose server doesn't reflect
+  `validationChecksFor` (`builder-validation-context.ts`) catches a resolver throw and falls back
+  to "no checks": the unconfigured behaviour. A mothership node whose server doesn't reflect
   `validationConfigRepository` (an older image), or a transient store outage, would otherwise
   fail EVERY coding dispatch. The trade is deliberate: a store outage degrades to the pre-feature
   guarantee rather than stopping all builds.
@@ -199,6 +199,26 @@ repo almost always shells out to the command the Go detector already suggested.
   outage that recovered before the PR-opening dispatch leaves no warning behind; and the report
   scans every step for it, because the failing read is by construction on a step that produced
   no validation evidence to hang it off.
+
+- **Only a resolution that STARTS A JOB may write that flag.** Rewrite-per-dispatch is what keeps
+  the flag honest, and it is also what makes every OTHER caller of `buildContext` dangerous: the
+  over-budget exemption probe and a re-attach to an already-running job both resolve a full context
+  without dispatching, so left ungated a store that recovered between the dispatch and the replay
+  would ERASE the record that the shipped job ran with no checks, restoring the exact fabricated
+  reading the flag exists to refuse. The decision is taken once per call
+  (`BuildContextOptions.recordsDispatch`) and handed to the resolvers as `StepObservations`
+  (`builder-step-observations.ts`), which owns every per-dispatch field the builder rewrites,
+  `selectedFragmentIds` included: **a new one joins that seam rather than writing the step
+  directly**, or it rediscovers this bug. Recording is the default, because a call site that
+  wrongly records states a visible fact the next real dispatch corrects, where one that wrongly
+  opts out deletes evidence with nothing left to show it existed.
+
+- **The report WITHDRAWS the unconfigured claim; it does not swap in another one.** The flag is
+  scanned run-wide, so an absent section knows only that SOME dispatch could not read the
+  configuration, not that this absence is what that read caused (a run whose coder read fine under
+  an older runner image, then a `ci-fixer` whose read failed, carries both facts and neither
+  explains the other). So the note says the platform cannot say why, and keeps the runner-image
+  cause named beside it.
 
 - **Unconfigured is byte-for-byte the old behaviour**: no row ⇒ no `validationChecks` on the
   context ⇒ no field on the job body ⇒ the harness's existing code path, untouched.

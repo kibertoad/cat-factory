@@ -122,13 +122,19 @@ export function composeValidation(
       // has by construction already settled: the absence is about what was configured, not about
       // how far the run got. Every remaining cause is named, because asserting only the first
       // would be a fabricated fact about somebody's setup (a runner image older than the feature
-      // reports nothing either), and an unreadable configuration displaces the claim entirely
-      // rather than joining the list, since there the platform positively knows the service may
-      // have configured checks it never got to see.
+      // reports nothing either).
+      //
+      // A failed read WITHDRAWS the "configures none" claim rather than replacing it with an
+      // equally causal one. The flag is scanned run-wide, so all that is known here is that SOME
+      // dispatch could not read the configuration; concluding that THIS absence is the one it
+      // caused would be the same species of over-claim (a run whose coder read fine but ran an
+      // older runner image, then a `ci-fixer` whose read failed, has both facts and neither
+      // explains the other). So the note states what was observed and stops.
       note: configUnreadable
-        ? 'The platform ran no pre-PR validation on this tree: it could not READ the check ' +
-          'configuration for this service, so the dispatch fell back to running none. That is ' +
-          'NOT a statement that the service configures none; look at the configuration store.'
+        ? 'The platform ran no pre-PR validation on this tree, and cannot say why: a dispatch on ' +
+          "this run could not READ this service's check configuration and fell back to running " +
+          'none. So this is NOT a statement that the service configures none; look at the ' +
+          'configuration store. (A runner image predating the feature also reports none.)'
         : 'The platform ran no pre-PR validation on this tree: this service configures no check ' +
           'commands (a runner image predating the feature also reports none).',
       ...(configUnreadable ? { configUnreadable: true } : {}),

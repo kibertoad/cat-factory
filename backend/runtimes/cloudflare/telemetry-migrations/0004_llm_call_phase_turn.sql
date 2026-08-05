@@ -13,8 +13,8 @@
 -- has no job-scoped counter at all. A 0 there would read as "the first turn" and quietly sort
 -- every proxied call to the front of its phase.
 --
--- No backfill and no index: this table is pruned to LLM_CALL_METRICS_RETENTION_DAYS (3 by
--- default), so pre-axis rows churn out within the window, and the per-execution rollup already
+-- No backfill and no index: this table is pruned to LLM_CALL_METRICS_RETENTION_DAYS, so
+-- pre-axis rows churn out within the window, and the per-execution rollup already
 -- rides idx_llm_call_metrics_execution.
 ALTER TABLE llm_call_metrics ADD COLUMN phase TEXT NOT NULL DEFAULT '';
 ALTER TABLE llm_call_metrics ADD COLUMN turn_index INTEGER;

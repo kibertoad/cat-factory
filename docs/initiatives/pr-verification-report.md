@@ -203,6 +203,13 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   section composed from an absence has the same obligation, and the test is whether the producing
   path can reach that absence by failing.
 
+  The replacement note WITHDRAWS the claim instead of making a second one. `configUnreadable` is
+  scanned across every step (the failing read is by construction on a step that produced no
+  evidence), so the section knows a read failed SOMEWHERE on the run, not that this absence is what
+  it caused. Saying "the read failed, so nothing ran" would be the same over-claim one layer down.
+  Read run-wide, state run-wide: a flag whose scan is broader than the sentence it licenses is the
+  shape to watch for when the next section grows one.
+
 - **`ci` verdict detail is on the gate step, not the provider.** Read `step.gate.lastVerdict` /
   `failingChecks` / `attempts` / `attemptLog`; do NOT re-probe the `CiStatusProvider` when
   composing (a re-probe costs a round trip and can disagree with what the gate acted on).

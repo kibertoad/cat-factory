@@ -62,6 +62,7 @@ import {
 import { connectionDescription } from '@cat-factory/contracts'
 import type { ResolvedValidationChecks } from '@cat-factory/contracts'
 import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
+import { stepObservations, type StepObservations } from './builder-step-observations.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -341,6 +342,31 @@ export interface AgentContextBuilderDeps {
   logger?: Logger
 }
 
+/** How a caller of {@link AgentContextBuilder.buildContext} means the resolution to be read. */
+export interface BuildContextOptions {
+  /**
+   * Override the step's own kind as the kind that will actually RUN (a gate step dispatching its
+   * helper, the Tester loop dispatching its fixer off the hosting step).
+   */
+  agentKind?: string
+  /**
+   * Whether THIS call is the resolution that a job about to start will run under, and so the one
+   * the step's PER-DISPATCH observability fields must describe (`selectedFragmentIds`,
+   * `validationConfigUnreadable`). Those fields are rewritten from each resolution, including
+   * being CLEARED when this round resolved nothing, so a call that is not a dispatch would
+   * overwrite the record of the dispatch that actually produced the tree.
+   *
+   * Defaults to `true`, which is the safe direction for a caller that forgets: over-recording is
+   * a fact stated about a resolution that never shipped (visible, and corrected by the next real
+   * dispatch), where under-recording silently deletes evidence and restores exactly the
+   * fabricated-fact reading `validationConfigUnreadable` exists to refuse. The two callers that
+   * pass `false` are the ones that resolve a context WITHOUT starting a job: the over-budget
+   * exemption probe, and a re-attach to a job a prior (possibly replayed) dispatch already
+   * started.
+   */
+  recordsDispatch?: boolean
+}
+
 /**
  * Assembles the {@link AgentRunContext} for a pipeline step from the run + block state:
  * the (possibly reworked) requirements, linked docs/tracker issues, the live environment,
@@ -362,6 +388,9 @@ export class AgentContextBuilder {
    * gate/tester, not the helper. Trait-driven context (the `code-aware` fragment fold)
    * must key off the helper's kind, else a code-aware helper never receives the
    * service's standards.
+   *
+   * `options.recordsDispatch` says whether this resolution is the one the step's per-dispatch
+   * observability describes; see {@link BuildContextOptions}.
    */
   async buildContext(
     workspaceId: string,
@@ -369,9 +398,10 @@ export class AgentContextBuilder {
     step: PipelineStep,
     isFinalStep: boolean,
     block: Block,
-    options?: { agentKind?: string },
+    options?: BuildContextOptions,
   ): Promise<AgentRunContext> {
     const agentKind = options?.agentKind ?? step.agentKind
+    const observations = stepObservations(step, options)
     // When a block's requirements have been reworked, that standardized document is
     // the single source of truth for every agent step: it already folds in the
     // description plus the linked docs / tracker issues, so it REPLACES the
@@ -410,13 +440,9 @@ export class AgentContextBuilder {
       // only — the kinds that receive the values out of band. Advertised in the tester prompt so
       // the agent knows which env vars are injected; values are resolved separately at dispatch.
       testSecrets,
-      // The service frame's validation config (walked up the frame chain), which yields TWO
-      // context fields from ONE read: the PRE-PR validation checks, forwarded onto a PR-opening
-      // coding job body so the harness runs them before it opens the PR; and the DEPENDENCY
-      // PREPOPULATION install, forwarded onto EVERY dispatch that gets a checkout so the agent
-      // starts against a tree whose dependencies are present. `{}` ⇒ the service declared neither
-      // OR the read failed, and the two are told apart on the step rather than here (see
-      // `validationChecksFor`).
+      // The service frame's validation config (walked up the frame chain): TWO independently
+      // gated context fields from ONE read, and `{}` for a service that declared neither OR a
+      // read that failed, told apart on the step rather than here. See `validationChecksFor`.
       validationChecks,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
@@ -458,15 +484,15 @@ export class AgentContextBuilder {
       isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
-      validationChecksFor(this.deps, workspaceId, serviceFrame, step),
+      validationChecksFor(this.deps, workspaceId, serviceFrame, step, observations),
       this.resolveInitiativeContext(workspaceId, block, agentKind, instance),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
         : Promise.resolve<string | null>(null),
       // The fragment fold keys off the EFFECTIVE dispatched kind and reads the shared frame's
-      // `serviceFragmentIds`; it mutates `step.selectedFragmentIds` for observability (safe under
-      // the wave — single-threaded, no other resolver touches the step).
-      this.resolveFragments(workspaceId, agentKind, step, block, serviceFrame, instance.id),
+      // `serviceFragmentIds`; it records the selection through `observations` (safe under the
+      // wave — single-threaded, no other resolver touches the step).
+      this.resolveFragments(workspaceId, agentKind, observations, block, serviceFrame, instance.id),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
       resolveDispatchSettings(this.deps, workspaceId, agentKind, step, block),
@@ -1086,11 +1112,15 @@ export class AgentContextBuilder {
    * the frame's own agents. Ids are deduped, service-then-block order, resolved against the
    * universal pool. Records the selected ids on the step for observability; never throws (a lookup
    * failure degrades to the block pins).
+   *
+   * The selection is recorded through {@link StepObservations}, which is also the only reason the
+   * step is reachable from here; the fold itself is unaffected, so a resolution that records
+   * nothing still gets the fragments it would have run with.
    */
   private async resolveFragments(
     workspaceId: string,
     agentKind: string,
-    step: PipelineStep,
+    observations: StepObservations,
     block: Block,
     serviceFrame: Block | null,
     executionId: string,
@@ -1103,7 +1133,7 @@ export class AgentContextBuilder {
       !hasTrait(agentKind, CODE_AWARE_TRAIT, this.deps.agentKindRegistry) &&
       !hasTrait(agentKind, DOC_AWARE_TRAIT, this.deps.agentKindRegistry)
     ) {
-      step.selectedFragmentIds = undefined
+      observations.fragmentIds(undefined)
       return null
     }
     try {
@@ -1144,14 +1174,14 @@ export class AgentContextBuilder {
       // Re-recorded per dispatch — including clearing it when a re-dispatch resolves to
       // nothing (the selection was emptied between rounds), so the step never keeps
       // reporting fragments a later round no longer received.
-      step.selectedFragmentIds = fragments.length ? fragments.map((f) => f.id) : undefined
+      observations.fragmentIds(fragments.length ? fragments.map((f) => f.id) : undefined)
       if (fragments.length === 0) return null
       return { fragments }
     } catch {
       // Resolution must never wedge a run; fall back to the block's own pins. Clear any
       // stale selection so observability doesn't keep reporting a prior round's fragments
       // that this dispatch did not actually inject.
-      step.selectedFragmentIds = undefined
+      observations.fragmentIds(undefined)
       return null
     }
   }

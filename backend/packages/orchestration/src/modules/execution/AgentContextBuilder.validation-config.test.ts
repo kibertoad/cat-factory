@@ -110,3 +110,62 @@ describe('a validation-config read that FAILS', () => {
     expect(context.validationChecks?.checks).toHaveLength(1)
   })
 })
+
+describe('a resolution that starts NO job', () => {
+  // `recordsDispatch: false`. The flag is rewritten from each resolution, so the two callers that
+  // build a context without dispatching (the over-budget exemption probe, and a re-attach to a job
+  // an earlier — possibly replayed — dispatch already started) would otherwise overwrite the
+  // record of the read behind the tree that actually shipped.
+
+  it('does not ERASE the flag when the store has since recovered', async () => {
+    // The regression that matters: the job ran with no checks and pushed its tree, then the
+    // Workflows instance died and re-attached against a healthy store. Clearing here would put
+    // "this service configures no check commands" back in front of the reviewer.
+    let failing = true
+    const deps = makeDeps({
+      resolveValidationChecks: async () => {
+        if (failing) throw new Error('store unavailable')
+        return { checks: [{ label: 'test', command: 'npm test' }], maxAttempts: 3 }
+      },
+    })
+    const builder = new AgentContextBuilder(deps)
+    const s = step()
+    await builder.buildContext('ws1', instance([s]), s, true, FRAME)
+    expect(s.validationConfigUnreadable).toBe(true)
+
+    failing = false
+    await builder.buildContext('ws1', instance([s]), s, true, FRAME, { recordsDispatch: false })
+    expect(s.validationConfigUnreadable).toBe(true)
+  })
+
+  it('does not INVENT the flag when its own read fails', async () => {
+    // The mirror: a probe that hits a down store has learned nothing about any dispatch, so it
+    // must not report one as having run unvalidated. It still warns, because the outage is real.
+    const logger = createRecordingLogger()
+    const deps = makeDeps({
+      logger,
+      resolveValidationChecks: async () => {
+        throw new Error('store unavailable')
+      },
+    })
+    const s = step()
+    await new AgentContextBuilder(deps).buildContext('ws1', instance([s]), s, true, FRAME, {
+      recordsDispatch: false,
+    })
+
+    expect(s.validationConfigUnreadable).toBeUndefined()
+    const warned = logger.lines.find((l) => l.level === 'warn' && l.msg.includes('Validation'))
+    expect(warned?.fields.recordedOnStep).toBe(false)
+  })
+
+  it('leaves the fragment selection of the dispatch that ran alone', async () => {
+    // Same rule, same reason, for the sibling per-dispatch observability field: a re-attach must
+    // not re-report what a later resolution would have injected.
+    const s = step({ agentKind: 'coder', selectedFragmentIds: ['frag_from_the_dispatch'] })
+    const deps = makeDeps()
+    await new AgentContextBuilder(deps).buildContext('ws1', instance([s]), s, true, FRAME, {
+      recordsDispatch: false,
+    })
+    expect(s.selectedFragmentIds).toEqual(['frag_from_the_dispatch'])
+  })
+})
