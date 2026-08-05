@@ -398,7 +398,8 @@ native-child env allow-list) updates that doc in the same PR.
   keyword before an issue reference CLOSES that issue on merge**, a raw newline ends a table row, and an
   unbalanced fence swallows whatever follows, including the machine-readable JSON block of the
   verification report. Every hole goes through `cell`, `inline` or `prose`, which neutralise the auto-link
-  triggers with numeric entities in ONE pass (chained `.replace()`s re-escape each other).
+  triggers with numeric entities in ONE pass (chained `.replace()`s re-escape each other); a hole that is a
+  link TARGET goes through `link`/`cellLink`, which emit an unusable URL as plain text rather than a link.
 - **The harness carries byte-for-byte COPIES of a few kernel helpers** (`host-markdown.ts`,
   `normalizeProxyPhase`, `isSafeTestPath`) because the image builds from `src/` plus typescript and can
   depend on no workspace package. Each is pinned by a conformity test: change one, change the other.
@@ -723,11 +724,8 @@ promote by assertion. Doc:
 
 **Pre-dispatch input gate**: a deterministic reduction over a task's OWN authored fields, run at step 0
 before the first dispatch, parking the run for FREE when there is structurally nothing to act on.
-Traps: it is not a cheap reviewer (it never scores prose or infers intent, and every BLOCKING finding
-names an input no model could have acted on either); the park rides `step.approval`, so a generic
-approve would mark the run's first working step done (refused in `assertNotIterativeGate`, checked off
-the INSTANCE); `off` records NO findings where `passed` records an empty list, so an unwired or
-unreadable settings seam records `off` rather than the default mode. Doc:
+Trap: it is not a cheap reviewer, so it never scores prose or infers intent and every BLOCKING finding
+names an input no model could have acted on either. Doc:
 [`pre-dispatch-input-gate.md`](./docs/initiatives/pre-dispatch-input-gate.md).
 
 **Requirements review**: the FIRST step of the default pipelines, an inline iterative loop
@@ -827,10 +825,11 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   at-least-once with a `<runId>:<event>` dedupe id a receiver dedupes on, never on the body. Doc:
   [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
-**PR verification report**: the ENGINE keeps a report of captured facts on every run's PR as a managed
-marker-delimited section of the PR body (idempotent, no persisted state). Trap: it is an engine HOOK on
-step settlement, not a pipeline step, and it composes from state already in memory (the CI gate's
-RECORDED verdict, never a re-probe). Doc:
+**PR verification report**: the ENGINE keeps a report of captured facts on EVERY pull request a run
+opened (own-service plus each peer repo's) as a managed marker-delimited section of the body
+(idempotent, no persisted state). Traps: it is an engine HOOK on step settlement composing from state
+already in memory (never a re-probe); a peer's copy WITHHOLDS the own-service-only sections, so the
+write-avoidance cache keys per TARGET or peers keep a stale report. Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
 
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed

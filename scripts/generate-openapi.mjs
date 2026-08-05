@@ -75,7 +75,13 @@ const API_PREFIX = '/api/v1'
 // more, which is the point of the note at the top of this block: on a repo landing this many
 // additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
 // someone else already published. Re-read it against `origin/main` every time.
-const API_VERSION = '1.15.0'
+// 1.16.0, not 1.15.0: the run report gains an optional `scope`, naming WHICH of a multi-repo run's
+// pull requests a given copy is written onto. Additive: a consumer written against 1.15 reads every
+// field it knows, and an absent `scope` means what it always meant (the own-service PR). FIFTH
+// number this one addition has held (1.12 → 1.13 → 1.14 → 1.15 → 1.16), and 1.15 was taken by the
+// `/me` endpoint landing on main while this branch was in flight, caught by re-reading this line
+// after the merge rather than by trusting a clean auto-merge of the VERSION itself.
+const API_VERSION = '1.16.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
