@@ -12,8 +12,8 @@ function fakeRepo(overrides: Partial<AuditEventRepository> = {}) {
         appended.push(event)
         return Promise.resolve()
       }),
-      listByAccount: vi.fn(
-        (): Promise<AuditEventPage> => Promise.resolve({ events: [], nextCursor: null }),
+      listByAccount: vi.fn((): Promise<AuditEventPage> =>
+        Promise.resolve({ events: [], nextCursor: null }),
       ),
       ...overrides,
     } satisfies AuditEventRepository,
