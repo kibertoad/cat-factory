@@ -82,6 +82,16 @@ export interface Env {
    */
   PROVISIONING_DB?: D1Database
 
+  /**
+   * REQUIRED, dedicated D1 database for the account audit log, with its own migrations lineage
+   * (`audit-migrations/`). Separate from `DB` for RETENTION rather than write profile: audit is
+   * low-volume, but once run-lifecycle events land it is the only table that grows with run
+   * volume AND wants a multi-year window, and D1's ceiling is 10 GB PER DATABASE. Required for
+   * the same reason `TELEMETRY_DB` is: an unbound binding means no audit trail, which reads
+   * exactly like a deployment where nothing privileged ever happened.
+   */
+  AUDIT_DB: D1Database
+
   /** Cloudflare Workers AI binding (optional; used when provider = workers-ai). */
   AI?: Ai
 
@@ -431,6 +441,22 @@ export interface Env {
    */
   ENCRYPTION_KEY?: string
 
+  /**
+   * The redirect URL a vendor's authorization server sends an operator's browser back to when they
+   * connect a remote (`http`) MCP tool server: this deployment's public app URL followed by
+   * `/mcp-oauth-callback`, and the same string registered as the OAuth client's redirect URI at the
+   * vendor. It points at the SPA rather than at this Worker on purpose: the page there re-presents
+   * the vendor's `code` and `state` over the authenticated API, which is what lets the completion
+   * be gated on a session at all (a vendor's redirect carries no bearer token).
+   *
+   * Operator-set rather than derived from the request, because the vendor has this exact value on
+   * file: a `Host`-derived string differs behind every route a Worker is reachable by, and the
+   * exchange then fails at the vendor with `redirect_uri_mismatch`. Unset ⇒ the interactive grant
+   * refuses with a 503 naming this variable; the client-credentials grant needs no redirect and
+   * works without it.
+   */
+  MCP_OAUTH_REDIRECT_URL?: string
+
   // ---- Document-source integration (see config.ts; always on) -------------
   /**
    * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).
@@ -713,6 +739,19 @@ export function requireTelemetryDb(env: Env): D1Database {
     throw configProblem({ key: 'TELEMETRY_DB', ...ENV_HELP.TELEMETRY_DB })
   }
   return env.TELEMETRY_DB
+}
+
+/**
+ * Resolve the required audit database, throwing a clear, actionable error when the binding is
+ * absent. The account audit log lives in its own D1 database; every entry point that touches it
+ * goes through this, so an unbound binding fails the same way with the same message instead of
+ * NPE-ing deep in a repository on the first privileged action.
+ */
+export function requireAuditDb(env: Env): D1Database {
+  if (!env.AUDIT_DB) {
+    throw configProblem({ key: 'AUDIT_DB', ...ENV_HELP.AUDIT_DB })
+  }
+  return env.AUDIT_DB
 }
 
 /**

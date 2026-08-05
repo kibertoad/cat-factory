@@ -171,6 +171,19 @@ const editDraft = ref<{
   brief: string
   tags: string
 } | null>(null)
+// The linked SHORT VERSION is an OVERRIDE of what the platform does by default (condense a
+// long standard automatically, fold a short one in full), so it follows the override rule:
+// hidden in basic mode while unset, revealed as soon as the fragment carries one — a
+// basic-mode curator is never left unable to see or clear a brief a teammate linked.
+//
+// Both flags are LATCHED at the moment the form opens rather than tracking the live draft.
+// Recomputing per keystroke makes the control delete itself the instant a basic-mode curator
+// empties it — mid-edit, under the cursor, on the one interaction (clearing, to hand the
+// standard back to auto-generation) the rule exists to keep reachable.
+const uiMode = useUiModeStore()
+const showEditBrief = ref(false)
+const showDraftBrief = computed(() => showOverrideField(uiMode.isAdvanced, null))
+
 function startEdit(f: (typeof library.fragments)[number]) {
   editDraft.value = {
     id: f.id,
@@ -192,19 +205,6 @@ const editValid = computed(
     !!editDraft.value.summary.trim() &&
     !!editDraft.value.body.trim(),
 )
-// The linked SHORT VERSION is an OVERRIDE of what the platform does by default (condense a
-// long standard automatically, fold a short one in full), so it follows the override rule:
-// hidden in basic mode while unset, revealed as soon as the fragment carries one — a
-// basic-mode curator is never left unable to see or clear a brief a teammate linked.
-//
-// Both flags are LATCHED at the moment the form opens rather than tracking the live draft.
-// Recomputing per keystroke makes the control delete itself the instant a basic-mode curator
-// empties it — mid-edit, under the cursor, on the one interaction (clearing, to hand the
-// standard back to auto-generation) the rule exists to keep reachable.
-const uiMode = useUiModeStore()
-const showEditBrief = ref(false)
-const showDraftBrief = computed(() => showOverrideField(uiMode.isAdvanced, null))
-
 async function saveEdit() {
   const d = editDraft.value
   if (!d || !editValid.value) return
@@ -277,11 +277,6 @@ async function removeFragment(id: string) {
 // Link a Confluence/Notion page or GitHub file as a fragment that is re-resolved
 // from the source at run time (a living source of truth, not a frozen snapshot).
 const docDraft = ref({ source: '' as DocumentSourceKind | '', ref: '', tags: '' })
-const docDraftValid = computed(() => {
-  if (docLinkDisabled.value || !docDraft.value.source) return false
-  // The GitHub picker validates on staged files; every other path on the free-text ref.
-  return usingDocPicker.value ? docFilePaths.value.length > 0 : !!docDraft.value.ref.trim()
-})
 
 // ---- GitHub file picker (documents tab) -----------------------------------
 // For a GitHub source, let the user search a repo + browse to one or MORE files
@@ -363,6 +358,12 @@ const stagedDocRefs = computed(() =>
 
 /** When the rich picker drives the ref(s); otherwise the free-text field does. */
 const usingDocPicker = computed(() => showGithubDocPicker.value)
+
+const docDraftValid = computed(() => {
+  if (docLinkDisabled.value || !docDraft.value.source) return false
+  // The GitHub picker validates on staged files; every other path on the free-text ref.
+  return usingDocPicker.value ? docFilePaths.value.length > 0 : !!docDraft.value.ref.trim()
+})
 
 /**
  * A pasted GitHub file/directory URL resolved to a repo + location: select the repo

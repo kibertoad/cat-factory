@@ -57,8 +57,11 @@ it only reaches the logger the Worker writes through while both imports resolve 
   without notice and no later tick is guaranteed to reach what it held. Node's twins use timers.
 
 Package root (not under `src/`): `migrations/` + `telemetry-migrations/` +
-`sandbox-migrations/` + `migrations-provisioning/` hold the D1 schema, the twin of the Node
-facade's `drizzle/` + `db/schema.ts`.
+`sandbox-migrations/` + `migrations-provisioning/` + `audit-migrations/` hold the D1 schema, the
+twin of the Node facade's `drizzle/` + `db/schema.ts`. One lineage per BINDING: a new one is also a
+new `[[d1_databases]]` entry, a `files` entry in package.json, and a line in `deploy/backend`'s
+`db:migrate:*` scripts plus deploy.yml's `migrations` path filter, or its schema never reaches
+production.
 
 **See also:** `CLAUDE.md` → "Multi-runtime facades & cross-runtime conformance", "Execution
 flow", "Repo bootstrap flow".

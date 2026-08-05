@@ -113,6 +113,32 @@ export function createUiResultViews() {
     stepDetail.value = { instanceId, stepIndex }
   }
 
+  /**
+   * Open a task's NON-CODE OUTCOME summary — what the run changed in product terms, with the
+   * evidence behind it, and the diff one click away. BLOCK-keyed rather than run-keyed because a
+   * merged task keeps its pull request long after its run instance is gone, and that task is
+   * exactly the one somebody comes back to read. The run rides along when there is one, which is
+   * where every piece of evidence comes from; `stepIndex` stays null because the summary is
+   * composed from the WHOLE run and there is no step for it to be about.
+   */
+  function openOutcome(blockId: string, instanceId: string | null = null) {
+    resultView.value = { view: 'outcome', blockId, instanceId, stepIndex: null }
+  }
+
+  /**
+   * Open the outcome summary from a caller that knows the RUN: the `outcome` deep link.
+   *
+   * The run id is a LOOKUP here, not the key — the window is block-keyed (above) — so a link
+   * naming its block opens on it even when the store never hydrated that run, which is the
+   * normal state of following a link into a task that finished long ago. Falling back to the
+   * run's own `blockId` keeps a link that carries only `run=` working. Only a link that
+   * resolves neither is a silent no-op, matching the run-step openers.
+   */
+  function openRunOutcome(instanceId: string, blockId: string | null = null) {
+    const resolved = blockId ?? useExecutionStore().getInstance(instanceId)?.blockId ?? null
+    if (resolved) openOutcome(resolved, instanceId)
+  }
+
   function openRequirementReview(blockId: string) {
     resultView.value = { view: 'requirements-review', blockId, instanceId: null, stepIndex: null }
   }
@@ -185,6 +211,8 @@ export function createUiResultViews() {
     openForkDecision,
     openPrReview,
     openTestEvidence,
+    openOutcome,
+    openRunOutcome,
     closeResultView,
     closeRequirementReview,
     openStepDetail,

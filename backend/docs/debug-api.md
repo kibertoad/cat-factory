@@ -111,7 +111,7 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
 | `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
-| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?limit=`, `?cursor=`                             |
+| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?ok=`, `?limit=`, `?cursor=`                     |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
 
 The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
@@ -132,7 +132,13 @@ dispatches by agent-kind spelling and its re-runs `-10` before `-2`. The server 
 each call actually STARTED, with `seq` separating the calls that share a millisecond.
 
 Both orders take `?jobId=` to narrow to ONE dispatch, which is how "what did the third ci-fixer
-round actually do, in order" is asked.
+round actually do, in order" is asked, and `?ok=true|false` to narrow to the calls that worked or
+the ones that did not. `?ok=false` is the drill-down behind the overview's tool-call failure
+counts, and it is applied in SQL like every other narrowing here: a caller filtering a page
+itself has already paid for the rows it discards and has spent the page's `limit` on them, so on
+a run whose failures sit behind a hundred successful calls it returns none of them. Pairing it
+with `order=trajectory` gives the failures in the order they hit, which is what tells a retry
+loop apart from a scatter of unrelated failures.
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that
@@ -163,14 +169,39 @@ The failure classes and where each one's evidence lives:
 - **`output_truncated`: the model was cut off.** The per-kind insight names which agent kept
   hitting its output ceiling (`outputHeadroomRatio` ≈ 1). The fix conversation is about output
   limits or task size, not correctness.
+- **`tool_calls_failed` / `tool_retry_loop`: a tool broke inside the container.** A tool-EXECUTION
+  failure is a perfectly healthy model call whose result came back bad, so it is invisible in
+  every LLM number on this page. The two are deliberately not the same kind of statement, and
+  their severities say so. `tool_calls_failed` is an **`info`**: it counts them run-wide with the
+  RATIO (34 of 36 and 34 of 3,600 are the same count and opposite diagnoses) and fires on any run
+  with a failure at all, because a failing tool call is the ordinary shape of an agent loop (a
+  test that fails before it is fixed, a `grep` that matches nothing). As a `warning` it would fire
+  on most healthy runs and cost the ordering the thing it is for. `tool_retry_loop` is the
+  **`warning`**: it fires only where the failures CONCENTRATE on one `(agentKind, tool)` pair
+  (mostly-failing AND failed enough times to not be one bad command), which is the difference
+  between an agent re-running something that cannot work and one meeting the occasional failing
+  command. It considers EVERY cell rather than the run's most-failed one, or a fixer wedged
+  5-for-5 on `apply_patch` goes unreported behind a coder's 6 failures across 100 healthy `bash`
+  calls. Drill in with `/tool-calls?ok=false`, and add `&order=trajectory` to see the loop in the
+  order it ran.
 - **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
   is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
   reason, so it fires on a failure the model side cannot explain: tool execution inside the
-  container, or the engine. Read the trajectory first
-  (`/tool-calls?order=trajectory`, `?jobId=` to narrow to the dispatch that died): a tool-EXECUTION
-  error is a row of its own, `ok: false`, with the tool's own error text in `result`. Two gaps stay
-  behind it, and both are the search workflow below: a workspace with bodies `withheld` gives the
-  failing call but not what it said, and an ENGINE-side failure records no call anywhere.
+  container, or the engine. Its message reads the trajectory sink and says which of THREE cases
+  this is, because they need different next steps: failing tool calls exist (start at
+  `/tool-calls?ok=false`, `?jobId=` to narrow to the dispatch that died, where each failure is a
+  row with the tool's own error text in `result`); a recorded loop in which nothing failed (so
+  what is left is the engine); or no trajectory at all, either because the sink is unwired or
+  because this run captured none, which is unrecorded rather than uneventful. One gap stays
+  behind it and it is the search workflow below: a workspace with bodies `withheld` gives the
+  failing call but not what it said.
+- **"what did the agents actually DO, and how much of it worked?": read `toolCalls`.** One SQL
+  aggregate at the `(agentKind, tool)` grain, re-cut as `byTool` and `byAgentKind` and folded into
+  `totals`, each row carrying `failures` and `failureRate` beside `calls`. Both breakdowns lead
+  with the most-failed row rather than the busiest one, because a run's busiest tool is almost
+  never its broken one. The same aggregate supplies `sinks.toolCalls.count`, so the count and the
+  breakdown cannot disagree, and a run that called no tools reports `failureRate: null` rather
+  than a clean 0% (which would file "nothing happened" beside "everything worked").
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately: a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.
@@ -293,15 +324,12 @@ stored character is reachable; a body larger than one window is read in stitched
   other side (it is the harness's JOB-scoped counter, so a re-dispatch starts it over). Neither is
   a step index: they mark the boundary without naming which attempt sits on either side of it, and
   a proxied call reports `turnIndex: null` rather than participating in the sequence at all.
-- **Tool-execution errors are rows, but no rollup counts them.** Each is its own tool-call row
-  (`ok: false`), so each is readable with what the tool returned. What is missing is aggregation:
-  there is no `?ok=` filter, the overview reports only how many tool calls the run made, and no
-  signal is derived from how many of them failed. Finding a stuck edit loop is a walk of
-  `?order=trajectory`, not a number on the overview. Two things
-  genuinely fall outside the sink: an engine-side failure, which no producer records, and an older
+- **Two things genuinely fall outside the tool-call sink**, and neither is reconstructed from
+  pattern-matching at record time: an engine-side failure, which no producer records, and an older
   harness image, which reports `bodies: 'withheld'` when it captured no argument text and has its
-  whole dispatch skipped when it numbers no calls at all. Neither is reconstructed from
-  pattern-matching at record time.
+  whole dispatch skipped when it numbers no calls at all. The overview's `toolCalls` rollup and
+  its `failure_outside_model_calls` message both distinguish "the sink recorded a clean loop" from
+  "nothing was recorded", so neither absence reads as a run whose tools all worked.
 - **Search case folding is ASCII.** SQLite's `LIKE` folds only ASCII and Postgres' `ILIKE`
   follows its locale; conformance pins the ASCII behaviour the two stores share. Search terms are
   literal substrings, not patterns.

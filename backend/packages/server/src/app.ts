@@ -37,6 +37,7 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { mcpOAuthCompletionController } from './modules/toolServers/McpOAuthCompletionController.js'
 import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
 import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
@@ -252,6 +253,11 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Per-user infra handler overrides (local mode); 503s where the service is unwired.
   app.route('/', environmentUserHandlerController())
   app.route('/', userSecretController())
+  // Finishes an MCP tool-server OAuth grant from the `code`/`state` the SPA carries back off the
+  // vendor's redirect. Root-mounted because the board is sealed into the state rather than named in
+  // the path, and session-gated by the shared default-deny gate like everything else here, which
+  // is what makes its user binding and `secrets.manage` re-check enforceable at all.
+  app.route('/', mcpOAuthCompletionController())
   app.route('/', openRouterCatalogController())
   app.route('/', userApiKeyController())
   // Local-mode operational settings (warm pool + checkout reuse); 503 on non-local facades.
@@ -387,4 +393,9 @@ function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/slack', slackOAuthController())
   // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/tasks', linearOAuthController())
+  // The MCP tool-server OAuth flow deliberately has NO receiver here: a vendor redirects the
+  // operator's browser to the SPA, which re-presents the `code` and `state` over the authenticated
+  // API (`mcpOAuthCompletionController`, mounted with the session-gated controllers above). A
+  // public receiver could not tell WHO was completing the grant, since a third-party navigation
+  // carries no bearer token.
 }

@@ -75,6 +75,10 @@ watch(selectedRepoId, (id) => {
   if (found) selectedRepo.value = found
 })
 
+// The file-search query (its matches live in the file-selection section below). Declared
+// above `clearRepo` and the repo-switch watcher, which both reset it.
+const fileQuery = ref('')
+
 function clearRepo() {
   selectedRepoId.value = undefined
   selectedRepo.value = undefined
@@ -127,7 +131,6 @@ watch(selectedRepoId, (id) => {
   if (id !== undefined) void ensureFilesLoaded()
 })
 
-const fileQuery = ref('')
 // Matches are computed client-side from the cached tree (no per-keystroke server call).
 // A query is required so a large repo never renders thousands of rows at once; results
 // are capped for the same reason.

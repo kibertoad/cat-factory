@@ -24,6 +24,7 @@ import type {
   ListDebugLogsResponse,
   ListDebugRunsResponse,
   ListDebugSearchQueriesResponse,
+  ListDebugToolCallsOk,
   ListDebugToolCallsOrder,
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
@@ -127,6 +128,7 @@ export type DebugListToolCallsQuery = {
   cursor?: string
   jobId?: string
   order?: ListDebugToolCallsOrder
+  ok?: ListDebugToolCallsOk
 }
 
 /** Query parameters for `client.jobs.list()`. */

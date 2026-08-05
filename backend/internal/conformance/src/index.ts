@@ -48,6 +48,7 @@ export {
 export { deriveWorkerDatabase, adminDatabaseUrl, type WorkerDatabase } from './test-db.js'
 export { defineLlmMetricsSuite } from './llm-metrics-suite.js'
 export { defineSubscriptionQuotaSuite } from './subscription-quota-suite.js'
+export { defineMcpOAuthGrantSuite } from './mcp-oauth-grant-suite.js'
 export { defineBinaryArtifactsSuite, MemoryBinaryBlobBackend } from './binary-artifacts-suite.js'
 export {
   defineContentStorageResolutionSuite,
@@ -95,6 +96,7 @@ export { defineEnvironmentHandlersSuite } from './environment-handlers-suite.js'
 export { defineEnvironmentTestSuite } from './environment-test-suite.js'
 export { definePasswordResetTokenSuite } from './password-reset-suite.js'
 export { defineMachineNodeSuite } from './machine-node-suite.js'
+export { defineAuditEventSuite } from './audit-event-suite.js'
 export { defineAuthAttemptSuite } from './auth-attempt-suite.js'
 export { defineTokenUsageSuite } from './token-usage-suite.js'
 export { defineCommitProjectionSuite } from './commit-projection-suite.js'

@@ -134,4 +134,59 @@ describe('dispatchStepView routing', () => {
       expect(ui.stepDetail).toBeNull()
     })
   })
+
+  // The outcome summary is the RUN's, not a step's, and it has two entry points: the board and
+  // inspector know the block (and a merged task's run may be gone), while a deep link knows only
+  // the run id.
+  describe('openOutcome', () => {
+    it('opens block-keyed with no step, and with no run when the task has none', () => {
+      ui.openOutcome('b1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: null,
+        stepIndex: null,
+      })
+    })
+
+    it('carries the run when the caller knows it', () => {
+      ui.openOutcome('b1', 'e1')
+
+      expect(ui.resultView).toMatchObject({ view: 'outcome', blockId: 'b1', instanceId: 'e1' })
+    })
+
+    it('resolves the block from the run for a run-only caller (the deep link)', () => {
+      execution.hydrate([instance('e1', 'b1', [{ agentKind: 'coder' }])], 'ws1')
+
+      ui.openRunOutcome('e1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: 'e1',
+        stepIndex: null,
+      })
+    })
+
+    // The link the deep-link consumer passes carries BOTH ids, and the run is only a lookup:
+    // following one into a task that finished long ago is the normal case, and the snapshot
+    // that hydrates the board is not obliged to still carry that run.
+    it('opens on the block the link names even when the run was never hydrated', () => {
+      ui.openRunOutcome('missing', 'b1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: 'missing',
+        stepIndex: null,
+      })
+    })
+
+    it('does nothing for a run the store has not hydrated and a link with no block', () => {
+      ui.openRunOutcome('missing')
+
+      expect(ui.resultView).toBeNull()
+    })
+  })
 })

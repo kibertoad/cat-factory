@@ -139,6 +139,26 @@ export {
   type ToolSecretContainerFields,
   type WorkspaceToolSecretResolverOptions,
 } from './agents/capabilityCredentialResolver.js'
+// The OAuth half of the same seam: the kernel `McpOAuthTokenSource` a facade wires, joining the
+// sealed per-workspace grant store to the credential chain above (which resolves the OAuth client
+// secret). Every facade builds it beside `buildToolSecretChain`, so a deployment with a grant
+// store dispatches with a live token and one without states the server as `oauth_not_connected`.
+export {
+  createMcpOAuthTokenSource,
+  mcpOAuthContainerFields,
+  mcpOAuthExecutorDeps,
+  type McpOAuthContainerFields,
+  type McpOAuthTokenSourceOptions,
+} from './agents/mcpOAuthTokenSource.js'
+export {
+  resolveOAuthClientSecret,
+  type OAuthClientSecretResolution,
+  type ResolveOAuthClientSecretInput,
+} from './agents/mcpOAuthClientSecret.js'
+export {
+  MCP_OAUTH_CALLBACK_PATH,
+  requireMcpOAuthRedirectUrl,
+} from './modules/toolServers/mcpOAuthRedirect.js'
 export {
   buildCapabilityCredentialsView,
   collectDeclaredCapabilityCredentials,

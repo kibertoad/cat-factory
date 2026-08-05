@@ -70,7 +70,7 @@ const INLINE_TYPE_NAMES = {
   'body,id': 'DebugContextFragment',
   'content,index,name,role,toolCallId,toolCalls': 'DebugPromptMessage',
   'args,name': 'DebugToolCall',
-  'diagnostics,generatedAt,kind,llm,run,signals,sinks,steps,version': 'DebugRunOverview',
+  'diagnostics,generatedAt,kind,llm,run,signals,sinks,steps,toolCalls,version': 'DebugRunOverview',
   'blockId,createdAt,currentStep,failure,pipelineId,pipelineName,runId,status,stepCount':
     'DebugRunSummary',
   'agentKind,contextFilesChars,createdAt,fragmentsChars,harness,model,snapshotId,stepIndex,systemPromptChars,userPromptChars':
@@ -87,6 +87,10 @@ const INLINE_TYPE_NAMES = {
     'DebugLlmPhaseRollup',
   'cacheHitRate,cacheReadTokens,cacheWriteTokens,calls,completionTokens,costEstimate,errors,overheadMs,promptTokens,transportOverheadRatio,truncatedCalls,upstreamMs,warnings':
     'DebugLlmTotals',
+  // The tool-EXECUTION rollup, cut the same three ways as the LLM one above it.
+  'calls,failureRate,failures': 'DebugToolCallTotals',
+  'calls,failureRate,failures,tool': 'DebugToolRollup',
+  'agentKind,calls,failureRate,failures': 'DebugToolCallKindRollup',
 }
 
 /** Enum value-sets that deserve a chosen name rather than a positional one. */
