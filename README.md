@@ -1,6 +1,9 @@
 # cat-factory
 
-Website: [www.catfactory.ai](http://www.catfactory.ai)
+Website: [www.catfactory.ai](http://www.catfactory.ai) ·
+**[Cookbook](https://www.catfactory.ai/guide/cookbook.html)**: task-oriented recipes for
+changing a pipeline you already run (add a review step, add a gate, change a step's
+prompt, attach a skill), each a few minutes in the pipeline builder.
 
 **A self-hosted platform that runs the software delivery loop with LLM agent
 pipelines, turning board tasks and tracker issues into reviewed, CI-gated,
@@ -416,6 +419,8 @@ currently open and what each one is trying to change.
 
 **Agents & pipelines**
 
+- [Cookbook: the short recipe per pipeline edit, in the builder](https://www.catfactory.ai/guide/cookbook.html)
+  (product docs, task-indexed rather than architecture-indexed)
 - [Custom agents: ship your own agent kinds without forking](./backend/docs/custom-agents.md) ·
   [authoring a role](./backend/docs/custom-agent-roles.md) ·
   [gate & agent ergonomics](./backend/docs/custom-agent-gate-ergonomics.md)
