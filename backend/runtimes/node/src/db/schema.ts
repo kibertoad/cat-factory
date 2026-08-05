@@ -1293,11 +1293,19 @@ export const publicApiKeys = pgTable(
     // session, and pre-existing rows predate the column (D1 migration 0054). Not a FK: a key is
     // a workspace-scoped service credential that outlives its minter's access. Mirror of D1 0054.
     created_by_user_id: text('created_by_user_id'),
+    // The KEY that minted this one, set only for a headless mint through `POST /api/v1/keys`
+    // (D1 migration 0081). Provenance AND a lifecycle link: revoking a key revokes everything it
+    // minted, which is what the `idx_public_api_keys_minter` index below serves. Not a FK, for
+    // the same reason `created_by_user_id` is not: the row must survive its minter's removal.
+    created_by_key_id: text('created_by_key_id'),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
     last_used_at: bigint('last_used_at', { mode: 'number' }),
     revoked_at: bigint('revoked_at', { mode: 'number' }),
   },
-  (t) => [index('idx_public_api_keys_workspace').on(t.workspace_id)],
+  (t) => [
+    index('idx_public_api_keys_workspace').on(t.workspace_id),
+    index('idx_public_api_keys_minter').on(t.created_by_key_id),
+  ],
 )
 
 // Per-USER infra handler overrides (local mode): the per-user layer over a workspace's

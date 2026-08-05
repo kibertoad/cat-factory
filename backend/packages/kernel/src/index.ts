@@ -31,15 +31,15 @@ export { resolveWritebackFlag } from './domain/writeback.js'
 // `narrowMergeClassRule` is NOT re-exported from here: it moved to `@cat-factory/contracts` beside
 // the rule maps it composes, so the preset editor in the SPA narrows by the same implementation the
 // engine applies. A convenience re-export would put two import paths on one rule, which is the
-// shape that lets a second hand-written copy exist.
+// shape that lets a second hand-written copy exist. `resolveMergeClassRule` /
+// `resolveRoleScopedMergeClassRule` followed it there when the SPA's risk-policy picker had to
+// agree about what a role's entry costs that role, and are not re-exported for the same reason.
+// What stays here is the CLASSIFICATION of a diff, which nothing in the SPA decides.
 export {
   CHANGE_CLASS_RANK,
   classifyChangedPath,
   classifyChangedFiles,
-  resolveMergeClassRule,
-  resolveRoleScopedMergeClassRule,
   type ChangeClassification,
-  type RoleScopedMergeClassRule,
 } from './domain/change-class.js'
 export { extractJson } from './domain/llm-output.js'
 export {

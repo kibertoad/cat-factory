@@ -704,6 +704,7 @@
         "neverUsed": "mai utilizzato",
         "createdBy": "creato da {user}",
         "createdByYou": "te",
+        "createdByKey": "la chiave API {id}",
         "revoke": "Revoca token"
       },
       "add": {
@@ -6164,7 +6165,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Si applica perche questa attivita non sceglie un criterio proprio.",
-      "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana."
+      "noneHint": "Nessun criterio di rischio configurato. Ogni pull request attende una revisione umana.",
+      "refused": {
+        "relaxes_role_sandbox": "Non disponibile per il tuo ruolo: le esecuzioni di questa attività sono isolate e questo criterio ne consentirebbe il merge. Un amministratore dello spazio di lavoro può cambiarlo.",
+        "relaxes_role_submission_allowlist": "Non disponibile per il tuo ruolo: questo criterio ti permetterebbe di unire tipi di modifica che questa attività ti preclude. Un amministratore dello spazio di lavoro può cambiarlo.",
+        "relaxes_role_class_rule": "Non disponibile per il tuo ruolo: questo criterio unisce automaticamente modifiche che devi revisionare in questa attività. Un amministratore dello spazio di lavoro può cambiarlo."
+      }
     },
     "preview": {
       "defaultBadge": "Predefinito",

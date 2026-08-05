@@ -41,4 +41,12 @@ Also fixes `RiskPolicyService.update` dropping `classRulesByRole` and `dryRunRol
 the update contract but never applied, so editing the role layer of an existing preset returned 200
 and changed nothing.
 
+The allowlist is role-scoped state, so it takes an arm in `refuseRiskPolicySelection` too
+(`relaxes_role_submission_allowlist`), on the rule ADR 0037 set when it closed the same escape for
+the sandbox: a task's `riskPolicyId` is a member-tier board write, so without it a role held to
+`['docs']` could re-point the task at a preset that allowlists it nothing and land `source` without
+editing a policy. The arm is the same subset test the others make, and an ABSENT allowlist on the
+far side relaxes every held one, the empty one included. The three arms run in the merge ladder's
+own order, so a refused row in the picker names the restriction the run would have been refused on.
+
 Design: `backend/docs/adr/0039-role-scoped-submission-allowlists.md`.

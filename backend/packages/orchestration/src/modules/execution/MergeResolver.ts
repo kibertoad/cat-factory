@@ -14,10 +14,10 @@ import type {
 import {
   isDryRun,
   parseMergeAssessment,
+  resolveRoleScopedMergeClassRule,
   submissionAllowedForRole,
   submissionAllowlistForRole,
 } from '@cat-factory/contracts'
-import { resolveRoleScopedMergeClassRule } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 

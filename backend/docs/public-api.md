@@ -47,8 +47,12 @@ Over REST (session-authed, workspace-scoped; this is the one management surface 
 
 Create body: `{ "label": "CI pipeline", "scope": "read" }`. `label` is 1–120 chars; `scope` is
 optional and **defaults to `write`**. A workspace holds at most **50** keys (409 past that; revoke
-one first). Key metadata carries `createdByUserId`, `createdAt`, `lastUsedAt` (updated at most once
-a minute) and `revokedAt`.
+one first). Key metadata carries `createdByUserId`, `createdByKeyId`, `createdAt`, `lastUsedAt`
+(updated at most once a minute) and `revokedAt`.
+
+An operator with no browser can do the same over `/api/v1` itself: see
+[Key provisioning](#key-provisioning-apiv1keys). The two surfaces share one store, so a key minted
+either way is listed and revoked by both.
 
 A key is bound to **one account + workspace**: every `/api/v1` call it makes acts within that
 workspace, and resources in any other workspace are a `404` indistinguishable from ones that never
@@ -58,12 +62,12 @@ existed.
 
 Scopes are an ordered, **inclusive** ladder; each rung can do everything below it:
 
-| Scope    | Adds                                                                                                                                                                             |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, the whole [`/debug` surface](./debug-api.md).                            |
-| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                      |
-| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                            |
-| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), and manage the [outbound webhook](#outbound-webhook-push). |
+| Scope    | Adds                                                                                                                                                                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`   | All reads and streams: list services/tasks/pipelines/jobs/notifications, read a run, SSE, `GET /usage`, a run's [evidence](#run-evidence-report--artifacts), the whole [`/debug` surface](./debug-api.md).                      |
+| `write`  | Non-destructive mutations: create/edit/start/stop/retry a task, start a headless job, cancel a job, dismiss a notification.                                                                                                     |
+| `decide` | Answer a run's **parked human decisions** (`/runs/:runId/decisions/*`) and, because of that, start a job OR a board task on a pipeline that can park.                                                                           |
+| `admin`  | Destructive / merge-adjacent operations: delete a task, `act` on a notification (which can perform a **real merge**), manage the [outbound webhook](#outbound-webhook-push), and [provision keys](#key-provisioning-apiv1keys). |
 
 Two things to know before minting `decide` or `admin`:
 
@@ -72,6 +76,16 @@ Two things to know before minting `decide` or `admin`:
   point (a headless overseer watching a team's board), but it means minting `decide` is the operator
   asserting "this integration answers decisions for this workspace". Prefer `write` for an
   integration that only authors and launches.
+- **Two parks slip past the `decide` requirement, and a `write` key can set them in motion.** The
+  check reads the pipeline's step chain before the run starts, and two things are not in it. An
+  unbounded human-wait **gate a deployment registered itself** declares its never-ending poll inside
+  the object its factory builds, which nothing can read at request time, so such a pipeline is
+  admitted for a `write` key and then parks with nothing here able to name it. And **follow-up
+  triage** is deliberately uncounted: the companion is on by default on every Coder step, so
+  counting it would make `decide` mandatory for all board work that builds anything. Both parks are
+  recoverable: follow-up triage has an answer path at `decide`, and either can be ended with
+  `POST /api/v1/tasks/:taskId/stop`. But if your integration starts board pipelines and wants to
+  answer whatever they stop on, mint `decide`.
 - Handing out even a `read` key is not free once the debug surface is in play: it reaches prompt
   and response bodies the SPA gates behind workspace RBAC. See the
   [auth section of `debug-api.md`](./debug-api.md#auth).
@@ -203,7 +217,10 @@ curl -sN -H "$AUTH" "$BASE/api/v1/tasks/$TASK_ID/events"   # SSE
 # 6. If the run parks on a decision (SSE `decision` event / run status `blocked`):
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 
-# 7. The period's spend + budget position, for a dashboard:
+# 7. Once it finishes, the EVIDENCE, the same bundle the pull request carries:
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/report"
+
+# 8. The period's spend + budget position, for a dashboard:
 curl -s -H "$AUTH" "$BASE/api/v1/usage"
 ```
 
@@ -372,19 +389,25 @@ Task `status` is the real lifecycle (`planned` / `ready` / `in_progress` / `bloc
 `done`): a decoupled public mirror of the board status, stable even if the board grows internal
 states.
 
-Board-task `start` applies the **same parking rule** as `POST /jobs`, and a pipeline parks in any of
-three ways:
+Board-task `start` applies the **same parking rule** as `POST /jobs`, and the rule recognises four
+ways a pipeline parks:
 
 - an **approval gate** on an enabled step;
 - an inline **review or brainstorm** kind (`requirements-review`, `clarity-review`, and the two
   brainstorms), which sets the run `blocked` awaiting an answer;
 - an unbounded **human-wait gate** (`human-review`), a gate step whose poll never times out because
-  it is waiting for a person to review the PR.
+  it is waiting for a person to review the PR;
+- an **interview gate**: a step whose kind carries the `interview-gate` trait (the planning and
+  document interviewers, plus any a deployment registers), which asks a batch of questions and waits.
 
 Any of them needs a `decide`-scope key (`403 pipeline_requires_decide_scope`; the refusal names this
 surface's exit, `POST /tasks/:taskId/stop`). Note that this covers the shipped **Adaptive build**
 preset, which carries a risk-gated `human-review`: a `write`-only key cannot start it. The
 unconditional presets (`Standard build`, `Simple build`) never park and stay `write`-startable.
+
+What the rule does **not** see: a park raised dynamically mid-run (an agent-raised decision, a judge
+`park`), a deployment's own unbounded-wait gate, and follow-up triage. See
+[Pick the right scope](#2-pick-the-right-scope) for what that means when you mint a key.
 
 #### Filing a task from a tracker ticket
 
@@ -560,8 +583,11 @@ possibly started by a human in the SPA). Reading needs `read`; **answering needs
 Every action returns the run's **whole decision list**, re-read after the action:
 `{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
 run is waiting on a park this surface does not model
-([tracker](../../docs/initiatives/public-api-additions.md)); the one you should expect is
-`human-review`, whose answer is a person approving the pull request on the VCS host.
+([tracker](../../docs/initiatives/public-api-additions.md)). Two produce it: `human-review`, whose
+answer is a person approving the pull request on the VCS host rather than an API call; and an
+unbounded human-wait **gate a deployment registered itself**, whose answer lives wherever that
+deployment put it. The same blind spot applies one step earlier, at admission; see
+[Scopes](#scopes) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -589,8 +615,15 @@ run is waiting on a park this surface does not model
 | `POST …/human-test/request-fix`                       | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the tested environment, then rebuild it.                                                                                        |
 | `POST …/visual-confirmation/approve`                  | `decide` | Approve the captured screenshots against the reference designs and advance.                                                                                                             |
 | `POST …/visual-confirmation/request-fix`              | `decide` | Body `{ findings (1–10000) }`; dispatch a fixer against the captured screenshots.                                                                                                       |
+| `POST …/follow-ups/items/:itemId/file`                | `decide` | File one `follow_up` item as a tracker issue. Refused for a `question` item, and for a workspace with no tracker connected.                                                             |
+| `POST …/follow-ups/items/:itemId/send-back`           | `decide` | Fold one `follow_up` item into another Coder pass (it records as `queued`).                                                                                                             |
+| `POST …/follow-ups/items/:itemId/answer`              | `decide` | Body `{ answer (1–4000) }`; answer one `question` item. Refused for a `follow_up` item.                                                                                                 |
+| `POST …/follow-ups/items/:itemId/dismiss`             | `decide` | Wave one item off without acting on it. Valid for either kind.                                                                                                                          |
+| `POST …/interview/answer`                             | `decide` | Body `{ questionId, answer (≤2000) }`; record one answer. Does **not** resume the run.                                                                                                  |
+| `POST …/interview/continue`                           | `decide` | Submit the answers and resume; the interviewer may ask more. **Asynchronous** (the pass runs in the durable driver).                                                                    |
+| `POST …/interview/proceed`                            | `decide` | Stop the questions: the interviewer converges on what it has and the run advances. Also asynchronous.                                                                                   |
 
-Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
+Thirteen decision kinds appear in `decisions[]`, discriminated by `kind`:
 
 - **`approval-gate`**: a step marked `requiresApproval` finished and the run is holding its output
   up for a person — the simplest park, and the one any pipeline can carry. Carries the
@@ -659,7 +692,22 @@ Eleven decision kinds appear in `decisions[]`, discriminated by `kind`:
   over this API** — resolving an id to an image needs the app, so approving on this projection
   alone approves screenshots you have not seen.
 
-The last two are exposed with their limits stated rather than sold as equivalent to the rest: the
+- **`follow-ups`**: while the Coder worked it streamed forward-looking `items` (loose ends it
+  noticed and deliberately did not act on, and questions it would otherwise have guessed at), and
+  the run stops at that step's completion until every one is decided. Unlike every other kind here
+  this one **appears before the run parks**: the items accrue live, so an integration that triages
+  as they arrive never sees the run stop. `loops`/`maxLoops` are the send-back budget. Reachable
+  only through `POST /tasks/:taskId/start`, since the companion rides a container Coder step.
+- **`interview`**: an inline interviewer asked a batch of clarifying questions and the run is
+  waiting while a human answers them. One kind for every interview gate (the built-ins are the
+  planning and the document interviewer; a deployment can register its own). `stepKind` says which
+  is asking, and it is the only field to branch on. An entry whose `questions` are all answered
+  means the interviewer pass is **in flight**: `continue` wakes the durable driver and the next
+  round arrives on a later read. The brief it converges on is not projected: it differs per gate
+  and is not something you answer.
+
+`human-test` and `visual-confirmation` are exposed with their limits stated rather than sold as
+equivalent to the rest: the
 verbs are mechanical, but the judgement they record is the one an API consumer is least able to
 supply. They earn their place for an integration that drives its own human through a different UI,
 or that has a real automated check to point at `environment.url`.
@@ -695,6 +743,105 @@ safeguard acts on: `costSpent`, `costLimit` and `exceeded: true` when runs are p
 kinds**: a `subscription` row's `costEstimate` is illustrative (flat-rate plans bill nothing per
 token); only `metered` rows are money. Workspace tier only, by design: a workspace key never learns
 a sibling workspace's spend.
+
+### Run evidence (report + artifacts)
+
+What a run PROVED, for a consumer whose job is to judge it rather than debug it: a trial harness
+deciding whether to accept a change, an evaluation pipeline scoring a fleet of runs.
+
+| Method / path                            | Scope  | Behaviour                                                       |
+| ---------------------------------------- | ------ | --------------------------------------------------------------- |
+| `GET /api/v1/runs/:runId/report`         | `read` | The engine's **verification report** for the run.               |
+| `GET /api/v1/runs/:runId/artifacts`      | `read` | The binary artifacts the run captured (metadata; unpaged).      |
+| `GET /api/v1/artifacts/:artifactId/blob` | `read` | One artifact's **bytes**, with its recorded image content type. |
+
+A run is addressable here on the same terms as the [decision routes](#parked-decisions-apiv1runsruniddecisions)
+that share the `/api/v1/runs/:runId/*` prefix: the runs this key could already read through
+`GET /api/v1/jobs/:id` or `GET /api/v1/tasks/:taskId/run`. That is NARROWER than the
+[`/debug` surface](./debug-api.md), which resolves any run in the workspace, and deliberately so:
+one path prefix carries one authorization model. What it excludes is runs anchored on a frame or
+module (a blueprint, a bug-intake sweep), which carry no task and no pull request and so have no
+verification story to tell.
+
+**The report is the same bundle the pull request carries**, byte-for-byte the shape inside the
+`cat-factory:verification-report` fenced JSON block, so a consumer that was scraping PR bodies can
+stop. It is composed on read from the run's stored state, which is what lets it answer for a run
+that never opened a pull request at all (a headless job, or a run that failed before it pushed);
+those get `run.repo: null` rather than an invented one.
+
+Every section carries `status: "reported" | "absent"` plus a `note`, so _"this pipeline had no
+tester step"_ and _"the tester found nothing"_ never read the same. What it covers: the CI gate's
+verdict and failing checks, the platform's own run of the service's lint/test/build commands with
+the failing output, the red-then-green reproduction proof for a bugfix, the tester's structured
+report, requirement coverage, the throwaway-environment lifecycle, judge verdicts, and the merge
+decision. `truncations` names anything a per-list cap left out.
+
+`observability` carries the links back: `runUrl` (the app's panel, for a person), `trajectoryUrl`
+(the run's tool calls in order, on the debug surface) and `reportUrl` (this endpoint). Each is
+`null` when the deployment configured no public URL to build it from, never a link to nowhere.
+
+The **artifact** rows are `{ artifactId, kind, view, contentType, byteSize, hash, createdAt }`.
+`kind` is `screenshot` (machine-captured during the run) or `reference` (the image a human uploaded
+for it to be judged against); `view` pairs the two. The list is deliberately unpaged: the capture
+path caps how many artifacts one run may store, so the response size is bounded before the request,
+and `byteSize` lets a caller decide whether to fetch the bytes at all.
+
+The blob endpoint answers the artifact's stored image content type with `nosniff`, and is
+**authenticated like everything else**: a report on a public repository can link to it without
+making the bytes public. It declares every type it can send (the image allow-list plus an
+`application/octet-stream` fallback for a stored row it does not recognise, which it serves as an
+attachment), so a generated client can switch on the response honestly.
+
+Refusals on these three carry `error.details.reason`, which is what separates causes that need
+different reactions: `run_not_found` (the id names no run this key may read),
+`artifact_not_found` (the id is unknown to the key's workspace), `artifact_blob_missing` (the
+metadata row survives but its bytes are gone from the blob backend, a storage fault worth
+reporting, not a request to stop making), and `binary_artifact_storage_unconfigured` on the
+`503` both artifact endpoints answer when the account configured no blob backend. That 503 is
+never an empty list, which would say something false about the run.
+
+**What the report costs.** It is composed per request, and for a run whose tester reported it also
+reads the service's `spec/` tree off the run's branch over the VCS API, the only `/api/v1` read
+that reaches outside the deployment. The result is memoised per run inside one process, so a
+scaled Node deployment or a cold Worker isolate can repeat it. That is the price of serving the
+pull request's bundle verbatim rather than a second projection that could disagree with it. An
+integration sweeping a fleet should poll per run on settlement rather than on a tight loop; there
+is no separate rate limit on this endpoint beyond the key itself.
+
+```sh
+# The report a trial harness ingests, and the evidence behind it.
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/report" | jq '.ci, .validation, .observability'
+curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN/artifacts" | jq '.artifacts[] | {artifactId, view, byteSize}'
+curl -s -H "$AUTH" "$BASE/api/v1/artifacts/$ART/blob" -o login.png
+```
+
+### Key provisioning (`/api/v1/keys`)
+
+The external counterpart of the key panel, so a deployment whose operator is headless can mint the
+per-tenant or per-environment credentials it hands out.
+
+| Method / path                | Scope   | Behaviour                                                              |
+| ---------------------------- | ------- | ---------------------------------------------------------------------- |
+| `GET /api/v1/keys`           | `admin` | The workspace's live keys (metadata; a secret is never readable back). |
+| `POST /api/v1/keys`          | `admin` | Mint a key, returning its raw secret **exactly once**.                 |
+| `DELETE /api/v1/keys/:keyId` | `admin` | Revoke a key **and every key it minted**. Idempotent (always `204`).   |
+
+Create body: `{ "label": "tenant-42 reader", "scope": "read" }`; omitting `scope` mints `write`, the
+same safe middle rung the app defaults to. Everything else comes from the calling key: the mint
+lands in **its** workspace, and this surface has no vocabulary for another one.
+
+Two bounds are what make this safe to offer, and both are enforced, not advisory:
+
+- **`admin` cannot be minted here** (`400 validation`). A key provisioned over the API can never
+  provision in turn, so the chain is exactly one link long. A second admin key needs a human
+  session and the `secrets.manage` workspace permission.
+- **Revocation cascades.** Revoking a key revokes what it minted, on this surface and in the app
+  alike. Without that, a leaked provisioning key would survive its own cleanup: the operator kills
+  the credential they can see and the ones an attacker made keep working.
+
+A provisioned key records `createdByKeyId` (and no `createdByUserId`, since no person minted it), which
+is what the app's key list shows and what the cascade follows. Revoking the **calling** key is
+allowed: a harness handing back a scratch credential is the case it exists for.
 
 ### Run debugging (`/api/v1/debug/*`)
 

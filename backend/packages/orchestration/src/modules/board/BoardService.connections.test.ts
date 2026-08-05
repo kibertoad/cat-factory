@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -63,9 +64,14 @@ describe('BoardService service-connection guards', () => {
 
   it('accepts and persists a valid connection between two service frames', async () => {
     const { service } = build([block('a'), block('b')])
-    const updated = await service.updateBlock(WS, 'a', {
-      serviceConnections: [{ serviceBlockId: 'b', description: 'sends email via it' }],
-    })
+    const updated = await service.updateBlock(
+      WS,
+      'a',
+      {
+        serviceConnections: [{ serviceBlockId: 'b', description: 'sends email via it' }],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updated.serviceConnections).toEqual([
       { serviceBlockId: 'b', description: 'sends email via it' },
     ])
@@ -74,23 +80,38 @@ describe('BoardService service-connection guards', () => {
   it('rejects a self-connection with a ValidationError', async () => {
     const { service } = build([block('a')])
     await expect(
-      service.updateBlock(WS, 'a', { serviceConnections: [{ serviceBlockId: 'a' }] }),
+      service.updateBlock(
+        WS,
+        'a',
+        { serviceConnections: [{ serviceBlockId: 'a' }] },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      ),
     ).rejects.toThrow(/itself/)
   })
 
   it('rejects a connection to a non-service frame', async () => {
     const { service } = build([block('a'), block('f', { type: 'frontend' })])
     await expect(
-      service.updateBlock(WS, 'a', { serviceConnections: [{ serviceBlockId: 'f' }] }),
+      service.updateBlock(
+        WS,
+        'a',
+        { serviceConnections: [{ serviceBlockId: 'f' }] },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      ),
     ).rejects.toThrow(/not a service/)
   })
 
   it('drops serviceConnections silently on a task-level patch', async () => {
     const { service, updates } = build([block('a'), block('t', { level: 'task', parentId: 'a' })])
-    await service.updateBlock(WS, 't', {
-      title: 'Renamed',
-      serviceConnections: [{ serviceBlockId: 'a' }],
-    })
+    await service.updateBlock(
+      WS,
+      't',
+      {
+        title: 'Renamed',
+        serviceConnections: [{ serviceBlockId: 'a' }],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updates[0]?.patch).toEqual({ title: 'Renamed' })
   })
 
@@ -103,12 +124,22 @@ describe('BoardService service-connection guards', () => {
       block('t', { level: 'task', parentId: 'own' }),
     ]
     const { service } = build(blocks)
-    const updated = await service.updateBlock(WS, 't', {
-      involvedServiceIds: ['provider', 'consumer'],
-    })
+    const updated = await service.updateBlock(
+      WS,
+      't',
+      {
+        involvedServiceIds: ['provider', 'consumer'],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updated.involvedServiceIds).toEqual(['provider', 'consumer'])
     await expect(
-      service.updateBlock(WS, 't', { involvedServiceIds: ['unrelated'] }),
+      service.updateBlock(
+        WS,
+        't',
+        { involvedServiceIds: ['unrelated'] },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      ),
     ).rejects.toThrow(/not connected/)
   })
 
@@ -126,7 +157,7 @@ describe('BoardService service-connection guards', () => {
       }),
     ])
     await expect(
-      service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] }),
+      service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] }, UNATTRIBUTED_BLOCK_EDITOR),
     ).rejects.toThrow(/multi-repo/)
   })
 
@@ -140,13 +171,23 @@ describe('BoardService service-connection guards', () => {
         aprioriBranches: [{ name: 'spike/x', mode: 'reference' }],
       }),
     ])
-    const updated = await service.updateBlock(WS, 't', { involvedServiceIds: ['provider'] })
+    const updated = await service.updateBlock(
+      WS,
+      't',
+      { involvedServiceIds: ['provider'] },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updated.involvedServiceIds).toEqual(['provider'])
   })
 
   it('drops involvedServiceIds silently on a frame-level patch', async () => {
     const { service, updates } = build([block('a'), block('b')])
-    await service.updateBlock(WS, 'a', { title: 'Renamed', involvedServiceIds: ['b'] })
+    await service.updateBlock(
+      WS,
+      'a',
+      { title: 'Renamed', involvedServiceIds: ['b'] },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updates[0]?.patch).toEqual({ title: 'Renamed' })
   })
 
@@ -191,7 +232,12 @@ describe('BoardService service-connection guards', () => {
       },
     } as unknown as BoardServiceDependencies
     const service = new BoardService(deps)
-    const updated = await service.updateBlock(WS, 't', { involvedServiceIds: ['foreign'] })
+    const updated = await service.updateBlock(
+      WS,
+      't',
+      { involvedServiceIds: ['foreign'] },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(updated.involvedServiceIds).toEqual(['foreign'])
   })
 

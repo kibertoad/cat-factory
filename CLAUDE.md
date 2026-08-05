@@ -672,12 +672,10 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   producing step with findings as `rework` / fail. **Adding a judge is a new registry entry**
   (`JudgeDefinition`). Model, and why it is neither a gate nor a `StepCompletionResolver`:
   [`judge-registry.md`](./docs/initiatives/judge-registry.md).
-- **Companions**: a REWORK PAIR, looping the preceding producer back for bounded automatic rework
-  before any human is asked. **Adding one is `AgentKindRegistry.registerCompanion`**, beside the
-  kind's own registration. Traps: the pairing is registered SEPARATELY from the kind, so every read
-  goes through the registry, and the free lookups take it OPTIONALLY, so a site that omits it
-  silently sees built-ins only; adjacency is an invariant (`assertValidCompanionPlacement`). Choose
-  it over a JUDGE when the remedy is the producer running again, not a verdict being disposed.
+- **Companions**: a REWORK PAIR looping the preceding producer back on a bounded budget before a
+  human is asked; **added with `AgentKindRegistry.registerCompanion`**. Trap: the pairing is stored
+  SEPARATELY from the kind and the lookups take the registry OPTIONALLY, so a read off a kind's own
+  definition sees built-in pairs only. Doc: [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md).
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
@@ -813,12 +811,14 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
   auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
 - **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`,
-  `submissionClassesByRole`). Traps: narrowing is subtractive and an allowlist is exhaustive, but absent
-  is not a rule and `unknown` matches neither; a bar on LANDING is refused at BOTH exits (auto-merge AND
-  `mergePr`); the role and mode are PINNED at admission and a pin is only pinned if it PERSISTS through
-  `executionToDetail` / `rowToExecution` / `buildResumedInstance`; starting a run reads its tier through
-  the one `runInitiatorRole(c)` accessor or is named in `runAdmission.coverage.spec.ts` as deliberately
-  unattributed. Docs: [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
+  `submissionClassesByRole`). Traps: narrowing is subtractive and an allowlist exhaustive, but
+  absent is not a rule and `unknown` matches neither; a bar on LANDING is refused at BOTH exits
+  (auto-merge AND `mergePr`); the role and mode PIN at admission and count only if the pin PERSISTS
+  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`; SELECTING a task's preset
+  is guarded like editing one (no selection may relax the selector's own role, at either door that
+  writes `riskPolicyId`); starting a run or writing a block reads its tier through
+  `runInitiatorRole(c)` / `blockEditActor(c)` or is named in the matching `*.coverage.spec.ts` as
+  deliberately unattributed. Docs: [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
   yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
@@ -840,8 +840,8 @@ RECORDED verdict, never a re-probe). Doc:
 **Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
 it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
 being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
-`confirmed` probe is a reclaim and a missing verify row is never a pass. Doc:
-[`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
+`confirmed` probe is a reclaim and a missing verify row is never a pass.
+Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`

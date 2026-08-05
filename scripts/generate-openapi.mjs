@@ -35,7 +35,32 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.9.0'
+// 1.11.0, not 1.10.0: main reached 1.10.0 while this branch was in flight (the run-evidence and
+// key-provisioning operations), and that number is already published against a surface WITHOUT the
+// follow-up and interview operations added here. The same collision the note above describes, the
+// second time in three releases.
+const API_VERSION = '1.11.0'
+
+/**
+ * The media types the artifact-blob route can answer with: the image allow-list it clamps a
+ * stored content type to, plus the octet-stream it falls back to for a row it does not recognise
+ * (which it also serves as an attachment, so nothing executes).
+ *
+ * Stated here because the blob endpoint is documented by hand rather than from a route contract,
+ * and kept honest by `blobMediaTypes.spec.ts`, which asserts this set IS the server's own
+ * allow-list. A spec that names one type while the server sends another is a lie a third-party
+ * client generated from this document would act on.
+ */
+const BLOB_MEDIA_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/octet-stream',
+]
+
+/** OpenAPI's spelling of "opaque bytes". */
+const BINARY_SCHEMA = { type: 'string', format: 'binary' }
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -89,6 +114,10 @@ const COMPONENT_SCHEMAS = {
   PublicHumanTestEnvironment: 'publicHumanTestEnvironmentSchema',
   PublicHumanTestDecision: 'publicHumanTestDecisionSchema',
   PublicVisualConfirmDecision: 'publicVisualConfirmDecisionSchema',
+  PublicFollowUpItem: 'publicFollowUpItemSchema',
+  PublicFollowUpsDecision: 'publicFollowUpsDecisionSchema',
+  PublicInterviewQuestion: 'publicInterviewQuestionSchema',
+  PublicInterviewDecision: 'publicInterviewDecisionSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -104,6 +133,42 @@ const COMPONENT_SCHEMAS = {
   PublicResolvePrReview: 'publicResolvePrReviewSchema',
   PublicChallengePrReviewFinding: 'publicChallengePrReviewFindingSchema',
   PublicRequestGateFix: 'publicRequestGateFixSchema',
+  PublicAnswerFollowUp: 'publicAnswerFollowUpSchema',
+  PublicAnswerInterview: 'publicAnswerInterviewSchema',
+  // Run EVIDENCE. The verification report is served VERBATIM (the same shape the engine writes
+  // into the pull-request body), so its sections are hoisted individually rather than left to be
+  // named positionally: these types are what a consumer of this API writes its code against, and
+  // `PrVerificationReportRunStepsItem` is not a name anyone should have to read. Every one of
+  // them is an exported schema in `@cat-factory/contracts`, so the names are chosen once here and
+  // the shapes cannot drift from what the engine composes.
+  // The key resource, hoisted for the same reason every other DTO here is: un-hoisted, the
+  // provisioning surface ships as `ListPublicKeysResponseKey` and `CreatePublicKeyRequestScope`
+  // in four languages: positional names that also RENUMBER if an operation is added ahead of
+  // them.
+  PublicApiKey: 'publicApiKeySchema',
+  PublicApiKeyList: 'publicApiKeyListResultSchema',
+  CreatedPublicApiKey: 'createdPublicApiKeySchema',
+  CreateHeadlessPublicApiKey: 'createHeadlessPublicApiKeySchema',
+  PublicRunArtifact: 'publicRunArtifactSchema',
+  PublicRunArtifactList: 'publicRunArtifactListSchema',
+  PrVerificationReport: 'prVerificationReportSchema',
+  PrReportRun: 'prReportRunSchema',
+  PrReportStep: 'prReportStepSchema',
+  PrReportIssue: 'prReportIssueSchema',
+  PrReportCi: 'prReportCiSchema',
+  PrReportCheck: 'prReportCheckSchema',
+  PrReportValidation: 'prReportValidationSchema',
+  PrReportValidationCommand: 'prReportValidationCommandSchema',
+  PrReportReproduction: 'prReportReproductionSchema',
+  PrReportTests: 'prReportTestsSchema',
+  PrReportTestOutcome: 'prReportTestOutcomeSchema',
+  PrReportTestConcern: 'prReportTestConcernSchema',
+  PrReportRequirements: 'prReportRequirementsSchema',
+  PrReportEnvironments: 'prReportEnvironmentsSchema',
+  PrReportMerge: 'prReportMergeSchema',
+  PrReportJudges: 'prReportJudgesSchema',
+  PrReportJudge: 'prReportJudgeSchema',
+  PrReportObservability: 'prReportObservabilitySchema',
 }
 
 /** Per-operation docs, keyed by operationId (the exported contract const name minus `Contract`). */
@@ -442,6 +507,48 @@ const OPERATION_DOCS = {
     description:
       'Submit findings against the captured screenshots and dispatch a fixer. The findings ARE the fixer prompt, so they cannot be blank. Requires a `decide`-scope key.',
   },
+  filePublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'File a follow-up item as an issue',
+    description:
+      "File one `follow_up` item on the workspace's issue tracker, recording the ticket ref on the item. Refused for a `question` item, and for a workspace with no tracker connected. Creating the issue is not idempotent, so a retry after a partial failure files a second one. Requires a `decide`-scope key.",
+  },
+  sendBackPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Send a follow-up item back to the Coder',
+    description:
+      'Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget the decision reports. Requires a `decide`-scope key.',
+  },
+  answerPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Answer a follow-up question',
+    description:
+      'Answer one `question` item the Coder raised mid-run; the answer steers its next pass. Refused for a `follow_up` item, which is filed, sent back or dismissed instead. Requires a `decide`-scope key.',
+  },
+  dismissPublicRunFollowUp: {
+    tag: 'Decisions',
+    summary: 'Dismiss a follow-up item',
+    description:
+      'Wave one item off without acting on it. Valid for either item kind, and (like every other verb here) releases the park once it is the last undecided item. Requires a `decide`-scope key.',
+  },
+  answerPublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Answer an interview question',
+    description:
+      'Record an answer to one question the parked interviewer asked. Does NOT resume the run: answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.',
+  },
+  continuePublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Continue a parked interview',
+    description:
+      'Submit the recorded answers and resume: the interviewer runs again and may ask follow-up questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next round arrives on a later read of the decision list. Requires a `decide`-scope key.',
+  },
+  proceedPublicRunInterview: {
+    tag: 'Decisions',
+    summary: 'Proceed past a parked interview',
+    description:
+      'Stop the questions: the interviewer converges on the answers so far and the run advances. Also asynchronous, since converging is itself an interviewer pass. Requires a `decide`-scope key.',
+  },
 
   // The remote-debugging reads (`/api/v1/debug/*`, `read` scope). A two-level drill-down: the
   // run-scoped lists live under `/debug/runs/:runId/*`, while a point read that carries BODIES is
@@ -496,6 +603,36 @@ const OPERATION_DOCS = {
     description:
       'The tool calls the run’s agents made, in the order they made them — which command, against what, and what came back. The half of “how did this diff come about” that neither the diff nor a prompt body answers. Arguments and results are retained only when the deployment records agent context AND the workspace has not opted out; `bodies` says which, so an empty `args` is never mistaken for a call that took none.',
   },
+  getPublicRunReport: {
+    tag: 'Evidence',
+    summary: "Get a run's verification report",
+    description:
+      'The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.',
+  },
+  listPublicRunArtifacts: {
+    tag: 'Evidence',
+    summary: "List a run's captured artifacts",
+    description:
+      'The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.',
+  },
+  listPublicKeys: {
+    tag: 'Keys',
+    summary: "List the workspace's API keys",
+    description:
+      'The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.',
+  },
+  createPublicKey: {
+    tag: 'Keys',
+    summary: 'Provision an API key',
+    description:
+      'Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.',
+  },
+  revokePublicKey: {
+    tag: 'Keys',
+    summary: 'Revoke an API key',
+    description:
+      'Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.',
+  },
   listDebugLogs: {
     tag: 'Debug',
     summary: "List a run's infrastructure log",
@@ -516,6 +653,9 @@ const TAG_DESCRIPTIONS = {
     'The workspace’s one outbound endpoint: register it to receive notifications, run-lifecycle events and platform-health alerts by push instead of polling. Requires an `admin`-scope key; the signing secret is write-only.',
   Decisions:
     'A run’s parked human decisions — requirement-review findings and implementation-fork choices — so a headless caller can drive the clarification loop instead of the run hanging. Answering requires a `decide`-scope key.',
+  Evidence:
+    'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
+  Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',
   Debug:
     'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
@@ -750,6 +890,41 @@ export async function buildOpenApiDoc() {
         200: {
           description: 'An event stream of run updates',
           content: { 'text/event-stream': { schema: { type: 'string' } } },
+        },
+        '4XX': {
+          description: STATUS_DESCRIPTIONS['4XX'],
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } },
+          },
+        },
+      },
+    },
+  }
+
+  // The artifact BYTES: not a route contract, because the response is an image rather than JSON.
+  // Documented by hand for the same reason the two SSE routes above are, and named in the SDK
+  // surface table so all four clients expose it (each transport reads the body as bytes).
+  tags.add('Evidence')
+  paths[`${API_PREFIX}/artifacts/{artifactId}/blob`] = {
+    get: {
+      operationId: 'getPublicArtifactBlob',
+      tags: ['Evidence'],
+      summary: "Download an artifact's bytes",
+      description:
+        'The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.',
+      parameters: [{ name: 'artifactId', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'The artifact bytes',
+          // Every type the route can actually answer with, not one standing in for the rest: the
+          // handler serves the artifact's RECORDED type clamped to the image allow-list, and
+          // falls back to octet-stream only for a stored row it does not recognise. Declaring a
+          // single type would tell anyone generating a client from this document to expect a
+          // media type the endpoint never sends. `blobMediaTypes.spec.ts` pins this set to the
+          // server's own allow-list, so the two cannot drift.
+          content: Object.fromEntries(
+            BLOB_MEDIA_TYPES.map((media) => [media, { schema: BINARY_SCHEMA }]),
+          ),
         },
         '4XX': {
           description: STATUS_DESCRIPTIONS['4XX'],

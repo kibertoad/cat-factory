@@ -1,6 +1,6 @@
 {
   "name": "@cat-factory/node-server",
-  "version": "0.171.2",
+  "version": "0.172.0",
   "description": "Node.js runtime facade for the Agent Architecture Board: serves the shared @cat-factory/server Hono app via @hono/node-server, wiring Node implementations of the runtime ports (persistence, gateways, model provisioning).",
   "repository": {
     "type": "git",
@@ -57,14 +57,14 @@
     "@cat-factory/provider-s3": "workspace:*",
     "@cat-factory/server": "workspace:*",
     "@cat-factory/spend": "workspace:*",
-    "@hono/node-server": "^2.0.12",
+    "@hono/node-server": "^2.1.0",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.12.33",
+    "hono": "^4.13.0",
     "layered-loader": "^16.0.0",
     "pg": "^8.22.0",
-    "pg-boss": "^12.26.4",
+    "pg-boss": "^12.27.0",
     "toad-scheduler": "^4.1.0",
-    "ws": "^8.21.1"
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "@cat-factory/conformance": "workspace:*",

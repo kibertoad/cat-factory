@@ -35,7 +35,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import { LinearOAuth } from '../../auth/LinearOAuth.js'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditActor, requireWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -330,13 +330,16 @@ export function taskSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, createTaskFromIssueContract, async (c) => {
     const tasks = requireTasks(c)
     const { source, externalId, containerId } = c.req.valid('json')
-    const result = await tasks.linkService.createTaskFromIssue(
-      param(c, 'workspaceId'),
+    const result = await tasks.linkService.createTaskFromIssue({
+      workspaceId: param(c, 'workspaceId'),
       containerId,
       source,
       externalId,
-      c.get('user')?.id ?? null,
-    )
+      // A person on this board is filing the issue as a task, so the write carries their tier:
+      // the same authority the inspector's own create form is judged under (ADR 0037).
+      editor: blockEditActor(c),
+      createdBy: c.get('user')?.id ?? null,
+    })
     return c.json(result, 201)
   })
 
@@ -346,14 +349,16 @@ export function taskSourceController(): Hono<AppEnv> {
   buildHonoRoute(app, spawnEpicContract, async (c) => {
     const tasks = requireTasks(c)
     const { ref, containerId, position } = c.req.valid('json')
-    const result = await tasks.linkService.spawnEpic(
-      param(c, 'workspaceId'),
-      sourceParam(c),
-      ref,
+    const result = await tasks.linkService.spawnEpic({
+      workspaceId: param(c, 'workspaceId'),
+      source: sourceParam(c),
+      epicRef: ref,
       containerId,
-      c.get('user')?.id ?? null,
+      // Same reading as the single-issue route above: a member is materialising these tasks.
+      editor: blockEditActor(c),
+      createdBy: c.get('user')?.id ?? null,
       position,
-    )
+    })
     return c.json(result, 201)
   })
 

@@ -10,6 +10,10 @@ import type { AppEnv } from '../../http/env.js'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import { registerApprovalDecisionRoutes } from './decisions/approvalRoutes.js'
 import {
+  registerFollowUpDecisionRoutes,
+  registerInterviewDecisionRoutes,
+} from './decisions/companionRoutes.js'
+import {
   registerBrainstormDecisionRoutes,
   registerClarityDecisionRoutes,
 } from './decisions/dialogueRoutes.js'
@@ -64,6 +68,8 @@ export function publicDecisionController(): Hono<AppEnv> {
   registerApprovalDecisionRoutes(app)
   registerPrReviewDecisionRoutes(app)
   registerHumanVerdictGateRoutes(app)
+  registerFollowUpDecisionRoutes(app)
+  registerInterviewDecisionRoutes(app)
   return app
 }
 

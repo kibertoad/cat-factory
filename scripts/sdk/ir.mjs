@@ -359,11 +359,42 @@ class TypeRegistry {
 /** Media type of an operation's success response, and the schema behind it. */
 function successResponse(operation) {
   const codes = Object.keys(operation.responses ?? {}).filter((c) => /^2\d\d$/.test(c))
-  if (codes.length === 0) return { status: 204, mediaType: null, schema: null }
+  if (codes.length === 0) return { status: 204, mediaTypes: [], schema: null }
   const status = Number(codes.sort()[0])
   const content = operation.responses[String(status)].content ?? {}
-  const mediaType = Object.keys(content)[0] ?? null
-  return { status, mediaType, schema: mediaType ? content[mediaType].schema : null }
+  // ALL of them, not the first key: a response that can answer with several media types (the
+  // artifact blob serves any of four image types) is classified by what the SET means. Reading
+  // one key made the emitted return type depend on the order the generator happened to write the
+  // content map in, which is a property no one would think to preserve while editing it.
+  return { status, mediaTypes: Object.keys(content), schema: content['application/json']?.schema }
+}
+
+/**
+ * How an operation's success body is handed back: a typed value, an event reader, raw bytes, or
+ * nothing. The emitters branch on exactly this, so the decision is made ONCE here rather than
+ * re-derived from media-type strings in four languages.
+ *
+ * JSON mixed with anything else THROWS rather than picking a side: a body that is sometimes a
+ * value and sometimes bytes has no honest single return type in any of the four clients, and
+ * silently choosing one is how a caller ends up with a `Uint8Array` where its code expects a
+ * parsed object. Every remaining media type is bytes, vetted by {@link assertKnownResponseMedia}
+ * first, so "bytes" is a decision about a type someone deliberately allowed, never a fallback
+ * that swallowed a typo.
+ */
+function responseKind(operationId, { mediaTypes }) {
+  if (mediaTypes.length === 0) return 'empty'
+  const json = mediaTypes.includes('application/json')
+  if (json && mediaTypes.length > 1) {
+    throw new Error(
+      `SDK IR: ${operationId} answers success with JSON and ${mediaTypes
+        .filter((m) => m !== 'application/json')
+        .join(', ')}. Split it into two operations, or drop one: a single method cannot return ` +
+        'both a parsed value and an opaque body.',
+    )
+  }
+  if (json) return 'json'
+  if (mediaTypes.includes('text/event-stream')) return 'stream'
+  return 'binary'
 }
 
 /**
@@ -397,12 +428,17 @@ export async function buildIr(doc) {
     }
   }
 
+  // Before anything is classified: an unvetted media type must fail by NAME here, rather than be
+  // binned as "bytes" by `responseKind` and surface later as a client that hands back a blob.
+  assertKnownResponseMedia(spec)
+
   const operations = []
   for (const [path, methods] of Object.entries(spec.paths)) {
     for (const [method, operation] of Object.entries(methods)) {
       const id = operation.operationId
       const params = operation.parameters ?? []
       const success = successResponse(operation)
+      const kind = responseKind(id, success)
       const bodySchema = operation.requestBody?.content?.['application/json']?.schema
       operations.push({
         id,
@@ -427,12 +463,11 @@ export async function buildIr(doc) {
         body: bodySchema ? registry.resolve(bodySchema, `${pascal(id)}Request`) : null,
         // A stream is not a value: the SSE operations hand back a reader, so an emitter must
         // branch on this rather than trying to decode `text/event-stream` as the result type.
-        stream: success.mediaType === 'text/event-stream',
+        stream: kind === 'stream',
+        // Neither is a blob: the artifact download hands back raw bytes.
+        binary: kind === 'binary',
         status: success.status,
-        result:
-          success.mediaType === 'application/json'
-            ? registry.resolve(success.schema, `${pascal(id)}Response`)
-            : null,
+        result: kind === 'json' ? registry.resolve(success.schema, `${pascal(id)}Response`) : null,
       })
     }
   }
@@ -467,6 +502,53 @@ export async function buildIr(doc) {
  * today, so rather than build machinery to model a type that is both — and quietly pick a side —
  * this fails loudly the day it happens, and whoever adds it decides.
  */
+/**
+ * Refuse to generate against a success media type nobody has decided how to hand back.
+ *
+ * The emitters branch three ways: JSON decodes into the result type, `text/event-stream` hands
+ * back a reader, and everything else hands back bytes. That last clause is why this allow-list
+ * still earns its keep after `responseKind` stopped needing it to be exhaustive: without it a
+ * media type nobody intended (a typo, a `text/csv` somebody expected to arrive as a string)
+ * quietly becomes an opaque blob in four published clients, which reads to a caller as the
+ * platform's answer rather than as the oversight it is. Listing a type here is the decision that
+ * bytes are what that endpoint should hand back.
+ *
+ * Checked over the SPEC rather than the IR, because by the time an operation is in the IR the
+ * media types it carried have been collapsed into one flag.
+ */
+function assertKnownResponseMedia(spec) {
+  const known = new Set([
+    'application/json',
+    'text/event-stream',
+    // Bytes. The image types are what the artifact-blob route clamps a stored content type to;
+    // octet-stream is its fallback for a row it does not recognise. Kept in step with the server
+    // by `blobMediaTypes.spec.ts`, which pins the SPEC's set to the allow-list itself.
+    'application/octet-stream',
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+  ])
+  const successMedia = (operation) =>
+    Object.entries(operation.responses ?? {})
+      .filter(([code]) => /^2\d\d$/.test(code))
+      .flatMap(([, response]) => Object.keys(response.content ?? {}))
+  const offenders = Object.entries(spec.paths).flatMap(([path, methods]) =>
+    Object.entries(methods).flatMap(([method, operation]) =>
+      successMedia(operation)
+        .filter((media) => !known.has(media))
+        .map((media) => `${method.toUpperCase()} ${path} -> ${media}`),
+    ),
+  )
+  if (offenders.length > 0) {
+    throw new Error(
+      `SDK IR: success response media type(s) no emitter can return: ${offenders.join(', ')}. ` +
+        'Teach every transport how to hand the body back (see the `binary` flag) rather than ' +
+        'letting the operation generate as a method that discards it.',
+    )
+  }
+}
+
 function assertNoDefaultedRequestField(registry, operations) {
   const reachable = new Set()
   const visit = (ref) => {

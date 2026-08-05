@@ -10,6 +10,7 @@ import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { AdvanceResult } from './advance.js'
 import type { RunStateMachine } from './RunStateMachine.js'
 import type { StepGraph } from './StepGraph.js'
+import { stepAwaitsDecision } from './step-park.logic.js'
 
 // ---------------------------------------------------------------------------
 // The shared interactive-INTERVIEWER gate spine. An interview gate PARKS its run on a durable
@@ -22,6 +23,62 @@ import type { StepGraph } from './StepGraph.js'
 // differentiators through an {@link InterviewGateKind} strategy (which agent-kind it runs as, how
 // it decides + persists one pass, how it reads/answers its entity, and whether a re-run resets it).
 // ---------------------------------------------------------------------------
+
+/**
+ * One interview exchange in the KIND-NEUTRAL shape every gate projects its own entity onto.
+ *
+ * `status` is DERIVED, not stored, because the two built-in gates record answered-ness
+ * differently (the planning interviewer keeps an explicit `open`/`dismissed` marker beside the
+ * answer; the document interviewer has only the answer). Deriving it once here is what lets a
+ * caller read both through one shape.
+ */
+export interface InterviewQuestionView {
+  /** The id an answer is addressed by; null for an exchange that carries none. */
+  id: string | null
+  question: string
+  answer: string
+  status: 'open' | 'answered' | 'dismissed'
+}
+
+/**
+ * A gate's live interview, projected out of whatever entity it stores it on: the read every
+ * surface that must present an interview without knowing which gate raised it goes through
+ * (today the public decision projection).
+ *
+ * Deliberately NOT the entity: an interview gate's entity is its own feature's (an initiative, a
+ * document session), and the parts that differ are the parts this cannot carry: the synthesized
+ * product each one converges on. What is shared is the loop: the questions, and how much round
+ * budget is left.
+ */
+export interface InterviewView {
+  /** `awaiting` while the human owes answers; `done` once the interview converged. */
+  status: 'awaiting' | 'done'
+  round: number
+  maxRounds: number
+  questions: InterviewQuestionView[]
+}
+
+/**
+ * The KIND-NEUTRAL half of an interview gate: what a caller holding a PARKED STEP can do without
+ * knowing which feature owns the interview. {@link InterviewGateController} implements it for
+ * every gate, so a surface that resolved a gate by `agentKind` depends on this rather than on the
+ * controller generic.
+ *
+ * That distinction is the point rather than tidiness. The controller is generic over the ENTITY
+ * each feature stores its interview on, and a lookup keyed by step kind cannot know which entity it
+ * is about to get back; typing such a lookup `InterviewGateController<unknown>` compiles only
+ * because TypeScript's method parameters are bivariant, and it hands the caller `answer(): unknown`
+ * as the shape of an entity it must then not use. This interface says what is actually on offer,
+ * and the entity-typed reads stay on the per-feature getters that already know the answer.
+ */
+export interface InterviewGate {
+  /** The pipeline-step `agentKind` this gate runs as, which is what a lookup keys on. */
+  readonly agentKind: string
+  getView(workspaceId: string, blockId: string): Promise<InterviewView | null>
+  answer(workspaceId: string, blockId: string, questionId: string, answer: string): Promise<unknown>
+  continue(workspaceId: string, blockId: string): Promise<unknown>
+  proceed(workspaceId: string, blockId: string): Promise<unknown>
+}
 
 /** The durable-driver collaborators every interview gate needs (shared with every other gate). */
 export interface InterviewGateDeps {
@@ -73,9 +130,16 @@ export interface InterviewGateKind<TEntity> {
   ): Promise<TEntity | null>
   /** The block's current interview entity, or null (the window load path). */
   current(workspaceId: string, blockId: string): Promise<TEntity | null>
+  /**
+   * Project the entity onto the kind-neutral {@link InterviewView}, or null when it carries no
+   * interview at all (an entity that outlives its runs and whose interviewer has never run).
+   * "No interview" and "an interview with no questions" are different facts, which is why this
+   * is nullable rather than an empty view.
+   */
+  view(entity: TEntity): InterviewView | null
 }
 
-export class InterviewGateController<TEntity> {
+export class InterviewGateController<TEntity> implements InterviewGate {
   constructor(
     private readonly deps: InterviewGateDeps,
     private readonly kind: InterviewGateKind<TEntity>,
@@ -173,6 +237,15 @@ export class InterviewGateController<TEntity> {
   }
 
   /**
+   * The block's interview in the kind-neutral {@link InterviewView}, or null when there is none.
+   * The read for a caller that has to present an interview without knowing which gate raised it.
+   */
+  async getView(workspaceId: string, blockId: string): Promise<InterviewView | null> {
+    const entity = await this.kind.current(workspaceId, blockId)
+    return entity ? this.kind.view(entity) : null
+  }
+
+  /**
    * Record the continue/proceed intent on the parked interviewer step and signal the durable
    * driver to wake — which re-enters {@link evaluate} and runs the (slow) interviewer LLM off the
    * HTTP request. Off-path (no parked run) it is a no-op read: the interview is not live, so there
@@ -196,10 +269,7 @@ export class InterviewGateController<TEntity> {
         parked.instance.id,
         (inst) => {
           const step = inst.steps.find(
-            (s) =>
-              s.agentKind === this.kind.agentKind &&
-              s.state === 'waiting_decision' &&
-              s.approval?.status === 'pending',
+            (s) => s.agentKind === this.kind.agentKind && stepAwaitsDecision(s),
           )
           if (!step?.approval) {
             throw new ConflictError('No interview is currently awaiting input')
@@ -232,10 +302,7 @@ export class InterviewGateController<TEntity> {
     const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
     if (!instance) return null
     const step = instance.steps.find(
-      (s) =>
-        s.agentKind === this.kind.agentKind &&
-        s.state === 'waiting_decision' &&
-        s.approval?.status === 'pending',
+      (s) => s.agentKind === this.kind.agentKind && stepAwaitsDecision(s),
     )
     return step ? { instance, step } : null
   }

@@ -46,6 +46,7 @@ import {
 } from '@cat-factory/gates'
 import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@cat-factory/kernel'
 import type { AppConfig } from './config'
+import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
@@ -109,14 +110,12 @@ import {
   selectDeployDeps,
   selectDocumentsDeps,
   selectEmailInvitationDeps,
-  selectEnvConfigRepairer,
   selectEnvironmentsDeps,
   selectFragmentLibraryDeps,
   selectIncidentEnrichmentDeps,
   selectMergeLifecycleDeps,
   selectPackageRegistryDeps,
   selectReleaseHealthDeps,
-  selectRepoBootstrapper,
   selectRequirementsDeps,
   selectRunnersDeps,
   selectSandboxDeps,
@@ -815,9 +814,10 @@ export function assembleWorkerContainer(input: WorkerContainerAssemblyInput): Se
     // The consensus transcript store, for the read endpoint (the SPA window's initial
     // load / reload). Always wired; live updates ride the `consensus` workspace event.
     consensusSessionRepository: new D1ConsensusSessionRepository({ db }),
-    // Resolves the per-account binary-artifact store (screenshots) for the artifact
-    // controllers + the visual-confirmation gate (configured per-account in the UI).
-    resolveBinaryArtifactStore,
+    // Per-account binary-artifact store. Read off `dependencies`, not the value beside it, so an
+    // override reaches the HTTP layer as well as the engine; the Node facade's twin states why.
+    resolveBinaryArtifactStore:
+      dependencies.resolveBinaryArtifactStore ?? resolveBinaryArtifactStore,
     // The Worker's only test-env backend is the `environment-provider` (its UI-test container is
     // torn down with the run — no long-lived in-container compose default), so a missing provider
     // IS a real gap the "test environment not configured" banner should surface. Derived from the

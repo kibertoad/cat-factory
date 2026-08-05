@@ -39,10 +39,12 @@ export class PatPreferringAppRegistry implements AppTokenSource {
 
   async installationToken(
     installationId: number,
-    opts?: { forceRefresh?: boolean },
+    opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
-    // `forceRefresh` is moot for a PAT (it never expires the way an App token does); it only
-    // matters for the wrapped App-token cache below.
+    // Both options are moot for a PAT: it never expires the way an App token does, and
+    // `repository_ids` scoping is an App-token mechanism with no PAT equivalent, so a run on the
+    // initiator's own token is bounded by that token, which is what `allowInitiatorPat` governs
+    // (`backend/docs/security-model.md`, Layer 3). They matter only for the wrapped source below.
     const pat = await this.initiatorToken()
     if (pat) return pat
     return this.inner.installationToken(installationId, opts)

@@ -104,7 +104,13 @@ export {
   type MintInstallationToken,
   type EnsureWorkBranch,
   type JobPackageRegistrySpec,
+  jobTokenRepoIds,
 } from './agents/ContainerAgentExecutor.js'
+// The one place a facade decides WHOSE token a dispatch carries and HOW WIDE it is minted.
+export {
+  buildDispatchTokenMint,
+  type DispatchTokenMintDependencies,
+} from './agents/dispatchTokenMint.js'
 export { ensureWorkBranchViaRest, type EnsureWorkBranchInput } from './github/ensureWorkBranch.js'
 export { RunnerJobClient, type ResolveRunnerTransport } from './agents/RunnerJobClient.js'
 // Tool servers (MCP) for a container dispatch: the resolution the executor runs, plus the

@@ -15,9 +15,19 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   parked human decisions: the composer over `publicApi/decisions/`, whose `scope.ts` gates a run
   for the key, `projection.ts` turns a run into the decision list, and one `*Routes.ts` per park
   family answers it — approval gates and agent questions, the three iterative-review loops, the
-  container-backed PR review and human-verdict gates), `PublicDebugController` (the
+  container-backed PR review and human-verdict gates, and `companionRoutes.ts` for follow-up triage
+  plus the interview gates), `PublicDebugController` (the
   `read`-scoped remote **run debugging** reads over a run's telemetry + provisioning log, sized so
-  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicMcpController` (the
+  an LLM can walk them within a context budget; see `docs/debug-api.md`), `PublicEvidenceController`
+  (the `read`-scoped run **evidence** reads for a consumer that has to JUDGE a run rather than debug
+  one: the engine's verification report composed on read (the same bundle the pull request carries,
+  so there is no second projection to disagree with it) plus the run's captured artifacts and their
+  BYTES, the one route on this surface that is hand-mounted because an image response cannot be a
+  contract; its run-scoped reads take `decisions/scope.ts`'s NARROWER rule, because one path prefix
+  carries one authorization model), `PublicKeyController` (HEADLESS key provisioning at `admin`
+  scope, delegating to the same `PublicApiKeyService` the session panel calls; the mintable rungs
+  are derived from the gate, so a key minted here can never mint another),
+  `PublicMcpController` (the
   HOSTED **MCP** endpoint, `POST /api/v1/mcp`: mounts `@cat-factory/mcp-server`'s server behind a
   Web-standard Streamable HTTP transport, stateless per request, with the key's SCOPE deciding the
   tool list and every tool call looping back through `http/loopback.ts` to `/api/v1` under the
@@ -65,7 +75,19 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   that decides what of a dispatch may be persisted, so a new body field is opt-in, never
   inherited). A third, `toolTrajectory.ts`, owns the poll's TOOL-CALL drain: it applies the body
   gate ONCE and hands the same gated batch to the trajectory store and to any wired trace sink,
-  so the two can never end up with different answers about what a workspace permitted. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
+  so the two can never end up with different answers about what a workspace permitted. A fourth,
+  `dispatchTokenMint.ts`, owns the dispatch CREDENTIAL: it is the one place that decides whose
+  token a job carries (the run initiator's PAT, else the deployment's) and how wide it is minted
+  (`repository_ids` narrowed to `jobTokenRepoIds`, the repos that dispatch resolved). Both facades
+  build their mint through it, because the two decisions interact (scoping applies only to the App
+  token, a PAT cannot be narrowed at all) and they previously held byte-identical copies of half of
+  it. EVERY path that hands a container a GitHub credential goes through it: the step executor, the
+  repo bootstrapper, the env-config repairer, preview jobs and the deploy clone target. What holds
+  that totality is the `MintInstallationToken` ctx, whose presence is what marks a mint as a
+  DISPATCH mint and whose `repoIds` is required, so a new dispatcher cannot ship without deciding
+  its scope; an engine call passes no ctx and stays installation-wide. `containerAgentBody.ts`
+  holds the auxiliary-repo resolution the scope reads, which is why that resolution is a dispatch
+  INPUT rather than a tail step. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has

@@ -704,6 +704,7 @@
         "neverUsed": "nie verwendet",
         "createdBy": "erstellt von {user}",
         "createdByYou": "Ihnen",
+        "createdByKey": "API-Schlüssel {id}",
         "revoke": "Token widerrufen"
       },
       "add": {
@@ -6164,7 +6165,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Gilt, weil diese Aufgabe keine eigene Richtlinie wählt.",
-      "noneHint": "Keine Risikorichtlinie konfiguriert. Jeder Pull Request wartet auf eine menschliche Prüfung."
+      "noneHint": "Keine Risikorichtlinie konfiguriert. Jeder Pull Request wartet auf eine menschliche Prüfung.",
+      "refused": {
+        "relaxes_role_sandbox": "Für deine Rolle nicht verfügbar: Läufe dieser Aufgabe laufen in der Sandbox, und diese Richtlinie würde sie mergen lassen. Eine Workspace-Administration kann das ändern.",
+        "relaxes_role_submission_allowlist": "Für deine Rolle nicht verfügbar: Diese Richtlinie würde dich Änderungsarten mergen lassen, die dir bei dieser Aufgabe verwehrt sind. Eine Workspace-Administration kann das ändern.",
+        "relaxes_role_class_rule": "Für deine Rolle nicht verfügbar: Diese Richtlinie merged Änderungen automatisch, die du bei dieser Aufgabe prüfen musst. Eine Workspace-Administration kann das ändern."
+      }
     },
     "preview": {
       "defaultBadge": "Standard",

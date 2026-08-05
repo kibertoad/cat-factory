@@ -102,6 +102,19 @@ export interface ConformanceApp {
     body?: unknown,
     headers?: Record<string, string>,
   ): Promise<TestResponse<T>>
+  /**
+   * Issue a request whose success carries BYTES rather than JSON (the artifact blob endpoint).
+   *
+   * A separate method rather than a flag on {@link ConformanceApp.call}: that one JSON-decodes
+   * every body, so a PNG reaches it as a parse error rather than a response. Returns the recorded
+   * content type beside the bytes, because clamping it to the image allow-list is half of what
+   * the endpoint promises: an artifact served as something a browser would execute is the bug.
+   */
+  callBinary(
+    method: string,
+    path: string,
+    headers?: Record<string, string>,
+  ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }>
   /** Create (and optionally seed) a workspace, returning its snapshot. */
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /**

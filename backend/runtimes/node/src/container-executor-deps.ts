@@ -26,6 +26,7 @@ import type {
   GitHubClient,
   GitHubInstallationRepository,
   ProvisioningSubsystem,
+  RepoProjectionRepository,
   RunnerPoolConnectionRepository,
   RunnerPoolProvider,
   StoreAgentContextGate,
@@ -44,6 +45,7 @@ import { createLangfuseSink } from '@cat-factory/observability-langfuse'
 import { createNodeOtelSink } from '@cat-factory/observability-otel/node'
 import {
   type AppConfig,
+  type DispatchTokenMintDependencies,
   type JobPackageRegistrySpec,
   type MintInstallationToken,
   type ResolveRepoOrigin,
@@ -59,6 +61,7 @@ import {
   WebCryptoSecretCipher,
   DOCS,
   ENV_VARS_ANCHORS,
+  buildDispatchTokenMint,
   ensureWorkBranchViaRest,
   logger,
   noRunnerBackendAvailableError,
@@ -223,7 +226,12 @@ export interface NodeContainerExecutorDeps {
     modelPresetId?: string,
   ) => Promise<string | undefined>
   agentKindRegistry: AgentKindRegistry
-  mintInstallationTokenOverride?: (installationId: number) => Promise<string>
+  /**
+   * Replaces the App-registry mint (a static PAT in local mode, the mothership delegation client
+   * in mothership mode). Receives the dispatch's `repositoryIds` scope; an override that cannot
+   * narrow ignores it.
+   */
+  mintInstallationTokenOverride?: DispatchTokenMintDependencies['mint']
   subscriptions?: ProviderSubscriptionService
   personalSubscriptions?: PersonalSubscriptionService
   resolveAccountId?: (workspaceId: string) => Promise<string | null | undefined>
@@ -325,10 +333,12 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
   }
 
   // Token source: an explicit override (e.g. a static PAT in local mode) wins; else
-  // the GitHub App registry mints a per-installation token (when the App is configured).
-  const baseMint =
+  // the GitHub App registry mints a per-installation token (when the App is configured). Only
+  // the App mint can be narrowed to a run's repos; an override carries whatever the human who
+  // created it granted, so it ignores the scope.
+  const baseMint: DispatchTokenMintDependencies['mint'] | undefined =
     mintInstallationTokenOverride ??
-    (appRegistry ? (id: number) => appRegistry.installationToken(id) : undefined)
+    (appRegistry ? (id, opts) => appRegistry.installationToken(id, opts) : undefined)
   if (!baseMint) {
     // Every other prerequisite is set but there is no GitHub token source, so the harness
     // could never clone/push. Name the fix (App creds) rather than disabling silently (A5).
@@ -340,16 +350,16 @@ export function buildNodeContainerExecutor(deps: NodeContainerExecutorDeps): Age
     )
     return null
   }
-  // Prefer the run initiator's per-user PAT (when stored AND the workspace permits it) over
-  // the App/env token, so pushes/PRs are attributed to them. Falls back to the base mint
-  // otherwise; `resolveRunInitiatorToken` answers null for every "no" in that chain.
-  const mintInstallationToken: MintInstallationToken = async (installationId, ctx) => {
-    if (resolveRunInitiatorToken && ctx) {
-      const pat = await resolveRunInitiatorToken(ctx)
-      if (pat) return pat
-    }
-    return baseMint(installationId)
-  }
+  // The dispatch's clone/push credential: the run initiator's per-user PAT when stored AND
+  // permitted (so pushes/PRs are attributed to them), else the base mint narrowed to the repos
+  // this one run resolved. Both decisions live in the SHARED `buildDispatchTokenMint` so this
+  // facade and the Worker cannot drift on either.
+  const mintInstallationToken: MintInstallationToken = buildDispatchTokenMint({
+    mint: baseMint,
+    ...(resolveRunInitiatorToken ? { resolveRunInitiatorToken } : {}),
+    logger,
+    operationalMetrics,
+  })
 
   return new ContainerAgentExecutor({
     resolveTransport,
@@ -488,7 +498,7 @@ export function selectNodeRepoBootstrapper(deps: {
     typeof ContainerRepoBootstrapper
   >[0]['repoProjectionCache']
   githubClient: GitHubClient | undefined
-  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  mintInstallationToken: MintInstallationToken | undefined
   resolvePackageRegistries?: (workspaceId: string) => Promise<JobPackageRegistrySpec[]>
 }): ContainerRepoBootstrapper | undefined {
   const publicUrl = deps.env.PUBLIC_URL?.trim()
@@ -535,7 +545,9 @@ export function selectNodeEnvConfigRepairer(deps: {
   config: AppConfig
   resolveTransport: ResolveRunnerTransport | null
   installationRepository: GitHubInstallationRepository
-  mintInstallationToken: ((installationId: number) => Promise<string>) | undefined
+  /** The workspace's repo projection: turns the request's owner/repo into the token's scope. */
+  repoRepository: Pick<RepoProjectionRepository, 'list'>
+  mintInstallationToken: MintInstallationToken | undefined
   override: CoreDependencies['environmentProvider']
   environmentBackendRegistry: EnvironmentBackendRegistry
 }): ContainerEnvConfigRepairer | undefined {
@@ -579,6 +591,7 @@ export function selectNodeEnvConfigRepairer(deps: {
   return new ContainerEnvConfigRepairer({
     resolveTransport: deps.resolveTransport,
     installationRepository: deps.installationRepository,
+    repoRepository: deps.repoRepository,
     mintInstallationToken: deps.mintInstallationToken,
     sessionService: new ContainerSessionService({ secret: sessionSecret }),
     environmentProvider,

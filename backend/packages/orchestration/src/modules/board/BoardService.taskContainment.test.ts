@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { ValidationError } from '@cat-factory/kernel'
@@ -63,7 +64,12 @@ describe('BoardService.addTask containment rule', () => {
 
   it('creates a task under a service frame and under a module', async () => {
     for (const parent of ['frame_svc', 'mod_api']) {
-      const task = await build().addTask(WS, parent, { title: 'Feature' })
+      const task = await build().addTask(
+        WS,
+        parent,
+        { title: 'Feature' },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(task).toMatchObject({ level: 'task', parentId: parent })
     }
   })
@@ -72,15 +78,15 @@ describe('BoardService.addTask containment rule', () => {
     // An epic/initiative groups tasks through their `epicId`/`initiativeId` membership link, never
     // through parentage — a task parented to one would be structurally orphaned.
     for (const parent of ['epic_q3', 'init_loop']) {
-      await expect(build().addTask(WS, parent, { title: 'Feature' })).rejects.toBeInstanceOf(
-        ValidationError,
-      )
+      await expect(
+        build().addTask(WS, parent, { title: 'Feature' }, UNATTRIBUTED_BLOCK_EDITOR),
+      ).rejects.toBeInstanceOf(ValidationError)
     }
   })
 
   it('still refuses a task as the container, with its own message', async () => {
-    await expect(build().addTask(WS, 'task_existing', { title: 'Nested' })).rejects.toThrow(
-      /cannot contain other tasks/i,
-    )
+    await expect(
+      build().addTask(WS, 'task_existing', { title: 'Nested' }, UNATTRIBUTED_BLOCK_EDITOR),
+    ).rejects.toThrow(/cannot contain other tasks/i)
   })
 })

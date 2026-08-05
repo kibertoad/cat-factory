@@ -5,6 +5,7 @@ import type {
 } from '@cat-factory/kernel'
 import { GITHUB_SETTINGS_URLS, VCS_DOC_URLS } from '@cat-factory/kernel'
 import { base64url, pkcs8PemToDer } from '../crypto/encoding.js'
+import { InstallationTokenCache, installationTokenKey } from './installationTokenCache.js'
 
 // GitHub App authentication, implemented entirely on Web Crypto (`crypto.subtle`)
 // so it runs in a plain Workers isolate without Node `crypto` — and identically
@@ -95,17 +96,23 @@ export function explainInstallationTokenMintFailure(
 }
 
 /**
- * Installation tokens (live ~1h repo read/write credentials) are cached IN
- * MEMORY, per isolate/process — never persisted. Persisting them put a plaintext
- * credential at rest (readable from any DB dump / console / SQLi elsewhere); an
- * in-memory cache keeps the hit rate high for a warm process while the token never
- * outlives it. A cache miss just re-mints cheaply from the app JWT. The
- * module-level map intentionally persists across requests within the same process.
+ * Installation tokens (live ~1h repo read/write credentials) are cached IN MEMORY, per
+ * isolate/process, never persisted. Persisting them put a plaintext credential at rest
+ * (readable from any DB dump / console / SQLi elsewhere); an in-memory cache keeps the hit
+ * rate high for a warm process while the token never outlives it. The module-level cache
+ * intentionally persists across requests within the same process.
+ *
+ * Keyed by installation AND repo scope ({@link installationTokenKey}), so a mint narrowed to
+ * one dispatch's repos is cached beside the unscoped engine token instead of bypassing the
+ * cache entirely. Bypassing was the honest reading while the key was an installation id alone,
+ * but it made the standard dispatch path pay a JWT signature plus a GitHub round trip on EVERY
+ * step and every re-dispatch epoch, where it used to pay one per installation per hour.
  */
-const tokenCache = new Map<
-  number,
-  { token: string; expiresAt: number; permissions: InstallationPermissions }
->()
+const tokenCache = new InstallationTokenCache<{
+  token: string
+  expiresAt: number
+  permissions: InstallationPermissions
+}>()
 
 export interface GitHubAppAuthDependencies {
   appId: string
@@ -156,15 +163,12 @@ export class GitHubAppAuth {
     installationId: number,
     opts?: { forceRefresh?: boolean; repositoryIds?: number[] },
   ): Promise<string> {
-    // A repo-SCOPED mint (mothership GitHub delegation) never touches the unscoped
-    // engine cache: serving a cached unscoped token would over-grant past the caller's
-    // scope, and caching the scoped token would under-grant every subsequent engine
-    // call. Scoped tokens are minted fresh per request — the delegation client's own
-    // short memo collapses the chatter.
-    if (opts?.repositoryIds) {
-      return (await this.mintInstallationToken(installationId, opts.repositoryIds)).token
-    }
-    return (await this.cachedToken(installationId, opts?.forceRefresh)).token
+    // A repo-SCOPED mint (a container dispatch's job token, the mothership delegation path)
+    // shares the cache with the unscoped engine token but never its ENTRY: the key carries the
+    // scope, so a narrowed token can neither be served to a caller that asked for none nor
+    // poison the engine path with one. That is what makes caching it safe, and caching it is
+    // what keeps the standard dispatch off a JWT signature plus a GitHub round trip per step.
+    return (await this.cachedToken(installationId, opts?.forceRefresh, opts?.repositoryIds)).token
   }
 
   /**
@@ -181,14 +185,16 @@ export class GitHubAppAuth {
   private async cachedToken(
     installationId: number,
     forceRefresh = false,
+    repositoryIds?: number[],
   ): Promise<{ token: string; permissions: InstallationPermissions }> {
     if (!forceRefresh) {
-      const cached = tokenCache.get(installationId)
-      if (cached && cached.expiresAt - TOKEN_SKEW_MS > this.deps.clock.now()) {
-        return cached
-      }
+      const cached = tokenCache.get(
+        installationTokenKey(installationId, repositoryIds),
+        this.deps.clock.now(),
+      )
+      if (cached) return cached
     }
-    return this.mintInstallationToken(installationId)
+    return this.mintInstallationToken(installationId, repositoryIds)
   }
 
   private async mintInstallationToken(
@@ -222,10 +228,14 @@ export class GitHubAppAuth {
       permissions: body.permissions ?? {},
       expiresAt: Number.isNaN(expiresAt) ? this.deps.clock.now() + 30 * 60 * 1000 : expiresAt,
     }
-    // In-memory only (see tokenCache note) — never persisted. A repo-scoped mint is
-    // deliberately NOT cached: the cache is keyed by installation id alone, so a scoped
-    // entry would poison the unscoped engine path (and vice versa).
-    if (!repositoryIds) tokenCache.set(installationId, entry)
+    // In-memory only (see the tokenCache note above), never persisted. The token is treated as
+    // lapsed a few minutes early so one is never picked up moments before it expires mid-request.
+    tokenCache.set(
+      installationTokenKey(installationId, repositoryIds),
+      entry,
+      entry.expiresAt - TOKEN_SKEW_MS,
+      this.deps.clock.now(),
+    )
     return entry
   }
 

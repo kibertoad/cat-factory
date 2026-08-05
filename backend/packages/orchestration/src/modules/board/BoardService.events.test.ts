@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -104,7 +105,12 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
 
   it('updateBlock emits with the home workspace, not the acting one', async () => {
     const { service, emits } = build([task('blk_shared', 'frame_shared')])
-    await service.updateBlock(ACTING, 'blk_shared', { title: 'Renamed live' })
+    await service.updateBlock(
+      ACTING,
+      'blk_shared',
+      { title: 'Renamed live' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     const e = emits.find((x) => x.reason === 'block-updated')
     expect(e).toBeDefined()
     expect(e?.workspaceId).toBe(HOME)
@@ -113,7 +119,12 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
 
   it('addTask emits with the home workspace, so siblings on every mount see the new task', async () => {
     const { service, emits } = build([frame('frame_shared')])
-    const created = await service.addTask(ACTING, 'frame_shared', { title: 'New shared task' })
+    const created = await service.addTask(
+      ACTING,
+      'frame_shared',
+      { title: 'New shared task' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     const e = emits.find((x) => x.reason === 'block-added')
     expect(e).toBeDefined()
     expect(e?.workspaceId).toBe(HOME)
@@ -122,7 +133,13 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
 
   it('updateBlock forwards the origin connection id so the acting tab is not echoed its own edit', async () => {
     const { service, emits } = build([task('blk_shared', 'frame_shared')])
-    await service.updateBlock(ACTING, 'blk_shared', { title: 'Renamed live' }, 'cid-upd')
+    await service.updateBlock(
+      ACTING,
+      'blk_shared',
+      { title: 'Renamed live' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+      'cid-upd',
+    )
     const e = emits.find((x) => x.reason === 'block-updated')
     expect(e).toBeDefined()
     // Home origin (fan-out to every mounting board) AND the acting connection carried through so

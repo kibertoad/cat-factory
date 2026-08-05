@@ -84,6 +84,25 @@ the same reason those two are distinct from each other. Both of those are satisf
 merging the PR through this platform; this one refuses the platform merge path outright, and the
 remedy is a teammate whose role may land the class, or an admin widening the allowlist.
 
+### Selecting a preset is the third exit, and it needed an arm too
+
+ADR 0037 closed a hole this ADR would otherwise have reopened: a task's `riskPolicyId` is an
+ordinary member-tier board write, so a role held to `['docs']` could re-point the task at a preset
+that allowlists it nothing (which reads as unrestricted) and land `source` without editing a policy
+at all. `refuseRiskPolicySelection` gains a third arm, `relaxes_role_submission_allowlist`, on that
+ADR's own rule: **every role-scoped restriction owes the selection guard an arm.** A new field on
+the role layer that skips this is an escape hatch that no test in its own feature will catch, since
+each feature's tests exercise the run path rather than the picker.
+
+The arm is the same subset test the others make: an absent allowlist on the far side relaxes every
+held one, and otherwise a class `to` would land that `from` would not is capability the selector did
+not have. The empty/absent distinction bites hardest here, because an empty allowlist and no
+allowlist are both falsy and mean opposite things.
+
+The arms run in the engine's merge-ladder order (sandbox, allowlist, class rules), so a refused row
+in the picker names the restriction the run itself would have been refused on rather than whichever
+arm happened to be checked first.
+
 ### `classRulesByRole` and this are ORTHOGONAL, and both apply
 
 A class may be `always` under the role's class rules and still outside its submission allowlist, and

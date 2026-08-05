@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type { Block } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -159,22 +160,22 @@ describe('BoardService — public-API board reads/writes', () => {
   describe('addServiceTask (guards before delegating to addTask)', () => {
     it('rejects a missing or internal-frame container as not found', async () => {
       const svc = build(seed())
-      await expect(svc.addServiceTask(WS, 'nope', { title: 'x' })).rejects.toBeInstanceOf(
-        NotFoundError,
-      )
-      await expect(svc.addServiceTask(WS, 'f2', { title: 'x' })).rejects.toBeInstanceOf(
-        NotFoundError,
-      )
+      await expect(
+        svc.addServiceTask(WS, 'nope', { title: 'x' }, UNATTRIBUTED_BLOCK_EDITOR),
+      ).rejects.toBeInstanceOf(NotFoundError)
+      await expect(
+        svc.addServiceTask(WS, 'f2', { title: 'x' }, UNATTRIBUTED_BLOCK_EDITOR),
+      ).rejects.toBeInstanceOf(NotFoundError)
     })
 
     it('rejects a non-frame container and an archived service', async () => {
       const svc = build(seed())
-      await expect(svc.addServiceTask(WS, 't1', { title: 'x' })).rejects.toBeInstanceOf(
-        ValidationError,
-      )
-      await expect(svc.addServiceTask(WS, 'f3', { title: 'x' })).rejects.toBeInstanceOf(
-        ValidationError,
-      )
+      await expect(
+        svc.addServiceTask(WS, 't1', { title: 'x' }, UNATTRIBUTED_BLOCK_EDITOR),
+      ).rejects.toBeInstanceOf(ValidationError)
+      await expect(
+        svc.addServiceTask(WS, 'f3', { title: 'x' }, UNATTRIBUTED_BLOCK_EDITOR),
+      ).rejects.toBeInstanceOf(ValidationError)
     })
   })
 })

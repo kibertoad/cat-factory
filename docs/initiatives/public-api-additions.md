@@ -1,7 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** A0, C1, D1 and D2 landed; **A1–A6 landed together**; the start-path scope question settled
-by [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2 and C2 not started ·
+**Status:** A0, C1, D1, D2, **E1 and E2** landed; **A1–A6 landed together**; **A7 (follow-up
+triage) and A8 (interview gates) landed together**; the start-path scope question settled by
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2, C2 and F1 not started ·
 **Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -36,22 +37,14 @@ surface discovered later belongs in this table rather than in a revised number:
 | human-test window         | `step.humanTest`     | ✅ `/runs/:runId/decisions/human-test/*`         |
 | visual-confirmation gate  | `step.visualConfirm` | ✅ `…/visual-confirmation/*`                     |
 | `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)                    |
-| follow-up triage          | `step.followUps`     | ❌ none, **found during A1–A6** (see below)      |
-| interview gate            | interview modules    | ❌ none, **found during A1–A6** (see below)      |
+| follow-up triage          | `step.followUps`     | ✅ `…/decisions/follow-ups/items/:itemId/*`      |
+| interview gate            | interview modules    | ✅ `/runs/:runId/decisions/interview/*`          |
 
 **The last two rows were not in the original investigation**, and the table's own warning is why
 they are here rather than in a revised count: this enumeration is what was found, not a proof of
 exhaustiveness. Both surfaced from the same place, `assertNotIterativeGate` — the engine's list of
-parks that ride `step.approval` but refuse the generic approve. Neither has a public answer path
-and neither is projected as a decision, so a run parked on one reports `parked: true` with nothing
-to answer, exactly as `human-review` does. They are NOT in
-`PUBLICLY_ANSWERABLE_PARK_SURFACES`, so no refusal advertises them.
-
-Ranking them is deliberately left open. Follow-up triage is a per-item verb set (file / send back /
-answer / dismiss) over items an agent streams mid-run, and an interview gate is a conversational
-loop (answer / continue / proceed) whose value to a headless caller is the same open question A6
-raises. Neither is reachable from `POST /jobs` (both ride container-agent steps), so both are
-board-start-only, which is where A5/A6 already rank.
+parks that ride `step.approval` but refuse the generic approve. A7/A8 below built them, so the
+table's ❌ column is now `human-review` alone.
 
 **The pre-dispatch input gate is the odd row**, and worth reading before adding another: every other
 entry is a park a PIPELINE can carry, so `parkSurfacesOf` sees it in the step chain and admission
@@ -83,11 +76,13 @@ The headline finding is not "an endpoint is missing" but an **asymmetry between 
 key start and what the decision surface lets it answer**. A caller can put a run into a state only
 the SPA can get it out of.
 
-**Where this stands:** A1–A6 landed as one change, so the asymmetry the tracker was opened for is
-closed: of the surfaces a pipeline can park on, `human-review` is the only one a `decide` key can
-start and not answer, and it is unanswerable by construction rather than unbuilt. What remains is
-B1/B2 (key introspection, spec endpoint), C1 (webhook management) and C2 (step output), none of
-which is a park. The former [open question](#open-question-for-the-maintainer-settled) about the
+**Where this stands:** A1–A6 landed as one change and A7/A8 finished the table, so the asymmetry
+the tracker was opened for is closed: of the surfaces a pipeline can park on, `human-review` is the
+only one a `decide` key can start and not answer, and it is unanswerable by construction rather than
+unbuilt. E1/E2 then closed the other half of "what can a headless consumer NOT do here": read what a
+run PROVED, and get a key without a browser. What remains is B1/B2 (key introspection, spec
+endpoint) and C2 (step output), none of which is a park, plus the ONE admission gap A8 surfaced and
+did not close (a deployment's own unbounded-wait gate, ranked as F1). The former [open question](#open-question-for-the-maintainer-settled) about the
 `POST /tasks/:taskId/start` scope rule is settled (tightened, with
 [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)). When the committed scope
 completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md); if it
@@ -214,6 +209,84 @@ step click opens and it cannot import the classifier — the built-in gate kinds
 `orchestration` (`HUMAN_TEST_AGENT_KIND`) where the frontend cannot see them. Converging the two
 means moving those constants into `@cat-factory/contracts` first, which is a change worth making on
 its own rather than smuggled in behind this one.
+
+### A7 follow-up triage / A8 interview gates ✅ (landed together)
+
+The two rows the A1–A6 investigation added to the table, and the reason they landed as one change is
+the reason A1–A6 did: past the shared plumbing they are the same shape. Ranking them was left open
+above; what settled it is that they were the last two ❌ rows with something to build, so leaving
+them meant the table stayed a list of known holes rather than a record of a finished surface.
+
+- **A7 follow-up triage**: `…/decisions/follow-ups/items/:itemId/{file,send-back,answer,dismiss}`,
+  projected as `follow-ups`. The verb set is per ITEM because that is the unit of the decision, and
+  it is addressed by item id for the reason the approval routes take `approvalId`: a pipeline may
+  carry more than one follow-up-enabled Coder step and the engine routes each item to the step that
+  surfaced it. `send-back` is named for what it does rather than for the `queued` status it records;
+  the projection's `status` is what a caller reads back, so the two words never have to agree.
+- **A8 interview gates**: `/runs/:runId/decisions/interview/{answer,continue,proceed}`, projected as
+  `interview`. ONE route set for every interview gate rather than one per gate, keyed by RUN alone:
+  which interviewer is asking is a property of the parked step, so the server resolves it instead of
+  making the caller name a gate it read out of the same projection a moment earlier.
+
+Six things worth reading before extending either:
+
+- **A7 is the first decision that is NOT a park.** Follow-up items accrue live while the Coder is
+  still running and can be decided before it finishes, so the projection lists them whenever any item
+  is `pending` rather than once the run is `blocked`. Every other `isLive*` predicate here is "the
+  park plus the in-flight states either side"; this one is "is anything undecided". An integration
+  that triages as items arrive never sees the run stop, which is the whole point of the companion.
+- **A8 needed a new seam, and it is a VIEW rather than an entity.** The two interview gates store
+  their Q&A on entities that belong to their own features (an `initiatives` row, a
+  `doc_interview_sessions` row) and the controller spine is generic over that entity, so there was
+  nothing kind-agnostic to project. `InterviewGateKind.view` + `InterviewGateController.getView` add
+  it: the shared `InterviewView` carries the loop (questions, round budget) and deliberately NOT the
+  product each gate converges on (an authoring brief; a goal / constraints / non-goals), because
+  that is the part that genuinely differs and the part nobody answers. A third interviewer
+  implements `view` and needs no route, projection or decision kind of its own.
+- **What a third interviewer DOES still need, because the two halves have different reach.**
+  Admission reads the `interview-gate` trait off the agent-kind registry, so a deployment's own
+  interviewer counts as a park the moment it is REGISTERED. Answering it needs its controller WIRED
+  as well: `ExecutionService.wiredInterviewGates` is a hand-kept list of the controllers this
+  deployment built, because an interview gate is not registry-constructed the way an agent kind is
+  (it needs its feature's store and service). Registered-but-unwired is therefore a real state, and
+  it is reported honestly rather than papered over: admission refuses a plain `write` key, the
+  projection lists nothing, and the routes 503 naming the kind. Closing that gap means giving
+  interview gates a registration seam of their own, which is a bigger change than this slice and is
+  not blocking anyone today (both built-ins are wired by both facades).
+- **A question's `status` is DERIVED, not read.** The planning interviewer keeps an explicit
+  `open`/`dismissed` marker beside the answer; the document interviewer has only the answer. One
+  derivation (`dismissed` → dismissed, else non-empty answer → `answered`) is what lets a caller
+  read both through one shape, and it is the platform-computes rule: neither entity stores the
+  three-way value the wire carries.
+- **`questionId` is nullable and that is load-bearing.** Both Q&A schemas make the id optional so a
+  hand-authored or imported exchange still parses. Such a question cannot be answered individually,
+  and projecting the null says so, where omitting the exchange would read as a response that lost a
+  question.
+- **The refusals split three ways and each says something different**: no parked interview → 404
+  (`no_interview`), an interviewer this deployment never wired → 503 naming the kind, and a run the
+  key cannot see → the shared 404 `not_found`. Collapsing the first two would tell an operator
+  staring at a stopped run that it is not stopped.
+
+**The admission half, which is where this got interesting.** The gotcha list says a slice adds its
+surface to `PUBLICLY_ANSWERABLE_PARK_SURFACES`; for these two that raised the prior question of
+whether `parkSurfacesOf` can see them at all, and the two answers came out opposite:
+
+- **Interview gates ARE now enumerated**, as a fourth park mechanism read off the `interview-gate`
+  TRAIT. This closes a hole worse than the `human-review` one it rhymes with: an interviewer is an
+  INLINE step, so a pipeline built out of interview steps satisfied the inline-only rule and was
+  reported `headlessStartable` (the flag that tells a caller a `write` key can drive it end to end)
+  while every run of it stopped on the first batch of questions. No shipped preset changes hands
+  (`pl_initiative` and `pl_document` both carry a later human gate and were already admitted as
+  parking on that), so this is a refusal getting more accurate, not capability moving.
+- **Follow-up triage is deliberately NOT enumerated**, and this is the decision to re-read before
+  "fixing" it. The companion is seeded on every Coder step unless a pipeline turns it off, so
+  counting it would make `pl_simple` and `pl_build` (the presets whose selling point is that they
+  never pause) `decide`-only, and take board starts away from every live `write` key at once. That
+  is a bigger break than the gap it closes, and the gap is no longer the one admission exists to
+  prevent: the park has an answer path now, so a run that stops there is recoverable with a `decide`
+  key instead of being app-only. Revisit if the companion's default ever flips off. The
+  asymmetry is STATED in `public-api.md`'s scope section rather than left for an operator to
+  discover, which is the same honesty rule A0 established for the refusal message.
 
 ### B1: `GET /api/v1/me` (key introspection) ⬜
 
@@ -364,6 +437,100 @@ are `pending` on the persistence allow-list, so naming `documents` on a node wit
 answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
 is one slice of the mothership tracker, not this one.
 
+### E1: Run EVIDENCE, the verification report + artifacts ✅
+
+`GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/artifacts` and
+`GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
+CAPTURED about a run was reachable only from a browser session, so a consumer whose job is to judge
+a run (a trial harness deciding whether to accept a change, an evaluation pipeline scoring a fleet)
+had to scrape the fenced JSON block out of a pull-request body for the report and could not reach
+the captured screenshots at all: the caveat A6 recorded against the visual-confirmation gate
+("approving screenshots it has not seen") was the same hole seen from the other side.
+
+Decisions worth keeping:
+
+- **The report is served VERBATIM**, the engine's own `PrVerificationReport`, composed on read by
+  the same code that writes the PR section (`PrVerificationReportController.composeForRun`). A
+  second, API-shaped projection of the same facts is how two surfaces start disagreeing about what
+  a run proved. The consequence is real and is now stated on the schema: the report shape is part
+  of the STABLE surface from here on, so it grows additively.
+- **The read differs from the publish in three ways, all about audience**: it answers for a run
+  with NO pull request (a headless job, a run that failed before it pushed: the exact set a
+  PR-scraping consumer could never see), it does not consult the per-workspace
+  `publishPrVerificationReport` opt-out (that is a statement about writing onto someone's PR, not
+  about reading your own evidence back), and it does not swallow its failures.
+- **The run-scoped reads take `loadScopedRun`, NOT the debug surface's workspace rule**, even
+  though a `read` key already reaches far more through `/api/v1/debug/*`. What decides it is the
+  PATH: `debug-api.md` records "two access semantics behind one name" as the reason the debug reads
+  are not under `/api/v1/runs/:id/…`, and that reason binds whoever mounts there next. The
+  excluded set (frame/module-anchored runs) has no task and no PR, so no verification story.
+- **The BYTES needed a binary response the SDK chain could not express.** An operation whose
+  success media type was neither JSON nor SSE fell through to `result: null`, which every emitter
+  renders as a method returning NOTHING: a published client that reaches the endpoint and
+  discards its body. The IR now marks `binary` alongside `stream`, each of the four transports
+  hands the bytes back in its own idiom, and an UNKNOWN media type fails generation rather than
+  falling through. The MCP facade omits it with a stated reason (a tool result has no shape for an
+  arbitrary byte stream), and the omission expectation is now derived from the spec's media types
+  rather than a pinned list.
+- **`503`, never an empty list**, when the account configured no blob backend: "this deployment
+  stores no artifacts" and "this run captured none" are different facts, and only one is about the
+  run. Same reason the artifact list 404s an unknown run rather than answering `[]`.
+- **A wiring bug this surfaced, fixed on both facades**: each container built the HTTP layer's
+  `resolveBinaryArtifactStore` from account settings while the ENGINE got the (overridable) one
+  from `CoreDependencies`, so an override reached one side of the app and not the other. The
+  container now reads it off `dependencies`.
+
+### E2: Headless key provisioning ✅
+
+`GET|POST|DELETE /api/v1/keys` at `admin` scope, delegating to the same `PublicApiKeyService` the
+session panel calls. Same class of gap as C1: a deployment whose operator is headless could drive
+every part of this API except the act of GETTING a key.
+
+The security argument is two enforced bounds, not advice:
+
+- **A minted key can never reach the rung minting requires.** `HEADLESS_MINTABLE_SCOPES` is derived
+  from `HEADLESS_KEY_MINT_SCOPE` (`admin`) rather than listed, so the mint chain is exactly one
+  link long and a rung inserted later cannot silently widen it. Refused by the contract's own
+  picklist, so there is deliberately no hand-written second copy of the rule to drift.
+- **Revocation cascades.** Revoking a key revokes what it minted, on both surfaces. Without it a
+  leaked provisioning key would survive its own cleanup: the operator kills the credential they can
+  see and the ones an attacker made keep working. This needed a new `created_by_key_id` column
+  (D1 ⇄ Drizzle, with its own index) and a `revokeMintedBy` repository method issuing ONE statement
+  rather than a read-then-loop a concurrent mint could slip through.
+
+`createdByKeyId` is also provenance the app renders: a headless mint stores a null user, so without
+a branch in the key panel it would read exactly like a key predating the audit column: "nobody
+knows who made this" shown for the one case the platform knows precisely.
+
+### F1: a deployment-registered wait gate is invisible to admission ⬜
+
+Not a park surface to build: a hole in the enumeration that decides which key may start a run, found
+while adding the interview mechanism beside it and recorded here rather than left as a comment.
+
+`parkSurfacesOf`'s human-wait case reads `HUMAN_WAIT_GATE_KINDS`, a constant in
+`@cat-factory/contracts` naming the BUILT-IN gates that declare `pollExhaustion: 'rearm'` (today just
+`human-review`), pinned by a drift guard in `@cat-factory/gates`. A deployment that registers its own
+unbounded-wait gate through the public `GateRegistry` seam is not in it, so such a pipeline is
+admitted for a plain `write` key and then parks with nothing on this surface able to name it: the
+`human-review` defect, one layer out.
+
+Why it was not closed here: a gate's `pollExhaustion` is declared on the object its FACTORY builds
+from an engine context, so reading it at HTTP request time means standing a fake context up per
+admission call, which is a shortcut rather than a design (the same reasoning
+`human-wait-parity.test.ts` records for why the built-in answer is a shared constant).
+
+**The shape of a real fix, so the next iteration does not re-derive it:** let a gate declare
+`pollExhaustion` at REGISTRATION time, beside the factory, and have `parkSurfacesOf` read the
+registry. That makes the declaration static for every gate rather than only the built-ins, and it
+deletes `HUMAN_WAIT_GATE_KINDS` and its drift guard instead of adding a second mechanism beside them.
+It is a change to the `GateRegistry` seam (every registration site, both facades), which is why it is
+its own slice. Note what it would NOT change: interview gates and the four inline kinds are already
+declaration-derived, so this is the last hand-kept entry in the enumeration.
+
+Until then the gap is documented in three places that a person actually reads: the note on
+`HUMAN_WAIT_GATE_KINDS`, `parkSurfacesOf`'s "deliberately not here" list, and the scope section of
+`backend/docs/public-api.md`.
+
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 
 `publicJob` carries a `result`; `publicRun` carries step states, the PR and the error, but no step
@@ -404,10 +571,14 @@ Recorded so these are not re-proposed:
 - **`PublicDecisionController` keeps hand-built error envelopes on purpose**: failures are DATA
   there, so the contract handlers stay typed against their declared response schemas. Follow the
   existing shape rather than throwing a `DomainError`.
-- **Scope placement.** A1–A6 are `decide`. C1 is `admin`. B1/B2 are `read`.
+- **Scope placement.** A1–A8 are `decide`. C1 is `admin`. B1/B2 are `read`.
 - **Add the surface to `PUBLICLY_ANSWERABLE_PARK_SURFACES`** (`publicApiAdmission.ts`) as part of the
   slice. That set is what the A0 refusal message and its drift-guard test read, so a slice that ships
   an answer path without updating it leaves the API still telling operators the park is unanswerable.
+  **First ask whether `parkSurfacesOf` produces the surface at all**: A7/A8 is where that stopped
+  being automatic. A surface admission cannot see (follow-up triage, by the decision recorded above)
+  has no refusal to correct, so adding it to the set is inert, and adding it to the enumeration to
+  make it non-inert is a scope change that has to be weighed on its own.
 - **A park that rides `step.approval` is classified through `dedicatedParkSurface`, never re-listed.**
   Offering a caller the generic approve verbs on a park the engine refuses them for is a 409 loop, and
   a second copy of the list is how that arrives (see A1–A6 above).

@@ -209,9 +209,67 @@ not this setting.
 **It is not separation of duties in general.** It scopes the tiers a preset names, and nothing
 more. An admin can still be the sole human on their own run's PR under any preset.
 
-**A sandboxed member cannot un-sandbox themselves.** `RiskPolicyController` mounts
-`requireWorkspacePermission('settings.manage')` on `*`, so editing `dryRunRoles` is admin-tier.
-Without that the setting would be theatre, since the obvious way around a sandbox is to delete it.
+**A sandboxed member cannot un-sandbox themselves, and that took TWO gates, not one.**
+`RiskPolicyController` mounts `requireWorkspacePermission('settings.manage')` on `*`, so editing
+`dryRunRoles` is admin-tier. Without that the setting would be theatre, since the obvious way
+around a sandbox is to delete it.
+
+The first cut of this feature stopped there and was wrong to, which is worth recording because the
+gap reads as covered: the policy is per TASK, and which preset a task is under is `riskPolicyId` on
+the block patch: a `board.write`, member tier, on the same board. So the sandbox held only as long
+as nobody re-pointed the task, and the way around it was not to edit the policy but to select
+another one: one PATCH, or one click in the inspector's picker (and, one door along, one new task
+authored straight onto a permissive preset, since a task that picks nothing is governed by the
+workspace default).
+
+Gating the SELECTION behind `settings.manage` was the obvious fix and the wrong one: a preset
+library exists to be chosen from per task, and taking that from members would make every preset
+admin-only on deployments that authored no role policy at all. `refuseRiskPolicySelection`
+(contracts) instead applies this feature's own narrow-only property one level up: **a selection may
+not drop a restriction the selector's own role was under.** Two arms when this ADR landed, and both
+are role-scoped: losing the sandbox, or losing a class rule the ROLE LAYER narrowed (keyed on
+`narrowedByRole`, the same test `thresholds.roleRule` already uses, so a class the two presets
+merely differ on in their BASE map is not a refusal). ADR 0039 adds the third, over the submission
+allowlist, on the rule stated here: every role-scoped restriction owes this guard an arm.
+
+That last exclusion is the design decision, not an oversight. `classRules` and the ceilings say the
+same thing to every tier, so moving a task between them is the per-task policy choice the library
+is for; comparing them would refuse ordinary selections on workspaces with no role scoping, and
+would still be arbitrary, since it would leave the score ceilings free to move. The consequence
+worth having is that the guard is INERT until an operator authors a role policy, exactly as
+`{}` / `[]` are the identity everywhere else in this feature.
+
+It binds at the SERVICE (`BoardService.addTask` / `updateBlock`), not in a controller, because the
+field is writable at both doors and the escape is whichever one a caller reaches for. The editor
+travels as a REQUIRED `BlockEditActor` parameter, so a new call site cannot inherit an exemption
+from a default, and `blockEditActor.coverage.spec.ts` then classifies each route as attributed or
+deliberately unattributed with a reason: the typecheck forces a value, only the spec forces the
+RIGHT one. That pairing is copied from the run-start attribution above for the same reason: this
+feature has now shipped twice with one door enforced and another open.
+
+The spec classifies the sites that NAME an actor rather than the sites that CALL a board write,
+and that is the second lesson rather than a detail. Its first cut matched
+`boardService.addTask|updateBlock`, which saw four routes and missed the public-API creation path
+(a different method name) and the tracker / document spawns (a different package). Each of those
+was deciding its own exemption inside a collaborator, where no route stated it. So the exemption
+now travels to the layer that can answer it: a service takes the editor and never invents one,
+and every site that names a value is classified wherever it lives. What a module does with an
+actor is a typecheck's business; which actor it is, is a fact about the request.
+
+#### What the rule does NOT cover: a service mounted on two boards
+
+The guard judges a swap against the ACTING workspace's preset library, which is what the engine
+resolves too, so the two agree. A SHARED service frame mounted on a second board is where that
+agreement stops being enough: the task is one row, but `riskPolicyId` resolves against whichever
+board it is read from, and an id belonging to board A's library is simply dangling on board B (it
+falls back to B's default, exactly like a deleted preset). A member of both boards can therefore
+re-point a shared task from B, where the sandbox that governs it on A is invisible, and A then
+resolves its own default rather than the preset the task was pinned to.
+
+Closing this means deciding that a shared task's policy resolves against its HOME workspace
+everywhere, engine included, which changes what a preset means on a mounted board rather than
+tightening a guard. It is left open deliberately and recorded here rather than in a comment,
+because the fix belongs to the shared-service model and not to this one.
 
 ### Why the PR still opens
 
@@ -273,6 +331,16 @@ inspector is mounted once for the session and follows the selection, so it outli
 the request is dropped when the block changes under it, or arming a sandbox on one task would
 silently sandbox the next run started on another.
 
+#### The picker refuses what the engine would refuse
+
+`RiskPolicyPicker` disables an option `refuseRiskPolicySelection` would reject, from the same
+contracts rule and against the same resolved policy (the named preset, else the workspace default),
+so the create form and the inspector need no second reading of what "picked nothing" means. That is
+the rule stated at the top of the narrow-only section, applied to the other authoring surface: a
+picker offering a row the server answers with a 403 tells someone they made a choice they did not
+make. The disabled row keeps its detail pane and gains the reason, because the useful thing to
+learn is which policy the task is under and why this one is closed, not that a click did nothing.
+
 ## Consequences
 
 - A workspace can hand a task to a non-developer with the sandbox on, and take it off per role and
@@ -283,3 +351,9 @@ silently sandbox the next run started on another.
   that a run pins at admission owes the same end-to-end conformance assertion, on both runtimes.
 - The merge decision now carries the initiator's role and (when it changed the outcome) the narrowed
   rule, so a refusal can name the tier it was narrowed for instead of implying the scores did it.
+- A board write can now be refused on POLICY grounds, so `BoardService.addTask`/`updateBlock` take
+  the acting `BlockEditActor` and every caller states one. Anything else that becomes selectable
+  per task and scoped per role owes the same pair: the rule in contracts (so the picker agrees) and
+  the guard at the service (so both doors do).
+- `resolveMergeClassRule` / `resolveRoleScopedMergeClassRule` moved from kernel to contracts, since
+  the SPA now has to make the same judgement. The engine imports them from there.

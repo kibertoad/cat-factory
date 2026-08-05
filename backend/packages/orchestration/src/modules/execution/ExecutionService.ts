@@ -23,6 +23,7 @@ import type {
   RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
+import type { PrVerificationReport } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
 import {
@@ -73,6 +74,7 @@ import { VisualConfirmationController } from './VisualConfirmationController.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import { InitiativeInterviewController } from './InitiativeInterviewController.js'
 import { DocInterviewController } from './DocInterviewController.js'
+import type { InterviewGate } from './InterviewGateController.js'
 import type { InitiativeRunHarvest } from '../initiative/initiative.logic.js'
 import type {
   IterationCapChoice,
@@ -563,6 +565,24 @@ export class ExecutionService {
   }
 
   /**
+   * The run's verification report, composed for a READER rather than published onto a pull
+   * request: the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
+   * such run, or when the run's block is gone.
+   *
+   * The SAME composition the PR body carries (see
+   * {@link PrVerificationReportController.composeForRun} for the three differences the read
+   * path makes, all of them about audience rather than content).
+   */
+  async composeVerificationReport(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<PrVerificationReport | null> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return null
+    return this.prVerificationReport.composeForRun(workspaceId, instance)
+  }
+
+  /**
    * Assemble the post-merge board controller. A method rather than a literal in the constructor
    * because everything it reads is already a field by the time it runs, so it needs no destructured
    * parameter threaded through — and the constructor is a god-function against its size budget.
@@ -598,10 +618,7 @@ export class ExecutionService {
       architectureBrainstormKind: this.architectureBrainstormKind,
       // The interview-gate controllers, dispatched by the `interview-gate` trait keyed on each
       // controller's `agentKind` (a new interviewer wires its controller here — no engine branch).
-      interviewControllers: [
-        this.initiativeInterviewController,
-        this.docInterviewController,
-      ].filter((c): c is InitiativeInterviewController | DocInterviewController => !!c),
+      interviewControllers: this.wiredInterviewGates,
       prVerificationReport: this.prVerificationReport,
       runInitiatorScope: runInitiatorScopeFn,
       resolveRiskPolicy: (ws, block) => this.resolveRiskPolicy(ws, block),
@@ -686,6 +703,38 @@ export class ExecutionService {
    */
   get docInterview(): DocInterviewController | undefined {
     return this.docInterviewController
+  }
+
+  /**
+   * Every interview gate this deployment actually wired. ONE list, because the engine's own step
+   * dispatch and {@link interviewGateFor} both have to enumerate the gates and a second copy is
+   * how they would come to disagree: the dispatcher would park a run on a gate the public decision
+   * surface then reports as unwired, which reads to an operator as a run stopped on nothing.
+   *
+   * Wiring a THIRD interviewer is still an edit here (a field on this class, fed from
+   * `reviewSubjects`); what this getter buys is that it is one edit rather than two.
+   */
+  private get wiredInterviewGates(): (InitiativeInterviewController | DocInterviewController)[] {
+    return [this.initiativeInterviewController, this.docInterviewController].filter(
+      (c): c is InitiativeInterviewController | DocInterviewController => !!c,
+    )
+  }
+
+  /**
+   * The interview gate wired for a step's `agentKind`, or undefined when this deployment wired
+   * none. The lookup a caller reaches for when it holds a PARKED STEP rather than a feature: the
+   * public decision surface answers "the interview this run is stopped on" and must not have to
+   * name which gate that is (the getters above are the per-feature reads, for a controller that
+   * already knows, and they keep the entity-typed return this one cannot have).
+   *
+   * Keyed exactly as the engine's own dispatch is, off the same {@link wiredInterviewGates} list.
+   * Note where that stops: admission reads the `interview-gate` TRAIT off the kind registry, so a
+   * deployment's own interviewer is counted as a park the moment it is REGISTERED, while being
+   * answerable here needs its controller WIRED as well. Registered but unwired is the honest 503
+   * the public surface reports, not a state this lookup can paper over.
+   */
+  interviewGateFor(agentKind: string): InterviewGate | undefined {
+    return this.wiredInterviewGates.find((c) => c.agentKind === agentKind)
   }
 
   private requireWorkspace(workspaceId: string) {

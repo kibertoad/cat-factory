@@ -7,6 +7,7 @@ import type {
   TaskRecord,
   TaskSourceKind,
 } from '@cat-factory/kernel'
+import type { BlockEditActor } from '@cat-factory/contracts'
 import { assertFound, ConflictError } from '@cat-factory/kernel'
 import type { BlockRepository } from '@cat-factory/kernel'
 import type { BoardWritePort } from '@cat-factory/kernel'
@@ -181,15 +182,28 @@ export class TaskLinkService {
    * new task — the bug hunt adopts a candidate as a `bug` on the bug-fix pipeline. Omitted
    * (every pre-existing caller) leaves both to `BoardService.addTask`'s defaults, so the
    * generic import path is unchanged.
+   *
+   * `editor` is whose authority the board write is made under, and it comes from the CALLER
+   * because only the caller knows: filing an issue from the SPA is a member acting on their own
+   * board, while the tracker reconciliation sweep behind the same method holds no tier at all.
+   * Deciding it here would pick one of those and be wrong about the other (see
+   * {@link BlockEditActor}).
+   *
+   * Takes an input OBJECT: `editor` was the seventh thing to identify (which board, which
+   * container, which issue, on whose authority, filed by whom, shaped how), and past a handful a
+   * positional list stops being readable at the call site and starts being a place to transpose
+   * two strings. Same shape as the resolution helpers this file's neighbours already take.
    */
-  async createTaskFromIssue(
-    workspaceId: string,
-    containerId: string,
-    source: TaskSourceKind,
-    externalId: string,
-    createdBy?: string | null,
-    shape?: { taskType?: CreateTaskType; pipelineId?: string },
-  ): Promise<TaskFromIssue> {
+  async createTaskFromIssue(input: {
+    workspaceId: string
+    containerId: string
+    source: TaskSourceKind
+    externalId: string
+    editor: BlockEditActor
+    createdBy?: string | null
+    shape?: { taskType?: CreateTaskType; pipelineId?: string }
+  }): Promise<TaskFromIssue> {
+    const { workspaceId, containerId, source, externalId, editor, createdBy, shape } = input
     const issue = assertFound(
       await this.deps.taskRepository.get(workspaceId, source, externalId),
       'Task',
@@ -224,6 +238,7 @@ export class TaskLinkService {
         ...(shape?.taskType ? { taskType: shape.taskType } : {}),
         ...(shape?.pipelineId ? { pipelineId: shape.pipelineId } : {}),
       },
+      editor,
       createdBy ?? null,
     )
     // Link the issue to the new task so agents get the full issue (description,
@@ -248,15 +263,21 @@ export class TaskLinkService {
    * outside the imported set are skipped, and the board's cycle guard protects against bad
    * data (a rejected edge is ignored, never fatal). The board (`epicId` + `dependsOn`) is
    * the source of truth after the spawn; the issue projections back agent context.
+   *
+   * `editor` is whose authority every child task is created under, supplied by the caller for the
+   * reason {@link TaskLinkService.createTaskFromIssue} states, and this takes an input object for
+   * the reason stated there too.
    */
-  async spawnEpic(
-    workspaceId: string,
-    source: TaskSourceKind,
-    epicRef: string,
-    containerId: string,
-    createdBy?: string | null,
-    position?: Position,
-  ): Promise<SpawnedEpic> {
+  async spawnEpic(input: {
+    workspaceId: string
+    source: TaskSourceKind
+    epicRef: string
+    containerId: string
+    editor: BlockEditActor
+    createdBy?: string | null
+    position?: Position
+  }): Promise<SpawnedEpic> {
+    const { workspaceId, source, epicRef, containerId, editor, createdBy, position } = input
     // The container must be visible to this workspace (a frame/module the issue tasks land in).
     assertFound(await this.deps.blockRepository.get(workspaceId, containerId), 'Block', containerId)
 
@@ -302,6 +323,7 @@ export class TaskLinkService {
           description: issueTaskDescription(content),
           epicId: epic.id,
         },
+        editor,
         createdBy ?? null,
       )
       await this.deps.taskRepository.linkBlock(workspaceId, source, content.externalId, block.id)

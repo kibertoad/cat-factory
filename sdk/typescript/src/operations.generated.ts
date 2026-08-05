@@ -10,8 +10,10 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  CreateHeadlessPublicApiKey,
   CreatePublicJob,
   CreatePublicTask,
+  CreatedPublicApiKey,
   DebugAgentContextSnapshot,
   DebugLlmCall,
   DebugRunOverview,
@@ -28,6 +30,10 @@ import type {
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
+  PrVerificationReport,
+  PublicAnswerFollowUp,
+  PublicAnswerInterview,
+  PublicApiKeyList,
   PublicApproveStep,
   PublicChallengePrReviewFinding,
   PublicChooseFork,
@@ -49,6 +55,7 @@ import type {
   PublicResolveJudge,
   PublicResolvePrReview,
   PublicRun,
+  PublicRunArtifactList,
   PublicServiceList,
   PublicSetFindingStatus,
   PublicTask,
@@ -550,7 +557,7 @@ export class UsageResource {
   }
 }
 
-/** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
+/** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
 export class DecisionsResource {
   readonly #transport: Transport
 
@@ -567,6 +574,34 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/questions/${encodePathSegment(decisionId)}/answer`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Answer a follow-up question
+   * Answer one `question` item the Coder raised mid-run; the answer steers its next pass. Refused for a `follow_up` item, which is filed, sent back or dismissed instead. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/answer` — operation `answerPublicRunFollowUp`.
+   */
+  answerFollowUp(runId: string, itemId: string, body: PublicAnswerFollowUp, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/follow-ups/items/${encodePathSegment(itemId)}/answer`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * Answer an interview question
+   * Record an answer to one question the parked interviewer asked. Does NOT resume the run: answer the batch, then `continue` or `proceed`. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/interview/answer` — operation `answerPublicRunInterview`.
+   */
+  answerInterviewQuestion(runId: string, body: PublicAnswerInterview, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/interview/answer`,
       body,
       options,
     })
@@ -641,6 +676,32 @@ export class DecisionsResource {
   }
 
   /**
+   * Continue a parked interview
+   * Submit the recorded answers and resume: the interviewer runs again and may ask follow-up questions. ASYNCHRONOUS: the pass runs in the durable driver, so the next round arrives on a later read of the decision list. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/interview/continue` — operation `continuePublicRunInterview`.
+   */
+  continueInterview(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/interview/continue`,
+      options,
+    })
+  }
+
+  /**
+   * Dismiss a follow-up item
+   * Wave one item off without acting on it. Valid for either item kind, and (like every other verb here) releases the park once it is the last undecided item. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/dismiss` — operation `dismissPublicRunFollowUp`.
+   */
+  dismissFollowUp(runId: string, itemId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/follow-ups/items/${encodePathSegment(itemId)}/dismiss`,
+      options,
+    })
+  }
+
+  /**
    * Dismiss a PR review finding
    * Drop one finding from the parked review entirely. Curation rather than a resolution: the run stays parked. Requires a `decide`-scope key.
    * `POST /api/v1/runs/{runId}/decisions/pr-review/findings/{findingId}/dismiss` — operation `dismissPublicRunPrReviewFinding`.
@@ -649,6 +710,19 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/pr-review/findings/${encodePathSegment(findingId)}/dismiss`,
+      options,
+    })
+  }
+
+  /**
+   * File a follow-up item as an issue
+   * File one `follow_up` item on the workspace's issue tracker, recording the ticket ref on the item. Refused for a `question` item, and for a workspace with no tracker connected. Creating the issue is not idempotent, so a retry after a partial failure files a second one. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/file` — operation `filePublicRunFollowUp`.
+   */
+  fileFollowUp(runId: string, itemId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/follow-ups/items/${encodePathSegment(itemId)}/file`,
       options,
     })
   }
@@ -743,6 +817,19 @@ export class DecisionsResource {
     return this.#transport.request<PublicDecisionList>({
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/clarity/proceed`,
+      options,
+    })
+  }
+
+  /**
+   * Proceed past a parked interview
+   * Stop the questions: the interviewer converges on the answers so far and the run advances. Also asynchronous, since converging is itself an interviewer pass. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/interview/proceed` — operation `proceedPublicRunInterview`.
+   */
+  proceedInterview(runId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/interview/proceed`,
       options,
     })
   }
@@ -978,6 +1065,19 @@ export class DecisionsResource {
       method: 'POST',
       path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/approvals/${encodePathSegment(approvalId)}/resolve-exceeded`,
       body,
+      options,
+    })
+  }
+
+  /**
+   * Send a follow-up item back to the Coder
+   * Fold one `follow_up` item into another Coder pass (the item records as `queued`). Once every item is decided the run loops the Coder for the ones sent back, within the `maxLoops` budget the decision reports. Requires a `decide`-scope key.
+   * `POST /api/v1/runs/{runId}/decisions/follow-ups/items/{itemId}/send-back` — operation `sendBackPublicRunFollowUp`.
+   */
+  sendBackFollowUp(runId: string, itemId: string, options: RequestOptions = {}): Promise<PublicDecisionList> {
+    return this.#transport.request<PublicDecisionList>({
+      method: 'POST',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/decisions/follow-ups/items/${encodePathSegment(itemId)}/send-back`,
       options,
     })
   }
@@ -1255,6 +1355,103 @@ export class DebugResource {
   }
 }
 
+/** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+export class EvidenceResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Download an artifact's bytes
+   * The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.
+   * `GET /api/v1/artifacts/{artifactId}/blob` — operation `getPublicArtifactBlob`.
+   */
+  downloadArtifact(artifactId: string, options: RequestOptions = {}): Promise<Uint8Array> {
+    return this.#transport.bytes({
+      method: 'GET',
+      path: `/api/v1/artifacts/${encodePathSegment(artifactId)}/blob`,
+      options,
+    })
+  }
+
+  /**
+   * Get a run's verification report
+   * The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.
+   * `GET /api/v1/runs/{runId}/report` — operation `getPublicRunReport`.
+   */
+  getReport(runId: string, options: RequestOptions = {}): Promise<PrVerificationReport> {
+    return this.#transport.request<PrVerificationReport>({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/report`,
+      options,
+    })
+  }
+
+  /**
+   * List a run's captured artifacts
+   * The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.
+   * `GET /api/v1/runs/{runId}/artifacts` — operation `listPublicRunArtifacts`.
+   */
+  listArtifacts(runId: string, options: RequestOptions = {}): Promise<PublicRunArtifactList> {
+    return this.#transport.request<PublicRunArtifactList>({
+      method: 'GET',
+      path: `/api/v1/runs/${encodePathSegment(runId)}/artifacts`,
+      options,
+    })
+  }
+}
+
+/** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
+export class KeysResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Provision an API key
+   * Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.
+   * `POST /api/v1/keys` — operation `createPublicKey`.
+   */
+  create(body: CreateHeadlessPublicApiKey, options: RequestOptions = {}): Promise<CreatedPublicApiKey> {
+    return this.#transport.request<CreatedPublicApiKey>({
+      method: 'POST',
+      path: `/api/v1/keys`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * List the workspace's API keys
+   * The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.
+   * `GET /api/v1/keys` — operation `listPublicKeys`.
+   */
+  list(options: RequestOptions = {}): Promise<PublicApiKeyList> {
+    return this.#transport.request<PublicApiKeyList>({
+      method: 'GET',
+      path: `/api/v1/keys`,
+      options,
+    })
+  }
+
+  /**
+   * Revoke an API key
+   * Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.
+   * `DELETE /api/v1/keys/{keyId}` — operation `revokePublicKey`.
+   */
+  revoke(keyId: string, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'DELETE',
+      path: `/api/v1/keys/${encodePathSegment(keyId)}`,
+      options,
+    })
+  }
+}
+
 /**
  * The resource clients a `CatFactoryClient` exposes, one per tag of the published OpenAPI surface.
  *
@@ -1278,10 +1475,14 @@ export abstract class CatFactoryResources {
   readonly webhook: WebhookResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
-  /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates. */
+  /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
   readonly debug: DebugResource
+  /** What a run proved: the engine's verification report and the artifacts it captured, bytes included. */
+  readonly evidence: EvidenceResource
+  /** The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted). */
+  readonly keys: KeysResource
 
   protected constructor(transport: Transport) {
     this.jobs = new JobsResource(transport)
@@ -1293,5 +1494,7 @@ export abstract class CatFactoryResources {
     this.usage = new UsageResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
+    this.evidence = new EvidenceResource(transport)
+    this.keys = new KeysResource(transport)
   }
 }

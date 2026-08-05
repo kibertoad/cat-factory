@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
@@ -51,16 +52,26 @@ describe('BoardService document-repository task gating', () => {
   it('rejects a feature task under a document repository', async () => {
     const service = build('document')
     await expect(
-      service.addTask(WS, 'frame_docs', { title: 'Ship it', taskType: 'feature' }),
+      service.addTask(
+        WS,
+        'frame_docs',
+        { title: 'Ship it', taskType: 'feature' },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      ),
     ).rejects.toThrow(/document repository only accepts document or spike/i)
   })
 
   it('accepts a document task under a document repository', async () => {
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Write the RFC',
-      taskType: 'document',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.taskType).toBe('document')
   })
 
@@ -68,19 +79,29 @@ describe('BoardService document-repository task gating', () => {
     // A document task starts with the universal style fragments pinned so the `doc-aware`
     // authoring/review kinds fold them in by default; the user can remove them like any pin.
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Write the RFC',
-      taskType: 'document',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual(['style.anti-llmisms', 'style.concise-actionable'])
   })
 
   it('accepts a spike task under a document repository', async () => {
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Investigate',
-      taskType: 'spike',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Investigate',
+        taskType: 'spike',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.taskType).toBe('spike')
     // A non-document task carries no default style pins.
     expect(task.fragmentIds).toBeUndefined()
@@ -90,29 +111,44 @@ describe('BoardService document-repository task gating', () => {
     // The full-build pipeline makes no sense for a document (no code / spec / tests), so a
     // document task with no explicit pipeline is pinned to pl_document at creation.
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Write the RFC',
-      taskType: 'document',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.pipelineId).toBe('pl_document')
   })
 
   it('honours an explicit pipeline pick over the document default', async () => {
     const service = build('document')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Write the RFC',
-      taskType: 'document',
-      pipelineId: 'pl_document_quick',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Write the RFC',
+        taskType: 'document',
+        pipelineId: 'pl_document_quick',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.pipelineId).toBe('pl_document_quick')
   })
 
   it('still accepts a feature task under a normal service frame', async () => {
     const service = build('service')
-    const task = await service.addTask(WS, 'frame_docs', {
-      title: 'Add endpoint',
-      taskType: 'feature',
-    })
+    const task = await service.addTask(
+      WS,
+      'frame_docs',
+      {
+        title: 'Add endpoint',
+        taskType: 'feature',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.taskType).toBe('feature')
     expect(task.fragmentIds).toBeUndefined()
     // A non-document task gets no type-default pipeline (falls through to the run-time picker).

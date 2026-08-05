@@ -4,10 +4,12 @@ import type {
   EnvironmentProvider,
   GitHubInstallation,
   GitHubInstallationRepository,
+  RepoProjectionRepository,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { ContainerEnvConfigRepairer } from '../src/agents/ContainerEnvConfigRepairer.js'
+import type { MintInstallationToken } from '../src/agents/repoTargeting.js'
 import type { ContainerSessionService } from '../src/containers/ContainerSessionService.js'
 
 // The env-config REPAIR agent (PR #416 increment 2), reworked into the durable
@@ -42,9 +44,16 @@ function repairProvider(over: Partial<EnvironmentProvider> = {}): EnvironmentPro
   } as unknown as EnvironmentProvider
 }
 
+/** The workspace's projected repos; `kibertoad/acme` is the one every REQUEST below targets. */
+const PROJECTED_REPOS = [
+  { githubId: 501, owner: 'kibertoad', name: 'acme' },
+  { githubId: 502, owner: 'kibertoad', name: 'other' },
+] as unknown as Awaited<ReturnType<RepoProjectionRepository['list']>>
+
 function makeRepairer(
   transport: RunnerTransport,
   provider: EnvironmentProvider = repairProvider(),
+  over: { projectedRepos?: typeof PROJECTED_REPOS; mint?: MintInstallationToken } = {},
 ): ContainerEnvConfigRepairer {
   const installationRepository = {
     getByWorkspace: vi.fn(async () => INSTALLATION),
@@ -55,7 +64,8 @@ function makeRepairer(
   return new ContainerEnvConfigRepairer({
     resolveTransport: async () => transport,
     installationRepository,
-    mintInstallationToken: vi.fn(async () => 'gh-token'),
+    repoRepository: { list: async () => over.projectedRepos ?? PROJECTED_REPOS },
+    mintInstallationToken: over.mint ?? (async () => 'gh-token'),
     sessionService,
     environmentProvider: provider,
     model: { provider: 'workers-ai', model: '@cf/test' },
@@ -118,12 +128,10 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair maps a running view to a progress update', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'running',
-          progress: { completed: 1, inProgress: 1, total: 3 },
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'running',
+        progress: { completed: 1, inProgress: 1, total: 3 },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -148,12 +156,10 @@ describe('ContainerEnvConfigRepairer', () => {
     // "(container evicted or crashed)" text alone is NOT classified (error-message coverage I5).
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'failed',
-          error: 'container evicted or crashed',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'container evicted or crashed',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -206,12 +212,10 @@ describe('ContainerEnvConfigRepairer', () => {
     // timeout now, so a watchdog-worded error with no cause coarsens to `agent`, not `timeout`.
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'failed',
-          error: 'aborted: no agent activity for too long',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'failed',
+        error: 'aborted: no agent activity for too long',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -223,9 +227,10 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair treats a completed job with a structured error as a failure', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({ state: 'done', result: { error: 'push rejected' } }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -238,13 +243,11 @@ describe('ContainerEnvConfigRepairer', () => {
   it('pollRepair prefers the harness cause on a completed-with-error view (git push fault)', async () => {
     const repairer = makeRepairer({
       dispatch: vi.fn(),
-      poll: vi.fn(
-        async (): Promise<RunnerJobView> => ({
-          state: 'done',
-          result: { error: 'push rejected' },
-          failureCause: 'git',
-        }),
-      ),
+      poll: vi.fn(async (): Promise<RunnerJobView> => ({
+        state: 'done',
+        result: { error: 'push rejected' },
+        failureCause: 'git',
+      })),
       release: vi.fn(),
     } as unknown as RunnerTransport)
 
@@ -282,5 +285,48 @@ describe('ContainerEnvConfigRepairer', () => {
       /does not support agent-based config repair/i,
     )
     expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  // The repair container gets a real clone/push credential, so it is a dispatch under the same
+  // rule as the step executor: the token names the one repo the agent edits, not everything the
+  // installation covers (`backend/docs/security-model.md`, Layer 3).
+  it('scopes the repair token to the target repo, resolved off the workspace projection', async () => {
+    const scopes: (string[] | undefined)[] = []
+    const repairer = makeRepairer(
+      { dispatch: async () => undefined } as unknown as RunnerTransport,
+      repairProvider(),
+      {
+        mint: async (_id, ctx) => {
+          scopes.push(ctx?.repoIds)
+          return 'gh-token'
+        },
+      },
+    )
+
+    await repairer.startRepair(REQUEST)
+
+    // `kibertoad/acme`, not the sibling `kibertoad/other` the same installation also covers.
+    expect(scopes).toEqual([['501']])
+  })
+
+  it('passes an EMPTY scope when the projection has not caught up with the target repo', async () => {
+    const scopes: (string[] | undefined)[] = []
+    const repairer = makeRepairer(
+      { dispatch: async () => undefined } as unknown as RunnerTransport,
+      repairProvider(),
+      {
+        projectedRepos: [] as unknown as typeof PROJECTED_REPOS,
+        mint: async (_id, ctx) => {
+          scopes.push(ctx?.repoIds)
+          return 'gh-token'
+        },
+      },
+    )
+
+    // An empty array, NOT an absent one: the mint reads absent as "an engine call, wide by
+    // design" and empty as "a dispatch that could not resolve its repos", which it widens and
+    // reports. A stale projection row must not silently look like the former.
+    await repairer.startRepair(REQUEST)
+    expect(scopes).toEqual([[]])
   })
 })

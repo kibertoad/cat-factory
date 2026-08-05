@@ -2951,6 +2951,7 @@
         "neverUsed": "nigdy nie użyto",
         "createdBy": "utworzone przez {user}",
         "createdByYou": "Ciebie",
+        "createdByKey": "klucz API {id}",
         "revoke": "Unieważnij token"
       },
       "add": {
@@ -6031,7 +6032,12 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Stosowana, ponieważ to zadanie nie wybiera własnej zasady.",
-      "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję."
+      "noneHint": "Nie skonfigurowano żadnej zasady ryzyka. Każdy pull request czeka na ludzką recenzję.",
+      "refused": {
+        "relaxes_role_sandbox": "Niedostępne dla twojej roli: uruchomienia tego zadania działają w piaskownicy, a ta zasada pozwoliłaby je scalić. Administrator obszaru roboczego może to zmienić.",
+        "relaxes_role_submission_allowlist": "Niedostępne dla twojej roli: ta zasada pozwoliłaby ci scalać rodzaje zmian, których to zadanie ci zabrania. Administrator obszaru roboczego może to zmienić.",
+        "relaxes_role_class_rule": "Niedostępne dla twojej roli: ta zasada automatycznie scala zmiany, które musisz przejrzeć w tym zadaniu. Administrator obszaru roboczego może to zmienić."
+      }
     },
     "preview": {
       "defaultBadge": "Domyślna",

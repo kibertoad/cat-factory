@@ -96,11 +96,31 @@ Read the columns as signals:
   output truncation; the model was cut off mid-answer (raise the output limit or
   shrink the task). `truncatedCalls` in the step metrics counts these.
 - `ok=1` + `finish_reason='tool_calls'` everywhere → the LLM side is healthy; the
-  failure is in tool EXECUTION inside the container (see step 4). The
-  `ProgressGuard` (harness `pi.ts`) counts failing tool calls from Pi's event
-  stream — those tool errors are NOT rows here, only the LLM calls that drove them.
+  failure is in tool EXECUTION inside the container (see step 4). Not in this table,
+  but each failing tool call is its own row in `agent_tool_calls` (`ok=0`), which is
+  where step 4 starts. The `ProgressGuard` (harness `pi.ts`) counts the same failures
+  live off Pi's event stream, which is what aborts the run.
 
 ## Step 4 — read the actual tool-call loop (the root cause)
+
+Read the trajectory first. `agent_tool_calls` (same telemetry DB) holds one row per tool
+invocation, so a stuck loop or a failing edit is visible without reconstructing it from
+prompt deltas:
+
+```sql
+SELECT seq, tool, ok, datetime(started_at/1000,'unixepoch') AS t,
+       substr(args,1,200) AS args, substr(result,1,300) AS result
+FROM agent_tool_calls
+WHERE execution_id='<run id>'
+ORDER BY started_at ASC, seq ASC;
+```
+
+Order by `(started_at, seq)`, never by `job_id` (a string that sorts a run's dispatches by
+agent-kind spelling) and never by `seq` alone (it restarts at zero on each dispatch). Add
+`AND job_id='<job id>'` to read one dispatch. `bodies='withheld'` means the workspace or
+deployment opted out of body capture, so an empty `args` says nothing about the call; a run
+whose image predates the sink has no rows at all, and the deltas below are then the only
+account.
 
 `prompt_text` is stored as a DELTA vs the previous call (migration 0027), so each
 call's `prompt_text` contains the new assistant message(s) plus the tool RESULT

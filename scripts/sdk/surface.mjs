@@ -88,6 +88,23 @@ const SURFACE = {
   requestPublicRunHumanTestFix: { group: 'decisions', method: 'requestHumanTestFix' },
   approvePublicRunVisualConfirm: { group: 'decisions', method: 'approveVisualConfirmation' },
   requestPublicRunVisualConfirmFix: { group: 'decisions', method: 'requestVisualConfirmationFix' },
+  filePublicRunFollowUp: { group: 'decisions', method: 'fileFollowUp' },
+  sendBackPublicRunFollowUp: { group: 'decisions', method: 'sendBackFollowUp' },
+  answerPublicRunFollowUp: { group: 'decisions', method: 'answerFollowUp' },
+  dismissPublicRunFollowUp: { group: 'decisions', method: 'dismissFollowUp' },
+  answerPublicRunInterview: { group: 'decisions', method: 'answerInterviewQuestion' },
+  continuePublicRunInterview: { group: 'decisions', method: 'continueInterview' },
+  proceedPublicRunInterview: { group: 'decisions', method: 'proceedInterview' },
+
+  // ---- Run evidence (`read` scope; what a run PROVED, for a consumer that has to judge it) --
+  getPublicRunReport: { group: 'evidence', method: 'getReport' },
+  listPublicRunArtifacts: { group: 'evidence', method: 'listArtifacts' },
+  getPublicArtifactBlob: { group: 'evidence', method: 'downloadArtifact' },
+
+  // ---- Headless key provisioning (`admin` scope) ------------------------------------------
+  listPublicKeys: { group: 'keys', method: 'list' },
+  createPublicKey: { group: 'keys', method: 'create' },
+  revokePublicKey: { group: 'keys', method: 'revoke' },
 
   // ---- Run diagnostics (`read` scope; the surface an operator or an LLM debugs a run with) -
   listDebugRuns: { group: 'debug', method: 'listRuns', paginates: 'runs' },
@@ -116,6 +133,10 @@ const SURFACE = {
  * absence reads as an oversight and a caller writes it off as unsupported.
  */
 export const MCP_OMITTED_OPERATIONS = {
+  getPublicArtifactBlob:
+    'A tool result is text or a declared content block, not an arbitrary byte stream, so an ' +
+    'image download has no honest shape here. Call `evidence_list_artifacts` for the ids, sizes ' +
+    'and content types, and fetch the bytes over HTTP (or through an SDK) with the same key.',
   streamPublicJobEvents:
     'A tool call returns one result, so it has no channel to stream an open-ended event feed ' +
     'over. Poll `jobs_get` instead, or consume the SSE endpoint through an SDK.',
@@ -173,9 +194,12 @@ export const GROUP_DOCS = {
     "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
   decisions:
-    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings and the human-verdict gates.',
+    'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
     "A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs.",
+  evidence:
+    "What a run proved: the engine's verification report and the artifacts it captured, bytes included.",
+  keys: "The workspace's own API keys: provision one headlessly, list them, revoke one (and what it minted).",
 }
 
 /** The resource groups in emission order. */

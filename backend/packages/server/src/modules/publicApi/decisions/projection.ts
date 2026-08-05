@@ -4,13 +4,19 @@ import {
   CLARITY_REVIEW_AGENT_KIND,
   REQUIREMENTS_BRAINSTORM_AGENT_KIND,
 } from '@cat-factory/agents'
-import { dedicatedParkSurface } from '@cat-factory/orchestration'
+import {
+  dedicatedParkSurface,
+  findParkedInterviewStep,
+  followUpLoopBudget,
+} from '@cat-factory/orchestration'
+import type { InterviewView } from '@cat-factory/orchestration'
 import type {
   BrainstormSession,
   BrainstormStage,
   ClarityReview,
   Decision,
   ExecutionInstance,
+  FollowUpsStepState,
   ForkDecisionStepState,
   HumanTestStepState,
   JudgeStepState,
@@ -366,6 +372,72 @@ function unclassifiedPhase(_phase: never): boolean {
 }
 
 /**
+ * Project a step's FOLLOW-UP TRIAGE state: every item the Coder surfaced, decided ones included.
+ *
+ * The whole list rather than only the `pending` ones, because a caller triaging item by item has
+ * to see what it already decided (and what a filed item became) to know what is left, and the
+ * list is bounded by what one Coder pass streamed.
+ *
+ * The send-back budget comes from the engine's own {@link followUpLoopBudget} rather than being
+ * re-defaulted here: a caller reads these two numbers to decide whether a `send-back` will actually
+ * re-run the Coder, so reporting a ceiling the gate would not honour is worse than reporting none.
+ */
+export function toFollowUpsDecision(
+  step: PipelineStep,
+  stepIndex: number,
+  state: FollowUpsStepState,
+): PublicDecision {
+  return {
+    kind: 'follow-ups',
+    stepKind: step.agentKind,
+    stepIndex,
+    items: state.items.map((item) => ({
+      itemId: item.id,
+      kind: item.kind,
+      title: item.title,
+      detail: item.detail,
+      suggestedAction: item.suggestedAction ?? null,
+      status: item.status,
+      answer: item.answer ?? null,
+      ticketExternalId: item.ticketExternalId ?? null,
+      ticketUrl: item.ticketUrl ?? null,
+    })),
+    ...followUpLoopBudget(state),
+  }
+}
+
+/**
+ * Whether a step's follow-up companion is asking anything. Narrower than the other predicates
+ * here, and for the opposite reason: this park accrues LIVE, so the items exist long before the
+ * run stops and long after it moves on. Only a `pending` item is a question; the rest are the
+ * caller's own decisions, projected so it can see them, not asked again.
+ */
+function isLiveFollowUps(state: FollowUpsStepState): boolean {
+  return state.enabled && state.items.some((item) => item.status === 'pending')
+}
+
+/** Project a parked INTERVIEW gate: which interviewer is asking, and the exchanges so far. */
+export function toInterviewDecision(
+  stepKind: string,
+  blockId: string,
+  view: InterviewView,
+): PublicDecision {
+  return {
+    kind: 'interview',
+    stepKind,
+    taskId: blockId,
+    round: view.round,
+    maxRounds: view.maxRounds,
+    questions: view.questions.map((q) => ({
+      questionId: q.id,
+      question: q.question,
+      answer: q.answer,
+      status: q.status,
+    })),
+  }
+}
+
+/**
  * Project the PRE-DISPATCH INPUT GATE's verdict for an external caller. The issue CODES are the same
  * closed vocabulary the SPA renders, so an integration maps them to its own copy (or hands them to
  * whoever filed the ticket) rather than parsing our prose.
@@ -419,13 +491,15 @@ export async function buildDecisionList<E extends AppEnv>(
   // are issued together: this projection is on the poll path AND rebuilt after every answer, and
   // awaiting them in sequence made its latency the sum of every park kind a run could carry rather
   // than the slowest one. The concatenation order below is still deterministic.
-  const [dialogue, fork] = await Promise.all([
+  const [dialogue, fork, interview] = await Promise.all([
     liveDialogueDecisions(c, workspaceId, scoped.blockId, execution),
     liveForkDecisions(c, workspaceId, execution),
+    liveInterviewDecisions(c, workspaceId, scoped.blockId, execution),
   ])
   const decisions: PublicDecision[] = [
     ...dialogue,
     ...fork,
+    ...interview,
     ...liveStepDecisions(execution, container.agentKindRegistry),
   ]
 
@@ -516,6 +590,34 @@ function liveBrainstormStages(kinds: Set<string>): BrainstormStage[] {
   return stages
 }
 
+/**
+ * The run's INTERVIEW park, if it has one. The questions live on the gate's own entity (an
+ * initiative row, a document-interview session) rather than on the step, so this costs a read,
+ * gated on the run actually being PARKED on an interview step, which is stricter than the
+ * step-chain gating the dialogue reads use and can be, because there is no off-path interview to
+ * serve: an interview exists only while its gate holds the run.
+ *
+ * A parked step whose gate this deployment never wired resolves to no controller and is reported
+ * as nothing to answer, which is the truth: the run is stopped on a gate that cannot be driven
+ * here. The routes answer such a caller with a 503 naming the unwired interviewer, rather than
+ * this projection inventing a decision for it.
+ */
+async function liveInterviewDecisions<E extends AppEnv>(
+  c: Context<E>,
+  workspaceId: string,
+  blockId: string,
+  execution: ExecutionInstance,
+): Promise<PublicDecision[]> {
+  const container = c.get('container')
+  const parked = findParkedInterviewStep(execution, container.agentKindRegistry)
+  if (!parked) return []
+  const gate = container.executionService.interviewGateFor(parked.step.agentKind)
+  const view = await gate?.getView(workspaceId, blockId)
+  return view && view.status === 'awaiting'
+    ? [toInterviewDecision(parked.step.agentKind, blockId, view)]
+    : []
+}
+
 /** The run's implementation-fork park, which the engine stores behind its own service read. */
 async function liveForkDecisions<E extends AppEnv>(
   c: Context<E>,
@@ -559,6 +661,9 @@ function liveStepDecisions(
     }
     if (step.visualConfirm && isLiveVisualConfirm(step.visualConfirm)) {
       decisions.push(toVisualConfirmDecision(step.visualConfirm))
+    }
+    if (step.followUps && isLiveFollowUps(step.followUps)) {
+      decisions.push(toFollowUpsDecision(step, index, step.followUps))
     }
   })
   return decisions

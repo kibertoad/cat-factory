@@ -222,7 +222,7 @@ export class SqliteTelemetryIngestReader implements LocalTelemetryIngestReader {
   ): AgentToolCall[] {
     // Walked on the `(created_at, id)` keyset like every other sink, NOT in trajectory order:
     // the upload only has to move each row exactly once, and the mothership re-derives the
-    // trajectory from the `(job_id, seq)` the rows carry.
+    // trajectory from the `(started_at, seq)` the rows carry.
     return this.page<ToolCallRow>('agent_tool_calls', workspaceId, executionId, cursor, limit).map(
       rowToToolCall,
     )

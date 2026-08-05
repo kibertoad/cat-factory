@@ -28,6 +28,7 @@ function publicApiKeyToWire(record: PublicApiKeyRecord): PublicApiKey {
     label: record.label,
     scope: record.scope,
     createdByUserId: record.createdByUserId,
+    createdByKeyId: record.createdByKeyId,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
@@ -67,6 +68,8 @@ export function publicApiKeyController(): Hono<AppEnv> {
     const { label, scope } = c.req.valid('json')
     // Attribute the mint to the acting user (audit + UI); `null` in dev-open (no session).
     const createdByUserId = c.get('user')?.id ?? null
+    // No `createdByKeyId`: a person minted this one. That field is what marks a key provisioned
+    // through `POST /api/v1/keys`, and it is also the link the revocation cascade follows.
     const { record, secret } = await publicApiKeys.issue(
       { accountId, workspaceId, createdByUserId },
       label,
@@ -75,6 +78,8 @@ export function publicApiKeyController(): Hono<AppEnv> {
     return c.json({ key: publicApiKeyToWire(record), secret }, 201)
   })
 
+  // Revoking also revokes every key this one minted headlessly (`PublicApiKeyService.revoke`),
+  // so an operator killing a compromised credential in the app does not leave its offspring live.
   buildHonoRoute(app, revokePublicApiKeyContract, async (c) => {
     const publicApiKeys = requirePublicApiKeys(c)
     await publicApiKeys.revoke(param(c, 'workspaceId'), c.req.valid('param').id)

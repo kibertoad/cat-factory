@@ -699,9 +699,11 @@ function emitMethod(operation) {
 
   const returns = operation.stream
     ? 'EventStream'
-    : operation.result
-      ? javaType(operation.result)
-      : 'void'
+    : operation.binary
+      ? 'byte[]'
+      : operation.result
+        ? javaType(operation.result)
+        : 'void'
   const argsForTransport = [
     lit(operation.httpMethod),
     pathExpression(operation),
@@ -711,9 +713,11 @@ function emitMethod(operation) {
 
   const call = operation.stream
     ? `        return transport.stream(${argsForTransport.slice(0, 2).join(', ')}, ${argsForTransport[3]});\n`
-    : operation.result
-      ? `        return transport.request(${argsForTransport.join(', ')}, ${typeReference(operation.result)});\n`
-      : `        transport.requestNoContent(${argsForTransport.join(', ')});\n`
+    : operation.binary
+      ? `        return transport.requestBytes(${argsForTransport.join(', ')});\n`
+      : operation.result
+        ? `        return transport.request(${argsForTransport.join(', ')}, ${typeReference(operation.result)});\n`
+        : `        transport.requestNoContent(${argsForTransport.join(', ')});\n`
 
   const overload =
     query && operation.pathParams.length >= 0
