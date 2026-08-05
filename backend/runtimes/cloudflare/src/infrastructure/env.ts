@@ -406,6 +406,29 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_SECRET?: string
   /** Explicit Google redirect_uri; derived from the request origin when unset. */
   GOOGLE_OAUTH_REDIRECT_URL?: string
+  // ---- Enterprise SSO (generic OIDC) --------------------------------------
+  // One adapter for every enterprise identity provider: the issuer's own discovery document
+  // supplies the endpoints, so Okta / Entra ID / Auth0 / Keycloak / PingFederate / a Shibboleth
+  // OP are configuration rather than code. All three of the first group are required together —
+  // a partial set REFUSES to boot rather than silently leaving the deployment on consumer
+  // logins. Parsing and validation live in `@cat-factory/server`'s `resolveSsoConfig`, which the
+  // Node facade calls too, so the two runtimes cannot drift on admission policy.
+  /** The provider's issuer URL, e.g. `https://acme.okta.com/oauth2/default`. */
+  AUTH_SSO_ISSUER_URL?: string
+  AUTH_SSO_CLIENT_ID?: string
+  AUTH_SSO_CLIENT_SECRET?: string
+  /** Sign-in button label; names the operator's IdP, so it is never localized. */
+  AUTH_SSO_LABEL?: string
+  /** Space-separated scopes; `openid` is added when absent. Default `openid profile email`. */
+  AUTH_SSO_SCOPES?: string
+  /** Explicit redirect_uri; derived from the request origin when unset. */
+  AUTH_SSO_REDIRECT_URL?: string
+  /** Optional narrowing: only these email domains may sign in via SSO. */
+  AUTH_SSO_ALLOWED_EMAIL_DOMAINS?: string
+  /** The claim group memberships arrive under (`groups` by default). */
+  AUTH_SSO_GROUPS_CLAIM?: string
+  /** Optional narrowing: the user must be in at least one of these directory groups. */
+  AUTH_SSO_REQUIRED_GROUPS?: string
   /** Optional dedicated master key for the per-account email API key (falls back to ENCRYPTION_KEY). */
   EMAIL_ENCRYPTION_KEY?: string
   /** Deployment-level system sender for auth emails (password reset): provider/from/key. */

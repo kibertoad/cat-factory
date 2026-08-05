@@ -120,7 +120,7 @@ export const ENV_HELP = {
     summary:
       'A remote deployment has no anonymous tier, so at least one login provider must be configured or every protected route fails closed.',
     remedy:
-      'Enable one of: GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth (GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login (AUTH_PASSWORD_ENABLED=true) — each alongside a 32+ character AUTH_SESSION_SECRET. For local dev or tests, set AUTH_DEV_OPEN=true in a non-production ENVIRONMENT instead.',
+      'Enable one of: enterprise SSO (AUTH_SSO_ISSUER_URL + AUTH_SSO_CLIENT_ID + AUTH_SSO_CLIENT_SECRET — one generic OIDC adapter serving Okta, Entra ID, Auth0, Keycloak, PingFederate and the like), GitHub OAuth (GITHUB_OAUTH_CLIENT_ID + GITHUB_OAUTH_CLIENT_SECRET), Google OAuth (GOOGLE_OAUTH_CLIENT_ID + GOOGLE_OAUTH_CLIENT_SECRET), or password login (AUTH_PASSWORD_ENABLED=true) — each alongside a 32+ character AUTH_SESSION_SECRET. For local dev or tests, set AUTH_DEV_OPEN=true in a non-production ENVIRONMENT instead.',
     docsUrl: DOCS.envVars(ENV_VARS_ANCHORS.authentication),
   },
   DB: {

@@ -67,11 +67,13 @@ const API_PREFIX = '/api/v1'
 // as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
 // only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
 // that clean merge.
-// 1.14.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
-// written against a main that was still on 1.11.0. Main has since reached 1.13.0 twice over, so
-// this takes the next free number. The third collision in as many releases, which is why the note
-// at the top of this block says to re-check rather than trust a clean merge.
-const API_VERSION = '1.14.0'
+// 1.15.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
+// written against a main that was still on 1.11.0. The number has now moved three times under this
+// branch: main published 1.12.0 for `configUnreadable`, 1.13.0 for the run-debugging surface, and
+// 1.14.0 for the per-judge model pin, which is the sibling branch an earlier note here predicted
+// would collide. Re-checked against `origin/main` on every merge, which is the only reason this
+// line is right; a clean auto-merge of it has never once meant agreement.
+const API_VERSION = '1.15.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

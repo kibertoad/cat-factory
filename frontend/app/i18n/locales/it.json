@@ -3675,9 +3675,25 @@
       "signInFailed": "Accesso non riuscito. Controlla i tuoi dati e riprova.",
       "genericError": "Qualcosa è andato storto. Riprova.",
       "notConfiguredTitle": "L'autenticazione non è configurata",
-      "notConfiguredBody": "Questo deployment non ha alcun metodo di accesso abilitato, quindi non puoi accedere o utilizzare i tuoi workspace. Un amministratore deve configurare un provider di autenticazione (OAuth GitHub o Google, oppure accesso con email e password).",
+      "notConfiguredBody": "Questo deployment non ha alcun metodo di accesso abilitato, quindi non puoi accedere o utilizzare i tuoi workspace. Un amministratore deve configurare un provider di autenticazione (accesso unico tramite il provider di identità della tua organizzazione, OAuth GitHub o Google, oppure accesso con email e password).",
       "patPlaceholder": "personal access token {provider}",
       "signInWithPat": "Accedi con il PAT {provider}"
+    },
+    "sso": {
+      "continueWith": "Continua con {provider}",
+      "failedTitle": "L'accesso unico non è stato completato",
+      "errors": {
+        "stateInvalid": "Questo tentativo di accesso è scaduto o è già stato usato. Riprova da questa pagina.",
+        "providerDenied": "Il tuo provider di identità ha rifiutato l'accesso. Se non l'hai annullato tu, chiedi al team IT se questa applicazione ti è stata assegnata.",
+        "exchangeFailed": "Questo deployment non ha potuto completare lo scambio con il tuo provider di identità. Un amministratore deve verificare il client secret e l'URL di reindirizzamento dell'accesso unico.",
+        "tokenInvalid": "Non è stato possibile verificare la risposta del tuo provider di identità. Un amministratore deve controllare la configurazione dell'accesso unico di questo deployment.",
+        "subjectMissing": "Il tuo provider di identità non ha restituito un identificatore utente, quindi non è stato possibile risolvere alcun account. Un amministratore deve controllare quali claim vengono esposti.",
+        "groupRequired": "L'accesso è riuscito, ma non appartieni a nessun gruppo della directory autorizzato a usare questo deployment. Chiedi al team IT di aggiungerti.",
+        "domainNotAllowed": "Il tuo dominio email non è autorizzato ad accedere a questo deployment. Chiedi al team IT quale account usare.",
+        "emailRequired": "Questo deployment limita l'accesso per dominio email, ma il tuo provider di identità non ha esposto un indirizzo email verificato. Un amministratore deve abilitare il claim email.",
+        "providerUnreachable": "Il tuo provider di identità non ha risposto durante il completamento dell'accesso, quindi potrebbe non essere raggiungibile. Riprova tra un momento e avvisa un amministratore se il problema persiste.",
+        "unknown": "L'accesso unico è fallito per un motivo che questa versione non riconosce. Riprova e avvisa un amministratore se il problema persiste."
+      }
     },
     "resetPassword": {
       "title": "Reimposta password",

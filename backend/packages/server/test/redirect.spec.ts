@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pickPostLoginRedirect } from '../src/modules/auth/AuthController.js'
+import { pickPostLoginRedirect } from '../src/modules/auth/loginFlow.js'
 
 // pickPostLoginRedirect guards a token-exfiltration primitive: the session token is
 // appended to the landing URL as a fragment, so an open redirect would hand a victim's

@@ -708,6 +708,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
           <div
             v-if="incorporated"
             class="mb-4 flex items-center gap-2 rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-4 text-sm text-emerald-300"
+            data-testid="requirements-settled"
           >
             <UIcon name="i-lucide-circle-check" class="h-5 w-5 shrink-0" />
             {{ t('requirements.settled') }}
@@ -760,6 +761,9 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               <div
                 class="rounded-lg border border-slate-800 bg-slate-900/60 p-3"
                 :class="{ 'opacity-60': item.status === 'dismissed' }"
+                data-testid="requirements-finding"
+                :data-finding-status="item.status"
+                :data-finding-severity="item.severity"
               >
                 <div class="flex items-start gap-2">
                   <UIcon
@@ -831,6 +835,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           size="xs"
                           :icon="opt.icon"
                           :disabled="frozen"
+                          :data-testid="`requirements-mode-${opt.mode}`"
                           @click="setMode(item, opt.mode)"
                         >
                           {{ t(opt.labelKey) }}
@@ -881,6 +886,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
                           class="mt-2 w-full"
                           :placeholder="t('requirements.answerPlaceholder')"
                           :disabled="frozen"
+                          data-testid="requirements-answer"
                           @blur="persistDraft(item)"
                         />
                         <p
@@ -1170,6 +1176,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               :loading="acting"
               :disabled="!access.canExecuteRuns.value"
               :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              data-testid="requirements-proceed"
               @click="proceed"
             >
               {{ t('requirements.actions.proceedNothing') }}
@@ -1183,6 +1190,7 @@ async function resolveExceeded(choice: 'extra-round' | 'proceed' | 'stop-reset')
               :loading="reworking"
               :disabled="!canIncorporate || !access.canExecuteRuns.value"
               :title="access.canExecuteRuns.value ? undefined : t('access.noRunExecute')"
+              data-testid="requirements-incorporate"
               @click="incorporate()"
             >
               {{ t('requirements.actions.incorporateAnswers') }}
