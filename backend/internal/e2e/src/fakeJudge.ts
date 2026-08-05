@@ -20,6 +20,7 @@
 // `presentation.resultView: 'judge'` (see `WorkspaceController.snapshotCustomAgentKinds`), so the
 // judge window opens on a parked step with no frontend wiring at all — which is exactly what
 // `judge-gate.spec.ts` drives.
+import { DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
 import { registerExampleScopeJudge } from '@cat-factory/example-custom-agent'
 import type { buildNodeContainer } from '@cat-factory/node-server'
 import type { FakeProfileRegistry, WorkspaceScopedFakes } from './fakeProfile.ts'
@@ -46,6 +47,13 @@ const PASSING = [1]
  * The per-workspace round counter is what makes a bounce loop assertable (`[0.4, 0.9]` = fail then
  * pass), so it is keyed by workspace and reset by a profile write, exactly like the gate providers'
  * verdict sequences.
+ *
+ * That key is the WORKSPACE, which is the grain to know before writing a spec against it: every
+ * judge assessment in a workspace draws from the one queue, so two concurrent runs (or two judge
+ * steps in one pipeline) interleave, and a retried assessment consumes an entry. A spec that needs
+ * a specific verdict per round therefore drives ONE run per workspace, and does not read the
+ * ORDER of the queue as evidence of a bounce: `judge-gate.spec.ts` asserts the bounce on the
+ * round history the engine itself recorded.
  */
 export class E2eJudgeAssessor implements WorkspaceScopedFakes {
   private readonly rounds = new Map<string, number>()
@@ -77,6 +85,14 @@ export class E2eJudgeAssessor implements WorkspaceScopedFakes {
  * The raw verdict for one score, in the canonical `{ score, summary, findings }` shape the
  * example judge's schema extends. Returned RAW (not parsed): the engine parses it with the
  * registration's own parser, which is half of what registering the real example covers.
+ *
+ * Findings ride a FAILING verdict only, and "failing" is the engine's own bar
+ * ({@link DEFAULT_JUDGE_MIN_SCORE}, what the default preset gives every spec here) rather than a
+ * literal: a verdict that CLEARED the rubric but still complains about the work is a thing no real
+ * assessor produces, and a spec asserting on the findings of a passing round would be asserting on
+ * a fake's quirk. Derived rather than restated, so raising the default bar cannot leave this behind.
+ * The one case it does not track is a task on a preset that overrides `judgeMinScore`; no spec does,
+ * and one that did would script its scores against its own preset anyway.
  */
 export function verdictFor(score: number): {
   score: number
@@ -87,7 +103,7 @@ export function verdictFor(score: number): {
     score,
     summary: `Scope adherence scored ${score.toFixed(2)} by the e2e fake assessor.`,
     findings:
-      score < 1
+      score < DEFAULT_JUDGE_MIN_SCORE
         ? [
             {
               title: 'Out-of-scope change',

@@ -50,16 +50,21 @@ export interface FakeProfile {
   initiativePlan?: unknown
 
   // ---- Inline-LLM scripts (consumed by `E2eInlineModels`, NOT the agent executor: the
-  // requirements-review loop's three calls run inline through the `ModelProvider` port). ----
+  // requirements-review loop's calls run inline through the `ModelProvider` port). ----
   /**
    * The findings the requirements REVIEWER raises on its first pass, in the wire shape
    * `coerceReviewItems` reads. Absent / empty ⇒ the reviewer finds nothing and the gate
    * auto-passes, which is the base behaviour every other spec relies on. The re-review always
    * converges, so a scripted set drives exactly one park → answer → incorporate → settle loop.
    *
-   * Keep `autoAnswerable` false (the default) unless the spec is about the auto-recommendation
-   * automation: a `true` finding makes the engine fire the Requirement Writer over it, which is
-   * a second inline call and a second thing for the spec to wait on.
+   * Leave `autoAnswerable` false (the default). A `true` finding makes the engine fire the
+   * Requirement Writer over it, which is a second inline call and a second thing for the spec to
+   * wait on, and the fake RECOMMENDS NOTHING (`inlineReplyFor` answers that call with an empty
+   * recommendation set, because a synthesized product recommendation would be indistinguishable
+   * from a real one in the window). So the finding comes back still `open`, which is a real product
+   * state but not the automation. A spec about the auto-recommendation needs a script field here
+   * first; the call itself is already classified, so it reads as the recommendation it is rather
+   * than as an interview.
    */
   reviewFindings?: {
     title: string

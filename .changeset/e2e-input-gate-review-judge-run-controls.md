@@ -38,4 +38,6 @@ arrives through the workspace capability manifest with `resultView: 'judge'`.
 The only product change is test hooks: `data-testid`s on the board card's Start button, the
 input-gate finding rows (with the finding CODE as an attribute, so a spec asserts which input was
 named rather than that some box appeared), the requirements-review window's findings / answer box /
-rail actions, and the add-task modal's description field.
+rail actions, the add-task modal's description field, the inspector's step-open button, and the judge
+window's round-history rows (carrying each round's DISPOSITION, so a bounce is asserted on the
+engine's own record of it rather than inferred from the run having finished).

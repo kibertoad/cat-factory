@@ -18,10 +18,10 @@
     "@cat-factory/conformance": "workspace:*",
     "@cat-factory/contracts": "workspace:*",
     "@cat-factory/example-custom-agent": "workspace:*",
-    "@cat-factory/node-server": "workspace:*",
-    "@cat-factory/orchestration": "workspace:*"
+    "@cat-factory/node-server": "workspace:*"
   },
   "devDependencies": {
+    "@cat-factory/orchestration": "workspace:*",
     "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.2",
     "ai": "^7.0.51",

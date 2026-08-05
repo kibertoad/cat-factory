@@ -4,8 +4,8 @@ import { classifyInlineCall, inlineReplyFor, type InlineCallKind } from './fakeI
 import { FakeProfileRegistry } from './fakeProfile.ts'
 
 // The inline-LLM fake answers each call by the SHAPE OF ITS PROMPT, because that is the only thing
-// an inline call carries that says which of the requirements loop's three LLM steps it is. That
-// makes the markers a copy of production strings, and a copy is a thing that rots.
+// an inline call carries that says which step of the requirements loop it is. That makes the markers
+// a copy of production strings, and a copy is a thing that rots.
 //
 // It rots SILENTLY and in the worst possible direction: an unmatched prompt falls through to the
 // interview answer, whose JSON carries no `items`, so a drifted marker turns the requirements
@@ -14,27 +14,42 @@ import { FakeProfileRegistry } from './fakeProfile.ts'
 //
 // So these classify prompts built by the REAL builders (`requirementsLogic`, the same module the
 // engine calls) rather than by hand-written strings, which would only ever pin the fake to itself.
+// The contexts below are typed as the REAL `RequirementsContext` with no cast, so a new required
+// field on it fails this lane instead of quietly rendering a prompt production never sends.
 
-/** The reviewer's context for a FIRST pass: no incorporated document yet. */
-function firstPassContext(): Parameters<typeof requirementsLogic.buildReviewPrompt>[0] {
+/**
+ * The reviewer's context for a FIRST pass: no incorporated document yet.
+ *
+ * `type` is a real `Block['type']` member, which the typed context is how we know: the hand-written
+ * `'feature'` this started as is not one, so the prompt it rendered was a shape production cannot
+ * produce, and the cast that allowed it hid exactly that.
+ */
+function firstPassContext(): requirementsLogic.RequirementsContext {
   return {
-    block: { title: 'Password reset', type: 'feature', description: 'Let a user reset it.' },
+    block: { title: 'Password reset', type: 'service', description: 'Let a user reset it.' },
     docs: [],
     tasks: [],
-  } as unknown as Parameters<typeof requirementsLogic.buildReviewPrompt>[0]
+  }
 }
 
 /** The same context once an incorporation has produced a standardized document. */
-function laterPassContext(): Parameters<typeof requirementsLogic.buildReviewPrompt>[0] {
+function laterPassContext(): requirementsLogic.RequirementsContext {
   return {
     ...firstPassContext(),
     incorporatedDoc: '## Goal\n\nLet a user reset their own password.',
-  } as unknown as Parameters<typeof requirementsLogic.buildReviewPrompt>[0]
+  }
 }
 
-/** Classify a prompt the way the fake does — through the AI-SDK message shape it really sees. */
+/**
+ * Classify a prompt the way the fake does: through the AI-SDK message shape it really sees. The
+ * `text` key is the shape, not decoration. The fake searches the stringified prompt, so a part
+ * spelled any other way would still match today and would stop matching the moment the fake
+ * narrowed to reading text parts, leaving this guard passing against a shape nothing sends.
+ */
 function classifyAsSent(prompt: string): InlineCallKind {
-  return classifyInlineCall(JSON.stringify([{ role: 'user', content: [{ type: 'text', prompt }] }]))
+  return classifyInlineCall(
+    JSON.stringify([{ role: 'user', content: [{ type: 'text', text: prompt }] }]),
+  )
 }
 
 describe('classifyInlineCall', () => {
@@ -59,6 +74,27 @@ describe('classifyInlineCall', () => {
       expect(classifyAsSent(requirementsLogic.buildReworkPrompt(ctx, []))).toBe(
         'requirements-incorporate',
       )
+    }
+  })
+
+  it('reads the Requirement Writer prompt as the recommendation, not as an interview', () => {
+    // The fourth call this flow can make, and the one that used to land on the catch-all: it embeds
+    // the same rendered requirements block as the review prompt but carries neither instruction
+    // marker, so nothing distinguished it. Unnamed, it answered with interview JSON, which
+    // `coerceRecommendations` reads as zero suggestions: a recommendation step that silently did
+    // nothing. Driven with `laterPassContext` too, because that one embeds the incorporated-document
+    // marker and so is the shape that could be mistaken for a re-review.
+    for (const ctx of [firstPassContext(), laterPassContext()]) {
+      const prompt = requirementsLogic.buildRecommendationPrompt(
+        ctx,
+        requirementsLogic.coerceReviewItems(
+          { items: [{ title: 'Who may reset?', detail: 'Not stated.', autoAnswerable: true }] },
+          () => 'item_1',
+          0,
+        ),
+        { fragments: [], specExcerpts: [], webResults: [] },
+      )
+      expect(classifyAsSent(prompt)).toBe('requirements-recommend')
     }
   })
 
@@ -102,6 +138,16 @@ describe('inlineReplyFor', () => {
     ).toBe('## Goal')
     // A default is still a real document: an empty reply is REFUSED by the incorporation path.
     expect(inlineReplyFor('requirements-incorporate', {}).trim().length).toBeGreaterThan(0)
+  })
+
+  it('recommends nothing, in the shape the Writer path reads as "no suggestion"', () => {
+    // Deliberately empty rather than invented: a synthesized recommendation is indistinguishable
+    // from a real one in the window. What matters is that it parses as an empty RECOMMENDATION set
+    // (leaving the finding open for the human) rather than as unparseable noise.
+    const parsed = requirementsLogic.coerceRecommendations(
+      JSON.parse(inlineReplyFor('requirements-recommend', {})),
+    )
+    expect(parsed.size).toBe(0)
   })
 })
 

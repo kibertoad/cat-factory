@@ -8,11 +8,12 @@
 //
 // It is injected via `buildNodeContainer`'s `overrides.modelProviderResolver` and answers each
 // call by the SHAPE OF THE PROMPT it was handed (see {@link classifyInlineCall}), because that
-// is the only thing an inline call carries that says which of the flow's three LLM steps it is.
+// is the only thing an inline call carries that says which step of a flow it belongs to.
 // The engine builds those prompts, so the markers below are quotes of production strings:
-// `requirements.logic.ts` (`buildReviewPrompt` / `buildReworkPrompt` / `renderRequirements`).
-// Changing one of those lines is what `fakeInlineModel.test.ts` pins, so a marker cannot rot
-// silently into "every call is an interview" (which reads as a reviewer that found nothing).
+// `requirements.logic.ts` (`buildReviewPrompt` / `buildReworkPrompt` / `buildRecommendationPrompt`
+// / `renderRequirements`). Changing one of those lines is what `fakeInlineModel.test.ts` pins, so a
+// marker cannot rot silently into "every call is an interview" (which reads as a reviewer that
+// found nothing).
 //
 // WHAT it answers with is per-workspace, resolved from the same `FakeProfile` registry the fake
 // agent and the gate providers read (`forScope` carries the `workspaceId`). A workspace with no
@@ -41,6 +42,7 @@ export type InlineCallKind =
   | 'requirements-review'
   | 'requirements-re-review'
   | 'requirements-incorporate'
+  | 'requirements-recommend'
   | 'interview'
 
 /**
@@ -51,18 +53,32 @@ export type InlineCallKind =
  * a re-review renders the incorporated document inside the review prompt, and a second
  * incorporation renders it inside the rework prompt. Testing the most specific call first is
  * what keeps "fold the answers in" from being read as "review this again".
+ *
+ * {@link RECOMMEND_MARKER} is the one that collides with nothing (it carries neither the review nor
+ * the rework instruction), and it is tested early anyway: the thing that makes it identifiable is
+ * its own opening line, so reading it before the marker COMBINATIONS keeps the ordering rule one
+ * rule rather than two.
  */
 const INCORPORATE_MARKER = 'Rewrite the requirements as a single self-contained Markdown document'
 const INCORPORATED_DOC_MARKER = 'Current standardized requirements (under review)'
 const REVIEW_MARKER = 'Here are the collected requirements to review:'
+const RECOMMEND_MARKER = 'Recommend an answer for each of these requirements-review findings:'
 
 /**
  * Classify one inline call from its prompt text. Pure, and exported so the browser-free vitest
- * lane can pin it against the production prompt builders' own strings: a drifted marker degrades
- * to `interview`, which a spec would only ever see as a reviewer that mysteriously found nothing.
+ * lane can pin it against the production prompt builders' own strings.
+ *
+ * `interview` is the catch-all, and it is the reason every call this flow actually MAKES is named
+ * here even when no spec drives it. An unmatched prompt answers with the interview decision, whose
+ * JSON carries neither `items` nor `recommendations`, so a drifted marker reads downstream as a
+ * step that ran and found nothing rather than as a fake that failed to recognise its caller. The
+ * Requirement Writer (`buildRecommendationPrompt`) is the fourth call the requirements loop can
+ * make: it embeds the same rendered requirements block but neither instruction marker, so before it
+ * was named it landed on that catch-all.
  */
 export function classifyInlineCall(prompt: string): InlineCallKind {
   if (prompt.includes(INCORPORATE_MARKER)) return 'requirements-incorporate'
+  if (prompt.includes(RECOMMEND_MARKER)) return 'requirements-recommend'
   if (prompt.includes(INCORPORATED_DOC_MARKER) && prompt.includes(REVIEW_MARKER)) {
     return 'requirements-re-review'
   }
@@ -108,6 +124,14 @@ export function inlineReplyFor(kind: InlineCallKind, profile: FakeProfile | unde
       return JSON.stringify({ items: [] })
     case 'requirements-incorporate':
       return profile?.incorporatedRequirements ?? DEFAULT_INCORPORATED_DOC
+    // Recommending an answer to a product question is the one thing this fake will not invent: a
+    // synthesized recommendation would be indistinguishable from a real one in the window, and a
+    // spec would then assert a human's decision against text nobody wrote. An empty set is what
+    // the Writer path reads as "nothing to suggest", leaving the finding OPEN for the human, which
+    // is a state the product already models. It is spelled out rather than left to the catch-all so
+    // this call cannot answer with interview JSON, and so the drift guard covers it.
+    case 'requirements-recommend':
+      return JSON.stringify({ recommendations: [] })
     default:
       return INTERVIEW_CONVERGENCE
   }

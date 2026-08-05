@@ -57,14 +57,30 @@ test.describe('registered judge (rubric verdict gate)', () => {
     await card.click()
 
     // LIVE: the judge step is listed (proof the manifest-registered kind reached the SPA at all)
-    // and reaches `done`. Getting there REQUIRES the bounce round: a script that only ever failed
-    // would spend the budget and park, so `done` is what proves the producer was re-run and the
-    // second verdict passed.
+    // and reaches `done`.
     await expect(judgeStep(page)).toBeVisible({ timeout: LIVE_TIMEOUT })
     await expect(judgeStep(page)).toHaveAttribute('data-step-state', 'done', {
       timeout: RUN_TERMINAL_TIMEOUT,
     })
     await expect(card).toHaveAttribute('data-status', 'pr_ready', { timeout: RUN_TERMINAL_TIMEOUT })
+
+    // …and the bounce is asserted on the ENGINE'S OWN RECORD of it, not inferred from the run
+    // having finished. `done` alone does not distinguish "failed, bounced, then passed" from
+    // "passed on the first look": the verdict script is a queue read once per assessment, so any
+    // extra or retried assessment shifts it, and a run that never bounced would reach exactly this
+    // state. The round history is the fact that separates them, and it outlives the run, so this
+    // reads it after the terminal rather than racing a transient step state.
+    await judgeStep(page).getByTestId('run-step-open').click()
+    const dialog = page.getByTestId('result-window')
+    await expect(dialog.getByTestId('judge-round')).toHaveCount(2)
+    await expect(dialog.getByTestId('judge-round').first()).toHaveAttribute(
+      'data-round-disposition',
+      'pass',
+    )
+    await expect(dialog.getByTestId('judge-round').last()).toHaveAttribute(
+      'data-round-disposition',
+      'bounce',
+    )
   })
 
   test('a spent bounce budget parks for a human; the judge window shows the verdict and Proceed advances the run', async ({

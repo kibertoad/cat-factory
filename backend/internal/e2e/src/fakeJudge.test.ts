@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_JUDGE_MIN_SCORE } from '@cat-factory/contracts'
 import { E2eJudgeAssessor, verdictFor } from './fakeJudge.ts'
 import { FakeProfileRegistry } from './fakeProfile.ts'
 
 // The judge assessor's per-workspace ROUND COUNTER is what makes a bounce loop assertable: the
-// engine calls `assess` once per round, and `judge-gate.spec.ts` distinguishes "bounced then
-// passed" from "parked when the budget ran out" purely by the second verdict differing from the
-// first. A counter shared across workspaces (or reset per call) would make both specs pass or fail
-// for reasons unrelated to the engine, so it is pinned here rather than in a browser.
+// engine calls `assess` once per round, and `judge-gate.spec.ts` drives "bounced then passed"
+// against "parked when the budget ran out" off scripts that differ in their second entry. A counter
+// shared across workspaces (or reset per call) would make both specs pass or fail for reasons
+// unrelated to the engine, so it is pinned here rather than in a browser.
 
 /** The score the assessor reports for the next round of `workspaceId`. */
 async function nextScore(assessor: E2eJudgeAssessor, workspaceId: string): Promise<number> {
@@ -59,5 +60,17 @@ describe('verdictFor', () => {
     expect(verdictFor(0.4).findings).toHaveLength(1)
     // A passing verdict with findings would render as a rubric complaint about work it cleared.
     expect(verdictFor(1).findings).toEqual([])
+  })
+
+  it('draws the line at the ENGINE’s bar, not at a perfect score', () => {
+    // The boundary that actually bites: `judge-gate.spec.ts`'s pass round scores 0.9, which clears
+    // the threshold without being perfect. Gating findings on `< 1` sent a high-severity rubric
+    // complaint along with the verdict that let the work through. Both bounds are derived from the
+    // constant the engine reads, so raising the default bar cannot silently re-open the gap.
+    expect(verdictFor(DEFAULT_JUDGE_MIN_SCORE - 0.01).findings).toHaveLength(1)
+    expect(verdictFor(DEFAULT_JUDGE_MIN_SCORE).findings).toEqual([])
+    expect(verdictFor(DEFAULT_JUDGE_MIN_SCORE + 0.01).findings).toEqual([])
+    // The spec's own passing script value, spelled out because it is the case that regressed.
+    expect(verdictFor(0.9).findings).toEqual([])
   })
 })

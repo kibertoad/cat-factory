@@ -171,10 +171,10 @@ importers:
       '@cat-factory/node-server':
         specifier: workspace:*
         version: link:../../runtimes/node
+    devDependencies:
       '@cat-factory/orchestration':
         specifier: workspace:*
         version: link:../../packages/orchestration
-    devDependencies:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
