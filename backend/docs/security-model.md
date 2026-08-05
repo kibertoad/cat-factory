@@ -252,8 +252,12 @@ With that scoping, the pipeline properties are:
   change the authority it runs under. Narrowing is subtractive by construction
   (`narrowMergeClassRule`), so a role entry can never widen what the base rules allow, and a run
   with no role to pin (a schedule fire, a public-API start, auth-disabled dev) stays on the base
-  rules rather than being guessed onto a tier. Full model:
-  [ADR 0037](./adr/0037-role-scoped-merge-policy.md).
+  rules rather than being guessed onto a tier. A third field, `submissionClassesByRole`, allowlists
+  the change classes a role may land at all and is refused at both exits too, so a tier can be held
+  short of `source` without being sandboxed on everything; an absent entry is unrestricted and
+  `unknown` stays inert there as well, for the same reason it does above. Full model:
+  [ADR 0037](./adr/0037-role-scoped-merge-policy.md) and
+  [ADR 0039](./adr/0039-role-scoped-submission-allowlists.md).
 - The **CI gate** reads the host's real check runs: your CI is a mechanism here, to exactly the
   extent your CI actually tests things.
 - **Human gates cannot be triaged away by a model.** Estimate gating may _add_ a human checkpoint

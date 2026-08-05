@@ -7,6 +7,9 @@
   (`@cat-factory/app`)
 
 Supersedes the `role-scoped-merge-policy` initiative tracker, whose committed scope is complete.
+Extended by [ADR 0039](./0039-role-scoped-submission-allowlists.md), which closes the gap this ADR
+names below: a per-role allowlist of the change classes a preset will land at all, so a tier can be
+held short of `source` without being sandboxed on everything.
 
 ## Context
 

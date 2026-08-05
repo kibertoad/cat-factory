@@ -19,7 +19,11 @@ import {
 } from '@cat-factory/kernel'
 import { type AgentKindRegistry, companionTargets, isCompanionKind } from '@cat-factory/agents'
 import { foldGateApproval, isAsyncAgentExecutor, refuseGateResolution } from '@cat-factory/kernel'
-import { isDryRun } from '@cat-factory/contracts'
+import {
+  isDryRun,
+  submissionAllowedForRole,
+  submissionAllowlistForRole,
+} from '@cat-factory/contracts'
 import type { ReviewEffort } from '@cat-factory/contracts'
 import { HUMAN_REVIEW_AGENT_KIND } from './ci.logic.js'
 import { type DedicatedParkSurface, dedicatedParkSurface } from './step-park.logic.js'
@@ -536,10 +540,11 @@ export class StepDecisionController {
    * downstream breaks. The record settle runs AFTER the merge and is best-effort inside the
    * service, so no part of this feature can fail or block a merge.
    *
-   * A DRY RUN's PR is refused here. Without this the sandbox is decorative: `MergeResolver`
-   * declining to auto-merge only to leave a `merge_review` card whose own action lands the change
-   * would let a run that was never authorised to merge do exactly that, one tap later and through
-   * the surface the mode exists to guard.
+   * A DRY RUN's PR is refused here, and so is one whose initiator's role may not land this class
+   * of change. Without those the two policies are decorative: `MergeResolver` declining to
+   * auto-merge only to leave a `merge_review` card whose own action lands the change would let a
+   * run that was never authorised to merge do exactly that, one tap later and through the surface
+   * the policy exists to guard.
    */
   async mergePr(
     workspaceId: string,
@@ -551,10 +556,27 @@ export class StepDecisionController {
     if (block.status !== 'pr_ready') {
       throw new ConflictError(`Block '${blockId}' has no PR awaiting merge`, 'no_pr_to_merge')
     }
-    await this.assertNotDryRun(workspaceId, block)
+    await this.assertPlatformMayMerge(workspaceId, block)
     await this.deps.finalizeMerge(workspaceId, blockId)
     await this.deps.mergePolicy.recordHumanMerge(workspaceId, blockId, reviewEffort)
     return this.deps.requireBlock(workspaceId, blockId)
+  }
+
+  /**
+   * The two policies that refuse the PLATFORM merge path outright, checked in the same order
+   * `MergeResolver` applies them so the manual exit and the automatic one can never disagree
+   * about which one held a PR back.
+   *
+   * The run is loaded ONCE and handed to both. Both read state off the run that opened this PR
+   * (its mode, and the tier it was admitted under), and re-reading it per guard would be a second
+   * point-read of the same row for no second fact.
+   */
+  private async assertPlatformMayMerge(workspaceId: string, block: Block): Promise<void> {
+    const instance = block.executionId
+      ? await this.deps.executionRepository.get(workspaceId, block.executionId)
+      : null
+    this.assertNotDryRun(block, instance)
+    await this.assertSubmissionAllowed(workspaceId, block, instance)
   }
 
   /**
@@ -571,15 +593,52 @@ export class StepDecisionController {
    * real PR on the host, and someone with write access there can always merge it by hand. What
    * this mode guarantees is that the PLATFORM will not do it on a sandboxed run's behalf.
    */
-  private async assertNotDryRun(workspaceId: string, block: Block): Promise<void> {
-    if (!block.executionId) return
-    const instance = await this.deps.executionRepository.get(workspaceId, block.executionId)
+  private assertNotDryRun(block: Block, instance: ExecutionInstance | null): void {
     if (!isDryRun(instance?.mode)) return
     throw new ConflictError(
       'This pull request came from a dry run, so it cannot be merged from here. Start the task ' +
         'again as a live run to produce a pull request this workspace will merge.',
       'dry_run_not_mergeable',
       { executionId: block.executionId },
+    )
+  }
+
+  /**
+   * Refuse the platform merge path when the run's initiator holds a role whose merge preset
+   * allowlists which change classes it may land, and this PR's class is outside that list.
+   *
+   * The sibling of {@link assertNotDryRun}, and the reason this policy is more than a `never`
+   * class rule: a rule routes to a human, but the human it routes to may be the initiator, so
+   * without this exit a scoped role would land exactly what the allowlist withholds, one tap
+   * later, from the card their own run raised.
+   *
+   * The class is only knowable at merge time, so the order below is load-bearing: the allowlist
+   * is read first and the classification (one VCS call) is paid for ONLY when a scoped role is
+   * actually on the other side of it. An unattributed run and an unscoped role therefore cost
+   * this guard a preset read and nothing else.
+   *
+   * The refusal deliberately does NOT claim the change cannot land: the PR is real, a teammate
+   * whose role may land this class can merge it from here, and someone with write access on the
+   * host can always merge it there. Unlike the sandbox, re-running the task changes nothing (the
+   * same role would produce the same refusal), so the copy must not suggest it.
+   */
+  private async assertSubmissionAllowed(
+    workspaceId: string,
+    block: Block,
+    instance: ExecutionInstance | null,
+  ): Promise<void> {
+    const role = instance?.initiatedByRole
+    if (!role) return
+    const preset = await this.deps.mergePolicy.resolve(workspaceId, block)
+    if (!submissionAllowlistForRole(preset.submissionClassesByRole, role)) return
+    const changeClass = await this.deps.mergePolicy.classifyChangeClass(workspaceId, block)
+    if (submissionAllowedForRole(preset.submissionClassesByRole, role, changeClass)) return
+    throw new ConflictError(
+      `This task's merge policy does not let a ${role} land a ${changeClass} change, so this ` +
+        'pull request cannot be merged from here. A teammate whose role may land this kind of ' +
+        'change can merge it, or an admin can widen the merge policy.',
+      'submission_not_allowed',
+      { executionId: block.executionId, role, changeClass },
     )
   }
 

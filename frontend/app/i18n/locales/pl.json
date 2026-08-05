@@ -578,7 +578,8 @@
         "input_gate_parked": "Odpowiedz w kontroli danych wejściowych zadania",
         "ticket_already_linked": "To zgłoszenie ma już zadanie",
         "document_already_linked": "Dokument jest już załączony",
-        "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić"
+        "dry_run_not_mergeable": "Uruchomienia próbnego nie można scalić",
+        "submission_not_allowed": "Scalanie niedozwolone dla tego uruchomienia"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -615,7 +616,8 @@
         "input_gate_parked": "To uruchomienie czeka na kontrolę danych wejściowych, której nie da się rozstrzygnąć przez zatwierdzenie. Skorzystaj z powiadomienia przy uruchomieniu: popraw zadanie i sprawdź ponownie albo uruchom mimo to.",
         "ticket_already_linked": "Zgłoszenie może stać za tylko jednym zadaniem, więc ponowne powiązanie pozbawiłoby istniejące zadanie kontekstu, z którym powstało. Otwórz to zadanie albo najpierw odłącz zgłoszenie.",
         "document_already_linked": "Ten dokument jest załączony do innego zadania. Najpierw odłącz go tam albo załącz osobną kopię.",
-        "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
+        "dry_run_not_mergeable": "Ten pull request pochodzi z uruchomienia próbnego, więc nie można go tutaj scalić. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali.",
+        "submission_not_allowed": "Polityka scalania tego zadania nie pozwala roli, która rozpoczęła to uruchomienie, scalić tego typu zmiany. Może to zrobić osoba o odpowiedniej roli albo administrator może rozszerzyć politykę w ustawieniu scalania."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",
@@ -1269,6 +1271,7 @@
         "class_auto_merge": "Ten zestaw zawsze scala automatycznie tę kategorię zmian, więc oceny nie były porównywane.",
         "class_requires_review": "Ten zestaw zawsze przekazuje tę kategorię zmian człowiekowi, niezależnie od ocen.",
         "role_requires_review": "Ten zestaw ustawień kieruje uruchomienia rozpoczęte przez rolę {role} do przeglądu przez człowieka dla tego rodzaju zmiany, niezależnie od ocen. Osoba z wyższymi uprawnieniami może scalić ten PR bez żadnych poprawek.",
+        "submission_not_allowed": "To ustawienie pozwala uruchomieniom rozpoczętym przez rolę {role} scalać tylko te typy zmian: {classes}. Ta zmiana jest innego typu, więc pull request czeka na kogoś, czyja rola pozwala go scalić.",
         "dry_run": "To było uruchomienie próbne, więc pull request pozostał otwarty dla człowieka, a oceny nie były porównywane. Uruchom zadanie ponownie w trybie rzeczywistym, aby powstał pull request, który ta przestrzeń robocza scali."
       },
       "scores": "Oceny",
@@ -1280,7 +1283,8 @@
       "ceiling": "limit {value}",
       "rationale": "Uzasadnienie",
       "noAssessment": "Scalający nie zwrócił oceny punktowej.",
-      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu."
+      "noResult": "Nie zarejestrowano jeszcze decyzji o scaleniu.",
+      "noSubmittableClasses": "brak"
     },
     "testReport": {
       "title": "Raport z testów",
@@ -2768,10 +2772,15 @@
       },
       "roleRules": {
         "heading": "Ograniczenia według roli uruchamiającego",
-        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można objąć surowszymi regułami niż powyższe albo wyłącznie uruchomieniami próbnymi: potok pracuje i otwiera pull request, ale nic nie jest scalane. Rola może tę zasadę tylko zaostrzyć, nigdy poluzować.",
-        "autoMergeOffWarning": "W tym zestawie automatyczne scalanie jest wyłączone, więc każdy pull request i tak trafia do człowieka, a ograniczenia kategorii poniżej niczego nie dodają. Uruchomienia próbne nadal obowiązują: odmawiają też scalenia ręcznego.",
+        "help": "To, co wolno uruchomieniu, zależy też od tego, kto je rozpoczął. Rolę można ograniczyć do wybranych typów zmian, objąć surowszymi regułami niż powyższe albo ograniczyć do uruchomień próbnych: potok pracuje i otwiera pull request, a nic nie jest scalane. Rola może tę politykę tylko zawężać, nigdy rozszerzać.",
+        "autoMergeOffWarning": "Automatyczne scalanie jest wyłączone w tym ustawieniu, więc każdy pull request i tak trafia do człowieka, a limity klas poniżej nic nie zmieniają. Ograniczenie scalania i uruchomienia próbne nadal działają: oba odmawiają także scalenia ręcznego.",
         "sandboxLabel": "Tylko uruchomienia próbne",
-        "sandboxNote": "Uruchomienia rozpoczęte przez tę rolę otwierają pull request i niczego nie scalają, więc reguły kategorii poniżej nie mogą ich już bardziej ograniczyć.",
+        "sandboxNote": "Uruchomienia tej roli otwierają pull request i nic nie scalają, więc żadne z ograniczeń poniżej nie może ich bardziej zawęzić.",
+        "submissionLabel": "Ogranicz, jakie zmiany ta rola może scalać",
+        "submissionHelp": "Po włączeniu w uruchomieniach tej roli scalane są tylko zaznaczone typy zmian. Reszta czeka na kogoś innego, niezależnie od ocen. Pull request i tak powstaje i można go scalić ręcznie na hoście git.",
+        "submissionNone": "Nic nie jest zaznaczone, więc ta przestrzeń robocza nie scali żadnego uruchomienia tej roli.",
+        "submissionBadge": "Scalanie ograniczone",
+        "classHeading": "Wymagany przegląd według typu zmiany",
         "noRules": "Brak ograniczeń kategorii",
         "ruleCount": "{count} kategoria ograniczona | {count} kategorie ograniczone | {count} kategorii ograniczonych",
         "inherit": "Tak jak w tej zasadzie",
@@ -6040,6 +6049,7 @@
       "ciAttempts": "Uruchomienie może podjąć {count} próbę naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} próby naprawy czerwonego CI, zanim się podda. | Uruchomienie może podjąć {count} prób naprawy czerwonego CI, zanim się podda.",
       "roleHeading": "Kto rozpoczął uruchomienie",
       "roleSandboxed": "Uruchomienia rozpoczęte przez role {roles} otwierają pull request i nigdy nie są scalane.",
+      "roleScoped": "Uruchomienia rozpoczęte przez {roles} scalają tylko wybrane typy zmian.",
       "roleNarrowed": "Uruchomienia rozpoczęte przez role {roles} podlegają surowszym regułom w części kategorii zmian."
     }
   },

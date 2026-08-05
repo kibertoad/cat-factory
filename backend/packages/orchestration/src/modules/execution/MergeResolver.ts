@@ -6,10 +6,17 @@ import type {
   ExecutionInstance,
   MergeAssessment,
   MergeAxis,
+  MergeClassRule,
   MergeClassRules,
   MergeDecision,
+  SubmissionClassesByRole,
 } from '@cat-factory/kernel'
-import { isDryRun, parseMergeAssessment } from '@cat-factory/contracts'
+import {
+  isDryRun,
+  parseMergeAssessment,
+  submissionAllowedForRole,
+  submissionAllowlistForRole,
+} from '@cat-factory/contracts'
 import { resolveRoleScopedMergeClassRule } from '@cat-factory/kernel'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
@@ -41,6 +48,13 @@ interface MergeThresholds {
    * rules put it.
    */
   classRulesByRole?: ClassRulesByRole
+  /**
+   * Per-role allowlist of the change classes this preset will land at all. Orthogonal to
+   * {@link classRulesByRole} and applied ABOVE it: a class the rules would auto-merge is still
+   * refused when it is outside the initiator's allowlist. An absent map (or an absent role
+   * entry) is unrestricted.
+   */
+  submissionClassesByRole?: SubmissionClassesByRole
 }
 
 /**
@@ -52,6 +66,97 @@ interface ReviewCardContext {
   changeClass: ChangeClass
   recordId?: string
   dryRun?: boolean
+  /**
+   * The initiator's role may not land this class of change. Like `dryRun` it changes what the
+   * card says held the PR back, and for the same reason: the scores were never consulted, so a
+   * card describing them would send the reader to edit a ceiling that had no part in it.
+   */
+  submissionBlocked?: boolean
+}
+
+/**
+ * Everything the auto-merge precedence ladder decides on, gathered so the ladder itself can be one
+ * pure function rather than a pair of nested ternaries inside the resolver.
+ */
+interface MergePrecedenceInput {
+  /** The run was SANDBOXED: it may land nothing, whatever the policy says. */
+  dryRun: boolean
+  /** The initiator's role may land this change class (true when nothing scopes them). */
+  submissionAllowed: boolean
+  /** The preset's master switch. */
+  autoMergeEnabled: boolean
+  /** The class rule as narrowed by the initiator's role. */
+  effectiveRule: MergeClassRule
+  /** The role's entry is what produced `effectiveRule` (it is stricter than the base rule). */
+  narrowedByRole: boolean
+  /** The merger produced a parseable assessment at all. */
+  hasAssessment: boolean
+  /** ...and explained it, which is the backstop against a bogus 0/0/0 auto-merging. */
+  credible: boolean
+  /** Every axis is at or below its ceiling. */
+  withinThresholds: boolean
+}
+
+/** What the ladder decides: merge, or leave it for a human and say precisely why. */
+interface MergePrecedenceVerdict {
+  merge: boolean
+  /** The reason to record when the merge lands (unused when `merge` is false). */
+  mergeReason: MergeDecision['reason']
+  /** The reason to record when it does not (unused when `merge` is true). */
+  reviewReason: MergeDecision['reason']
+}
+
+/**
+ * The auto-merge precedence ladder, most-significant first:
+ *
+ *   1. A DRY RUN merges nothing, whatever else says. It outranks even `autoMergeEnabled` because
+ *      it is a property of the RUN rather than of the policy: the person who started it was never
+ *      authorised to land this work, so no preset can consent on their behalf.
+ *   2. The initiator's SUBMISSION ALLOWLIST, when their role carries one and this run's class is
+ *      outside it. Beside `dry_run` and above the master switch for the same reason: it is about
+ *      WHO started the run. What separates it from a `never` class rule is that it also refuses
+ *      the MANUAL merge, so it is a bar on landing rather than a demand for review.
+ *   3. `autoMergeEnabled: false`, the master switch. "Manual review only" stays manual and a
+ *      class rule can NEVER override it.
+ *   4. The class rule AS NARROWED BY THE INITIATOR'S ROLE: `always` merges regardless of the
+ *      scores, and regardless of the rationale backstop, because an explicit operator policy
+ *      keyed on a DETERMINISTIC backend classification outranks the agent's self-report; `never`
+ *      always routes to a human. A role entry can only push this arm toward `never`.
+ *   5. The credibility + threshold comparison.
+ *
+ * The review reason is derived HERE, in the same order and from the same inputs, because the two
+ * used to be written twice and the pair has to agree: a decision that declines to merge on one
+ * rung and blames another sends the reader to edit a setting that had no part in the outcome.
+ * Every rung is kept apart from its neighbours because each needs a DIFFERENT fix. `dry_run` is
+ * fixed by re-running live, `submission_not_allowed` by a teammate on a permitted tier or a wider
+ * allowlist, `role_requires_review` by any reviewer, `class_requires_review` by editing the class
+ * rule, and `no_rationale` (scores but no explanation) is not `no_assessment` (no scores at all).
+ */
+function resolveMergePrecedence(input: MergePrecedenceInput): MergePrecedenceVerdict {
+  const { effectiveRule } = input
+  const merge =
+    !input.dryRun &&
+    input.submissionAllowed &&
+    input.autoMergeEnabled &&
+    (effectiveRule === 'always' ||
+      (effectiveRule !== 'never' && input.credible && input.withinThresholds))
+  return {
+    merge,
+    mergeReason: effectiveRule === 'always' ? 'class_auto_merge' : 'within_thresholds',
+    reviewReason: reviewReasonFor(input),
+  }
+}
+
+/** Why review is needed, in the same order {@link resolveMergePrecedence} applies. */
+function reviewReasonFor(input: MergePrecedenceInput): MergeDecision['reason'] {
+  if (input.dryRun) return 'dry_run'
+  if (!input.submissionAllowed) return 'submission_not_allowed'
+  if (!input.autoMergeEnabled) return 'auto_merge_disabled'
+  if (input.effectiveRule === 'never') {
+    return input.narrowedByRole ? 'role_requires_review' : 'class_requires_review'
+  }
+  if (!input.hasAssessment) return 'no_assessment'
+  return input.credible ? 'exceeded_thresholds' : 'no_rationale'
 }
 
 /** The assessment axes that exceed their preset ceiling (empty when all are within). */
@@ -161,6 +266,20 @@ export class MergeResolver {
     // the mode was settled and pinned at start, so a preset edited mid-flight cannot un-sandbox a
     // run a human is already reviewing (nor sandbox one that has been merging all along).
     const dryRun = isDryRun(instance.mode)
+    // Whether this run's TIER may land this KIND of change at all. Read alongside the class rule
+    // rather than folded into it: the two are orthogonal and both apply, and this one is a bar on
+    // landing where a class rule only decides how much review landing takes. `unknown` passes
+    // straight through (an unreadable diff is an outage, not evidence), as does a role with no
+    // authored allowlist and a run with no pinned role at all.
+    const submissionAllowlist = submissionAllowlistForRole(
+      preset.submissionClassesByRole,
+      instance.initiatedByRole,
+    )
+    const submissionAllowed = submissionAllowedForRole(
+      preset.submissionClassesByRole,
+      instance.initiatedByRole,
+      classification.changeClass,
+    )
 
     const thresholds: MergeDecision['thresholds'] = {
       presetName: preset.name,
@@ -173,6 +292,11 @@ export class MergeResolver {
       // Recorded only when the role CHANGED the outcome, so its presence always means "this
       // would have gone differently for someone else" rather than "a role was involved".
       ...(narrowedByRole ? { roleRule: effectiveRule } : {}),
+      // Recorded whenever the role IS scoped, not only when the scope refused this PR: an
+      // allowlist that permitted this class is what explains why the same role's next PR on
+      // another class will not land, and reporting it only on the refusal would make the
+      // permission read as an absence of policy.
+      ...(submissionAllowlist ? { submissionClasses: [...submissionAllowlist] } : {}),
     }
     const base = {
       assessment: assessment ?? undefined,
@@ -188,24 +312,31 @@ export class MergeResolver {
     const credible = assessment !== null && assessment.rationale.trim() !== ''
     const exceededAxes = assessment ? exceededAxesOf(assessment, preset) : []
 
-    // Auto-merge precedence, most-significant first:
-    //   1. A DRY RUN merges nothing, whatever else says. It outranks even `autoMergeEnabled`
-    //      because it is a property of the RUN rather than of the policy: the person who started
-    //      it was never authorised to land this work, so no preset can consent on their behalf.
-    //   2. `autoMergeEnabled: false` — the master switch. "Manual review only" stays manual and
-    //      a class rule can NEVER override it.
-    //   3. The class rule AS NARROWED BY THE INITIATOR'S ROLE: `always` merges regardless of the
-    //      scores (and regardless of the rationale backstop — an explicit operator policy keyed on
-    //      a DETERMINISTIC backend classification outranks the agent's self-report); `never`
-    //      always routes to a human. A role entry can only push this arm toward `never`.
-    //   4. The existing credibility + threshold comparison.
-    const within =
-      !dryRun &&
-      preset.autoMergeEnabled &&
-      (effectiveRule === 'always' ||
-        (effectiveRule !== 'never' && credible && exceededAxes.length === 0))
-    const mergeReason: MergeDecision['reason'] =
-      effectiveRule === 'always' ? 'class_auto_merge' : 'within_thresholds'
+    const {
+      merge: within,
+      mergeReason,
+      reviewReason,
+    } = resolveMergePrecedence({
+      dryRun,
+      submissionAllowed,
+      autoMergeEnabled: preset.autoMergeEnabled,
+      effectiveRule,
+      narrowedByRole,
+      hasAssessment: assessment !== null,
+      credible,
+      withinThresholds: exceededAxes.length === 0,
+    })
+
+    // What a review card this outcome raises needs beyond the assessment. Built once: the two
+    // raise sites below differ only in WHY they were reached, and a card that named a different
+    // cause on the merge-failure path than on the refusal path would be reporting the resolver's
+    // control flow rather than the run's policy.
+    const cardContext = (recordId?: string): ReviewCardContext => ({
+      changeClass: classification.changeClass,
+      ...(recordId ? { recordId } : {}),
+      dryRun,
+      submissionBlocked: !submissionAllowed,
+    })
 
     const record = (decision: 'auto_merged' | 'pending_review') =>
       this.deps.mergeTrackRecord?.recordDecision(workspaceId, {
@@ -234,47 +365,26 @@ export class MergeResolver {
         // Auto-merge failed outright (e.g. branch protection / conflict, or the first PR of a
         // multi-repo task): fall through to a review notification so a human can sort it out.
         const pending = await record('pending_review')
-        await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
-          changeClass: classification.changeClass,
-          recordId: pending?.id,
-          dryRun,
-        })
+        await this.raiseReviewAndBlock(
+          workspaceId,
+          instance,
+          block,
+          assessment,
+          cardContext(pending?.id),
+        )
         return { ...base, outcome: 'awaiting_review', reason: 'merge_failed', exceededAxes }
       }
     }
 
     const pending = await record('pending_review')
-    await this.raiseReviewAndBlock(workspaceId, instance, block, assessment, {
-      changeClass: classification.changeClass,
-      recordId: pending?.id,
-      dryRun,
-    })
-    // Classify WHY review is needed, most-specific first, so the banner is precise, in the SAME
-    // order the auto-merge branch above applies. A missing/unparseable assessment
-    // (`no_assessment`) is distinct from one that returned scores but no rationale
-    // (`no_rationale`): the latter DID produce visible scores, so the banner must not claim there
-    // was no assessment at all.
-    //
-    // `dry_run` tops the ladder for the reason it tops the precedence: a sandboxed run's scores
-    // were never consulted, so reporting it as `exceeded_thresholds` (or as `auto_merge_disabled`,
-    // on a preset that would happily have merged it) sends someone to edit a ceiling that had no
-    // part in the outcome. `role_requires_review` is likewise kept apart from
-    // `class_requires_review` even though both mean "the rule says never": one is fixed by editing
-    // the class rule, the other by a teammate on a higher tier merging the PR as it stands.
-    const reason: MergeDecision['reason'] = dryRun
-      ? 'dry_run'
-      : !preset.autoMergeEnabled
-        ? 'auto_merge_disabled'
-        : effectiveRule === 'never'
-          ? narrowedByRole
-            ? 'role_requires_review'
-            : 'class_requires_review'
-          : assessment === null
-            ? 'no_assessment'
-            : !credible
-              ? 'no_rationale'
-              : 'exceeded_thresholds'
-    return { ...base, outcome: 'awaiting_review', reason, exceededAxes }
+    await this.raiseReviewAndBlock(
+      workspaceId,
+      instance,
+      block,
+      assessment,
+      cardContext(pending?.id),
+    )
+    return { ...base, outcome: 'awaiting_review', reason: reviewReason, exceededAxes }
   }
 
   /**
@@ -336,10 +446,18 @@ export class MergeResolver {
     const body = track.dryRun
       ? `This was a dry run, so its PR was left open for a human regardless of the assessment.` +
         (scores && assessment ? ` The merger scored it ${scores}. ${assessment.rationale}` : '')
-      : assessment
-        ? `The merger scored this PR outside the task's auto-merge thresholds ` +
-          `(${scores}). ${assessment.rationale}`
-        : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
+      : // Same rule as the sandbox: name the policy that actually held the PR back rather than
+        // the scores nobody consulted. It deliberately does NOT claim the change cannot land: the
+        // PR is real, and a teammate whose role may land this class can merge it from here.
+        track.submissionBlocked
+        ? `This task's merge policy does not let the role that started this run land ` +
+          `${track.changeClass === 'unknown' ? 'this' : `a \`${track.changeClass}\``} change, so ` +
+          `its PR was left open regardless of the assessment.` +
+          (scores && assessment ? ` The merger scored it ${scores}. ${assessment.rationale}` : '')
+        : assessment
+          ? `The merger scored this PR outside the task's auto-merge thresholds ` +
+            `(${scores}). ${assessment.rationale}`
+          : `The merger could not produce a valid assessment for this PR. Review and merge manually.`
     await this.deps.notificationService.raise(workspaceId, {
       type: 'merge_review',
       blockId: block.id,

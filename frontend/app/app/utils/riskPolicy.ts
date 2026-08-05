@@ -52,6 +52,12 @@ export interface RolePolicySummary {
    * both would read as two limits where the second changes nothing.
    */
   narrowed: WorkspaceRole[]
+  /**
+   * Roles allowlisted to a subset of change classes they may LAND. Same suppression rule as
+   * `narrowed` and for the same reason, and listed SEPARATELY from it because the two are not
+   * degrees of one setting: this one bars landing outright, including through the manual merge.
+   */
+  scoped: WorkspaceRole[]
 }
 
 /**
@@ -65,6 +71,12 @@ export function rolePolicySummary(p: RiskPolicy): RolePolicySummary {
     sandboxed: [...sandboxed],
     narrowed: WORKSPACE_ROLES.filter(
       (role) => !sandboxed.includes(role) && Object.keys(p.classRulesByRole[role] ?? {}).length > 0,
+    ),
+    // Scoped-ness is the PRESENCE of an entry, never its length: a role allowlisted to nothing
+    // is the most restrictive policy this setting can express, and reading it as "no allowlist"
+    // would drop the one summary line a reader most needs to see.
+    scoped: WORKSPACE_ROLES.filter(
+      (role) => !sandboxed.includes(role) && p.submissionClassesByRole[role] !== undefined,
     ),
   }
 }

@@ -3,6 +3,7 @@ import type {
   MergeClassRules,
   RequirementConcernLevel,
   StepGating,
+  SubmissionClassesByRole,
   WorkspaceRole,
 } from '@cat-factory/kernel'
 
@@ -56,4 +57,11 @@ export interface ResolvedRunRiskPolicy {
    * run must stay sandboxed even if the role is un-listed mid-flight.
    */
   dryRunRoles?: readonly WorkspaceRole[]
+  /**
+   * Per-ROLE allowlist of the change classes this preset will land at all. Read at MERGE time
+   * rather than at start (the opposite of `dryRunRoles` above), because the class is derived from
+   * the pull request's changed files and does not exist until there is a pull request. That is
+   * not a weaker guarantee, only a later one: opening the PR was never the harm, landing it is.
+   */
+  submissionClassesByRole?: SubmissionClassesByRole
 }

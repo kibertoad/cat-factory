@@ -1,5 +1,6 @@
 import type {
   Block,
+  ChangeClass,
   GroupCacheHandle,
   ReviewEffort,
   RiskPolicy,
@@ -77,6 +78,27 @@ export class RunMergePolicy {
       if (fallback) return fallback
     }
     return DEFAULT_RISK_POLICY
+  }
+
+  /**
+   * The DETERMINISTIC change class of a block's open pull request, for a policy decision that
+   * needs it outside the merger step (the manual-merge guard).
+   *
+   * One VCS call, and `unknown` whenever the class cannot be established: no repository wired,
+   * no PR number, a provider outage. That degradation is the whole reason this is worth a named
+   * method rather than an inline `?.classify(...)`: every consumer of a class MUST treat
+   * `unknown` as inert, and a call site that reached for the classification directly would be
+   * one `??` away from reading an outage as a policy verdict.
+   *
+   * Deliberately re-classifies rather than reading the class back off the recorded merge
+   * decision: a decision row is not guaranteed to exist on every path that reaches the merge
+   * route (a pipeline with no `merger` step raises `pipeline_complete` and records nothing).
+   */
+  async classifyChangeClass(workspaceId: string, block: Block): Promise<ChangeClass> {
+    const svc = this.deps.mergeTrackRecord
+    if (!svc) return 'unknown'
+    // `classify` is best-effort by construction and already degrades to `unknown` on any fault.
+    return (await svc.classify(workspaceId, block)).changeClass
   }
 
   /**

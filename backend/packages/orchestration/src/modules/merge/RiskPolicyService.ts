@@ -95,6 +95,7 @@ export class RiskPolicyService {
       classRules: input.classRules,
       classRulesByRole: input.classRulesByRole,
       dryRunRoles: input.dryRunRoles,
+      submissionClassesByRole: input.submissionClassesByRole,
       // The very first preset must be the default; otherwise honour the request.
       isDefault: existing.length === 0 ? true : input.isDefault,
       createdAt: this.clock.now(),
@@ -140,9 +141,17 @@ export class RiskPolicyService {
       ...(patch.judgeMaxBounces !== undefined ? { judgeMaxBounces: patch.judgeMaxBounces } : {}),
       ...(patch.autoMergeEnabled !== undefined ? { autoMergeEnabled: patch.autoMergeEnabled } : {}),
       ...(patch.forkDecision !== undefined ? { forkDecision: patch.forkDecision } : {}),
-      // Replaces the whole map rather than merging, so clearing a class's rule is a plain
-      // omission from the submitted set (there is no "delete this one key" wire shape).
+      // Each of the three role/class maps replaces the whole stored value rather than merging,
+      // so clearing one entry is a plain omission from the submitted set (there is no "delete
+      // this one key" wire shape). All three are applied here, and an editor that submits the
+      // full map every save depends on it: a patch field the service drops is indistinguishable
+      // from a save that worked, right up until the operator reloads the settings panel.
       ...(patch.classRules !== undefined ? { classRules: patch.classRules } : {}),
+      ...(patch.classRulesByRole !== undefined ? { classRulesByRole: patch.classRulesByRole } : {}),
+      ...(patch.dryRunRoles !== undefined ? { dryRunRoles: patch.dryRunRoles } : {}),
+      ...(patch.submissionClassesByRole !== undefined
+        ? { submissionClassesByRole: patch.submissionClassesByRole }
+        : {}),
       ...(patch.isDefault !== undefined ? { isDefault: patch.isDefault } : {}),
     }
     await this.presets.upsert(workspaceId, updated)
@@ -237,6 +246,7 @@ export class RiskPolicyService {
       forkDecision: seed.forkDecision,
       classRulesByRole: seed.classRulesByRole,
       dryRunRoles: seed.dryRunRoles,
+      submissionClassesByRole: seed.submissionClassesByRole,
       classRules: seed.classRules,
       isDefault: seed.isDefault,
       version: seed.version,

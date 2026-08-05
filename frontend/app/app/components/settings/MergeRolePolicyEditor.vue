@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // The ROLE layer of one merge preset: what happens to a run depending on WHO started it.
 //
-// Two settings, edited together because they answer the same question at two strengths. A role can
-// be held to stricter per-class rules than the preset's base map (`classRulesByRole`), or held to
-// dry runs entirely (`dryRunRoles`): the pipeline works and opens its pull request, and nothing
-// merges. The second outranks the first, which is why a sandboxed role says so on its row rather
-// than leaving the class rules below reading as the policy.
+// Three settings, edited together because they answer the same question at three strengths. A role
+// can be held to stricter per-class rules than the preset's base map (`classRulesByRole`), held to
+// an allowlist of the change classes it may LAND at all (`submissionClassesByRole`), or held to dry
+// runs entirely (`dryRunRoles`): the pipeline works and opens its pull request, and nothing merges.
+// The strongest of the three that applies is what governs, which is why a sandboxed role says so on
+// its row rather than leaving the two below it reading as the policy.
 //
 // Composition is NARROW-ONLY, so this editor only offers a role rules STRICTER than the base one
 // (see MergeRolePolicyEditor.logic.ts). A looser rule is discarded by the engine, and an editor
@@ -18,14 +19,19 @@ import type {
   MergeClassRule,
   MergeClassRules,
   RuleableChangeClass,
+  SubmissionClassesByRole,
   WorkspaceRole,
 } from '~/types/merge'
 import {
   INHERIT_RULE,
   roleClassRuleRows,
   roleNarrowedCount,
+  roleSubmissionRows,
+  roleSubmissionScoped,
   setRoleClassRule,
+  setRoleSubmissionScoped,
   toggleDryRunRole,
+  toggleSubmissionClass,
   type RoleRuleSelection,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
 
@@ -34,6 +40,12 @@ const props = defineProps<{
   classRulesByRole: ClassRulesByRole
   /** The roles whose runs this preset sandboxes. */
   dryRunRoles: DryRunRoles
+  /**
+   * Which change classes each role may LAND. A role with no entry is unrestricted; an entry with
+   * no classes lands nothing. The editor keeps those two apart (a switch, then tick boxes),
+   * because tick boxes alone would render them identically.
+   */
+  submissionClassesByRole: SubmissionClassesByRole
   /** The base rules the role layer narrows, so each row can show what it inherits. */
   classRules: MergeClassRules
   /**
@@ -50,6 +62,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:classRulesByRole': [ClassRulesByRole]
   'update:dryRunRoles': [DryRunRoles]
+  'update:submissionClassesByRole': [SubmissionClassesByRole]
 }>()
 
 const { t } = useI18n()
@@ -92,6 +105,14 @@ const roles = computed(() =>
       sandboxed: props.dryRunRoles.includes(role),
       narrowed,
       open: !!expanded.value[role],
+      // Scoped-ness is read off the MAP rather than off the entry being truthy, so an empty
+      // allowlist (a real policy: this role lands nothing) stays scoped instead of reading as
+      // the unrestricted default.
+      submissionScoped: roleSubmissionScoped(props.submissionClassesByRole, role),
+      submissionRows: roleSubmissionRows(props.submissionClassesByRole[role] ?? []).map((row) => ({
+        ...row,
+        label: t(CLASS_LABEL_KEYS[row.changeClass]),
+      })),
       rows: roleClassRuleRows(props.classRules, entry).map((row) => ({
         ...row,
         label: t(CLASS_LABEL_KEYS[row.changeClass]),
@@ -118,6 +139,24 @@ function setSandboxed(role: WorkspaceRole, sandboxed: boolean) {
 function setRule(role: WorkspaceRole, changeClass: RuleableChangeClass, rule: RoleRuleSelection) {
   emit('update:classRulesByRole', setRoleClassRule(props.classRulesByRole, role, changeClass, rule))
 }
+
+function setSubmissionScoped(role: WorkspaceRole, scoped: boolean) {
+  emit(
+    'update:submissionClassesByRole',
+    setRoleSubmissionScoped(props.submissionClassesByRole, role, scoped),
+  )
+}
+
+function setSubmissionClass(
+  role: WorkspaceRole,
+  changeClass: RuleableChangeClass,
+  allowed: boolean,
+) {
+  emit(
+    'update:submissionClassesByRole',
+    toggleSubmissionClass(props.submissionClassesByRole, role, changeClass, allowed),
+  )
+}
 </script>
 
 <template>
@@ -129,8 +168,9 @@ function setRule(role: WorkspaceRole, changeClass: RuleableChangeClass, rule: Ro
       <p class="mt-0.5 text-[11px] leading-snug text-slate-500">
         {{ t('settings.riskPolicy.roleRules.help') }}
       </p>
-      <!-- Auto-merge off already sends every pull request to a human, so only the sandbox half of
-           this editor still changes anything (it refuses the manual merge as well). -->
+      <!-- Auto-merge off already sends every pull request to a human, so the per-class narrowing
+           has nothing left to subtract. The other two settings still bite, because both refuse the
+           MANUAL merge as well, which is the one thing the master switch leaves open. -->
       <p
         v-if="!autoMergeEnabled"
         class="mt-1 text-[11px] leading-snug text-amber-400/90"
@@ -174,11 +214,20 @@ function setRule(role: WorkspaceRole, changeClass: RuleableChangeClass, rule: Ro
                 )
           }}
         </UButton>
+        <!-- A collapsed group must not hide an active policy: the tally above counts class rules
+             only, and a role can land nothing at all while showing "No class limits". -->
+        <span
+          v-if="group.submissionScoped"
+          class="text-[11px] text-amber-400/90"
+          :data-testid="`merge-role-submission-badge-${group.role}`"
+        >
+          {{ t('settings.riskPolicy.roleRules.submissionBadge') }}
+        </span>
       </div>
 
-      <!-- A sandboxed role merges nothing at all, so the class rules below cannot make its runs
-           any stricter. They stay editable (removing the sandbox brings them straight back) and
-           the row says which of the two is actually governing. -->
+      <!-- A sandboxed role merges nothing at all, so neither limit below can make its runs any
+           stricter. Both stay editable (removing the sandbox brings them straight back) and the
+           row says which of the three is actually governing. -->
       <p
         v-if="group.sandboxed"
         class="mt-1 text-[11px] leading-snug text-amber-400/90"
@@ -187,38 +236,83 @@ function setRule(role: WorkspaceRole, changeClass: RuleableChangeClass, rule: Ro
         {{ t('settings.riskPolicy.roleRules.sandboxNote') }}
       </p>
 
-      <div v-if="group.open" class="mt-2 space-y-1.5 border-t border-slate-800 pt-2">
-        <p v-if="!anyBaseRule" class="text-[11px] leading-snug text-slate-500">
-          {{ t('settings.riskPolicy.roleRules.baseHint') }}
-        </p>
-        <div
-          v-for="row in group.rows"
-          :key="row.changeClass"
-          class="flex flex-wrap items-center gap-2"
-          :data-testid="`merge-role-row-${group.role}-${row.changeClass}`"
-        >
-          <span class="min-w-[7rem] text-xs text-slate-400">{{ row.label }}</span>
-          <USelect
-            :model-value="row.selected"
-            :items="row.items"
-            value-key="value"
+      <div v-if="group.open" class="mt-2 space-y-2 border-t border-slate-800 pt-2">
+        <!-- What this role may LAND at all. Above the class rules because it outranks them: a
+             class can be auto-mergeable under the rules and still outside this list, and then
+             nothing merges, through the review card's own button included. -->
+        <div class="space-y-1.5">
+          <USwitch
+            :model-value="group.submissionScoped"
             size="sm"
-            class="w-52"
-            :disabled="disabled || row.items.length === 1"
-            :data-testid="`merge-role-rule-${group.role}-${row.changeClass}`"
-            @update:model-value="setRule(group.role, row.changeClass, $event as RoleRuleSelection)"
+            :disabled="disabled"
+            :label="t('settings.riskPolicy.roleRules.submissionLabel')"
+            :data-testid="`merge-role-submission-${group.role}`"
+            @update:model-value="setSubmissionScoped(group.role, $event)"
           />
-          <!-- Nothing left to narrow: the base rule already routes this class to a human. -->
-          <span v-if="row.items.length === 1" class="text-[11px] text-slate-500">
-            {{ t('settings.riskPolicy.roleRules.alreadyStrictest') }}
-          </span>
-          <span
-            v-else-if="row.redundant"
-            class="text-[11px] text-amber-400/90"
-            :data-testid="`merge-role-redundant-${group.role}-${row.changeClass}`"
+          <p class="text-[11px] leading-snug text-slate-500">
+            {{ t('settings.riskPolicy.roleRules.submissionHelp') }}
+          </p>
+          <div v-if="group.submissionScoped" class="flex flex-wrap gap-x-4 gap-y-1">
+            <UCheckbox
+              v-for="row in group.submissionRows"
+              :key="row.changeClass"
+              :model-value="row.allowed"
+              size="sm"
+              :disabled="disabled"
+              :label="row.label"
+              :data-testid="`merge-role-submission-class-${group.role}-${row.changeClass}`"
+              @update:model-value="setSubmissionClass(group.role, row.changeClass, $event === true)"
+            />
+          </div>
+          <!-- An empty allowlist is a real policy, not an unfinished edit, so it says what it
+               does rather than reading as a switch somebody forgot to fill in. -->
+          <p
+            v-if="group.submissionScoped && !group.submissionRows.some((r) => r.allowed)"
+            class="text-[11px] leading-snug text-amber-400/90"
+            :data-testid="`merge-role-submission-none-${group.role}`"
           >
-            {{ t('settings.riskPolicy.roleRules.redundant') }}
-          </span>
+            {{ t('settings.riskPolicy.roleRules.submissionNone') }}
+          </p>
+        </div>
+
+        <div class="space-y-1.5 border-t border-slate-800/70 pt-2">
+          <p class="text-[11px] leading-snug text-slate-500">
+            {{ t('settings.riskPolicy.roleRules.classHeading') }}
+          </p>
+          <p v-if="!anyBaseRule" class="text-[11px] leading-snug text-slate-500">
+            {{ t('settings.riskPolicy.roleRules.baseHint') }}
+          </p>
+          <div
+            v-for="row in group.rows"
+            :key="row.changeClass"
+            class="flex flex-wrap items-center gap-2"
+            :data-testid="`merge-role-row-${group.role}-${row.changeClass}`"
+          >
+            <span class="min-w-[7rem] text-xs text-slate-400">{{ row.label }}</span>
+            <USelect
+              :model-value="row.selected"
+              :items="row.items"
+              value-key="value"
+              size="sm"
+              class="w-52"
+              :disabled="disabled || row.items.length === 1"
+              :data-testid="`merge-role-rule-${group.role}-${row.changeClass}`"
+              @update:model-value="
+                setRule(group.role, row.changeClass, $event as RoleRuleSelection)
+              "
+            />
+            <!-- Nothing left to narrow: the base rule already routes this class to a human. -->
+            <span v-if="row.items.length === 1" class="text-[11px] text-slate-500">
+              {{ t('settings.riskPolicy.roleRules.alreadyStrictest') }}
+            </span>
+            <span
+              v-else-if="row.redundant"
+              class="text-[11px] text-amber-400/90"
+              :data-testid="`merge-role-redundant-${group.role}-${row.changeClass}`"
+            >
+              {{ t('settings.riskPolicy.roleRules.redundant') }}
+            </span>
+          </div>
         </div>
       </div>
     </div>

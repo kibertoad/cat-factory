@@ -525,10 +525,15 @@
       },
       "roleRules": {
         "heading": "Limiti per ruolo di chi avvia",
-        "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere soggetto a regole più severe di quelle sopra, oppure alle sole prove: la pipeline lavora e apre una pull request, ma non viene unito nulla. Un ruolo può solo restringere questo criterio, mai allargarlo.",
-        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per categoria qui sotto non aggiungono nulla. Le prove restano valide: rifiutano anche un'unione manuale.",
+        "help": "Ciò che un'esecuzione può fare dipende anche da chi l'ha avviata. Un ruolo può essere limitato a certi tipi di modifica, tenuto a regole più severe di quelle sopra, oppure limitato alle prove: la pipeline lavora e apre una pull request, e non viene unito nulla. Un ruolo può solo restringere questa politica, mai ampliarla.",
+        "autoMergeOffWarning": "L'unione automatica è disattivata per questo preset, quindi ogni pull request passa già da una persona e i limiti per classe qui sotto non aggiungono nulla. Il limite di unione e le prove restano validi: entrambi rifiutano anche l'unione manuale.",
         "sandboxLabel": "Solo prove",
-        "sandboxNote": "Le esecuzioni avviate da questo ruolo aprono una pull request e non uniscono nulla, quindi le regole per categoria qui sotto non possono restringerle ulteriormente.",
+        "sandboxNote": "Le esecuzioni di questo ruolo aprono una pull request e non uniscono nulla, quindi nessuno dei limiti qui sotto può renderle più severe.",
+        "submissionLabel": "Limita quali modifiche questo ruolo può unire",
+        "submissionHelp": "Se attivo, nelle esecuzioni avviate da questo ruolo vengono unite solo le tipologie selezionate. Il resto resta aperto per qualcun altro, quali che siano i punteggi. La pull request viene comunque aperta e può essere unita a mano sull'host git.",
+        "submissionNone": "Non è selezionato nulla, quindi questo spazio di lavoro non unirà nessuna esecuzione di questo ruolo.",
+        "submissionBadge": "Unione limitata",
+        "classHeading": "Revisione richiesta per tipo di modifica",
         "noRules": "Nessun limite per categoria",
         "ruleCount": "{count} categoria limitata | {count} categorie limitate",
         "inherit": "Come questo criterio",
@@ -1799,6 +1804,7 @@
         "class_auto_merge": "Questo preset unisce sempre automaticamente questa categoria di modifica, quindi i punteggi non sono stati confrontati.",
         "class_requires_review": "Questo preset invia sempre questa categoria di modifica a una persona, indipendentemente dai punteggi.",
         "role_requires_review": "Questa impostazione sottopone a revisione umana le esecuzioni avviate da un {role} per questo tipo di modifica, qualunque siano i punteggi. Un collega di livello superiore può unire questa PR così com’è.",
+        "submission_not_allowed": "Questo preset consente alle esecuzioni avviate da un {role} di unire solo questi tipi di modifica: {classes}. Questa è di un altro tipo, quindi la pull request attende qualcuno il cui ruolo possa unirla.",
         "dry_run": "Questa era una prova, quindi la pull request è rimasta aperta per una persona e i punteggi non sono stati confrontati. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
       },
       "scores": "Punteggi",
@@ -1810,7 +1816,8 @@
       "ceiling": "limite massimo {value}",
       "rationale": "Motivazione",
       "noAssessment": "Il merger non ha restituito una valutazione con punteggio.",
-      "noResult": "Nessuna decisione di merge ancora registrata."
+      "noResult": "Nessuna decisione di merge ancora registrata.",
+      "noSubmittableClasses": "nessuno"
     },
     "testReport": {
       "title": "Report di test",
@@ -5270,7 +5277,8 @@
         "input_gate_parked": "Rispondi nel controllo di input dell'attività",
         "ticket_already_linked": "Questo ticket ha già un'attività",
         "document_already_linked": "Documento già allegato",
-        "dry_run_not_mergeable": "Una prova non può essere unita"
+        "dry_run_not_mergeable": "Una prova non può essere unita",
+        "submission_not_allowed": "Unione non consentita per questa esecuzione"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -5307,7 +5315,8 @@
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
-        "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà."
+        "dry_run_not_mergeable": "Questa pull request proviene da una prova, quindi non può essere unita da qui. Riavvia l’attività come esecuzione reale per produrre una pull request che questo spazio di lavoro unirà.",
+        "submission_not_allowed": "La politica di unione di questa attività non consente al ruolo che ha avviato l'esecuzione di unire questo tipo di modifica. Un collega il cui ruolo lo consente può farlo, oppure un amministratore può ampliare la politica nel preset di unione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -6173,6 +6182,7 @@
       "ciAttempts": "L'esecuzione può fare {count} tentativo per rimettere in verde la CI prima di arrendersi. | L'esecuzione può fare {count} tentativi per rimettere in verde la CI prima di arrendersi.",
       "roleHeading": "Chi ha avviato l'esecuzione",
       "roleSandboxed": "Le esecuzioni avviate da {roles} aprono una pull request e non vengono mai unite.",
+      "roleScoped": "Le esecuzioni avviate da {roles} uniscono solo alcuni tipi di modifica.",
       "roleNarrowed": "Le esecuzioni avviate da {roles} seguono regole più severe per alcune categorie di modifica."
     }
   },

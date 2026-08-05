@@ -578,7 +578,8 @@
         "input_gate_parked": "Respóndelo en la comprobación de entrada de la tarea",
         "ticket_already_linked": "Esta incidencia ya tiene una tarea",
         "document_already_linked": "El documento ya está adjunto",
-        "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar"
+        "dry_run_not_mergeable": "Una ejecución de prueba no se puede fusionar",
+        "submission_not_allowed": "Fusión no permitida para esta ejecución"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -615,7 +616,8 @@
         "input_gate_parked": "Esta ejecución está detenida en su comprobación de entrada, que la vía de aprobación no puede resolver. Usa el aviso de la ejecución: corrige la tarea y vuelve a comprobar, o ejecútala de todos modos.",
         "ticket_already_linked": "Una incidencia solo puede respaldar una tarea, así que volver a vincularla dejaría a la tarea existente sin el contexto con el que se creó. Abre esa tarea o desvincula antes la incidencia.",
         "document_already_linked": "Ese documento está adjunto a otra tarea. Sepáralo allí primero o adjunta una copia aparte.",
-        "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
+        "dry_run_not_mergeable": "Esta pull request proviene de una ejecución de prueba, así que no se puede fusionar desde aquí. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará.",
+        "submission_not_allowed": "La política de fusión de esta tarea no permite que el rol que inició la ejecución fusione este tipo de cambio. Alguien cuyo rol sí lo permita puede hacerlo, o un administrador puede ampliar la política en el preajuste de fusión."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",
@@ -1269,6 +1271,7 @@
         "class_auto_merge": "Este preajuste fusiona siempre esta categoría de cambio de forma automática, así que no se compararon las puntuaciones.",
         "class_requires_review": "Este preajuste envía siempre esta categoría de cambio a una persona, sean cuales sean las puntuaciones.",
         "role_requires_review": "Esta configuración obliga a que las ejecuciones iniciadas por un {role} pasen por revisión humana para este tipo de cambio, sean cuales sean las puntuaciones. Un compañero con un nivel superior puede fusionar este PR tal como está.",
+        "submission_not_allowed": "Este preajuste solo deja que las ejecuciones iniciadas por un {role} fusionen estos tipos de cambio: {classes}. Este es de otro tipo, así que la pull request espera a alguien cuyo rol pueda fusionarla.",
         "dry_run": "Esta fue una ejecución de prueba, así que la pull request quedó abierta para una persona y no se compararon las puntuaciones. Vuelve a iniciar la tarea como ejecución real para producir una pull request que este espacio de trabajo sí fusionará."
       },
       "scores": "Puntuaciones",
@@ -1280,7 +1283,8 @@
       "ceiling": "límite {value}",
       "rationale": "Justificación",
       "noAssessment": "El fusionador no devolvió una evaluación puntuada.",
-      "noResult": "Aún no se ha registrado ninguna decisión de fusión."
+      "noResult": "Aún no se ha registrado ninguna decisión de fusión.",
+      "noSubmittableClasses": "ninguno"
     },
     "testReport": {
       "title": "Informe de pruebas",
@@ -2768,10 +2772,15 @@
       },
       "roleRules": {
         "heading": "Límites según el rol que inicia",
-        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede quedar sujeto a reglas más estrictas que las de arriba, o solo a ejecuciones de prueba: la canalización trabaja y abre una pull request, pero no se fusiona nada. Un rol solo puede endurecer esta política, nunca relajarla.",
-        "autoMergeOffWarning": "El auto-merge está desactivado en este preajuste, así que cada pull request ya pasa por una persona y los límites de categoría de abajo no añaden nada. Las ejecuciones de prueba siguen aplicándose: también rechazan una fusión manual.",
+        "help": "Lo que puede hacer una ejecución también depende de quién la inició. Un rol puede limitarse a ciertos tipos de cambio, someterse a reglas más estrictas que las de arriba, o limitarse a ejecuciones de prueba: la pipeline trabaja y abre una pull request, y no se fusiona nada. Un rol solo puede restringir esta política, nunca ampliarla.",
+        "autoMergeOffWarning": "La fusión automática está desactivada en este preajuste, así que cada pull request ya pasa por una persona y los límites por clase de abajo no añaden nada. El límite de fusión y las ejecuciones de prueba siguen aplicándose: ambos rechazan también la fusión manual.",
         "sandboxLabel": "Solo ejecuciones de prueba",
-        "sandboxNote": "Las ejecuciones iniciadas por este rol abren una pull request y no fusionan nada, así que las reglas por categoría de abajo no pueden restringirlas más.",
+        "sandboxNote": "Las ejecuciones de este rol abren una pull request y no fusionan nada, así que ninguno de los límites de abajo puede restringirlas más.",
+        "submissionLabel": "Limitar qué cambios puede fusionar este rol",
+        "submissionHelp": "Cuando está activo, solo se fusionan los tipos marcados en las ejecuciones que inicia este rol. El resto queda abierto para otra persona, sin importar las puntuaciones. La pull request se abre igualmente y se puede fusionar a mano en el host de git.",
+        "submissionNone": "No hay nada marcado, así que este espacio de trabajo no fusionará ninguna ejecución de este rol.",
+        "submissionBadge": "Fusión limitada",
+        "classHeading": "Revisión necesaria por tipo de cambio",
         "noRules": "Sin límites por categoría",
         "ruleCount": "{count} categoría limitada | {count} categorías limitadas",
         "inherit": "Igual que esta política",
@@ -6040,6 +6049,7 @@
       "ciAttempts": "La ejecución puede intentar {count} vez poner CI en verde antes de rendirse. | La ejecución puede intentar {count} veces poner CI en verde antes de rendirse.",
       "roleHeading": "Quién inició la ejecución",
       "roleSandboxed": "Las ejecuciones iniciadas por {roles} abren una pull request y nunca se fusionan.",
+      "roleScoped": "Las ejecuciones iniciadas por {roles} solo fusionan ciertos tipos de cambio.",
       "roleNarrowed": "Las ejecuciones iniciadas por {roles} siguen reglas más estrictas en algunas categorías de cambio."
     }
   },

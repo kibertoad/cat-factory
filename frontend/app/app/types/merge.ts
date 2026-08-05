@@ -16,6 +16,8 @@ export type {
   // runs are sandboxed (they open a pull request and merge nothing).
   ClassRulesByRole,
   DryRunRoles,
+  // Which change classes a role may LAND at all (absent ⇒ unrestricted, empty ⇒ nothing).
+  SubmissionClassesByRole,
   WorkspaceRole,
   MergeTrackRecord,
   ReviewEffort,

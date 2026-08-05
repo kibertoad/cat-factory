@@ -71,6 +71,7 @@ const REASON_KEYS: Record<MergeDecision['reason'], string> = {
   class_auto_merge: 'panels.mergerResult.reason.class_auto_merge',
   class_requires_review: 'panels.mergerResult.reason.class_requires_review',
   role_requires_review: 'panels.mergerResult.reason.role_requires_review',
+  submission_not_allowed: 'panels.mergerResult.reason.submission_not_allowed',
   dry_run: 'panels.mergerResult.reason.dry_run',
 }
 const OUTCOME_KEYS: Record<MergeDecision['outcome'], string> = {
@@ -152,6 +153,12 @@ const reasonText = computed(() => {
   return t(REASON_KEYS[d.reason], {
     preset: d.thresholds.presetName,
     axes: axisLabels,
+    // The classes the initiator's role MAY land, so the refusal names what the remedy is
+    // measured against. Empty is a real policy (that role lands nothing) and reads as such
+    // through its own translated phrase rather than as a blank in the middle of a sentence.
+    classes: d.thresholds.submissionClasses?.length
+      ? d.thresholds.submissionClasses.map((c) => t(CLASS_KEYS[c])).join(', ')
+      : t('panels.mergerResult.noSubmittableClasses'),
     // Never blank: a role-scoped reason is only ever produced for a run that pinned one, and the
     // fallback keeps the sentence readable rather than leaving a hole if that ever changes.
     role: d.thresholds.initiatorRole

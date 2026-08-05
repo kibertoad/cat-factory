@@ -525,10 +525,15 @@
       },
       "roleRules": {
         "heading": "Grenzen je startender Rolle",
-        "help": "Was ein Lauf darf, hängt auch davon ab, wer ihn gestartet hat. Eine Rolle kann strengeren Regeln als den obigen unterliegen oder nur Probeläufe machen: Die Pipeline arbeitet und öffnet einen Pull Request, zusammengeführt wird nichts. Eine Rolle kann diese Richtlinie nur verschärfen, nie lockern.",
-        "autoMergeOffWarning": "Für diese Vorlage ist das automatische Zusammenführen aus, jeder Pull Request geht also ohnehin an einen Menschen und die Kategoriegrenzen unten ändern nichts mehr. Probeläufe gelten weiterhin: Sie verweigern auch das manuelle Zusammenführen.",
+        "help": "Was ein Lauf darf, hängt auch davon ab, wer ihn gestartet hat. Eine Rolle kann auf bestimmte Änderungsarten beschränkt, an strengere Regeln als die obigen gebunden oder auf Probeläufe begrenzt werden: Die Pipeline arbeitet und öffnet einen Pull Request, zusammengeführt wird nichts. Eine Rolle kann diese Richtlinie nur einschränken, nie erweitern.",
+        "autoMergeOffWarning": "Automatisches Zusammenführen ist für diese Vorlage aus, daher geht ohnehin jeder Pull Request an einen Menschen und die Klassenlimits unten bewirken nichts. Die Merge-Beschränkung und Probeläufe gelten weiterhin: Beide verweigern auch das manuelle Zusammenführen.",
         "sandboxLabel": "Nur Probeläufe",
-        "sandboxNote": "Läufe dieser Rolle öffnen einen Pull Request und führen nichts zusammen, die Kategorieregeln unten können sie also nicht weiter einschränken.",
+        "sandboxNote": "Läufe dieser Rolle öffnen einen Pull Request und führen nichts zusammen, daher kann keine der Beschränkungen unten sie strenger halten.",
+        "submissionLabel": "Einschränken, welche Änderungen diese Rolle zusammenführen darf",
+        "submissionHelp": "Wenn aktiv, werden bei Läufen dieser Rolle nur die angehakten Änderungsarten zusammengeführt. Alles andere bleibt für jemand anderen offen, unabhängig von den Bewertungen. Der Pull Request wird trotzdem geöffnet und kann auf dem Git-Host von Hand zusammengeführt werden.",
+        "submissionNone": "Nichts ist angehakt, also führt dieser Arbeitsbereich keinen Lauf dieser Rolle zusammen.",
+        "submissionBadge": "Zusammenführen beschränkt",
+        "classHeading": "Erforderliche Prüfung je Änderungsart",
         "noRules": "Keine Kategoriegrenzen",
         "ruleCount": "{count} Kategorie eingeschränkt | {count} Kategorien eingeschränkt",
         "inherit": "Wie in dieser Richtlinie",
@@ -1799,6 +1804,7 @@
         "class_auto_merge": "Diese Vorlage führt diese Änderungskategorie immer automatisch zusammen, daher wurden die Bewertungen nicht verglichen.",
         "class_requires_review": "Diese Vorlage gibt diese Änderungskategorie unabhängig von den Bewertungen immer an einen Menschen.",
         "role_requires_review": "Diese Vorgabe lässt Läufe, die ein {role} startet, für diese Art von Änderung unabhängig von den Bewertungen immer von einem Menschen prüfen. Ein Teammitglied mit höherer Berechtigung kann diesen PR unverändert zusammenführen.",
+        "submission_not_allowed": "Diese Vorlage lässt Läufe, die von {role} gestartet wurden, nur diese Änderungsarten zusammenführen: {classes}. Dies ist eine andere Art, daher wartet der Pull Request auf jemanden, dessen Rolle ihn zusammenführen darf.",
         "dry_run": "Dies war ein Probelauf, daher blieb der Pull Request für einen Menschen offen und die Bewertungen wurden nicht verglichen. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
       },
       "scores": "Bewertungen",
@@ -1810,7 +1816,8 @@
       "ceiling": "Obergrenze {value}",
       "rationale": "Begründung",
       "noAssessment": "Der Merger hat keine bewertete Einschätzung zurückgegeben.",
-      "noResult": "Noch keine Merge-Entscheidung aufgezeichnet."
+      "noResult": "Noch keine Merge-Entscheidung aufgezeichnet.",
+      "noSubmittableClasses": "keine"
     },
     "testReport": {
       "title": "Testbericht",
@@ -5270,7 +5277,8 @@
         "input_gate_parked": "Über die Eingabeprüfung der Aufgabe beantworten",
         "ticket_already_linked": "Dieses Ticket hat bereits eine Aufgabe",
         "document_already_linked": "Dokument bereits angehängt",
-        "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden"
+        "dry_run_not_mergeable": "Probelauf kann nicht zusammengeführt werden",
+        "submission_not_allowed": "Zusammenführen für diesen Lauf nicht erlaubt"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -5307,7 +5315,8 @@
         "input_gate_parked": "Dieser Lauf wartet auf seine Eingabeprüfung, die über die Freigabe nicht beantwortet werden kann. Nutzen Sie den Hinweis am Lauf: Aufgabe ergänzen und erneut prüfen, oder trotzdem ausführen.",
         "ticket_already_linked": "Ein Ticket kann nur eine Aufgabe stützen. Es erneut zu verknüpfen würde der bestehenden Aufgabe genau den Kontext entziehen, mit dem sie angelegt wurde. Öffne stattdessen diese Aufgabe oder hebe die Verknüpfung des Tickets zuerst auf.",
         "document_already_linked": "Dieses Dokument ist an eine andere Aufgabe angehängt. Lösen Sie es dort zuerst, oder hängen Sie eine separate Kopie an.",
-        "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt."
+        "dry_run_not_mergeable": "Dieser Pull Request stammt aus einem Probelauf und kann hier nicht zusammengeführt werden. Starte die Aufgabe erneut als echten Lauf, um einen Pull Request zu erzeugen, den dieser Arbeitsbereich zusammenführt.",
+        "submission_not_allowed": "Die Merge-Richtlinie dieser Aufgabe erlaubt der Rolle, die diesen Lauf gestartet hat, diese Änderungsart nicht zusammenzuführen. Jemand mit einer passenden Rolle kann es tun, oder ein Admin erweitert die Richtlinie in der Merge-Vorlage."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",
@@ -6173,6 +6182,7 @@
       "ciAttempts": "Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt. | Der Lauf darf {count} Mal versuchen, eine rote CI grün zu bekommen, bevor er aufgibt.",
       "roleHeading": "Wer den Lauf gestartet hat",
       "roleSandboxed": "Läufe von {roles} öffnen einen Pull Request und werden nie zusammengeführt.",
+      "roleScoped": "Läufe von {roles} führen nur bestimmte Änderungsarten zusammen.",
       "roleNarrowed": "Für Läufe von {roles} gelten in einigen Änderungskategorien strengere Regeln."
     }
   },

@@ -578,7 +578,8 @@
         "input_gate_parked": "Répondez-y dans la vérification d'entrée de la tâche",
         "ticket_already_linked": "Ce ticket a déjà une tâche",
         "document_already_linked": "Document déjà joint",
-        "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée"
+        "dry_run_not_mergeable": "Une exécution à blanc ne peut pas être fusionnée",
+        "submission_not_allowed": "Fusion non autorisée pour cette exécution"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -615,7 +616,8 @@
         "input_gate_parked": "Cette exécution est en attente de sa vérification d'entrée, à laquelle la validation ne peut pas répondre. Utilisez l'avis sur l'exécution : corrigez la tâche et relancez la vérification, ou exécutez-la quand même.",
         "ticket_already_linked": "Un ticket ne peut alimenter qu'une seule tâche : le relier à nouveau priverait la tâche existante du contexte avec lequel elle a été créée. Ouvrez plutôt cette tâche, ou dissociez d'abord le ticket.",
         "document_already_linked": "Ce document est joint à une autre tâche. Détachez-le d'abord, ou joignez-en une copie distincte.",
-        "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
+        "dry_run_not_mergeable": "Cette pull request provient d'une exécution à blanc et ne peut pas être fusionnée ici. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera.",
+        "submission_not_allowed": "La politique de fusion de cette tâche n'autorise pas le rôle qui a lancé cette exécution à fusionner ce type de changement. Un coéquipier dont le rôle le permet peut le faire, ou un admin peut élargir la politique dans le préréglage de fusion."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",
@@ -1269,6 +1271,7 @@
         "class_auto_merge": "Ce préréglage fusionne toujours automatiquement cette catégorie de changement : les scores n’ont donc pas été comparés.",
         "class_requires_review": "Ce préréglage envoie toujours cette catégorie de changement à un humain, quels que soient les scores.",
         "role_requires_review": "Ce préréglage soumet les exécutions lancées par un {role} à une revue humaine pour ce type de modification, quels que soient les scores. Un collègue d'un niveau supérieur peut fusionner cette PR telle quelle.",
+        "submission_not_allowed": "Ce préréglage ne laisse les exécutions lancées par un {role} fusionner que ces types de changement : {classes}. Celui-ci en est un autre, donc la pull request attend quelqu'un dont le rôle peut la fusionner.",
         "dry_run": "Il s'agissait d'une exécution à blanc : la pull request est restée ouverte pour une personne et les scores n'ont pas été comparés. Relancez la tâche en exécution réelle pour produire une pull request que cet espace de travail fusionnera."
       },
       "scores": "Scores",
@@ -1280,7 +1283,8 @@
       "ceiling": "plafond {value}",
       "rationale": "Justification",
       "noAssessment": "Le fusionneur n'a pas renvoyé d'évaluation chiffrée.",
-      "noResult": "Aucune décision de fusion enregistrée pour le moment."
+      "noResult": "Aucune décision de fusion enregistrée pour le moment.",
+      "noSubmittableClasses": "aucun"
     },
     "testReport": {
       "title": "Rapport de test",
@@ -2768,10 +2772,15 @@
       },
       "roleRules": {
         "heading": "Limites selon le rôle qui lance l'exécution",
-        "help": "Ce qu'une exécution peut faire dépend aussi de qui l'a lancée. Un rôle peut être soumis à des règles plus strictes que celles ci-dessus, ou aux seules exécutions à blanc : le pipeline travaille et ouvre une pull request, mais rien n'est fusionné. Un rôle peut seulement durcir cette politique, jamais l'assouplir.",
-        "autoMergeOffWarning": "La fusion automatique est désactivée pour ce préréglage : chaque pull request passe déjà par un humain et les limites de catégorie ci-dessous n'ajoutent rien. Les exécutions à blanc restent en vigueur : elles refusent aussi une fusion manuelle.",
+        "help": "Ce qu'une exécution peut faire dépend aussi de qui l'a lancée. Un rôle peut être limité à certains types de changement, tenu à des règles plus strictes que celles ci-dessus, ou limité aux exécutions à blanc : la pipeline travaille et ouvre une pull request, et rien n'est fusionné. Un rôle ne peut que restreindre cette politique, jamais l'élargir.",
+        "autoMergeOffWarning": "La fusion automatique est désactivée pour ce préréglage : chaque pull request passe déjà par un humain et les limites par classe ci-dessous n'ajoutent rien. La limite de fusion et les exécutions à blanc s'appliquent toujours : toutes deux refusent aussi la fusion manuelle.",
         "sandboxLabel": "Exécutions à blanc uniquement",
-        "sandboxNote": "Les exécutions lancées par ce rôle ouvrent une pull request et ne fusionnent rien : les règles par catégorie ci-dessous ne peuvent donc rien durcir de plus.",
+        "sandboxNote": "Les exécutions lancées par ce rôle ouvrent une pull request et ne fusionnent rien, donc aucune des limites ci-dessous ne peut les restreindre davantage.",
+        "submissionLabel": "Limiter les changements que ce rôle peut fusionner",
+        "submissionHelp": "Une fois activé, seuls les types cochés sont fusionnés pour les exécutions lancées par ce rôle. Le reste attend quelqu'un d'autre, quels que soient les scores. La pull request est quand même ouverte et reste fusionnable à la main sur l'hôte git.",
+        "submissionNone": "Rien n'est coché : cet espace de travail ne fusionnera aucune exécution lancée par ce rôle.",
+        "submissionBadge": "Fusion limitée",
+        "classHeading": "Relecture exigée par type de changement",
         "noRules": "Aucune limite par catégorie",
         "ruleCount": "{count} catégorie limitée | {count} catégories limitées",
         "inherit": "Comme cette politique",
@@ -6040,6 +6049,7 @@
       "ciAttempts": "L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner. | L'exécution peut tenter {count} fois de remettre la CI au vert avant d'abandonner.",
       "roleHeading": "Qui a lancé l'exécution",
       "roleSandboxed": "Les exécutions lancées par {roles} ouvrent une pull request et ne sont jamais fusionnées.",
+      "roleScoped": "Les exécutions lancées par {roles} ne fusionnent que certains types de changement.",
       "roleNarrowed": "Les exécutions lancées par {roles} suivent des règles plus strictes pour certaines catégories de changement."
     }
   },

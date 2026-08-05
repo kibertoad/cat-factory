@@ -23,11 +23,12 @@ const ROLE_LABEL: Record<WorkspaceRole, () => string> = {
   viewer: () => t('merge.role.viewer'),
 }
 const roleLayer = computed(() => {
-  const { sandboxed, narrowed } = rolePolicySummary(props.policy)
+  const { sandboxed, narrowed, scoped } = rolePolicySummary(props.policy)
   return {
     sandboxed: sandboxed.map((r) => ROLE_LABEL[r]()).join(', '),
     narrowed: narrowed.map((r) => ROLE_LABEL[r]()).join(', '),
-    any: sandboxed.length > 0 || narrowed.length > 0,
+    scoped: scoped.map((r) => ROLE_LABEL[r]()).join(', '),
+    any: sandboxed.length > 0 || narrowed.length > 0 || scoped.length > 0,
   }
 })
 
@@ -93,6 +94,9 @@ const ceilings = computed(() =>
       </div>
       <p v-if="roleLayer.sandboxed" class="text-[12px] leading-snug text-slate-400">
         {{ t('riskPolicy.preview.roleSandboxed', { roles: roleLayer.sandboxed }) }}
+      </p>
+      <p v-if="roleLayer.scoped" class="text-[12px] leading-snug text-slate-400">
+        {{ t('riskPolicy.preview.roleScoped', { roles: roleLayer.scoped }) }}
       </p>
       <p v-if="roleLayer.narrowed" class="text-[12px] leading-snug text-slate-400">
         {{ t('riskPolicy.preview.roleNarrowed', { roles: roleLayer.narrowed }) }}
