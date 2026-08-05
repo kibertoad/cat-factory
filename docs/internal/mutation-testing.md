@@ -26,6 +26,11 @@ flow itself, so the flow is provable before it merges.
 
 Each job runs one package, so a red package names itself and the others still finish.
 
+`scripts/stryker-base.mjs` types its return value against `@stryker-mutator/api`, which is why that
+package sits in the ROOT `devDependencies` even though nothing at the root executes Stryker. The only
+reference is a JSDoc `import()` type, so a dependency sweep reads it as dead weight. It is not:
+dropping it while the reference stands is what knip's `unlisted` rule fails the build on.
+
 The PR trigger is scoped to the flow's own files (this workflow, the shared config, the two scripts,
 any package's `stryker.config.mjs`). It exists because `workflow_dispatch` only works once a workflow
 is on the default branch, so a change to the flow could otherwise be proven only after merging it.
