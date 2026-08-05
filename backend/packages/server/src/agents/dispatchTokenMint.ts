@@ -39,6 +39,9 @@ export interface DispatchTokenMintDependencies {
   operationalMetrics?: OperationalMetrics
 }
 
+/** The scope was named but does not map onto GitHub repo ids: distinct from "none was named". */
+const UNMAPPABLE_SCOPE = Symbol('unmappable-repo-scope')
+
 export function buildDispatchTokenMint(deps: DispatchTokenMintDependencies): MintInstallationToken {
   const log = deps.logger ?? noopLogger
   return async (installationId, ctx) => {
@@ -66,9 +69,6 @@ export function buildDispatchTokenMint(deps: DispatchTokenMintDependencies): Min
     return deps.mint(installationId, repositoryIds ? { repositoryIds } : undefined)
   }
 }
-
-/** The scope was named but does not map onto GitHub repo ids: distinct from "none was named". */
-const UNMAPPABLE_SCOPE = Symbol('unmappable-repo-scope')
 
 /**
  * The neutral `VcsRepoRef.repoId` scope as GitHub's `repository_ids`, or `undefined` when the
