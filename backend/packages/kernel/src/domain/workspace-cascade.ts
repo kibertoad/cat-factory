@@ -72,6 +72,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'initiatives',
   'kaizen_gradings',
   'kaizen_verified_combos',
+  'mcp_oauth_grants',
   'merge_threshold_presets',
   'merge_track_records',
   'model_presets',

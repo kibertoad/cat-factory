@@ -3015,6 +3015,27 @@
       "servableHarnessesNone": "Hiçbir ajan CLI’si bu taşımayı sunamaz, dolayısıyla bu sunucu hiçbir çalıştırmada geçerli olmaz.",
       "allowedTools": "Şunlarla sınırlı: {tools}",
       "credentials": "Kimlik bilgileri: {keys}",
+      "oauth": {
+        "connected": "Bağlandı",
+        "notConnected": "Bağlı değil",
+        "machineGrant": "Bu dağıtım olarak oturum açar",
+        "connectedBy": "{user} bağladı",
+        "scopes": "Verilen izinler: {scopes}",
+        "notRefreshable": "Sağlayıcı yenileme belirteci vermedi, bu yüzden erişim belirteci sona erdiğinde bağlantının yeniden kurulması gerekir.",
+        "lastError": "Son belirteç yenileme başarısız oldu: {detail}",
+        "connect": "Bağlan",
+        "reconnect": "Yeniden bağlan",
+        "disconnect": "Bağlantıyı kes",
+        "callback": {
+          "working": "Bağlantı tamamlanıyor…",
+          "done": "{server} bağlandı",
+          "doneHint": "Bu panonun çalıştırmaları artık araç sunucusunu oturum açtığınız hesapla kullanabilir.",
+          "back": "Uygulamaya dön",
+          "failedTitle": "Bağlantı tamamlanamadı",
+          "failed": "Yetkilendirme tamamlanamadı. Bağlantıyı Altyapı penceresinden yeniden başlatın.",
+          "missingParams": "Bu bağlantıda sağlayıcının geri gönderdiği değerler eksik, bu yüzden tamamlanacak bir şey yok. Bağlantıyı yeniden başlatın."
+        }
+      },
       "test": "Test et",
       "notProbeable": {
         "stdio": "Ajanın konteynerinin içinde çalışır, bu yüzden buradan test edilemez.",
@@ -3025,6 +3046,8 @@
         "ok": "Yanıt verdi",
         "credentialsMissing": "Kimlik bilgisi yok",
         "credentialRefused": "Kimlik bilgisi reddedildi",
+        "oauthNotConnected": "Bağlı değil",
+        "oauthTokenFailed": "Bağlantı çalışmayı bıraktı",
         "unreachable": "Yanıt yok",
         "httpError": "İsteği reddetti",
         "protocolError": "MCP sunucusu değil",
@@ -3041,7 +3064,9 @@
       "hideDetails": "Ayrıntıları gizle",
       "toast": {
         "loadFailed": "Araç sunucuları yüklenemedi",
-        "probeFailed": "Araç sunucusu test edilemedi"
+        "probeFailed": "Araç sunucusu test edilemedi",
+        "connectFailed": "Bağlantı başlatılamadı",
+        "disconnectFailed": "Araç sunucusunun bağlantısı kesilemedi"
       }
     },
     "capabilityCredentials": {

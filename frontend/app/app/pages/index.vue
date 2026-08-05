@@ -285,6 +285,27 @@ watch(
   { immediate: true },
 )
 
+// Probe the GitHub integration as soon as a board is active (re-probe per board —
+// connections are per workspace). The result drives the onboarding gate in the template
+// before the board mounts, so an unconnected user can't slip past it. `ensureProbed`
+// single-flights per board (app-startup initiative, item 12), so this and the SideBar's
+// probe collapse to one request on a cold open instead of two.
+watch(
+  () => workspace.workspaceId,
+  (id) => {
+    if (id) void github.ensureProbed()
+  },
+  { immediate: true },
+)
+
+// Hard gate: the App is enabled on the backend but this workspace has no
+// installation yet. `available === null` means the probe is still in flight.
+// Both are declared here, ahead of the tutorial offer below, because that offer reads them
+// from a watcher that runs synchronously during setup (`immediate: true`). Declared after
+// it, they'd still be in their TDZ and the first run would throw.
+const needsGitHubInstall = computed(() => github.available === true && !github.connected)
+const githubProbePending = computed(() => github.available === null)
+
 // Offer the tutorial on launch, once the board is up. Yields to every other startup
 // surface — the GitHub onboarding gate and the advisory/onboarding modals above — so a
 // first launch never stacks the tour prompt on top of a dialog that needs answering
@@ -346,24 +367,6 @@ useTutorialNudge()
 // plus the funnel counters. Unconditional and best-effort: with no accounts or no store wired it
 // simply has nothing to talk to, and the browser-persisted store carries on alone.
 useTutorialSync()
-
-// Probe the GitHub integration as soon as a board is active (re-probe per board —
-// connections are per workspace). The result drives the onboarding gate below
-// before the board mounts, so an unconnected user can't slip past it. `ensureProbed`
-// single-flights per board (app-startup initiative, item 12), so this and the SideBar's
-// probe collapse to one request on a cold open instead of two.
-watch(
-  () => workspace.workspaceId,
-  (id) => {
-    if (id) void github.ensureProbed()
-  },
-  { immediate: true },
-)
-
-// Hard gate: the App is enabled on the backend but this workspace has no
-// installation yet. `available === null` means the probe is still in flight.
-const needsGitHubInstall = computed(() => github.available === true && !github.connected)
-const githubProbePending = computed(() => github.available === null)
 
 // Subscribe to the backend's real-time event stream and (re)connect whenever the
 // active workspace changes. Runs advance durably server-side; progress arrives as

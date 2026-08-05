@@ -18,12 +18,7 @@ const { freeFramePosition, focusFrame } = useFramePlacement()
 const { t } = useI18n()
 const { confirmAction, toastDone } = useConfirmAction()
 
-const open = computed({
-  get: () => ui.bootstrapOpen,
-  set: (v: boolean) => {
-    if (!v) void requestClose()
-  },
-})
+const open = computed(() => ui.bootstrapOpen)
 
 // Load the workspace's reference architectures + recent jobs, plus (best-effort)
 // the GitHub repos the user can access so the base form can pick from them.
@@ -98,6 +93,15 @@ const { requestClose } = useUnsavedGuard({
     description: description.value.trim(),
     instructions: instructions.value.trim(),
   }),
+})
+
+// The template's v-model binding: dismissal (Escape / backdrop) routes through the guard.
+// Declared after the guard so the setter's `requestClose` reference is never in its TDZ.
+const modalOpen = computed({
+  get: () => open.value,
+  set: (v: boolean) => {
+    if (!v) void requestClose()
+  },
 })
 
 // Mirror of the backend `slugField` rule (@cat-factory/contracts bootstrap
@@ -420,7 +424,7 @@ const statusLabel = computed<Record<BootstrapStatus, string>>(() => ({
 </script>
 
 <template>
-  <UModal v-model:open="open" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="modalOpen" :title="t('bootstrap.title')" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <div class="space-y-6">
         <!-- Three states, because each promises the user something different about the repo.

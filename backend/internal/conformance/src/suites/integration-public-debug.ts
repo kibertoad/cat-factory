@@ -172,6 +172,15 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       }
       // Totals are folded from the SQL rollup, so they exist even for a run with no calls.
       expect(overview.body.llm.totals.calls).toBe(overview.body.sinks.llmCalls.count)
+      // The tool-call rollup is folded from the SAME aggregate the sink count is taken from, so
+      // the two agree by construction rather than by two queries happening to match. A run with
+      // no tool calls reports a NULL failure rate, never a clean 0%: a rate of zero would file
+      // "nothing happened" beside "everything worked".
+      expect(overview.body.toolCalls.totals.calls).toBe(overview.body.sinks.toolCalls.count)
+      expect(overview.body.toolCalls.totals.failures).toBe(0)
+      expect(overview.body.toolCalls.totals.failureRate).toBeNull()
+      expect(overview.body.toolCalls.byTool).toEqual([])
+      expect(overview.body.toolCalls.byAgentKind).toEqual([])
     })
 
     it('serves every per-run detail list for a real run, bounded and empty-safe', async () => {
@@ -249,6 +258,28 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(resumedRecent.status).toBe(200)
+
+      // The outcome filter rides BOTH orders through the controller (its SQL semantics are
+      // pinned by the per-store suite; what only this can see is that each facade wired the
+      // param), and its vocabulary is closed: anything but true/false is a 400 rather than a
+      // page silently served unfiltered, which a caller counting failures would read as zero.
+      for (const query of ['ok=false', 'ok=true', 'ok=false&order=trajectory']) {
+        const filtered = await app.call<{ toolCalls: unknown[] }>(
+          'GET',
+          `/api/v1/debug/runs/${runId}/tool-calls?${query}`,
+          undefined,
+          auth,
+        )
+        expect(filtered.status).toBe(200)
+        expect(filtered.body.toolCalls).toEqual([])
+      }
+      const badOk = await app.call(
+        'GET',
+        `/api/v1/debug/runs/${runId}/tool-calls?ok=maybe`,
+        undefined,
+        auth,
+      )
+      expect(badOk.status).toBe(400)
 
       // The search and ordering narrowings ride the same route (their SQL semantics are pinned
       // by the per-store suite; what only this can see is that each facade wired the params).

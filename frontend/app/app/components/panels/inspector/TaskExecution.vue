@@ -56,6 +56,13 @@ const instance = computed(() => execution.getInstance(props.block.executionId))
 // is that nothing will merge, and WHY is answered by the run's own notes and the merge decision.
 const sandboxed = computed(() => isDryRun(instance.value?.mode))
 
+// A failed pipeline run surfaces the shared failure banner + retry — the
+// execution failure surface that the old `pr_ready` flip used to hide.
+const failedRun = computed(() => {
+  const run = agentRuns.byBlock[props.block.id]
+  return run && run.status === 'failed' ? run : null
+})
+
 // Nothing to show yet: no run, no failed run, no PR, and not awaiting a merge — render an
 // empty state instead of a blank gap so the section reads as "no runs yet" rather than broken.
 const isEmpty = computed(
@@ -76,13 +83,6 @@ const runFailed = computed(() => instance.value?.status === 'failed')
  * kind-specific behind. Which verdicts earn a notice is `inputGateNoticeFor`'s call.
  */
 const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
-
-// A failed pipeline run surfaces the shared failure banner + retry — the
-// execution failure surface that the old `pr_ready` flip used to hide.
-const failedRun = computed(() => {
-  const run = agentRuns.byBlock[props.block.id]
-  return run && run.status === 'failed' ? run : null
-})
 
 // Failures from prior attempts, preserved across retries — shown regardless of the run's
 // CURRENT status, so the error trail stays viewable after a restart clears the top banner.
