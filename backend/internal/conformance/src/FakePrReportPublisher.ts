@@ -26,8 +26,15 @@ const CONNECTION = { provider: 'github', connectionId: '1' } as const
  * peers carried the own-service report.
  */
 export class FakePrReportPublisher implements PrVerificationReportPublisher {
-  /** The current "PR body" per `<repo>#<number>`. See {@link bodyKey}. */
-  readonly bodies = new Map<string, string>()
+  /**
+   * The current "PR body" per PULL REQUEST (`<repo>#<number>`). PRIVATE, and seeded through an
+   * accessor rather than written directly, because the key is not something a caller should have
+   * to know: it was the block id alone, then the block plus its PR, and each time a suite that
+   * kept using the old form silently seeded a body no publish ever reads (the report then lands
+   * on an empty one and the "the agent's own prose survives" assertion tests nothing). Go through
+   * {@link seedBody} / {@link body}.
+   */
+  private readonly bodies = new Map<string, string>()
   /** Every publish call, in order, for asserting how many remote writes were attempted. */
   readonly calls: {
     workspaceId: string
@@ -53,6 +60,25 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
    * driving two runs would assert one's report while reading the other's.
    */
   private readonly ownByBlock = new Map<string, PrReportTarget>()
+
+  /**
+   * Seed the OWN-SERVICE pull request's body — the coder's own description, as it stands before
+   * the engine ever touches it. Use this rather than writing the map directly.
+   */
+  seedBody(blockId: string, body: string): void {
+    this.bodies.set(bodyKey(this.ownTarget(blockId)), body)
+  }
+
+  /** The full current body of a block's own-service PR (prose + any managed region). */
+  body(blockId: string): string | undefined {
+    return this.bodies.get(bodyKey(this.ownTarget(blockId)))
+  }
+
+  /** The full current body of one of the block's PEER pull requests. */
+  peerBody(blockId: string, repo: string): string | undefined {
+    const target = this.peers.get(blockId)?.find((t) => t.repo === repo)
+    return target ? this.bodies.get(bodyKey(target)) : undefined
+  }
 
   /** Seed a block's peer PR (the multi-repo case), returning the target it will resolve. */
   addPeer(blockId: string, repo: string, prNumber: number, frameId?: string): PrReportTarget {
@@ -103,13 +129,12 @@ export class FakePrReportPublisher implements PrVerificationReportPublisher {
    * published. This is the report a single-repo run produces, and the complete one.
    */
   section(blockId: string): string | null {
-    return readManagedSection(this.bodies.get(bodyKey(this.ownTarget(blockId))))
+    return readManagedSection(this.body(blockId))
   }
 
   /** The same, for one of the block's PEER pull requests (addressed by its repo). */
   peerSection(blockId: string, repo: string): string | null {
-    const target = this.peers.get(blockId)?.find((t) => t.repo === repo)
-    return target ? readManagedSection(this.bodies.get(bodyKey(target))) : null
+    return readManagedSection(this.peerBody(blockId, repo))
   }
 
   /** The block's own-service target, minted once and stable for the fake's lifetime. */
