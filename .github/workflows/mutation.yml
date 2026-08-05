@@ -19,8 +19,19 @@ on:
   # main-branch trend line.
   schedule:
     - cron: '20 3 * * *'
-  # Manual runs on any branch, so a change to the mutated packages (or to this workflow) can be
-  # measured before it merges, optionally narrowed to one package.
+  # A change to the mutation flow ITSELF runs it on the PR making the change. `workflow_dispatch`
+  # only exists once a workflow sits on the default branch, so without this the flow could first be
+  # proven only AFTER merging it, and a broken matrix or a renamed script would surface as a red
+  # nightly on main. An ordinary PR matches none of these paths and pays nothing.
+  pull_request:
+    paths:
+      - '.github/workflows/mutation.yml'
+      - 'scripts/stryker-base.mjs'
+      - 'scripts/mutation-targets.mjs'
+      - 'scripts/mutation-summary.mjs'
+      - 'backend/**/stryker.config.mjs'
+  # Manual runs on any branch, so a change to the mutated packages can be measured before it merges,
+  # optionally narrowed to one package.
   workflow_dispatch:
     inputs:
       package:

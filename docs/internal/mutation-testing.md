@@ -13,17 +13,21 @@ never expected on a developer's laptop.
 
 ## How it runs
 
-|                  |                                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Workflow         | [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml): nightly cron + `workflow_dispatch` (optionally one package) |
-| Blocking?        | No. A separate workflow contributes no check to `ci.yml`'s aggregated `Build` / `Test` gates                                          |
-| Per package      | `pnpm exec turbo run test:mutation --filter=<package>` (the package script is `stryker run`)                                          |
-| Shared policy    | [`scripts/stryker-base.mjs`](../../scripts/stryker-base.mjs)                                                                          |
-| Target discovery | [`scripts/mutation-targets.mjs`](../../scripts/mutation-targets.mjs)                                                                  |
-| Score table      | [`scripts/mutation-summary.mjs`](../../scripts/mutation-summary.mjs), appended to the run summary                                     |
-| Report           | Uploaded per package as the `mutation-report-<slug>` artifact (HTML + JSON, 14 days)                                                  |
+|                  |                                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workflow         | [`.github/workflows/mutation.yml`](../../.github/workflows/mutation.yml): nightly cron, `workflow_dispatch` (optionally one package), plus any PR touching the flow's own files |
+| Blocking?        | No. A separate workflow contributes no check to `ci.yml`'s aggregated `Build` / `Test` gates                                                                                    |
+| Per package      | `pnpm exec turbo run test:mutation --filter=<package>` (the package script is `stryker run`)                                                                                    |
+| Shared policy    | [`scripts/stryker-base.mjs`](../../scripts/stryker-base.mjs)                                                                                                                    |
+| Target discovery | [`scripts/mutation-targets.mjs`](../../scripts/mutation-targets.mjs)                                                                                                            |
+| Score table      | [`scripts/mutation-summary.mjs`](../../scripts/mutation-summary.mjs), appended to the run summary                                                                               |
+| Report           | Uploaded per package as the `mutation-report-<slug>` artifact (HTML + JSON, 14 days)                                                                                            |
 
 Each job runs one package, so a red package names itself and the others still finish.
+
+The PR trigger is scoped to the flow's own files (this workflow, the shared config, the two scripts,
+any package's `stryker.config.mjs`). It exists because `workflow_dispatch` only works once a workflow
+is on the default branch, so a change to the flow could otherwise be proven only after merging it.
 
 ### Do not run it locally
 
