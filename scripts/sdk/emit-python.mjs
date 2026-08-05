@@ -291,16 +291,21 @@ function emitObject(type) {
     '    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is\n' +
     '    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can\n' +
     '    #: still reach a newly added field instead of having to upgrade first.\n' +
-    // `dataclasses.field`, never the bare `field` this module also imports. This is the ONE
-    // executable expression in a generated class BODY, so it is the one name a wire property
-    // can shadow: `{"field": {...}}` on the wire emits `field: X | None = None` above, which
-    // binds `field` in the class namespace and turns the call below into `None(...)`. It took
-    // out every import of the package, because one unimportable model breaks the whole module.
-    // The decorator needs no such care: it is evaluated at MODULE scope, before the class body
-    // binds anything. Regenerate-and-diff cannot catch this class of bug (the emitter is
-    // consistent in both halves), so the guard is `sdk/python/tests/test_models.py`, which
+    // `_dc_field`, never a bare `field`: a wire property may legitimately be NAMED `field`
+    // (`PublicInputGateDecisionIssue.field` is), and a dataclass attribute of that name SHADOWS
+    // the import inside the class body, so the next line would call the attribute's `None`
+    // default instead of `dataclasses.field` and the module would fail to import. Not just this
+    // model's: `__init__.py` reaches models through `client` and `operations`, so one
+    // unimportable class takes out every import of the package. The underscore prefix also keeps
+    // the alias out of the module's public surface.
+    //
+    // This is the ONE executable expression in a generated class BODY, which is what makes it the
+    // one name a wire property can shadow: the decorator is evaluated at MODULE scope before the
+    // body binds anything, and annotations are strings under `from __future__ import
+    // annotations`. Regenerate-and-diff structurally cannot catch this class of bug (the emitter
+    // is consistent in both halves), so the guard is `sdk/python/tests/test_models.py`, which
     // imports the real generated module and round-trips the shape that first broke it.
-    '    extra: dict[str, Any] = dataclasses.field(default_factory=dict)\n' +
+    '    extra: dict[str, Any] = _dc_field(default_factory=dict)\n' +
     '\n' +
     '    @classmethod\n' +
     `    def from_dict(cls, data: Mapping[str, Any]) -> "${type.name}":\n` +
@@ -380,9 +385,8 @@ release older than the deployment it talks to degrades to "less typed", never to
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field as _dc_field
 from enum import Enum, StrEnum
 from typing import Any, TypeAlias
 
