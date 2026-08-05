@@ -12,7 +12,7 @@ import type {
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { DEPLOYER_AGENT_KIND } from '@cat-factory/integrations'
 import { isTesterKind } from './ci.logic.js'
-import { findStep } from './prReport.steps.js'
+import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's TEST ENVIRONMENT LIFECYCLE section: the three-leg proof that the
@@ -622,7 +622,7 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
           ? '❓ the tester did not say where it ran'
           : '➖ none'
   const out = [`**Evidence:** ${label}`]
-  if (evidence.status !== 'captured' && evidence.note) out.push(`_${evidence.note}_`)
+  if (evidence.status !== 'captured' && evidence.note) out.push(absentNote(evidence.note))
   if (evidence.status === 'absent') return [...out, '']
   const counts = [
     `${evidence.outcomes} area${evidence.outcomes === 1 ? '' : 's'} exercised`,
@@ -657,7 +657,7 @@ function renderEvidence(evidence: PrReportEnvironmentEvidence): string[] {
 export function renderEnvironments(envs: PrVerificationReport['environments']): string[] {
   const out = ['### Test environment lifecycle', '']
   if (envs.status === 'absent') {
-    return [...out, `_${envs.note}_`, '', ...renderEvidence(envs.evidence)]
+    return [...out, absentNote(envs.note), '', ...renderEvidence(envs.evidence)]
   }
   out.push(...renderProof(envs))
   out.push('| Service frame | State | URL | Error |', '| --- | --- | --- | --- |')

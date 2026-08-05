@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRepository,
   ExecutionInstance,
+  PrReportTarget,
   PrVerificationReportPublisher,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -44,8 +45,10 @@ function recordingPublisher() {
   return {
     sections,
     publisher: {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' as const }),
-      publish: async (_ws: string, _block: string, section: string) => {
+      resolveTargets: async () => [
+        { prNumber: 7, repo: 'acme/api', provider: 'github' as const, role: 'own' as const },
+      ],
+      publish: async (_ws: string, _block: string, _target: PrReportTarget, section: string) => {
         sections.push(section)
         return { published: true }
       },
@@ -88,8 +91,8 @@ describe('PrVerificationReportController', () => {
     const sections: string[] = []
     let blockReads = 0
     const publisher: PrVerificationReportPublisher = {
-      resolveTarget: async () => null,
-      publish: async (_ws, _block, section) => {
+      resolveTargets: async () => [],
+      publish: async (_ws, _block, _target, section) => {
         sections.push(section)
         return { published: true }
       },
@@ -113,8 +116,10 @@ describe('PrVerificationReportController', () => {
     // it is actually written onto.
     const sections: string[] = []
     const publisher: PrVerificationReportPublisher = {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'gitlab' }),
-      publish: async (_ws, _block, section) => {
+      resolveTargets: async () => [
+        { prNumber: 7, repo: 'acme/api', provider: 'gitlab', role: 'own' },
+      ],
+      publish: async (_ws, _block, _target, section) => {
         sections.push(section)
         return { published: true }
       },
@@ -164,7 +169,9 @@ describe('PrVerificationReportController', () => {
 
   it('never lets a publisher failure escape into the run', async () => {
     const failing: PrVerificationReportPublisher = {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' }),
+      resolveTargets: async () => [
+        { prNumber: 7, repo: 'acme/api', provider: 'github', role: 'own' },
+      ],
       publish: async () => {
         throw new Error('GitHub is down')
       },
@@ -221,7 +228,7 @@ describe('PrVerificationReportController', () => {
     // The publish path short-circuits here (nowhere to write); the read path must not, because a
     // headless job and a run that failed before it pushed are exactly what a consumer asks about.
     const publisher = {
-      resolveTarget: async () => null,
+      resolveTargets: async () => [],
       publish: async () => ({ published: false as const }),
     } satisfies PrVerificationReportPublisher
     const report = await new PrVerificationReportController({

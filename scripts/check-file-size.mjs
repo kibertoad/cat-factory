@@ -218,7 +218,7 @@ const LEGACY_ALLOWANCES = new Map([
  * Shrink-only, like LEGACY_ALLOWANCES: move detail into the linked authority doc rather than
  * raising the number, and lower the allowance in the same PR when a cleanup lands a win.
  */
-const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1100]])
+const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1099]])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and

@@ -28,6 +28,7 @@ import {
   type AppConfig,
   type GitHubAppRegistry,
   type ResolveRepoTarget,
+  type ResolveRepoTargets,
   type ResolveRepoOrigin,
   type ResolveRunInitiatorToken,
   FetchGitHubClient,
@@ -161,6 +162,13 @@ export interface NodeGitHubDepsInput {
   gitlabEngineClient: GitHubClient | undefined
   providerRegistry: ProviderRegistry
   resolveRepoTarget: ResolveRepoTarget
+  /**
+   * The MULTI-REPO resolver, so the verification report reaches a cross-service run's PEER pull
+   * requests as well as its own-service one (it supplies the connection each peer repo's write
+   * goes through). Absent ⇒ own-service PRs only, which is also the only kind a deployment
+   * without the involved-services fan-out ever opens.
+   */
+  resolveRepoTargets?: ResolveRepoTargets
   /**
    * Maps a resolved repo to its origin. Threaded through so the verification report states the
    * deployment's real provider instead of assuming GitHub; absent ⇒ the shared `githubRepoOrigin`
@@ -349,13 +357,16 @@ export function selectNodeGitHubDeps(input: NodeGitHubDepsInput): NodeGitHubDeps
         resolveRepoTarget,
         blockRepository,
       }),
-      // Keeps the engine-maintained verification report current on each run's PR. Reads
-      // through the same `engineVcsClient`, so a GitLab-only deployment gets it too.
+      // Keeps the engine-maintained verification report current on every pull request the run
+      // opened — the own-service one plus each peer repo's. Reads through the same
+      // `engineVcsClient`, so a GitLab-only deployment gets it too.
       prVerificationReportPublisher: new GitHubPrReportPublisher({
         githubClient: engineVcsClient,
         resolveRepoTarget,
+        resolveRepoTargets: input.resolveRepoTargets,
         blockRepository,
         resolveRepoOrigin: input.resolveRepoOrigin,
+        logger,
       }),
     }
   }

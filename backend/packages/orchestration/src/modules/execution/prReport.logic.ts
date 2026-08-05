@@ -7,6 +7,7 @@ import type {
   PrReportCheck,
   PrReportIssue,
   PrReportRequirement,
+  PrReportScope,
   PrVerificationReport,
   RequirementVerdict,
   SpecDoc,
@@ -27,7 +28,7 @@ import {
   renderReproduction,
   renderValidation,
 } from './prReport.commands.js'
-import { findStep } from './prReport.steps.js'
+import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The PR verification report's PURE half: compose it from a run's already-loaded state, and
@@ -137,8 +138,48 @@ export interface PrReportInputs {
    * its captured evidence. See `prReport.environments.ts`.
    */
   environments: PrReportEnvironmentInputs
+  /**
+   * WHICH of a multi-repo run's pull requests this report is being composed for. Absent ⇒ the
+   * own-service PR, which is every single-repo run and the shape the report had before peer
+   * reports existed.
+   *
+   * A `peer` scope withholds the three OWN-SERVICE-only sections rather than restating them;
+   * see {@link ownServiceOnly}.
+   */
+  scope?: PrReportScope
   /** Epoch ms stamped as the report's `generatedAt`. */
   now: number
+}
+
+/**
+ * The absent-section note a PEER repo's report carries in place of an own-service-only section.
+ *
+ * These three sections are statements about the OWN-SERVICE repo: pre-PR validation ran that
+ * service's configured check commands, the reproduction proof ran against that repo's tree, and
+ * the requirement join reads that service's in-repo `spec/`. None of them was computed for this
+ * repo, so restating them here would attribute one repo's evidence to another repo's diff — a
+ * green validation block on a peer PR reads as "this repo's checks passed" when this repo's
+ * checks were never run.
+ *
+ * Withheld LOUDLY, with a pointer to where the evidence actually is, because a silently missing
+ * section reads exactly like a clean one (the report's governing rule). The pointer degrades
+ * honestly: a run whose own-service PR is not open yet says so rather than naming a PR that
+ * does not exist.
+ */
+function ownServiceOnly(what: string, scope: PrReportScope): string {
+  const own = scope.ownPullRequest
+  const where = own
+    ? `on the own-service pull request (${own.repo}#${own.number})`
+    : 'on the own-service pull request, which this run has not opened yet'
+  return (
+    `Not computed for this repository: ${what} runs against the task's own service, ` +
+    `not against a connected service's repo. It is reported ${where}.`
+  )
+}
+
+/** True when this report is being composed for a peer repo's pull request. */
+function isPeer(scope: PrReportScope | undefined): boolean {
+  return scope?.role === 'peer'
 }
 
 /** A step is "settled" once it finished — a pending step has no evidence to report yet. */
@@ -146,7 +187,24 @@ function settled(step: PipelineStep | undefined): boolean {
   return !!step && (step.state === 'done' || step.progress >= 1)
 }
 
-function composeCi(instance: ExecutionInstance, truncations: string[]): PrVerificationReport['ci'] {
+/**
+ * The CI gate's verdict, as recorded on the gate step.
+ *
+ * The verdict itself is RUN-scoped on a multi-repo task and deliberately reported unchanged on
+ * every PR: the gate reduces the check runs across all of the run's repos to one verdict, and
+ * that one verdict is what blocks the merge of every PR in the set. Reporting only this repo's
+ * checks on this repo's PR would answer a question nobody asked and hide why the run is stuck.
+ *
+ * The HEAD COMMIT is the one thing that genuinely differs per PR, so it is read from the gate's
+ * per-repo `headShas` map when this report's repo has an entry there, falling back to the scalar
+ * `headSha` (which is the own-service head — the first entry — by construction). Reporting the
+ * own-service head on a peer's PR would name a commit that repo has never heard of.
+ */
+function composeCi(
+  instance: ExecutionInstance,
+  truncations: string[],
+  repo: string | null,
+): PrVerificationReport['ci'] {
   const step = findStep(
     instance,
     (s) => s.agentKind === CI_AGENT_KIND,
@@ -182,7 +240,7 @@ function composeCi(instance: ExecutionInstance, truncations: string[]): PrVerifi
   return {
     status: 'reported',
     verdict: gate.lastVerdict ?? null,
-    headSha: gate.headSha ?? null,
+    headSha: (repo ? gate.headShas?.[repo] : null) ?? gate.headSha ?? null,
     failingChecks,
     fixerAttempts: gate.attempts,
     maxFixerAttempts: gate.maxAttempts,
@@ -523,9 +581,12 @@ export function composePrVerificationReport(
     state: step.state,
     model: step.model ?? null,
   }))
+  const scope = inputs.scope ?? { role: 'own' as const, frameId: null, ownPullRequest: null }
+  const peer = isPeer(scope)
   return {
     version: PR_VERIFICATION_REPORT_VERSION,
     generatedAt: inputs.now,
+    scope,
     run: {
       executionId: instance.id,
       blockId: instance.blockId,
@@ -541,11 +602,41 @@ export function composePrVerificationReport(
         title: scrubbed(issue.title),
       })),
     },
-    ci: composeCi(instance, truncations),
-    validation: composeValidation(instance, commandCaps),
-    reproduction: composeReproduction(instance, commandCaps),
+    // The CI gate, the tester, the judges, the environments and the merge sequence are all
+    // RUN-scoped: the gate reduces every repo's checks to one verdict that blocks every PR the
+    // run opened, the tester ran once, and the merger merges the whole set (peers first, own
+    // last). So they are reported identically on every PR — a peer reviewer needs to see that
+    // the merge is blocked by another repo's red check, not a blank where the reason was.
+    ci: composeCi(instance, truncations, inputs.repo ?? null),
+    validation: peer
+      ? {
+          status: 'absent',
+          note: ownServiceOnly('pre-PR validation', scope),
+          attempts: 0,
+          commands: [],
+        }
+      : composeValidation(instance, commandCaps),
+    reproduction: peer
+      ? {
+          status: 'absent',
+          note: ownServiceOnly('the bugfix reproduction proof', scope),
+          testPaths: [],
+          attempts: 0,
+        }
+      : composeReproduction(instance, commandCaps),
     tests: composeTests(instance, truncations),
-    requirements: composeRequirements(instance, inputs.spec, truncations),
+    requirements: peer
+      ? {
+          status: 'absent',
+          note: ownServiceOnly('the requirement → evidence join', scope),
+          entries: [],
+          met: 0,
+          notMet: 0,
+          notCovered: 0,
+          regressions: 0,
+          total: 0,
+        }
+      : composeRequirements(instance, inputs.spec, truncations),
     environments: composeEnvironments(instance, inputs.environments, (items, label) =>
       cap(items, label, truncations),
     ),
@@ -575,7 +666,7 @@ function pct(score: number): string {
 
 function renderCi(ci: PrVerificationReport['ci']): string[] {
   const out = ['### Continuous integration', '']
-  if (ci.status === 'absent') return [...out, `_${ci.note}_`, '']
+  if (ci.status === 'absent') return [...out, absentNote(ci.note), '']
   const verdict =
     ci.verdict === 'pass'
       ? '✅ green'
@@ -590,12 +681,26 @@ function renderCi(ci: PrVerificationReport['ci']): string[] {
       (ci.maxFixerAttempts != null ? ` of ${ci.maxFixerAttempts}` : ''),
   )
   if (ci.failingChecks.length) {
-    out.push('', '| Check | Conclusion |', '| --- | --- |')
+    // The repo column appears only when the gate tagged a check with one, which it does exactly
+    // on a MULTI-REPO run. Without it a cross-service reviewer reads a list of red check names
+    // with no way to tell which repo is actually broken — and on a peer's PR, no way to tell
+    // that the red one isn't theirs.
+    const multiRepo = ci.failingChecks.some((check) => check.repo)
+    out.push(
+      '',
+      multiRepo ? '| Check | Repo | Conclusion |' : '| Check | Conclusion |',
+      multiRepo ? '| --- | --- | --- |' : '| --- | --- |',
+    )
     for (const check of ci.failingChecks) {
       const name = check.url
         ? `[${hostMarkdown.cell(check.name)}](${check.url})`
         : hostMarkdown.cell(check.name)
-      out.push(`| ${name} | ${hostMarkdown.cell(check.conclusion ?? 'unknown')} |`)
+      const conclusion = hostMarkdown.cell(check.conclusion ?? 'unknown')
+      out.push(
+        multiRepo
+          ? `| ${name} | ${hostMarkdown.cell(check.repo ?? '—')} | ${conclusion} |`
+          : `| ${name} | ${conclusion} |`,
+      )
     }
   }
   return [...out, '']
@@ -603,7 +708,7 @@ function renderCi(ci: PrVerificationReport['ci']): string[] {
 
 function renderTests(tests: PrVerificationReport['tests']): string[] {
   const out = ['### Test verification', '']
-  if (tests.status === 'absent') return [...out, `_${tests.note}_`, '']
+  if (tests.status === 'absent') return [...out, absentNote(tests.note), '']
   out.push(`**Greenlight:** ${tests.greenlight ? '✅ yes' : '❌ withheld'}`)
   if (tests.environment) out.push(`**Environment:** ${tests.environment}`)
   out.push(
@@ -646,7 +751,7 @@ function renderTests(tests: PrVerificationReport['tests']): string[] {
  */
 function renderRequirements(reqs: PrVerificationReport['requirements']): string[] {
   const out = ['### Requirement verification', '']
-  if (reqs.status === 'absent') return [...out, `_${reqs.note}_`, '']
+  if (reqs.status === 'absent') return [...out, absentNote(reqs.note), '']
   // The regression count LEADS when there is one. It is a subset of `not met`, so it is stated
   // as its own line rather than as a fourth tally that would not add up to the total.
   if (reqs.regressions > 0) {
@@ -705,7 +810,7 @@ function renderRequirements(reqs: PrVerificationReport['requirements']): string[
 
 function renderMerge(merge: PrVerificationReport['merge']): string[] {
   const out = ['### Merge assessment', '']
-  if (merge.status === 'absent') return [...out, `_${merge.note}_`, '']
+  if (merge.status === 'absent') return [...out, absentNote(merge.note), '']
   if (merge.assessment) {
     out.push(
       `**Complexity** ${pct(merge.assessment.complexity)} · ` +
@@ -726,7 +831,7 @@ function renderMerge(merge: PrVerificationReport['merge']): string[] {
 
 function renderJudges(judges: PrVerificationReport['judges']): string[] {
   const out = ['### Rubric reviews', '']
-  if (judges.status === 'absent') return [...out, `_${judges.note}_`, '']
+  if (judges.status === 'absent') return [...out, absentNote(judges.note), '']
   for (const verdict of judges.verdicts) {
     const name = hostMarkdown.inline(verdict.rubricName ?? verdict.stepKind)
     const score =
@@ -809,6 +914,35 @@ function renderTruncations(truncations: readonly string[]): string[] {
 }
 
 /**
+ * The one-line banner a PEER repo's copy of the report opens with.
+ *
+ * A reviewer on a connected service's PR is looking at one repo of a change that spans several,
+ * and every downstream section reads differently once they know that: the CI verdict covers
+ * repos whose checks are not on this PR, the merge happens as a set, and three sections are
+ * withheld as own-service-only. Saying so once at the top is what keeps those from reading as
+ * gaps. An own-service report (every single-repo run) renders nothing, so the ordinary case is
+ * byte-for-byte what it was.
+ */
+function renderScope(scope: PrVerificationReport['scope']): string[] {
+  if (scope?.role !== 'peer') return []
+  const own = scope.ownPullRequest
+  const pointer = own
+    ? `The task's own service is ${hostMarkdown.inline(own.repo)}` +
+      (own.url
+        ? ` ([#${own.number}](${own.url}))`
+        : ` (${hostMarkdown.inline(`#${own.number}`)})`) +
+      '.'
+    : "The task's own service has no pull request open yet."
+  return [
+    `> **This is a connected service's pull request.** This change spans several repositories; ` +
+      `the run's evidence below covers all of them. ${pointer} Pre-PR validation, the ` +
+      `reproduction proof and the requirement check are reported there, since they run against ` +
+      `that service.`,
+    '',
+  ]
+}
+
+/**
  * Render the report as the managed PR-body section: human-readable markdown followed by a
  * fenced JSON block carrying the exact {@link PrVerificationReport} shape, so external
  * tooling can ingest it without scraping prose. The caller splices the result into the PR
@@ -821,6 +955,7 @@ export function renderPrVerificationReport(report: PrVerificationReport): string
     '_Maintained by cat-factory. These are captured facts from the run that produced this PR,',
     "not the agent's own claims. It is rewritten in place as the run progresses._",
     '',
+    ...renderScope(report.scope),
     ...renderRun(report.run, report.observability),
     ...renderCi(report.ci),
     // The two CAPTURED-OUTPUT sections sit beside CI rather than at the end: they answer the same

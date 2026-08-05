@@ -32,6 +32,9 @@ export type PrReportSkipReason =
  * the run targeted. Deriving those from the run's own dispatch diagnostics instead would be a
  * different question with a different answer: diagnostics record the MOST RECENT dispatch,
  * which on a multi-repo task is a peer repo, not the repo whose PR is being written to.
+ *
+ * A multi-repo run resolves SEVERAL of these (see {@link PrVerificationReportPublisher.resolveTargets}),
+ * one per pull request it opened, and each gets its own composed report.
  */
 export interface PrReportTarget {
   /** The pull/merge request the report is written onto. */
@@ -40,6 +43,23 @@ export interface PrReportTarget {
   repo: string
   /** The VCS provider that repo lives on. */
   provider: VcsProvider
+  /**
+   * `own` for the task's own-service pull request — the only target a single-repo run has —
+   * and `peer` for a connected involved service's repo (`Block.peerPullRequests`).
+   *
+   * The engine composes a DIFFERENT report for each: the sections that are statements about
+   * the own-service repo (pre-PR validation, the reproduction proof, the `spec/` requirement
+   * join) are withheld from a peer's report rather than copied onto it, since a peer repo's
+   * checks were never the ones that ran. See the contracts' `prReportScopeSchema`.
+   */
+  role: 'own' | 'peer'
+  /**
+   * The involved service frame whose repo this is, when the recorded peer PR attributed one.
+   * Null for the own-service target, and for a peer whose frame was not recorded.
+   */
+  frameId?: string | null
+  /** The pull request's web URL, when known — what a peer report links back to. */
+  url?: string | null
 }
 
 /** The outcome of one publish attempt. */
@@ -54,21 +74,42 @@ export interface PrReportPublishResult {
 
 export interface PrVerificationReportPublisher {
   /**
-   * Resolve where the block's report would be published, or `null` when there is nowhere to
-   * write it yet (no recorded pull request, or no linked repo). The engine calls this FIRST —
-   * it both short-circuits the compose for a run that has no PR and supplies the repo/provider
-   * the report states. Never throws for an absent PR/repo; those are ordinary skips.
+   * Resolve EVERY pull request the block's report should be published onto — the own-service
+   * PR first, then one per peer repo the run opened a PR in — or an empty array when there is
+   * nowhere to write yet (no recorded pull request, or no linked repo).
+   *
+   * The engine calls this FIRST: it short-circuits the compose for a run that has no PR (most
+   * runs, for most of their life) and supplies the repo/provider/role each report states. Never
+   * throws for an absent PR/repo; those are ordinary skips.
+   *
+   * Ordering is load-bearing: the own-service target is FIRST when it exists, because a peer
+   * report points back at it and the engine reads it from this list rather than re-resolving.
+   * A run whose peers opened PRs but whose own service did not yet returns peers only, and
+   * their reports say the own-service PR is not open rather than naming one that isn't there.
+   *
+   * Resolving N peers must not cost N repo lookups: the adapter resolves the run's repo set in
+   * ONE call and joins the recorded peer PRs onto it (the no-N+1 rule).
    */
-  resolveTarget(workspaceId: string, blockId: string): Promise<PrReportTarget | null>
+  resolveTargets(workspaceId: string, blockId: string): Promise<PrReportTarget[]>
   /**
-   * Upsert the engine-managed verification-report section on the block's pull request.
+   * Upsert the engine-managed verification-report section on ONE resolved pull request.
    * `section` is the fully rendered markdown (human-readable prose + the fenced JSON block);
-   * the adapter reads the PR's current body, splices the marked region, and writes it back
+   * the adapter reads that PR's current body, splices the marked region, and writes it back
    * ONLY when it changed.
+   *
+   * `target` is passed in rather than re-resolved, because on a multi-repo run there is no
+   * single "the block's PR" to re-derive: the caller composed a report FOR this target, and
+   * re-resolving here is how the body written and the report written into it would come to
+   * disagree about which repo they are about.
    *
    * Never throws for an absent PR / repo — those are ordinary skips (a run may open its PR on
    * a later step, or produce none at all). A transport failure MAY throw; the engine treats a
    * failed publish as best-effort bookkeeping and never fails a run over it.
    */
-  publish(workspaceId: string, blockId: string, section: string): Promise<PrReportPublishResult>
+  publish(
+    workspaceId: string,
+    blockId: string,
+    target: PrReportTarget,
+    section: string,
+  ): Promise<PrReportPublishResult>
 }

@@ -9,8 +9,12 @@
 // `selectNodeGitHubDeps` call registers gate providers onto `providerRegistry` as a side effect and
 // must stay BEFORE `applyGateProviders` in the finalize step.
 import {
+  type AppCaches,
+  type BlockRepository,
   type Clock,
   type GitHubInstallationRepository,
+  type RepoProjectionRepository,
+  type ServiceRepository,
   createInitiatorPatGate,
 } from '@cat-factory/kernel'
 import {
@@ -94,6 +98,42 @@ export interface NodeRunPlatformInput {
  * so the root spreads it wholesale rather than re-listing it — the same reason the per-run
  * `runServices` bundle (spread in here) is kept as one value.
  */
+/**
+ * The two block → repo resolvers, built together off the ONE dependency set they share.
+ *
+ * They answer the same question at two arities — which repo does this block's work target, and
+ * which repos does a cross-service run touch — and read the same installation, projection, block
+ * and service repositories to do it. Built side by side so a change to that shared set (a new
+ * cache, a re-sourced repository) cannot reach one and miss the other, which is how the singular
+ * resolver and the multi-repo one would come to disagree about a block's own repo.
+ */
+function buildNodeRepoResolvers(deps: {
+  installationRepository: GitHubInstallationRepository
+  repoProjectionRepository: RepoProjectionRepository
+  blockRepository: BlockRepository
+  serviceRepository: ServiceRepository
+  repoProjectionCache?: AppCaches['repoProjection']
+}) {
+  const { repoProjectionCache, ...shared } = deps
+  return {
+    // The repo a running block targets (installation + owner/name), resolved from the
+    // github_repos projection. Built once and shared by the container executor, the
+    // GitHub-issue tracker filer, and the CI / merge providers.
+    resolveRepoTarget: buildResolveRepoTarget({
+      ...shared,
+      // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
+      // module + bootstrapper invalidate the same bag on every projection write.
+      repoProjectionCache,
+    }),
+    // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
+    // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
+    // resolves the involved frames in one query). Fed to the container executor so the
+    // implementer can fan a cross-service change out across sibling checkouts, and to the PR
+    // verification report so it reaches the peer PRs that fan-out opened.
+    resolveRepoTargets: buildResolveRepoTargets(shared),
+  }
+}
+
 export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPlatformInput) {
   const {
     env,
@@ -158,10 +198,8 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
       })
     : undefined
 
-  // The repo a running block targets (installation + owner/name), resolved from the
-  // github_repos projection. Built once and shared by the container executor, the
-  // GitHub-issue tracker filer, and the CI / merge providers.
-  const resolveRepoTarget = buildResolveRepoTarget({
+  // Block → repo(s) resolution, singular and multi-repo, off one shared dependency set.
+  const { resolveRepoTarget, resolveRepoTargets } = buildNodeRepoResolvers({
     installationRepository: githubInstallationRepository,
     repoProjectionRepository,
     blockRepository: repos.blockRepository,
@@ -169,20 +207,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     // in `repos`, so it is the Drizzle repo over `db` in a standard build and the remote proxy in
     // mothership mode — no separate direct-db `DrizzleServiceFrameRepository` construction.
     serviceRepository: repos.serviceRepository,
-    // Cache the whole-projection re-list per workspace (slice 3); the GitHub sync/webhook
-    // module + bootstrapper invalidate the same bag on every projection write.
     repoProjectionCache: options.caches?.repoProjection,
-  })
-
-  // The MULTI-REPO resolver (service-connections phase 3): the task's own repo plus each
-  // connected involved-service repo, deduped (the service repo's batched `listByFrameBlocks`
-  // resolves the involved frames in one query). Fed to the container executor so the
-  // implementer can fan a cross-service change out across sibling checkouts.
-  const resolveRepoTargets = buildResolveRepoTargets({
-    installationRepository: githubInstallationRepository,
-    repoProjectionRepository,
-    blockRepository: repos.blockRepository,
-    serviceRepository: repos.serviceRepository,
   })
 
   // The runner-transport resolver + the container-backed deploy lifecycle seams (resolve the
@@ -292,6 +317,7 @@ export function buildNodeRunPlatform({ options, foundation, models }: NodeRunPla
     gitlabEngineClient,
     providerRegistry,
     resolveRepoTarget,
+    resolveRepoTargets,
     resolveRepoOrigin: options.resolveRepoOrigin,
     githubInstallationRepository,
     repoProjectionRepository,

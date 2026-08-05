@@ -4,6 +4,7 @@ import type {
   ExecutionInstance,
   Logger,
   PrReportIssue,
+  PrReportOwnPullRequest,
   PrReportTarget,
   PrVerificationReportPublisher,
   ProvisioningLogRepository,
@@ -34,6 +35,22 @@ import { isTesterKind } from './ci.logic.js'
  * an honest one.
  */
 const PROVISIONING_EVENT_LIMIT = 200
+
+/**
+ * The own-service pull request, as a peer report names it, or null when the run has not opened
+ * one.
+ *
+ * Read off the SAME resolved target list the reports are published onto rather than re-resolved
+ * from the block, so the pull request a peer's copy points at and the one the own-service copy
+ * is written onto cannot come from two different answers. Null is a real case and reported as
+ * one: the coding agent can open a peer repo's PR on a run whose own-service PR is still to
+ * come, and naming a pull request that does not exist is worse than saying it does not.
+ */
+function ownPrPointer(targets: readonly PrReportTarget[]): PrReportOwnPullRequest | null {
+  const own = targets.find((t) => t.role === 'own')
+  if (!own) return null
+  return { repo: own.repo, number: own.prNumber, url: own.url ?? null }
+}
 
 /**
  * The engine collaborator that keeps a run's **verification report** on its pull request.
@@ -119,8 +136,9 @@ export interface PrVerificationReportControllerDeps {
 
 export class PrVerificationReportController {
   /**
-   * The last section published per execution id, so settlements that change nothing a reader
-   * would see cost no PR edit at all.
+   * The last section published per (execution, pull request), so settlements that change nothing
+   * a reader would see cost no PR edit at all. Keyed by TARGET as well as run because a
+   * multi-repo run publishes a different section to each of its PRs on the same settlement.
    *
    * It does NOT collapse a run to one edit: the report carries a per-step state table, so most
    * settlements genuinely do change it and the report tracks the run as it progresses — which
@@ -136,13 +154,15 @@ export class PrVerificationReportController {
   private readonly lastPublished = new Map<string, string>()
 
   /**
-   * Hard cap on {@link lastPublished}. A long-lived Node replica serves an unbounded number of
-   * runs, and each entry holds a rendered section, so the map is bounded here rather than
-   * relying on a call site to evict finished runs (a coupling that would silently leak the
-   * moment a new terminal path forgot to call it). Oldest-first eviction: `Map` preserves
-   * insertion order, and evicting an entry only costs one redundant (idempotent) republish.
+   * Hard cap on {@link lastPublished}, counted in ENTRIES (one per run per pull request, so a
+   * cross-service run occupies a handful rather than one). A long-lived Node replica serves an
+   * unbounded number of runs and each entry holds a rendered section, so the map is bounded here
+   * rather than relying on a call site to evict finished runs (a coupling that would silently
+   * leak the moment a new terminal path forgot to call it). Oldest-first eviction: `Map`
+   * preserves insertion order, and evicting an entry only costs one redundant (idempotent)
+   * republish.
    */
-  private static readonly MAX_TRACKED_RUNS = 256
+  private static readonly MAX_TRACKED_ENTRIES = 256
 
   constructor(private readonly deps: PrVerificationReportControllerDeps) {}
 
@@ -157,22 +177,22 @@ export class PrVerificationReportController {
       if (!(await this.publishingEnabled(workspaceId))) return
       // Ask the adapter WHERE this would go before composing anything: it both short-circuits a
       // run that has no PR yet (most runs, for most of their life) and supplies the repo +
-      // provider the report states — the same resolution the write itself uses, so the report
-      // can never name a different repo from the one it lands on.
-      const target = await publisher.resolveTarget(workspaceId, instance.blockId)
-      if (!target) return
+      // provider + role each report states — the same resolution the writes themselves use, so
+      // a report can never name a different repo from the one it lands on.
+      //
+      // A multi-repo run resolves several targets (own-service PR plus one per peer repo the
+      // run opened a PR in) and each gets its OWN composed report: they are not the same
+      // document, because the own-service-only sections are withheld from a peer's copy.
+      const targets = await publisher.resolveTargets(workspaceId, instance.blockId)
+      if (!targets.length) return
+      const ownPullRequest = ownPrPointer(targets)
 
-      const report = await this.compose(workspaceId, instance, target)
-      // Only a task carries an implementation PR; a frame/module run has nothing to report on.
-      if (!report) return
-
-      const section = renderPrVerificationReport(report)
-      // `generatedAt` changes on every compose, so compare the section with it masked out —
-      // otherwise the cache would never hit and every step would edit the PR.
-      const fingerprint = section.replaceAll(/"generatedAt": \d+/g, '"generatedAt": 0')
-      if (this.lastPublished.get(instance.id) === fingerprint) return
-      await publisher.publish(workspaceId, instance.blockId, section)
-      this.remember(instance.id, fingerprint)
+      for (const target of targets) {
+        // Each target is published independently and a failure on one does not cost the others:
+        // a peer repo whose token was revoked must not stop the own-service PR — the one a
+        // reviewer is most likely looking at — from getting its report.
+        await this.publishTo(workspaceId, instance, target, ownPullRequest)
+      }
     } catch (error) {
       // A PR-report write is bookkeeping. A provider outage, a revoked token, or a PR someone
       // closed underneath the run must never turn a green run red.
@@ -181,6 +201,46 @@ export class PrVerificationReportController {
         executionId: instance.id,
         blockId: instance.blockId,
         workspaceId,
+      })
+    }
+  }
+
+  /**
+   * Compose and publish the report for ONE resolved target. Best-effort per target: a failure is
+   * logged and swallowed here rather than at the loop, so one unreachable peer repo does not
+   * cost every remaining PR its report.
+   */
+  private async publishTo(
+    workspaceId: string,
+    instance: ExecutionInstance,
+    target: PrReportTarget,
+    ownPullRequest: PrReportOwnPullRequest | null,
+  ): Promise<void> {
+    try {
+      const report = await this.compose(workspaceId, instance, target, ownPullRequest)
+      // Only a task carries an implementation PR; a frame/module run has nothing to report on.
+      if (!report) return
+
+      const section = renderPrVerificationReport(report)
+      // `generatedAt` changes on every compose, so compare the section with it masked out —
+      // otherwise the cache would never hit and every step would edit the PR.
+      const fingerprint = section.replaceAll(/"generatedAt": \d+/g, '"generatedAt": 0')
+      // Keyed by run AND target: a multi-repo run publishes several DIFFERENT sections per
+      // settlement, so one key per run would let the first target's fingerprint suppress every
+      // other target's write and the peers would carry a stale report forever.
+      const key = `${instance.id} ${target.repo}#${target.prNumber}`
+      if (this.lastPublished.get(key) === fingerprint) return
+      await this.deps.publisher?.publish(workspaceId, instance.blockId, target, section)
+      this.remember(key, fingerprint)
+    } catch (error) {
+      this.deps.logger?.warn('Failed to publish the PR verification report onto a pull request', {
+        err: describeError(error),
+        executionId: instance.id,
+        blockId: instance.blockId,
+        workspaceId,
+        repo: target.repo,
+        prNumber: target.prNumber,
+        role: target.role,
       })
     }
   }
@@ -219,8 +279,14 @@ export class PrVerificationReportController {
     workspaceId: string,
     instance: ExecutionInstance,
   ): Promise<PrVerificationReport | null> {
-    const target = (await this.deps.publisher?.resolveTarget(workspaceId, instance.blockId)) ?? null
-    return this.compose(workspaceId, instance, target)
+    // The OWN-SERVICE report is what a reader asking about the run gets, on a multi-repo run as
+    // much as a single-repo one: it is the complete one (a peer's copy deliberately withholds
+    // the own-service-only sections), and the API answers a question about the RUN, not about
+    // one of its pull requests. A run with no own-service PR composes an unscoped report, the
+    // same as one with no PR at all.
+    const targets = (await this.deps.publisher?.resolveTargets(workspaceId, instance.blockId)) ?? []
+    const own = targets.find((t) => t.role === 'own') ?? null
+    return this.compose(workspaceId, instance, own, ownPrPointer(targets))
   }
 
   /**
@@ -238,6 +304,7 @@ export class PrVerificationReportController {
     workspaceId: string,
     instance: ExecutionInstance,
     target: PrReportTarget | null,
+    ownPullRequest: PrReportOwnPullRequest | null,
   ): Promise<PrVerificationReport | null> {
     const block = await this.deps.blockRepository.get(workspaceId, instance.blockId)
     if (!block) return null
@@ -246,6 +313,13 @@ export class PrVerificationReportController {
       issues: await this.linkedIssues(workspaceId, instance.blockId),
       repo: target?.repo ?? null,
       provider: target?.provider ?? null,
+      scope: {
+        role: target?.role ?? 'own',
+        frameId: target?.frameId ?? null,
+        // Only a PEER's copy points elsewhere: on the own-service report this would name the
+        // very pull request the reader already has open.
+        ownPullRequest: target?.role === 'peer' ? ownPullRequest : null,
+      },
       runUrl: this.deepLink(workspaceId, instance, 'observability'),
       trajectoryUrl: this.apiLink(
         `/api/v1/debug/runs/${encodeURIComponent(instance.id)}/tool-calls?order=trajectory`,
@@ -261,11 +335,14 @@ export class PrVerificationReportController {
     })
   }
 
-  /** Record the published fingerprint, evicting the oldest entry once the cap is reached. */
-  private remember(executionId: string, fingerprint: string): void {
-    this.lastPublished.delete(executionId)
-    this.lastPublished.set(executionId, fingerprint)
-    while (this.lastPublished.size > PrVerificationReportController.MAX_TRACKED_RUNS) {
+  /**
+   * Record the published fingerprint, evicting the oldest entry once the cap is reached. `key`
+   * is per run AND per target, so a multi-repo run holds one entry per pull request it writes.
+   */
+  private remember(key: string, fingerprint: string): void {
+    this.lastPublished.delete(key)
+    this.lastPublished.set(key, fingerprint)
+    while (this.lastPublished.size > PrVerificationReportController.MAX_TRACKED_ENTRIES) {
       const oldest = this.lastPublished.keys().next()
       if (oldest.done) break
       this.lastPublished.delete(oldest.value)
@@ -345,7 +422,7 @@ export class PrVerificationReportController {
   private rememberSpec(executionId: string, spec: SpecDoc | null): void {
     this.specByRun.delete(executionId)
     this.specByRun.set(executionId, spec)
-    while (this.specByRun.size > PrVerificationReportController.MAX_TRACKED_RUNS) {
+    while (this.specByRun.size > PrVerificationReportController.MAX_TRACKED_ENTRIES) {
       const oldest = this.specByRun.keys().next()
       if (oldest.done) break
       this.specByRun.delete(oldest.value)

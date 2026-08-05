@@ -39,7 +39,7 @@ import { vcsProviderSchema } from './routes/auth.js'
  * (see the header), so a bump means "there is more here than there was", and a consumer written
  * against an older number keeps reading the fields it knows.
  */
-export const PR_VERIFICATION_REPORT_VERSION = 6
+export const PR_VERIFICATION_REPORT_VERSION = 7
 
 /**
  * How much of one captured command log the report carries, per command.
@@ -706,11 +706,75 @@ export const prReportRequirementsSchema = v.object({
 })
 export type PrReportRequirements = v.InferOutput<typeof prReportRequirementsSchema>
 
+/**
+ * The own-service pull request, as named from a PEER repo's report.
+ *
+ * A peer report withholds the sections that are about the own-service repo rather than
+ * restating them (see {@link prReportScopeSchema}), so it owes the reader somewhere to go for
+ * them. Without this the withholding note would be a dead end: "reported on the own-service
+ * pull request" names no pull request.
+ */
+export const prReportOwnPullRequestSchema = v.object({
+  /** `owner/name` of the task's own-service repo. */
+  repo: v.string(),
+  /** The own-service PR number. */
+  number: v.number(),
+  /** Its web URL, when the block recorded one. */
+  url: v.optional(v.nullable(v.string())),
+})
+export type PrReportOwnPullRequest = v.InferOutput<typeof prReportOwnPullRequestSchema>
+
+/**
+ * WHICH pull request this copy of the report is written onto, on a multi-repo run.
+ *
+ * A cross-service task opens one PR per repo it changed: the task's own-service PR plus one
+ * per connected involved service (`Block.peerPullRequests`). Every one of them gets a report,
+ * because a reviewer sitting on the peer repo's PR is exactly as entitled to the run's
+ * evidence as one sitting on the own-service PR, and before this they got nothing at all.
+ *
+ * The scope exists because the reports are NOT interchangeable. Most of what the run proved is
+ * run-global (the tester ran once, the judges scored once, the trajectory is one run), but
+ * three sections are statements about the OWN-SERVICE repo specifically: the platform's
+ * pre-PR validation ran that service's configured check commands, the reproduction proof ran
+ * against that repo's tree, and the requirement → evidence join reads that service's in-repo
+ * `spec/`. Copying those onto a peer PR would attribute one repo's evidence to another repo's
+ * diff, which is worse than saying nothing: a green validation section on a peer PR reads as
+ * "this repo's checks passed" when this repo's checks were never run.
+ *
+ * So a peer report carries them as `absent` with a note naming
+ * {@link prReportScopeSchema.entries.ownPullRequest}, and `role` is what lets a consumer tell
+ * that withholding apart from a section that was absent because its step never ran.
+ *
+ * A single-repo run is `own` with a null `frameId` and a null `ownPullRequest` — the ordinary
+ * case, and the shape every report had before peer reports existed.
+ */
+export const prReportScopeSchema = v.object({
+  /**
+   * `own` for the task's own-service PR (and for every single-repo run); `peer` for a
+   * connected involved service's repo.
+   */
+  role: v.picklist(['own', 'peer']),
+  /**
+   * The involved service frame whose repo this PR belongs to, when the peer PR recorded one.
+   * Null on an own-service report, and on a peer whose frame attribution was not recorded.
+   */
+  frameId: v.optional(v.nullable(v.string())),
+  /** Where the own-service sections live. Null on an own-service report. */
+  ownPullRequest: v.optional(v.nullable(prReportOwnPullRequestSchema)),
+})
+export type PrReportScope = v.InferOutput<typeof prReportScopeSchema>
+
 export const prVerificationReportSchema = v.object({
   /** See {@link PR_VERIFICATION_REPORT_VERSION}. */
   version: v.number(),
   /** Epoch ms the report was composed (refreshed on every publish). */
   generatedAt: v.number(),
+  /**
+   * Which of a multi-repo run's pull requests this report is written onto, and what that
+   * means for the sections below. Optional so a consumer written against version ≤ 6 (where
+   * every report was implicitly the own-service one) keeps parsing; absent reads as `own`.
+   */
+  scope: v.optional(prReportScopeSchema),
   run: prReportRunSchema,
   ci: prReportCiSchema,
   /** The platform's OWN run of the service's check commands against the pushed tree. */

@@ -10,7 +10,7 @@ import type {
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { PR_REPORT_MAX_OUTPUT_CHARS } from '@cat-factory/contracts'
 import { REPRO_DECLARATION_KIND } from './reproductionProof.logic.js'
-import { findStep } from './prReport.steps.js'
+import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's two CAPTURED-OUTPUT sections: the platform's own pre-PR validation
@@ -166,7 +166,7 @@ function duration(ms: number | null | undefined): string {
 
 export function renderValidation(validation: PrReportValidation): string[] {
   const out = ['### Pre-PR validation', '']
-  if (validation.status === 'absent') return [...out, `_${validation.note}_`, '']
+  if (validation.status === 'absent') return [...out, absentNote(validation.note), '']
   out.push(
     `**Verdict:** ${validation.passed ? '✅ every check passed' : '❌ checks failed'}` +
       ` · attempt ${validation.attempts}` +
@@ -334,7 +334,7 @@ function renderPhaseOutput(
 
 export function renderReproduction(repro: PrReportReproduction): string[] {
   const out = ['### Reproduction proof', '']
-  if (repro.status === 'absent') return [...out, `_${repro.note}_`, '']
+  if (repro.status === 'absent') return [...out, absentNote(repro.note), '']
   out.push(`**Verdict:** ${reproductionHeadline(repro.verdict)}`)
 
   if (repro.verdict === 'declared_infeasible') {

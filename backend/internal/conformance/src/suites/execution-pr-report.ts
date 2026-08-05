@@ -211,6 +211,88 @@ export function defineExecutionPrReportConformance(harness: ConformanceHarness):
         const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
         expect(exec.status).toBe('done')
       })
+
+      it('publishes a SCOPED report onto a multi-repo run’s peer PR too', async () => {
+        // Slice 11: a cross-service run opens one PR per repo it changed, and a reviewer on the
+        // connected service's PR is as entitled to the run's evidence as one on the own-service
+        // PR. Both get a report, and they are NOT the same document — the own-service-only
+        // sections are withheld from the peer's copy rather than copied onto it, since that
+        // repo's checks were never the ones that ran.
+        const publisher = new FakePrReportPublisher()
+        publisher.addPeer('task_login', 'acme/email', 12, 'frm_email')
+        const app = harness.makeApp(
+          {
+            asyncKinds: ['coder'],
+            pullRequest: PR,
+            validationReport: {
+              passed: true,
+              attempts: 1,
+              at: 1_700_000_000_000,
+              outcomes: [
+                {
+                  label: 'lint',
+                  command: 'pnpm lint',
+                  exitCode: 0,
+                  passed: true,
+                  outputTail: 'ok',
+                },
+              ],
+            },
+          },
+          {
+            prVerificationReportPublisher: publisher,
+            gateProviders: { ciStatus: makeFakeCi([true]) },
+          },
+        )
+        const { workspace } = await app.createWorkspace()
+        const wsId = workspace.id
+
+        const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+          name: 'Build + CI',
+          agentKinds: ['coder', 'ci'],
+        })
+        await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+          pipelineId: pipeline.body.id,
+        })
+        expect((await app.drive(wsId)).find((e) => e.blockId === 'task_login')?.status).toBe('done')
+
+        // BOTH pull requests carry a report, each in its own body.
+        const own = parsePrVerificationReport(publisher.reportJson('task_login'))
+        const peer = parsePrVerificationReport(publisher.peerReportJson('task_login', 'acme/email'))
+
+        expect(own.scope?.role).toBe('own')
+        expect(peer.scope?.role).toBe('peer')
+        expect(peer.scope?.frameId).toBe('frm_email')
+        // The peer's copy points back at the own-service PR — without it the withholding note
+        // below would be a dead end.
+        expect(peer.scope?.ownPullRequest).toMatchObject({ repo: 'acme/api', number: 1 })
+        expect(own.scope?.ownPullRequest ?? null).toBeNull()
+
+        // Each report names the repo whose PR it is written onto.
+        expect(own.run.repo).toBe('acme/api')
+        expect(peer.run.repo).toBe('acme/email')
+
+        // RUN-scoped evidence is reported identically on both: the CI gate reduces every repo's
+        // checks to one verdict that blocks the whole set, so a peer reviewer must see it.
+        expect(own.ci.verdict).toBe('pass')
+        expect(peer.ci.verdict).toBe('pass')
+
+        // OWN-SERVICE-only evidence is withheld from the peer, and says so rather than going
+        // silently missing (which would read exactly like a clean section).
+        expect(own.validation.status).toBe('reported')
+        expect(peer.validation.status).toBe('absent')
+        expect(peer.validation.note).toContain('Not computed for this repository')
+        expect(peer.validation.note).toContain('acme/api#1')
+        expect(peer.validation.commands).toEqual([])
+        expect(peer.reproduction.status).toBe('absent')
+        expect(peer.requirements.status).toBe('absent')
+
+        // The prose says it too, not only the machine-readable block.
+        const peerSection = publisher.peerSection('task_login', 'acme/email')!
+        expect(peerSection).toContain("connected service's pull request")
+        // The own-service report is unchanged by any of this: no banner, no withholding.
+        expect(publisher.section('task_login')).not.toContain("connected service's pull request")
+      })
     })
   })
 }
