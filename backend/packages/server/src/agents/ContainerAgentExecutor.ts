@@ -11,6 +11,7 @@ import {
   type Logger,
   type ModelFlavor,
   type ModelRef,
+  type McpOAuthTokenSource,
   type OperationalMetrics,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
@@ -46,7 +47,7 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
-import { resolveToolServers, type ResolvedToolServers } from './toolServers.js'
+import { resolveDispatchToolServers, type ResolvedToolServers } from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
@@ -344,6 +345,14 @@ export interface ContainerAgentExecutorDependencies {
    * reported to the agent as unavailable rather than started without its credential.
    */
   resolveToolSecrets?: ToolSecretResolver
+  /**
+   * Mint the ACCESS TOKEN an OAuth-authenticated remote tool server needs, per dispatch. Wired by
+   * every facade that has a grant store (which needs `ENCRYPTION_KEY`); absent ⇒ a server
+   * declaring `oauth` is reported to the agent as `oauth_not_connected` rather than dispatched
+   * without its `Authorization` header. The value rides the job body only, exactly like a resolved
+   * `secretKeys` value.
+   */
+  resolveToolServerOAuth?: McpOAuthTokenSource
   /**
    * The facade logger, used for the best-effort degradations around agent capabilities (an
    * unregistered tool-server id, a credential lookup that failed). Absent ⇒ those are silent,
@@ -1033,12 +1042,21 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // (native) claude-code takes the checkout path too — it has no isolated config home to install
     // into — so the prompt must carry the instructions rather than point at an install.
     const skillRender = renderSkillsForHarness(context.skills, harness, auth.ambientAuth === true)
-    const tools = await this.resolveToolServersFor(context, {
-      harness,
-      ambientAuth: auth.ambientAuth === true,
-      workspaceId,
-      blockId,
-    })
+    // Tool servers (MCP) the running kind declared, narrowed to what THIS harness and auth mode can
+    // serve and whose credentials (static or granted) resolve. Never throws: an unwirable server is
+    // stated to the agent as unavailable rather than turned into a failed dispatch. The binding of
+    // the injected deps onto the resolution lives beside the resolution, because each new credential
+    // channel adds another optional dep and this file sits at its size ratchet.
+    const tools = await resolveDispatchToolServers(
+      { ...this.deps, agentKindRegistry: this.agentKindRegistry },
+      context,
+      {
+        harness,
+        ambientAuth: auth.ambientAuth === true,
+        workspaceId,
+        blockId,
+      },
+    )
     const { testSecretEnv, generatorSecrets } = await this.resolveJobSecretEnv(context, {
       workspaceId,
       blockId,
@@ -1185,32 +1203,6 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       testSecretEnv: args.resolvedTestSecrets.map((e) => ({ key: e.key, value: e.value })),
       generatorSecrets,
     }
-  }
-
-  /**
-   * Tool servers (MCP) the running kind declared: narrowed to what THIS harness/auth mode can
-   * serve and whose credentials resolve, split into the prompt-facing projection (folded onto the
-   * prompt context by the caller, so it reaches the prompt AND the agent-context snapshot) and the
-   * job-body `mcpServers` field carrying the transports + their secrets. Never throws — an
-   * unwirable server is reported to the agent as unavailable, not turned into a failed dispatch.
-   *
-   * A thin binding of the executor's injected deps onto the pure {@link resolveToolServers};
-   * separated so `buildJobBody` stays under its complexity ceiling.
-   */
-  private resolveToolServersFor(
-    context: AgentRunContext,
-    args: { harness: HarnessKind; ambientAuth: boolean; workspaceId: string; blockId: string },
-  ): Promise<ResolvedToolServers> {
-    return resolveToolServers({
-      context,
-      agentKindRegistry: this.agentKindRegistry,
-      harness: args.harness,
-      ...(args.ambientAuth ? { ambientAuth: true } : {}),
-      workspaceId: args.workspaceId,
-      blockId: args.blockId,
-      ...(this.deps.resolveToolSecrets ? { resolveToolSecrets: this.deps.resolveToolSecrets } : {}),
-      ...(this.deps.logger ? { logger: this.deps.logger } : {}),
-    })
   }
 
   /**

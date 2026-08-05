@@ -568,6 +568,18 @@ export {
   type CapabilityCredentialsServiceDependencies,
 } from './modules/capabilityCredentials/CapabilityCredentialsService.js'
 export {
+  McpOAuthService,
+  MCP_OAUTH_CIPHER_INFO,
+  type McpAuthorizationRequest,
+  type McpOAuthServiceDependencies,
+} from './modules/mcpOAuth/McpOAuthService.js'
+export {
+  McpOAuthError,
+  MCP_OAUTH_TIMEOUT_MS,
+  discoverMcpOAuthEndpoints,
+  type McpOAuthEndpoints,
+} from './modules/mcpOAuth/mcpOAuthClient.js'
+export {
   ValidationConfigService,
   type ValidationConfigServiceDependencies,
 } from './modules/validation/ValidationConfigService.js'

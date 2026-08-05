@@ -1,4 +1,9 @@
-import { listToolServersContract, probeToolServerContract } from '@cat-factory/contracts'
+import {
+  disconnectToolServerOAuthContract,
+  listToolServersContract,
+  probeToolServerContract,
+  startToolServerOAuthContract,
+} from '@cat-factory/contracts'
 import type { ApiContext } from './context'
 
 /**
@@ -17,5 +22,14 @@ export function toolServersApi({ send, ws }: ApiContext) {
 
     probeToolServer: (workspaceId: string, id: string) =>
       send(probeToolServerContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
+
+    // Begin an interactive OAuth grant: answers with the VENDOR's authorization URL for the
+    // operator's browser to follow, rather than redirecting, since a redirect from a `fetch` lands
+    // in a cross-origin document this app cannot observe.
+    startToolServerOAuth: (workspaceId: string, id: string) =>
+      send(startToolServerOAuthContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
+
+    disconnectToolServerOAuth: (workspaceId: string, id: string) =>
+      send(disconnectToolServerOAuthContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
   }
 }

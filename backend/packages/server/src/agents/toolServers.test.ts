@@ -1,4 +1,10 @@
-import type { AgentRunContext, McpServerDefinition, ToolSecretResolver } from '@cat-factory/kernel'
+import type {
+  AgentRunContext,
+  McpOAuthTokenResult,
+  McpOAuthTokenSource,
+  McpServerDefinition,
+  ToolSecretResolver,
+} from '@cat-factory/kernel'
 import { TOOL_SERVER_BUDGET } from '@cat-factory/kernel'
 import { AgentKindRegistry } from '@cat-factory/agents'
 import { describe, expect, it } from 'vitest'
@@ -629,5 +635,128 @@ describe('job-spec secret marking', () => {
       workspaceId: 'ws1',
     })
     expect(result.mcpServers[0]?.secretKeys).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// OAuth. What matters here is the DISPOSITIONS: a granted token has to land in the job body and
+// nowhere near the prompt, and each way of not getting one has to reach the agent as its own
+// reason, because "no credential", "nobody connected" and "the connection stopped working" send an
+// operator to three different places.
+// ---------------------------------------------------------------------------
+
+const OAUTH_SERVER: McpServerDefinition = {
+  id: 'linear',
+  transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
+  oauth: { grant: 'authorization_code', clientId: 'cid' },
+}
+
+const tokenSource = (result: McpOAuthTokenResult): McpOAuthTokenSource => ({
+  accessToken: async () => result,
+})
+
+describe('resolveToolServers with OAuth', () => {
+  it('folds a granted token into the job body and never into the projection', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(OAUTH_SERVER),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolServerOAuth: tokenSource({
+        status: 'ok',
+        header: 'Authorization',
+        value: 'Bearer live-token',
+      }),
+    })
+    expect(result.mcpServers).toEqual([
+      {
+        id: 'linear',
+        transport: 'http',
+        url: 'https://mcp.linear.app/mcp',
+        headers: { Authorization: 'Bearer live-token' },
+        secretKeys: ['Authorization'],
+      },
+    ])
+    expect(result.unavailableToolServers).toEqual([])
+    // The projection is copied verbatim into the agent-context telemetry snapshot.
+    expect(JSON.stringify(result.toolServers)).not.toContain('live-token')
+  })
+
+  it('states an ungranted server as oauth_not_connected rather than dispatching it bare', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(OAUTH_SERVER),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolServerOAuth: tokenSource({ status: 'not_connected' }),
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers).toEqual([
+      { id: 'linear', label: 'linear', reason: 'oauth_not_connected' },
+    ])
+  })
+
+  it('keeps a failed token exchange apart from an absent grant', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(OAUTH_SERVER),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolServerOAuth: tokenSource({ status: 'token_failed', error: 'invalid_grant' }),
+    })
+    expect(result.unavailableToolServers).toEqual([
+      { id: 'linear', label: 'linear', reason: 'oauth_token_failed' },
+    ])
+  })
+
+  it('states the server when no grant store is wired, rather than sending an unauthenticated request', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(OAUTH_SERVER),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+    })
+    expect(result.mcpServers).toEqual([])
+    expect(result.unavailableToolServers).toEqual([
+      { id: 'linear', label: 'linear', reason: 'oauth_not_connected' },
+    ])
+  })
+
+  it('lets the granted token win the header a static credential also names', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith({
+        ...OAUTH_SERVER,
+        secretKeys: [{ key: 'LEGACY_TOKEN', header: 'Authorization' }],
+      }),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ LEGACY_TOKEN: 'stale' }),
+      resolveToolServerOAuth: tokenSource({
+        status: 'ok',
+        header: 'Authorization',
+        value: 'Bearer live-token',
+      }),
+    })
+    expect(result.mcpServers[0]?.headers).toEqual({ Authorization: 'Bearer live-token' })
+  })
+
+  it('does not consult the token source for a server that declares no OAuth', async () => {
+    let asked = false
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(HTTP),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ DOCS_TOKEN: 'abc' }),
+      resolveToolServerOAuth: {
+        accessToken: async () => {
+          asked = true
+          return { status: 'not_connected' }
+        },
+      },
+    })
+    expect(asked).toBe(false)
+    expect(result.mcpServers).toHaveLength(1)
   })
 })

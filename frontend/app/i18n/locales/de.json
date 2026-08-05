@@ -619,6 +619,18 @@
       "servableHarnessesNone": "Keine Agenten-CLI kann diesen Transport bedienen, daher greift dieser Server in keinem Lauf.",
       "allowedTools": "Eingeschränkt auf: {tools}",
       "credentials": "Zugangsdaten: {keys}",
+      "oauth": {
+        "connected": "Verbunden",
+        "notConnected": "Nicht verbunden",
+        "machineGrant": "Meldet sich als dieses Deployment an",
+        "connectedBy": "Verbunden von {user}",
+        "scopes": "Gewährt: {scopes}",
+        "notRefreshable": "Der Anbieter hat kein Refresh-Token ausgestellt, daher muss diese Verbindung neu hergestellt werden, sobald das Zugriffstoken abläuft.",
+        "lastError": "Die letzte Token-Erneuerung ist fehlgeschlagen: {detail}",
+        "connect": "Verbinden",
+        "reconnect": "Neu verbinden",
+        "disconnect": "Trennen"
+      },
       "test": "Testen",
       "notProbeable": {
         "stdio": "Läuft im Container des Agenten und kann von hier aus nicht getestet werden.",
@@ -629,6 +641,8 @@
         "ok": "Hat geantwortet",
         "credentialsMissing": "Keine Zugangsdaten",
         "credentialRefused": "Zugangsdaten abgelehnt",
+        "oauthNotConnected": "Nicht verbunden",
+        "oauthTokenFailed": "Verbindung funktioniert nicht mehr",
         "unreachable": "Keine Antwort",
         "httpError": "Anfrage abgewiesen",
         "protocolError": "Kein MCP-Server",
@@ -645,7 +659,9 @@
       "hideDetails": "Details verbergen",
       "toast": {
         "loadFailed": "Die Werkzeugserver konnten nicht geladen werden",
-        "probeFailed": "Der Werkzeugserver konnte nicht getestet werden"
+        "probeFailed": "Der Werkzeugserver konnte nicht getestet werden",
+        "connectFailed": "Die Verbindung konnte nicht gestartet werden",
+        "disconnectFailed": "Der Werkzeugserver konnte nicht getrennt werden"
       }
     },
     "capabilityCredentials": {

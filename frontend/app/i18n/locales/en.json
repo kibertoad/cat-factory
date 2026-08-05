@@ -3110,6 +3110,18 @@
       "servableHarnessesNone": "No agent CLI can serve this transport, so this server never applies to any run.",
       "allowedTools": "Narrowed to: {tools}",
       "credentials": "Credentials: {keys}",
+      "oauth": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "machineGrant": "Signs in as this deployment",
+        "connectedBy": "Connected by {user}",
+        "scopes": "Granted: {scopes}",
+        "notRefreshable": "The vendor issued no refresh token, so this connection has to be made again once its access token expires.",
+        "lastError": "The last token renewal failed: {detail}",
+        "connect": "Connect",
+        "reconnect": "Reconnect",
+        "disconnect": "Disconnect"
+      },
       "test": "Test",
       "notProbeable": {
         "stdio": "Runs inside the agent's container, so it cannot be tested from here.",
@@ -3120,6 +3132,8 @@
         "ok": "Answered",
         "credentialsMissing": "No credential",
         "credentialRefused": "Credential refused",
+        "oauthNotConnected": "Not connected",
+        "oauthTokenFailed": "Connection stopped working",
         "unreachable": "No answer",
         "httpError": "Rejected the request",
         "protocolError": "Not an MCP server",
@@ -3136,7 +3150,9 @@
       "hideDetails": "Hide details",
       "toast": {
         "loadFailed": "Could not load the tool servers",
-        "probeFailed": "Could not test the tool server"
+        "probeFailed": "Could not test the tool server",
+        "connectFailed": "Could not start the connection",
+        "disconnectFailed": "Could not disconnect the tool server"
       }
     },
     "capabilityCredentials": {

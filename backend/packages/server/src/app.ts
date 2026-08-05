@@ -37,6 +37,7 @@ import { mothershipConnectController } from './modules/localSettings/MothershipC
 import { releaseHealthController } from './modules/releaseHealth/ReleaseHealthController.js'
 import { testSecretsController } from './modules/testSecrets/TestSecretsController.js'
 import { capabilityCredentialsController } from './modules/capabilityCredentials/CapabilityCredentialsController.js'
+import { mcpOAuthCallbackController } from './modules/toolServers/McpOAuthCallbackController.js'
 import { toolServerController } from './modules/toolServers/ToolServerController.js'
 import { validationConfigController } from './modules/validation/ValidationConfigController.js'
 import { packageRegistriesController } from './modules/packageRegistries/PackageRegistriesController.js'
@@ -382,4 +383,9 @@ function registerWebhookControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/slack', slackOAuthController())
   // Linear-facing OAuth callback (browser redirect); not workspace-scoped.
   app.route('/tasks', linearOAuthController())
+  // The MCP tool-server OAuth callback (browser redirect from a VENDOR's authorization server).
+  // Mounted at the root because the redirect URI is a string the vendor has on file, so it can
+  // carry no board id; the sealed `state` is what names the workspace, and the route re-checks the
+  // session and the permission itself.
+  app.route('/', mcpOAuthCallbackController())
 }

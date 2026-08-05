@@ -137,6 +137,21 @@ clean and shipped the deployment's master sealing key to a third party. So:
   `AWS_ACCESS_KEY_ID`). With one name for both jobs, the floor would have made the commonest MCP
   servers unusable, with no workaround open to a deployment, which is the same objection that ruled
   out mandating a `TOOL_` prefix on the lookup side.
+- **An OAuth GRANT is the third shape of the same path, and it moves what a run authenticates AS
+  rather than what it can read.** A remote (`http`) tool server may declare `oauth` instead of a
+  static key; the platform then holds a per-workspace, sealed grant and mints an access token at
+  dispatch, into the same job-body header channel a resolved `secretKeys` value uses. Four things
+  keep it inside the boundary above. The OAuth CLIENT SECRET is looked up through the same chain and
+  held to the same reserved-key floor, so nothing new can be named. The authorization and token
+  endpoints are held to the tool-server URL rule whether DECLARED or DISCOVERED, because a metadata
+  document is a third party naming where this deployment's client secret is posted. The `state` that
+  carries the flow is SEALED rather than signed (it holds the PKCE verifier, which travels the same
+  browser redirect the authorization code does) and binds the user who started it, so an
+  authorization link opened by an admin cannot plant someone else's vendor account as the board's
+  connection. And `secrets.manage` is re-checked at the CALLBACK, not assumed from the Connect
+  press, because a grant takes minutes of human time. What OAuth does NOT change: a wired server's
+  results are still untrusted input, and the granted SCOPES are the boundary that actually bounds
+  what a subverted agent can do with the connection.
 - **The dispatch-time check sits at the CALL SITE, not inside the env resolver**, so it holds for
   a deployment's own `ToolSecretResolver` too, which is the one that could genuinely have a value
   stored under such a name.

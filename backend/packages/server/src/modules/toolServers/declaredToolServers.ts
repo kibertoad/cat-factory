@@ -6,7 +6,11 @@ import {
   redactSecrets,
 } from '@cat-factory/kernel'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { ToolServerNotProbeableReason, ToolServerView } from '@cat-factory/contracts'
+import type {
+  ToolServerNotProbeableReason,
+  ToolServerOAuthStatus,
+  ToolServerView,
+} from '@cat-factory/contracts'
 import { stripUrlCredentials } from '../../agents/agentContextRecord.js'
 
 // ---------------------------------------------------------------------------
@@ -19,8 +23,26 @@ import { stripUrlCredentials } from '../../agents/agentContextRecord.js'
 // with a bare registry and no container.
 // ---------------------------------------------------------------------------
 
+/**
+ * The non-secret half of a stored grant, as `McpOAuthService.listStatuses` returns it: everything
+ * `ToolServerOAuthStatus` holds except the two fields the DECLARATION decides (`grant`) and this
+ * projection derives (`connected`).
+ */
+export type StoredOAuthGrants = ReadonlyMap<
+  string,
+  Omit<ToolServerOAuthStatus, 'grant' | 'connected'>
+>
+
 export interface CollectDeclaredToolServersInput {
   agentKindRegistry: AgentKindRegistry
+  /**
+   * This workspace's grants, keyed by server id — read ONCE for the whole inventory rather than
+   * per row, because the rows are the deployment's entire registry.
+   *
+   * Omitted ⇒ no grant store is wired, and every OAuth declaration renders as not connected, which
+   * is the true state of a deployment that has nowhere to keep a grant.
+   */
+  oauthGrants?: StoredOAuthGrants
 }
 
 /** One declared server: the definition this surface answers for, and the kinds that reach it. */
@@ -76,12 +98,18 @@ export function collectDeclaredToolServers(
   input: CollectDeclaredToolServersInput,
 ): ToolServerView[] {
   return [...resolveDeclaredToolServers(input.agentKindRegistry).values()]
-    .map((declared) => toView(declared.definition, declared.declaredBy))
+    .map((declared) =>
+      toView(declared.definition, declared.declaredBy, input.oauthGrants ?? new Map()),
+    )
     .sort((a, b) => a.id.localeCompare(b.id))
 }
 
 /** Project one definition into its non-secret operator-facing view. */
-function toView(definition: McpServerDefinition, declaredBy: AgentKind[]): ToolServerView {
+function toView(
+  definition: McpServerDefinition,
+  declaredBy: AgentKind[],
+  grants: StoredOAuthGrants,
+): ToolServerView {
   const notProbeable = notProbeableReason(definition)
   return {
     id: definition.id,
@@ -99,9 +127,28 @@ function toView(definition: McpServerDefinition, declaredBy: AgentKind[]): ToolS
       required: secret.required !== false,
       ...(secret.usage ? { usage: secret.usage } : {}),
     })),
+    ...oauthStatus(definition, grants),
     probeable: notProbeable === undefined,
     ...(notProbeable ? { notProbeableReason: notProbeable } : {}),
   }
+}
+
+/**
+ * The OAuth half of a row: the declaration's grant type, joined to whether THIS workspace holds a
+ * grant for it.
+ *
+ * Absent for a server that declares no OAuth, which is what keeps the Connect affordance off every
+ * row it does not apply to. `connected` is derived from the presence of a stored grant rather than
+ * stored as a flag, so a disconnect that removed the row cannot leave a row claiming otherwise.
+ */
+function oauthStatus(
+  definition: McpServerDefinition,
+  grants: StoredOAuthGrants,
+): Pick<ToolServerView, 'oauth'> {
+  const oauth = definition.oauth
+  if (!oauth) return {}
+  const stored = grants.get(definition.id)
+  return { oauth: { grant: oauth.grant, connected: Boolean(stored), ...stored } }
 }
 
 /**

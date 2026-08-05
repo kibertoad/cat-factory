@@ -3003,6 +3003,18 @@
       "servableHarnessesNone": "Hiçbir ajan CLI’si bu taşımayı sunamaz, dolayısıyla bu sunucu hiçbir çalıştırmada geçerli olmaz.",
       "allowedTools": "Şunlarla sınırlı: {tools}",
       "credentials": "Kimlik bilgileri: {keys}",
+      "oauth": {
+        "connected": "Bağlandı",
+        "notConnected": "Bağlı değil",
+        "machineGrant": "Bu dağıtım olarak oturum açar",
+        "connectedBy": "{user} bağladı",
+        "scopes": "Verilen izinler: {scopes}",
+        "notRefreshable": "Sağlayıcı yenileme belirteci vermedi, bu yüzden erişim belirteci sona erdiğinde bağlantının yeniden kurulması gerekir.",
+        "lastError": "Son belirteç yenileme başarısız oldu: {detail}",
+        "connect": "Bağlan",
+        "reconnect": "Yeniden bağlan",
+        "disconnect": "Bağlantıyı kes"
+      },
       "test": "Test et",
       "notProbeable": {
         "stdio": "Ajanın konteynerinin içinde çalışır, bu yüzden buradan test edilemez.",
@@ -3013,6 +3025,8 @@
         "ok": "Yanıt verdi",
         "credentialsMissing": "Kimlik bilgisi yok",
         "credentialRefused": "Kimlik bilgisi reddedildi",
+        "oauthNotConnected": "Bağlı değil",
+        "oauthTokenFailed": "Bağlantı çalışmayı bıraktı",
         "unreachable": "Yanıt yok",
         "httpError": "İsteği reddetti",
         "protocolError": "MCP sunucusu değil",
@@ -3029,7 +3043,9 @@
       "hideDetails": "Ayrıntıları gizle",
       "toast": {
         "loadFailed": "Araç sunucuları yüklenemedi",
-        "probeFailed": "Araç sunucusu test edilemedi"
+        "probeFailed": "Araç sunucusu test edilemedi",
+        "connectFailed": "Bağlantı başlatılamadı",
+        "disconnectFailed": "Araç sunucusunun bağlantısı kesilemedi"
       }
     },
     "capabilityCredentials": {

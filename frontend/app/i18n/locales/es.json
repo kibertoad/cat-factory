@@ -2862,6 +2862,18 @@
       "servableHarnessesNone": "Ninguna CLI de agente puede servir este transporte, así que este servidor nunca se aplica a una ejecución.",
       "allowedTools": "Limitado a: {tools}",
       "credentials": "Credenciales: {keys}",
+      "oauth": {
+        "connected": "Conectado",
+        "notConnected": "Sin conexión",
+        "machineGrant": "Se identifica como este despliegue",
+        "connectedBy": "Conectado por {user}",
+        "scopes": "Concedido: {scopes}",
+        "notRefreshable": "El proveedor no emitió un token de actualización, así que habrá que volver a conectar cuando caduque el token de acceso.",
+        "lastError": "La última renovación del token falló: {detail}",
+        "connect": "Conectar",
+        "reconnect": "Volver a conectar",
+        "disconnect": "Desconectar"
+      },
       "test": "Probar",
       "notProbeable": {
         "stdio": "Se ejecuta dentro del contenedor del agente, así que no puede probarse desde aquí.",
@@ -2872,6 +2884,8 @@
         "ok": "Respondió",
         "credentialsMissing": "Sin credencial",
         "credentialRefused": "Credencial rechazada",
+        "oauthNotConnected": "Sin conexión",
+        "oauthTokenFailed": "La conexión dejó de funcionar",
         "unreachable": "Sin respuesta",
         "httpError": "Rechazó la solicitud",
         "protocolError": "No es un servidor MCP",
@@ -2888,7 +2902,9 @@
       "hideDetails": "Ocultar detalles",
       "toast": {
         "loadFailed": "No se pudieron cargar los servidores de herramientas",
-        "probeFailed": "No se pudo probar el servidor de herramientas"
+        "probeFailed": "No se pudo probar el servidor de herramientas",
+        "connectFailed": "No se pudo iniciar la conexión",
+        "disconnectFailed": "No se pudo desconectar el servidor de herramientas"
       }
     },
     "capabilityCredentials": {

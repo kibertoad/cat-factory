@@ -582,6 +582,7 @@ export * from './ports/index.js'
 // See `backend/docs/custom-agents.md` → "Capabilities: skills and tools".
 export {
   type McpHttpTransport,
+  type McpOAuthConfig,
   type McpSecretRef,
   type McpServerDefinition,
   type McpStdioTransport,
@@ -592,6 +593,8 @@ export {
   type SkillVersionPin,
   type UnavailableToolServer,
   MCP_HARNESS_TRANSPORTS,
+  MCP_OAUTH_DEFAULT_HEADER,
+  MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
   MCP_SERVER_ID_PATTERN,
   MCP_SUPPORTED_HARNESSES,
   MCP_TOOL_NAME_PATTERN,

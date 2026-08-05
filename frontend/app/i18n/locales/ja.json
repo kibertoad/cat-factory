@@ -3003,6 +3003,18 @@
       "servableHarnessesNone": "このトランスポートを扱えるエージェント CLI がないため、このサーバーはどの実行にも適用されません。",
       "allowedTools": "許可されたツール: {tools}",
       "credentials": "認証情報: {keys}",
+      "oauth": {
+        "connected": "接続済み",
+        "notConnected": "未接続",
+        "machineGrant": "このデプロイとしてサインインします",
+        "connectedBy": "{user} が接続しました",
+        "scopes": "許可されたスコープ: {scopes}",
+        "notRefreshable": "プロバイダーがリフレッシュトークンを発行しなかったため、アクセストークンの期限が切れたら接続をやり直す必要があります。",
+        "lastError": "直近のトークン更新に失敗しました: {detail}",
+        "connect": "接続",
+        "reconnect": "再接続",
+        "disconnect": "接続を解除"
+      },
       "test": "テスト",
       "notProbeable": {
         "stdio": "エージェントのコンテナ内で動作するため、ここからはテストできません。",
@@ -3013,6 +3025,8 @@
         "ok": "応答あり",
         "credentialsMissing": "認証情報なし",
         "credentialRefused": "認証情報を拒否",
+        "oauthNotConnected": "未接続",
+        "oauthTokenFailed": "接続が機能しなくなりました",
         "unreachable": "応答なし",
         "httpError": "リクエストを拒否",
         "protocolError": "MCP サーバーではない",
@@ -3029,7 +3043,9 @@
       "hideDetails": "詳細を隠す",
       "toast": {
         "loadFailed": "ツールサーバーを読み込めませんでした",
-        "probeFailed": "ツールサーバーをテストできませんでした"
+        "probeFailed": "ツールサーバーをテストできませんでした",
+        "connectFailed": "接続を開始できませんでした",
+        "disconnectFailed": "ツールサーバーの接続を解除できませんでした"
       }
     },
     "capabilityCredentials": {

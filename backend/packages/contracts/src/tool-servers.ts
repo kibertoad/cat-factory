@@ -74,6 +74,56 @@ export const toolServerCredentialSchema = v.object({
 })
 export type ToolServerCredential = v.InferOutput<typeof toolServerCredentialSchema>
 
+/** Which OAuth grant a declaration uses, mirroring kernel's `McpOAuthConfig['grant']`. */
+export const toolServerOAuthGrantSchema = v.picklist(['authorization_code', 'client_credentials'])
+export type ToolServerOAuthGrant = v.InferOutput<typeof toolServerOAuthGrantSchema>
+
+/**
+ * The non-secret state of a workspace's OAuth grant for one tool server: what is persisted beside
+ * the sealed tokens, and what the operator surface renders.
+ *
+ * Never a token, and never a refresh token's presence dressed up as one. The only reason this is a
+ * record rather than a boolean is that "connected" is four separate questions an operator asks in
+ * sequence — is there a grant, whose account is it, will it keep working, and did the last renewal
+ * fail — and a single flag answers the first while silently implying the other three.
+ */
+export const toolServerOAuthStatusSchema = v.object({
+  grant: toolServerOAuthGrantSchema,
+  /**
+   * Whether this workspace holds a grant for the server.
+   *
+   * For `client_credentials` this is a fact about a CACHED token rather than about a human
+   * decision: nothing needs granting, so a false here means only that no token has been minted
+   * yet, and a dispatch mints one. The surface therefore renders the two grants differently and
+   * this field is deliberately not overloaded to say so.
+   */
+  connected: v.boolean(),
+  /** Scopes the authorization server actually granted, when it named them. */
+  scopes: v.optional(v.array(v.string())),
+  /** When the grant was established (epoch ms). */
+  connectedAt: v.optional(v.number()),
+  /** The user who granted it, so a board can tell whose vendor account its runs authenticate as. */
+  connectedBy: v.optional(v.string()),
+  /** When the current access token expires (epoch ms), when the server stated an expiry. */
+  expiresAt: v.optional(v.number()),
+  /**
+   * Whether a refresh token was issued.
+   *
+   * `false` on an `authorization_code` grant is a real and reportable state, not a detail: the
+   * connection works until the access token expires and then needs granting again by hand, which
+   * an operator can only plan around if the surface says so before it happens.
+   */
+  refreshable: v.optional(v.boolean()),
+  /**
+   * Why the last token exchange failed, when one did. Present ALONGSIDE `connected: true`, which
+   * is the point: the grant is still on file and is no longer producing tokens, and reporting that
+   * as a clean connection is how an operator ends up debugging the agent instead of the vendor.
+   * Scrubbed at the emit site.
+   */
+  lastError: v.optional(v.string()),
+})
+export type ToolServerOAuthStatus = v.InferOutput<typeof toolServerOAuthStatusSchema>
+
 /**
  * One declared tool server, as an operator sees it.
  *
@@ -119,6 +169,12 @@ export const toolServerViewSchema = v.object({
   allowedTools: v.optional(v.array(v.string())),
   /** The credentials it asks for, by name. */
   credentials: v.array(toolServerCredentialSchema),
+  /**
+   * The OAuth declaration's state for THIS workspace, when the server declares one. Absent ⇒ the
+   * server authenticates with static credentials (or none), and the Connect affordance does not
+   * apply to it at all.
+   */
+  oauth: v.optional(toolServerOAuthStatusSchema),
   /** Whether this deployment can reach the server to probe it. */
   probeable: v.boolean(),
   /** Why not, when `probeable` is false. Always present in that case, absent otherwise. */
@@ -151,6 +207,12 @@ export type ToolServersView = v.InferOutput<typeof toolServersViewSchema>
  * - `protocol_error` — it answered, but not as an MCP server: a non-JSON body, a JSON-RPC error, a
  *   protocol version it would not negotiate. The url probably names something that is not this
  *   server.
+ * - `oauth_not_connected` — the declaration authenticates with OAuth and this workspace has not
+ *   granted it. Kept apart from `credentials_missing` because there is no value to type: the
+ *   remedy is the Connect flow, and an operator sent to the credential checklist would find no row.
+ * - `oauth_token_failed` — a grant is on file and produced no access token (revoked or expired
+ *   refresh, an authorization server that refused, discovery that failed). The dispatch reports
+ *   the same condition as `oauth_token_failed`; `error` carries the cause.
  * - `not_probeable` — the probe was refused before it began; see
  *   {@link toolServerNotProbeableReasonSchema}.
  */
@@ -158,6 +220,8 @@ export const toolServerProbeStatusSchema = v.picklist([
   'ok',
   'credentials_missing',
   'credential_refused',
+  'oauth_not_connected',
+  'oauth_token_failed',
   'unreachable',
   'http_error',
   'protocol_error',
@@ -227,6 +291,21 @@ export const toolServerProbeResultSchema = v.object({
   error: v.optional(v.string()),
 })
 export type ToolServerProbeResult = v.InferOutput<typeof toolServerProbeResultSchema>
+
+/**
+ * What starting an OAuth grant answers: the vendor's own authorization URL, for the SPA to send
+ * the operator to.
+ *
+ * A url handed back rather than a 302, because the caller is a `fetch` from the settings panel and
+ * a redirect there would be followed by the browser into a cross-origin document the SPA cannot
+ * observe. It also keeps the refusals (`503` when the redirect URL is unconfigured, `409` when the
+ * declaration is not an `authorization_code` one) as ordinary error envelopes with a
+ * `details.reason` the panel can translate, which a redirect response cannot carry.
+ */
+export const toolServerOAuthStartSchema = v.object({
+  url: v.string(),
+})
+export type ToolServerOAuthStart = v.InferOutput<typeof toolServerOAuthStartSchema>
 
 /**
  * How many tool NAMES a probe result carries back.

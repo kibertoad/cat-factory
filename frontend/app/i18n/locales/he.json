@@ -3003,6 +3003,18 @@
       "servableHarnessesNone": "אף CLI של סוכן אינו יכול לשרת תעבורה זו, ולכן שרת זה לא חל על שום הרצה.",
       "allowedTools": "מוגבל אל: {tools}",
       "credentials": "פרטי הזדהות: {keys}",
+      "oauth": {
+        "connected": "מחובר",
+        "notConnected": "לא מחובר",
+        "machineGrant": "מזדהה בשם פריסה זו",
+        "connectedBy": "חובר על ידי {user}",
+        "scopes": "ניתנו ההרשאות: {scopes}",
+        "notRefreshable": "הספק לא הנפיק אסימון רענון, ולכן יש לחבר מחדש כאשר אסימון הגישה יפוג.",
+        "lastError": "חידוש האסימון האחרון נכשל: {detail}",
+        "connect": "התחברות",
+        "reconnect": "התחברות מחדש",
+        "disconnect": "ניתוק"
+      },
       "test": "בדיקה",
       "notProbeable": {
         "stdio": "רץ בתוך המכולה של הסוכן, ולכן לא ניתן לבדוק אותו מכאן.",
@@ -3013,6 +3025,8 @@
         "ok": "השיב",
         "credentialsMissing": "אין פרטי הזדהות",
         "credentialRefused": "פרטי ההזדהות נדחו",
+        "oauthNotConnected": "לא מחובר",
+        "oauthTokenFailed": "החיבור הפסיק לעבוד",
         "unreachable": "אין תשובה",
         "httpError": "דחה את הבקשה",
         "protocolError": "אינו שרת MCP",
@@ -3029,7 +3043,9 @@
       "hideDetails": "הסתרת פרטים",
       "toast": {
         "loadFailed": "לא ניתן לטעון את שרתי הכלים",
-        "probeFailed": "לא ניתן לבדוק את שרת הכלים"
+        "probeFailed": "לא ניתן לבדוק את שרת הכלים",
+        "connectFailed": "לא ניתן להתחיל את החיבור",
+        "disconnectFailed": "לא ניתן לנתק את שרת הכלים"
       }
     },
     "capabilityCredentials": {

@@ -23,6 +23,7 @@ import {
   makePreviewJobBuilder,
   type PersistenceRegistry,
   logger,
+  mcpOAuthContainerFields,
   resolveUrlSafetyPolicy,
 } from '@cat-factory/server'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
@@ -398,6 +399,7 @@ interface NodeServerContainerBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  mcpOAuthService: NodeRunServicesResult['mcpOAuthService']
   /**
    * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
    * resolver the tool-server probe resolves through, plus whether this node's environment answers
@@ -454,6 +456,7 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
     toolSecretResolver,
     validationConfigService,
@@ -608,6 +611,17 @@ function projectNodeServerContainer(bundle: NodeServerContainerBundle): ServerCo
     ...(capabilityCredentialsService
       ? { capabilityCredentials: capabilityCredentialsService }
       : {}),
+    // The per-workspace MCP OAuth grant store the tool-server connect/disconnect routes and the
+    // inventory's connection state read. Present when the shared ENCRYPTION_KEY is configured;
+    // absent, the routes refuse with a 503 naming the key rather than pretending a grant can be
+    // kept somewhere.
+    // The per-workspace MCP OAuth grant store, plus the redirect URL a vendor's authorization
+    // server sends the browser back to. Operator-set rather than derived from the request, because
+    // a third party holds this exact string and a `Host`-derived one differs behind every proxy.
+    ...mcpOAuthContainerFields({
+      oauth: mcpOAuthService,
+      redirectUrl: env.MCP_OAUTH_REDIRECT_URL,
+    }),
     // The composed capability-credential chain: the resolver the tool-server probe resolves through,
     // and what sits BEHIND the store, so the credential checklist describes the real chain instead of
     // asserting the default beside it. Both arrive already projected by
@@ -727,6 +741,7 @@ interface NodeContainerFinalizeBundle {
   vcsRegistry: NodeAppRegistriesResult['vcsRegistry']
   testSecretsService: NodeRunServicesResult['testSecretsService']
   capabilityCredentialsService: NodeRunServicesResult['capabilityCredentialsService']
+  mcpOAuthService: NodeRunServicesResult['mcpOAuthService']
   /**
    * The composed capability-credential chain, as `toolSecretContainerFields` projects it: the
    * resolver the tool-server probe resolves through, plus whether this node's environment answers
@@ -798,6 +813,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
     toolSecretResolver,
     validationConfigService,
@@ -961,6 +977,7 @@ function finalizeNodeContainer(bundle: NodeContainerFinalizeBundle): ServerConta
     vcsRegistry,
     testSecretsService,
     capabilityCredentialsService,
+    mcpOAuthService,
     toolSecretEnvironmentFallback,
     toolSecretResolver,
     validationConfigService,

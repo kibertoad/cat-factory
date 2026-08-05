@@ -25,6 +25,9 @@ export const useToolServersStore = defineStore('toolServers', () => {
   // operator just asked for.
   const results = ref<Record<string, ToolServerProbeResult>>({})
   const probing = ref<string | null>(null)
+  // The server whose OAuth grant is being connected or disconnected, so one row's button spins and
+  // the rest stay clickable — the same shape `probing` has, and for the same reason.
+  const connecting = ref<string | null>(null)
   const loading = ref(false)
   // The backend's two definitive refusals: no `secrets.manage` (403), and — unlike the credential
   // store — never a 503, since the inventory needs no encryption key to project a registry. `null`
@@ -108,5 +111,57 @@ export const useToolServersStore = defineStore('toolServers', () => {
     }
   }
 
-  return { view, results, probing, loading, available, hasSurface, load, ensureLoaded, probe }
+  /**
+   * Start an OAuth grant and hand the browser to the vendor.
+   *
+   * A full-page navigation rather than a popup: the operator has to sign in at a third party, and a
+   * popup is what a browser blocks and a password manager cannot fill. Nothing is stored here — the
+   * callback lands back on the app and the panel re-reads the inventory, so the connection state
+   * comes from the row rather than from anything this store guessed.
+   */
+  async function connectOAuth(id: string) {
+    const ws = useWorkspaceStore()
+    connecting.value = id
+    try {
+      const { url } = await api.startToolServerOAuth(ws.requireId(), id)
+      window.location.href = url
+    } finally {
+      connecting.value = null
+    }
+  }
+
+  /**
+   * Drop the workspace's grant, then re-read so the row's state comes from the backend rather than
+   * from an optimistic edit: a disconnect is the one action whose whole point is that the server
+   * stops being usable, and a row that looked connected for another second would be the misreport
+   * this panel exists to prevent.
+   */
+  async function disconnectOAuth(id: string) {
+    const ws = useWorkspaceStore()
+    connecting.value = id
+    try {
+      await api.disconnectToolServerOAuth(ws.requireId(), id)
+      // The stored probe result described a server this board could still reach. It cannot now.
+      const { [id]: _dropped, ...rest } = results.value
+      results.value = rest
+    } finally {
+      connecting.value = null
+    }
+    await load()
+  }
+
+  return {
+    view,
+    results,
+    probing,
+    connecting,
+    loading,
+    available,
+    hasSurface,
+    load,
+    ensureLoaded,
+    probe,
+    connectOAuth,
+    disconnectOAuth,
+  }
 })

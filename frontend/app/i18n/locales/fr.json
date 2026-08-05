@@ -2862,6 +2862,18 @@
       "servableHarnessesNone": "Aucune CLI d’agent ne peut servir ce transport, donc ce serveur ne s’applique à aucune exécution.",
       "allowedTools": "Restreint à : {tools}",
       "credentials": "Identifiants : {keys}",
+      "oauth": {
+        "connected": "Connecté",
+        "notConnected": "Non connecté",
+        "machineGrant": "S’authentifie en tant que ce déploiement",
+        "connectedBy": "Connecté par {user}",
+        "scopes": "Accordé : {scopes}",
+        "notRefreshable": "Le fournisseur n’a pas émis de jeton de rafraîchissement : il faudra reconnecter dès que le jeton d’accès expirera.",
+        "lastError": "Le dernier renouvellement du jeton a échoué : {detail}",
+        "connect": "Connecter",
+        "reconnect": "Reconnecter",
+        "disconnect": "Déconnecter"
+      },
       "test": "Tester",
       "notProbeable": {
         "stdio": "Il s’exécute dans le conteneur de l’agent et ne peut donc pas être testé d’ici.",
@@ -2872,6 +2884,8 @@
         "ok": "A répondu",
         "credentialsMissing": "Aucun identifiant",
         "credentialRefused": "Identifiant refusé",
+        "oauthNotConnected": "Non connecté",
+        "oauthTokenFailed": "La connexion ne fonctionne plus",
         "unreachable": "Aucune réponse",
         "httpError": "Requête rejetée",
         "protocolError": "Pas un serveur MCP",
@@ -2888,7 +2902,9 @@
       "hideDetails": "Masquer les détails",
       "toast": {
         "loadFailed": "Impossible de charger les serveurs d’outils",
-        "probeFailed": "Impossible de tester le serveur d’outils"
+        "probeFailed": "Impossible de tester le serveur d’outils",
+        "connectFailed": "Impossible de démarrer la connexion",
+        "disconnectFailed": "Impossible de déconnecter le serveur d’outils"
       }
     },
     "capabilityCredentials": {

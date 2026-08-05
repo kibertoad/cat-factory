@@ -431,6 +431,19 @@ export interface Env {
    */
   ENCRYPTION_KEY?: string
 
+  /**
+   * The redirect URL a vendor's authorization server sends an operator's browser back to when they
+   * connect a remote (`http`) MCP tool server — this deployment's public `/mcp/oauth/callback` URL,
+   * and the same string registered as the OAuth client's redirect URI at the vendor.
+   *
+   * Operator-set rather than derived from the request, because the vendor has this exact value on
+   * file: a `Host`-derived string differs behind every route a Worker is reachable by, and the
+   * exchange then fails at the vendor with `redirect_uri_mismatch`. Unset ⇒ the interactive grant
+   * refuses with a 503 naming this variable; the client-credentials grant needs no redirect and
+   * works without it.
+   */
+  MCP_OAUTH_REDIRECT_URL?: string
+
   // ---- Document-source integration (see config.ts; always on) -------------
   /**
    * Comma-separated allow-list of sources to register (e.g. `confluence,notion`).

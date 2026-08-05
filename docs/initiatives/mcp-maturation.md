@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3 and 4 landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4 and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -142,19 +142,22 @@ dump and never uses the word MCP).
       public API in the same slice, so provisioning stops being SPA-only. This supersedes ADR
       0029's "no per-workspace tool-server UI" non-goal, already half-stale since the credential
       store landed and now further so, since slice 4 gave the SPA a read-only tool-server surface; the ADR's consequences section is updated in the same PR.
-- [ ] **7. OAuth, both directions.** Consuming: authorization-code + refresh for remote `http`
-      servers, tokens sealed in the per-workspace capability-credential store, the grant flow in
-      the same panel. This is the biggest capability unlock on the consuming side: the modern
-      vendor MCP ecosystem is OAuth-first, and a static env var or header template cannot reach
-      it. Serving: the MCP authorization spec on the hosted endpoint (resource metadata; dynamic
-      client registration as scoped), so a host connects without a long-lived key in plaintext
-      config. Deliberately last: the consuming half wants slice 6's per-workspace surface for
-      grants, and the serving half needs slice 3's endpoint to exist.
-      **Criticality note (2026-08-05):** for the external-vendor goal specifically, the consuming
-      half is the single biggest gap in the whole initiative; every OAuth-first remote server
-      (Figma, Atlassian, Slack, Linear) is unreachable until it lands. If demand arrives before
-      slice 6, a deployment-level flow (client credentials, or a pre-obtained refresh token sealed
-      in the store) is a legitimate intermediate step that does not need the grant UI.
+- [ ] **7. OAuth, both directions.** The CONSUMING half has landed; the SERVING half has not.
+      **Consuming (done):** `McpOAuthConfig` on a remote (`http`) declaration, with both the
+      `authorization_code` grant (a `secrets.manage` holder presses Connect, PKCE, refresh) and the
+      `client_credentials` grant (no browser, no UI, for an internal or partner server on a
+      deployment with nobody to press a button). Endpoints are DISCOVERED per the MCP authorization
+      spec (RFC 9728 → RFC 8414 → OIDC discovery) with a declaration override; grants are sealed
+      per (workspace, server) in a store of their own; the dispatch mints and refreshes the access
+      token through the kernel `McpOAuthTokenSource` port and folds it into the job body's header,
+      never a prompt. The unavailability vocabulary gained `oauth_not_connected` and
+      `oauth_token_failed`, the probe gained the matching verdicts, and the tool-server row gained
+      Connect / Reconnect / Disconnect. It did NOT wait for slice 6 (see the criticality note the
+      2026-08-05 review left), and did not need it: the grant is per workspace already, because the
+      credential half always was. Its decisions and the gotchas it surfaced are below.
+      **Serving (open):** the MCP authorization spec on the hosted endpoint (protected-resource
+      metadata; dynamic client registration as scoped), so a host connects without a long-lived key
+      in plaintext config. It needs slice 3's endpoint, which exists, so nothing blocks it.
 - [ ] **8. Adoption loudness and `stdio` operability.** (2026-08-05 review) Two small items that
       decide whether a deployment learns its ceiling at boot or from a run. A boot warning when NO
       harness the deployment can resolve serves ANY registered server (a Pi-only deployment
@@ -197,7 +200,7 @@ carries it; "done" means that slice has landed.
 | Tool servers asserted nowhere cross-runtime                                       | Slice 5                       |
 | No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
 | Capability credentials absent from the public API                                 | Slice 6                       |
-| No OAuth for remote tool servers                                                  | Slice 7                       |
+| No OAuth for remote tool servers                                                  | Slice 7 (consuming half done) |
 | No MCP authorization on the serving side                                          | Slice 7                       |
 | `http` conflates streamable HTTP and SSE; fixtures use `/sse` URLs                | Not pursued (below)           |
 | No composed tools / auto-pagination in the MCP server                             | Not pursued (below)           |
@@ -210,16 +213,16 @@ carries it; "done" means that slice has landed.
 
 From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
 
-| Finding (2026-08-05)                                                              | Disposition                   |
-| --------------------------------------------------------------------------------- | ----------------------------- |
-| Blind run (stale runner image) is the likeliest adopter failure; land it first    | Slice 5 (ordering note)       |
-| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable    | Slice 7 (criticality note)    |
-| No boot signal when no resolvable harness serves any registered server           | Slice 8                       |
-| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story     | Slice 8 (docs half done)      |
-| Consuming-side docs buried in `custom-agents.md`; no single authority doc        | Done (`mcp-tool-servers.md`)  |
-| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source      | Done (same change)            |
-| Silent last-write-wins on a re-registered tool-server id                          | Not pursued (below)           |
-| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob                  | Not pursued (below)           |
+| Finding (2026-08-05)                                                           | Disposition                   |
+| ------------------------------------------------------------------------------ | ----------------------------- |
+| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (ordering note)       |
+| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable | Slice 7 (consuming half done) |
+| No boot signal when no resolvable harness serves any registered server         | Slice 8                       |
+| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story   | Slice 8 (docs half done)      |
+| Consuming-side docs buried in `custom-agents.md`; no single authority doc      | Done (`mcp-tool-servers.md`)  |
+| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source    | Done (same change)            |
+| Silent last-write-wins on a re-registered tool-server id                       | Not pursued (below)           |
+| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob               | Not pursued (below)           |
 
 ## Deliberately not pursued
 
@@ -303,6 +306,75 @@ Recorded so the next iteration does not re-propose them.
   internal-first soft launch for an endpoint whose whole point is external callers. It carries that
   obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
   decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 7 (consuming) — its five decisions
+
+- **A store of its OWN, not another key in the capability-credential checklist.** The obvious
+  saving is to seal a refresh token under a credential key and reuse everything. It does not
+  survive contact with what a grant IS: it expires, it is REWRITTEN by the dispatch path when it
+  refreshes, it belongs to a named person's vendor account, and it is created by a redirect rather
+  than typed. The checklist's whole shape (a key, a write-only value, a last-written date) can
+  express none of that, and a row per (workspace, server) also keeps two servers' refreshes off
+  each other's row — where the credential store's one-blob-per-workspace shape would have made every
+  refresh contend with every other. What IS reused is the resolver chain, for the OAuth client
+  secret: that one really is a static value a tenant supplies, so it goes through the checklist like
+  any other and needs no second mechanism.
+- **The in-flight authorization request is SEALED INTO THE STATE, not a pending-row table.** A table
+  costs a migration on both runtimes, a repository pair, and a sweeper on both facades to delete the
+  rows behind every consent screen anyone ever abandoned. Sealing it (AEAD, under the deployment's
+  own key) makes all of that disappear: the value is confidential and authenticated, carries its own
+  expiry, and an abandoned request is collected by the operator closing the tab. It is SEALED rather
+  than signed with the platform's existing `StateSigner` because it carries the PKCE verifier, and
+  an HMAC over a readable payload would publish the verifier into the same browser redirect the
+  authorization code travels in. The residual gap, recorded rather than hidden: with no row there is
+  no single-use enforcement, so a replayed state re-presents a code the authorization server has
+  already spent and refuses.
+- **The refresh race resolves by ADOPTING the winner's tokens, not by re-applying.** Every other
+  rev-guarded path in this repo reloads and re-applies on the winner's snapshot. Here that would be
+  actively wrong: an authorization server that rotates refresh tokens has already invalidated the
+  loser's, so re-applying replaces a working grant with a dead one. The loser re-reads and uses what
+  the winner stored. This is the one place the repo's standard CAS idiom needed inverting, and it
+  reads as a bug until the rotation is in view.
+- **Discovery is performed, and its results are held to the URL floor.** Requiring both endpoints in
+  the declaration would have been half the code, and it makes a vendor server a scavenger hunt
+  through a changelog for two strings that change when the vendor re-platforms. The MCP spec
+  prescribes the walk, so the walk is what a deployment gets. What discovery may NOT do is relax the
+  transport rule: a metadata document is a third party naming where this deployment's client secret
+  is sent, so a discovered endpoint is refused on exactly the terms a declared one is.
+- **Dynamic client registration (RFC 7591) is deliberately NOT performed.** A client registered at
+  runtime is deployment state with no home in a composition-root registration and no
+  operator-visible identity at the vendor: nobody could find it, rotate it or revoke it from either
+  side. Every vendor server this initiative set out to reach offers a console-registered client, so
+  the cost is a server that offers ONLY dynamic registration, which is named in the limits list
+  rather than left to be discovered.
+
+## Gotchas slice 7 (consuming) surfaced
+
+- **A grant OUTLIVES the declaration that created it, and disconnect must not be gated on the
+  registry.** A deployment retires a server or renames it in a refactor, and the row is then a live
+  vendor token nobody can reach: a `DELETE` that 404'd on an unknown id would make the one action
+  that removes it unavailable exactly when it is needed. The connect route is the opposite and
+  checks everything, because a refusal AFTER the redirect lands on a vendor's error page.
+- **"Connected" and "no longer working" are ONE row, not alternatives.** The first draft cleared the
+  connection on a failed refresh, which reads as never having connected and sends an operator to
+  press Connect on a grant the vendor revoked. The summary carries `lastError` BESIDE `connected`,
+  the same "absent and zero must never render the same" rule the drop vocabulary is built on.
+- **A refresh token the server did not rotate has to be carried forward.** Both behaviours are
+  common, and a `{...tokens}` spread that dropped an absent `refresh_token` turns a working
+  non-rotating grant into a single-use one — a failure that appears days later, on the first
+  dispatch after the access token expires.
+- **The expiry needs SKEW, because a dispatched token is used for the length of a run.** Handing
+  over a token with twenty seconds left costs the agent a tool the prompt already promised it, with
+  no unavailability reason to state, because the platform believed it was wired.
+- **The callback cannot read `workspaceAccess` off the context.** It is mounted at the app root
+  (the redirect URI is a string the vendor holds, so it can carry no board id), which means the
+  workspace gate never ran and nothing published an access object. It loads one itself — which is
+  also the right behaviour rather than a workaround, since `secrets.manage` can be revoked in the
+  minutes a human spends at a consent screen.
+- **The executor's file was at its size ratchet, and a new optional dep is what pushed it over.**
+  The binding of injected deps onto `resolveToolServers` moved out of `ContainerAgentExecutor` and
+  next to the resolution itself (`resolveDispatchToolServers`), so the NEXT credential channel lands
+  there rather than re-triggering the same split.
 
 ## Slice 4's five decisions
 

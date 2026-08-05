@@ -45,11 +45,21 @@ const SOURCES: Record<string, string[]> = {
     'options.capabilityCredentialEnvironmentFallback',
     'toolSecretChain.resolver',
     'toolSecretContainerFields',
+    // The OAuth half rides the SAME chain (it resolves the client secret through it), so a lost
+    // link here would not fail to compile: `resolveToolServerOAuth` is optional, and absent it
+    // every OAuth server is stated as `oauth_not_connected` on a deployment that has a grant store.
+    'mcpOAuthExecutorDeps',
   ],
   // …carried onto the container the credential controller and the tool-server PROBE resolve from,
   // resolver INCLUDED: the probe resolves through the same chain a dispatch does, so a lost link
   // there would silently report every board's servers against this node's own environment.
-  '../src/container.ts': ['toolSecretEnvironmentFallback', 'toolSecretResolver'],
+  // …and the OAuth grant store plus its redirect URL, projected by the one shared helper for the
+  // reason the credential pair is: the store without the URL is a Connect button that always 503s.
+  '../src/container.ts': [
+    'toolSecretEnvironmentFallback',
+    'toolSecretResolver',
+    'mcpOAuthContainerFields',
+  ],
   // The executor taking the composed chain as a REQUIRED dependency. This link is the one the
   // type system now pins by itself: the field carried a bare environment default until it was
   // made required, and that default failed OPEN, so dropping the link here resolved every tenant
