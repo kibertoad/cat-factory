@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR #{number}",
       "openPrOnGithub": "Otwórz {pr} na GitHub",
+      "readOutcome": "Wynik",
+      "readOutcomeHint": "Przeczytaj, co się zmieniło, wraz z dowodami",
       "review": "Przejrzyj",
       "merge": "Scal",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR #{number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Przeczytaj wynik",
       "stepState": {
         "pending": "Oczekuje",
         "working": "Praca",
@@ -5343,6 +5346,110 @@
     "history": {
       "heading": "Historia ({count} runda) | Historia ({count} rundy) | Historia ({count} rund)",
       "fixRequested": "Poproszono o poprawkę"
+    }
+  },
+  "outcome": {
+    "title": "Wynik",
+    "subtitle": "Co zmienił ten przebieg i jakie są na to dowody",
+    "diff": "Otwórz diff",
+    "diffNumbered": "Otwórz diff (#{number})",
+    "peerDiff": "Otwórz diff w {repo}",
+    "disposition": {
+      "merged": "Scalone",
+      "awaiting_merge": "Czeka na scalenie",
+      "in_flight": "Wciąż trwa",
+      "needs_attention": "Wymaga uwagi",
+      "not_run": "Jeszcze nie uruchomiono",
+      "unknown": "Przebieg nie został wczytany"
+    },
+    "ask": {
+      "title": "O co proszono",
+      "none": "To zadanie nie ma opisu, więc nie ma do czego porównać wyniku."
+    },
+    "gap": {
+      "run_unavailable": "Przebieg tego zadania nie został wczytany, więc zapisane w nim dowody nie są tutaj pokazane. To co innego niż przebieg, który niczego nie zapisał."
+    },
+    "requirements": {
+      "title": "Sprawdzone wymagania",
+      "met": "Spełnione: {count}",
+      "notMet": "Niespełnione: {count}",
+      "notCovered": "Niesprawdzone: {count}",
+      "regressions": "Regresje: {count}",
+      "regressionTag": "Regresja",
+      "idOnly": "sam identyfikator",
+      "idOnlyHint": "Tego identyfikatora nie ma w specyfikacji usługi, więc nie ma nazwy do pokazania.",
+      "spec": {
+        "not_read": "Specyfikacja usługi nie została odczytana, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
+        "unmatched": "Żaden z tych identyfikatorów wymagań nie występuje w odczytanej specyfikacji usługi, więc pokazane są tylko identyfikatory zgłoszone przez testera."
+      },
+      "verdict": {
+        "met": "Potwierdzone",
+        "not_met": "Niespełnione",
+        "not_covered": "Niesprawdzone"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc nie sprawdzono żadnego wymagania.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu, więc żadne wymaganie nie zostało rozstrzygnięte.",
+        "no_verdicts": "Tester zgłosił raport, nie rozstrzygając żadnego wymagania ze specyfikacji."
+      }
+    },
+    "tests": {
+      "title": "Jak to przetestowano",
+      "openReport": "Pełny raport z testów",
+      "summary": "Tester zgłasza: {summary}",
+      "abort": "Tester nie mógł przeprowadzić sensownego testu: {reason}",
+      "counts": "{passed} zaliczonych, {failed} niezaliczonych, {skipped} pominiętych",
+      "verdict": {
+        "greenlit": "Gotowe do wydania",
+        "concerns": "Zgłoszono zastrzeżenia",
+        "could_not_run": "Nie dało się przetestować"
+      },
+      "environment": {
+        "local": "Przetestowane na lokalnych zależnościach",
+        "ephemeral": "Przetestowane na środowisku podglądu"
+      },
+      "severity": {
+        "low": "Niski",
+        "medium": "Średni",
+        "high": "Wysoki",
+        "critical": "Krytyczny"
+      },
+      "gap": {
+        "no_tester_step": "Ten potok nie ma kroku testowego, więc niczego nie sprawdzono.",
+        "tester_not_reported": "Tester jeszcze nie zgłosił raportu."
+      }
+    },
+    "visuals": {
+      "title": "Jak to wygląda",
+      "shotAlt": "Zrzut ekranu widoku {view}",
+      "hasReference": "Dla tego widoku dostarczono projekt referencyjny",
+      "source": {
+        "visual_confirm": "Te widoki porównano z projektami referencyjnymi.",
+        "tester": "Te widoki zarejestrowano podczas testów. Nikogo nie poproszono o ich ocenę."
+      },
+      "gap": {
+        "no_visual_step": "Nic w tym potoku nie rejestruje interfejsu, więc nie ma na co patrzeć.",
+        "none_captured": "Interfejs miał zostać zarejestrowany, ale nie zapisano żadnego widoku."
+      }
+    },
+    "checks": {
+      "title": "Sprawdzenia",
+      "row": "{kind}: {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Sprawdzenia projektu",
+        "reproduction": "Odtworzenie błędu"
+      },
+      "state": {
+        "pass": "zaliczone",
+        "fail": "niezaliczone",
+        "pending": "wciąż trwa",
+        "inconclusive": "bez rozstrzygnięcia"
+      }
+    },
+    "empty": {
+      "title": "Nie ma jeszcze czego pokazać",
+      "body": "To zadanie nie wytworzyło jeszcze wyniku do przeczytania."
     }
   },
   "focus": {

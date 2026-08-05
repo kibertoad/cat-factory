@@ -457,6 +457,8 @@
       "pr": "PR",
       "prNumber": "PR n° {number}",
       "openPrOnGithub": "Ouvrir {pr} sur GitHub",
+      "readOutcome": "Résultat",
+      "readOutcomeHint": "Lisez ce qui a changé, avec les preuves à l'appui",
       "review": "Revoir",
       "merge": "Fusionner",
       "mergeConfirm": {
@@ -1046,6 +1048,7 @@
       },
       "prNumber": "PR n° {number}",
       "pullRequest": "Pull request",
+      "readOutcome": "Lire le résultat",
       "stepState": {
         "pending": "En attente",
         "working": "En cours",
@@ -5343,6 +5346,110 @@
     "history": {
       "heading": "Historique (aucun tour) | Historique ({count} tour) | Historique ({count} tours)",
       "fixRequested": "Correction demandée"
+    }
+  },
+  "outcome": {
+    "title": "Résultat",
+    "subtitle": "Ce que cette exécution a changé, et les preuves à l'appui",
+    "diff": "Ouvrir le diff",
+    "diffNumbered": "Ouvrir le diff (#{number})",
+    "peerDiff": "Ouvrir le diff dans {repo}",
+    "disposition": {
+      "merged": "Fusionné",
+      "awaiting_merge": "En attente de fusion",
+      "in_flight": "Toujours en cours",
+      "needs_attention": "Demande votre attention",
+      "not_run": "Pas encore exécuté",
+      "unknown": "Exécution non chargée"
+    },
+    "ask": {
+      "title": "Ce qui était demandé",
+      "none": "Cette tâche n'a pas de description, il n'y a donc rien à quoi comparer le résultat."
+    },
+    "gap": {
+      "run_unavailable": "L'exécution de cette tâche n'a pas été chargée : les éléments qu'elle a enregistrés ne peuvent donc pas être affichés ici. Ce n'est pas la même chose qu'une exécution qui n'a rien enregistré."
+    },
+    "requirements": {
+      "title": "Exigences vérifiées",
+      "met": "Satisfaites : {count}",
+      "notMet": "Non satisfaites : {count}",
+      "notCovered": "Non vérifiées : {count}",
+      "regressions": "Régressions : {count}",
+      "regressionTag": "Régression",
+      "idOnly": "identifiant seul",
+      "idOnlyHint": "Cet identifiant ne figure pas dans la spécification du service, il n'y a donc aucun titre à afficher.",
+      "spec": {
+        "not_read": "La spécification du service n'a pas été lue : voici donc les identifiants d'exigence signalés par le testeur, sans leurs titres.",
+        "unmatched": "Aucun de ces identifiants d'exigence ne figure dans la spécification du service qui a été lue ; seuls les identifiants signalés par le testeur sont affichés."
+      },
+      "verdict": {
+        "met": "Vérifiée",
+        "not_met": "En échec",
+        "not_covered": "Non vérifiée"
+      },
+      "gap": {
+        "no_tester_step": "Ce pipeline ne comporte aucune étape de test, aucune exigence n'a donc été vérifiée.",
+        "tester_not_reported": "Le testeur n'a pas encore rendu son rapport, aucune exigence n'a donc été tranchée.",
+        "no_verdicts": "Le testeur a rendu son rapport sans se prononcer sur la moindre exigence de la spécification."
+      }
+    },
+    "tests": {
+      "title": "Comment cela a été testé",
+      "openReport": "Rapport de test complet",
+      "summary": "Le testeur rapporte : {summary}",
+      "abort": "Le testeur n'a pas pu réaliser de test utile : {reason}",
+      "counts": "{passed} réussis, {failed} en échec, {skipped} ignorés",
+      "verdict": {
+        "greenlit": "Bon pour la mise en production",
+        "concerns": "Réserves signalées",
+        "could_not_run": "N'a pas pu être testé"
+      },
+      "environment": {
+        "local": "Testé avec des dépendances locales",
+        "ephemeral": "Testé sur un environnement de prévisualisation"
+      },
+      "severity": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "high": "Élevée",
+        "critical": "Critique"
+      },
+      "gap": {
+        "no_tester_step": "Ce pipeline ne comporte aucune étape de test, rien n'a donc été exercé.",
+        "tester_not_reported": "Le testeur n'a pas encore rendu son rapport."
+      }
+    },
+    "visuals": {
+      "title": "À quoi cela ressemble",
+      "shotAlt": "Capture de {view}",
+      "hasReference": "Une maquette de référence a été fournie pour cette vue",
+      "source": {
+        "visual_confirm": "Ces vues ont été comparées à leurs maquettes de référence.",
+        "tester": "Ces vues ont été capturées pendant les tests. Personne n'a été invité à les relire."
+      },
+      "gap": {
+        "no_visual_step": "Rien dans ce pipeline ne capture l'interface, il n'y a donc rien à regarder.",
+        "none_captured": "L'interface devait être capturée, mais aucune vue ne l'a été."
+      }
+    },
+    "checks": {
+      "title": "Contrôles",
+      "row": "{kind} : {state}",
+      "kind": {
+        "ci": "CI",
+        "validation": "Contrôles du projet",
+        "reproduction": "Reproduction du bug"
+      },
+      "state": {
+        "pass": "réussi",
+        "fail": "en échec",
+        "pending": "en cours",
+        "inconclusive": "non concluant"
+      }
+    },
+    "empty": {
+      "title": "Rien à afficher pour l'instant",
+      "body": "Cette tâche n'a encore produit aucun résultat à lire."
     }
   },
   "focus": {

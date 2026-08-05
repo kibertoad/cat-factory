@@ -35,9 +35,13 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-// 1.12.0: additive only, an optional `modelPin` on the PR verification report's judge verdicts
-// (which model the rubric was authored for, and whether the run got it).
-const API_VERSION = '1.12.0'
+// 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
+// so a consumer built against 1.11.0 keeps parsing.
+// 1.13.0, not 1.12.0: additive only, an optional `modelPin` on the report's judge verdicts (which
+// model the rubric was authored for, and whether the run got it), but main took 1.12.0 for the
+// validation field while this branch was in flight. The collision the note above describes, caught
+// here only because both sides had a comment to conflict on.
+const API_VERSION = '1.13.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

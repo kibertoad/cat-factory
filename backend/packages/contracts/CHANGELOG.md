@@ -1,5 +1,102 @@
 # @cat-factory/contracts
 
+## 0.245.0
+
+### Minor Changes
+
+- 10e7a15: Non-code outcome summary: "read the result" lands on evidence, not a diff
+
+  Reading a finished run meant reading a pull request. Everything a person who does not read diffs
+  needs was already captured (the tester's structured report, the screenshots it took, the
+  visual-confirmation pairs a human reviewed, the per-requirement verdicts it returned) and every
+  piece of it sat behind its own STEP-keyed window, so it was reachable only by someone who had
+  already learned the pipeline. The engine composes exactly these facts for the reviewer on the pull
+  request; the person who asked for the work got a branch name.
+
+  There is now an OUTCOME result view, keyed by the RUN: what was asked in the requester's own words,
+  which of the service's requirements the tester ruled on and what it observed against each, the
+  tester's verdict and concerns, the views it captured (against their reference designs when a human
+  reviewed them), and the checks that recorded a verdict, with every pull request the run opened at
+  the top of the card. It is what the board's `pr_ready` and `done` cards and the inspector's
+  execution panel open, on a task that has something to show; a task with no pull request and no
+  recorded evidence offers no card rather than an empty one. The `outcome` run deep link
+  (`?run=…&block=…&view=outcome`) resolves to it as well: nothing emits that link yet (the engine's
+  verification report links a REVIEWER to the run-scoped panels it already served), so today it is
+  the entry point for a URL a person shares.
+
+  The composition is a pure reduction (`utils/runOutcome.ts`) over state the SPA is already streamed,
+  not a new endpoint and not a model asked to summarise itself. That was the main decision: an
+  endpoint would have meant a second producer of the facts the PR verification report already
+  composes, and the two would disagree about what a run proved. The cost is that requirement TITLES
+  come from a best-effort read of the service spec, and the card says so rather than letting a
+  requirement id read as its name: a spec it never read and a spec it DID read that names none of
+  the reported ids are different sentences, and where only some ids resolved, the rows that did not
+  are marked individually instead of sitting unmarked beside their named neighbours.
+
+  The same discipline covers every section: an absent producer states WHICH one was missing, a tester
+  that could not run at all is kept apart from one that ran and raised concerns, a run the SPA cannot
+  resolve is stated as that rather than as a pipeline that recorded nothing, and a regression (an
+  `established` requirement observed to fail) is computed from the spec's state and the tester's
+  verdict rather than read off any report.
+
+  Worth watching in review: the board card's basic-mode behaviour. A `pr_ready` card drops its raw
+  pull-request chip in basic mode, because the outcome card it now leads with carries that link at the
+  top. That is an ordering change, not a hidden capability, and advanced mode keeps both. The chip's
+  condition states that as the invariant it is (drop it only where the outcome card is offered), so
+  the tier can reorder two routes to the diff but never remove the last one.
+
+- ca213b1: Say when the validation configuration could not be READ, and keep telemetry long enough to read
+
+  Two independent honesty gaps in what a run reports about itself.
+
+  **A failed validation-config read rendered as an unconfigured service.** A dispatch resolves the
+  service frame's pre-PR validation checks, and `validationChecksFor` catches a throw and degrades
+  to "no checks" so a config-store outage (or a mothership node whose server does
+  not reflect `validationConfigRepository`) cannot wedge every coding run. That trade is right and
+  stays. What was wrong is that it was the whole story: the catch was bare, so a service whose checks
+  had silently stopped running produced the exact context of a service that never had any, and the PR
+  verification report then stated in the reviewer's face that "this service configures no check
+  commands", a fabricated fact about somebody's setup, in the one section built to stop an agent
+  asserting things it did not verify.
+
+  The read now degrades loudly. The catch warns with the frame id and the scrubbed cause, and sets
+  `step.validationConfigUnreadable`, which the report reads as `PrReportValidation.configUnreadable`.
+  On an absent section that DISPLACES the unconfigured note rather than qualifying it (a skimming
+  reader must not come away with the wrong one of two opposite readings); on a reported section it is
+  a callout above the verdict, because a later dispatch whose read failed ran unvalidated after the
+  evidence was captured and an unqualified green table would overstate what it covers. The flag is
+  rewritten on every dispatch of the step, so a transient outage that recovered before the PR-opening
+  dispatch leaves no warning behind, and the report scans every step for it, because the failing read
+  is by construction on a step that produced no validation evidence to hang it off.
+
+  Rewrite-per-dispatch is what keeps the flag honest, so only a resolution that actually STARTS a job
+  may perform it: `buildContext` now takes `recordsDispatch` (defaulting to `true`), and the two
+  callers that build a context without dispatching pass `false` — the over-budget exemption probe,
+  and a re-attach to a job an earlier, possibly replayed, dispatch already started. Ungated, a store
+  that recovered between the dispatch and the replay would ERASE the record that the shipped job ran
+  with no checks. The decision is handed to the resolvers as a `StepObservations` seam rather than a
+  boolean each re-reads, and that seam owns every per-dispatch field the builder rewrites, including
+  `selectedFragmentIds`, which carried the same contract and the same latent hole.
+
+  The absent-section note WITHDRAWS the unconfigured claim rather than replacing it with an equally
+  causal one: the flag is scanned run-wide, so all that is known is that some dispatch could not
+  read, and the older-runner-image cause stays named beside it.
+
+  `configUnreadable` is an additive optional field on the run report, which is part of the stable
+  `/api/v1` surface: OpenAPI `info.version` goes to 1.12.0 and the four SDKs plus the MCP facade are
+  regenerated. A consumer built against 1.11.0 keeps parsing.
+
+  **`LLM_CALL_METRICS_RETENTION_DAYS` now defaults to 14 days rather than 3.** The store exists for
+  post-mortems and an investigation into a failed run routinely starts days after it, so the old
+  window expired the record before anyone looked: a run that failed on a Friday was unreadable by
+  Monday. Fourteen matches the provisioning log's default and keeps a working week plus its
+  weekend. The heavy half of the store is the recorded bodies, which are already double-gated behind
+  `LLM_RECORD_PROMPTS` and the per-workspace `storeAgentContext`, so a deployment that records them
+  and wants the old footprint sets the variable back to 3. The window multiplies the store linearly,
+  which is ~4.7x here; `storage-and-retention.md` now sizes that against D1's 10 GB ceiling from
+  bytes-per-row rather than row count, because with bodies off and with bodies on the answer differs
+  by three orders of magnitude.
+
 ## 0.244.0
 
 ### Minor Changes

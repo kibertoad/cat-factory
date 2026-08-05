@@ -40,7 +40,7 @@ line in the `(agentKind, phase)` rollup instead of every judge's landing togethe
 Watch for: `JUDGE_AGENT_KIND` is gone from `@cat-factory/agents` rather than left as a constant
 that would silently re-collapse every rubric onto one model default. `PresetRouting.pinnedForKind`
 is required, so any producer of that shape must state it. Public API addition only: an optional
-`modelPin` on the report's judge verdicts, spec `1.12.0`.
+`modelPin` on the report's judge verdicts, spec `1.13.0`.
 
 Design: `docs/initiatives/judge-registry.md` (D9); resolution chain:
 `backend/docs/model-support.md`.
