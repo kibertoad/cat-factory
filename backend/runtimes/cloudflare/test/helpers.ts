@@ -50,6 +50,19 @@ export interface TestApp {
     body?: unknown,
     headers?: Record<string, string>,
   ): Promise<TestResponse<T>>
+  /**
+   * Issue a request whose success carries BYTES rather than JSON (the artifact blob endpoint).
+   *
+   * A separate method rather than a flag on {@link ConformanceApp.call}: that one JSON-decodes
+   * every body, so a PNG reaches it as a parse error rather than a response. Returns the recorded
+   * content type beside the bytes, because clamping it to the image allow-list is half of what
+   * the endpoint promises: an artifact served as something a browser would execute is the bug.
+   */
+  callBinary(
+    method: string,
+    path: string,
+    headers?: Record<string, string>,
+  ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }>
   createWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
   /** Create an unseeded workspace owned by a fresh ORG account (via the real services). */
   createOrgWorkspace(options?: { name?: string; seed?: boolean }): Promise<WorkspaceSnapshot>
@@ -134,6 +147,22 @@ export function makeApp(
     )
     const text = await res.text()
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
+  }
+
+  async function callBinary(
+    method: string,
+    path: string,
+    extraHeaders?: Record<string, string>,
+  ): Promise<{ status: number; contentType: string | null; bytes: Uint8Array }> {
+    const res = await app.fetch(
+      new Request(`${BASE}${path}`, { method, headers: { ...extraHeaders } }),
+      env,
+    )
+    return {
+      status: res.status,
+      contentType: res.headers.get('content-type'),
+      bytes: new Uint8Array(await res.arrayBuffer()),
+    }
   }
 
   async function createWorkspace(options: { name?: string; seed?: boolean } = {}) {
@@ -221,6 +250,7 @@ export function makeApp(
 
   return {
     call,
+    callBinary,
     createWorkspace,
     createOrgWorkspace,
     drive,

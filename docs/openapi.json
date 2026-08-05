@@ -1,6 +1,27 @@
 {
   "components": {
     "schemas": {
+      "CreateHeadlessPublicApiKey": {
+        "properties": {
+          "label": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "read",
+              "write",
+              "decide"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
       "CreatePublicJob": {
         "properties": {
           "input": {
@@ -66,6 +87,21 @@
         },
         "required": [
           "title"
+        ],
+        "type": "object"
+      },
+      "CreatedPublicApiKey": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/PublicApiKey"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "secret"
         ],
         "type": "object"
       },
@@ -620,6 +656,1486 @@
         ],
         "type": "object"
       },
+      "PrReportCheck": {
+        "properties": {
+          "conclusion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "conclusion"
+        ],
+        "type": "object"
+      },
+      "PrReportCi": {
+        "properties": {
+          "failingChecks": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportCheck"
+            },
+            "type": "array"
+          },
+          "fixerAttempts": {
+            "type": "number"
+          },
+          "headSha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxFixerAttempts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pass",
+                  "pending",
+                  "fail"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "failingChecks",
+          "fixerAttempts"
+        ],
+        "type": "object"
+      },
+      "PrReportEnvironments": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "error": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "frameId": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "ready",
+                    "failed",
+                    "skipped"
+                  ],
+                  "type": "string"
+                },
+                "url": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "frameId",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "properties": {
+              "capturedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "outcomes": {
+                "type": "number"
+              },
+              "ranAgainst": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "local",
+                      "ephemeral"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requirementVerdicts": {
+                "type": "number"
+              },
+              "screenshots": {
+                "items": {
+                  "properties": {
+                    "artifactId": {
+                      "type": "string"
+                    },
+                    "hasReference": {
+                      "type": "boolean"
+                    },
+                    "url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "view": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "view",
+                    "artifactId",
+                    "hasReference",
+                    "url"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "status": {
+                "enum": [
+                  "captured",
+                  "local",
+                  "undeclared",
+                  "absent"
+                ],
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "status",
+              "ranAgainst",
+              "capturedAt",
+              "outcomes",
+              "requirementVerdicts",
+              "screenshots",
+              "url"
+            ],
+            "type": "object"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proof": {
+            "enum": [
+              "complete",
+              "incomplete",
+              "not_applicable"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "teardown": {
+            "enum": [
+              "confirmed",
+              "unconfirmed",
+              "pending",
+              "failed",
+              "not_applicable"
+            ],
+            "type": "string"
+          },
+          "timeline": {
+            "properties": {
+              "gap": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "unwired",
+                      "unreadable",
+                      "truncated",
+                      "not_provisioned"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provisionFailures": {
+                "type": "number"
+              },
+              "provisionedAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "teardownFailures": {
+                "type": "number"
+              },
+              "teardownsUnconfirmed": {
+                "type": "number"
+              },
+              "tornDownAt": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "gap",
+              "provisionedAt",
+              "tornDownAt",
+              "provisionFailures",
+              "teardownFailures",
+              "teardownsUnconfirmed"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "entries",
+          "teardown",
+          "timeline",
+          "evidence",
+          "proof",
+          "gaps"
+        ],
+        "type": "object"
+      },
+      "PrReportIssue": {
+        "properties": {
+          "externalId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "externalId",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      },
+      "PrReportJudge": {
+        "properties": {
+          "bounces": {
+            "type": "number"
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pass",
+                  "park",
+                  "bounce",
+                  "fail"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "severity": {
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "where": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "severity"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "maxBounces": {
+            "type": "number"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rubricName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rubricOverridden": {
+            "type": "boolean"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stepKind": {
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "stepKind",
+          "rubricName",
+          "rubricOverridden",
+          "score",
+          "threshold",
+          "disposition",
+          "summary",
+          "findings",
+          "bounces",
+          "maxBounces",
+          "model"
+        ],
+        "type": "object"
+      },
+      "PrReportJudges": {
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportJudge"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "verdicts"
+        ],
+        "type": "object"
+      },
+      "PrReportMerge": {
+        "properties": {
+          "assessment": {
+            "anyOf": [
+              {
+                "properties": {
+                  "complexity": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "impact": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  "rationale": {
+                    "type": "string"
+                  },
+                  "risk": {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "complexity",
+                  "risk",
+                  "impact",
+                  "rationale"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presetName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "PrReportObservability": {
+        "properties": {
+          "reportUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "runUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trajectoryUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "runUrl",
+          "trajectoryUrl",
+          "reportUrl"
+        ],
+        "type": "object"
+      },
+      "PrReportReproduction": {
+        "properties": {
+          "alternativeVerification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "properties": {
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitCode": {
+                    "type": "number"
+                  },
+                  "outputTail": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "setupFailed": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "timedOut": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "exitCode",
+                  "passed"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "final": {
+            "anyOf": [
+              {
+                "properties": {
+                  "durationMs": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "exitCode": {
+                    "type": "number"
+                  },
+                  "outputTail": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "setupFailed": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "timedOut": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "exitCode",
+                  "passed"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxAttempts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "omittedTestPaths": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "testPaths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reproduced",
+                  "inconclusive",
+                  "declared_infeasible"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "testPaths",
+          "attempts"
+        ],
+        "type": "object"
+      },
+      "PrReportRequirements": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "criteriaCount": {
+                  "type": "number"
+                },
+                "detail": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "group": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "module": {
+                  "type": "string"
+                },
+                "priority": {
+                  "enum": [
+                    "must",
+                    "should",
+                    "could"
+                  ],
+                  "type": "string"
+                },
+                "state": {
+                  "enum": [
+                    "aspirational",
+                    "established"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "enum": [
+                    "met",
+                    "not_met",
+                    "not_covered"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "module",
+                "group",
+                "priority",
+                "state",
+                "verdict",
+                "detail",
+                "criteriaCount"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "met": {
+            "type": "number"
+          },
+          "notCovered": {
+            "type": "number"
+          },
+          "notMet": {
+            "type": "number"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "regressions": {
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "status",
+          "entries",
+          "met",
+          "notMet",
+          "notCovered",
+          "regressions",
+          "total"
+        ],
+        "type": "object"
+      },
+      "PrReportRun": {
+        "properties": {
+          "blockId": {
+            "type": "string"
+          },
+          "blockTitle": {
+            "type": "string"
+          },
+          "executionId": {
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportIssue"
+            },
+            "type": "array"
+          },
+          "pipelineId": {
+            "type": "string"
+          },
+          "pipelineName": {
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "github",
+                  "gitlab"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportStep"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "executionId",
+          "blockId",
+          "blockTitle",
+          "pipelineId",
+          "pipelineName",
+          "steps",
+          "issues"
+        ],
+        "type": "object"
+      },
+      "PrReportStep": {
+        "properties": {
+          "agentKind": {
+            "type": "string"
+          },
+          "index": {
+            "type": "number"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "agentKind",
+          "state"
+        ],
+        "type": "object"
+      },
+      "PrReportTestConcern": {
+        "properties": {
+          "severity": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "severity"
+        ],
+        "type": "object"
+      },
+      "PrReportTestOutcome": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
+      "PrReportTests": {
+        "properties": {
+          "concerns": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportTestConcern"
+            },
+            "type": "array"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fixerAttempts": {
+            "type": "number"
+          },
+          "greenlight": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "maxFixerAttempts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportTestOutcome"
+            },
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tested": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "status",
+          "tested",
+          "outcomes",
+          "concerns",
+          "fixerAttempts"
+        ],
+        "type": "object"
+      },
+      "PrReportValidation": {
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "attempts": {
+            "type": "number"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/PrReportValidationCommand"
+            },
+            "type": "array"
+          },
+          "maxAttempts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "reported",
+              "absent"
+            ],
+            "type": "string"
+          },
+          "stepKind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "attempts",
+          "commands"
+        ],
+        "type": "object"
+      },
+      "PrReportValidationCommand": {
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exitCode": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "outputTail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "timedOut": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "command",
+          "exitCode",
+          "passed"
+        ],
+        "type": "object"
+      },
+      "PrVerificationReport": {
+        "properties": {
+          "ci": {
+            "$ref": "#/components/schemas/PrReportCi"
+          },
+          "environments": {
+            "$ref": "#/components/schemas/PrReportEnvironments"
+          },
+          "generatedAt": {
+            "type": "number"
+          },
+          "judges": {
+            "$ref": "#/components/schemas/PrReportJudges"
+          },
+          "merge": {
+            "$ref": "#/components/schemas/PrReportMerge"
+          },
+          "observability": {
+            "$ref": "#/components/schemas/PrReportObservability"
+          },
+          "reproduction": {
+            "$ref": "#/components/schemas/PrReportReproduction"
+          },
+          "requirements": {
+            "$ref": "#/components/schemas/PrReportRequirements"
+          },
+          "run": {
+            "$ref": "#/components/schemas/PrReportRun"
+          },
+          "tests": {
+            "$ref": "#/components/schemas/PrReportTests"
+          },
+          "truncations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/PrReportValidation"
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "version",
+          "generatedAt",
+          "run",
+          "ci",
+          "validation",
+          "reproduction",
+          "tests",
+          "requirements",
+          "environments",
+          "merge",
+          "judges",
+          "observability",
+          "truncations"
+        ],
+        "type": "object"
+      },
       "PublicAgentDecision": {
         "properties": {
           "decisionId": {
@@ -647,6 +2163,101 @@
           "stepKind",
           "question",
           "options"
+        ],
+        "type": "object"
+      },
+      "PublicApiKey": {
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdByKeyId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdByUserId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revokedAt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "enum": [
+              "read",
+              "write",
+              "decide",
+              "admin"
+            ],
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "workspaceId",
+          "label",
+          "scope",
+          "createdByUserId",
+          "createdByKeyId",
+          "createdAt",
+          "lastUsedAt",
+          "revokedAt"
+        ],
+        "type": "object"
+      },
+      "PublicApiKeyList": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/PublicApiKey"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
         ],
         "type": "object"
       },
@@ -2151,6 +3762,66 @@
         ],
         "type": "object"
       },
+      "PublicRunArtifact": {
+        "properties": {
+          "artifactId": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "number"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "screenshot",
+              "reference"
+            ],
+            "type": "string"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifactId",
+          "kind",
+          "view",
+          "contentType",
+          "byteSize",
+          "hash",
+          "createdAt"
+        ],
+        "type": "object"
+      },
+      "PublicRunArtifactList": {
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/PublicRunArtifact"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifacts"
+        ],
+        "type": "object"
+      },
       "PublicService": {
         "properties": {
           "description": {
@@ -2718,10 +4389,77 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.9.0"
+    "version": "1.10.0"
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/artifacts/{artifactId}/blob": {
+      "get": {
+        "description": "The stored bytes of one artifact listed by the run-artifacts endpoint, served with the recorded image content type (`nosniff`, never inline active content). Authenticated like every other call: the bytes are workspace-scoped, so a report that links here on a public repository leaks nothing to a reader without a key. 404 when the id is unknown to the key’s workspace, and separately when the metadata row survives but its bytes are gone from the blob backend.",
+        "operationId": "getPublicArtifactBlob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifactId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/gif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The artifact bytes"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          }
+        },
+        "summary": "Download an artifact's bytes",
+        "tags": [
+          "Evidence"
+        ]
+      }
+    },
     "/api/v1/debug/agent-context/{snapshotId}": {
       "get": {
         "description": "The complete context one dispatch was PROVIDED: system and user prompts, the folded standards fragments, and the injected `.cat-context/*` files an agent reads through tools (which therefore appear in no proxy telemetry). Windowed by `bodyOffset`/`bodyChars`.",
@@ -6317,6 +8055,143 @@
         ]
       }
     },
+    "/api/v1/keys": {
+      "get": {
+        "description": "The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret is never readable back. `createdByKeyId` names the key that provisioned a key headlessly; `createdByUserId` names the person who minted one in the app.",
+        "operationId": "listPublicKeys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicApiKeyList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List the workspace's API keys",
+        "tags": [
+          "Keys"
+        ]
+      },
+      "post": {
+        "description": "Mint a key for the calling key’s own workspace and return its raw secret EXACTLY ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key. `admin` cannot be minted here: a key provisioned over the API can never itself provision, which keeps the chain one link long. Requires an `admin`-scope key.",
+        "operationId": "createPublicKey",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHeadlessPublicApiKey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedPublicApiKey"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Provision an API key",
+        "tags": [
+          "Keys"
+        ]
+      }
+    },
+    "/api/v1/keys/{keyId}": {
+      "delete": {
+        "description": "Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive its own revocation through the credentials it left behind. Idempotent, and it may name the calling key. Requires an `admin`-scope key.",
+        "operationId": "revokePublicKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "keyId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Revoke an API key",
+        "tags": [
+          "Keys"
+        ]
+      }
+    },
     "/api/v1/notification-webhook": {
       "delete": {
         "description": "Deregister the endpoint; deliveries stop. Idempotent.",
@@ -6627,6 +8502,58 @@
         "summary": "List the workspace's pipelines",
         "tags": [
           "Pipelines"
+        ]
+      }
+    },
+    "/api/v1/runs/{runId}/artifacts": {
+      "get": {
+        "description": "The binary artifacts the run captured (UI screenshots) plus the reference images they were reviewed against: id, kind, view, content type, exact byte size and content hash. Unpaged: the capture path caps how many one run may store, so the response size is bounded before the request. Fetch the bytes with the blob endpoint.",
+        "operationId": "listPublicRunArtifacts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicRunArtifactList"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "List a run's captured artifacts",
+        "tags": [
+          "Evidence"
         ]
       }
     },
@@ -8814,6 +10741,58 @@
         ]
       }
     },
+    "/api/v1/runs/{runId}/report": {
+      "get": {
+        "description": "The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing checks, the platform’s own run of the service’s lint/test/build commands (with the failing output), the red-then-green reproduction proof for a bugfix, the tester’s structured report, requirement coverage, the throwaway-environment lifecycle, judge verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body carries, composed on read, so it also answers for a run that never opened a pull request. Each section states `reported` or `absent` with a note, so a step that did not run never looks like a step that found nothing.",
+        "operationId": "getPublicRunReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrVerificationReport"
+                }
+              }
+            },
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Client error (validation, unauthorized, not found, conflict, rate limit)"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Get a run's verification report",
+        "tags": [
+          "Evidence"
+        ]
+      }
+    },
     "/api/v1/services": {
       "get": {
         "description": "List the board service frames in the key’s workspace, so a caller can discover the serviceId to create/list tasks under.",
@@ -9484,8 +11463,16 @@
       "name": "Decisions"
     },
     {
+      "description": "What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).",
+      "name": "Evidence"
+    },
+    {
       "description": "Headless runs of a public, inline pipeline (start, poll, stream).",
       "name": "Jobs"
+    },
+    {
+      "description": "The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.",
+      "name": "Keys"
     },
     {
       "description": "The workspace’s human-actionable notifications (list, act on, or dismiss the run tails).",

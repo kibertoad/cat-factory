@@ -448,14 +448,16 @@ function emitMethod(operation) {
       : 'None'
   const [returns, transportCall, prefix, tail] = operation.stream
     ? ['EventStream', 'stream', 'return ', '']
-    : operation.result
-      ? [
-          pyType(operation.result),
-          'request',
-          'raw = ',
-          `        return ${needsDecode(operation.result) ? decodeExpr(operation.result, 'raw') : 'raw'}\n`,
-        ]
-      : ['None', 'request_no_content', '', '']
+    : operation.binary
+      ? ['bytes', 'request_bytes', 'return ', '']
+      : operation.result
+        ? [
+            pyType(operation.result),
+            'request',
+            'raw = ',
+            `        return ${needsDecode(operation.result) ? decodeExpr(operation.result, 'raw') : 'raw'}\n`,
+          ]
+        : ['None', 'request_no_content', '', '']
 
   return (
     `    def ${name}(${methodParams(operation).join(', ')}) -> ${returns}:\n` +

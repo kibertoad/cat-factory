@@ -18,8 +18,10 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    CreateHeadlessPublicApiKey,
     CreatePublicJob,
     CreatePublicTask,
+    CreatedPublicApiKey,
     DebugAgentContextSnapshot,
     DebugLlmCall,
     DebugRunOverview,
@@ -36,6 +38,8 @@ from .models import (
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
+    PrVerificationReport,
+    PublicApiKeyList,
     PublicApproveStep,
     PublicChallengePrReviewFinding,
     PublicChooseFork,
@@ -57,6 +61,7 @@ from .models import (
     PublicResolveJudge,
     PublicResolvePrReview,
     PublicRun,
+    PublicRunArtifactList,
     PublicServiceList,
     PublicSetFindingStatus,
     PublicTask,
@@ -1345,6 +1350,123 @@ class DebugResource:
             page_cursor = page.next_cursor
 
 
+class EvidenceResource:
+    """What a run proved: the engine's verification report and the artifacts it captured, bytes
+    included.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def download_artifact(self, artifact_id: str, timeout: float | None = None) -> bytes:
+        """Download an artifact's bytes
+        The stored bytes of one artifact listed by the run-artifacts endpoint, served with
+        the recorded image content type (`nosniff`, never inline active content).
+        Authenticated like every other call: the bytes are workspace-scoped, so a report
+        that links here on a public repository leaks nothing to a reader without a key. 404
+        when the id is unknown to the key’s workspace, and separately when the metadata row
+        survives but its bytes are gone from the blob backend.
+        `GET /api/v1/artifacts/{artifactId}/blob` (operation `getPublicArtifactBlob`).
+        """
+        return self._transport.request_bytes(
+            "GET",
+            f"/api/v1/artifacts/{_quote(artifact_id)}/blob",
+            query=None,
+            timeout=timeout,
+        )
+
+    def get_report(self, run_id: str, timeout: float | None = None) -> PrVerificationReport:
+        """Get a run's verification report
+        The engine’s bundle of CAPTURED FACTS about a run: the CI gate’s verdict and failing
+        checks, the platform’s own run of the service’s lint/test/build commands (with the
+        failing output), the red-then-green reproduction proof for a bugfix, the tester’s
+        structured report, requirement coverage, the throwaway-environment lifecycle, judge
+        verdicts and the merge decision. Byte-for-byte the JSON block the pull-request body
+        carries, composed on read, so it also answers for a run that never opened a pull
+        request. Each section states `reported` or `absent` with a note, so a step that did
+        not run never looks like a step that found nothing.
+        `GET /api/v1/runs/{runId}/report` (operation `getPublicRunReport`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/report",
+            query=None,
+            timeout=timeout,
+        )
+        return PrVerificationReport.from_dict(raw)
+
+    def list_artifacts(self, run_id: str, timeout: float | None = None) -> PublicRunArtifactList:
+        """List a run's captured artifacts
+        The binary artifacts the run captured (UI screenshots) plus the reference images
+        they were reviewed against: id, kind, view, content type, exact byte size and
+        content hash. Unpaged: the capture path caps how many one run may store, so the
+        response size is bounded before the request. Fetch the bytes with the blob endpoint.
+        `GET /api/v1/runs/{runId}/artifacts` (operation `listPublicRunArtifacts`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/runs/{_quote(run_id)}/artifacts",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicRunArtifactList.from_dict(raw)
+
+
+class KeysResource:
+    """The workspace's own API keys: provision one headlessly, list them, revoke one (and what
+    it minted).
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def create(self, body: CreateHeadlessPublicApiKey, timeout: float | None = None) -> CreatedPublicApiKey:
+        """Provision an API key
+        Mint a key for the calling key’s own workspace and return its raw secret EXACTLY
+        ONCE, so store it now: it is not recoverable. Omitting `scope` mints a `write` key.
+        `admin` cannot be minted here: a key provisioned over the API can never itself
+        provision, which keeps the chain one link long. Requires an `admin`-scope key.
+        `POST /api/v1/keys` (operation `createPublicKey`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/keys",
+            body=_encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return CreatedPublicApiKey.from_dict(raw)
+
+    def list(self, timeout: float | None = None) -> PublicApiKeyList:
+        """List the workspace's API keys
+        The live (non-revoked) keys for the calling key’s workspace, metadata only; a secret
+        is never readable back. `createdByKeyId` names the key that provisioned a key
+        headlessly; `createdByUserId` names the person who minted one in the app.
+        `GET /api/v1/keys` (operation `listPublicKeys`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/keys",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicApiKeyList.from_dict(raw)
+
+    def revoke(self, key_id: str, timeout: float | None = None) -> None:
+        """Revoke an API key
+        Revoke a key AND every key it minted, so a leaked provisioning key cannot outlive
+        its own revocation through the credentials it left behind. Idempotent, and it may
+        name the calling key. Requires an `admin`-scope key.
+        `DELETE /api/v1/keys/{keyId}` (operation `revokePublicKey`).
+        """
+        self._transport.request_no_content(
+            "DELETE",
+            f"/api/v1/keys/{_quote(key_id)}",
+            query=None,
+            timeout=timeout,
+        )
+
+
 def build_resources(transport: Transport) -> dict[str, Any]:
     """Every resource client, keyed by the attribute it is mounted at on the client."""
     return {
@@ -1357,4 +1479,6 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "usage": UsageResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),
+        "evidence": EvidenceResource(transport),
+        "keys": KeysResource(transport),
     }

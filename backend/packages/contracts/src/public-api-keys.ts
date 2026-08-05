@@ -60,6 +60,15 @@ export const publicApiKeySchema = v.object({
   scope: publicApiScopeSchema,
   /** The user who minted the key (`usr_*`), for audit/UI attribution; `null` when unknown. */
   createdByUserId: v.nullable(v.string()),
+  /**
+   * The KEY that minted this one (`pak_*`), set only for a key provisioned headlessly through
+   * `POST /api/v1/keys`; `null` for a key a person minted in the app.
+   *
+   * Provenance, not authorization, but unlike {@link publicApiKeySchema.entries.createdByUserId}
+   * it is also a lifecycle link: revoking a key revokes everything it minted, so a leaked
+   * provisioning key cannot outlive its own revocation through the keys it left behind.
+   */
+  createdByKeyId: v.nullable(v.string()),
   createdAt: v.number(),
   lastUsedAt: v.nullable(v.number()),
   /** Set when the key was revoked (tombstone); a revoked key never authenticates. */
@@ -82,6 +91,63 @@ export const createPublicApiKeySchema = v.object({
   scope: v.optional(publicApiScopeSchema, 'write'),
 })
 export type CreatePublicApiKeyInput = v.InferOutput<typeof createPublicApiKeySchema>
+
+/**
+ * The scope a HEADLESS provisioning call (`POST /api/v1/keys`) must itself hold, and therefore
+ * the rung a key it mints may not reach.
+ *
+ * One constant rather than two, because both facts are the same rule: provisioning is an admin
+ * action, so a key that can provision is an `admin` key, so a minted key that could reach `admin`
+ * could provision in turn. See {@link HEADLESS_MINTABLE_SCOPES}.
+ */
+export const HEADLESS_KEY_MINT_SCOPE = 'admin' as const satisfies PublicApiScope
+
+/**
+ * What a headless mint may hand out: every rung strictly BELOW the one provisioning itself
+ * requires, so a key minted over the API can never mint another.
+ *
+ * That bound is the whole reason headless provisioning is safe to offer. A leaked `admin` key is
+ * already a full compromise of its workspace; what this stops is the compromise SURVIVING its own
+ * cleanup, by making the mint chain exactly one link long and revocation of the minter cascade to
+ * everything it produced. An operator who wants a second admin key mints it in the app, where a
+ * human session and the `secrets.manage` workspace permission stand behind it.
+ *
+ * DERIVED from the ladder rather than hand-listed: a rung inserted above `admin` becomes mintable
+ * automatically and one inserted below stays mintable, where a literal list would silently freeze
+ * whichever set was true the day it was written.
+ */
+export type HeadlessMintableScope = Exclude<PublicApiScope, typeof HEADLESS_KEY_MINT_SCOPE>
+export const HEADLESS_MINTABLE_SCOPES = PUBLIC_API_SCOPES.slice(
+  0,
+  PUBLIC_API_SCOPES.indexOf(HEADLESS_KEY_MINT_SCOPE),
+) as readonly HeadlessMintableScope[]
+
+/**
+ * The gate must be the TOP rung, or the two statements of the same rule diverge: the value above
+ * is every rung BELOW the gate, while its type is every rung EXCEPT it, and those coincide only
+ * while nothing sits above. A rung added above `admin` fails this assignment rather than silently
+ * shipping a schema whose TypeScript type admits a scope its runtime validation refuses.
+ */
+type TopScopeRung = typeof PUBLIC_API_SCOPES extends readonly [...infer _Rest, infer Top]
+  ? Top
+  : never
+const _mintGateIsTopRung: TopScopeRung = HEADLESS_KEY_MINT_SCOPE
+
+/**
+ * Mint a key HEADLESSLY, over `/api/v1`: the same body as the session-authed create, minus the
+ * rung it may not reach.
+ *
+ * `scope` carries no schema-level DEFAULT where its session-authed twin does, deliberately: this
+ * body ships in four generated SDKs, where a default reads as "always present on the way out" and
+ * an omitted-optional as "may be absent on the way in", and the two cannot both be true of one
+ * field. The omitted-scope behaviour (`write`, the same safe middle rung) is applied by the
+ * handler and stated on the endpoint's docs instead.
+ */
+export const createHeadlessPublicApiKeySchema = v.object({
+  label: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
+  scope: v.optional(v.picklist([...HEADLESS_MINTABLE_SCOPES])),
+})
+export type CreateHeadlessPublicApiKeyInput = v.InferOutput<typeof createHeadlessPublicApiKeySchema>
 
 /**
  * The create response: the key metadata PLUS the raw secret (`cf_live_<id>.<secret>`),

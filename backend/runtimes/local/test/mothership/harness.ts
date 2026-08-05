@@ -41,6 +41,7 @@ import {
   createRemoteRepositoryRegistry,
 } from '@cat-factory/server'
 import type { GateProviderOverrides } from '@cat-factory/gates'
+import { callBinaryThrough } from '../harness.js'
 import type { BackendRegistries } from '@cat-factory/integrations'
 import type {
   Account,
@@ -410,6 +411,11 @@ export function makeMothershipConformanceApp(
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T }
   }
 
+  // The bytes read (the artifact blob endpoint), shared with the ordinary local harness rather
+  // than copied: a mothership node serves the same routes through the same app.
+  const callBinary = (method: string, path: string, extraHeaders?: Record<string, string>) =>
+    callBinaryThrough(app, method, path, extraHeaders)
+
   // Seed workspaces on the MOTHERSHIP directly (org/account creation is an onboarding concern,
   // deliberately NOT exposed over the persistence RPC — a machine token scopes accounts, it can't
   // mint them). Each new account id is added to the token scope so the SUT can reach it remotely.
@@ -508,6 +514,7 @@ export function makeMothershipConformanceApp(
 
   return {
     call,
+    callBinary,
     createWorkspace,
     createOrgWorkspace,
     // The mothership harness routes persistence over the RPC and does not run the auth-enabled

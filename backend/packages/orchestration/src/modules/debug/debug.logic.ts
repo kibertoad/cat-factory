@@ -445,11 +445,12 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       )
     }
   }
-  // The most common hard diagnosis has NO row of its own: a run that failed while every model
-  // call looks healthy. Tool-EXECUTION errors (malformed arguments, a stuck edit loop) happen
-  // inside the container and are recorded only as text inside the prompt deltas — each call
-  // still reports `ok` with a clean finish reason, so without this pointer the overview reads
-  // like a healthy run that inexplicably died and the caller has nothing to follow.
+  // A run that failed while every MODEL call looks healthy. Tool-EXECUTION errors (malformed
+  // arguments, a stuck edit loop) happen inside the container, so each model call still reports
+  // `ok` with a clean finish reason and this rollup, computed off the LLM sink alone, sees a
+  // healthy run that inexplicably died. The trajectory sink DOES record those calls, so the
+  // pointer names it first; the delta search stays behind it for the cases it cannot answer (an
+  // engine-side failure, or a workspace whose bodies are withheld).
   if (
     execution.status === 'failed' &&
     sinks.llmCalls.available &&
@@ -460,7 +461,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     push(
       'failure_outside_model_calls',
       'warning',
-      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated — the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine, neither of which records calls here. Search the bodies for tool errors (GET /debug/runs/:runId/llm-calls?contains=...), read the newest calls' deltas, and check each step's firstEvictionDetail plus /logs.`,
+      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated: the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine. Read the trajectory for failing tool calls (GET /debug/runs/:runId/tool-calls?order=trajectory), then search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what the engine never recorded, and check each step's firstEvictionDetail plus /logs.`,
       { count: totals.calls },
     )
   }

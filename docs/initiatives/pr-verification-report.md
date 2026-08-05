@@ -1,9 +1,13 @@
 # Initiative: PR verification report
 
-**Status:** phase 1 in progress · **Owner:** core · **Started:** 2026-07-26
+**Status:** phases 1 + 2 landed; slices 11 + 12 open · **Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
+
+The report itself ships: every slice that produces it has landed. What keeps this tracker alive
+rather than converted to an ADR is slice 11 (peer-PR reports) and slice 12, which cannot start
+until global-search slice 4 lands elsewhere. Convert once both close.
 
 ## Goal & rationale
 
@@ -211,6 +215,7 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 | 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                                                      | ⬜ todo |      |
 | 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ todo |      |
 | 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done | this |
+| 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 
@@ -242,6 +247,34 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   reproduction section: its Phase-B notes hold the renderer's non-obvious obligations, above all
   that an ABSENT `final` run is normal for an inconclusive verdict and that the producer's own
   `note` is rendered VERBATIM rather than re-derived from `base.passed`.
+
+### Machine reachability (slice 14)
+
+The report told a reader what happened and, for a person, where to browse it (`runUrl`, the app's
+observability panel). It named nothing a MACHINE could follow, so a consumer holding the report had
+to already know the debug API exists (and how to address a run on it) to reach the record behind
+any claim in it. `observability` now carries two more links, both built from `apiBaseUrl` (the
+BACKEND url, like the artifact byte links, never the SPA one beside it):
+
+- **`trajectoryUrl`** → `/api/v1/debug/runs/:runId/tool-calls?order=trajectory`: what the run's
+  agents actually did, in the order they did it. This is the link that makes the report auditable
+  rather than merely informative: every other section is a verdict somebody produced, and this is
+  the record those verdicts are about.
+- **`reportUrl`** → `/api/v1/runs/:runId/report`: this same report, served live. The fenced block in
+  the PR body is a snapshot from the last publish; a consumer that wants the current one (or that is
+  looking at a run whose PR body it does not have) fetches it.
+
+Three things about it are deliberate:
+
+- **Both are rendered in the PROSE as well as carried in the JSON.** A trajectory nobody can find is
+  not an audit trail, and the reader who wants to check a claim is often a person.
+- **Both endpoints stay key-authenticated**, so a report on a public repository names them without
+  making anything public; a reader without a credential gets a 401, the same honest outcome the app
+  deep link already produces.
+- **The read endpoint behind `reportUrl` composes from the same code**
+  (`PrVerificationReportController.composeForRun`), so the live JSON and the PR body cannot state
+  different facts about one run. It is also why the report shape is now part of the STABLE public
+  surface: see [`public-api-additions.md`](./public-api-additions.md) (E1).
 
 ### Evidence reachability (landed with slices 9 + 10)
 

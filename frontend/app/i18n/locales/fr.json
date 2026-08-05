@@ -2942,6 +2942,7 @@
         "neverUsed": "jamais utilisé",
         "createdBy": "créé par {user}",
         "createdByYou": "vous",
+        "createdByKey": "la clé d’API {id}",
         "revoke": "Révoquer le jeton"
       },
       "add": {

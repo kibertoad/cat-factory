@@ -190,4 +190,72 @@ describe('PrVerificationReportController', () => {
       'https://app.example.test/?ws=ws_1&block=blk_1&run=exec_1&view=observability',
     )
   })
+  it('links the auditable trajectory and the live report from the configured API base URL', async () => {
+    const { sections, publisher } = recordingPublisher()
+    await new PrVerificationReportController({
+      ...makeDeps(BLOCK, publisher),
+      apiBaseUrl: 'https://api.example.test/',
+    }).publishForRun('ws_1', makeInstance())
+
+    // Both links are built from the BACKEND url, never the SPA one beside it: they answer a
+    // different question (bytes to anything holding a key vs a panel a human browses) and are
+    // different hosts the moment the SPA is served separately.
+    expect(sections[0]).toContain(
+      'https://api.example.test/api/v1/debug/runs/exec_1/tool-calls?order=trajectory',
+    )
+    expect(sections[0]).toContain('https://api.example.test/api/v1/runs/exec_1/report')
+  })
+
+  it('emits no evidence links at all when no public backend URL is configured', async () => {
+    const { sections, publisher } = recordingPublisher()
+    await new PrVerificationReportController(makeDeps(BLOCK, publisher)).publishForRun(
+      'ws_1',
+      makeInstance(),
+    )
+    // A link to nowhere is worse than none, so the fields are null and the prose omits the rows.
+    expect(sections[0]).not.toContain('order=trajectory')
+    expect(sections[0]).toContain('"trajectoryUrl": null')
+  })
+
+  it('composes the report for a READ even when the run has no pull request', async () => {
+    // The publish path short-circuits here (nowhere to write); the read path must not, because a
+    // headless job and a run that failed before it pushed are exactly what a consumer asks about.
+    const publisher = {
+      resolveTarget: async () => null,
+      publish: async () => ({ published: false as const }),
+    } satisfies PrVerificationReportPublisher
+    const report = await new PrVerificationReportController({
+      ...makeDeps(BLOCK, publisher),
+      apiBaseUrl: 'https://api.example.test',
+    }).composeForRun('ws_1', makeInstance())
+
+    expect(report?.run.executionId).toBe('exec_1')
+    // Nothing resolved a repo, and the report says null rather than inventing one.
+    expect(report?.run.repo).toBeNull()
+    expect(report?.observability.reportUrl).toBe(
+      'https://api.example.test/api/v1/runs/exec_1/report',
+    )
+  })
+
+  it('composes nothing for a run whose block is gone', async () => {
+    const controller = new PrVerificationReportController(makeDeps(null))
+    await expect(controller.composeForRun('ws_1', makeInstance())).resolves.toBeNull()
+  })
+
+  it('composes for a READ even when the workspace turned PUBLISHING off', async () => {
+    // The opt-out is a statement about writing onto someone's pull request, not about whether the
+    // workspace may read its own evidence back over an authenticated, workspace-scoped key.
+    const settings = {
+      get: async () => ({ ...DEFAULT_WORKSPACE_SETTINGS, publishPrVerificationReport: false }),
+    } as unknown as WorkspaceSettingsRepository
+    const { sections, publisher } = recordingPublisher()
+    const controller = new PrVerificationReportController({
+      ...makeDeps(BLOCK, publisher),
+      workspaceSettingsRepository: settings,
+    })
+
+    await controller.publishForRun('ws_1', makeInstance())
+    expect(sections).toHaveLength(0)
+    await expect(controller.composeForRun('ws_1', makeInstance())).resolves.not.toBeNull()
+  })
 })
