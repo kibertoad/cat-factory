@@ -131,6 +131,12 @@ export const useExecutionStore = defineStore('execution', () => {
     } else instances.value.push(instance)
   }
 
+  const byId = computed(() => {
+    const map = new Map<string, ExecutionInstance>()
+    for (const e of instances.value) map.set(e.id, e)
+    return map
+  })
+
   /**
    * Run an action that returns a run's authoritative sub-state and apply that state to the cached
    * run as an OPTIMISTIC ECHO — but only when the event stream has not delivered a newer revision
@@ -168,12 +174,6 @@ export const useExecutionStore = defineStore('execution', () => {
     apply(state, instance)
     return state
   }
-
-  const byId = computed(() => {
-    const map = new Map<string, ExecutionInstance>()
-    for (const e of instances.value) map.set(e.id, e)
-    return map
-  })
 
   function getInstance(id: string | null | undefined) {
     return id ? byId.value.get(id) : undefined
