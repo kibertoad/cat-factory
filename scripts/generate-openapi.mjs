@@ -43,14 +43,23 @@ const API_PREFIX = '/api/v1'
 // as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
 // only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
 // that clean merge.
-// 1.14.0: the tool-call list's `?ok=true|false` filter is REPLACED by `?outcome=ok|error`, the
+// 1.14.0: additive only, an optional `modelPin` on the report's judge verdicts (which model the
+// rubric was authored for, and whether the run got it). Third number that change held: it was
+// written against 1.12.0, moved to 1.13.0 when the validation field took that, and again once the
+// debug surface took 1.13.0. Every one of those was found by re-reading this line after a merge,
+// which is the only thing that catches it.
+// 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by `?outcome=ok|error`, the
 // same param name and vocabulary the llm-call list already uses. This is a MINOR for a change
 // that is technically breaking, taken deliberately: `?ok=` existed for one release, has no known
 // consumer, and the two drill-downs answering the same question under two spellings is the wart
 // the change exists to remove. A picklist also lets the set gain a member (a timeout, a refusal)
 // where `true|false` could only be retyped. If an adopter turns up before this lands, the honest
 // shape is `?ok=` served beside `?outcome=` for a release, not a rename.
-const API_VERSION = '1.14.0'
+//
+// 1.15.0 and not 1.14.0 because the judge model pin took that while this was in flight. Two
+// sibling branches are also holding 1.15.0 right now, so the last of the three to land re-reads
+// this line rather than trusting its clean merge.
+const API_VERSION = '1.15.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

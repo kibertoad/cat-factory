@@ -259,6 +259,7 @@ export type {
 export type { VcsClient } from './vcs-client.js'
 export { VcsIdentityError } from './vcs-identity.js'
 export type {
+  LocalVcsSetup,
   VcsIdentity,
   VcsIdentityResolver,
   VcsIdentityEntry,

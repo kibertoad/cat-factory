@@ -395,38 +395,74 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
 }
 
 /**
- * The three cross-cutting obligations the engine owes an operator, built as one collaborator
- * because they share a failure mode: an un-wired one does not error, it reads as "none of this
- * ever happened". Wiring them together is what makes forgetting one a compile error rather than
- * a silently dark runtime.
+ * How this facade resolves the agent executor: the container/inline selection, wrapped for
+ * consensus panels when the dispatched step runs as one.
  *
- * Extracted from `buildWorkerCoreDependencies` when that function crossed its line budget: the
- * ratchet's intended outcome, not a number to raise.
+ * Split out of the core-dependency literal because it is the one entry there that RESOLVES rather
+ * than names a collaborator, and it is the only reader of four of `input`'s fields (the executor
+ * package registries, the web-search account settings, the tool-secret chain and the MCP OAuth
+ * store), so keeping it here keeps those four out of the literal's destructuring too.
  */
-function buildWorkerObservabilityCore(
-  deps: Pick<WorkerContainerAssemblyInput, 'env' | 'idGenerator' | 'clock'>,
-): Pick<CoreDependencies, 'logger' | 'operationalMetrics' | 'auditRecorder'> {
-  const { env, idGenerator, clock } = deps
+function selectWorkerAgentExecutor(
+  input: WorkerContainerAssemblyInput,
+): Pick<CoreDependencies, 'agentExecutor'> {
+  const {
+    env,
+    config,
+    db,
+    clock,
+    caches,
+    overrides,
+    registries,
+    resolveTransport,
+    subscriptions,
+    personalSubscriptions,
+    agentContextObservability,
+    executorPackageRegistries,
+    webSearchAccountSettings,
+    toolSecretChain,
+    mcpOAuthService,
+    eventPublisher,
+  } = input
+  const { agentKindRegistry } = registries
+
   return {
-    // The structured logger every domain service emits through. Must be wired on BOTH facades
-    // or the Worker's engine silently falls back to `noopLogger` — which would put exactly the
-    // best-effort paths this logger exists to surface back in the dark on the deployed runtime.
-    logger,
-    // The counter half of the same obligation, wired in the same position for the same reason:
-    // an un-wired collector reads as "none of this ever happened". On this runtime it is
-    // per-ISOLATE, which is why the entry points flush it rather than the cron alone.
-    operationalMetrics,
-    // The third member of that obligation: where privileged actions are RECORDED for an account
-    // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
-    // anything", which is the assurance it exists to give.
-    auditRecorder: new AuditService({
-      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
-      // with live transactional state for the 10 GB per-database ceiling.
-      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
-      idGenerator,
-      clock,
-      logger,
-    }),
+    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor) skip selection
+    // entirely: selectAgentExecutor throws when a sandbox is opted in but its prerequisites are
+    // missing, which is the desired loud failure in production but must not fire for tests that
+    // never reach the real executor.
+    agentExecutor:
+      overrides.agentExecutor ??
+      maybeWrapConsensus({
+        standard: selectAgentExecutor({
+          env,
+          config,
+          db,
+          clock,
+          caches,
+          resolveTransport,
+          agentKindRegistry,
+          subscriptions,
+          personalSubscriptions,
+          agentContextObservability,
+          resolvePackageRegistries: executorPackageRegistries,
+          webSearchAccountSettings,
+          resolveToolSecrets: toolSecretChain.resolver,
+          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
+          // what resolves the OAuth client secret.
+          ...mcpOAuthExecutorDeps({
+            oauth: mcpOAuthService,
+            resolveToolSecrets: toolSecretChain.resolver,
+            logger,
+          }),
+        }),
+        env,
+        config,
+        db,
+        eventPublisher,
+        agentKindRegistry,
+        caches,
+      }),
   }
 }
 
@@ -446,7 +482,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     resolveTransport,
     subscriptions,
     testSecretsService,
-    mcpOAuthService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -457,9 +492,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     agentContextObservability,
     searchQueryObservability,
     accountSettings,
-    executorPackageRegistries,
-    webSearchAccountSettings,
-    toolSecretChain,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -481,8 +513,25 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
   const bedrockModels = bedrockModelsCapability(env)
 
   return {
-    // The logger / metrics / audit trio, built together (see `buildWorkerObservabilityCore`).
-    ...buildWorkerObservabilityCore({ env, idGenerator, clock }),
+    // The structured logger every domain service emits through. Must be wired on BOTH facades
+    // or the Worker's engine silently falls back to `noopLogger` — which would put exactly the
+    // best-effort paths this logger exists to surface back in the dark on the deployed runtime.
+    logger,
+    // The counter half of the same obligation, wired in the same position for the same reason:
+    // an un-wired collector reads as "none of this ever happened". On this runtime it is
+    // per-ISOLATE, which is why the entry points flush it rather than the cron alone.
+    operationalMetrics,
+    // The third member of that obligation: where privileged actions are RECORDED for an account
+    // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
+    // anything", which is the assurance it exists to give.
+    auditRecorder: new AuditService({
+      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+      // with live transactional state for the 10 GB per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      idGenerator,
+      clock,
+      logger,
+    }),
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
@@ -517,42 +566,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     }),
     idGenerator,
     clock,
-    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
-    // skip selection entirely — selectAgentExecutor throws when a sandbox is opted
-    // in but its prerequisites are missing, which is the desired loud failure in
-    // production but must not fire for tests that never reach the real executor.
-    agentExecutor:
-      overrides.agentExecutor ??
-      maybeWrapConsensus({
-        standard: selectAgentExecutor({
-          env,
-          config,
-          db,
-          clock,
-          caches,
-          resolveTransport,
-          agentKindRegistry,
-          subscriptions,
-          personalSubscriptions,
-          agentContextObservability,
-          resolvePackageRegistries: executorPackageRegistries,
-          webSearchAccountSettings,
-          resolveToolSecrets: toolSecretChain.resolver,
-          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
-          // what resolves the OAuth client secret.
-          ...mcpOAuthExecutorDeps({
-            oauth: mcpOAuthService,
-            resolveToolSecrets: toolSecretChain.resolver,
-            logger,
-          }),
-        }),
-        env,
-        config,
-        db,
-        eventPublisher,
-        agentKindRegistry,
-        caches,
-      }),
+    ...selectWorkerAgentExecutor(input),
     agentKindRegistry,
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.

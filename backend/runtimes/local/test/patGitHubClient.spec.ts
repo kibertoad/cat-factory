@@ -64,9 +64,7 @@ function stubUserRepos(pages: Array<Array<{ id: number; name: string }>>): strin
 }
 
 function makeClient(cache?: GroupCacheHandle<GitHubRepo[]>): GitHubClient {
-  const client = createLocalGitHubClient({ GITHUB_PAT: 'pat-token', GITHUB_API_BASE: API }, cache)
-  if (!client) throw new Error('expected a PAT client')
-  return client
+  return createLocalGitHubClient({ GITHUB_API_BASE: API }, () => 'pat-token', cache)
 }
 
 const namesOf = (repos: GitHubRepo[]) => repos.map((r) => r.name).sort()

@@ -1,6 +1,3 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-import { mkdirSync } from 'node:fs'
 import { type CoreRepositories, type DriveConfig, driveExecution } from '@cat-factory/node-server'
 import {
   DelegatedAppTokenSource,
@@ -23,6 +20,7 @@ import { MothershipWebSocketPropagator } from './mothershipPropagator.js'
 import { withTelemetryReadThrough } from './telemetryReadThrough.js'
 import { MothershipEventSubscriber } from './mothershipSubscriber.js'
 import { type LocalCredentialStore, createLocalCredentialStore } from './sqlite/credentialStore.js'
+import { localDbPath } from './sqlite/db.js'
 import { type LocalSettingsStore, createLocalSettingsStore } from './sqlite/localSettingsStore.js'
 import { type LocalTelemetryStore, createLocalTelemetryStore } from './sqlite/telemetryStore.js'
 import {
@@ -50,19 +48,6 @@ export function isMothershipMode(env: NodeJS.ProcessEnv): boolean {
 function validCachedToken(store: LocalMachineTokenStore): string | null {
   const cached = store.read()
   return cached && cached.exp > Date.now() ? cached.token : null
-}
-
-/**
- * Resolve a local SQLite file path: an explicit override wins (incl. `:memory:` for tests), else a
- * stable per-user file under `~/.cat-factory` so the store survives restarts (the whole point of a
- * durable local store). Ensures the directory exists.
- */
-function localDbPath(explicit: string | undefined, fileName: string): string {
-  const override = explicit?.trim()
-  if (override) return override
-  const dir = join(homedir(), '.cat-factory')
-  mkdirSync(dir, { recursive: true })
-  return join(dir, fileName)
 }
 
 /** The composed mothership persistence: remote org repos + the local credential store. */

@@ -109,6 +109,14 @@ export const scopeAdherenceJudge: JudgeFactory = () => ({
     body: SCOPE_RUBRIC,
     fragmentId: SCOPE_RUBRIC_FRAGMENT_ID,
   },
+  // The model this rubric was authored for. Judging scope means holding the whole task brief
+  // against the whole diff, which the cheap kinds this org runs its ordinary steps on do badly,
+  // and a rubric gate that is wrong is worse than no gate. It is a DEFAULT, not a seizure of the
+  // workspace's settings: a task that pins its own model, or a preset row naming `scope-adherence`
+  // in the model-defaults panel, still wins. A deployment whose catalog cannot serve this id runs
+  // the assessment on its own default and says so on the step and the PR report, rather than
+  // quietly scoring the work with a model this rubric was not written for.
+  modelId: 'claude-opus',
   parseVerdict: scopeVerdict.parse,
   // Send the work back to the Coder rather than parking a human on every miss: an out-of-scope
   // diff is usually something the agent can fix from the findings alone. The engine parks only

@@ -1834,7 +1834,9 @@
       "continueWithConfigured": "Se connecter avec le PAT {provider} configuré",
       "noPatTitle": "Aucun jeton de gestion de versions configuré",
       "noPatBody": "Définissez GITHUB_PAT ou GITLAB_PAT dans votre .env pour vous connecter avec un jeton d'accès personnel, puis redémarrez le serveur.",
+      "setupBody": "Créez un jeton d'accès personnel et collez-le ci-dessous. Il vous connecte et devient le jeton avec lequel cette installation clone, pousse et fusionne.",
       "createToken": "Créer un jeton {provider} ↗",
+      "tokenBecomesCredential": "Ce jeton est stocké sur cette machine et utilisé pour chaque clone, push, PR et fusion des agents.",
       "orDivider": "ou",
       "failed": "Échec de la connexion. Vérifiez que le jeton configuré est valide et réessayez."
     },
@@ -4754,6 +4756,7 @@
     "threshold": "seuil {threshold}",
     "thresholdHint": "Le score que cette etape devait atteindre, issu de la politique de fusion de la tache. En dessous, le juge renvoie le travail a l'etape qui l'a produit avec ses constats a reprendre, ou met l'execution en attente pour vous quand il ne reste plus de budget de tentatives.",
     "rubricOverridden": "grille de l'espace de travail",
+    "modelPinUnavailable": "Cette revue a été écrite pour le modèle {model}, que ce déploiement ne peut pas exécuter : un autre modèle a donc noté le travail.",
     "reworkRounds": "reprise {spent}/{budget}",
     "findingsHeading": "Ce que la grille a signalé",
     "roundsHeading": "Tours de revue",

@@ -1,7 +1,7 @@
 import { generateText } from 'ai'
 import type {
-  Block,
   JudgeAssessor,
+  JudgeModelPin,
   JudgeSubject,
   ModelProvider,
   ModelProviderResolver,
@@ -10,20 +10,20 @@ import type {
 import { extractJson, resolveScopedModelProvider, ValidationError } from '@cat-factory/kernel'
 import {
   catFactoryObservability,
-  JUDGE_AGENT_KIND,
   JUDGE_SYSTEM_PROMPT,
   renderJudgePrompt,
 } from '@cat-factory/agents'
 import { type ResolveBlockRunContext, scopeForBlockRun } from '../../inlineScope.js'
-import { type InlineBlockModelDeps, resolveInlineBlockModelRef } from '../../inlineBlockModel.js'
+import { type InlineBlockModelDeps, resolveInlineBlockModel } from '../../inlineBlockModel.js'
 
 // ---------------------------------------------------------------------------
 // The default {@link JudgeAssessor}: the INLINE LLM call behind every judge step.
 //
-// Structurally the `ForkChatService` twin — resolve the block's model (block pin → workspace
-// per-kind default → routing default), run `generateText`, return the reply — with one
-// difference: a judge's deliverable is a JSON object the engine PARSES, so this returns the
-// raw extracted value and lets the judge's registered parser own the shape.
+// Structurally the `ForkChatService` twin (resolve the model, run `generateText`, return the
+// reply) with two differences. A judge's deliverable is a JSON object the engine PARSES, so
+// this returns the raw extracted value and lets the judge's registered parser own the shape;
+// and the resolution keys on the JUDGE'S OWN kind and admits one more layer, the model the
+// registration pinned for its rubric (see `resolveModel`).
 //
 // It is deliberately STATELESS: all judge state rides the run's step (`step.judge`), so there
 // is no side table and the runtimes cannot drift. It is built in `createCore` from the
@@ -73,8 +73,11 @@ export class JudgeService implements JudgeAssessor {
    * than crashing the run — an assessment that could not be read must never be mistaken for a
    * clean one.
    */
-  async assess(subject: JudgeSubject): Promise<{ verdict: unknown; model: string }> {
-    const { modelProvider, ref } = await this.resolveModel(subject.workspaceId, subject.block)
+  async assess(
+    subject: JudgeSubject,
+  ): Promise<{ verdict: unknown; model: string; modelPin?: JudgeModelPin }> {
+    const { modelProvider, ref, pin } = await this.resolveModel(subject)
+    const pinned = pin ? { modelPin: pin } : {}
     let text: string
     try {
       const result = await generateText({
@@ -86,7 +89,10 @@ export class JudgeService implements JudgeAssessor {
         temperature: 0,
         maxOutputTokens: 2000,
         providerOptions: catFactoryObservability({
-          agentKind: JUDGE_AGENT_KIND,
+          // The JUDGE'S OWN kind, not a shared `judge` label: each rubric now resolves (and can
+          // pin) its own model, so a rollup that lumped them together would attribute one
+          // rubric's spend to another.
+          agentKind: subject.step.agentKind,
           workspaceId: subject.workspaceId,
         }),
       })
@@ -107,24 +113,35 @@ export class JudgeService implements JudgeAssessor {
         `The judge assessment (${ref.provider}:${ref.model}) returned no JSON verdict`,
       )
     }
-    return { verdict, model: `${ref.provider}:${ref.model}` }
+    return { verdict, model: `${ref.provider}:${ref.model}`, ...pinned }
   }
 
+  /**
+   * The model this judgement runs on, resolved under the JUDGE'S OWN kind so each registered
+   * rubric is its own row in the workspace's model defaults (which is what the model-defaults
+   * panel has always offered for them) rather than every judge sharing one `judge` key.
+   *
+   * Task pin > a preset override naming this judge's kind > the registration's own
+   * {@link JudgeSubject.modelId} > the preset's base model > the routing default. The returned
+   * `pin` says which of those won, so a declared model this deployment cannot serve is recorded
+   * rather than silently swapped.
+   */
   private async resolveModel(
-    workspaceId: string,
-    block: Block,
-  ): Promise<{ modelProvider: ModelProvider; ref: ModelRef }> {
+    subject: JudgeSubject,
+  ): Promise<{ modelProvider: ModelProvider; ref: ModelRef; pin?: JudgeModelPin }> {
+    const { workspaceId, block } = subject
     const scope = await scopeForBlockRun(workspaceId, block, this.deps.resolveRunContext)
     const modelProvider = await resolveScopedModelProvider(scope, this.deps)
-    const ref = await this.modelFor(workspaceId, block)
+    const { ref, pin } = await resolveInlineBlockModel(
+      this.deps,
+      workspaceId,
+      subject.step.agentKind,
+      block,
+      subject.modelId,
+    )
     if (!modelProvider || !ref) {
       throw new ValidationError('No model is configured for the judge assessment')
     }
-    return { modelProvider, ref }
-  }
-
-  /** Block pin > workspace per-kind default > routing default (subscription refs degrade inline). */
-  private modelFor(workspaceId: string, block: Block): Promise<ModelRef | undefined> {
-    return resolveInlineBlockModelRef(this.deps, workspaceId, JUDGE_AGENT_KIND, block)
+    return { modelProvider, ref, ...(pin ? { pin } : {}) }
   }
 }

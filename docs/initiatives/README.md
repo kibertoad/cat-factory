@@ -123,6 +123,7 @@ track work that is not ours to land:
 ### API surface and integrations
 
 - [Email as a NotificationChannel](./email-notification-channel.md)
+- [Figma design support and the designer workflow](./figma-design-support.md)
 - [MCP support maturation](./mcp-maturation.md)
 - [Public API additions (the parked-decision surface)](./public-api-additions.md)
 

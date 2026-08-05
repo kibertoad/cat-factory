@@ -20,3 +20,6 @@ empty by design, so a site that forgets the second step silently drops the platf
 
 **See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)"; kernel `domain/gate-logic.ts`
 (the pure gate logic the engine drives); `backend/docs/custom-agent-gate-ergonomics.md`.
+
+**Mutation-tested** (`stryker.config.mjs`): nightly, non-blocking, never run locally. Scope and
+score floor: [`mutation-testing.md`](../../../docs/internal/mutation-testing.md).

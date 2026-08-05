@@ -321,6 +321,8 @@ export type {
   JudgeStatus,
   JudgeRound,
   JudgeStepState,
+  JudgeModelPin,
+  JudgeModelPinStatus,
   ResolveJudgeInput,
   // PR deep-review shapes: the sliced, severity-ordered findings the read-only reviewer
   // produces + the live step state the engine parks on + the human's selection/resolution.
@@ -434,6 +436,7 @@ export type {
   PrReportSectionStatus,
   PrReportStep,
   PrReportIssue,
+  PrReportJudge,
   PrReportRun,
   PrReportCheck,
   PrReportCi,

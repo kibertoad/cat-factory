@@ -30,6 +30,17 @@ the plan shape is predictable, and the run should mostly be unattended.
 A preset encodes exactly that difference **declaratively**, without a bespoke pipeline or a
 `switch` on the initiative kind anywhere in the loop.
 
+### The boundary: a preset PLANS, a reusable operation does not
+
+A preset is the vehicle when the work must be **decomposed**: phases, many spawned items,
+checkpoints between them. When the create-form answers are the whole per-case brief and ONE
+pipeline delivers one outcome, the vehicle is a **reusable operation** instead: a custom task type
+bundling its form, its standing-context fragments and its own canned pipeline, so one invocation is
+one typed task. See [`reusable-operations.md`](./reusable-operations.md), which shares this
+document's field vocabulary (`contracts/src/form-fields.ts`) and its `DescriptorFields.vue`
+renderer. Stretching a preset to cover a single-task operation adds an interview, a planner and a
+plan ingest for a plan of one.
+
 ## The governing principle
 
 > **The loop never branches on a preset id.** Every deviation is either serialisable

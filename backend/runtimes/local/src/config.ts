@@ -186,7 +186,7 @@ export function applyLocalDefaults(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // Inbound-auth secret injected into every agent container and sent on each harness call.
     // REQUIRED and must be stable: the local runner transports otherwise mint a RANDOM
     // per-process value, so after a restart polls against a container still running from before
-    // fail auth — the run flaps instead of re-attaching (docs/race-condition-audit-2026-07.md).
+    // fail auth — the run flaps instead of re-attaching (docs/internal/race-condition-audit-2026-07.md).
     // Generate with `pnpm secrets` in deploy/local.
     HARNESS_SHARED_SECRET: requireStableSecret(env, 'HARNESS_SHARED_SECRET'),
     // The harness (inside the container) posts to `${PUBLIC_URL}/v1`; the runtime's host

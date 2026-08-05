@@ -14,7 +14,7 @@ import {
 // A registered `CustomTaskType` collects a small form at creation and freezes the answers in the
 // sparse `taskTypeFields.custom` bag on the block. The bag is keys and raw values; the DESCRIPTOR
 // holds the human labels and the option captions. This module joins the two, once, so every
-// prompt-assembling path renders the same thing (see `docs/initiatives/reusable-operations.md` D3).
+// prompt-assembling path renders the same thing (see `backend/docs/reusable-operations.md`).
 //
 // The join is VALUE-AUTHORITATIVE and that is the whole design: the descriptor lives in the
 // deployment's code while the bag lives in a row, so the two drift by construction (a node one
