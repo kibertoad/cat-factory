@@ -47,7 +47,10 @@ an org that needs less than its whole directory says so, re-checked every sign-i
 A refused round-trip redirects with `#sso_error=<reason>` over a closed vocabulary the SPA maps to
 translated copy in all ten locales, rather than a JSON envelope a browser mid-redirect cannot get
 back from. The reasons are separate because the remedies are: a missing directory group is the
-user's to take to IT, a failed code exchange is the operator's own configuration.
+user's to take to IT, a failed code exchange is the operator's own configuration, and an IdP that
+stopped answering mid-round-trip (`provider_unreachable`) is neither. That last one covers the whole
+callback leg, so a provider outage during the exchange redirects with a reason rather than rendering
+the operator-facing envelope the LOGIN leg correctly still uses.
 
 Four configuration combinations now REFUSE TO BOOT rather than resolving to a deployment that looks
 configured and is not: a partial credential set, a non-https issuer on a non-loopback host, a

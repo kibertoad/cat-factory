@@ -236,7 +236,21 @@ What each leg does:
   `alg: none` and an `HS256` token forged with the deployment's own client secret.
 - **A rotated signing key costs ONE refetch.** An unknown `kid` invalidates the
   cached provider and refetches (rate-limited), rather than failing every login
-  until a TTL lapses.
+  until a TTL lapses. Once that one refetch is spent, or its rate limit refuses it,
+  the token is simply unverifiable and the leg refuses with `token_invalid`:
+  `verifyIdToken` never lets the underlying library's own key-lookup error out, or
+  the callback's refusal path would render a 500 envelope at a browser mid-redirect.
+- **Userinfo is merged only when it describes the SAME subject** the verified ID
+  token did (OIDC Core 5.3.2). Overlaying the token's claims last already keeps `sub`
+  authoritative, but `email` and `groups` ride the same response and both decide
+  admission, so another subject's response would satisfy a group gate with somebody
+  else's membership. A mismatch is dropped with a `warn`, never silently.
+- **The round-trip cookie has its OWN token audience** (`sso-state`), not the OAuth
+  legs' `oauth-state`. Both are one login's CSRF state, but the OAuth value travels in
+  the URL, so any user holds a validly-signed one; this one is the httpOnly carrier of
+  the PKCE verifier and the OIDC nonce. Its shape is checked after the signature too,
+  because a payload missing those two secrets would flow on as `undefined` and take
+  the nonce comparison with it.
 
 ### Configuration
 
@@ -348,6 +362,9 @@ that should reach this deployment, checked in that order:
 1. **`AUTH_SSO_REQUIRED_GROUPS`** — the user must be in at least one named
    directory group (read from `AUTH_SSO_GROUPS_CLAIM`; the reader tolerates every
    shape providers ship groups in, since an unread claim would refuse the whole org).
+   The list is comma-separated, so **a group name may contain spaces**
+   (`Domain Admins,Platform Engineering`): an array claim's entries are taken whole,
+   and only a bare space-separated string value is split.
 2. **`AUTH_SSO_ALLOWED_EMAIL_DOMAINS`** — their **verified** email's domain must be
    listed. A configured domain gate with no email released is **refused**
    (`email_required`), not admitted: admitting would silently void a rule the

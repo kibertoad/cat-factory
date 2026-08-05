@@ -1836,6 +1836,7 @@
         "groupRequired": "Te has autenticado correctamente, pero no perteneces a ningún grupo del directorio autorizado a usar este despliegue. Pide a tu equipo de TI que te añada.",
         "domainNotAllowed": "Tu dominio de correo no tiene permitido iniciar sesión en este despliegue. Pregunta a tu equipo de TI qué cuenta debes usar.",
         "emailRequired": "Este despliegue restringe el inicio de sesión por dominio de correo, pero tu proveedor de identidad no publicó una dirección de correo verificada. Un administrador debe habilitar el claim de correo.",
+        "providerUnreachable": "Tu proveedor de identidad no respondió mientras se completaba el inicio de sesión, por lo que puede estar caído o sin conexión. Vuelve a intentarlo en un momento y avisa a un administrador si sigue ocurriendo.",
         "unknown": "El inicio de sesión único falló por un motivo que esta versión no reconoce. Inténtalo de nuevo y avisa a un administrador si sigue ocurriendo."
       }
     },

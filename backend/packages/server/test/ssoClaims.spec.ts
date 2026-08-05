@@ -4,6 +4,7 @@ import {
   needsUserinfo,
   readGroupClaim,
   readSsoIdentity,
+  userinfoMatchesSubject,
 } from '../src/auth/oidc/claims.js'
 import type { SsoConfig } from '../src/config/types.js'
 
@@ -42,8 +43,27 @@ describe('readGroupClaim', () => {
     expect(readGroupClaim({ groups: 'Engineering' }, 'groups')).toEqual(['engineering'])
   })
 
-  it('splits a space-separated string', () => {
+  it('splits a BARE space-separated string (a SAML-to-OIDC bridge)', () => {
+    // Only the scalar shape is ambiguous, so only the scalar shape is split.
     expect(readGroupClaim({ groups: 'engineering ops' }, 'groups')).toEqual(['engineering', 'ops'])
+  })
+
+  it('keeps a space inside an ARRAY entry, because the array already delimited it', () => {
+    // The lockout this file's header warns about, from the opposite direction: AD-backed
+    // directories (Entra ID, Okta) permit spaces in a group's display name, and
+    // AUTH_SSO_REQUIRED_GROUPS splits on COMMAS, so "Domain Admins" is perfectly addressable.
+    // Splitting the claim into `domain` + `admins` matches nothing an operator can write, and the
+    // refusal that follows reads exactly like they got the group names wrong.
+    expect(readGroupClaim({ groups: ['Domain Admins', 'Engineering'] }, 'groups')).toEqual([
+      'domain admins',
+      'engineering',
+    ])
+  })
+
+  it('keeps a space inside an object entry too', () => {
+    expect(readGroupClaim({ groups: [{ value: 'Domain Admins' }] }, 'groups')).toEqual([
+      'domain admins',
+    ])
   })
 
   it('reads objects carrying `value` or `name`', () => {
@@ -122,6 +142,38 @@ describe('readSsoIdentity', () => {
       email: null,
       emailVerified: false,
     })
+  })
+
+  it('honours a STRING "false" from a provider that ships booleans as strings', () => {
+    // Absence means verified, so the only thing left to catch is a provider saying "no" — and
+    // reading `"false"` as verified would invert its own answer rather than fill a gap.
+    expect(
+      readSsoIdentity({ sub: 's', email: 'a@b.c', email_verified: 'false' }, config()),
+    ).toMatchObject({ emailVerified: false })
+    // A string "true" is still verified, as absence would have been anyway.
+    expect(
+      readSsoIdentity({ sub: 's', email: 'a@b.c', email_verified: 'true' }, config()),
+    ).toMatchObject({ emailVerified: true })
+  })
+})
+
+describe('userinfoMatchesSubject', () => {
+  // OIDC Core 5.3.2. Overlaying the ID token's claims last already stops `sub` being taken from
+  // userinfo, but `email` and `groups` ride the same response and BOTH decide admission — so a
+  // response for another subject is the one way a group gate is satisfied by someone else's
+  // membership.
+  it('matches when the response describes the same subject', () => {
+    expect(userinfoMatchesSubject({ sub: 'okta-1' }, { sub: 'okta-1' })).toBe(true)
+  })
+
+  it('refuses a response for a DIFFERENT subject', () => {
+    expect(userinfoMatchesSubject({ sub: 'okta-2' }, { sub: 'okta-1' })).toBe(false)
+  })
+
+  it('refuses a response with no `sub`, where the claim is REQUIRED', () => {
+    // A merge that cannot be checked is not one to trust.
+    expect(userinfoMatchesSubject({ email: 'a@b.c' }, { sub: 'okta-1' })).toBe(false)
+    expect(userinfoMatchesSubject({ sub: '  ' }, { sub: 'okta-1' })).toBe(false)
   })
 })
 

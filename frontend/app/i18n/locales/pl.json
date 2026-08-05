@@ -1836,6 +1836,7 @@
         "groupRequired": "Logowanie się udało, ale nie należysz do żadnej grupy katalogowej uprawnionej do korzystania z tego wdrożenia. Poproś zespół IT o dodanie Cię.",
         "domainNotAllowed": "Twoja domena e-mail nie ma uprawnień do logowania w tym wdrożeniu. Zapytaj zespół IT, którego konta użyć.",
         "emailRequired": "To wdrożenie ogranicza logowanie do wybranych domen e-mail, ale dostawca tożsamości nie udostępnił zweryfikowanego adresu e-mail. Administrator musi włączyć oświadczenie e-mail.",
+        "providerUnreachable": "Twój dostawca tożsamości nie odpowiedział podczas kończenia logowania, więc on sam lub połączenie z nim może być niedostępne. Spróbuj ponownie po chwili, a jeśli problem się powtarza, powiadom administratora.",
         "unknown": "Logowanie jednokrotne nie powiodło się z powodu, którego ta wersja nie rozpoznaje. Spróbuj ponownie, a jeśli problem się powtarza, powiadom administratora."
       }
     },

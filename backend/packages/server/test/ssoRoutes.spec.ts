@@ -56,6 +56,16 @@ interface IdpOptions {
   claims?: Record<string, unknown>
   /** Sign with a key the published JWKS does not contain. */
   wrongSigner?: boolean
+  /**
+   * Sign with the REAL key but announce a `kid` the published key set does not hold — the shape a
+   * provider mid-key-rotation produces, where only the key LOOKUP fails.
+   */
+  unpublishedKid?: boolean
+  /**
+   * Stop serving the discovery document after this many successful reads, so the callback leg
+   * meets an IdP that went away mid-round-trip (the login leg reads it once).
+   */
+  discoveryFailsAfter?: number
   /** Forge an HS256 token using the deployment's own client secret as the HMAC key. */
   forgeSymmetric?: boolean
   /** Fail the token exchange with the provider's own error body. */
@@ -70,6 +80,7 @@ interface IdpOptions {
  */
 function fakeIdp(opts: IdpOptions = {}) {
   const tokenRequests: URLSearchParams[] = []
+  let discoveryReads = 0
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input)
     const json = (body: unknown, status = 200) =>
@@ -79,6 +90,10 @@ function fakeIdp(opts: IdpOptions = {}) {
       })
 
     if (url.endsWith('/.well-known/openid-configuration')) {
+      discoveryReads += 1
+      if (opts.discoveryFailsAfter !== undefined && discoveryReads > opts.discoveryFailsAfter) {
+        return new Response('gateway timeout', { status: 504 })
+      }
       return json({
         issuer: ISSUER,
         authorization_endpoint: `${ISSUER}/v1/authorize`,
@@ -121,7 +136,7 @@ async function mintIdToken(form: URLSearchParams, opts: IdpOptions): Promise<str
     return jwt.setProtectedHeader({ alg: 'HS256' }).sign(new TextEncoder().encode(CLIENT_SECRET))
   }
   return jwt
-    .setProtectedHeader({ alg: 'RS256', kid: KID })
+    .setProtectedHeader({ alg: 'RS256', kid: opts.unpublishedKid ? 'rotated-key-2' : KID })
     .sign(opts.wrongSigner ? foreignKey : signingKey)
 }
 
@@ -334,6 +349,68 @@ describe('GET /auth/sso/callback', () => {
   it('refuses an ID token signed by a key the provider does not publish', async () => {
     const { res } = await roundTrip(harness({ wrongSigner: true }))
     expect(fragment(res).sso_error).toBe('token_invalid')
+  })
+
+  it('refuses an ID token whose `kid` the provider does not publish, as a REDIRECT', async () => {
+    // The key-rotation shape: the signature is genuine, only the key lookup fails. It must land the
+    // browser back on the SPA with a reason like every other refusal — this used to let jose's own
+    // `ERR_JWKS_NO_MATCHING_KEY` escape the `OidcFlowError` catch, which rendered a 500 JSON
+    // envelope at a browser mid-redirect, with no way back and nothing the user could act on.
+    const { res } = await roundTrip(harness({ unpublishedKid: true }))
+    expect(res.status).toBe(302)
+    expect(fragment(res).sso_error).toBe('token_invalid')
+  })
+
+  it('reports an IdP that stops answering mid-round-trip as `provider_unreachable`', async () => {
+    // An OUTAGE, not a bad token and not this deployment's credentials, so it is neither
+    // `token_invalid` nor `exchange_failed` — and it REDIRECTS, because the browser is mid-flow.
+    const { res } = await roundTrip(harness({ discoveryFailsAfter: 1 }))
+    expect(res.status).toBe(302)
+    expect(fragment(res).sso_error).toBe('provider_unreachable')
+  })
+
+  it('ignores a userinfo response describing a DIFFERENT subject', async () => {
+    // OIDC Core 5.3.2. The contrast with the admitting case below is the whole point: identical
+    // groups, and the only difference is whose response they came in. Honouring it would satisfy a
+    // group gate with somebody else's directory membership.
+    const { res } = await roundTrip(
+      harness({
+        sso: ssoConfig({ requiredGroups: ['engineering'] }),
+        userinfo: { sub: 'somebody-else', groups: ['Engineering'] },
+      }),
+    )
+    expect(fragment(res).sso_error).toBe('group_required')
+  })
+
+  it("refuses a cookie signed for the OAuth legs' audience", async () => {
+    // The two are both "one login round-trip's CSRF state", but the OAuth value travels in the URL
+    // (so any user holds a validly-signed one) while this one is the httpOnly carrier of the PKCE
+    // verifier and the OIDC nonce. Sharing an audience would let the public value verify as the
+    // secret container, leaving both secrets `undefined` and the flow resting on the provider to
+    // refuse a PKCE mismatch.
+    // Driven with the fake IdP installed so the refusal is not being done by an unreachable
+    // network: with a shared audience this payload reached the token exchange, and because its
+    // `idNonce` was `undefined` the nonce comparison collapsed to `undefined === undefined` too —
+    // two guards no-oping at once, leaving only the provider's PKCE check standing.
+    const h = harness()
+    const forged = await new HmacSigner(SECRET).sign({
+      aud: TOKEN_AUDIENCE.oauthState,
+      nonce: 'attacker-known-nonce',
+      redirect: `${ORIGIN}/`,
+      exp: Date.now() + 600_000,
+    })
+    const realFetch = globalThis.fetch
+    globalThis.fetch = h.idp.fetchImpl
+    try {
+      const res = await h.app.request(
+        `${ORIGIN}/auth/sso/callback?code=x&state=attacker-known-nonce`,
+        { headers: { cookie: `cf_sso_state=${forged}` } },
+      )
+      expect(fragment(res).token).toBeUndefined()
+      expect(fragment(res).sso_error).toBe('state_invalid')
+    } finally {
+      globalThis.fetch = realFetch
+    }
   })
 
   it("refuses an HS256 token forged with the deployment's own client secret", async () => {

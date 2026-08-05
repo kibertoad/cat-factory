@@ -182,9 +182,15 @@ export class OidcClient {
    * On a `kid` the cached key set does not hold, refetches the provider ONCE (the rate-limited
    * key-rotation path) and retries — because a provider rotating its signing keys must cost one
    * fetch, not every login until the cache TTL lapses.
+   *
+   * Every exit is a payload or an `OidcFlowError`. The unknown-key signal is jose's OWN error and
+   * it is useful only INSIDE this method: once the one refetch is spent (or refused by its rate
+   * limit) the token is simply unverifiable, and letting the raw error out made the callback leg's
+   * `instanceof OidcFlowError` catch miss, which rendered a 500 JSON envelope at a browser
+   * mid-redirect instead of the reason the flow promises.
    */
   async verifyIdToken(idToken: string, expected: { nonce: string }): Promise<JWTPayload> {
-    let document = await this.provider()
+    const document = await this.provider()
     try {
       return await this.verifyAgainst(document, idToken, expected)
     } catch (error) {
@@ -193,9 +199,14 @@ export class OidcClient {
         this.deps.config.issuerUrl,
         document,
       )
-      if (refreshed === document) throw error
-      document = refreshed
-      return this.verifyAgainst(document, idToken, expected)
+      // Unchanged means the refetch was rate-limited: nothing new to try against.
+      if (refreshed === document) throw keyNotPublished(error)
+      try {
+        return await this.verifyAgainst(refreshed, idToken, expected)
+      } catch (retryError) {
+        if (!isUnknownKeyError(retryError)) throw retryError
+        throw keyNotPublished(retryError)
+      }
     }
   }
 
@@ -270,6 +281,21 @@ export class OidcClient {
 /** The scrubbed message of a thrown value, as a string safe to interpolate. */
 function causeText(error: unknown): string {
   return String(describeError(error).err ?? '')
+}
+
+/**
+ * The refusal for a token whose signing key the provider does not publish, once the single
+ * rate-limited refetch has been spent. Reported as `token_invalid` because that is what it is
+ * from the caller's side: a token this deployment cannot verify. The message names the key so an
+ * operator reading the log can tell a mid-rotation race (retry succeeds) from a provider signing
+ * with a key it never published (it does not).
+ */
+function keyNotPublished(error: unknown): OidcFlowError {
+  return new OidcFlowError(
+    'token_invalid',
+    'The ID token is signed with a key the identity provider does not publish in its key set, ' +
+      `and refetching the key set did not produce it: ${causeText(error)}`,
+  )
 }
 
 /**

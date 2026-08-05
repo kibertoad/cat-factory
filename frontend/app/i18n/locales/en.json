@@ -1940,6 +1940,7 @@
         "groupRequired": "Your sign-in worked, but you aren't in a directory group that's allowed to use this deployment. Ask your IT team to add you.",
         "domainNotAllowed": "Your email domain isn't allowed to sign in to this deployment. Ask your IT team which account to use.",
         "emailRequired": "This deployment restricts sign-in by email domain, but your identity provider didn't release a verified email address. An administrator needs to enable the email claim.",
+        "providerUnreachable": "Your identity provider didn't respond while your sign-in was being completed, so it or the network to it may be down. Try again in a moment, and tell an administrator if it keeps happening.",
         "unknown": "Single sign-on failed for a reason this version doesn't recognise. Try again, and tell an administrator if it keeps happening."
       }
     },

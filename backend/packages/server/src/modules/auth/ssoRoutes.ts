@@ -8,7 +8,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import type { Hono } from 'hono'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie } from 'hono/cookie'
-import { oidcIdentitySubject } from '@cat-factory/kernel'
+import { UnavailableError, oidcIdentitySubject } from '@cat-factory/kernel'
 import type { Logger } from '@cat-factory/kernel'
 import {
   OidcClient,
@@ -17,7 +17,12 @@ import {
   ssoNotConfigured,
 } from '../../auth/oidc/OidcClient.js'
 import { OidcProviderDirectory } from '../../auth/oidc/discovery.js'
-import { judgeSsoAdmission, needsUserinfo, readSsoIdentity } from '../../auth/oidc/claims.js'
+import {
+  judgeSsoAdmission,
+  needsUserinfo,
+  readSsoIdentity,
+  userinfoMatchesSubject,
+} from '../../auth/oidc/claims.js'
 import type { SsoIdentity } from '../../auth/oidc/claims.js'
 import { HmacSigner, TOKEN_AUDIENCE } from '../../auth/signing.js'
 import type { AuthConfig, SsoConfig } from '../../config/types.js'
@@ -70,7 +75,7 @@ const SSO_STATE_COOKIE = 'cf_sso_state'
  * secrets that make an intercepted authorization code and a replayed ID token useless.
  */
 interface SsoRoundTrip {
-  aud: typeof TOKEN_AUDIENCE.oauthState
+  aud: typeof TOKEN_AUDIENCE.ssoState
   /** Echoed as the OAuth `state` parameter; the CSRF binding between URL and cookie. */
   nonce: string
   /** PKCE `code_verifier`. */
@@ -130,7 +135,7 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
     const sso = ssoConfig(c)
     const { verifier, challenge } = await createPkcePair()
     const trip: SsoRoundTrip = {
-      aud: TOKEN_AUDIENCE.oauthState,
+      aud: TOKEN_AUDIENCE.ssoState,
       nonce: crypto.randomUUID(),
       verifier,
       idNonce: crypto.randomUUID(),
@@ -173,14 +178,23 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
     if (!code) return c.redirect(refuse(trip.redirect, 'state_invalid'))
 
     const client = ssoClient(c, sso)
-    let identity: SsoIdentity | null
+    let resolved: { identity: SsoIdentity | null; issuer: string }
     try {
-      identity = await resolveIdentity(client, sso, {
+      resolved = await resolveIdentity(client, sso, {
         code,
         redirectUri: ssoCallbackUrl(c, sso),
         trip,
+        logger: requestLogger(c),
       })
     } catch (err) {
+      // An IdP that stopped answering mid-round-trip is an OUTAGE, not a bad token and not this
+      // deployment's credentials, so it gets its own reason. It also has to REDIRECT: on the login
+      // leg an envelope is right (nothing has redirected yet, the operator is the audience), but
+      // here the browser is mid-flow and raw JSON leaves it with no way back.
+      if (err instanceof UnavailableError) {
+        requestLogger(c).warn('sso.provider_unreachable', { detail: err.message })
+        return c.redirect(refuse(trip.redirect, 'provider_unreachable'))
+      }
       if (!(err instanceof OidcFlowError)) throw err
       // The message names the operator-actionable cause (a wrong secret, a redirect_uri the IdP
       // does not hold, a clock skew); the user gets the reason code. Logged at WARN because a
@@ -188,6 +202,7 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
       requestLogger(c).warn(`sso.${err.reason}`, { detail: err.message })
       return c.redirect(refuse(trip.redirect, err.reason))
     }
+    const { identity, issuer } = resolved
     if (!identity) return c.redirect(refuse(trip.redirect, 'subject_missing'))
 
     const admission = judgeSsoAdmission(identity, sso)
@@ -196,21 +211,25 @@ export function registerSsoRoutes(app: Hono<AppEnv>): void {
       return c.redirect(refuse(trip.redirect, admission.reason))
     }
 
-    const token = await establishSession(c, cfg, sso, identity, trip)
+    const token = await establishSession(c, cfg, identity, issuer, trip)
     return c.redirect(withToken(trip.redirect, token))
   })
 }
 
 /**
  * Exchange the code, verify the ID token, and merge in userinfo when — and only when — a claim
- * admission depends on is missing from the token. Returns null when the verified token carries no
- * `sub`, the one shape that leaves nothing to key an identity on.
+ * admission depends on is missing from the token. `identity` is null when the verified token
+ * carries no `sub`, the one shape that leaves nothing to key an identity on.
+ *
+ * Returns the DISCOVERED issuer alongside it, so the caller keying the user's identity on it does
+ * not resolve the provider a second time: that second read is what put an IdP outage AFTER the
+ * admission decision, where nothing was left to report it with.
  */
 async function resolveIdentity(
   client: OidcClient,
   sso: SsoConfig,
-  params: { code: string; redirectUri: string; trip: SsoRoundTrip },
-): Promise<SsoIdentity | null> {
+  params: { code: string; redirectUri: string; trip: SsoRoundTrip; logger: Logger },
+): Promise<{ identity: SsoIdentity | null; issuer: string }> {
   const tokens = await client.exchangeCode({
     code: params.code,
     redirectUri: params.redirectUri,
@@ -225,9 +244,24 @@ async function resolveIdentity(
     // The ID token's claims WIN over userinfo's: the token is signed and the userinfo response is
     // only bearer-authenticated, so on a disagreement the verified half is authoritative. `sub`
     // in particular must never be taken from userinfo.
-    if (extra) merged = { ...extra, ...claims }
+    //
+    // And the response is only merged AT ALL when it describes the same subject the token did
+    // (OIDC Core 5.3.2): spreading `claims` last protects `sub` itself, but `email` and `groups`
+    // ride the same response and both decide admission, so another subject's response would
+    // satisfy a group gate with somebody else's membership. Dropped LOUDLY, because the visible
+    // consequence otherwise is a `group_required` refusal blamed on the operator's group names.
+    if (extra && userinfoMatchesSubject(extra, claims)) merged = { ...extra, ...claims }
+    else if (extra) {
+      params.logger.warn('sso.userinfo.subject_mismatch', {
+        // Separates a non-conformant provider OMITTING the required claim (an operator fixes which
+        // claims it releases) from a response genuinely describing somebody else (alarming, and a
+        // different conversation). Neither subject value is logged.
+        userinfoHasSub: typeof extra.sub === 'string' && extra.sub.trim() !== '',
+      })
+    }
   }
-  return readSsoIdentity(merged, sso)
+  const { metadata } = await client.provider()
+  return { identity: readSsoIdentity(merged, sso), issuer: metadata.issuer }
 }
 
 /**
@@ -240,21 +274,20 @@ async function resolveIdentity(
 async function establishSession<E extends AppEnv>(
   c: Context<E>,
   cfg: AuthConfig,
-  sso: SsoConfig,
   identity: SsoIdentity,
+  issuer: string,
   trip: SsoRoundTrip,
 ): Promise<string> {
   const container = c.get('container')
-  const { metadata } = await ssoClient(c, sso).provider()
   const user = await container.userService.findOrCreateByIdentity(
     'oidc',
-    oidcIdentitySubject(metadata.issuer, identity.sub),
+    oidcIdentitySubject(issuer, identity.sub),
     {
       name: identity.name,
       email: identity.email,
       emailVerified: identity.emailVerified,
       avatarUrl: identity.avatarUrl,
-      metadata: { issuer: metadata.issuer, login: identity.login },
+      metadata: { issuer, login: identity.login },
     },
   )
   await container.accountService.ensurePersonalAccount({
@@ -273,7 +306,7 @@ async function establishSession<E extends AppEnv>(
     }
   }
   const { token } = await mintSession(cfg, sessionUser(user, identity.login))
-  logSignIn(requestLogger(c), user.id, identity, metadata.issuer)
+  logSignIn(requestLogger(c), user.id, identity, issuer)
   return token
 }
 
@@ -309,10 +342,31 @@ async function consumeRoundTrip<E extends AppEnv>(
   const raw = getCookie(c, SSO_STATE_COOKIE)
   deleteCookie(c, SSO_STATE_COOKIE, { path: '/auth' })
   const trip = await new HmacSigner(cfg.sessionSecret).verify<SsoRoundTrip>(raw, {
-    aud: TOKEN_AUDIENCE.oauthState,
+    aud: TOKEN_AUDIENCE.ssoState,
   })
-  if (!trip) return null
+  if (!isCompleteRoundTrip(trip)) return null
   const state = c.req.query('state')
   if (!state || state !== trip.nonce) return null
   return trip
+}
+
+/**
+ * Whether a verified cookie payload actually carries the round-trip this leg needs.
+ *
+ * `HmacSigner.verify` proves THIS deployment signed the value and pins its audience; neither
+ * proves its SHAPE, and the generic parameter is a cast rather than a check. Without this, a
+ * payload missing the two secrets would flow on as `undefined`: a PKCE `code_verifier` of
+ * `"undefined"` in the token form and a nonce compared against `undefined`, both of which a
+ * conformant provider refuses — which is exactly why the check belongs here instead of resting on
+ * one being conformant.
+ */
+function isCompleteRoundTrip(trip: SsoRoundTrip | null): trip is SsoRoundTrip {
+  const present = (value: unknown): boolean => typeof value === 'string' && value !== ''
+  return (
+    trip !== null &&
+    present(trip.nonce) &&
+    present(trip.verifier) &&
+    present(trip.idNonce) &&
+    present(trip.redirect)
+  )
 }

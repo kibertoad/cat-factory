@@ -60,6 +60,11 @@ export type SsoConfigView = v.InferOutput<typeof ssoConfigViewSchema>
  * - `email_required` — an email-domain allowlist is configured but the provider released no
  *   verified email to check it against, so admission cannot be decided. An operator must
  *   release the `email` claim (or drop the allowlist); admitting instead would silently void it.
+ * - `provider_unreachable` — the IdP (or the network to it) did not answer while the callback was
+ *   being settled: its discovery document or key set could not be read. An OUTAGE, distinct from
+ *   `exchange_failed` because the remedy is not the deployment's own client credentials, and
+ *   distinct from `token_invalid` because nothing was wrong with the token. Retrying works once
+ *   the provider does.
  */
 export const ssoErrorReasonSchema = v.picklist([
   'state_invalid',
@@ -70,6 +75,7 @@ export const ssoErrorReasonSchema = v.picklist([
   'group_required',
   'domain_not_allowed',
   'email_required',
+  'provider_unreachable',
 ])
 export type SsoErrorReason = v.InferOutput<typeof ssoErrorReasonSchema>
 

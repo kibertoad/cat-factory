@@ -1836,6 +1836,7 @@
         "groupRequired": "Oturum açma başarılı oldu, ancak bu dağıtımı kullanmasına izin verilen bir dizin grubunda değilsiniz. BT ekibinizden sizi eklemesini isteyin.",
         "domainNotAllowed": "E-posta alan adınızın bu dağıtımda oturum açma izni yok. Hangi hesabı kullanmanız gerektiğini BT ekibinize sorun.",
         "emailRequired": "Bu dağıtım oturum açmayı e-posta alan adına göre kısıtlıyor, ancak kimlik sağlayıcınız doğrulanmış bir e-posta adresi paylaşmadı. Bir yöneticinin e-posta talebini etkinleştirmesi gerekiyor.",
+        "providerUnreachable": "Oturum açma işlemi tamamlanırken kimlik sağlayıcınız yanıt vermedi; sağlayıcı ya da ona giden ağ çalışmıyor olabilir. Biraz sonra yeniden deneyin, sorun sürerse bir yöneticiye bildirin.",
         "unknown": "Tek oturum açma, bu sürümün tanımadığı bir nedenle başarısız oldu. Tekrar deneyin ve sorun sürerse bir yöneticiye bildirin."
       }
     },

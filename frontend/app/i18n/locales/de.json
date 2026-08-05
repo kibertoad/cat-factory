@@ -3666,6 +3666,7 @@
         "groupRequired": "Die Anmeldung hat funktioniert, aber Sie sind in keiner Verzeichnisgruppe, die dieses Deployment nutzen darf. Bitten Sie Ihre IT-Abteilung, Sie hinzuzufügen.",
         "domainNotAllowed": "Ihre E-Mail-Domain darf sich bei diesem Deployment nicht anmelden. Fragen Sie Ihre IT-Abteilung, welches Konto Sie verwenden sollen.",
         "emailRequired": "Dieses Deployment beschränkt die Anmeldung auf bestimmte E-Mail-Domains, aber Ihr Identitätsprovider hat keine verifizierte E-Mail-Adresse freigegeben. Ein Administrator muss den E-Mail-Claim aktivieren.",
+        "providerUnreachable": "Ihr Identitätsprovider hat beim Abschluss der Anmeldung nicht geantwortet, möglicherweise ist er oder die Verbindung zu ihm gestört. Versuchen Sie es in einem Moment erneut und informieren Sie einen Administrator, falls es weiterhin auftritt.",
         "unknown": "Single Sign-on ist aus einem Grund fehlgeschlagen, den diese Version nicht kennt. Versuchen Sie es erneut und informieren Sie einen Administrator, falls es weiterhin auftritt."
       }
     },

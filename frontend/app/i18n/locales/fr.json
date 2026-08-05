@@ -1836,6 +1836,7 @@
         "groupRequired": "Votre connexion a réussi, mais vous n'appartenez à aucun groupe de l'annuaire autorisé à utiliser ce déploiement. Demandez à votre service informatique de vous ajouter.",
         "domainNotAllowed": "Votre domaine de messagerie n'est pas autorisé à se connecter à ce déploiement. Demandez à votre service informatique quel compte utiliser.",
         "emailRequired": "Ce déploiement limite la connexion à certains domaines de messagerie, mais votre fournisseur d'identité n'a pas transmis d'adresse e-mail vérifiée. Un administrateur doit activer le claim e-mail.",
+        "providerUnreachable": "Votre fournisseur d'identité n'a pas répondu pendant la finalisation de la connexion : lui-même ou le réseau qui y mène est peut-être indisponible. Réessayez dans un instant et prévenez un administrateur si cela persiste.",
         "unknown": "L'authentification unique a échoué pour une raison que cette version ne reconnaît pas. Réessayez et prévenez un administrateur si le problème persiste."
       }
     },

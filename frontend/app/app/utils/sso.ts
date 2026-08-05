@@ -36,5 +36,6 @@ export const SSO_ERROR_MESSAGE_KEYS: Record<SsoLoginFailure, string> = {
   group_required: 'auth.sso.errors.groupRequired',
   domain_not_allowed: 'auth.sso.errors.domainNotAllowed',
   email_required: 'auth.sso.errors.emailRequired',
+  provider_unreachable: 'auth.sso.errors.providerUnreachable',
   unknown: 'auth.sso.errors.unknown',
 }

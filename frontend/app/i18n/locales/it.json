@@ -3666,6 +3666,7 @@
         "groupRequired": "L'accesso è riuscito, ma non appartieni a nessun gruppo della directory autorizzato a usare questo deployment. Chiedi al team IT di aggiungerti.",
         "domainNotAllowed": "Il tuo dominio email non è autorizzato ad accedere a questo deployment. Chiedi al team IT quale account usare.",
         "emailRequired": "Questo deployment limita l'accesso per dominio email, ma il tuo provider di identità non ha esposto un indirizzo email verificato. Un amministratore deve abilitare il claim email.",
+        "providerUnreachable": "Il tuo provider di identità non ha risposto durante il completamento dell'accesso, quindi potrebbe non essere raggiungibile. Riprova tra un momento e avvisa un amministratore se il problema persiste.",
         "unknown": "L'accesso unico è fallito per un motivo che questa versione non riconosce. Riprova e avvisa un amministratore se il problema persiste."
       }
     },

@@ -55,19 +55,30 @@ function str(value: unknown): string | null {
  * strings, a single string, a space-separated string (some SAML-to-OIDC bridges), or an array of
  * `{ value }` / `{ name }` objects. Anything unrecognised contributes nothing rather than
  * throwing: one odd entry must not discard the rest of a user's groups.
+ *
+ * Whether a value is SPLIT on whitespace turns on whether something else already delimited it,
+ * and getting that backwards is the silent lockout this whole file warns about. An ARRAY entry is
+ * taken WHOLE: Okta, Entra ID and every AD-backed directory permit spaces in a group's name
+ * ("Domain Admins" is the canonical one), `AUTH_SSO_REQUIRED_GROUPS` splits on COMMAS so such a
+ * name is perfectly addressable, and shredding it into `domain` + `admins` matches nothing an
+ * operator can write. Only a BARE STRING is genuinely ambiguous, and there the space-separated
+ * spelling is the shape a whole-value read would get wrong.
  */
 export function readGroupClaim(claims: Record<string, unknown>, claimName: string): string[] {
   if (!claimName) return []
   const raw = claims[claimName]
+  if (typeof raw === 'string') {
+    return raw
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.toLowerCase())
+  }
   const values = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]
   const out: string[] = []
   for (const entry of values) {
     if (typeof entry === 'string') {
-      // A single string may itself be a space-separated list; splitting is safe because a
-      // group name containing a space is not addressable by a CSV allowlist anyway.
-      for (const part of entry.split(/\s+/)) {
-        if (part) out.push(part.toLowerCase())
-      }
+      const value = str(entry)
+      if (value) out.push(value.toLowerCase())
       continue
     }
     if (entry && typeof entry === 'object') {
@@ -78,6 +89,36 @@ export function readGroupClaim(claims: Record<string, unknown>, claimName: strin
     }
   }
   return out
+}
+
+/**
+ * Whether a claim states a NEGATIVE explicitly.
+ *
+ * `email_verified` is specified as a boolean and its ABSENCE is read as verified (the decision
+ * documented on {@link SsoIdentity.emailVerified}), so the only thing this has to catch is a
+ * provider that says "no". Some ship JSON booleans as strings, and `"false"` is the one spelling
+ * where absence-means-verified would invert the provider's own answer rather than fill a gap.
+ */
+function statesFalse(value: unknown): boolean {
+  return value === false || value === 'false'
+}
+
+/**
+ * Whether a userinfo response describes the SAME subject the verified ID token did.
+ *
+ * OIDC Core 5.3.2 makes this a MUST, and it is not tidiness: overlaying the ID token's claims
+ * LAST already stops `sub` itself from being taken from userinfo, but `email` and `groups` ride
+ * the same response and BOTH decide admission. A response for another subject would hand this
+ * user that subject's directory groups, which is the one way a `requiredGroups` gate can be
+ * satisfied by somebody else's membership. A response with no `sub` at all fails this too: the
+ * claim is REQUIRED there, and a merge that cannot be checked is not one to trust.
+ */
+export function userinfoMatchesSubject(
+  userinfo: Record<string, unknown>,
+  claims: Record<string, unknown>,
+): boolean {
+  const fromUserinfo = str(userinfo.sub)
+  return fromUserinfo !== null && fromUserinfo === str(claims.sub)
 }
 
 /**
@@ -97,7 +138,7 @@ export function readSsoIdentity(
   return {
     sub,
     email,
-    emailVerified: claims.email_verified !== false && email !== null,
+    emailVerified: email !== null && !statesFalse(claims.email_verified),
     name: str(claims.name) ?? joinName(claims),
     avatarUrl: str(claims.picture),
     login: preferred ?? email ?? sub,
