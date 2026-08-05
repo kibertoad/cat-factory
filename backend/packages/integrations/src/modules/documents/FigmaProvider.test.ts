@@ -74,7 +74,7 @@ describe('FigmaProvider.fetchDocument', () => {
     expect(seen.some((u) => u.includes('/nodes?'))).toBe(true)
   })
 
-  it('drops the design-tokens section on a 403 (non-Enterprise) instead of failing', async () => {
+  it('names the Enterprise plan gate on a variables 403 instead of failing', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -92,7 +92,142 @@ describe('FigmaProvider.fetchDocument', () => {
 
     const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1')
     expect(doc.body).toContain('## Card')
-    expect(doc.body).not.toContain('Design tokens')
+    // The 403 is a PLAN GATE, and this file publishes no styles to fall back to. Saying so
+    // is the point: silently omitting the section reads as a design that defines no tokens.
+    expect(doc.body).toContain('not available on this plan')
+    expect(doc.body).not.toMatch(/^- .+ = /m)
+  })
+
+  it('falls back to published styles for tokens when variables are plan-gated', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/nodes?')) {
+          return jsonResponse({
+            name: 'F',
+            nodes: {
+              '1:2': {
+                document: {
+                  name: 'Card',
+                  type: 'FRAME',
+                  children: [
+                    {
+                      name: 'Heading',
+                      type: 'TEXT',
+                      characters: 'Hi',
+                      styles: { fill: 'S1', text: 'S2' },
+                      fills: [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 } }],
+                      style: { fontFamily: 'Inter', fontSize: 24, fontWeight: 700 },
+                    },
+                  ],
+                },
+                styles: {
+                  S1: { name: 'brand/primary', styleType: 'FILL' },
+                  S2: { name: 'text/heading', styleType: 'TEXT' },
+                },
+              },
+            },
+          })
+        }
+        if (url.includes('/variables/local')) return new Response('forbidden', { status: 403 })
+        if (url.includes('/images/')) return jsonResponse({ images: { '1:2': null } })
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1')
+    expect(doc.body).toContain('Source: published styles.')
+    expect(doc.body).toContain('- Colors › brand/primary = #ff0000')
+    expect(doc.body).toContain('- Typography › text/heading = Inter 24/700')
+    // The styling facts ride the layout line, so the tree carries the values too.
+    expect(doc.body).toContain('- Heading _TEXT_ [fill #ff0000; Inter 24/700]')
+  })
+
+  it('reads a whole-file link as real frame subtrees, and states the frames it dropped', async () => {
+    const frames = Array.from({ length: 14 }, (_, i) => ({
+      id: `1:${i}`,
+      name: `Frame ${i}`,
+      type: 'FRAME',
+    }))
+    const requested: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('?depth=1')) throw new Error('unexpected probe')
+        if (url.includes('/nodes?')) {
+          const ids = new URL(url).searchParams.get('ids')!.split(',')
+          requested.push(...ids)
+          return jsonResponse({
+            name: 'Big File',
+            nodes: Object.fromEntries(
+              ids.map((id) => [
+                id,
+                {
+                  document: {
+                    id,
+                    name: `Frame ${id.split(':')[1]}`,
+                    type: 'FRAME',
+                    children: [{ name: 'Body', type: 'TEXT', characters: `text ${id}` }],
+                  },
+                },
+              ]),
+            ),
+          })
+        }
+        if (url.includes('/files/KEY?depth=2')) {
+          return jsonResponse({
+            name: 'Big File',
+            version: 'v1',
+            document: { name: 'Document', children: [{ name: 'Page 1', children: frames }] },
+          })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY', 'ws_1')
+    // The outline read alone returns frames with NO children, so the subtree reads are what
+    // makes a whole-file import more than a list of frame names.
+    expect(requested).toHaveLength(12)
+    expect(doc.body).toContain('- Body _TEXT_')
+    expect(doc.body).toContain('- text 1:0')
+    expect(doc.body).toContain('This file has 14 top-level frames; the first 12 were imported')
+    expect(doc.body).not.toContain('Frame 12')
+  })
+
+  it('leaves a frame at outline depth when its subtree read fails, and says so', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/nodes?')) return new Response('boom', { status: 500 })
+        if (url.includes('/files/KEY?depth=2')) {
+          return jsonResponse({
+            name: 'File',
+            document: {
+              name: 'Document',
+              children: [
+                {
+                  name: 'Page 1',
+                  children: [
+                    {
+                      id: '1:1',
+                      name: 'Home',
+                      type: 'FRAME',
+                      absoluteBoundingBox: { width: 390, height: 844 },
+                    },
+                  ],
+                },
+              ],
+            },
+          })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY', 'ws_1')
+    expect(doc.body).toContain('## Home (390×844)')
+    expect(doc.body).toContain('1 of 1 frame subtree reads failed')
   })
 
   it('maps an off-host redirect to a FigmaApiError (SSRF guard runs per hop)', async () => {

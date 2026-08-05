@@ -35,6 +35,9 @@ which is an unreasonable first step to put in front of a non-engineer.
 
 ### 2. A whole-file import is nearly empty, and styling never reaches the agent
 
+**Closed by Track B slices 1 to 4**; the survey finding is kept below because the caps and the
+token fallback are only legible against what they replaced.
+
 Two fidelity holes in what the agent reads:
 
 - `FigmaProvider.fetchNodes` fetches a whole-file link at `depth=2`, which returns pages and
@@ -143,19 +146,27 @@ All rendering changes land in the source-neutral `DesignContext` model (new opti
 sections and token fields), never as Figma-only renderer branches; Zeplin maps what it has,
 omits what it lacks, and the conformity of the two is what keeps Penpot cheap later.
 
-- [ ] **Real whole-file content.** Fetch the file shallow first, then the top-level frames as
-      node subtrees (bounded: first N frames by the existing node/byte caps, the cap stating what
-      it dropped). A whole-file import must produce layout and text for its frames, not a bare
-      frame list.
-- [ ] **Styling in the layout tree.** Extract per-node fills (solid colours as hex), text style
-      (family/size/weight), corner radius, and auto-layout facts (direction, padding, gap) into
-      the layout lines or a per-frame `Styling` section. Bounded exactly like the tree itself.
-- [ ] **Tokens without Enterprise.** Derive a tokens section from published styles (the file
-      `styles` map joined to the styled nodes) when the variables API is gated; keep variables as
-      the richer path when available. The render states which source the tokens came from, since
-      "absent" and "plan-gated" must read differently.
-- [ ] **Component fidelity.** Carry component properties/variant names on `DesignComponent.note`
-      so "reuse the existing component" has enough signal to match against repo code.
+- [x] **Real whole-file content.** The `depth=2` file read became an OUTLINE read, and the frames
+      it names are fetched as real subtrees in chunks of 4, capped at `MAX_FILE_FRAMES`. Chunked
+      rather than one request because an oversize response must cost its own frames, not every
+      frame: a chunk that fails leaves those frames at outline depth and says so, beside the note
+      naming the frames the cap dropped. The two caps that bound the render moved with it: the
+      per-frame node cap now sits under an IMPORT-wide budget, since a per-frame cap alone bounds
+      nothing about a whole-file import that fans out over a dozen frames.
+- [x] **Styling in the layout tree.** Fills, strokes, typography, corner radius and the
+      auto-layout facts ride the node's own layout line in brackets, rather than a per-frame
+      `Styling` section: the facts are per-node, and a second section would make the reader join
+      them back up by name. Bounded by the tree's own caps, since they are the same lines.
+- [x] **Tokens without Enterprise.** Published styles (the `styles` map joined to the fills/text
+      styles of the nodes referencing them) are the fallback when variables are plan-gated, and
+      `DesignContext.tokenOrigin` states which source produced the section. A style whose value no
+      node resolves is DROPPED rather than emitted as a bare name: a token an implementer cannot
+      apply is noise, and it would inflate the section that decides whether the gate gets stated.
+- [x] **Component fidelity.** An instance is named by its component SET (a variant's own name is
+      its property assignment, so it identifies nothing alone), and every variant and property the
+      design uses folds onto that one component's `note`. Folded rather than one entry per variant
+      because the shared `dedupeComponents` keys on the name, so per-variant entries would collapse
+      to whichever one was seen first.
 - [ ] **Auto-fold `design.context`.** Fold the fragment (brief for implementer kinds, full body
       for reviewer/planner kinds, the existing two-tier rule) whenever the run's resolved context
       includes a design-origin document. A deterministic presence rule at prompt assembly, NOT a

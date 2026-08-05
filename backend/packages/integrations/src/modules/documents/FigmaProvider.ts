@@ -22,8 +22,17 @@ import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http
 
 const API_BASE = 'https://api.figma.com/v1'
 const USER_AGENT = 'cat-factory'
-/** Depth fetched for a whole-file link (a node link fetches its own subtree). */
+/**
+ * Depth of the whole-file OUTLINE read: `depth=2` returns the pages and their top-level
+ * frames with no grandchildren, which is how we learn the frame ids. The content then comes
+ * from per-frame node reads below, because a deeper `depth=` on the file endpoint fetches
+ * the entire document at once and blows the response cap on any real file.
+ */
 const FILE_DEPTH = 2
+/** Depth requested per frame subtree: one level past what the layout renderer will show. */
+const FRAME_DEPTH = 7
+/** Frames per `/nodes` request: bounded so one oversize response can't cost every frame. */
+const FRAME_CHUNK = 4
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
 const MAX_RESPONSE_BYTES = 5_000_000
 
@@ -45,23 +54,52 @@ export class FigmaApiError extends Error {
  */
 const safeFetch = createHostPinnedFetch({ host: FIGMA_API_HOST, label: 'Figma' })
 
-interface FileResponse {
+/** The design-system maps Figma returns beside a node tree, on both endpoints. */
+interface FigmaMaps {
+  components?: figmaLogic.FigmaComponentMap
+  componentSets?: figmaLogic.FigmaComponentSetMap
+  styles?: figmaLogic.FigmaStyleMap
+}
+
+interface FileResponse extends FigmaMaps {
   name?: string
   /** File version id / last-modified timestamp Figma advances on every edit. */
   version?: string
   lastModified?: string
   document?: figmaLogic.FigmaNode
-  components?: figmaLogic.FigmaComponentMap
 }
 
 interface NodesResponse {
   name?: string
   version?: string
   lastModified?: string
-  nodes?: Record<
-    string,
-    { document?: figmaLogic.FigmaNode; components?: figmaLogic.FigmaComponentMap } | undefined
-  >
+  nodes?: Record<string, ({ document?: figmaLogic.FigmaNode } & FigmaMaps) | undefined>
+}
+
+/** Everything one fetch of a file/frame yields: the trees, the maps, and what it dropped. */
+interface FetchedNodes {
+  roots: figmaLogic.FigmaNode[]
+  maps: Required<FigmaMaps>
+  fileName: string
+  version: string
+  notes: string[]
+}
+
+/** The variables read is three-valued: a 403 is a PLAN GATE, not a failure. */
+type VariablesRead =
+  | { status: 'ok'; meta: figmaLogic.FigmaVariablesMeta | null }
+  | { status: 'gated' }
+  | { status: 'failed' }
+
+function emptyMaps(): Required<FigmaMaps> {
+  return { components: {}, componentSets: {}, styles: {} }
+}
+
+/** Fold one response's design-system maps onto the accumulated ones. */
+function mergeMaps(into: Required<FigmaMaps>, from: FigmaMaps | undefined): void {
+  Object.assign(into.components, from?.components ?? {})
+  Object.assign(into.componentSets, from?.componentSets ?? {})
+  Object.assign(into.styles, from?.styles ?? {})
 }
 
 interface VariablesResponse {
@@ -104,15 +142,16 @@ export class FigmaProvider implements DocumentSourceProvider {
       throw new FigmaApiError(400, `Figma ref is missing a file key: ${externalId}`)
     }
 
-    const { roots, components, fileName, version } = await this.fetchNodes(
+    const { roots, maps, fileName, version, notes } = await this.fetchNodes(
       credentials,
       fileKey,
       nodeId,
     )
-    // Design tokens are Enterprise-gated; on 403/404 drop them, don't fail. A rendered
-    // preview rides along as a reference (no download) — best-effort, the short-lived URL
-    // may expire and a non-multimodal agent ignores it.
-    const variablesMeta = await this.fetchVariables(credentials, fileKey)
+    // Design tokens are Enterprise-gated; on 403/404 the published styles carried by the
+    // node tree are the fallback and the render says which one it used. A rendered preview
+    // rides along as a reference (no download): best-effort, the short-lived URL may expire
+    // and a non-multimodal agent ignores it.
+    const variables = await this.fetchVariables(credentials, fileKey)
     const previewUrl = await this.fetchPreviewUrl(credentials, fileKey, nodeId)
 
     const context = figmaLogic.buildFigmaDesignContext({
@@ -120,9 +159,13 @@ export class FigmaProvider implements DocumentSourceProvider {
       fileName,
       nodeId,
       roots,
-      components,
-      variablesMeta,
+      components: maps.components,
+      componentSets: maps.componentSets,
+      styles: maps.styles,
+      variablesMeta: variables.status === 'ok' ? variables.meta : null,
+      variablesStatus: variables.status,
       previewUrl,
+      fetchNotes: notes,
     })
 
     return {
@@ -155,33 +198,54 @@ export class FigmaProvider implements DocumentSourceProvider {
     return fileVersion(res)
   }
 
-  /** Fetch a specific node's subtree, or the whole file's document, plus its components. */
+  /** Fetch a specific node's subtree, or the whole file's frames, plus its design-system maps. */
   private async fetchNodes(
     credentials: DocumentCredentials,
     fileKey: string,
     nodeId: string | undefined,
-  ): Promise<{
-    roots: figmaLogic.FigmaNode[]
-    components: figmaLogic.FigmaComponentMap
-    fileName: string
-    version: string
-  }> {
-    if (nodeId) {
-      const res = await this.get<NodesResponse>(
-        credentials,
-        `/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}`,
-      )
-      const entry = res.nodes?.[nodeId]
-      if (!entry?.document) {
-        throw new FigmaApiError(404, `Figma node ${nodeId} not found in file ${fileKey}`)
-      }
-      return {
-        roots: [entry.document],
-        components: entry.components ?? {},
-        fileName: res.name ?? fileKey,
-        version: fileVersion(res),
-      }
+  ): Promise<FetchedNodes> {
+    if (nodeId) return await this.fetchNodeSubtree(credentials, fileKey, nodeId)
+    return await this.fetchFileFrames(credentials, fileKey)
+  }
+
+  /** A node link: one `/nodes` read of the referenced frame's full subtree. */
+  private async fetchNodeSubtree(
+    credentials: DocumentCredentials,
+    fileKey: string,
+    nodeId: string,
+  ): Promise<FetchedNodes> {
+    const res = await this.get<NodesResponse>(
+      credentials,
+      `/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}`,
+    )
+    const entry = res.nodes?.[nodeId]
+    if (!entry?.document) {
+      throw new FigmaApiError(404, `Figma node ${nodeId} not found in file ${fileKey}`)
     }
+    const maps = emptyMaps()
+    mergeMaps(maps, entry)
+    return {
+      roots: [entry.document],
+      maps,
+      fileName: res.name ?? fileKey,
+      version: fileVersion(res),
+      notes: [],
+    }
+  }
+
+  /**
+   * A whole-file link: read the file's OUTLINE (pages + top-level frames, no grandchildren),
+   * then fetch a bounded set of those frames as real subtrees. A single `depth=` bump on the
+   * file endpoint cannot do this: Figma returns pages and their top-level frames with no
+   * children at `depth=2`, and the whole document at a depth that would reach the content.
+   *
+   * A frame whose subtree read fails still renders from the outline, and every frame the
+   * cap or a failure cost is NAMED, so a bounded import can't read as the whole design.
+   */
+  private async fetchFileFrames(
+    credentials: DocumentCredentials,
+    fileKey: string,
+  ): Promise<FetchedNodes> {
     const res = await this.get<FileResponse>(
       credentials,
       `/files/${encodeURIComponent(fileKey)}?depth=${FILE_DEPTH}`,
@@ -189,36 +253,104 @@ export class FigmaProvider implements DocumentSourceProvider {
     if (!res.document) {
       throw new FigmaApiError(502, `Figma returned no document for file ${fileKey}`)
     }
-    // For a whole-file link the document's children are the pages/canvases; render
-    // each top-level frame under them as a section root.
-    const roots = (res.document.children ?? []).flatMap((page) => page.children ?? [])
-    return {
-      roots: roots.length ? roots : [res.document],
-      components: res.components ?? {},
+    const maps = emptyMaps()
+    mergeMaps(maps, res)
+
+    const outline = figmaLogic.figmaTopLevelFrames(res.document)
+    const base: FetchedNodes = {
+      // A file with no frames at all (an empty document) still renders its own root, which
+      // is what the outline-only fallback did before frames were fetched separately.
+      roots: outline.length ? outline : [res.document],
+      maps,
       fileName: res.name ?? fileKey,
       version: fileVersion(res),
+      notes: [],
     }
+    if (!outline.length) return base
+
+    const selected = outline.slice(0, figmaLogic.MAX_FILE_FRAMES)
+    if (selected.length < outline.length) {
+      base.notes.push(
+        `This file has ${outline.length} top-level frames; the first ${selected.length} were ` +
+          `imported. Link a specific frame URL to import one that is not listed here.`,
+      )
+    }
+
+    const deep = await this.fetchFrameSubtrees(credentials, fileKey, selected, maps)
+    base.roots = selected.map((frame) => (frame.id ? (deep.get(frame.id) ?? frame) : frame))
+    const unread = selected.length - deep.size
+    if (unread > 0) {
+      base.notes.push(
+        `${unread} of ${selected.length} frame subtree reads failed; those frames show their ` +
+          `name and size only, not their layout or text.`,
+      )
+    }
+    return base
   }
 
   /**
-   * Fetch the local-variables `meta` (design tokens); null on the Enterprise-gating
-   * 403/404. Fully best-effort: any transport failure (incl. a blocked-redirect
-   * `DocumentHttpError`) drops the tokens rather than failing the whole import.
+   * Read the selected frames' subtrees in chunks, folding each response's design-system maps
+   * in. Chunked so one oversize response costs its own frames rather than every frame, and
+   * best-effort per chunk: the caller reports the frames a failure left at outline depth.
+   */
+  private async fetchFrameSubtrees(
+    credentials: DocumentCredentials,
+    fileKey: string,
+    frames: figmaLogic.FigmaNode[],
+    maps: Required<FigmaMaps>,
+  ): Promise<Map<string, figmaLogic.FigmaNode>> {
+    const out = new Map<string, figmaLogic.FigmaNode>()
+    for (let i = 0; i < frames.length; i += FRAME_CHUNK) {
+      const ids = frames
+        .slice(i, i + FRAME_CHUNK)
+        .map((frame) => frame.id)
+        .filter((id): id is string => Boolean(id))
+      if (!ids.length) continue
+      let res: NodesResponse
+      try {
+        res = await this.get<NodesResponse>(
+          credentials,
+          `/files/${encodeURIComponent(fileKey)}/nodes` +
+            `?ids=${encodeURIComponent(ids.join(','))}&depth=${FRAME_DEPTH}`,
+        )
+      } catch {
+        // silent-catch-ok: the miss is REPORTED by the caller as the frames left at outline
+        // depth, which is the honest form of it; a failed chunk must not fail the import.
+        continue
+      }
+      for (const id of ids) {
+        const entry = res.nodes?.[id]
+        if (!entry?.document) continue
+        mergeMaps(maps, entry)
+        out.set(id, entry.document)
+      }
+    }
+    return out
+  }
+
+  /**
+   * Fetch the local-variables `meta` (design tokens). A 403/404 is the Enterprise PLAN GATE
+   * and is reported as `gated` rather than as a failure, because the render says which of
+   * the two happened. Fully best-effort either way: any transport failure (incl. a
+   * blocked-redirect `DocumentHttpError`) drops the tokens rather than failing the import.
    */
   private async fetchVariables(
     credentials: DocumentCredentials,
     fileKey: string,
-  ): Promise<figmaLogic.FigmaVariablesMeta | null> {
+  ): Promise<VariablesRead> {
     try {
       const res = await safeFetch(
         `${API_BASE}/files/${encodeURIComponent(fileKey)}/variables/local`,
         { method: 'GET', headers: this.headers(credentials) },
       )
-      if (!res.ok) return null
+      if (res.status === 403 || res.status === 404) return { status: 'gated' }
+      if (!res.ok) return { status: 'failed' }
       const json = this.parse<VariablesResponse>(await readCappedText(res, MAX_RESPONSE_BYTES))
-      return json?.meta ?? null
+      return json ? { status: 'ok', meta: json.meta ?? null } : { status: 'failed' }
     } catch {
-      return null
+      // silent-catch-ok: reported as the `failed` status, which the token origin states in
+      // the rendered body; the variables read may never fail the import.
+      return { status: 'failed' }
     }
   }
 

@@ -44,9 +44,15 @@ the `.cat-context/` materialization. The only per-source code is `normalizeConne
 model** before rendering:
 
 - `documents/design.logic.ts`: `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
-  `references`) + `renderDesignContext`, which emits `## <block>` sections, a global `### Components`,
-  `### Design tokens`, and optional `### References`. Each provider only maps its own API into this
-  shape; the renderer is shared, so the output isn't Figma-shaped.
+  `tokenOrigin`, `references`, `notes`) + `renderDesignContext`, which emits the coverage `### Notes`
+  first, then `## <block>` sections, a global `### Components`, `### Design tokens` and optional
+  `### References`. Each provider only maps its own API into this shape; the renderer is shared, so
+  the output isn't Figma-shaped.
+  - **`notes` lead the body** because each one qualifies what follows (frames an import cap dropped,
+    a subtree read that failed), and a body that gets truncated loses its tail.
+  - **`tokenOrigin` names which token path produced the section.** A source with more than one
+    (Figma: variables, else published styles) must say which, and a plan gate, a failed read and a
+    design that defines no tokens are three facts a bare omission collapses into one.
 - `documents/http.ts`: the shared host-pinned fetch + SSRF guard + capped read every fixed-host
   provider reuses (`createHostPinnedFetch` / `assertHostPinned` / `readCappedText`).
 
@@ -59,10 +65,26 @@ the materialised structure, matches `### Components` to existing repo components
 ## Figma
 
 - **Auth:** a per-workspace Figma PAT (`X-Figma-Token`), sealed like Notion/Confluence.
-- **Fetch:** `GET /v1/files/:key/nodes` (frame subtree) or `/v1/files/:key` (whole file) → layout
-  tree + text + components; `GET /v1/files/:key/variables/local` → design tokens (Enterprise-gated;
-  dropped on 403/404, never fails the import); `GET /v1/images/:key` → a best-effort short-lived
-  rendered-preview URL on a `### References` line (no download: a non-multimodal agent ignores it).
+- **Fetch (node link):** `GET /v1/files/:key/nodes` returns the referenced frame's full subtree.
+- **Fetch (whole file):** `GET /v1/files/:key?depth=2` is an OUTLINE read (pages plus their
+  top-level frames, no grandchildren), so the content comes from chunked `/nodes` reads of the
+  first `MAX_FILE_FRAMES` of those frames. **A bigger `depth=` cannot replace this**: the file
+  endpoint jumps from "no children" to "the entire document", which blows the response cap on any
+  real file. A frame whose chunk fails still renders from the outline, and both the frame cap and
+  the failed reads are named in `### Notes`.
+- **Layout fidelity:** each node's line carries its styling in brackets, the facts an agent would
+  otherwise invent: `[fill #3366ff; Inter 16/600 lh 24; radius 8; auto-layout vertical gap 12
+padding 16/24]`. Bounded by the same depth/node caps as the tree.
+- **Tokens:** `GET /v1/files/:key/variables/local` when the plan serves it; a **403/404 is the
+  Enterprise plan gate**, and the fallback is the file's **published styles** (the `styles` map
+  joined to the fills/text styles of the nodes referencing them), which every plan serves. The two
+  are never merged: `tokenOrigin` states which one produced the section, and states the gate itself
+  when neither produced anything.
+- **Components:** each instance contributes its component-set name plus the variants and properties
+  the design actually uses (`variants: Size=Large | Size=Small; props: Icon=true, Label`), which is
+  the signal "reuse the existing component" needs to match against repo code.
+- **Preview:** `GET /v1/images/:key` → a best-effort short-lived rendered-preview URL on a
+  `### References` line (no download: a non-multimodal agent ignores it).
 - **Ref/auto-match:** `parseFigmaRef` canonicalises a `figma.com` share URL (dash node-ids, title
   segments, `&t=` params) to the stable `<fileKey>[:<nodeId>]` external id, matched by the
   `documentUrlResolver` seam regardless of URL-string differences.
@@ -75,8 +97,9 @@ current API when touched: treat them as the intended shape, not a frozen contrac
 - **Auth:** a per-workspace Zeplin PAT (`Authorization: Bearer`), sealed like Figma.
 - **Fetch:** `GET /v1/projects/:id` (name), `/projects/:id/screens` (→ blocks), `/projects/:id/
 components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
-  The screens/components/tokens reads are best-effort (a single failing section is dropped, not
-  fatal), exactly like Figma's variables.
+  The components/tokens reads are best-effort (a single failing section is dropped, not fatal),
+  exactly like Figma's variables, and the drop is NAMED in `### Notes` / `tokenOrigin` rather than
+  left to read as a project that has none.
 - **Why Zeplin (and not just Figma):** Zeplin is the design→dev **handoff** tool, so its content
   model is _screens + a design system_, NOT Figma's node tree. Having a second provider with a
   genuinely different model is what proves the `DesignContext` abstraction isn't Figma-shaped. It

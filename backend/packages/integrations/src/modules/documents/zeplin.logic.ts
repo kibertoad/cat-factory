@@ -249,6 +249,8 @@ export interface ZeplinContextInput {
   components: ZeplinComponent[]
   /** The project's design tokens, or null when unavailable. */
   designTokens?: ZeplinDesignTokens | null
+  /** Which of the supplementary reads failed, so their absence isn't read as emptiness. */
+  failedReads?: { components?: boolean; designTokens?: boolean }
 }
 
 /** Assemble the fetched Zeplin pieces into the shared {@link DesignContext}. */
@@ -258,12 +260,31 @@ export function buildZeplinDesignContext(input: ZeplinContextInput): DesignConte
     screenId && input.screens[0]?.name?.trim()
       ? `${input.projectName || projectId} — ${input.screens[0]!.name!.trim()}`
       : input.projectName || projectId
+  const notes: string[] = []
+  if (input.failedReads?.components) {
+    notes.push(
+      'The Zeplin component read failed, so the components section is missing rather than empty.',
+    )
+  }
+  const screens = input.screens.length
+  if (screens > MAX_SCREENS) {
+    notes.push(
+      `This project has ${screens} screens; the first ${MAX_SCREENS} were imported. Link a ` +
+        `specific screen URL to import one that is not listed here.`,
+    )
+  }
   return {
     title,
     url: zeplinUrlFor(input.externalId),
     blocks: zeplinScreensToBlocks(input.screens),
     components: zeplinComponentsToDesign(input.components),
     tokens: zeplinTokens(input.designTokens),
+    // Zeplin has ONE token source, so an origin is worth rendering only when its read
+    // failed: without it a failed read and a project defining no tokens look identical.
+    tokenOrigin: input.failedReads?.designTokens
+      ? { note: 'No design tokens: the Zeplin design-tokens read failed.' }
+      : undefined,
     references: [],
+    notes,
   }
 }

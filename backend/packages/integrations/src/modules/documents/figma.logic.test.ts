@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { renderDesignContext } from './design.logic.js'
 import {
+  MAX_FILE_FRAMES,
   assertSafeFigmaUrl,
   buildFigmaDesignContext,
+  figmaBlocks,
+  figmaComponents,
+  figmaStyleTokens,
+  figmaStylingFacts,
+  figmaTokenOrigin,
   figmaTokens,
+  figmaTopLevelFrames,
   figmaUrlFor,
   normalizeFigmaNodeId,
   parseFigmaRef,
@@ -130,6 +137,19 @@ describe('buildFigmaDesignContext + renderDesignContext', () => {
     expect(md).toContain('- Button/Primary')
   })
 
+  it('leads with the coverage notes, which qualify everything under them', () => {
+    const md = renderDesignContext(
+      buildFigmaDesignContext({
+        externalId: 'Key',
+        fileName: 'File',
+        roots: [frame],
+        components: {},
+        fetchNotes: ['4 of 40 frames were imported.'],
+      }),
+    )
+    expect(md.startsWith('### Notes\n- 4 of 40 frames were imported.')).toBe(true)
+  })
+
   it('omits empty sections', () => {
     const ctx = buildFigmaDesignContext({
       externalId: 'Key',
@@ -191,5 +211,235 @@ describe('figmaTokens', () => {
   it('returns no tokens when there are no variables (renderer drops the section)', () => {
     expect(figmaTokens(undefined)).toEqual([])
     expect(figmaTokens({ variables: {} })).toEqual([])
+  })
+})
+
+describe('figmaStylingFacts', () => {
+  it('reads the fill, typography, radius and auto-layout an implementer would guess at', () => {
+    expect(
+      figmaStylingFacts({
+        fills: [{ type: 'SOLID', color: { r: 0.2, g: 0.4, b: 1 } }],
+        strokes: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 0.5 } }],
+        style: { fontFamily: 'Inter', fontSize: 16, fontWeight: 600, lineHeightPx: 24 },
+        cornerRadius: 8,
+        layoutMode: 'VERTICAL',
+        itemSpacing: 12,
+        paddingTop: 16,
+        paddingRight: 24,
+        paddingBottom: 16,
+        paddingLeft: 24,
+      }),
+    ).toEqual([
+      'fill #3366ff',
+      'stroke #000000 (a=0.50)',
+      'Inter 16/600 lh 24',
+      'radius 8',
+      'auto-layout vertical gap 12 padding 16/24/16/24',
+    ])
+  })
+
+  it('skips an invisible or non-solid paint rather than naming a colour it does not have', () => {
+    expect(
+      figmaStylingFacts({
+        fills: [
+          { type: 'SOLID', visible: false, color: { r: 1, g: 0, b: 0 } },
+          { type: 'GRADIENT_LINEAR' },
+          { type: 'SOLID', color: { r: 0, g: 1, b: 0 } },
+        ],
+      }),
+    ).toEqual(['fill #00ff00'])
+  })
+
+  it('renders uniform padding once and drops a zero-padding auto-layout qualifier', () => {
+    expect(
+      figmaStylingFacts({
+        layoutMode: 'HORIZONTAL',
+        paddingTop: 8,
+        paddingRight: 8,
+        paddingBottom: 8,
+        paddingLeft: 8,
+      }),
+    ).toEqual(['auto-layout horizontal padding 8'])
+    expect(figmaStylingFacts({ layoutMode: 'NONE', cornerRadius: 0 })).toEqual([])
+  })
+})
+
+describe('figmaBlocks caps', () => {
+  /** A chain `depth` levels deep, so the depth cap is what stops the walk. */
+  function chain(depth: number): FigmaNode {
+    let node: FigmaNode = { name: `leaf`, type: 'TEXT', characters: 'x' }
+    for (let i = 0; i < depth; i++) node = { name: `n${i}`, type: 'FRAME', children: [node] }
+    return node
+  }
+
+  it('marks a frame the depth cap cut, and names the cap in a note', () => {
+    const { blocks, notes } = figmaBlocks([{ name: 'Deep', type: 'FRAME', children: [chain(9)] }])
+    expect(blocks[0]!.sections[0]!.lines.some((l) => l.includes('(truncated)'))).toBe(true)
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toContain('1 of 1 frames were cut')
+  })
+
+  it('says nothing when nothing was dropped', () => {
+    const { notes } = figmaBlocks([
+      { name: 'Shallow', type: 'FRAME', children: [{ name: 'a', type: 'TEXT', characters: 'a' }] },
+    ])
+    expect(notes).toEqual([])
+  })
+
+  it('bounds the WHOLE import, not each frame: one wide frame cannot spend the budget alone', () => {
+    // 40 frames of 100 children each is 4,000 nodes; the import budget is what stops it, and
+    // a per-frame cap alone would let a whole-file import produce all of them.
+    const wide = (name: string): FigmaNode => ({
+      name,
+      type: 'FRAME',
+      children: Array.from({ length: 100 }, (_, i) => ({ name: `c${i}`, type: 'RECTANGLE' })),
+    })
+    const { blocks, notes } = figmaBlocks(Array.from({ length: 40 }, (_, i) => wide(`F${i}`)))
+    const rendered = blocks.reduce((n, b) => n + b.sections[0]!.lines.length, 0)
+    expect(rendered).toBeLessThan(2000)
+    expect(notes[0]).toContain('frames were cut')
+  })
+})
+
+describe('figmaTopLevelFrames', () => {
+  it("flattens every page's frame children and skips what is not a frame", () => {
+    const frames = figmaTopLevelFrames({
+      name: 'Document',
+      children: [
+        {
+          name: 'Page 1',
+          children: [
+            { id: '1:1', name: 'Home', type: 'FRAME' },
+            { id: '1:2', name: 'a sticky', type: 'STICKY' },
+            { name: 'no id', type: 'FRAME' },
+          ],
+        },
+        { name: 'Page 2', children: [{ id: '2:1', name: 'Settings', type: 'COMPONENT' }] },
+      ],
+    })
+    expect(frames.map((f) => f.id)).toEqual(['1:1', '2:1'])
+    expect(MAX_FILE_FRAMES).toBeGreaterThan(0)
+  })
+
+  it('returns nothing for an empty document', () => {
+    expect(figmaTopLevelFrames(undefined)).toEqual([])
+    expect(figmaTopLevelFrames({ name: 'Document' })).toEqual([])
+  })
+})
+
+describe('figmaComponents', () => {
+  const button = (variant: string, props?: FigmaNode['componentProperties']): FigmaNode => ({
+    name: 'Button instance',
+    type: 'INSTANCE',
+    componentId: variant,
+    componentProperties: props,
+  })
+
+  it('names a variant by its SET and folds every observed variant onto one note', () => {
+    const components = figmaComponents(
+      [
+        {
+          name: 'Frame',
+          type: 'FRAME',
+          children: [
+            button('c1', { 'Size#1:0': { value: 'Large', type: 'VARIANT' } }),
+            button('c2', {
+              'Size#1:0': { value: 'Small', type: 'VARIANT' },
+              'Label#2:0': { value: 'Continue', type: 'TEXT' },
+              'Icon#3:0': { value: true, type: 'BOOLEAN' },
+            }),
+          ],
+        },
+      ],
+      {
+        c1: { name: 'Size=Large', componentSetId: 'set1', description: 'The primary action.' },
+        c2: { name: 'Size=Small', componentSetId: 'set1' },
+      },
+      { set1: { name: 'Button' } },
+    )
+    expect(components).toEqual([
+      {
+        name: 'Button',
+        note: 'variants: Size=Large | Size=Small; props: Icon=true, Label; The primary action.',
+      },
+    ])
+  })
+
+  it('falls back to the component name when there is no set, and reports no variant', () => {
+    const components = figmaComponents([{ name: 'F', type: 'FRAME', children: [button('c9')] }], {
+      c9: { name: 'Avatar' },
+    })
+    expect(components).toEqual([{ name: 'Avatar', note: undefined }])
+  })
+})
+
+describe('figmaStyleTokens (the plan-independent token source)', () => {
+  const root: FigmaNode = {
+    name: 'Frame',
+    type: 'FRAME',
+    children: [
+      {
+        name: 'Heading',
+        type: 'TEXT',
+        styles: { fill: 'S1', text: 'S2', effect: 'S3' },
+        fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }],
+        style: { fontFamily: 'Inter', fontSize: 32 },
+      },
+      // A second reference to the same style must not duplicate the token.
+      {
+        name: 'Sub',
+        type: 'TEXT',
+        styles: { fill: 'S1' },
+        fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1 } }],
+      },
+    ],
+  }
+
+  it('joins the published-style names to the values the nodes carry', () => {
+    expect(
+      figmaStyleTokens([root], {
+        S1: { name: 'surface/base', styleType: 'FILL' },
+        S2: { name: 'text/display', styleType: 'TEXT' },
+        S3: { name: 'shadow/lg', styleType: 'EFFECT' },
+      }),
+    ).toEqual([
+      { collection: 'Colors', name: 'surface/base', value: '#ffffff' },
+      { collection: 'Typography', name: 'text/display', value: 'Inter 32px' },
+    ])
+  })
+
+  it('drops a style whose value it cannot resolve rather than emitting a bare name', () => {
+    expect(
+      figmaStyleTokens([{ name: 'F', styles: { fill: 'S1' } }], { S1: { name: 'x' } }),
+    ).toEqual([])
+  })
+})
+
+describe('figmaTokenOrigin', () => {
+  it('names variables when they produced the section', () => {
+    expect(figmaTokenOrigin({ status: 'ok', variableTokens: 3, styleTokens: 9 })).toEqual({
+      label: 'Figma variables',
+    })
+  })
+
+  it('distinguishes a plan gate from a failed read when styles carried the section', () => {
+    expect(figmaTokenOrigin({ status: 'gated', variableTokens: 0, styleTokens: 2 })).toEqual({
+      label: 'published styles',
+      note: 'Variable-defined tokens are absent: the Figma variables API is not available on this plan.',
+    })
+    expect(
+      figmaTokenOrigin({ status: 'failed', variableTokens: 0, styleTokens: 2 })?.note,
+    ).toContain('variables read failed')
+  })
+
+  it('states the gate even with nothing to render, and stays silent on a genuine absence', () => {
+    expect(
+      figmaTokenOrigin({ status: 'gated', variableTokens: 0, styleTokens: 0 })?.label,
+    ).toBeUndefined()
+    expect(
+      figmaTokenOrigin({ status: 'gated', variableTokens: 0, styleTokens: 0 })?.note,
+    ).toContain('No design tokens')
+    // Nothing was refused and nothing was found: a design that defines no tokens says nothing.
+    expect(figmaTokenOrigin({ status: 'ok', variableTokens: 0, styleTokens: 0 })).toBeUndefined()
   })
 })
