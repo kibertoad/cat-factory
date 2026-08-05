@@ -1,5 +1,150 @@
 # @cat-factory/worker
 
+## 0.154.0
+
+### Minor Changes
+
+- 4e5640d: Adopt a catalog pipeline into the workspace on first run, so no board is stuck behind an advisory.
+
+  Built-in pipelines are copied into each workspace at creation, so a board seeded before a pipeline
+  shipped holds no row for it, and the catalog's own copy is invisible to every read: the library lists
+  rows, the builder edits rows, a run resolves by row. For a human browsing the pipeline library the
+  new-pipeline advisory plus a reseed closes that gap. For anything that PINS a pipeline by id it does
+  not, and a reusable operation does exactly that: the pin resolves off the task-type registry, which
+  knows nothing about rows, so a task of the operation was creatable on an older board and then refused
+  to start with a bare 404 that named nothing the user could act on.
+
+  Run resolution now goes through `pipelineAdoption.adoptForRun`, which returns the stored row or
+  materialises the catalog entry and returns that. It WRITES rather than running off the code copy on
+  purpose: resolving from the catalog without persisting would leave a run executing a pipeline the
+  board's own library cannot show, open in the builder, or attach a schedule to, which is the same
+  dishonesty as rendering an absent thing as an empty one. Only `builtin` catalog entries are adoptable,
+  and that restriction is the safety argument rather than a convenience: a built-in is read-only and
+  becomes deletable only once retired, and a retired id is absent from `seedPipelines` by construction,
+  so "no row plus a live built-in entry" can only mean never adopted. A versionless registered pipeline
+  is deletable, so adopting one would resurrect a deliberate deletion.
+
+  Two adoptions race by construction (two tasks of one operation started at once both resolve "no row"),
+  so this adds `PipelineRepository.insertIfAbsent`, conflict-targeted `DO NOTHING` on the composite key
+  on both runtimes. Deliberately not `INSERT OR IGNORE` on D1, which would also swallow an unrelated
+  constraint failure on that runtime alone and so hide a real bug behind a passing Postgres suite. Both
+  writers write the same catalog definition, so first write wins and the loser has nothing to report.
+  `PipelineService.reseed`'s absent branch moved onto the same method, fixing a pre-existing race of its
+  own, and both now build the row through one shared `adoptedCatalogRow` so adopting and reseeding cannot
+  diverge on labels or archive state.
+
+  Widening what a start resolves means every GATE standing in front of one had to be widened with it,
+  which is where the read-only twin `resolveDefinition` earns its place. Each of these read the bare row
+  and, finding nothing, did not refuse but CONCLUDED, about a pipeline that was about to run anyway:
+
+  - `individualVendorsForBlock` backs the personal-credential gate on the start request, so an un-adopted
+    pipeline resolved to no agent kinds, the gate concluded the run needed no personal subscription, and
+    the run then adopted and started ungated.
+  - The public API's decide-scope check resolves the caller's `pipelineId` to inspect it for parks. A
+    `null` skipped the check entirely, and `start` then adopted and parked the run, so a `write`-only key
+    could set in motion exactly the park that scope exists to withhold. Both public start paths now read
+    `PipelineService.resolveForRun`, which replaces the `get` that served the stored row (nothing wants
+    that read any more). One public-API behaviour change falls out of it, additive: naming a pipeline the
+    board has not adopted starts the run (or is refused for want of `decide`) instead of answering `404`
+    / `pipeline_not_public`, so an integration pinning a pipeline by id no longer waits on a human to
+    reseed the board.
+  - The post-merge auto-start resolved dependents from the workspace's pipeline LIST and dropped any
+    whose pin had no row, silently, so a merge propagated into a task that never began. It now resolves
+    misses through `adoptableCatalog()` (no point read per miss: the list already proves there is no
+    row), and a dependent whose pin resolves to nothing at all is reported rather than dropped.
+
+  So a bare `pipelineRepository.get` on a run-adjacent path is now the smell. Adoption is also COUNTED,
+  through the new `pipeline.adopted` operational counter: the log line says which board caught up, and
+  only the rate says how many are still behind a catalog the deployment already shipped.
+
+  Left refusing on purpose: an initiative policy edit or a recurring schedule naming an un-adopted
+  pipeline. Both are authoring paths where the SPA only offers stored pipelines, so the refusal is
+  reachable headlessly only, and adopting on an authoring write would materialise rows for pipelines
+  nobody ran.
+
+- a675c63: MCP maturation slice 4: a declared tool server can now be TESTED, and the deployment's tool servers are
+  finally visible without reading its source.
+
+  Until now the only way to learn whether a wired MCP tool server actually works was to start a run and
+  read the agent's own prompt. Boot validation rules on the DECLARATION and a dispatch reports what it
+  DROPPED, but a server that survives both — servable harness, allowed transport, credential present —
+  could still be a dead url, a rotated token or a typo'd tool name, and every one of those surfaced as an
+  agent quietly doing worse work without the tool it was promised.
+
+  Two new `secrets.manage`-gated routes under `/workspaces/:ws`: `GET /tool-servers` lists every
+  registered server (which agent kinds get it, which harnesses can serve it, which credentials it asks
+  for by name, whether it can be probed at all), and `POST /tool-servers/:id/test` speaks `initialize` +
+  `tools/list` to it for real. The Infrastructure window's "Capability credentials" tab renders the
+  inventory with a Test button per row, above the credential checklist those credentials belong to.
+
+  What makes the verdict worth having is that the probe resolves credentials through the SAME composed
+  chain a dispatch uses: the per-workspace store in front of the deployment environment, per key, with
+  the reserved-key floor applied before the resolver is asked. So the answer is about THIS board rather
+  than about whoever set the deployment's variable, and the probe can never be the one path that resolves
+  a platform configuration variable and ships it to a third party. The result names a CAUSE rather than a
+  boolean, split by the fix each needs: a missing credential and a rejected one are different rows, and
+  "no answer at all" is kept apart from "answered with a status" because one is the network and the other
+  is usually the token or the path.
+
+  Three things it deliberately refuses rather than approximating. A `stdio` server runs inside the run
+  container, a loopback url means "beside the agent in its own container", and the backend is neither of
+  those places — so those rows say why instead of offering a button, because a probe that reached for the
+  nearest thing it could talk to would answer about the backend's own machine, and a SUCCESS there would
+  mislead more than a failure. The third is the `allowedTools` reconciliation: the probe is the first
+  thing in the platform that can check a declared tool name against reality (every other layer holds it
+  to a NAME pattern, which a well-formed typo passes), and when the server's tool list came back
+  paginated past the probe's page bound the check reports itself as unchecked rather than calling a
+  working tool missing.
+
+  A redirect is followed, and each hop is held to the transport rule and to the DECLARED ORIGIN while a
+  credential is riding. That matches what a run does rather than exceeding it: the Web platform removes
+  `Authorization` on a cross-origin redirect, so an agent's own MCP client reaches such a hop
+  unauthenticated, and a probe that forwarded the token would report on a request no run makes while
+  handing a workspace's credential to whatever the redirect names. The row names the origin change, so
+  the fix reads as the declaration naming the final url. A server needing no credential is followed
+  across origins as before.
+
+  Two smaller fixes ride along. `McpSecretRef` gains `usage`, the operator-facing note the credential
+  checklist has always had a field for and only the generative-integration half ever populated — so a
+  tool server's row can finally say which token type and scopes a key wants. And the checklist's READ was
+  documented as `secrets.manage`-gated in three places while its mount let every member's GET through:
+  `requireWorkspacePermission` passes GET/HEAD by design, so both surfaces now mount the
+  explicitly-named `requireWorkspacePermissionIncludingReads`, with a cross-runtime RBAC assertion each.
+  Both mount it on their OWN path patterns rather than `'*'`: a `'*'` mount inside a routed Hono
+  sub-app lands on `/workspaces/:workspaceId/*` and can refuse a sibling controller's routes, which is
+  survivable while only writes are gated and an outage once reads are.
+
+  `ServerContainer` gains `toolSecretResolver`, the composed credential chain itself, beside the
+  `toolSecretEnvironmentFallback` description it already carried; a facade that wires the chain now
+  surfaces both. `AgentKindRegistry` gains `allToolServers()`, the complement of
+  `kindsWithCapabilities()` and the only way to see a registration attached to no kind at all — a state
+  that previously passed every check while its credentials sat in the operator's checklist as keys no
+  dispatch would ever ask for. Kernel gains `isLoopbackMcpHttpUrl` beside `isAllowedMcpHttpUrl`, a
+  separate predicate on purpose: one rules on the scheme, the other on where the server lives.
+
+  No harness change, so no runner-image bump.
+
+### Patch Changes
+
+- Updated dependencies [4e5640d]
+- Updated dependencies [a675c63]
+  - @cat-factory/kernel@0.238.0
+  - @cat-factory/observability-otel@0.11.0
+  - @cat-factory/orchestration@0.206.0
+  - @cat-factory/server@0.218.0
+  - @cat-factory/contracts@0.239.0
+  - @cat-factory/agents@0.111.0
+  - @cat-factory/caching@0.14.19
+  - @cat-factory/consensus@0.14.19
+  - @cat-factory/eks@0.1.229
+  - @cat-factory/gates@0.8.75
+  - @cat-factory/gitlab@0.15.34
+  - @cat-factory/integrations@0.127.1
+  - @cat-factory/observability-langfuse@0.10.3
+  - @cat-factory/provider-cloudflare@0.7.381
+  - @cat-factory/spend@0.15.1
+  - @cat-factory/prompt-fragments@0.15.65
+
 ## 0.153.0
 
 ### Minor Changes
