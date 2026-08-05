@@ -330,7 +330,7 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     recordMany: 'telemetry',
     listByExecution: 'telemetry',
     listPage: 'telemetry',
-    countByExecution: 'telemetry',
+    summarizeByExecution: 'telemetry',
     deleteOlderThan: 'sweeper',
   },
   // Modeled subscription quota-cycle counters (usage-and-quota-tracking, Part B): the

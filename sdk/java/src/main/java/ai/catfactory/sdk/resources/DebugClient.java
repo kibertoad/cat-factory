@@ -302,6 +302,7 @@ public final class DebugClient {
                         .limit(query.limit())
                         .jobId(query.jobId())
                         .order(query.order())
+                        .ok(query.ok())
                         .cursor(cursor)
                         .build();
                 ListDebugToolCallsResponse page = listToolCalls(runId, nextQuery);

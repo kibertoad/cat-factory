@@ -13,6 +13,7 @@ import {
   type AgentToolCall,
   type AgentToolCallPageQuery,
   type AgentToolCallRepository,
+  type AgentToolCallSummary,
   type AgentToolCallTrajectoryQuery,
   type LlmCallBodyWindow,
   type LlmCallMetric,
@@ -1058,6 +1059,10 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
+    if (query.ok !== undefined) {
+      clauses.push('ok = ?')
+      binds.push(query.ok ? 1 : 0)
+    }
     binds.push(query.limit)
     const rows = this.db
       .prepare(
@@ -1080,6 +1085,10 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
+    if (query.ok !== undefined) {
+      clauses.push('ok = ?')
+      binds.push(query.ok ? 1 : 0)
+    }
     if (query.cursor) {
       clauses.push('(created_at < ? OR (created_at = ? AND id < ?))')
       binds.push(query.cursor.createdAt, query.cursor.createdAt, query.cursor.id)
@@ -1096,13 +1105,30 @@ class SqliteAgentToolCallRepository implements AgentToolCallRepository {
     return rows.map(rowToToolCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
-    const row = this.db
+  async summarizeByExecution(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<AgentToolCallSummary[]> {
+    // The D1 GROUP BY, verbatim: one pass over the run's rows, neither body column read.
+    const rows = this.db
       .prepare(
-        'SELECT COUNT(*) AS n FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?',
+        `SELECT agent_kind, tool, COUNT(*) AS calls, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures
+         FROM agent_tool_calls
+         WHERE workspace_id = ? AND execution_id = ?
+         GROUP BY agent_kind, tool`,
       )
-      .get(workspaceId, executionId) as unknown as { n: number } | undefined
-    return row?.n ?? 0
+      .all(workspaceId, executionId) as unknown as {
+      agent_kind: string
+      tool: string
+      calls: number
+      failures: number
+    }[]
+    return rows.map((row) => ({
+      agentKind: row.agent_kind,
+      tool: row.tool,
+      calls: Number(row.calls),
+      failures: Number(row.failures ?? 0),
+    }))
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

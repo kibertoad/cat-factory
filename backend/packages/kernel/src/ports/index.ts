@@ -171,6 +171,7 @@ export type {
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
+  AgentToolCallSummary,
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
