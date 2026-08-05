@@ -1,7 +1,12 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3 and 4 landed.** Source: the 2026-08-04 review of both MCP
-surfaces.
+Status: **in progress; slices 1, 2, 3 and 4 landed.** Sources: the 2026-08-04 review of both MCP
+surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
+a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
+verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
+and the criticality notes on slices 5 and 7); its documentation findings landed with it as
+[`backend/docs/mcp-tool-servers.md`](../../backend/docs/mcp-tool-servers.md), the consuming-side
+authority doc split out of `custom-agents.md`.
 
 ## Goal
 
@@ -124,6 +129,10 @@ dump and never uses the word MCP).
       It comes AFTER the probe on purpose: the chip and the snapshot field both need a wire vocabulary
       for a tool server, and slice 4 is where that vocabulary now exists (`@cat-factory/contracts`'s
       `tool-servers.ts`), so this slice extends one rather than inventing a second.
+      **Within the slice, the HANDSHAKE half lands first.** The 2026-08-05 review rated the
+      blind run the likeliest failure an adopting deployment actually hits (self-hosted pools lag
+      the backend by design, and nothing states the gap to anyone), and unlike the chip it needs
+      no wire vocabulary, so it should not queue behind the telemetry half.
 - [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
       enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
@@ -141,6 +150,21 @@ dump and never uses the word MCP).
       client registration as scoped), so a host connects without a long-lived key in plaintext
       config. Deliberately last: the consuming half wants slice 6's per-workspace surface for
       grants, and the serving half needs slice 3's endpoint to exist.
+      **Criticality note (2026-08-05):** for the external-vendor goal specifically, the consuming
+      half is the single biggest gap in the whole initiative; every OAuth-first remote server
+      (Figma, Atlassian, Slack, Linear) is unreachable until it lands. If demand arrives before
+      slice 6, a deployment-level flow (client credentials, or a pre-obtained refresh token sealed
+      in the store) is a legitimate intermediate step that does not need the grant UI.
+- [ ] **8. Adoption loudness and `stdio` operability.** (2026-08-05 review) Two small items that
+      decide whether a deployment learns its ceiling at boot or from a run. A boot warning when NO
+      harness the deployment can resolve serves ANY registered server (a Pi-only deployment
+      registering tool servers today finds out one run prompt at a time, `tool_server_unservable`
+      being per definition rather than per deployment). And the `stdio` class's operational story:
+      the docs half landed with this review (`mcp-tool-servers.md` → Operating `stdio` servers:
+      pin the package version, pre-bake into the runner image for the cold start, verify from a
+      run), and a mechanical warm-up (installing declared `stdio` packages before the agent's
+      first turn, the dependency-prepopulation analogue) is the candidate follow-up if cold-start
+      or registry-outage failures show up in practice; it is a harness change, so an image bump.
 
 ## Findings inventory
 
@@ -184,6 +208,19 @@ carries it; "done" means that slice has landed.
 | No MCP resources/prompts/elicitation/progress notifications                       | Deferred (below)              |
 | Pi has no MCP client                                                              | Standing non-goal (ADR 0029)  |
 
+From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
+
+| Finding (2026-08-05)                                                              | Disposition                   |
+| --------------------------------------------------------------------------------- | ----------------------------- |
+| Blind run (stale runner image) is the likeliest adopter failure; land it first    | Slice 5 (ordering note)       |
+| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable    | Slice 7 (criticality note)    |
+| No boot signal when no resolvable harness serves any registered server           | Slice 8                       |
+| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story     | Slice 8 (docs half done)      |
+| Consuming-side docs buried in `custom-agents.md`; no single authority doc        | Done (`mcp-tool-servers.md`)  |
+| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source      | Done (same change)            |
+| Silent last-write-wins on a re-registered tool-server id                          | Not pursued (below)           |
+| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob                  | Not pursued (below)           |
+
 ## Deliberately not pursued
 
 Recorded so the next iteration does not re-propose them.
@@ -214,6 +251,17 @@ Recorded so the next iteration does not re-propose them.
 - **MCP resources, prompts, elicitation and progress notifications.** Deferred, not refused:
   host support is uneven and none of them gates the flows above. The natural revisit point is
   after slice 3, when hosted sessions make server-side prompts and progress worth having.
+- **A warning on re-registering a tool-server id.** Last-write-wins is the DOCUMENTED repoint
+  seam (`custom-agent-roles.md` → Repointing without forking): a deployment overrides an
+  installed package's server by registering the same id after it, so a warning would fire on the
+  intended pattern. The residual risk is two vendor packages colliding on an id by accident, which
+  today resolves silently by import order. The cheap remedy, if that ever bites, is an info-level
+  boot line naming each replacement (visible, not a warning), so the intended pattern stays quiet
+  in spirit while the accident becomes greppable.
+- **A deployment knob for `TOOL_SERVER_BUDGET`.** The constants (12 servers, ~32 KB) are far above
+  any observed declaration, both dimensions already warn at boot, and a knob would invite raising
+  the cap instead of trimming the kind. Revisit only when a real kind hits the cap for a reason
+  trimming cannot fix.
 
 ## Gotchas already known
 
