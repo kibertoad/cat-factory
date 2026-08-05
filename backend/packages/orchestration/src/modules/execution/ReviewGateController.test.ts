@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Block, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type {
+  Block,
+  ExecutionInstance,
+  PipelineStep,
+  ReviewQuestionPost,
+  ReviewQuestionSubject,
+} from '@cat-factory/kernel'
 import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
 import {
   ReviewGateController,
@@ -569,10 +575,14 @@ describe('ReviewGateController — headless question writeback', () => {
 
   function headlessSetup(over: { intakeOrigin?: string } = {}) {
     const calls: { order: string[] } = { order: [] }
-    const postReviewQuestions = vi.fn(async () => {
-      calls.order.push('post')
-      return { posted: 1, skipped: 0, failed: 0 }
-    })
+    // The three parameters are spelled out so `vi.fn` infers them: a bare `async () => …` infers
+    // ZERO, which makes `mock.calls[0][2]` an index into an empty tuple.
+    const postReviewQuestions = vi.fn(
+      async (_ws: string, _block: Block, _post: ReviewQuestionPost) => {
+        calls.order.push('post')
+        return { posted: 1, skipped: 0, failed: 0 }
+      },
+    )
     const logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() }
     const deps = fakeDeps({
       issueWriteback: { postReviewQuestions } as never,
@@ -585,7 +595,7 @@ describe('ReviewGateController — headless question writeback', () => {
     })
     const ctrl = new ReviewGateController(deps)
     const k = fakeKind()
-    ;(k.kind as { questionsOnPark?: boolean }).questionsOnPark = true
+    ;(k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = 'requirements'
     k.set(review({ items: [OPEN_ITEM] as never }))
     const s = step()
     const inst = instance([s, step({ agentKind: 'architect' })], {
@@ -646,11 +656,21 @@ describe('ReviewGateController — headless question writeback', () => {
     expect(t.postReviewQuestions).not.toHaveBeenCalled()
   })
 
-  it('posts nothing for a kind that has not opted in (the clarity gate echoes its own)', async () => {
+  it('posts nothing for a kind with no subject (a brainstorm has no linked issue to ask on)', async () => {
     const t = headlessSetup()
-    ;(t.k.kind as { questionsOnPark?: boolean }).questionsOnPark = false
+    ;(t.k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = undefined
     await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
     expect(t.postReviewQuestions).not.toHaveBeenCalled()
+  })
+
+  it('echoes a CLARITY park for a UI-started run, where the requirements subject would not', async () => {
+    // The one place the two subjects differ on this side: bug triage asks the REPORTER for what
+    // they left out, which is intake semantics rather than a headless fallback.
+    const t = headlessSetup({ intakeOrigin: 'ui' })
+    ;(t.k.kind as { questionsOnPark?: ReviewQuestionSubject }).questionsOnPark = 'clarity'
+    await t.ctrl.evaluate(t.k.kind, 'ws', t.inst, t.s, BLOCK, false)
+    expect(t.postReviewQuestions).toHaveBeenCalledTimes(1)
+    expect(t.postReviewQuestions.mock.calls[0]![2]).toMatchObject({ subject: 'clarity' })
   })
 
   it('asks only what is still open after the auto-recommendation pass answered findings', async () => {

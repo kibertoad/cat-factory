@@ -105,6 +105,7 @@ import { publicApiKeyController } from './modules/publicApi/PublicApiKeyControll
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
@@ -120,7 +121,7 @@ import { notificationWebhookController } from './modules/notificationWebhook/Not
  */
 export function registerCoreControllers<E extends AppEnv>(app: Hono<E>): void {
   registerRootControllers(app)
-  registerWorkspaceControllers(app)
+  registerControllers(app, WORKSPACE_CONTROLLERS)
   registerWebhookControllers(app)
 }
 
@@ -223,6 +224,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
   // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
   app.route('/', publicNotificationWebhookController())
+  // DISCOVERY (`/api/v1/me`, `/api/v1/openapi.json`): what the calling key may do, and this
+  // deployment's own copy of the spec — the two reads an integration makes before anything else,
+  // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
+  app.route('/', publicDiscoveryController())
   // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
   // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
   // and the tools reach those routes back through this app's own loopback under the caller's key, so
@@ -260,9 +265,7 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // Local-mode mothership login (`/local/mothership/connect`): exchanges a mothership session
   // for a cached machine token; 503 unless the local facade wired the connector.
   app.route('/', mothershipConnectController())
-  app.route('/accounts/:accountId', fragmentLibraryController('account'))
-  app.route('/accounts/:accountId', skillLibraryController())
-  app.route('/accounts/:accountId', foundationalServiceController('account'))
+  registerControllers(app, ACCOUNT_CONTROLLERS)
   app.route('/', workspaceController())
   // Workspace-membership roster + access-mode management (workspace-rbac). Absolute
   // `/workspaces/:ws/members` + `/access-mode` paths (like the workspace root), so mounted at `/`;
@@ -274,100 +277,156 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   app.route('/', eventsController())
 }
 
-/**
- * The per-workspace API — every controller mounted under `/workspaces/:workspaceId`. Order is
- * significant (shared middleware/routing), so it mirrors the historical registration order.
- *
- * Split into two ordered halves — the board / run / human-gate surfaces, then the workspace
- * CONFIGURATION surfaces (policies, secrets, presets, integrations) — purely for the
- * per-function statement budget. They are called back-to-back, so the mount order is
- * byte-for-byte what it was when this was one function.
- */
-function registerWorkspaceControllers<E extends AppEnv>(app: Hono<E>): void {
-  registerWorkspaceRunControllers(app)
-  registerWorkspaceConfigControllers(app)
+/** The shared per-workspace mount prefix; every entry in {@link WORKSPACE_CONTROLLERS} hangs off it. */
+export const WORKSPACE_MOUNT = '/workspaces/:workspaceId'
+/** The shared per-account mount prefix. */
+export const ACCOUNT_MOUNT = '/accounts/:accountId'
+
+/** One controller and the shared prefix it mounts under. */
+interface ControllerEntry {
+  /** Short name, so a guard test can say WHICH controller broke an invariant. */
+  name: string
+  mount: typeof WORKSPACE_MOUNT | typeof ACCOUNT_MOUNT
+  build: () => Hono<AppEnv>
 }
 
 /**
- * The first half of the per-workspace API: the board, the run/execution surfaces, and every
- * human-gate window a parked run opens. Mounted before {@link registerWorkspaceConfigControllers}.
+ * The per-workspace API, in registration order.
+ *
+ * ORDER IS SIGNIFICANT, and this list is the only statement of it: Hono composes a request from
+ * every matching entry in the order they were registered, so a controller's middleware also runs
+ * for routes registered after it. That is not merely a routing detail. Until each permission gate
+ * was narrowed to its own controller's path prefixes, the admin `use('*')` mounts in here reached
+ * every sibling below them, and a plain member was refused the human-gate writes (the story is on
+ * `mountWorkspacePermission`; `http/permissionMounts.test.ts` drives this list to pin it).
+ *
+ * A list rather than a run of `app.route` calls so that the guard test judges exactly what the app
+ * mounts: a controller added here is covered by construction, where one added by hand beside the
+ * loop below would not be.
  */
-function registerWorkspaceRunControllers<E extends AppEnv>(app: Hono<E>): void {
-  // Per-workspace API.
-  app.route('/workspaces/:workspaceId', boardController())
-  app.route('/workspaces/:workspaceId', pipelineController())
-  app.route('/workspaces/:workspaceId', executionController())
-  app.route('/workspaces/:workspaceId', documentSourceController())
-  app.route('/workspaces/:workspaceId', taskSourceController())
-  app.route('/workspaces/:workspaceId', bugHuntController())
-  app.route('/workspaces/:workspaceId', environmentController())
-  app.route('/workspaces/:workspaceId', runnerPoolController())
-  app.route('/workspaces/:workspaceId', provisioningLogController())
-  app.route('/workspaces/:workspaceId', vendorCredentialController())
-  app.route('/workspaces/:workspaceId', workspaceApiKeyController())
-  app.route('/workspaces/:workspaceId', publicApiKeyController())
+export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
+  { name: 'board', mount: WORKSPACE_MOUNT, build: () => boardController() },
+  { name: 'pipeline', mount: WORKSPACE_MOUNT, build: () => pipelineController() },
+  { name: 'execution', mount: WORKSPACE_MOUNT, build: () => executionController() },
+  { name: 'documentSource', mount: WORKSPACE_MOUNT, build: () => documentSourceController() },
+  { name: 'taskSource', mount: WORKSPACE_MOUNT, build: () => taskSourceController() },
+  { name: 'bugHunt', mount: WORKSPACE_MOUNT, build: () => bugHuntController() },
+  { name: 'environment', mount: WORKSPACE_MOUNT, build: () => environmentController() },
+  { name: 'runnerPool', mount: WORKSPACE_MOUNT, build: () => runnerPoolController() },
+  { name: 'provisioningLog', mount: WORKSPACE_MOUNT, build: () => provisioningLogController() },
+  { name: 'vendorCredential', mount: WORKSPACE_MOUNT, build: () => vendorCredentialController() },
+  { name: 'workspaceApiKey', mount: WORKSPACE_MOUNT, build: () => workspaceApiKeyController() },
+  { name: 'publicApiKey', mount: WORKSPACE_MOUNT, build: () => publicApiKeyController() },
   // Outbound notification webhook: the endpoint a headless integration registers to be PUSHED the
   // workspace's notifications (chiefly a run parking on a human decision) instead of polling.
-  app.route('/workspaces/:workspaceId', notificationWebhookController())
-  app.route('/workspaces/:workspaceId', bootstrapController())
-  app.route('/workspaces/:workspaceId', agentRunController())
+  {
+    name: 'notificationWebhook',
+    mount: WORKSPACE_MOUNT,
+    build: () => notificationWebhookController(),
+  },
+  { name: 'bootstrap', mount: WORKSPACE_MOUNT, build: () => bootstrapController() },
+  { name: 'agentRun', mount: WORKSPACE_MOUNT, build: () => agentRunController() },
   // Binary-artifact API (screenshots + reference uploads) for the visual-confirmation
   // gate; 503 when no blob storage is configured.
-  app.route('/workspaces/:workspaceId', artifactController())
-  app.route('/workspaces/:workspaceId', requirementReviewController())
-  app.route('/workspaces/:workspaceId', docInterviewController())
-  app.route('/workspaces/:workspaceId', followUpController())
-  app.route('/workspaces/:workspaceId', forkDecisionController())
-  app.route('/workspaces/:workspaceId', inputGateController())
-  app.route('/workspaces/:workspaceId', judgeController())
-  app.route('/workspaces/:workspaceId', prReviewController())
-  app.route('/workspaces/:workspaceId', kaizenController())
-  app.route('/workspaces/:workspaceId', humanTestController())
-  app.route('/workspaces/:workspaceId', visualConfirmationController())
-  app.route('/workspaces/:workspaceId', humanReviewController())
-  app.route('/workspaces/:workspaceId', consensusController())
-  app.route('/workspaces/:workspaceId', consensusGroupController())
-  app.route('/workspaces/:workspaceId', clarityReviewController())
-  app.route('/workspaces/:workspaceId', brainstormController())
-  app.route('/workspaces/:workspaceId', initiativeController())
-  app.route('/workspaces/:workspaceId', notificationController())
-}
-
-/**
- * The second half of the per-workspace API: the workspace's CONFIGURATION surfaces — merge and
- * risk policy, shared infra, secrets, presets, and the per-provider integrations. Mounted
- * immediately after {@link registerWorkspaceRunControllers}, preserving the historical order.
- */
-function registerWorkspaceConfigControllers<E extends AppEnv>(app: Hono<E>): void {
-  app.route('/workspaces/:workspaceId', riskPolicyController())
-  app.route('/workspaces/:workspaceId', mergeTrackRecordController())
-  app.route('/workspaces/:workspaceId', sharedStackController())
-  app.route('/workspaces/:workspaceId', preflightController())
-  app.route('/workspaces/:workspaceId', sandboxController())
-  app.route('/workspaces/:workspaceId', workspaceSettingsController())
-  app.route('/workspaces/:workspaceId', releaseHealthController())
-  app.route('/workspaces/:workspaceId', testSecretsController())
-  app.route('/workspaces/:workspaceId', capabilityCredentialsController())
-  app.route('/workspaces/:workspaceId', toolServerController())
-  app.route('/workspaces/:workspaceId', validationConfigController())
-  app.route('/workspaces/:workspaceId', packageRegistriesController())
+  { name: 'artifact', mount: WORKSPACE_MOUNT, build: () => artifactController() },
+  { name: 'requirementReview', mount: WORKSPACE_MOUNT, build: () => requirementReviewController() },
+  { name: 'docInterview', mount: WORKSPACE_MOUNT, build: () => docInterviewController() },
+  { name: 'followUp', mount: WORKSPACE_MOUNT, build: () => followUpController() },
+  { name: 'forkDecision', mount: WORKSPACE_MOUNT, build: () => forkDecisionController() },
+  { name: 'inputGate', mount: WORKSPACE_MOUNT, build: () => inputGateController() },
+  { name: 'judge', mount: WORKSPACE_MOUNT, build: () => judgeController() },
+  { name: 'prReview', mount: WORKSPACE_MOUNT, build: () => prReviewController() },
+  { name: 'kaizen', mount: WORKSPACE_MOUNT, build: () => kaizenController() },
+  { name: 'humanTest', mount: WORKSPACE_MOUNT, build: () => humanTestController() },
+  {
+    name: 'visualConfirmation',
+    mount: WORKSPACE_MOUNT,
+    build: () => visualConfirmationController(),
+  },
+  { name: 'humanReview', mount: WORKSPACE_MOUNT, build: () => humanReviewController() },
+  { name: 'consensus', mount: WORKSPACE_MOUNT, build: () => consensusController() },
+  { name: 'consensusGroup', mount: WORKSPACE_MOUNT, build: () => consensusGroupController() },
+  { name: 'clarityReview', mount: WORKSPACE_MOUNT, build: () => clarityReviewController() },
+  { name: 'brainstorm', mount: WORKSPACE_MOUNT, build: () => brainstormController() },
+  { name: 'initiative', mount: WORKSPACE_MOUNT, build: () => initiativeController() },
+  { name: 'notification', mount: WORKSPACE_MOUNT, build: () => notificationController() },
+  // ---- the workspace CONFIGURATION surfaces (policies, secrets, presets, integrations) ----
+  { name: 'riskPolicy', mount: WORKSPACE_MOUNT, build: () => riskPolicyController() },
+  { name: 'mergeTrackRecord', mount: WORKSPACE_MOUNT, build: () => mergeTrackRecordController() },
+  { name: 'sharedStack', mount: WORKSPACE_MOUNT, build: () => sharedStackController() },
+  { name: 'preflight', mount: WORKSPACE_MOUNT, build: () => preflightController() },
+  { name: 'sandbox', mount: WORKSPACE_MOUNT, build: () => sandboxController() },
+  { name: 'workspaceSettings', mount: WORKSPACE_MOUNT, build: () => workspaceSettingsController() },
+  { name: 'releaseHealth', mount: WORKSPACE_MOUNT, build: () => releaseHealthController() },
+  { name: 'testSecrets', mount: WORKSPACE_MOUNT, build: () => testSecretsController() },
+  {
+    name: 'capabilityCredentials',
+    mount: WORKSPACE_MOUNT,
+    build: () => capabilityCredentialsController(),
+  },
+  { name: 'toolServer', mount: WORKSPACE_MOUNT, build: () => toolServerController() },
+  { name: 'validationConfig', mount: WORKSPACE_MOUNT, build: () => validationConfigController() },
+  { name: 'packageRegistries', mount: WORKSPACE_MOUNT, build: () => packageRegistriesController() },
   // Browsable frontend preview (local/node); 503 on the Worker (frontendPreview unsupported).
-  app.route('/workspaces/:workspaceId', previewController())
-  app.route('/workspaces/:workspaceId', incidentEnrichmentController())
-  app.route('/workspaces/:workspaceId', modelPresetController())
-  app.route('/workspaces/:workspaceId', agentPromptController())
-  app.route('/workspaces/:workspaceId', workspaceAgentSettingsController())
-  app.route('/workspaces/:workspaceId', serviceFragmentDefaultsController())
-  app.route('/workspaces/:workspaceId', recurringPipelineController())
-  app.route('/workspaces/:workspaceId', trackerSettingsController())
-  app.route('/workspaces/:workspaceId', serviceMountController())
-  app.route('/workspaces/:workspaceId', serviceSpecController())
-  app.route('/workspaces/:workspaceId', fragmentLibraryController('workspace'))
-  app.route('/workspaces/:workspaceId', foundationalServiceController('workspace'))
-  app.route('/workspaces/:workspaceId', githubController())
-  app.route('/workspaces/:workspaceId', gitlabController())
-  app.route('/workspaces/:workspaceId', vcsConnectController())
-  app.route('/workspaces/:workspaceId', slackController())
+  { name: 'preview', mount: WORKSPACE_MOUNT, build: () => previewController() },
+  {
+    name: 'incidentEnrichment',
+    mount: WORKSPACE_MOUNT,
+    build: () => incidentEnrichmentController(),
+  },
+  { name: 'modelPreset', mount: WORKSPACE_MOUNT, build: () => modelPresetController() },
+  { name: 'agentPrompt', mount: WORKSPACE_MOUNT, build: () => agentPromptController() },
+  {
+    name: 'workspaceAgentSettings',
+    mount: WORKSPACE_MOUNT,
+    build: () => workspaceAgentSettingsController(),
+  },
+  {
+    name: 'serviceFragmentDefaults',
+    mount: WORKSPACE_MOUNT,
+    build: () => serviceFragmentDefaultsController(),
+  },
+  { name: 'recurringPipeline', mount: WORKSPACE_MOUNT, build: () => recurringPipelineController() },
+  { name: 'trackerSettings', mount: WORKSPACE_MOUNT, build: () => trackerSettingsController() },
+  { name: 'serviceMount', mount: WORKSPACE_MOUNT, build: () => serviceMountController() },
+  { name: 'serviceSpec', mount: WORKSPACE_MOUNT, build: () => serviceSpecController() },
+  {
+    name: 'fragmentLibrary',
+    mount: WORKSPACE_MOUNT,
+    build: () => fragmentLibraryController('workspace'),
+  },
+  {
+    name: 'foundationalService',
+    mount: WORKSPACE_MOUNT,
+    build: () => foundationalServiceController('workspace'),
+  },
+  { name: 'github', mount: WORKSPACE_MOUNT, build: () => githubController() },
+  { name: 'gitlab', mount: WORKSPACE_MOUNT, build: () => gitlabController() },
+  { name: 'vcsConnect', mount: WORKSPACE_MOUNT, build: () => vcsConnectController() },
+  { name: 'slack', mount: WORKSPACE_MOUNT, build: () => slackController() },
+]
+
+/** The per-account API, in registration order (the account tiers of the two library surfaces). */
+export const ACCOUNT_CONTROLLERS: readonly ControllerEntry[] = [
+  {
+    name: 'fragmentLibrary',
+    mount: ACCOUNT_MOUNT,
+    build: () => fragmentLibraryController('account'),
+  },
+  { name: 'skillLibrary', mount: ACCOUNT_MOUNT, build: () => skillLibraryController() },
+  {
+    name: 'foundationalService',
+    mount: ACCOUNT_MOUNT,
+    build: () => foundationalServiceController('account'),
+  },
+]
+
+/** Mount every controller in `entries` on its own shared prefix, preserving list order. */
+function registerControllers<E extends AppEnv>(
+  app: Hono<E>,
+  entries: readonly ControllerEntry[],
+): void {
+  for (const entry of entries) app.route(entry.mount, entry.build())
 }
 
 /**

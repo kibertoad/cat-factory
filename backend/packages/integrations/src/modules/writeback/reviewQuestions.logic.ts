@@ -1,5 +1,9 @@
+import {
+  replyPublicRunClarityFindingContract,
+  replyPublicRunFindingContract,
+} from '@cat-factory/contracts'
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
-import type { ReviewQuestionPost, TaskRecord } from '@cat-factory/kernel'
+import type { ReviewQuestionPost, ReviewQuestionSubject, TaskRecord } from '@cat-factory/kernel'
 // The marker every platform-authored tracker comment opens with. Shared with the reply renderer
 // (and the ingest guard that keys off it) so the two can never emit different prefixes — a comment
 // this side stopped marking is a comment the reply path would start ingesting as a human's.
@@ -66,30 +70,93 @@ function safeProse(value: string, max: number): string {
 }
 
 /**
- * Render a parked headless requirements review's open findings as a tracker comment.
+ * Per-subject copy: what the run stopped to establish, and which decision route answers it.
  *
- * Two properties are load-bearing:
+ * A `Record` over the closed {@link ReviewQuestionSubject} union rather than a branch, so adding a
+ * subject cannot ship with the requirements loop's wording (and, worse, the requirements loop's
+ * route) on a comment about something else.
  *
- * - **Every finding is rendered with its stable id.** That id is what a caller passes to
- *   `POST /api/v1/runs/:runId/decisions/requirements/items/:itemId/reply`, and (slice 2b) what
- *   a ticket reply names. A comment without ids is unanswerable, so the id leads each entry.
- *   Ids are platform-minted, so they are the ONE thing here rendered verbatim.
- * - **The comment states where answers go.** A headless run has no human in the app by
- *   definition; a question with no reply channel is worse than no question.
+ * Both members are FUNCTIONS, and both for the same reason: a string with holes in it is a
+ * contract nothing checks. `opening` was a `{n}`/`{s}`/`{i}`/`{max}` mini-template filled by
+ * sequential `.replace()`, so a mistyped placeholder shipped a literal `{n}` to a bug reporter
+ * with nothing failing; as a function the arity is a typecheck. And `replyPath` delegates to the
+ * ROUTE CONTRACT's own `pathResolver` rather than restating the path, because the hand-written
+ * copy said `…/items/<id>/reply` where the surface serves `…/findings/:itemId/reply` — a 404
+ * printed on a reporter's ticket, pinned by a test that had copied the same mistake. Deriving it
+ * from the one source the server routes off means the two cannot disagree again.
+ */
+const SUBJECT_COPY: Record<
+  ReviewQuestionSubject,
+  {
+    opening: (findings: number, iteration: number, maxIterations: number) => string
+    replyPath: (runId: string, itemId: string) => string
+  }
+> = {
+  requirements: {
+    opening: (n, i, max) =>
+      `cat-factory paused this work to get its requirements straight. It raised ${n} ` +
+      `open question${n === 1 ? '' : 's'} (review pass ${i} of ${max}) and the run is waiting ` +
+      'for answers before any code is written.',
+    replyPath: (runId, itemId) => replyPublicRunFindingContract.pathResolver({ runId, itemId }),
+  },
+  clarity: {
+    opening: (n, i, max) =>
+      `cat-factory cannot confidently fix this bug from the report as written. It raised ${n} ` +
+      `open question${n === 1 ? '' : 's'} (triage pass ${i} of ${max}) and the run is waiting ` +
+      'for answers.',
+    replyPath: (runId, itemId) =>
+      replyPublicRunClarityFindingContract.pathResolver({ runId, itemId }),
+  },
+}
+
+/** The `<id>` stand-in rendered into the API path, since one comment covers every finding. */
+const ID_PLACEHOLDER = '<id>'
+
+/** What a reader of this comment can actually answer through. */
+export interface ReviewQuestionChannels {
+  /**
+   * Whether a reply typed on THIS ticket reaches the run.
+   *
+   * Load-bearing, and REQUIRED rather than defaulted, because it decides which channel the copy
+   * puts first and a wrong default is invisible: the inbound path needs a minted per-connection
+   * webhook secret, so a workspace on pull-based intake has none, and telling that reporter to
+   * reply on the ticket is the "question with no reply channel" this renderer's own contract
+   * calls worse than no question. A caller that has not established the fact must say `false`.
+   */
+  ticketReplies: boolean
+}
+
+/**
+ * Render a parked review's open findings as a tracker comment.
+ *
+ * Three properties are load-bearing:
+ *
+ * - **Every finding is rendered with its stable id.** That id is what a caller passes to the
+ *   subject's reply route, and what a ticket reply names. A comment without ids is unanswerable,
+ *   so the id leads each entry. Ids are platform-minted, so they are the ONE thing here rendered
+ *   verbatim.
+ * - **It offers only channels that WORK.** Where a ticket reply reaches the run, the grammar comes
+ *   first: the reporter is reading this in their tracker, and telling them only about an HTTP
+ *   route asks the one person who came through the ticket to leave it. Where it does not
+ *   ({@link ReviewQuestionChannels}), the grammar is OMITTED rather than printed as advice that
+ *   silently does nothing, and the API line carries the whole answer path on its own.
+ * - **The wording matches the SUBJECT.** A bug reporter asked to "get the requirements straight"
+ *   reasonably concludes the comment landed on the wrong ticket.
  *
  * Markdown is the common denominator: GitHub renders it natively, and the Jira/Linear paths
  * convert it (Jira via the ADF payload builder, Linear natively) exactly as they already do
  * for the PR-open/PR-merge comments.
  */
-export function renderReviewQuestionsComment(post: ReviewQuestionPost): string {
+export function renderReviewQuestionsComment(
+  post: ReviewQuestionPost,
+  channels: ReviewQuestionChannels,
+): string {
+  const copy = SUBJECT_COPY[post.subject]
   const shown = post.findings.slice(0, MAX_FINDINGS)
   const omitted = post.findings.length - shown.length
   const lines = [
     PLATFORM_COMMENT_MARKER +
-      'cat-factory paused this work to get its requirements straight. It raised ' +
-      `${post.findings.length} open question${post.findings.length === 1 ? '' : 's'} ` +
-      `(review pass ${post.iteration} of ${post.maxIterations}) and the run is waiting for ` +
-      'answers before any code is written.',
+      copy.opening(post.findings.length, post.iteration, post.maxIterations),
     '',
   ]
   for (const finding of shown) {
@@ -107,10 +174,15 @@ export function renderReviewQuestionsComment(post: ReviewQuestionPost): string {
       '',
     )
   }
+  const apiPath = `\`POST ${copy.replyPath(post.runId, ID_PLACEHOLDER)}\``
   lines.push(
-    'Answer each question by its id through the platform API — ' +
-      `\`POST /api/v1/runs/${post.runId}/decisions/requirements/items/<id>/reply\` — or dismiss ` +
-      'the ones that do not apply. The run resumes as soon as none are left open.',
+    channels.ticketReplies
+      ? 'Answer here by replying with `@cat-factory answer <id> <your answer>` on its own line ' +
+          'for each (or `@cat-factory dismiss <id>` for the ones that do not apply). The same ' +
+          `answers go through the platform API at ${apiPath}. The run resumes as soon as none ` +
+          'are left open.'
+      : `Answer each question by its id through the platform API — ${apiPath} — or dismiss the ` +
+          'ones that do not apply. The run resumes as soon as none are left open.',
   )
   return capComment(lines.join('\n'))
 }

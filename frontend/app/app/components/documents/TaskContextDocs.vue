@@ -54,8 +54,16 @@ const chosenKeys = computed(() =>
 const connected = computed(() => documents.available && documents.anyConnected)
 // Sources the user could connect right now to unlock the picker, when none is
 // connected yet (GitHub docs are implicitly connected via the App, so never here).
+//
+// Empty for anyone without `integrations.manage`, because connecting stores a workspace
+// credential and stays admin-tier while ATTACHING moved to the member tier. Offering the
+// action to a member was a dead end: the connect modal opened, took a token, and 403'd.
+// Attaching is unaffected, which is the point of the split.
+const { canManageIntegrations } = useWorkspaceAccess()
 const connectableSources = computed(() =>
-  documents.available ? documents.sources.filter((s) => !documents.isConnected(s.source)) : [],
+  documents.available && canManageIntegrations.value
+    ? documents.sources.filter((s) => !documents.isConnected(s.source))
+    : [],
 )
 const connectMenu = computed<DropdownMenuItem[][]>(() => [
   connectableSources.value.map((s) => ({

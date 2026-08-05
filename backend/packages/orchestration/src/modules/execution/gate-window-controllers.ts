@@ -237,12 +237,9 @@ export interface ReviewSubjectDeps {
   requirementReviewService: ExecutionServiceDependencies['requirementReviewService']
   clarityReviewService: ExecutionServiceDependencies['clarityReviewService']
   brainstormServices: ExecutionServiceDependencies['brainstormServices']
-  issueWriteback: ExecutionServiceDependencies['issueWriteback']
   initiativeService: ExecutionServiceDependencies['initiativeService']
   initiativeInterviewService: ExecutionServiceDependencies['initiativeInterviewService']
   docInterviewService: ExecutionServiceDependencies['docInterviewService']
-  /** Facade logger for the clarity subject's best-effort question echo. */
-  logger: ExecutionServiceDependencies['logger']
 }
 
 /**
@@ -262,11 +259,9 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     requirementReviewService,
     clarityReviewService,
     brainstormServices,
-    issueWriteback,
     initiativeService,
     initiativeInterviewService,
     docInterviewService,
-    logger,
   } = deps
   // The review-gate subjects (requirements / clarity / the two brainstorm stages), built by
   // the factories in review-kinds.ts over one shared closure of collaborators — each subject's
@@ -278,8 +273,6 @@ export function buildReviewSubjects(deps: ReviewSubjectDeps) {
     requirementReviewService,
     clarityReviewService,
     brainstormServices,
-    issueWriteback,
-    logger,
   }
   const requirementsKind = buildRequirementsKind(reviewKindDeps)
   const clarityKind = buildClarityKind(reviewKindDeps)

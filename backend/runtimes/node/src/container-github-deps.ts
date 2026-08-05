@@ -636,6 +636,11 @@ function buildNodeIssueWriteback(args: {
             const { apiKey, token } = connection?.credentials ?? {}
             return apiKey || token ? { apiKey, token } : null
           },
+          // The same store, read for the ONE fact the parked-review question comment needs before
+          // it tells a reporter to answer on the ticket: whether an inbound webhook secret was ever
+          // minted for that connection. Without it the reply path fails closed, so the copy offers
+          // the API route alone. Mirrored in the Worker's `selectRecurringDeps`.
+          taskConnectionRepository,
         }
       : {}),
   })

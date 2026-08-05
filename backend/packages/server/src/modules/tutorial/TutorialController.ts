@@ -41,7 +41,7 @@ export function tutorialController(): Hono<AppEnv> {
 
   // Sign-in is checked BEFORE the capability on every route here: the 503 names what this
   // deployment has not wired, and an anonymous caller has no business learning that. Same ordering
-  // the RBAC permission gate uses for the same reason (`requireWorkspacePermission` runs ahead of a
+  // the RBAC permission gate uses for the same reason (`mountWorkspacePermission` runs ahead of a
   // controller's own 503), which is why these read auth-first rather than following the
   // capability-first shape of the older per-user controllers beside them.
   buildHonoRoute(app, getTutorialProgressContract, async (c) => {

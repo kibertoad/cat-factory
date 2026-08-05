@@ -53,6 +53,13 @@ export interface PublicApiKeyAuth {
    * route on it.
    */
   scope: PublicApiScope
+  /**
+   * The label the key was minted with, and when. Carried on the auth result rather than re-read
+   * because `authenticate` already has the row in hand: `GET /api/v1/me` answers from this, so
+   * self-description costs the request nothing beyond the lookup it was already doing.
+   */
+  label: string
+  createdAt: number
 }
 
 /**
@@ -180,6 +187,8 @@ export class PublicApiKeyService {
       accountId: record.accountId,
       workspaceId: record.workspaceId,
       scope: record.scope,
+      label: record.label,
+      createdAt: record.createdAt,
     }
   }
 

@@ -20,6 +20,26 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CONTRACTS_DIST = resolve(repoRoot, 'backend/packages/contracts/dist/index.js')
 export const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
 
+/**
+ * The SERVED copy of the same document: `GET /api/v1/openapi.json` hands these bytes back.
+ *
+ * A generated TS module rather than a runtime read of `docs/openapi.json`, because neither
+ * facade can reach that path — the Worker is a bundle with no filesystem, and the published
+ * `@cat-factory/server` ships `dist` alone. It holds the spec as ONE string constant rather than
+ * an object literal for two reasons: the endpoint answers with bytes, so there is nothing to
+ * re-serialise (and therefore no way for the served document to differ from the committed one),
+ * and a 360 KB object literal would cost every `tsc` run its structural check for no gain.
+ *
+ * Both outputs come from one `buildOpenApiDoc()` call and `check:openapi` diffs both, so they
+ * cannot drift from the contracts or from each other. The `.generated.ts` suffix is load-bearing:
+ * it is what `.oxfmtrc.json` and `.oxlintrc.json` already exempt, and a formatter reflowing this
+ * file would put it permanently at odds with its own drift guard.
+ */
+export const SERVED_OPENAPI_PATH = resolve(
+  repoRoot,
+  'backend/packages/server/src/modules/publicApi/openapiDocument.generated.ts',
+)
+
 const API_PREFIX = '/api/v1'
 
 // The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm
@@ -48,18 +68,28 @@ const API_PREFIX = '/api/v1'
 // written against 1.12.0, moved to 1.13.0 when the validation field took that, and again once the
 // debug surface took 1.13.0. Every one of those was found by re-reading this line after a merge,
 // which is the only thing that catches it.
-// 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by `?outcome=ok|error`, the
-// same param name and vocabulary the llm-call list already uses. This is a MINOR for a change
-// that is technically breaking, taken deliberately: `?ok=` existed for one release, has no known
-// consumer, and the two drill-downs answering the same question under two spellings is the wart
-// the change exists to remove. A picklist also lets the set gain a member (a timeout, a refusal)
-// where `true|false` could only be retyped. If an adopter turns up before this lands, the honest
-// shape is `?ok=` served beside `?outcome=` for a release, not a rename.
+// 1.15.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
+// written against a main that was still on 1.11.0. Four numbers have gone past this branch while
+// it was in flight (`configUnreadable`, the run-debugging surface, the judge model pin, and the
+// release that published them), so it takes the next free one. Nothing about that is unusual any
+// more, which is the point of the note at the top of this block: on a repo landing this many
+// additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
+// someone else already published. Re-read it against `origin/main` every time.
+// 1.17.0, not 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by
+// `?outcome=ok|error`, the same param name and vocabulary the llm-call list already uses. This is
+// a MINOR for a change that is technically breaking, taken deliberately: `?ok=` existed for one
+// release, has no known consumer, and the two drill-downs answering the same question under two
+// spellings is the wart the change exists to remove. A picklist also lets the set gain a member (a
+// timeout, a refusal) where `true|false` could only be retyped. If an adopter turns up before this
+// lands, the honest shape is `?ok=` served beside `?outcome=` for a release, not a rename.
 //
-// 1.15.0 and not 1.14.0 because the judge model pin took that while this was in flight. Two
-// sibling branches are also holding 1.15.0 right now, so the last of the three to land re-reads
-// this line rather than trusting its clean merge.
-const API_VERSION = '1.15.0'
+// The number SKIPS 1.16.0 rather than taking the next free one above main, which is the usual
+// rule here. 1.16.0 is held by the multi-repo verification-report branch, which took it in the
+// same merge sweep as this one; both branches sitting on 1.16.0 would auto-merge the VERSION line
+// byte-identically and conflict only in this comment, the exact silent failure the note at the top
+// describes. A gap costs nothing (nothing reads these numbers as contiguous) and a collision costs
+// a surface shipped under a version someone else published. Re-read against `origin/main` anyway.
+const API_VERSION = '1.17.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -119,6 +149,7 @@ const COMPONENT_SCHEMAS = {
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
+  PublicIdentity: 'publicIdentitySchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
   // members of its variant) keeps the spec from inlining tens of KB per operation.
@@ -138,6 +169,7 @@ const COMPONENT_SCHEMAS = {
   PublicFollowUpsDecision: 'publicFollowUpsDecisionSchema',
   PublicInterviewQuestion: 'publicInterviewQuestionSchema',
   PublicInterviewDecision: 'publicInterviewDecisionSchema',
+  PublicUnanswerableWait: 'publicUnanswerableWaitSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -328,6 +360,12 @@ const OPERATION_DOCS = {
     summary: "Read the workspace's usage for the current period",
     description:
       'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
+  },
+  getPublicIdentity: {
+    tag: 'Identity',
+    summary: 'Describe the calling key',
+    description:
+      'Report what the key on this request is and what it may do: its id, its account, the ONE workspace every call under it acts within, its scope, and the label it was minted with. `read` scope, the floor of the ladder, because an integration\u2019s startup self-check has to work whatever rung it holds. The scope ladder is INCLUSIVE (`read` \u2282 `write` \u2282 `decide` \u2282 `admin`), so compare against the rung an action needs rather than for equality.',
   },
   cancelPublicJob: {
     tag: 'Jobs',
@@ -676,6 +714,8 @@ const TAG_DESCRIPTIONS = {
   Evidence:
     'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
   Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',
+  Identity:
+    'What the calling key is and what it may do — the self-check an integration runs at startup, so “can I do this?” does not have to be answered by attempting it and reading the 403. `read` scope.',
   Debug:
     'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
@@ -992,10 +1032,30 @@ export function serializeOpenApiDoc(doc) {
   return `${JSON.stringify(doc, null, 2)}\n`
 }
 
+/**
+ * The served copy, as a TS module. The spec rides in a JSON string literal so the endpoint can
+ * answer with the bytes verbatim; `JSON.stringify` of the serialized text is what escapes it.
+ */
+export function serializeServedOpenApiDoc(doc) {
+  return [
+    '// GENERATED by `pnpm gen:openapi` — do not edit. Change the route contracts instead.',
+    '//',
+    '// The `/api/v1` OpenAPI document, byte-identical to the committed `docs/openapi.json`, so',
+    '// `GET /api/v1/openapi.json` can hand it back on a facade with no filesystem. A single string',
+    '// rather than an object: the endpoint serves bytes, so nothing re-serialises it, and a 360 KB',
+    '// object literal would cost every typecheck its structural check for nothing.',
+    '',
+    `export const OPENAPI_JSON = ${JSON.stringify(serializeOpenApiDoc(doc))}`,
+    '',
+  ].join('\n')
+}
+
 async function main() {
   const doc = await buildOpenApiDoc()
   await writeFile(OPENAPI_PATH, serializeOpenApiDoc(doc), 'utf8')
   console.log(`Wrote ${OPENAPI_PATH}`)
+  await writeFile(SERVED_OPENAPI_PATH, serializeServedOpenApiDoc(doc), 'utf8')
+  console.log(`Wrote ${SERVED_OPENAPI_PATH}`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

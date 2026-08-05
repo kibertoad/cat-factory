@@ -13,7 +13,7 @@ import { detectValidationChecksFromRepo } from '@cat-factory/integrations'
 import type { ValidationConfigService } from '@cat-factory/integrations'
 import { describeError } from '@cat-factory/kernel'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -34,7 +34,10 @@ function requireValidationConfig<E extends AppEnv>(c: Context<E>): ValidationCon
  */
 export function validationConfigController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('settings.manage'))
+  mountWorkspacePermission(app, 'settings.manage', [
+    '/validation-checks',
+    '/services/:blockId/validation-checks',
+  ])
 
   buildHonoRoute(app, listServiceValidationConfigsContract, async (c) => {
     const svc = requireValidationConfig(c)

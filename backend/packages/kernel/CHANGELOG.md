@@ -1,5 +1,61 @@
 # @cat-factory/kernel
 
+## 0.247.0
+
+### Minor Changes
+
+- 53cd697: Close three holes in `/api/v1` around a run that stops.
+
+  - **A bug-triage question is now answerable from the ticket it was asked on.** The clarity gate's
+    park echo rendered its findings as bare prose, so the ticket-comment reply grammar (which
+    addresses a finding by id) could never reach it. Both review subjects now ride one id-carrying
+    post path, and a comment naming a clarity finding drives the clarity review through the same
+    service methods the app calls.
+  - **`decisions: []` no longer means "we cannot say".** The decision list carries `unanswerable[]`,
+    naming each wait this surface cannot answer — a human-review gate, a gate the deployment
+    registered itself, an interviewer wired nowhere — with where its answer actually lives. It lists
+    only waits that are live and genuinely beyond this surface: a finished run names nothing, and a
+    wait the same response answers (a deployment gate that exhausted onto an ordinary approval) is
+    never reported as one nobody here can answer.
+  - **`GET /api/v1/me`** reports what the calling key may do, and **`GET /api/v1/openapi.json`**
+    serves the deployment's own spec.
+
+  Internal break: `IssueWritebackProvider.postQuestions` is gone (folded into `postReviewQuestions`,
+  which now takes a subject), and `TrackerWebhookService` takes `reviewGateways` per subject in place
+  of the single `reviewGateway`.
+
+### Patch Changes
+
+- Updated dependencies [53cd697]
+  - @cat-factory/contracts@0.249.0
+
+## 0.246.0
+
+### Minor Changes
+
+- 6d3f784: Local mode takes its source-control token from the sign-in screen
+
+  A local deployment with no `GITHUB_PAT` / `GITLAB_PAT` used to send a developer to the right
+  token page and then have nowhere to put the result: the token had to go into `.env`, followed by
+  a restart. The sign-in screen now accepts it directly, and it becomes the deployment's own
+  credential (sealed on the machine under `ENCRYPTION_KEY`), live for the next dispatch, gate probe
+  and repo read. `.env` still wins where it is set, and closes the browser flow.
+
+  `@cat-factory/server` additionally exports `githubRepoOrigin`, the clone origin a dispatch already
+  fell back to, so a facade whose own resolver handles only the non-GitHub case can delegate the
+  GitHub half instead of restating the URL.
+
+  Internal breaks in the affected packages: `VcsIdentityEntry.configuredToken` and
+  `CoreDependencies.sharedStackCloneToken` are now getters, `buildGitLabEngineClient` takes a token
+  or a getter, and the local facade's `createLocalGitHubClient` / `createLocalGitLabClient` take a
+  token getter and always return a client (an unconfigured deployment REFUSES on use, naming the
+  fix, rather than presenting no client at all).
+
+### Patch Changes
+
+- Updated dependencies [6d3f784]
+  - @cat-factory/contracts@0.248.0
+
 ## 0.245.0
 
 ### Minor Changes

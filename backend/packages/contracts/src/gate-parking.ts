@@ -36,3 +36,24 @@ export const HUMAN_WAIT_GATE_KINDS: ReadonlySet<string> = new Set<string>([
   // infinite attempt budget, and a notification (not a timeout) as the nudge.
   'human-review',
 ])
+
+/**
+ * Every gate kind the platform itself ships, human-wait and bounded alike.
+ *
+ * What it is FOR is the negative: a gate step whose kind is NOT in here was registered by the
+ * DEPLOYMENT through the public `GateRegistry` seam, and the note above is why nothing outside
+ * `@cat-factory/gates` can then say whether it ever ends on its own. That is a fact worth
+ * REPORTING rather than one to silently assume either way — a run sitting on such a gate with an
+ * empty public decision list is either mid-probe or waiting on a person forever, and only the
+ * deployment that registered it knows which.
+ *
+ * Pinned by the same drift guard as {@link HUMAN_WAIT_GATE_KINDS}, derived from the built-in
+ * registry, so a new built-in cannot ship without landing here.
+ */
+export const BUILTIN_GATE_KINDS: ReadonlySet<string> = new Set<string>([
+  'ci',
+  'conflicts',
+  'post-release-health',
+  'human-review',
+  'doc-quality',
+])

@@ -14,7 +14,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability, requireUser } from '../../http/guards.js'
 
@@ -57,7 +57,7 @@ export function apiKeyToWire(summary: ApiKeySummary): ApiKey {
 /** Workspace-scoped API-key routes, mounted under `/workspaces/:workspaceId`. */
 export function workspaceApiKeyController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('secrets.manage'))
+  mountWorkspacePermission(app, 'secrets.manage', ['/api-keys'])
 
   buildHonoRoute(app, listWorkspaceApiKeysContract, async (c) => {
     const apiKeys = requireApiKeys(c)

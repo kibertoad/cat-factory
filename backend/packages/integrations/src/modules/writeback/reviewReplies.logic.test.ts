@@ -149,6 +149,7 @@ describe('isPlatformAuthoredComment', () => {
   // cannot stop it) is a far worse failure than the duplicate it would look like.
   it('recognises BOTH platform-authored comment renderers', () => {
     const ack = renderReviewReplyAck({
+      subject: 'requirements',
       reviewId: 'rrv_1',
       runId: 'run_1',
       outcome: 'awaiting',
@@ -159,15 +160,19 @@ describe('isPlatformAuthoredComment', () => {
     })
     expect(isPlatformAuthoredComment(ack)).toBe(true)
 
-    const questions = renderReviewQuestionsComment({
-      workspaceId: 'ws1',
-      reviewId: 'rrv_1',
-      iteration: 1,
-      maxIterations: 3,
-      issueRef: 'jira:ENG-1',
-      runId: 'run_1',
-      findings: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
-    } as never)
+    const questions = renderReviewQuestionsComment(
+      {
+        workspaceId: 'ws1',
+        subject: 'requirements',
+        reviewId: 'rrv_1',
+        iteration: 1,
+        maxIterations: 3,
+        issueRef: 'jira:ENG-1',
+        runId: 'run_1',
+        findings: [{ id: 'rri_2', title: 'Which region?', detail: 'd' }],
+      } as never,
+      { ticketReplies: true },
+    )
     expect(isPlatformAuthoredComment(questions)).toBe(true)
   })
 
@@ -215,6 +220,7 @@ describe('isAllowedReplyAuthor', () => {
 
 describe('renderReviewReplyAck', () => {
   const base: ReviewReplyAck = {
+    subject: 'requirements',
     reviewId: 'rrv_1',
     runId: 'run_1',
     outcome: 'awaiting',

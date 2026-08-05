@@ -7,7 +7,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { WorkspaceSettingsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -23,7 +23,7 @@ function requireSettings<E extends AppEnv>(c: Context<E>): WorkspaceSettingsModu
  */
 export function workspaceSettingsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('settings.manage'))
+  mountWorkspacePermission(app, 'settings.manage', ['/settings'])
 
   buildHonoRoute(app, getWorkspaceSettingsContract, async (c) => {
     const settings = requireSettings(c)

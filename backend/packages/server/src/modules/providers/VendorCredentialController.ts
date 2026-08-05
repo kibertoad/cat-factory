@@ -10,7 +10,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -46,7 +46,7 @@ function requireSubscriptions<E extends AppEnv>(c: Context<E>) {
 
 export function vendorCredentialController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('secrets.manage'))
+  mountWorkspacePermission(app, 'secrets.manage', ['/vendor-credentials'])
 
   buildHonoRoute(app, listVendorCredentialsContract, async (c) => {
     const subscriptions = requireSubscriptions(c)
