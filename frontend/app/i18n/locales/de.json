@@ -1533,6 +1533,12 @@
       "inherited": "vom Service geerbt",
       "frozen": "Eingefroren: der Agent hat gestartet"
     },
+    "taskTypeFields": {
+      "title": "Aufgabentyp-Felder",
+      "hint": "Die Antworten, die dieser Aufgabentyp benötigt. Fehlt eine Pflichtangabe, wird ein Lauf vor dem Start angehalten.",
+      "save": "Speichern",
+      "revert": "Zurücksetzen"
+    },
     "dependencies": {
       "title": "Hängt ab von",
       "hint": "Aufgaben, die gemergt sein müssen, bevor diese laufen kann. Das Run-Steuerelement bleibt gesperrt, bis jede Abhängigkeit erledigt ist.",
@@ -5560,6 +5566,11 @@
       "success_criteria_missing": {
         "title": "Keine Erfolgskriterien",
         "hint": "Nenne die Frage, die der Spike beantwortet, oder wie ein gutes Ergebnis aussieht, damit die Zeitbox ein Ziel hat."
+      },
+      "required_field_missing": {
+        "title": "Fehlt: {field}",
+        "hint": "Dieser Aufgabentyp verlangt „{field}“, die Aufgabe beantwortet es aber nicht. Trage es an der Aufgabe nach und prüfe erneut.",
+        "unnamedField": "ein Pflichtfeld"
       },
       "unknown": {
         "title": "Unbekannter Befund",

@@ -94,6 +94,15 @@ one, echoes it on the response, puts it in **every error envelope**, and binds
 controller with `requestLogger(c)`; it falls back to the process-wide one when the middleware
 isn't mounted, so no call site branches.
 
+It also **adopts an inbound W3C `traceparent`** when the caller sent one, binding `traceId` and
+`spanId` alongside. That is what lets a caller already collecting a distributed trace (an SDK
+client, a gateway, a sibling service) see this deployment's lines inside their own trace rather
+than beside it. The header is untrusted, so `parseTraceparent` (kernel) admits only the exact
+fixed-width hex grammar and refuses the spec's all-zero sentinels; malformed means IGNORED, never
+a refused request. Where the OTLP log exporter is wired, a line naming a RUN still takes that
+run's derived trace id: see the exporter's README for why that precedence is the load-bearing
+half.
+
 One line per request: `info` on success, `warn` on a 4xx (with the `errorCode` `handleError`
 mapped, when the refusal came through a thrown `DomainError`), `error` on a 5xx. `/health` and
 `/ready` drop to `debug` when they succeed: an orchestrator probes them every few seconds, and a

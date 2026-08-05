@@ -11,6 +11,7 @@ import type {
   OperationalGauge,
   OperationalGaugeSample,
 } from '@cat-factory/kernel'
+import { SPAN_ID_FIELD, TRACE_ID_FIELD } from '@cat-factory/kernel'
 import type { PlatformObservability } from '@cat-factory/contracts'
 
 // The SINGLE source of truth for how a cat-factory observability event becomes
@@ -976,6 +977,18 @@ export interface MappedLogRecord {
    */
   traceId?: string
   /**
+   * The span this line belongs BESIDE, present only alongside {@link traceId} and only when the
+   * trace was ADOPTED from an inbound `traceparent`: it is the caller's own span id.
+   *
+   * A run-derived trace never sets it: that trace's spans are emitted by this package, and
+   * pointing a line at one of them would mean picking which (the run root? the step? the
+   * generation that happened to be open?), a question the line has no way to answer. Attaching
+   * to the trace and letting the backend place it is the honest shape there. An adopted trace
+   * is the opposite case: the caller's span is exactly and unambiguously the one the request
+   * ran under.
+   */
+  spanId?: string
+  /**
    * W3C trace flags for {@link traceId}, present only alongside it. Always SAMPLED, because
    * this pipeline has no sampler: a line that reached the exporter is a line the deployment
    * chose to export. Spans carry no `flags` and need none (a span's presence in the batch
@@ -1018,6 +1031,37 @@ export function mapLogRecord(record: LogRecord): MappedLogRecord {
     severityText: LOG_SEVERITY_TEXT[record.level],
     body: cap(record.msg),
     attributes: logAttributes(record.fields),
-    ...(runTraceId ? { traceId: runTraceId, traceFlags: TRACE_FLAG_SAMPLED } : {}),
+    ...traceContextOf(runTraceId, record.fields),
+  }
+}
+
+/**
+ * Which trace a line belongs to, given its run (if any) and the context the HTTP boundary
+ * adopted from an inbound `traceparent` (if any).
+ *
+ * **The run WINS when a line has both**, and the precedence is the load-bearing part. A run's
+ * derived trace id is what joins its lines to the spans this package emits for it, and that
+ * join is structural: nothing else asserts it, so re-pointing a run's lines at a caller's trace
+ * would leave the run's own spans in a trace with no logs and the logs in a trace with no
+ * spans. The adopted context fills in for everything else, which is most of what an API request
+ * emits and exactly what the caller asked to see.
+ *
+ * A line reaching here with both is not a conflict to resolve so much as two true statements at
+ * different scopes: the caller's trace covers the REQUEST, the derived one covers the RUN the
+ * request touched, and the run is the narrower, more useful answer. The `executionId` stays an
+ * attribute either way, so the other half is never lost.
+ */
+function traceContextOf(
+  runTraceId: string | null,
+  fields: Record<string, unknown>,
+): Pick<MappedLogRecord, 'traceId' | 'spanId' | 'traceFlags'> {
+  if (runTraceId) return { traceId: runTraceId, traceFlags: TRACE_FLAG_SAMPLED }
+  const traceId = fields[TRACE_ID_FIELD]
+  if (typeof traceId !== 'string' || !traceId) return {}
+  const spanId = fields[SPAN_ID_FIELD]
+  return {
+    traceId,
+    ...(typeof spanId === 'string' && spanId ? { spanId } : {}),
+    traceFlags: TRACE_FLAG_SAMPLED,
   }
 }

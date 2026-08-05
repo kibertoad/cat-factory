@@ -1533,6 +1533,12 @@
       "inherited": "ereditato dal servizio",
       "frozen": "Congelato: l'agente e' partito"
     },
+    "taskTypeFields": {
+      "title": "Campi del tipo di attività",
+      "hint": "Le risposte che questo tipo di attività dichiara necessarie. Una risposta obbligatoria mancante mette in pausa l'esecuzione prima che inizi.",
+      "save": "Salva",
+      "revert": "Ripristina"
+    },
     "dependencies": {
       "title": "Dipende da",
       "hint": "Attivita' che devono essere unite prima che questa possa essere eseguita. Il controllo Esegui resta bloccato finche' ogni dipendenza non e' completata.",
@@ -5560,6 +5566,11 @@
       "success_criteria_missing": {
         "title": "Nessun criterio di successo",
         "hint": "Indica la domanda a cui risponde lo spike, o come si presenta un buon esito, così il tempo riservato ha un obiettivo."
+      },
+      "required_field_missing": {
+        "title": "Manca: {field}",
+        "hint": "Questo tipo di attività richiede «{field}» e l’attività non lo compila. Inseriscilo nell’attività, poi ricontrolla.",
+        "unnamedField": "un campo obbligatorio"
       },
       "unknown": {
         "title": "Rilievo non riconosciuto",

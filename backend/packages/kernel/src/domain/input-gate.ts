@@ -15,14 +15,18 @@
 //     never guesses at intent. That is exactly the judgement the reviewer is for, and a cheap
 //     imitation of it would park real work.
 
+import { unfilledRequiredDescriptorFields } from '@cat-factory/contracts'
 import type {
   BlockLevel,
+  DescriptorField,
+  DescriptorFieldValues,
   InputGateIssue,
   InputGateIssueCode,
   InputGateMode,
   InputGateSeverity,
   InputGateStatus,
 } from '@cat-factory/contracts'
+import type { TaskTypeRegistry } from './task-type-registry.js'
 
 /**
  * Each finding's INTRINSIC severity: what it means about the input, before a workspace's
@@ -42,6 +46,13 @@ export const INPUT_GATE_SEVERITY: Record<InputGateIssueCode, InputGateSeverity> 
   reproduction_missing: 'blocking',
   review_target_missing: 'blocking',
   success_criteria_missing: 'advisory',
+  // BLOCKING because the deployment said so, which is the only authority there is here. The
+  // built-in codes are classified by this file's own judgement about what a model can work
+  // around; a custom type's pipeline is one this file has never seen, so the org that wrote it
+  // is the only party that can know. A deployment wanting the softer reading marks the field
+  // OPTIONAL and lets its reviewer ask, which is the same "when in doubt, advisory" trade the
+  // built-ins make, expressed by the declaration rather than by a second severity knob.
+  required_field_missing: 'blocking',
 }
 
 /** The task fields the gate reads. Supplied by the caller; the gate does no lookups itself. */
@@ -74,9 +85,22 @@ export interface InputGateInput {
         researchQuestion?: string | undefined
         prNumber?: number | undefined
         prUrl?: string | undefined
+        /** The custom-task-type value bag, keyed by each declared field's `key`. */
+        custom?: DescriptorFieldValues | undefined
       }
     | null
     | undefined
+  /**
+   * The create-form fields the task's CUSTOM type declares, resolved from the deployment's
+   * `TaskTypeRegistry` by {@link inputGateInputOf}. Empty for every built-in type, and for a
+   * namespaced type no deployment registered (stale data after an extension was removed): the
+   * honest answer there, since a gone registration declares nothing to require.
+   *
+   * Passed IN rather than looked up here so the evaluation stays a pure reduction over data: the
+   * gate runs at three call sites that must agree byte-for-byte, and one of them (`wouldBlock`)
+   * runs before a run exists at all.
+   */
+  customFields?: readonly DescriptorField[] | undefined
 }
 
 /**
@@ -86,20 +110,57 @@ export interface InputGateInput {
  * per-call-site object literal is how one of them silently stops passing `level` and starts
  * judging an initiative anchor as if it were a task.
  */
-export function inputGateInputOf(block: {
-  title: string
-  description: string
-  level: BlockLevel
-  taskType?: string | null | undefined
-  taskTypeFields?: InputGateInput['taskTypeFields']
-}): InputGateInput {
+export function inputGateInputOf(
+  block: {
+    title: string
+    description: string
+    level: BlockLevel
+    taskType?: string | null | undefined
+    taskTypeFields?: InputGateInput['taskTypeFields']
+  },
+  taskTypes: TaskTypeRegistry,
+): InputGateInput {
   return {
     title: block.title,
     description: block.description,
     level: block.level,
     taskType: block.taskType,
     taskTypeFields: block.taskTypeFields,
+    // REQUIRED rather than optional, so a fourth evaluation site cannot quietly ship without
+    // it. An optional registry would default a deployment's task types to "declares nothing",
+    // which is indistinguishable from a correct answer right up until somebody's required
+    // field stops being checked on one path only.
+    customFields: block.taskType ? declaredFieldsOf(taskTypes, block.taskType) : undefined,
   }
+}
+
+/**
+ * The create-form fields a task type declares, or undefined where that declaration is not the
+ * truth about the collected bag.
+ *
+ * The SAME two stand-downs the CREATE door takes (`taskTypeCreationDefaults`'s
+ * `checkCustomFields`), and they have to match: the whole argument for reading the existing
+ * declaration rather than adding a second one is that both doors then answer identically.
+ *
+ *  - **A type this process does not REGISTER** declares nothing here. An unregistered namespaced
+ *    type is a supported row (task types are node-local by design), so the honest answer is that
+ *    this build cannot say what such a task needs, not that it needs nothing.
+ *  - **A type carrying a `formPanel`**, whose bespoke create-form section owns the whole bag. Its
+ *    descriptor fields are not what that panel collects, so requiring them would park a run on
+ *    inputs the form it was authored in never offered.
+ *
+ * What the gate adds over the create door, given they agree, is WHEN it asks. The create check
+ * fires once, against the declaration as it stood that day, on the paths that go through
+ * `addTask`. This one fires at every run, against the declaration as it stands now, so a
+ * requirement a deployment adds in a later release reaches the tasks that predate it, and a
+ * task created on a node that did not register the type is still judged where it runs.
+ */
+function declaredFieldsOf(
+  taskTypes: TaskTypeRegistry,
+  taskType: string,
+): readonly DescriptorField[] | undefined {
+  const descriptor = taskTypes.get(taskType)
+  return descriptor && !descriptor.formPanel ? descriptor.fields : undefined
 }
 
 /** The gate's verdict: its disposition plus every finding, blocking and advisory alike. */
@@ -261,11 +322,15 @@ function descriptionFinding(description: string): InputGateIssueCode | null {
   return null
 }
 
+/** A finding before the mode has floored its severity: the code, and what it is ABOUT. */
+type PendingIssue = Omit<InputGateIssue, 'severity'>
+
 /**
- * The per-TYPE checks. Each states what that type's pipeline structurally consumes, so a gap
- * here means a downstream step has no input rather than a weak one. A type this file does not
- * know (including every deployment-registered namespaced type) yields nothing, which is the
- * honest answer: the platform cannot know what somebody else's task type requires.
+ * The per-TYPE checks for the BUILT-IN types. Each states what that type's pipeline
+ * structurally consumes, so a gap here means a downstream step has no input rather than a weak
+ * one. A type this file does not know yields nothing here, which is the honest answer: the
+ * platform cannot have an opinion about what somebody else's task type needs: only the
+ * deployment that registered it can, and it states that through {@link customFieldFindings}.
  */
 function typeFindings(input: InputGateInput): InputGateIssueCode[] {
   const fields = input.taskTypeFields ?? {}
@@ -292,6 +357,36 @@ function typeFindings(input: InputGateInput): InputGateIssueCode[] {
 }
 
 /**
+ * The per-type checks for a CUSTOM (deployment-registered) task type: the fields its own
+ * create-form declares `required` and the task does not answer.
+ *
+ * This is the whole extension seam, and it is deliberately a READ of a declaration the
+ * deployment already made rather than a second place to make it. A registered type's field
+ * descriptors drive the create form; marking one required there and having the gate ignore it
+ * would mean the same task is refused through the browser and accepted through the public API,
+ * an initiative spawn or a tracker import, which is exactly the set of paths that produce the
+ * empty tasks this gate exists for.
+ *
+ * The requiredness rule itself is `unfilledRequiredDescriptorFields` in contracts, shared with
+ * the form's own validator so the two doors cannot drift. It honours `showWhen`: a field the
+ * form would have hidden is not required, because parking a run on an input with nowhere to go
+ * and fill it in is worse than letting a thin task reach a reviewer.
+ *
+ * A missing field is reported ONE PER FIELD, unlike the description checks which collapse to a
+ * single reading. Three unanswered fields are three separate things to go and do, and a human
+ * reading "one required field is missing" would fix it and be parked again.
+ */
+function customFieldFindings(input: InputGateInput): PendingIssue[] {
+  const declared = input.customFields ?? []
+  if (declared.length === 0) return []
+  const values = input.taskTypeFields?.custom ?? {}
+  return unfilledRequiredDescriptorFields(declared, values).map((field) => ({
+    code: 'required_field_missing' as const,
+    field: { key: field.key, label: field.label },
+  }))
+}
+
+/**
  * Evaluate a task's input under a workspace's mode.
  *
  * `off` returns `status: 'off'` with NO findings: the check did not run, and an empty finding
@@ -312,14 +407,15 @@ export function evaluateInputGate(input: InputGateInput, mode: InputGateMode): I
     return { status: 'not_applicable', mode, issues: [] }
   }
 
-  const codes: InputGateIssueCode[] = []
+  const pending: PendingIssue[] = []
   const description = descriptionFinding(input.description)
-  if (description) codes.push(description)
-  codes.push(...typeFindings(input))
+  if (description) pending.push({ code: description })
+  pending.push(...typeFindings(input).map((code) => ({ code })))
+  pending.push(...customFieldFindings(input))
 
-  const issues: InputGateIssue[] = codes.map((code) => ({
-    code,
-    severity: mode === 'advisory' ? 'advisory' : INPUT_GATE_SEVERITY[code],
+  const issues: InputGateIssue[] = pending.map((issue) => ({
+    ...issue,
+    severity: mode === 'advisory' ? 'advisory' : INPUT_GATE_SEVERITY[issue.code],
   }))
   const blocked = issues.some((issue) => issue.severity === 'blocking')
   return { status: blocked ? 'blocked' : 'passed', mode, issues }
@@ -335,9 +431,19 @@ export function hasBlockingInputIssues(issues: readonly InputGateIssue[]): boole
  * PROSE rather than data: the parked step's proposal text and the run's log line. Every
  * user-facing surface renders from the CODES instead (the SPA maps them to translated copy),
  * so this is a detail line, never the explanation somebody is expected to read.
+ *
+ * A code that is about a NAMED input carries its `field.key`, because it is the only code that
+ * can repeat: three unanswered fields render as `required_field_missing(impact),
+ * required_field_missing(sev), ...` rather than the same word three times, which states a count
+ * and nothing else. The KEY, not the label: this line is read by an operator grepping logs, and
+ * the key is the stable identifier, where the label is deployment prose that may be re-worded
+ * between releases. It is not scrubbed because a field key is a declared schema identifier, not
+ * a value: the ANSWERS never reach this line.
  */
 export function describeInputGateIssues(issues: readonly InputGateIssue[]): string {
-  const blocking = issues.filter((issue) => issue.severity === 'blocking').map((i) => i.code)
-  const shown = blocking.length > 0 ? blocking : issues.map((i) => i.code)
-  return shown.join(', ')
+  const blocking = issues.filter((issue) => issue.severity === 'blocking')
+  const shown = blocking.length > 0 ? blocking : issues
+  return shown
+    .map((issue) => (issue.field ? `${issue.code}(${issue.field.key})` : issue.code))
+    .join(', ')
 }

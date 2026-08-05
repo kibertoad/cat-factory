@@ -21,6 +21,7 @@ import {
   noopLogger,
   ValidationError,
 } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor } from '@cat-factory/agents'
 import { DEFAULT_COMPANION_MAX_ATTEMPTS, pipelineHasVisualStep } from '@cat-factory/contracts'
 import type { PipelineAdoption } from '../pipelines/pipelineAdoption.js'
@@ -44,6 +45,11 @@ import type { RunStartOptions } from './runStartOptions.js'
  */
 export interface RunLifecycleDeps {
   admission: RunAdmission
+  /**
+   * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion's own default
+   * threshold seeds its step at run start, exactly as a built-in's does.
+   */
+  agentKindRegistry: AgentKindRegistry
   blockRepository: BlockRepository
   clock: Clock
   contextBuilder: AgentContextBuilder
@@ -215,7 +221,7 @@ export class RunLifecycleController {
       .map((kind, i) => ({ kind, i }))
       .filter(({ i }) => pipeline.enabled?.[i] !== false)
       .map(({ kind, i }, position) => {
-        const companionDef = companionFor(kind)
+        const companionDef = companionFor(kind, this.deps.agentKindRegistry)
         return {
           agentKind: kind,
           state: position === 0 ? 'working' : 'pending',

@@ -45,6 +45,7 @@ export const INSPECTOR_PANEL_IDS = [
   'task-dependencies',
   'task-run-settings',
   'task-agent-config',
+  'task-type-fields',
   'task-structure',
   // service / module body
   'container-summary',
@@ -134,6 +135,11 @@ export const INSPECTOR_PANEL_SPECS: readonly InspectorPanelSpec[] = [
   { id: 'task-dependencies', order: 60, when: isTask },
   { id: 'task-run-settings', order: 70, when: isTask },
   { id: 'task-agent-config', order: 80, when: isTask },
+  // The answers to a CUSTOM task type's declared fields. Gated on being a task alone; the panel
+  // itself hides unless the task's type is one this deployment registered WITH descriptor fields,
+  // which is the only case there is anything to edit. It sits beside the other task inputs rather
+  // than under Run settings: these are what the task IS, not how it runs.
+  { id: 'task-type-fields', order: 85, when: isTask },
   { id: 'task-structure', order: 90, when: isTask },
   { id: 'container-summary', order: 110, when: isContainer },
   { id: 'frontend-config', order: 120, when: (b) => isFrame(b) && b.type === 'frontend' },
