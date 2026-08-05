@@ -5,6 +5,8 @@ import type {
   ExecutionInstance,
   RequirementReview,
 } from '@cat-factory/contracts'
+import type { GateActor } from '@cat-factory/kernel'
+import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import type { Context } from 'hono'
 import type {
   BrainstormModule,
@@ -94,7 +96,7 @@ export function failureBody(fail: GateFailure['fail']): {
 export async function gateDecisionAction<E extends AppEnv>(
   c: Context<E>,
   runId: string,
-): Promise<{ workspaceId: string; scoped: ScopedRun } | GateFailure> {
+): Promise<{ workspaceId: string; scoped: ScopedRun; auth: PublicApiKeyAuth } | GateFailure> {
   // `decide` — the same rung that admits a parking pipeline in the first place. Answering injects
   // caller-supplied prose into the requirements every downstream agent then implements, so it sits
   // above ordinary `write` task authoring.
@@ -105,7 +107,19 @@ export async function gateDecisionAction<E extends AppEnv>(
   if (!scoped) {
     return { fail: { status: 404, code: 'not_found', message: 'Run not found' } }
   }
-  return { workspaceId, scoped }
+  return { workspaceId, scoped, auth: gate.auth }
+}
+
+/**
+ * The gate-resolving IDENTITY behind a public-API call: the key itself, never a person.
+ *
+ * That distinction is the whole point rather than a limitation. A step whose gate NAMES its
+ * approvers cannot be cleared by a shared credential — `refuseGateResolution` refuses any
+ * non-user actor against a policy — and a key that clears an unpoliced gate occupies exactly one
+ * quorum slot, so a key cannot satisfy a two-person checkpoint by calling twice either.
+ */
+export function publicApiGateActor(auth: PublicApiKeyAuth): GateActor {
+  return { id: auth.keyId, kind: 'api-key', role: null }
 }
 
 /** The settled context an iterative-review route acts on, for one review kind. */

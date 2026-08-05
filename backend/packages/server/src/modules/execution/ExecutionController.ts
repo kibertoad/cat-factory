@@ -22,7 +22,7 @@ import { runWithInitiator } from '../../github/runInitiatorContext.js'
 import type { AppEnv } from '../../http/env.js'
 import { optionalJsonBody } from '../../http/optionalJsonBody.js'
 import { param } from '../../http/params.js'
-import { runInitiatorRole } from '../../http/runAdmission.js'
+import { gateActor, runInitiatorRole } from '../../http/runAdmission.js'
 import {
   activateForInteraction,
   personalGateForBlock,
@@ -136,9 +136,13 @@ export function executionController(): Hono<AppEnv> {
     await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
-      .executionService.approveStep(param(c, 'workspaceId'), executionId, approvalId, {
-        proposal: c.req.valid('json').proposal,
-      })
+      .executionService.approveStep(
+        param(c, 'workspaceId'),
+        executionId,
+        approvalId,
+        { proposal: c.req.valid('json').proposal },
+        gateActor(c),
+      )
     return c.json(instance, 200)
   })
 
@@ -152,10 +156,13 @@ export function executionController(): Hono<AppEnv> {
     await activateForInteraction(c, param(c, 'workspaceId'), executionId)
     const instance = await c
       .get('container')
-      .executionService.requestStepChanges(param(c, 'workspaceId'), executionId, approvalId, {
-        feedback,
-        comments,
-      })
+      .executionService.requestStepChanges(
+        param(c, 'workspaceId'),
+        executionId,
+        approvalId,
+        { feedback, comments },
+        gateActor(c),
+      )
     return c.json(instance, 200)
   })
 
@@ -217,6 +224,7 @@ export function executionController(): Hono<AppEnv> {
         executionId,
         approvalId,
         c.req.valid('json').reason,
+        gateActor(c),
       )
     return c.json(instance, 200)
   })

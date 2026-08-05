@@ -573,13 +573,13 @@ folder is not wired up by existing): [`docs/releases.md`](./docs/releases.md).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
-- `node scripts/check-component-imports.mjs`: requires every layer component used in a Vue
-  template to be imported by path (a bare tag renders nothing, silently). See
-  [`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly).
-- `node scripts/check-reserved-env-keys.mjs`: requires every variable documented in
-  `docs/environment-variables.md` to be RESERVED, so it cannot be named as a capability credential
-  and resolved into an agent process.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all four).
+- `node scripts/check-component-imports.mjs`: every layer component used in a Vue template is
+  imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
+- `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
+  RESERVED, so it can never be named as a capability credential.
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
+  `buildStepApproval`.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
@@ -668,23 +668,16 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   reverts), settling the gate without re-probing.
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
-- **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
-  threshold, disposing: advance / park / bounce the producing step with findings as `rework` / fail.
-  **Adding a judge is a new registry entry** (`JudgeDefinition`; one driver,
-  `JudgeStepController.evaluate`, owns the state machine). State rides `step.judge` and survives
-  `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
-  precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
-  Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
-- **Companions**: a REWORK PAIR. A companion grades the immediately-preceding producer's output and,
-  below the step's threshold, loops THAT producer back for automatic rework on a bounded budget
+- **Judges**: an inline LLM scores work against a rubric, disposing: advance / park / bounce the
+  producing step with findings as `rework` / fail. **Adding a judge is a new registry entry**
+  (`JudgeDefinition`). Model, and why it is neither a gate nor a `StepCompletionResolver`:
+  [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Companions**: a REWORK PAIR, looping the preceding producer back for bounded automatic rework
   before any human is asked. **Adding one is `AgentKindRegistry.registerCompanion`**, beside the
-  kind's own registration: a companion is a relationship BETWEEN kinds, so it lives on the kind
-  registry rather than a sixth. Traps: the pairing is registered SEPARATELY from the kind, so every
-  read goes through the registry (a projection off the kind's own definition misses all of them);
-  the free lookups take the registry OPTIONALLY and fall back to the built-ins (`isGatableKind`'s
-  shape), so a site that omits it silently sees built-ins only; and adjacency is an invariant
-  (`assertValidCompanionPlacement`) because the engine grades the immediate predecessor. Choose it
-  over a JUDGE when the remedy is the producer running again rather than a verdict being disposed.
+  kind's own registration. Traps: the pairing is registered SEPARATELY from the kind, so every read
+  goes through the registry, and the free lookups take it OPTIONALLY, so a site that omits it
+  silently sees built-ins only; adjacency is an invariant (`assertValidCompanionPlacement`). Choose
+  it over a JUDGE when the remedy is the producer running again, not a verdict being disposed.
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
@@ -825,9 +818,8 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
   starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
   `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
   [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
-- **Merge track record**: a best-effort side channel persisting each decision. Traps: a mixed diff takes
-  the HIGHEST class present; an unreadable diff yields `unknown` and `unknown` never matches a rule, so
-  a VCS outage can't change policy. Doc:
+- **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
+  yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
   [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
 - **Notifications** are a human-actionable surface behind the `NotificationChannel` port; the same
   registered webhook endpoint also carries run-lifecycle events through the `RunLifecycleSink` port,

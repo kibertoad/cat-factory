@@ -114,6 +114,9 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
     snapshot.binaryGeneratorsUnavailable === true,
   )
   useTaskTypesStore().hydrateCapabilities(capabilities)
+  // The per-step parameters each registered gate declares, so a gated step's config form in the
+  // builder comes from the gate's own registration rather than a form hard-coded per gate.
+  usePipelinesStore().hydrateGateConfigForms(snapshot.gateConfigForms ?? [])
   // The account's repo-sourced Claude Skills catalog (shared across its workspaces), so the
   // pipeline builder's per-step skill picker has its options. A straight replace.
   useSkillsStore().hydrate(snapshot.skills ?? [])

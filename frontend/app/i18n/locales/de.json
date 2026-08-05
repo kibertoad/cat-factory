@@ -1985,7 +1985,12 @@
         "notRun": "nicht ausgeführt",
         "attempts": "Versuch {attempts} von {maxAttempts}",
         "omittedTestPaths": "{count} deklarierte Testdatei wurde vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut. | {count} deklarierte Testdateien wurden vor dem Nachweis verworfen, daher wurde der Stand vor dem Fix aus einer unvollständigen Reproduktion aufgebaut."
-      }
+      },
+      "quorumProgress": "{recorded} von {required} Freigaben",
+      "quorumYours": "(deine ist gezählt)",
+      "quorumEditLocked": "Korrekturen sind möglich, sobald deine Freigabe dieses Gate auflöst. Bis dahin unverändert freigeben oder Änderungen anfordern.",
+      "notAnApprover": "Dieses Gate benennt, wer es auflösen darf, und du gehörst nicht dazu.",
+      "approverIdentityRequired": "Dieses Gate benennt, wer es auflösen darf; eine dieser Personen muss dafür angemeldet sein."
     },
     "inspector": {
       "frameStatus": {
@@ -4129,6 +4134,17 @@
       "hint": "Der Höchstumfang einer einzelnen Antwort dieses Agenten. Leer lassen heißt vom nächsthöheren Level erben, nicht das Limit aufheben. Der Wert eines Pipeline-Schritts sticht die Vorgabe des Workspace.",
       "inherits": "Übernommen",
       "inheritsValue": "Übernommen ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Wer freigeben darf",
+      "roleAdmin": "Administratoren",
+      "roleMember": "Mitglieder",
+      "namedApproversLabel": "Benannte Freigebende",
+      "namedApproversPlaceholder": "Alle mit Schreibrecht",
+      "requiredApprovalsLabel": "Erforderliche Freigaben",
+      "requiredApprovalsHint": "Jeweils von einer anderen Person, bevor der Lauf fortgesetzt wird.",
+      "anyoneHint": "Alle, die dieses Board bearbeiten dürfen, können diesen Schritt freigeben.",
+      "gateParametersLabel": "Gate-Einstellungen"
     }
   },
   "agentPrompt": {

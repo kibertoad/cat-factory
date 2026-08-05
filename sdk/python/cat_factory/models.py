@@ -2837,6 +2837,8 @@ class PublicApprovalGateDecision:
     exceeded: bool
     kind: str
     proposal: str
+    recorded_approvals: float
+    required_approvals: float
     status: PublicApprovalGateDecisionStatus
     step_index: float
     step_kind: str
@@ -2851,12 +2853,14 @@ class PublicApprovalGateDecision:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicApprovalGateDecision":
         """Decode a `PublicApprovalGateDecision` from its JSON object."""
-        known = {"approvalId", "exceeded", "kind", "proposal", "status", "stepIndex", "stepKind", "feedback"}
+        known = {"approvalId", "exceeded", "kind", "proposal", "recordedApprovals", "requiredApprovals", "status", "stepIndex", "stepKind", "feedback"}
         return cls(
             approval_id=data.get("approvalId"),
             exceeded=data.get("exceeded"),
             kind=data.get("kind"),
             proposal=data.get("proposal"),
+            recorded_approvals=data.get("recordedApprovals"),
+            required_approvals=data.get("requiredApprovals"),
             status=_enum(PublicApprovalGateDecisionStatus, data.get("status")),
             step_index=data.get("stepIndex"),
             step_kind=data.get("stepKind"),
@@ -2871,6 +2875,8 @@ class PublicApprovalGateDecision:
         out["exceeded"] = self.exceeded
         out["kind"] = self.kind
         out["proposal"] = self.proposal
+        out["recordedApprovals"] = self.recorded_approvals
+        out["requiredApprovals"] = self.required_approvals
         out["status"] = _encode(self.status)
         out["stepIndex"] = self.step_index
         out["stepKind"] = self.step_kind

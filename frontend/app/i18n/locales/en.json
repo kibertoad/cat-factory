@@ -1544,7 +1544,12 @@
         "attempts": "Attempt {attempts} of {maxAttempts}",
         "omittedTestPaths": "{count} declared test file was dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction. | {count} declared test files were dropped before the proof ran, so the pre-fix tree was rebuilt from an incomplete reproduction.",
         "@omittedTestPaths": "Plural form required. A dropped file can leave the pre-fix tree without the reproduction, which makes the check pass there and wrongly reads as 'the test does not capture the defect'."
-      }
+      },
+      "quorumProgress": "{recorded} of {required} approvals",
+      "quorumYours": "(yours counted)",
+      "quorumEditLocked": "Corrections can be typed once yours is the approval that clears this gate. Until then, approve as-is or request changes.",
+      "notAnApprover": "This gate names who may resolve it, and you are not one of them.",
+      "approverIdentityRequired": "This gate names who may resolve it, so it has to be resolved by one of those people signed in."
     },
     "inspector": {
       "frameStatus": {
@@ -4643,6 +4648,17 @@
       "hint": "The most a single reply from this agent may run to. Leave it empty to inherit the next level up rather than to lift the limit. A pipeline step's own value wins over the workspace default.",
       "inherits": "Inherited",
       "inheritsValue": "Inherited ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Who may approve",
+      "roleAdmin": "Admins",
+      "roleMember": "Members",
+      "namedApproversLabel": "Named approvers",
+      "namedApproversPlaceholder": "Anyone entitled to write",
+      "requiredApprovalsLabel": "Approvals required",
+      "requiredApprovalsHint": "Each from a different person before the run continues.",
+      "anyoneHint": "Anyone who can edit this board may approve this step.",
+      "gateParametersLabel": "Gate settings"
     }
   },
   "agentPrompt": {

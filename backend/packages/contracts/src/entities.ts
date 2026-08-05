@@ -12,6 +12,7 @@ import { cloudProviderSchema, instanceSizeSchema } from './compute-provisioning.
 import { serviceProvisioningSchema } from './environments.js'
 import { documentSourceKindSchema } from './documents.js'
 import { frontendConfigSchema } from './frontend.js'
+import { stepGateConfigSchema } from './gate-config.js'
 import { serviceConnectionsSchema } from './service-connections.js'
 import {
   agentKindSchema,
@@ -826,6 +827,15 @@ export const stepOptionsSchema = v.object({
    * See `docs/initiatives/binary-output-foundational-storage.md`.
    */
   binaryOutput: v.optional(binaryOutputConfigSchema),
+  /**
+   * This step's GATE configuration: who may resolve its human approval gate and how many of
+   * them must, plus the parameters of the registered gate its kind runs (see
+   * {@link stepGateConfigSchema}). The `gates[i]` flag stays the "is there a human checkpoint
+   * here" answer; this carries everything that checkpoint needs to be more specific than "a
+   * human". Absent ⇒ one approval from anyone entitled to write, and the gate's shipped
+   * defaults.
+   */
+  gateConfig: v.optional(stepGateConfigSchema),
 })
 export type StepOptions = v.InferOutput<typeof stepOptionsSchema>
 

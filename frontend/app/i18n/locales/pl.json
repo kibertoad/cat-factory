@@ -1455,7 +1455,12 @@
         "notRun": "nie uruchomiono",
         "attempts": "Próba {attempts} z {maxAttempts}",
         "omittedTestPaths": "Przed uruchomieniem dowodu pominięto {count} zadeklarowany plik testowy, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji. | Przed uruchomieniem dowodu pominięto {count} zadeklarowane pliki testowe, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji. | Przed uruchomieniem dowodu pominięto {count} zadeklarowanych plików testowych, więc drzewo sprzed poprawki odtworzono z niepełnej reprodukcji."
-      }
+      },
+      "quorumProgress": "{recorded} z {required} zatwierdzeń",
+      "quorumYours": "(twoje jest policzone)",
+      "quorumEditLocked": "Poprawki będzie można wpisać, gdy Twoja akceptacja odblokuje tę bramkę. Do tego czasu zatwierdź bez zmian lub poproś o zmiany.",
+      "notAnApprover": "Ta bramka wskazuje, kto może ją rozstrzygnąć, a ciebie na tej liście nie ma.",
+      "approverIdentityRequired": "Ta bramka wskazuje, kto może ją rozstrzygnąć, więc musi to zrobić jedna z tych osób po zalogowaniu."
     },
     "inspector": {
       "frameStatus": {
@@ -4510,6 +4515,17 @@
       "hint": "Maksymalna długość pojedynczej odpowiedzi tego agenta. Puste pole dziedziczy wartość z wyższego poziomu, a nie znosi limitu. Wartość ustawiona na kroku pipeline'u ma pierwszeństwo przed domyślną wartością obszaru roboczego.",
       "inherits": "Odziedziczone",
       "inheritsValue": "Odziedziczone ({tokens})"
+    },
+    "gateConfig": {
+      "approversLabel": "Kto może zatwierdzić",
+      "roleAdmin": "Administratorzy",
+      "roleMember": "Członkowie",
+      "namedApproversLabel": "Wskazane osoby zatwierdzające",
+      "namedApproversPlaceholder": "Każdy z prawem zapisu",
+      "requiredApprovalsLabel": "Wymagane zatwierdzenia",
+      "requiredApprovalsHint": "Każde od innej osoby, zanim przebieg ruszy dalej.",
+      "anyoneHint": "Każdy, kto może edytować tę tablicę, może zatwierdzić ten krok.",
+      "gateParametersLabel": "Ustawienia bramki"
     }
   },
   "agentPrompt": {

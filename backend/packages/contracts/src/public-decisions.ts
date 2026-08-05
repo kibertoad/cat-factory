@@ -246,6 +246,25 @@ export const publicApprovalGateDecisionSchema = v.object({
   /** The guidance recorded on the last `request-changes`, or null. */
   feedback: v.nullable(v.string()),
   /**
+   * How many distinct approvals this gate needs before the run advances (1 unless the pipeline
+   * step configured a quorum), and how many it already has.
+   *
+   * Projected because a quorum makes `approve` legitimately NOT advance the run: without these
+   * an integration that approved and saw the gate still `pending` could only conclude its call
+   * had failed. A key-authenticated caller counts as ONE approval, and a gate whose pipeline
+   * NAMES its approvers cannot be resolved by a key at all (403) — a shared credential is not
+   * one of the people a policy named.
+   */
+  requiredApprovals: v.number(),
+  /**
+   * The approvals recorded so far, toward {@link requiredApprovals}.
+   *
+   * Named for the COUNT rather than `approvals`, which on the internal `StepApproval` is the list
+   * of records this counts. Two surfaces a caller crosses constantly should not spell one word two
+   * types.
+   */
+  recordedApprovals: v.number(),
+  /**
    * True when this gate is a quality COMPANION's iteration-cap park rather than an ordinary
    * pipeline gate: the automatic rework budget was spent with the rating still under the bar.
    * It answers with `resolve-exceeded` (extra round / proceed / stop and reset), NOT with

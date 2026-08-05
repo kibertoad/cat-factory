@@ -137,6 +137,19 @@ export const descriptorFieldEntries = {
   maxLength: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(DESCRIPTOR_FIELD_VALUE_MAX)),
   ),
+  /**
+   * Inclusive bounds for a `number` value, enforced by the input AND the validator; ignored for
+   * every other type.
+   *
+   * The numeric counterpart of {@link maxLength}, and it exists for the same reason: a declared
+   * bound that only the input enforces is not a bound, because the form is not the only door. A
+   * gate's `maxAttempts` filled over the public API, or typed into a hand-authored pipeline, has
+   * to be refused where the value is FROZEN — otherwise the only remaining defence is the reader
+   * silently clamping it, which turns a configuration mistake into behaviour nobody asked for and
+   * nobody is told about.
+   */
+  min: v.optional(v.number()),
+  max: v.optional(v.number()),
 } as const
 
 /**
@@ -329,6 +342,14 @@ function semanticProblems(field: DescriptorField, value: DescriptorFieldValue): 
     value.length > field.maxLength
   ) {
     problems.push(`Field "${field.key}" exceeds its maximum length of ${field.maxLength}.`)
+  }
+  if (typeof value === 'number') {
+    if (field.min !== undefined && value < field.min) {
+      problems.push(`Field "${field.key}" must be at least ${field.min}.`)
+    }
+    if (field.max !== undefined && value > field.max) {
+      problems.push(`Field "${field.key}" must be at most ${field.max}.`)
+    }
   }
   return problems
 }

@@ -14,6 +14,7 @@ import type {
   ChallengePrReviewFindingInput,
   PipelineStep,
   PullRequestMerger,
+  GateActor,
   StepReviewComment,
   IssueWritebackProvider,
   Logger,
@@ -1271,14 +1272,21 @@ export class ExecutionService {
     return this.stepDecisions.resolveDecision(workspaceId, executionId, decisionId, choice)
   }
 
-  /** Approve a step's gated proposal (optionally replacing it with the human's edit). */
+  /**
+   * Approve a step's gated proposal (optionally replacing it with the human's edit).
+   *
+   * `actor` is REQUIRED on all three gate resolutions rather than optional, so an entry point that
+   * forgets to supply the acting identity fails to typecheck instead of silently resolving a gate
+   * that names its approvers as though nobody were named. See `GateActor` / `refuseGateResolution`.
+   */
   approveStep(
     workspaceId: string,
     executionId: string,
     approvalId: string,
     opts: { proposal?: string } = {},
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.approveStep(workspaceId, executionId, approvalId, opts)
+    return this.stepDecisions.approveStep(workspaceId, executionId, approvalId, opts, actor)
   }
 
   /** Request changes on a step's gated proposal; the step re-runs with the feedback folded in. */
@@ -1287,8 +1295,15 @@ export class ExecutionService {
     executionId: string,
     approvalId: string,
     review: { feedback?: string; comments?: StepReviewComment[] },
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.requestStepChanges(workspaceId, executionId, approvalId, review)
+    return this.stepDecisions.requestStepChanges(
+      workspaceId,
+      executionId,
+      approvalId,
+      review,
+      actor,
+    )
   }
 
   /** Reject a step's gated proposal; the run stops with a `rejected` failure. */
@@ -1296,9 +1311,10 @@ export class ExecutionService {
     workspaceId: string,
     executionId: string,
     approvalId: string,
-    reason?: string,
+    reason: string | undefined,
+    actor: GateActor,
   ): Promise<ExecutionInstance> {
-    return this.stepDecisions.rejectStep(workspaceId, executionId, approvalId, reason)
+    return this.stepDecisions.rejectStep(workspaceId, executionId, approvalId, reason, actor)
   }
 
   /** Dispatch the human-review gate's fixer from a human's freeform instructions. */
