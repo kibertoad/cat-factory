@@ -69,7 +69,10 @@ NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration)
      unauthorized member gets a clean 403 without learning whether the integration is wired. Each
      admin controller maps to exactly ONE permission (whole-controller). Two mixed controllers
      (`WorkspaceController`, `WorkspaceMemberController`) use the imperative `requirePermission(c,
-perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403 `ForbiddenError`**
+perm)` helper per-handler instead. A third shape landed later for a controller whose routes split
+     by TIER rather than by permission: `DocumentSourceController` mounts `integrations.manage` on
+     its own credential and role-link PATH PATTERNS and leaves its authoring writes to the viewer
+     floor (see [`document-sources.md`](../document-sources.md)). A resolved-but-insufficient caller gets **403 `ForbiddenError`**
      (`DomainErrorCode 'forbidden'`); an unresolved board gets **404** (invisibility vs insufficiency).
 
 - **Caching.** Resolution runs on every workspace request (3 reads folded into one load), so it

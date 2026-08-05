@@ -8,10 +8,12 @@
 // once the block exists (`useContextLinking().linkPending`). The inspector's own panels are the
 // live counterpart, for a block that already exists.
 //
-// Both sections are ungated: when the relevant integration isn't connected the Attach button
-// becomes a "Connect a source" action instead of vanishing, so the capability is discoverable.
-// Connecting opens the source's connect modal OVER the host modal (both are root-mounted with
-// independent open flags), so in-progress form data survives.
+// Attaching is ungated in both sections: when the relevant integration isn't connected the Attach
+// button becomes a "Connect a source" action instead of vanishing, so the capability is
+// discoverable. Connecting opens the source's connect modal OVER the host modal (both are
+// root-mounted with independent open flags), so in-progress form data survives. That upgrade is
+// itself gated on `integrations.manage` for documents, whose ATTACH writes are member-tier while
+// storing the credential is not.
 import type { PendingContext } from '~/composables/useContextLinking'
 import ContextDocumentPicker from '~/components/documents/ContextDocumentPicker.vue'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
@@ -45,8 +47,16 @@ const issuesConnected = computed(() => tasks.available && tasks.anyOffered)
 // documents, every configured source without a live connection (GitHub docs are already implicitly
 // connected via the App, so they never appear here); for issues, every configured tracker not yet
 // available. The connect modals are the same ones the Integrations hub opens.
+//
+// The document half is additionally empty for anyone without `integrations.manage`: connecting
+// stores a workspace credential and stays admin-tier, while attaching a document moved to the
+// member tier, so a member falls through to the disabled Attach button instead of a connect
+// action that opens a modal, takes a token and 403s.
+const { canManageIntegrations } = useWorkspaceAccess()
 const connectableDocSources = computed(() =>
-  documents.available ? documents.sources.filter((s) => !documents.isConnected(s.source)) : [],
+  documents.available && canManageIntegrations.value
+    ? documents.sources.filter((s) => !documents.isConnected(s.source))
+    : [],
 )
 const connectableIssueSources = computed(() =>
   tasks.available ? tasks.sources.filter((s) => !s.available) : [],

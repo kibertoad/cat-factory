@@ -156,6 +156,31 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 | `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
 | `POST /documents/link`                        | Attach a doc to a block: `{ source, externalId, blockId }` |
 
+### Who may call what: the tier split
+
+This controller is one of the few that MIXES permission tiers, and the line is what a call
+touches rather than which controller serves it:
+
+| Routes                                                                                                   | Permission            | Why                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
+| `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
+| `import`, `search`, `plan`, `spawn`, `POST /documents/link`                                              | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
+| every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
+
+The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
+so those routes mount no permission gate at all, exactly like `boardController`'s writes. The
+admin gates are mounted on the controller's OWN path patterns, never `'*'`: a `'*'` mount becomes
+`ALL /workspaces/:workspaceId/*` on the shared app and reaches sibling controllers' routes.
+
+Holding the whole controller at `integrations.manage` is what this replaced, and it made the
+feature unusable by the persona it exists for. Someone who links the spec or the design their task
+is about is usually not the operator who connected the source, and the Add-task context picker
+imports the pasted ref and then links it, so for a `member` the attach flow failed on its first
+write. Cross-runtime coverage is in `defineWorkspaceRbacSuite`, which asserts both halves: a member
+is allowed the five authoring writes, a viewer is still refused every one of them (the floor), and
+connect/disconnect stay admin-only.
+
 `spawn` without `frameId` creates new top-level frames; with it, the plan's
 modules and tasks are added inside that existing service frame. A document linked
 to a block is resolved at execution time and injected into the agent prompt

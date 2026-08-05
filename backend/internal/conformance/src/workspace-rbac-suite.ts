@@ -420,6 +420,73 @@ function registerRbacMemberManagementTests(
     }
   })
 
+  it('document sources are TIER-SPLIT: a member imports, attaches and spawns; only an admin connects', async () => {
+    // The one controller that deliberately splits by TIER, so neither half is provable from the
+    // table above: that one asserts a member is refused a representative write per ADMIN
+    // controller, and here the same member must be ALLOWED five writes on the same controller.
+    //
+    // Attaching context to a task is board authoring (the Add-task picker imports the pasted ref
+    // and links it), so holding the whole controller at `integrations.manage` locked the feature
+    // to operators. What must stay refused is the CREDENTIAL: connect and disconnect.
+    const app = harness.makeApp()
+    const { adminA, b, c, wsId } = await scenario(app)
+    const ha = bearer(await app.session({ id: adminA }))
+    await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
+    await app.call('POST', `/workspaces/${wsId}/members`, { userId: b, role: 'viewer' }, ha)
+    const hc = bearer(await app.session({ id: c }))
+    const hb = bearer(await app.session({ id: b }))
+    const w = (path: string) => `/workspaces/${wsId}${path}`
+
+    // The member-tier writes. Asserted as "not 403" rather than as a success status because what
+    // is under test is the GATE, not the integration: past it these resolve on wiring and payload
+    // (503 with no documents module, 404 for a ref this workspace never imported), and pinning a
+    // concrete status here would make the assertion a test of the harness's own wiring.
+    const authoring: Array<{ method: 'POST'; path: string; body: unknown }> = [
+      { method: 'POST', path: w('/document-sources/notion/import'), body: { ref: 'nope' } },
+      { method: 'POST', path: w('/document-sources/notion/search'), body: { query: 'spec' } },
+      { method: 'POST', path: w('/document-sources/notion/plan'), body: { externalId: 'nope' } },
+      { method: 'POST', path: w('/document-sources/notion/spawn'), body: { externalId: 'nope' } },
+      {
+        method: 'POST',
+        path: w('/documents/link'),
+        body: { source: 'notion', externalId: 'nope', blockId: 'nope' },
+      },
+    ]
+    for (const req of authoring) {
+      const res = await app.call(req.method, req.path, req.body, hc)
+      expect({ route: `${req.method} ${req.path}`, forbidden: res.status === 403 }).toEqual({
+        route: `${req.method} ${req.path}`,
+        forbidden: false,
+      })
+      // A VIEWER is still refused every one of them, by the gate's method-shaped write floor. This
+      // is what keeps the change a tier MOVE rather than an opening: without it, "not 403 for a
+      // member" would also pass if the gate had been dropped altogether.
+      const denied = await app.call(req.method, req.path, req.body, hb)
+      expect({ route: `${req.method} ${req.path}`, status: denied.status }).toEqual({
+        route: `${req.method} ${req.path}`,
+        status: 403,
+      })
+    }
+
+    // The credential half stays admin-only. Connect carries a VALID body, because the mount gates
+    // this path specifically and a malformed payload would be refused by validation instead, which
+    // would pass this assertion for the wrong reason.
+    const connect = w('/document-sources/notion/connect')
+    expect((await app.call('POST', connect, { credentials: { token: 't' } }, hc)).status).toBe(403)
+    expect(
+      (await app.call('DELETE', w('/document-sources/notion/connection'), undefined, hc)).status,
+    ).toBe(403)
+    // And the admin still clears both (never a 403), so the refusals above are the gate rejecting
+    // the member rather than routes that always reject.
+    expect((await app.call('POST', connect, { credentials: { token: 't' } }, ha)).status).not.toBe(
+      403,
+    )
+    expect(
+      (await app.call('DELETE', w('/document-sources/notion/connection'), undefined, ha)).status,
+    ).not.toBe(403)
+  })
+
   it('admin-tier enforcement: the branch-protection preflight is a gated READ, unlike every other GitHub read (slice 6)', async () => {
     // Its own test rather than a row in the table above, because it breaks that table's premise:
     // those are WRITES, which `requireWorkspacePermission` gates wholesale. A GET passes the
