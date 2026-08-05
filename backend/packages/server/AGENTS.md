@@ -192,7 +192,10 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   VCS ports over whatever `GitHubClient` a facade wires as its ENGINE client (so GitLab
   deployments get them too): `GitHubCiStatusProvider`, `GitHubMergeabilityProvider`,
   `GitHubPullRequestMerger`, `GitHubBranchUpdater`, and `GitHubPrReportPublisher` (upserts the
-  verification report as a marker-delimited region of the PR description).
+  verification report as a marker-delimited region of the PR description, on EVERY pull request
+  the run opened: it resolves the own-service PR first, then joins the block's recorded peer PRs
+  onto ONE multi-repo repo resolution, and `publish` takes the target it was composed for rather
+  than re-deciding which PR is "the block's").
   - The client is at a ratcheting size budget, so cohesive concerns live BESIDE it and it keeps a
     thin delegate. Each takes the client's bound `request` rather than the client itself, which is
     also what makes them testable without a client: `reviewPosting.ts` + `reviewThreads.ts` (the
