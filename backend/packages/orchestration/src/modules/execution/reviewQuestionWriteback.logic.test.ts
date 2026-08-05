@@ -34,40 +34,72 @@ function review(over: { status?: RequirementReviewStatus; items?: RequirementRev
 
 describe('shouldPostReviewQuestions', () => {
   it('posts for a headless run parked on open findings', () => {
-    expect(shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review())).toBe(true)
+    expect(
+      shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review(), 'requirements'),
+    ).toBe(true)
   })
 
   it('posts for a ticket-dispatched run: the requester is on the ticket, not in the app', () => {
-    expect(shouldPostReviewQuestions({ intakeOrigin: 'tracker' }, review())).toBe(true)
+    expect(shouldPostReviewQuestions({ intakeOrigin: 'tracker' }, review(), 'requirements')).toBe(
+      true,
+    )
   })
 
   it('posts at the iteration cap too — the caller still has to choose how to proceed', () => {
     expect(
-      shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review({ status: 'exceeded' })),
+      shouldPostReviewQuestions(
+        { intakeOrigin: 'public-api' },
+        review({ status: 'exceeded' }),
+        'requirements',
+      ),
     ).toBe(true)
   })
 
   it('never posts for a UI-started run, which keeps its in-app clarification surface', () => {
-    expect(shouldPostReviewQuestions({ intakeOrigin: 'ui' }, review())).toBe(false)
+    expect(shouldPostReviewQuestions({ intakeOrigin: 'ui' }, review(), 'requirements')).toBe(false)
   })
 
   it('never posts for a legacy run with no recorded intake origin (degrades to `ui`)', () => {
-    expect(shouldPostReviewQuestions({}, review())).toBe(false)
+    expect(shouldPostReviewQuestions({}, review(), 'requirements')).toBe(false)
   })
 
   it.each(['incorporated', 'incorporating', 'reviewing', 'merged'] as const)(
     'does not post in the non-parking status %s',
     (status) => {
-      expect(shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review({ status }))).toBe(
-        false,
-      )
+      expect(
+        shouldPostReviewQuestions(
+          { intakeOrigin: 'public-api' },
+          review({ status }),
+          'requirements',
+        ),
+      ).toBe(false)
     },
   )
 
   it('does not post when every finding is already answered or dismissed', () => {
     const settled = [item({ status: 'answered' }), item({ id: 'itm_2', status: 'dismissed' })]
     expect(
-      shouldPostReviewQuestions({ intakeOrigin: 'public-api' }, review({ items: settled })),
+      shouldPostReviewQuestions(
+        { intakeOrigin: 'public-api' },
+        review({ items: settled }),
+        'requirements',
+      ),
+    ).toBe(false)
+  })
+
+  // Bug triage asks the REPORTER for what they left out, so its audience is every run rather than
+  // the headless ones — the one place the two subjects genuinely differ on this side.
+  it.each(['ui', 'public-api', 'tracker'] as const)(
+    'posts a clarity park for a %s-started run too',
+    (intakeOrigin) => {
+      expect(shouldPostReviewQuestions({ intakeOrigin }, review(), 'clarity')).toBe(true)
+    },
+  )
+
+  it('still refuses a clarity review that is not parked on anything open', () => {
+    // The audience widens; the "is there something to ask" half does not.
+    expect(
+      shouldPostReviewQuestions({ intakeOrigin: 'ui' }, review({ status: 'reviewing' }), 'clarity'),
     ).toBe(false)
   })
 })
@@ -86,8 +118,10 @@ describe('buildReviewQuestionPost', () => {
           item({ id: 'itm_dismissed', status: 'dismissed' }),
         ],
       },
+      'requirements',
     )
     expect(post).toEqual({
+      subject: 'requirements',
       reviewId: 'rr_1',
       iteration: 2,
       maxIterations: 6,

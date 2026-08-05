@@ -66,12 +66,16 @@ describe('PublicApiKeyService', () => {
     expect(secret).not.toContain(stored.secretHash)
 
     const auth = await service.authenticate(secret)
-    // A key defaults to `write` scope when none is requested.
+    // A key defaults to `write` scope when none is requested. `label`/`createdAt` ride along
+    // because the row is already in hand here — that is what lets `GET /api/v1/me` describe the
+    // calling key without a read of its own.
     expect(auth).toEqual({
       keyId: record.id,
       accountId: 'acc_1',
       workspaceId: 'ws_1',
       scope: 'write',
+      label: 'external system',
+      createdAt: record.createdAt,
     })
   })
 

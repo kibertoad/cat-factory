@@ -88,14 +88,15 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
   )
   // Inbound tracker webhooks. Built LAST of the intake modules because it composes the two
   // surfaces above it — the recurring scheduler (a qualifying issue event fires a schedule) and
-  // the engine's requirements-review actions (a ticket reply drives the parked review) — so it
-  // must see both already assembled. `modules.get` rather than a local, because `recurring` is
-  // itself registered through the registry just above.
+  // the engine's review actions (a ticket reply drives the parked requirements or clarity
+  // review) — so it must see both already assembled. `modules.get` rather than a local, because
+  // `recurring` is itself registered through the registry just above.
   modules.build('trackerWebhook', () =>
     createTrackerWebhookModule(dependencies, {
       tasks,
       recurring: modules.get('recurring'),
       requirements: modules.get('requirements'),
+      clarity: modules.get('clarity'),
       executionService,
     }),
   )

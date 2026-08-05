@@ -105,6 +105,7 @@ import { publicApiKeyController } from './modules/publicApi/PublicApiKeyControll
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
 import { publicDebugController } from './modules/publicApi/PublicDebugController.js'
 import { publicEvidenceController } from './modules/publicApi/PublicEvidenceController.js'
+import { publicDiscoveryController } from './modules/publicApi/PublicDiscoveryController.js'
 import { publicKeyController } from './modules/publicApi/PublicKeyController.js'
 import { publicMcpController } from './modules/publicApi/PublicMcpController.js'
 import { publicNotificationWebhookController } from './modules/publicApi/PublicNotificationWebhookController.js'
@@ -223,6 +224,10 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // its notifications, run-lifecycle edges and health alerts are delivered to. `admin` scope; same
   // service the session-authed `/workspaces/:ws/notification-webhook` routes call.
   app.route('/', publicNotificationWebhookController())
+  // DISCOVERY (`/api/v1/me`, `/api/v1/openapi.json`): what the calling key may do, and this
+  // deployment's own copy of the spec — the two reads an integration makes before anything else,
+  // each of which used to be answerable only by guessing. `read` scope, the floor of the ladder.
+  app.route('/', publicDiscoveryController())
   // The public API spoken as MCP (`POST /api/v1/mcp`), so a host drives this deployment with no npm
   // install and no local process. Mounted LAST of the `/api/v1` surface it re-enters: same key auth,
   // and the tools reach those routes back through this app's own loopback under the caller's key, so

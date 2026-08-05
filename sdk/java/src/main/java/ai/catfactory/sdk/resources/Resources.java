@@ -21,6 +21,7 @@ public abstract class Resources {
     private final NotificationsClient notifications;
     private final WebhookClient webhook;
     private final UsageClient usage;
+    private final MeClient me;
     private final DecisionsClient decisions;
     private final DebugClient debug;
     private final EvidenceClient evidence;
@@ -34,6 +35,7 @@ public abstract class Resources {
         this.notifications = new NotificationsClient(transport);
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
+        this.me = new MeClient(transport);
         this.decisions = new DecisionsClient(transport);
         this.debug = new DebugClient(transport);
         this.evidence = new EvidenceClient(transport);
@@ -73,6 +75,11 @@ public abstract class Resources {
     /** The billing period's metered budget position and the per-model breakdown behind it. */
     public UsageClient usage() {
         return usage;
+    }
+
+    /** What the calling key is and what it may do — the self-check an integration runs at startup. */
+    public MeClient me() {
+        return me;
     }
 
     /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */

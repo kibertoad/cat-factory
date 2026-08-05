@@ -5,6 +5,7 @@ import {
   redactSecrets,
   resolveWritebackFlag,
   runBestEffort,
+  REVIEW_QUESTION_POLICIES,
   REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
   type Clock,
@@ -186,29 +187,6 @@ export class IssueWritebackService implements IssueWritebackProvider {
     )
   }
 
-  async postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void> {
-    // Echo the clarification gate's open questions onto the linked tracker issue(s) so the
-    // reporter sees the ask where they filed the bug. Like `onIssuePickedUp`, NOT gated on
-    // the workspace writeback settings (see the port doc), and best-effort per issue.
-    const asked = questions.map((q) => q.trim()).filter((q) => q.length > 0)
-    if (asked.length === 0) return
-    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
-    if (issues.length === 0) return
-    const body = [
-      '🤖 cat-factory needs a few clarifications before it can fix this bug. Please answer ' +
-        'in the platform (these are echoed here for visibility):',
-      '',
-      ...asked.map((q) => `- ${q}`),
-    ].join('\n')
-    await this.forEachIssue(
-      { label: 'writeback.postQuestions', workspaceId },
-      issues,
-      async (issue) => {
-        await this.comment(workspaceId, issue, body)
-      },
-    )
-  }
-
   async postReviewQuestions(
     workspaceId: string,
     block: Block,
@@ -220,12 +198,17 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // rather than post unsafely; the park is still surfaced by the in-app review card.
     if (!markers || post.findings.length === 0) return empty
 
-    const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
-    const enabled = resolveWritebackFlag(
-      settings?.writebackQuestionsOnPark ?? false,
-      block.trackerQuestionsOnPark,
-    )
-    if (!enabled) return empty
+    // Only an OPT-IN subject reads the settings, and only then does it pay for the read: bug-report
+    // triage asks the reporter for what they left out, which is intake semantics (the same stance
+    // `onIssuePickedUp` takes) rather than an optional courtesy about someone else's tracker.
+    if (REVIEW_QUESTION_POLICIES[post.subject].optIn) {
+      const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
+      const enabled = resolveWritebackFlag(
+        settings?.writebackQuestionsOnPark ?? false,
+        block.trackerQuestionsOnPark,
+      )
+      if (!enabled) return empty
+    }
 
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return empty

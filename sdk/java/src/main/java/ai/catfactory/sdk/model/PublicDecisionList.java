@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param runId the {@code runId} field.
  * @param status the {@code status} field.
  * @param taskId the {@code taskId} field.
+ * @param unanswerable the {@code unanswerable} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicDecisionList(
@@ -26,7 +27,9 @@ public record PublicDecisionList(
 
     @JsonProperty("status") RunStatus status,
 
-    @JsonProperty("taskId") String taskId
+    @JsonProperty("taskId") String taskId,
+
+    @JsonProperty("unanswerable") List<PublicUnanswerableWait> unanswerable
 ) {
 
     /** A new builder for {@link PublicDecisionList}. */
@@ -46,6 +49,7 @@ public record PublicDecisionList(
         private @Nullable String runId;
         private @Nullable RunStatus status;
         private @Nullable String taskId;
+        private @Nullable List<PublicUnanswerableWait> unanswerable;
 
         /** Set {@code decisions}. */
         public Builder decisions(@Nullable List<PublicDecision> decisions) {
@@ -77,9 +81,15 @@ public record PublicDecisionList(
             return this;
         }
 
+        /** Set {@code unanswerable}. */
+        public Builder unanswerable(@Nullable List<PublicUnanswerableWait> unanswerable) {
+            this.unanswerable = unanswerable;
+            return this;
+        }
+
         /** Build the {@link PublicDecisionList}. */
         public PublicDecisionList build() {
-            return new PublicDecisionList(decisions, parked, runId, status, taskId);
+            return new PublicDecisionList(decisions, parked, runId, status, taskId, unanswerable);
         }
     }
 }

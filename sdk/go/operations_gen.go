@@ -847,6 +847,30 @@ func (s *UsageService) Get(ctx context.Context) (*PublicUsage, error) {
 	return &out, nil
 }
 
+// MeService what the calling key is and what it may do — the self-check an integration runs at startup.
+type MeService struct {
+	client *Client
+}
+
+// Get describe the calling key
+// Report what the key on this request is and what it may do: its id, its account, the ONE
+// workspace every call under it acts within, its scope, and the label it was minted with. `read`
+// scope, the floor of the ladder, because an integration’s startup self-check has to work
+// whatever rung it holds. The scope ladder is INCLUSIVE (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`),
+// so compare against the rung an action needs rather than for equality.
+// GET /api/v1/me (operation getPublicIdentity).
+func (s *MeService) Get(ctx context.Context) (*PublicIdentity, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/me",
+	}
+	var out PublicIdentity
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DecisionsService every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge
 // verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview
 // gates.

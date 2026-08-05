@@ -12,6 +12,7 @@ import {
   listPublicJobsQuerySchema,
   listPublicServiceTasksQuerySchema,
   publicJobAcceptedSchema,
+  publicIdentitySchema,
   publicJobListSchema,
   publicJobSchema,
   publicNotificationListSchema,
@@ -245,6 +246,26 @@ export const dismissPublicNotificationContract = defineApiContract({
   pathResolver: ({ id }) => `/api/v1/notifications/${id}/dismiss`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: notificationSchema, ...errorResponses },
+})
+
+// ---- key introspection (`read` scope) --------------------------------------
+
+/**
+ * What the calling key is and what it may do.
+ *
+ * `read` scope, which is the floor: an integration's first call at startup is the one that must
+ * work whatever rung it holds, and gating self-description behind a higher scope would make the
+ * check itself the thing that needs a wider key. It reveals nothing a caller does not already
+ * have — the key id is the non-secret half of the token it just presented, and the workspace and
+ * scope are properties of the credential in its own hand.
+ *
+ * Before this, "can I do X" was answerable only by attempting X and reading the `403`, which for
+ * a destructive operation is not a check at all.
+ */
+export const getPublicIdentityContract = defineApiContract({
+  method: 'get',
+  pathResolver: () => '/api/v1/me',
+  responsesByStatusCode: { 200: publicIdentitySchema, ...errorResponses },
 })
 
 // ---- usage & spend (the external dashboard read) ---------------------------

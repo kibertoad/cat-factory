@@ -466,11 +466,9 @@ export class ExecutionService {
       requirementReviewService,
       clarityReviewService,
       brainstormServices,
-      issueWriteback,
       initiativeService,
       initiativeInterviewService,
       docInterviewService,
-      logger,
     })
     this.requirementsKind = reviewSubjects.requirementsKind
     this.clarityKind = reviewSubjects.clarityKind

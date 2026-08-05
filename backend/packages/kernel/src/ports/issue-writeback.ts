@@ -11,12 +11,66 @@ export interface ReviewQuestionFinding {
 }
 
 /**
+ * Which iterative review a question post (and the reply that answers it) belongs to.
+ *
+ * A CLOSED vocabulary rather than a free string, because both halves of the loop key off it: the
+ * engine picks which runs get the echo, the provider picks whether the workspace's opt-in gates
+ * it, and the renderers pick which decision route the comment names. Every one of those is an
+ * exhaustive read of {@link REVIEW_QUESTION_POLICIES}, so a third subject cannot ship half-wired.
+ *
+ * The two brainstorm dialogues are deliberately absent: a brainstorm converges on a DIRECTION
+ * rather than answering questions a reporter filed, and a block running one has no linked issue
+ * whose author asked for it.
+ */
+export type ReviewQuestionSubject = 'requirements' | 'clarity'
+
+/** How one review subject's question echo behaves — see {@link REVIEW_QUESTION_POLICIES}. */
+export interface ReviewQuestionPolicy {
+  /**
+   * Which runs get the echo. `headless` posts only for a run whose requester is not in the app
+   * (`isHeadlessIntake`); `every-run` posts for a UI-started run too.
+   */
+  audience: 'headless' | 'every-run'
+  /**
+   * Whether the workspace's `writebackQuestionsOnPark` setting (with the per-task
+   * `Block.trackerQuestionsOnPark` override) has to be ON for the echo to fire.
+   */
+  optIn: boolean
+}
+
+/**
+ * What each review subject's echo is FOR, which is what decides its audience and its gating.
+ *
+ * The two differ because the two loops differ, and collapsing them would break one of them:
+ *
+ * - **requirements** is the headless clarification loop. A UI-started task has a perfectly good
+ *   in-app surface, so the echo exists only for a requester who is not in the app, and posting
+ *   onto someone's tracker is opt-in.
+ * - **clarity** is bug-report triage, and asking the REPORTER for the detail needed to fix their
+ *   bug is intake semantics, not a courtesy: it fires for every run and is ungated, exactly as it
+ *   did when it had its own bespoke echo.
+ *
+ * A `Record` over the closed union rather than two branches at the call sites, so adding a subject
+ * fails to compile until someone answers both questions for it.
+ */
+export const REVIEW_QUESTION_POLICIES: Record<ReviewQuestionSubject, ReviewQuestionPolicy> = {
+  requirements: { audience: 'headless', optIn: true },
+  clarity: { audience: 'every-run', optIn: false },
+}
+
+/**
  * A parked review's open findings, ready to be posted onto the block's linked tracker
  * issue(s). Built by the engine (which owns the run's intake origin and the review) and
  * handed to the provider, which resolves the workspace's writeback settings, the linked
  * issues, and the per-issue idempotency marker.
  */
 export interface ReviewQuestionPost {
+  /**
+   * Which review these findings belong to. Drives the provider's gating, the comment's copy and
+   * the decision route it names; it is NOT part of the idempotency key, because a review id
+   * already identifies exactly one review in exactly one store.
+   */
+  subject: ReviewQuestionSubject
   /** The parked review's id — half of the idempotency key. */
   reviewId: string
   /** The review's iteration number — the other half, so each pass posts exactly once. */
@@ -71,33 +125,23 @@ export interface IssueWritebackProvider {
     info: { runUrl?: string; inProgressLabel?: string },
   ): Promise<void>
   /**
-   * The bug-triage clarification gate (`clarity-review`) parked for a human because the
-   * investigator flagged the report as unclear — echo the open questions as a comment on
-   * the block's linked tracker issue(s) so the reporter sees the ask where they filed the
-   * bug. This is an ECHO only: answers to a CLARITY gate still arrive in-app (the clarity
-   * window). The tracker-side reply path built in
-   * `backend/docs/adr/0032-tracker-webhook-intake.md` is scoped to the REQUIREMENTS review — its
-   * findings carry the stable ids a reply names ({@link postReviewQuestions}); a clarity
-   * question has none, so a comment answering one is ignored rather than guessed at.
-   * Best-effort like the other hooks (a tracker outage never
-   * fails the run) and, like {@link onIssuePickedUp}, NOT gated on the workspace writeback
-   * settings — asking the reporter for the detail needed to fix their bug is intake
-   * semantics, not an optional courtesy. A no-op when the block has no linked issue.
-   */
-  postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void>
-  /**
-   * A HEADLESS run's requirements review parked with open findings — post them, each with
-   * its stable finding id, onto the block's linked tracker issue(s) so the loop is
-   * answerable from where the work was requested.
+   * A run's iterative review parked with open findings — post them, each with its stable finding
+   * id, onto the block's linked tracker issue(s) so the loop is answerable from where the work
+   * was requested.
    *
-   * Unlike {@link postQuestions} (the bug-triage echo, which is intake semantics and always
-   * fires) this IS gated on the workspace's `writebackQuestionsOnPark` setting with the
-   * per-task `Block.trackerQuestionsOnPark` override, because the requirements loop has a
-   * perfectly good in-app surface for every UI-started task and this is the opt-in headless
-   * alternative. The engine has already established that the run is headless and the review
-   * has open findings; the provider owns the settings, the linked-issue lookup, and the
-   * per-`(review, iteration, issue)` idempotency marker that keeps a durable-driver replay
-   * from double-posting.
+   * ONE method for both subjects ({@link ReviewQuestionSubject}), where the clarity gate used to
+   * have a bespoke echo of its own that posted bare question STRINGS. That echo was unanswerable
+   * by construction: the reply grammar in
+   * `backend/docs/adr/0032-tracker-webhook-intake.md` addresses a finding by id, and a comment
+   * that renders no ids gives a reporter nothing to name. The findings always HAD ids (both
+   * reviews persist the same item shape); only the rendering dropped them.
+   *
+   * What still differs by subject is WHO gets the echo and whether the workspace has to opt in,
+   * and that is read off {@link REVIEW_QUESTION_POLICIES} rather than branched here: the engine
+   * applies the audience half, the provider the opt-in half. The engine has already established
+   * that this run qualifies and that the review has open findings; the provider owns the settings
+   * read, the linked-issue lookup, and the per-`(review, iteration, issue)` idempotency marker
+   * that keeps a durable-driver replay from double-posting.
    *
    * Best-effort per issue like every other hook, but NOT silent: the returned outcome
    * reports what was posted, skipped as already-posted, and failed, so the caller can log a
@@ -159,6 +203,12 @@ export interface ReviewReplyRejection {
  * - `resolved` — a `proceed` / `stop` / `extra-round` command settled the park outright.
  */
 export interface ReviewReplyAck {
+  /**
+   * Which review the reply reached. The ack's copy and the reply route it points at both differ
+   * by subject, and a reporter answering a bug-triage question must not be told the REQUIREMENTS
+   * are being folded in.
+   */
+  subject: ReviewQuestionSubject
   /** The review the reply was applied to (or would have been, when `settled`). */
   reviewId: string
   /** The run whose park this reply answered — named so a reader can find it. */

@@ -1,4 +1,3 @@
-import { isHeadlessIntake } from '@cat-factory/contracts'
 import type {
   Block,
   BlockRepository,
@@ -10,6 +9,7 @@ import type {
   RequestRecommendationItem,
   RequirementConcernLevel,
   ResolveRequirementsExceededChoice,
+  ReviewQuestionSubject,
   WorkRunner,
 } from '@cat-factory/kernel'
 import { assertFound, ConflictError, ValidationError } from '@cat-factory/kernel'
@@ -104,15 +104,17 @@ export interface ReviewKind<TReview extends ReviewCommon> {
   /** Push a live review-changed event so an open window/inspector reflects the new status. */
   emit(workspaceId: string, review: TReview): Promise<void>
   /**
-   * Whether a HEADLESS park of this subject echoes its open findings onto the block's linked
-   * tracker issue(s) — the requirements loop only (see
-   * `docs/initiatives/headless-clarification-loop.md`).
+   * Which review this kind's parks echo onto the block's linked tracker issue(s) as, or absent
+   * when a park of this kind echoes nothing.
    *
-   * The clarity gate deliberately does NOT opt in: it already echoes its questions from its
-   * own `review()` closure as INTAKE semantics (every run, UI or headless, ungated by the
-   * workspace writeback settings), and opting in here would post the same questions twice.
+   * The subject is what picks the audience and the opt-in gating (`REVIEW_QUESTION_POLICIES`),
+   * so the two loops that DO echo share this one call path: the clarity gate used to post its
+   * questions from its own `review()` closure as bare strings, which rendered no finding ids and
+   * was therefore unanswerable from the ticket it landed on. Absent on the brainstorm kinds: a
+   * dialogue converges on a direction rather than answering a reporter's filing, and its block
+   * has no issue whose author asked for it.
    */
-  readonly questionsOnPark?: boolean
+  readonly questionsOnPark?: ReviewQuestionSubject
 }
 
 /**
@@ -245,11 +247,12 @@ export class ReviewGateController {
 
   /**
    * Park a review gate on its human decision, then best-effort echo the still-open findings
-   * onto the block's linked tracker issue(s) when the run entered HEADLESSLY.
+   * onto the block's linked tracker issue(s) when the kind's subject says this run qualifies.
    *
    * Every park in {@link evaluate} funnels through here so the echo cannot be forgotten by a
-   * future branch, and so the SPA path is provably untouched: {@link shouldPostReviewQuestions}
-   * refuses anything whose `intakeOrigin` is not headless ({@link isHeadlessIntake}).
+   * future branch, and so the requirements loop's SPA path is provably untouched:
+   * {@link shouldPostReviewQuestions} refuses anything whose `intakeOrigin` is not headless for
+   * a subject whose audience is `headless`.
    *
    * **The park is committed FIRST, and that ordering is load-bearing.** A run that failed to
    * park is a run that answers nobody, so it must never queue behind an outbound HTTP call to
@@ -285,21 +288,23 @@ export class ReviewGateController {
     review: TReview,
   ): Promise<void> {
     const writeback = this.deps.issueWriteback
-    // `intakeOrigin` first: it is a free in-memory check and the scope boundary of the whole
-    // feature, so a UI-started run pays nothing at all for the re-read below.
-    if (!writeback || !kind.questionsOnPark || !isHeadlessIntake(instance.intakeOrigin)) return
+    const subject = kind.questionsOnPark
+    // The subject first: it is a free in-memory check, and for a `headless`-audience subject the
+    // intake check behind it is the scope boundary of the whole feature, so a UI-started
+    // requirements run pays nothing at all for the re-read below.
+    if (!writeback || !subject || !shouldPostReviewQuestions(instance, review, subject)) return
     // Re-read the review: an auto-recommendation pass may have answered findings since `review`
     // was taken, and the echo must ask only what is still genuinely open. Deliberately
     // UNCONDITIONAL rather than flagged from the one call site that mutates today — a future
     // branch that adds another mutation would silently start asking already-answered questions,
     // and the cost is one indexed read on a path that is about to wait on a human for hours.
     const fresh = (await kind.getForBlock(workspaceId, block.id).catch(() => null)) ?? review
-    if (!shouldPostReviewQuestions(instance, fresh)) return
+    if (!shouldPostReviewQuestions(instance, fresh, subject)) return
     try {
       const outcome = await writeback.postReviewQuestions(
         workspaceId,
         block,
-        buildReviewQuestionPost(instance, fresh),
+        buildReviewQuestionPost(instance, fresh, subject),
       )
       if (outcome.failed > 0) {
         this.deps.logger?.warn('review question writeback failed for some linked issues', {

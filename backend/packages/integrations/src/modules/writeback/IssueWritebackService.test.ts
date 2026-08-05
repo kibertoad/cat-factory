@@ -419,38 +419,6 @@ describe('IssueWritebackService — issue pickup (bug intake)', () => {
     expect(labels).toEqual(['in-progress'])
   })
 
-  it('echoes clarification questions as a comment on the linked issue (best-effort, not gated)', async () => {
-    const comments: string[] = []
-    const svc = new IssueWritebackService({
-      // Both writeback flags OFF: echoing the ask is intake semantics, not settings-gated.
-      trackerSettingsRepository: fakeTrackerSettings(settings()),
-      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
-    })
-    await svc.postQuestions('ws', 'blk_1', ['  ', 'What are the repro steps?', 'Which browser?'])
-    expect(comments).toHaveLength(1)
-    // Blank questions are dropped; the rest render as a markdown list.
-    expect(comments[0]!).toContain('- What are the repro steps?')
-    expect(comments[0]!).toContain('- Which browser?')
-  })
-
-  it('posts nothing when there are no non-blank questions or no linked issue', async () => {
-    const comments: string[] = []
-    const deps = {
-      trackerSettingsRepository: fakeTrackerSettings(settings()),
-      commentOnGitHubIssue: async (_ws: string, _id: string, body: string) =>
-        void comments.push(body),
-    }
-    const withIssue = new IssueWritebackService({
-      ...deps,
-      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-    })
-    await withIssue.postQuestions('ws', 'blk_1', ['   ', ''])
-    const noIssue = new IssueWritebackService({ ...deps, taskRepository: fakeTasks([]) })
-    await noIssue.postQuestions('ws', 'blk_1', ['A real question?'])
-    expect(comments).toHaveLength(0)
-  })
-
   it('transitions a Jira issue into the In Progress (indeterminate) category', async () => {
     const calls: { method: string; url: string; body: string | undefined }[] = []
     const fetchImpl = async (
@@ -532,6 +500,7 @@ function markerKey(): ReviewQuestionPostKey {
 
 function questionPost(over: Partial<ReviewQuestionPost> = {}): ReviewQuestionPost {
   return {
+    subject: 'requirements',
     reviewId: 'rr_1',
     iteration: 1,
     maxIterations: 6,
@@ -610,6 +579,30 @@ describe('IssueWritebackService.postReviewQuestions', () => {
       failed: 0,
     })
     expect(comments).toEqual([])
+  })
+
+  it('posts a CLARITY park with both flags off — asking a bug reporter is intake, not opt-in', async () => {
+    const comments: string[] = []
+    const svc = new IssueWritebackService({
+      // Workspace flag off AND the per-task override off: neither governs this subject, because
+      // asking the reporter for what they left out is how the bug gets fixed at all.
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+      reviewQuestionPostRepository: fakeMarkers(),
+      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
+    })
+    const outcome = await svc.postReviewQuestions(
+      'ws',
+      block({ trackerQuestionsOnPark: 'off' }),
+      questionPost({ subject: 'clarity', reviewId: 'clr_1' }),
+    )
+    expect(outcome).toEqual({ posted: 1, skipped: 0, failed: 0 })
+    // The id is what makes it answerable from the ticket at all — the bespoke echo this replaced
+    // rendered the question prose alone.
+    expect(comments[0]).toContain('`itm_1`')
+    expect(comments[0]).toContain('@cat-factory answer <id>')
+    // …and the copy is about the bug, not about requirements the reporter never wrote.
+    expect(comments[0]).toContain('fix this bug')
   })
 
   it('honours the per-task override in both directions', async () => {

@@ -13,6 +13,7 @@ import {
   fakeBuildPreviewJob,
   driveWorkspace,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -475,6 +476,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number) {
+    return createDrizzleRepositories(db, SEED_CLOCK).clarityReviewRepository.upsert(
+      workspaceId,
+      makeReadyClarityReview(blockId, openItems),
+    )
+  }
+
   function seedService(service: Service) {
     return createDrizzleRepositories(db, SEED_CLOCK).serviceRepository.insert(service)
   }
@@ -508,6 +516,7 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     executionRepository: () => container.executionRepository,
     requirementReviewRepository: () =>
       createDrizzleRepositories(db, SEED_CLOCK).requirementReviewRepository,

@@ -80,7 +80,10 @@ Two things to know before minting `decide` or `admin`:
   check reads the pipeline's step chain before the run starts, and two things are not in it. An
   unbounded human-wait **gate a deployment registered itself** declares its never-ending poll inside
   the object its factory builds, which nothing can read at request time, so such a pipeline is
-  admitted for a `write` key and then parks with nothing here able to name it. And **follow-up
+  admitted for a `write` key and then parks. It is no longer INVISIBLE once it does: the run's
+  decision list reports it as an `unclassified_gate` in `unanswerable[]` (see
+  [Parked decisions](#parked-decisions-apiv1runsruniddecisions)), which is a report rather than a
+  classification — admission still cannot see it coming. And **follow-up
   triage** is deliberately uncounted: the companion is on by default on every Coder step, so
   counting it would make `decide` mandatory for all board work that builds anything. Both parks are
   recoverable: follow-up triage has an answer path at `decide`, and either can be ended with
@@ -194,6 +197,9 @@ clients, and the webhook delivery contract do not change incompatibly. What that
 BASE=https://<your-backend-origin>
 AUTH="Authorization: Bearer cf_live_…"
 
+# 0. What is this key, and what may it do? (workspace + scope, at `read`)
+curl -s -H "$AUTH" "$BASE/api/v1/me"
+
 # 1. What services does the board have?
 curl -s -H "$AUTH" "$BASE/api/v1/services"
 
@@ -215,6 +221,7 @@ curl -s -H "$AUTH" "$BASE/api/v1/tasks/$TASK_ID/run"
 curl -sN -H "$AUTH" "$BASE/api/v1/tasks/$TASK_ID/events"   # SSE
 
 # 6. If the run parks on a decision (SSE `decision` event / run status `blocked`):
+#    …and if `decisions` comes back empty, read `unanswerable` before concluding all is well.
 curl -s -H "$AUTH" "$BASE/api/v1/runs/$RUN_ID/decisions"
 
 # 7. Once it finishes, the EVIDENCE, the same bundle the pull request carries:
@@ -581,13 +588,37 @@ Keyed by **run id** so it serves both surfaces: a headless initiative job and an
 possibly started by a human in the SPA). Reading needs `read`; **answering needs `decide`**.
 
 Every action returns the run's **whole decision list**, re-read after the action:
-`{ runId, taskId, status, parked, decisions[] }`. `parked: true` with an **empty** list means the
-run is waiting on a park this surface does not model
-([tracker](../../docs/initiatives/public-api-additions.md)). Two produce it: `human-review`, whose
-answer is a person approving the pull request on the VCS host rather than an API call; and an
-unbounded human-wait **gate a deployment registered itself**, whose answer lives wherever that
-deployment put it. The same blind spot applies one step earlier, at admission; see
-[Scopes](#scopes) below.
+`{ runId, taskId, status, parked, decisions[], unanswerable[] }`.
+
+**An empty `decisions` is not the same as nothing happening, and `unanswerable` is what tells them
+apart.** Some waits this surface genuinely cannot answer, and each one it can detect is NAMED
+there rather than left as an empty list:
+
+| `reason`                 | What is holding the run                                                                 | What to do                                                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `human_wait_gate`        | A shipped gate whose poll has no deadline because a PERSON is the gate (`human-review`) | Nothing here: it clears when a reviewer approves the pull request on the VCS host. Escalate to that person, or `…/tasks/:id/stop`.                       |
+| `unclassified_gate`      | A gate **this deployment registered itself**                                            | Whether its poll ever ends is declared where the gate was built and is unreadable at request time. Its answer lives wherever the deployment surfaced it. |
+| `unwired_interview_gate` | An interviewer registered as an agent kind with no controller wired                     | An operator's fix, not a caller's: the questions are readable from no surface until the deployment wires it.                                             |
+
+Each entry carries `stepKind` and `stepIndex` (line them up with `publicRun.steps`) plus a prose
+`detail`. It is deliberately **not** gated on `parked`: an unbounded wait gate keeps the run
+`running` between polls, so the worst case used to be a run that read as working and never moved.
+
+Everything listed is a wait that is **live** and **beyond this surface**, which is what makes an
+entry worth escalating on. Three things are therefore never listed, each of them a way for the
+field to demand a person nobody has to send:
+
+- **A bounded built-in gate** (`ci`, `conflicts`, `post-release-health`, `doc-quality`). It
+  resolves itself, and reporting it would have a caller escalate a run that was going to move on
+  its own.
+- **A run that has ENDED** (`status` `done` or `failed`, a `…/stop` included). A finished run keeps
+  the steps it held when it stopped, so it lists nothing at all rather than going on asking for a
+  reviewer for work that is over.
+- **A wait this same response answers.** A deployment's own gate that spends its attempt budget
+  parks on an ordinary approval, which arrives as a `decisions[]` entry; it is not also reported as
+  unanswerable, so the two halves of one payload never contradict each other.
+
+The same blind spot applies one step earlier, at admission; see [Scopes](#scopes) below.
 
 | Method / path (under `/api/v1/runs/:runId/decisions`) | Scope    | Behaviour                                                                                                                                                                               |
 | ----------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -730,6 +761,34 @@ run whose CI could not be fixed). `act` runs the card's typed side-effect; on a 
 | `GET /api/v1/notifications`              | `read`  | All **open** cards (unpaginated; humans keep this list short).                                                                                                                                                                   |
 | `POST /api/v1/notifications/:id/act`     | `admin` | Run the side-effect, resolve the card: `merge_review` / `pipeline_complete` → merge the PR; `ci_failed` / `test_failed` → retry the run. Any other type → `409 notification_not_actionable` (resolve it in the app, or dismiss). |
 | `POST /api/v1/notifications/:id/dismiss` | `write` | Resolve the card with no side-effect (idempotent).                                                                                                                                                                               |
+
+### Discovery: the key and the spec
+
+The two reads an integration makes before it does anything, each of which used to be answerable
+only by guessing. Both at `read`, the floor of the ladder: a startup self-check gated higher would
+itself need a wider key.
+
+| Method / path              | Scope  | Behaviour                                                    |
+| -------------------------- | ------ | ------------------------------------------------------------ |
+| `GET /api/v1/me`           | `read` | What the calling key is and what it may do.                  |
+| `GET /api/v1/openapi.json` | `read` | **This deployment's** OpenAPI 3.1 document, served verbatim. |
+
+`GET /api/v1/me` answers `{ keyId, accountId, workspaceId, scope, label, createdAt }`. Before it,
+"can this key do X" was answerable only by attempting X and reading the `403`, which for a
+destructive operation is not a check at all. Two things to hold on to when you read `scope`: the
+ladder is **inclusive** (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an
+action needs rather than for equality; and `workspaceId` is the ONE workspace every call under this
+key acts within, which is what a multi-tenant integration should log alongside its own tenant id.
+
+`GET /api/v1/openapi.json` serves the same bytes as the committed
+[`docs/openapi.json`](../../docs/openapi.json), generated from the route contracts by
+`pnpm gen:openapi` and CI-guarded against drift. Prefer it over the repo file whenever the two can
+differ, which is exactly the case that matters: a deployment a release behind describes the
+operations it actually has. It is deliberately **not** an operation in the spec it serves (an
+"any JSON object" response would mint an untyped method in four generated SDKs and an MCP tool that
+pours the whole schema into a model's context), so it is documented here instead, and it is public
+surface under the stability commitment all the same. Like `POST /api/v1/mcp`, it is authenticated:
+the document leaks no workspace state, but it is the map of everything else on this surface.
 
 ### Usage & budget
 
@@ -1078,5 +1137,12 @@ their gotchas):
   calls.
 - Regenerate the spec in the same PR: `pnpm build && pnpm gen:openapi` (CI fails on drift via
   `check:openapi`); a new named DTO needs `COMPONENT_SCHEMAS` + `OPERATION_DOCS` entries in
-  `scripts/generate-openapi.mjs`.
+  `scripts/generate-openapi.mjs`. That one command writes BOTH the committed
+  [`docs/openapi.json`](../../docs/openapi.json) and the module the deployment serves at
+  `GET /api/v1/openapi.json`, and `check:openapi` diffs both — a served spec that lags the
+  contracts is worse than an absent one.
+- Bump the spec's `info.version` MINOR for an addition (the normal case). Re-check the number
+  against `origin/main` after every merge: two branches bumping to the same value produce
+  byte-identical text, so git auto-merges them and one surface ships under a number the other
+  already used.
 - **Update this document**: the reference tables above are hand-maintained.

@@ -149,6 +149,7 @@ describe('isPlatformAuthoredComment', () => {
   // cannot stop it) is a far worse failure than the duplicate it would look like.
   it('recognises BOTH platform-authored comment renderers', () => {
     const ack = renderReviewReplyAck({
+      subject: 'requirements',
       reviewId: 'rrv_1',
       runId: 'run_1',
       outcome: 'awaiting',
@@ -161,6 +162,7 @@ describe('isPlatformAuthoredComment', () => {
 
     const questions = renderReviewQuestionsComment({
       workspaceId: 'ws1',
+      subject: 'requirements',
       reviewId: 'rrv_1',
       iteration: 1,
       maxIterations: 3,
@@ -215,6 +217,7 @@ describe('isAllowedReplyAuthor', () => {
 
 describe('renderReviewReplyAck', () => {
   const base: ReviewReplyAck = {
+    subject: 'requirements',
     reviewId: 'rrv_1',
     runId: 'run_1',
     outcome: 'awaiting',

@@ -13,6 +13,7 @@ import {
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -442,6 +443,13 @@ export function makeConformanceApp(
     )
   }
 
+  function seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number) {
+    return new DrizzleClarityReviewRepository(db).upsert(
+      workspaceId,
+      makeReadyClarityReview(blockId, openItems),
+    )
+  }
+
   function seedService(service: Service) {
     return new DrizzleServiceRepository(db).insert(service)
   }
@@ -475,6 +483,7 @@ export function makeConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     executionRepository: () => container.executionRepository,
     requirementReviewRepository: () => new DrizzleRequirementReviewRepository(db),
     agentRunRepository: () => container.agentRunRepository,

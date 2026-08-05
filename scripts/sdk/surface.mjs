@@ -53,6 +53,9 @@ const SURFACE = {
   // ---- Usage ----------------------------------------------------------------------------
   getPublicUsage: { group: 'usage', method: 'get' },
 
+  // ---- Key introspection (`read` scope; the startup self-check) --------------------------
+  getPublicIdentity: { group: 'me', method: 'get' },
+
   // ---- Parked human decisions -----------------------------------------------------------
   listPublicRunDecisions: { group: 'decisions', method: 'list' },
   choosePublicRunFork: { group: 'decisions', method: 'chooseFork' },
@@ -193,6 +196,7 @@ export const GROUP_DOCS = {
   webhook:
     "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",
   usage: "The billing period's metered budget position and the per-model breakdown behind it.",
+  me: 'What the calling key is and what it may do — the self-check an integration runs at startup.',
   decisions:
     'Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates.',
   debug:
