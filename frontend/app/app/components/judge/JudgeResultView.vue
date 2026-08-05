@@ -288,6 +288,8 @@ async function act(choice: 'proceed' | 'bounce' | 'stop') {
               v-for="round in rounds"
               :key="round.round"
               class="flex flex-wrap items-center gap-2 rounded-md border border-slate-800 bg-slate-950/40 px-3 py-1.5 text-[12px] text-slate-300"
+              data-testid="judge-round"
+              :data-round-disposition="round.disposition"
             >
               <span class="text-slate-500">{{ t('judge.round', { round: round.round }) }}</span>
               <span class="font-medium text-slate-100">{{

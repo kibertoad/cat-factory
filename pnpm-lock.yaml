@@ -165,10 +165,16 @@ importers:
       '@cat-factory/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@cat-factory/example-custom-agent':
+        specifier: workspace:*
+        version: link:../example-custom-agent
       '@cat-factory/node-server':
         specifier: workspace:*
         version: link:../../runtimes/node
     devDependencies:
+      '@cat-factory/orchestration':
+        specifier: workspace:*
+        version: link:../../packages/orchestration
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
