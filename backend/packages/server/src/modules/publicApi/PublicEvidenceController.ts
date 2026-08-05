@@ -24,7 +24,7 @@ import { authorize, authorizeOrThrow, refuse } from './publicApiAuth.js'
 // public-api-additions.md` records against its visual-confirmation slice: "a caller approving a
 // visual-confirmation gate off this projection is approving screenshots it has not seen").
 //
-// Five rules shape this controller:
+// Six rules shape this controller:
 //
 //  1. **`read` scope, like the debug surface and for the same reason.** These are reads. Gating
 //     them behind `admin`, which on this API also merges pull requests and deletes tasks,
