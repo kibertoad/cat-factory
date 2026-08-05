@@ -1,8 +1,8 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
-**Status:** A0, C1, D1, D2 landed; **A1–A6 landed together**; **A7 (follow-up triage) and A8
-(interview gates) landed together**; the start-path scope question settled by
-[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2 and C2 not started ·
+**Status:** A0, C1, D1, D2, **E1 and E2** landed; **A1–A6 landed together**; **A7 (follow-up
+triage) and A8 (interview gates) landed together**; the start-path scope question settled by
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2, C2 and F1 not started ·
 **Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -76,12 +76,13 @@ The headline finding is not "an endpoint is missing" but an **asymmetry between 
 key start and what the decision surface lets it answer**. A caller can put a run into a state only
 the SPA can get it out of.
 
-**Where this stands:** A1–A6 landed as one change and A7/A8 finished the table, so the asymmetry the
-tracker was opened for is closed: of the surfaces a pipeline can park on, `human-review` is the only
-one a `decide` key can start and not answer, and it is unanswerable by construction rather than
-unbuilt. What remains is B1/B2 (key introspection, spec endpoint), C1 (webhook management) and C2
-(step output), none of which is a park, plus the ONE admission gap A8 surfaced and did not close
-(a deployment's own unbounded-wait gate, ranked as E1). The former [open question](#open-question-for-the-maintainer-settled) about the
+**Where this stands:** A1–A6 landed as one change and A7/A8 finished the table, so the asymmetry
+the tracker was opened for is closed: of the surfaces a pipeline can park on, `human-review` is the
+only one a `decide` key can start and not answer, and it is unanswerable by construction rather than
+unbuilt. E1/E2 then closed the other half of "what can a headless consumer NOT do here": read what a
+run PROVED, and get a key without a browser. What remains is B1/B2 (key introspection, spec
+endpoint) and C2 (step output), none of which is a park, plus the ONE admission gap A8 surfaced and
+did not close (a deployment's own unbounded-wait gate, ranked as F1). The former [open question](#open-question-for-the-maintainer-settled) about the
 `POST /tasks/:taskId/start` scope rule is settled (tightened, with
 [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)). When the committed scope
 completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md); if it
@@ -277,35 +278,6 @@ whether `parkSurfacesOf` can see them at all, and the two answers came out oppos
   asymmetry is STATED in `public-api.md`'s scope section rather than left for an operator to
   discover, which is the same honesty rule A0 established for the refusal message.
 
-### E1: a deployment-registered wait gate is invisible to admission ⬜
-
-Not a park surface to build: a hole in the enumeration that decides which key may start a run, found
-while adding the interview mechanism beside it and recorded here rather than left as a comment.
-
-`parkSurfacesOf`'s human-wait case reads `HUMAN_WAIT_GATE_KINDS`, a constant in
-`@cat-factory/contracts` naming the BUILT-IN gates that declare `pollExhaustion: 'rearm'` (today just
-`human-review`), pinned by a drift guard in `@cat-factory/gates`. A deployment that registers its own
-unbounded-wait gate through the public `GateRegistry` seam is not in it, so such a pipeline is
-admitted for a plain `write` key and then parks with nothing on this surface able to name it: the
-`human-review` defect, one layer out.
-
-Why it was not closed here: a gate's `pollExhaustion` is declared on the object its FACTORY builds
-from an engine context, so reading it at HTTP request time means standing a fake context up per
-admission call, which is a shortcut rather than a design (the same reasoning
-`human-wait-parity.test.ts` records for why the built-in answer is a shared constant).
-
-**The shape of a real fix, so the next iteration does not re-derive it:** let a gate declare
-`pollExhaustion` at REGISTRATION time, beside the factory, and have `parkSurfacesOf` read the
-registry. That makes the declaration static for every gate rather than only the built-ins, and it
-deletes `HUMAN_WAIT_GATE_KINDS` and its drift guard instead of adding a second mechanism beside them.
-It is a change to the `GateRegistry` seam (every registration site, both facades), which is why it is
-its own slice. Note what it would NOT change: interview gates and the four inline kinds are already
-declaration-derived, so this is the last hand-kept entry in the enumeration.
-
-Until then the gap is documented in three places that a person actually reads: the note on
-`HUMAN_WAIT_GATE_KINDS`, `parkSurfacesOf`'s "deliberately not here" list, and the scope section of
-`backend/docs/public-api.md`.
-
 ### B1: `GET /api/v1/me` (key introspection) ⬜
 
 There is no way for a caller to ask what its own key can do. Every `403 insufficient_scope` is
@@ -454,6 +426,100 @@ Same mothership caveat as D1, and for the same reason: `documentRepository.upser
 are `pending` on the persistence allow-list, so naming `documents` on a node with no main database
 answers `unknown_method`. A document-less create is unaffected. Moving the document write surface
 is one slice of the mothership tracker, not this one.
+
+### E1: Run EVIDENCE, the verification report + artifacts ✅
+
+`GET /api/v1/runs/:runId/report`, `GET /api/v1/runs/:runId/artifacts` and
+`GET /api/v1/artifacts/:artifactId/blob`, all `read` scope. The gap: everything the platform
+CAPTURED about a run was reachable only from a browser session, so a consumer whose job is to judge
+a run (a trial harness deciding whether to accept a change, an evaluation pipeline scoring a fleet)
+had to scrape the fenced JSON block out of a pull-request body for the report and could not reach
+the captured screenshots at all: the caveat A6 recorded against the visual-confirmation gate
+("approving screenshots it has not seen") was the same hole seen from the other side.
+
+Decisions worth keeping:
+
+- **The report is served VERBATIM**, the engine's own `PrVerificationReport`, composed on read by
+  the same code that writes the PR section (`PrVerificationReportController.composeForRun`). A
+  second, API-shaped projection of the same facts is how two surfaces start disagreeing about what
+  a run proved. The consequence is real and is now stated on the schema: the report shape is part
+  of the STABLE surface from here on, so it grows additively.
+- **The read differs from the publish in three ways, all about audience**: it answers for a run
+  with NO pull request (a headless job, a run that failed before it pushed: the exact set a
+  PR-scraping consumer could never see), it does not consult the per-workspace
+  `publishPrVerificationReport` opt-out (that is a statement about writing onto someone's PR, not
+  about reading your own evidence back), and it does not swallow its failures.
+- **The run-scoped reads take `loadScopedRun`, NOT the debug surface's workspace rule**, even
+  though a `read` key already reaches far more through `/api/v1/debug/*`. What decides it is the
+  PATH: `debug-api.md` records "two access semantics behind one name" as the reason the debug reads
+  are not under `/api/v1/runs/:id/…`, and that reason binds whoever mounts there next. The
+  excluded set (frame/module-anchored runs) has no task and no PR, so no verification story.
+- **The BYTES needed a binary response the SDK chain could not express.** An operation whose
+  success media type was neither JSON nor SSE fell through to `result: null`, which every emitter
+  renders as a method returning NOTHING: a published client that reaches the endpoint and
+  discards its body. The IR now marks `binary` alongside `stream`, each of the four transports
+  hands the bytes back in its own idiom, and an UNKNOWN media type fails generation rather than
+  falling through. The MCP facade omits it with a stated reason (a tool result has no shape for an
+  arbitrary byte stream), and the omission expectation is now derived from the spec's media types
+  rather than a pinned list.
+- **`503`, never an empty list**, when the account configured no blob backend: "this deployment
+  stores no artifacts" and "this run captured none" are different facts, and only one is about the
+  run. Same reason the artifact list 404s an unknown run rather than answering `[]`.
+- **A wiring bug this surfaced, fixed on both facades**: each container built the HTTP layer's
+  `resolveBinaryArtifactStore` from account settings while the ENGINE got the (overridable) one
+  from `CoreDependencies`, so an override reached one side of the app and not the other. The
+  container now reads it off `dependencies`.
+
+### E2: Headless key provisioning ✅
+
+`GET|POST|DELETE /api/v1/keys` at `admin` scope, delegating to the same `PublicApiKeyService` the
+session panel calls. Same class of gap as C1: a deployment whose operator is headless could drive
+every part of this API except the act of GETTING a key.
+
+The security argument is two enforced bounds, not advice:
+
+- **A minted key can never reach the rung minting requires.** `HEADLESS_MINTABLE_SCOPES` is derived
+  from `HEADLESS_KEY_MINT_SCOPE` (`admin`) rather than listed, so the mint chain is exactly one
+  link long and a rung inserted later cannot silently widen it. Refused by the contract's own
+  picklist, so there is deliberately no hand-written second copy of the rule to drift.
+- **Revocation cascades.** Revoking a key revokes what it minted, on both surfaces. Without it a
+  leaked provisioning key would survive its own cleanup: the operator kills the credential they can
+  see and the ones an attacker made keep working. This needed a new `created_by_key_id` column
+  (D1 ⇄ Drizzle, with its own index) and a `revokeMintedBy` repository method issuing ONE statement
+  rather than a read-then-loop a concurrent mint could slip through.
+
+`createdByKeyId` is also provenance the app renders: a headless mint stores a null user, so without
+a branch in the key panel it would read exactly like a key predating the audit column: "nobody
+knows who made this" shown for the one case the platform knows precisely.
+
+### F1: a deployment-registered wait gate is invisible to admission ⬜
+
+Not a park surface to build: a hole in the enumeration that decides which key may start a run, found
+while adding the interview mechanism beside it and recorded here rather than left as a comment.
+
+`parkSurfacesOf`'s human-wait case reads `HUMAN_WAIT_GATE_KINDS`, a constant in
+`@cat-factory/contracts` naming the BUILT-IN gates that declare `pollExhaustion: 'rearm'` (today just
+`human-review`), pinned by a drift guard in `@cat-factory/gates`. A deployment that registers its own
+unbounded-wait gate through the public `GateRegistry` seam is not in it, so such a pipeline is
+admitted for a plain `write` key and then parks with nothing on this surface able to name it: the
+`human-review` defect, one layer out.
+
+Why it was not closed here: a gate's `pollExhaustion` is declared on the object its FACTORY builds
+from an engine context, so reading it at HTTP request time means standing a fake context up per
+admission call, which is a shortcut rather than a design (the same reasoning
+`human-wait-parity.test.ts` records for why the built-in answer is a shared constant).
+
+**The shape of a real fix, so the next iteration does not re-derive it:** let a gate declare
+`pollExhaustion` at REGISTRATION time, beside the factory, and have `parkSurfacesOf` read the
+registry. That makes the declaration static for every gate rather than only the built-ins, and it
+deletes `HUMAN_WAIT_GATE_KINDS` and its drift guard instead of adding a second mechanism beside them.
+It is a change to the `GateRegistry` seam (every registration site, both facades), which is why it is
+its own slice. Note what it would NOT change: interview gates and the four inline kinds are already
+declaration-derived, so this is the last hand-kept entry in the enumeration.
+
+Until then the gap is documented in three places that a person actually reads: the note on
+`HUMAN_WAIT_GATE_KINDS`, `parkSurfacesOf`'s "deliberately not here" list, and the scope section of
+`backend/docs/public-api.md`.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 

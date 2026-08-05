@@ -91,7 +91,13 @@ export class PublicApiKeyService {
    * (default `write`) is the permission the key carries on `/api/v1` (read ⊂ write ⊂ admin).
    */
   async issue(
-    owner: { accountId: string; workspaceId: string; createdByUserId?: string | null },
+    owner: {
+      accountId: string
+      workspaceId: string
+      createdByUserId?: string | null
+      /** Set only for a headless mint: the key that authenticated `POST /api/v1/keys`. */
+      createdByKeyId?: string | null
+    },
     label: string,
     scope: PublicApiScope = 'write',
   ): Promise<IssuedPublicApiKey> {
@@ -118,6 +124,7 @@ export class PublicApiKeyService {
       scope,
       secretHash: await this.hash(secret),
       createdByUserId: owner.createdByUserId ?? null,
+      createdByKeyId: owner.createdByKeyId ?? null,
       createdAt: this.deps.clock.now(),
       lastUsedAt: null,
       revokedAt: null,
@@ -131,9 +138,22 @@ export class PublicApiKeyService {
     return this.deps.repository.listByWorkspace(workspaceId)
   }
 
-  /** Revoke a key, scoped to its workspace. Idempotent. */
+  /**
+   * Revoke a key AND every key it minted, scoped to its workspace. Idempotent.
+   *
+   * The cascade is what makes headless provisioning (`POST /api/v1/keys`) safe to offer: without
+   * it, revoking a leaked key that had minted others would revoke the credential the operator can
+   * SEE and leave behind the ones the attacker made, which is the compromise surviving its own
+   * cleanup. The chain is exactly one link long by construction (a minted key can never reach the
+   * `admin` rung minting requires), so this is one extra statement, never a walk.
+   *
+   * Ordered minter-first: the two writes are not one transaction, so a failure between them must
+   * leave the credential someone came here to kill already dead.
+   */
   async revoke(workspaceId: string, id: string): Promise<void> {
-    await this.deps.repository.revoke(workspaceId, id, this.deps.clock.now())
+    const at = this.deps.clock.now()
+    await this.deps.repository.revoke(workspaceId, id, at)
+    await this.deps.repository.revokeMintedBy(workspaceId, id, at)
   }
 
   /**

@@ -36,6 +36,8 @@ const INPUTS = {
   block: BLOCK,
   issues: [],
   runUrl: null,
+  trajectoryUrl: null,
+  reportUrl: null,
   // No provisioning log wired by default: the lifecycle section then reports itself as
   // un-evidenced, which is the honest reading of "nobody looked". The lifecycle's own cases live
   // in `prReport.environments.test.ts`.
@@ -281,18 +283,51 @@ describe('composePrVerificationReport', () => {
     expect(report.truncations).toContain('ci.failingChecks: showing 50 of 60')
     expect(renderPrVerificationReport(report)).toContain('showing 50 of 60')
   })
+
+  it('carries the evidence links it was given, and null for the ones it was not', () => {
+    const linked = composePrVerificationReport(instance([step({ agentKind: 'coder' })]), {
+      ...INPUTS,
+      trajectoryUrl: 'https://api.test/api/v1/debug/runs/exec_1/tool-calls?order=trajectory',
+      reportUrl: 'https://api.test/api/v1/runs/exec_1/report',
+    })
+    expect(linked.observability.trajectoryUrl).toContain('order=trajectory')
+    expect(linked.observability.reportUrl).toContain('/report')
+
+    // A deployment with no public backend URL emits no link rather than one to nowhere. The
+    // same rule the artifact byte links follow.
+    const unconfigured = composePrVerificationReport(
+      instance([step({ agentKind: 'coder' })]),
+      INPUTS,
+    )
+    expect(unconfigured.observability).toEqual({
+      runUrl: null,
+      trajectoryUrl: null,
+      reportUrl: null,
+    })
+  })
 })
 
 describe('renderPrVerificationReport', () => {
   it('emits a JSON block that parses back to the same report', () => {
     const report = composePrVerificationReport(
       instance([step({ agentKind: 'coder', model: 'fake' })]),
-      { ...INPUTS, runUrl: 'https://app.test/?run=exec_1' },
+      {
+        ...INPUTS,
+        runUrl: 'https://app.test/?run=exec_1',
+        trajectoryUrl: 'https://api.test/api/v1/debug/runs/exec_1/tool-calls?order=trajectory',
+        reportUrl: 'https://api.test/api/v1/runs/exec_1/report',
+      },
     )
     const section = renderPrVerificationReport(report)
 
     expect(section).toContain('Verification report')
     expect(section).toContain('https://app.test/?run=exec_1')
+    // The two MACHINE links are rendered in the prose, not only carried in the JSON: a
+    // trajectory a reader cannot find is not an audit trail.
+    expect(section).toContain(
+      'https://api.test/api/v1/debug/runs/exec_1/tool-calls?order=trajectory',
+    )
+    expect(section).toContain('https://api.test/api/v1/runs/exec_1/report')
     const json = section.match(/```json\n([\s\S]*?)\n```/)![1]!
     expect(parsePrVerificationReport(JSON.parse(json))).toEqual(report)
   })

@@ -54,7 +54,7 @@ export interface RequestSpec {
 }
 
 /** SDK version, stamped into `User-Agent`. Kept in step with package.json by `check:sdk`. */
-export const SDK_VERSION = '0.10.0'
+export const SDK_VERSION = '0.12.0'
 
 /**
  * Percent-encode a path parameter.
@@ -143,6 +143,22 @@ export class Transport {
     const response = await this.send(spec, 'application/json')
     // Drain, so a keep-alive connection is returned to the pool rather than held open.
     await response.arrayBuffer()
+  }
+
+  /**
+   * Perform a request whose success carries BYTES rather than JSON (an artifact download).
+   *
+   * Returned whole rather than as a stream: the listing endpoint that hands out these ids also
+   * carries each artifact's exact `byteSize`, so a caller decides whether to fetch BEFORE
+   * issuing the request, and every artifact is bounded by the platform's own upload ceiling.
+   * A reader would buy nothing here and would push lifetime management onto every caller.
+   */
+  async bytes(spec: RequestSpec): Promise<Uint8Array> {
+    // `*/*`, because the endpoint declares SEVERAL media types (the image allow-list plus an
+    // octet-stream fallback) and answers with whichever one the stored artifact is. Naming any
+    // single one would be an Accept header that disagrees with most of what the endpoint sends.
+    const response = await this.send(spec, '*/*')
+    return new Uint8Array(await response.arrayBuffer())
   }
 
   /**

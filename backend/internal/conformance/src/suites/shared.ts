@@ -1,4 +1,5 @@
 import type {
+  BinaryArtifactRecord,
   BinaryArtifactStore,
   Initiative,
   ResolveBinaryArtifactStore,
@@ -24,6 +25,63 @@ const EMPTY_BINARY_ARTIFACT_STORE: BinaryArtifactStore = {
 /** Storage configured: every workspace resolves the (empty) store, so the gate is satisfied. */
 export const STORAGE_ON: ResolveBinaryArtifactStore = () =>
   Promise.resolve(EMPTY_BINARY_ARTIFACT_STORE)
+
+/**
+ * A binary-artifact store that actually HOLDS what is put in it, for the suites that read
+ * artifacts back rather than merely proving the start gate was satisfied (the public evidence
+ * surface lists a run's artifacts and streams their bytes).
+ *
+ * Every read filters by `workspaceId`, exactly as both real stores do: that scoping is the
+ * boundary the public blob endpoint relies on, so a fake that ignored it would let a
+ * cross-workspace assertion pass on a bug.
+ */
+export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
+  seed(record: BinaryArtifactRecord, bytes: Uint8Array): void
+} {
+  const rows = new Map<string, { record: BinaryArtifactRecord; bytes: Uint8Array }>()
+  const owned = (workspaceId: string, id: string) => {
+    const held = rows.get(id)
+    return held && held.record.workspaceId === workspaceId ? held : null
+  }
+  return {
+    seed(record, bytes) {
+      rows.set(record.id, { record, bytes })
+    },
+    store: () => Promise.reject(new Error('seed() directly in conformance')),
+    getMetadata: (workspaceId, id) => Promise.resolve(owned(workspaceId, id)?.record ?? null),
+    getBlob: (workspaceId, id) => Promise.resolve(owned(workspaceId, id)?.bytes ?? null),
+    getBlobWithMetadata: (workspaceId, id) => {
+      const held = owned(workspaceId, id)
+      return Promise.resolve(held ? { record: held.record, bytes: held.bytes } : null)
+    },
+    listByExecution: (workspaceId, executionId) =>
+      Promise.resolve(
+        [...rows.values()]
+          .filter(
+            (r) => r.record.workspaceId === workspaceId && r.record.executionId === executionId,
+          )
+          .map((r) => r.record),
+      ),
+    countByExecution: (workspaceId, executionId) =>
+      Promise.resolve(
+        [...rows.values()].filter(
+          (r) => r.record.workspaceId === workspaceId && r.record.executionId === executionId,
+        ).length,
+      ),
+    listByBlock: (workspaceId, blockId) =>
+      Promise.resolve(
+        [...rows.values()]
+          .filter((r) => r.record.workspaceId === workspaceId && r.record.blockId === blockId)
+          .map((r) => r.record),
+      ),
+    delete: (workspaceId, id) => {
+      if (owned(workspaceId, id)) rows.delete(id)
+      return Promise.resolve()
+    },
+    pruneOlderThan: () => Promise.resolve(0),
+    deleteByWorkspace: () => Promise.resolve(0),
+  }
+}
 /** Storage off: the account has no content storage, so the start gate must refuse the run. */
 export const STORAGE_OFF: ResolveBinaryArtifactStore = () => Promise.resolve(null)
 

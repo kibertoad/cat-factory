@@ -3083,6 +3083,7 @@
         "neverUsed": "hiç kullanılmadı",
         "createdBy": "oluşturan: {user}",
         "createdByYou": "siz",
+        "createdByKey": "{id} API anahtarı",
         "revoke": "Belirteci iptal et"
       },
       "add": {

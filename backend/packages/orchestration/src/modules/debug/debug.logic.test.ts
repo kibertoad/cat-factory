@@ -474,10 +474,12 @@ describe('deriveSignals', () => {
     expect(signals.some((s) => s.severity === 'error')).toBe(false)
   })
 
-  it('points a failed run with clean model calls at tool execution, where no rows are recorded', () => {
+  it('points a failed run with clean model calls at tool execution, naming both reads', () => {
     // The signature the skill's step-3 rule names: every call ok, none truncated, run dead —
-    // the failure happened in tool EXECUTION (or the engine), which this store never sees.
-    // Without this signal the overview reads like a healthy run that inexplicably died.
+    // the failure happened in tool EXECUTION (or the engine), neither of which the LLM rollup
+    // this signal is computed from can see. Without it the overview reads like a healthy run
+    // that inexplicably died. The pointer names the trajectory first (where a failing tool call
+    // IS a row) and keeps the delta search behind it for what no producer records.
     const signals = deriveSignals({
       ...base,
       execution: run({ status: 'failed' }),
@@ -485,6 +487,7 @@ describe('deriveSignals', () => {
     })
     const pointer = signals.find((s) => s.code === 'failure_outside_model_calls')
     expect(pointer).toMatchObject({ severity: 'warning', count: 40 })
+    expect(pointer!.message).toContain('tool-calls?order=trajectory')
     expect(pointer!.message).toContain('contains=')
 
     // Any model-side anomaly claims the diagnosis instead: the pointer must not fire beside

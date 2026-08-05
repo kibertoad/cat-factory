@@ -23,6 +23,7 @@ import type {
   RunInputGate,
 } from '@cat-factory/kernel'
 import { allPullRequests } from '@cat-factory/contracts'
+import type { PrVerificationReport } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
 import type { RunStartOptions } from './runStartOptions.js'
 import {
@@ -561,6 +562,24 @@ export class ExecutionService {
     const instance = await this.executionRepository.get(workspaceId, executionId)
     if (!instance) return
     await this.prVerificationReport.publishForRun(workspaceId, instance)
+  }
+
+  /**
+   * The run's verification report, composed for a READER rather than published onto a pull
+   * request: the read behind `GET /api/v1/runs/:runId/report`. Null when the workspace has no
+   * such run, or when the run's block is gone.
+   *
+   * The SAME composition the PR body carries (see
+   * {@link PrVerificationReportController.composeForRun} for the three differences the read
+   * path makes, all of them about audience rather than content).
+   */
+  async composeVerificationReport(
+    workspaceId: string,
+    executionId: string,
+  ): Promise<PrVerificationReport | null> {
+    const instance = await this.executionRepository.get(workspaceId, executionId)
+    if (!instance) return null
+    return this.prVerificationReport.composeForRun(workspaceId, instance)
   }
 
   /**
