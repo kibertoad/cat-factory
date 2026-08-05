@@ -3,12 +3,6 @@ import { isSafeDocPath } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { systemPromptFor, userPromptFor } from '../catalog.js'
 import {
-  companionFor,
-  companionTargets,
-  isCompanionKind,
-  isContainerBackedCompanion,
-} from './companions.js'
-import {
   DOC_FINALIZER_KIND,
   DOC_OUTLINER_KIND,
   DOC_RESEARCHER_KIND,
@@ -72,15 +66,15 @@ describe('document agent kinds', () => {
   })
 
   it('makes doc-reviewer a companion of doc-writer', () => {
-    expect(isCompanionKind(DOC_REVIEWER_KIND)).toBe(true)
-    expect(companionTargets(DOC_REVIEWER_KIND)).toContain(DOC_WRITER_KIND)
-    expect(companionFor(DOC_REVIEWER_KIND)?.targets).toEqual([DOC_WRITER_KIND])
+    expect(registry.isCompanionKind(DOC_REVIEWER_KIND)).toBe(true)
+    expect(registry.companionTargets(DOC_REVIEWER_KIND)).toContain(DOC_WRITER_KIND)
+    expect(registry.companionFor(DOC_REVIEWER_KIND)?.targets).toEqual([DOC_WRITER_KIND])
   })
 
   it('runs doc-reviewer in a container so it reads the actual document, not a summary', () => {
     // The writer's deliverable is the committed Markdown, so its reviewer must clone the PR
     // branch and read it — an inline review of the writer's summary reply is worthless.
-    expect(isContainerBackedCompanion(DOC_REVIEWER_KIND)).toBe(true)
+    expect(registry.isContainerBackedCompanion(DOC_REVIEWER_KIND)).toBe(true)
     // The system prompt tells it to read the checkout rather than judge from the reply.
     const prompt = systemPromptFor(DOC_REVIEWER_KIND, registry)
     expect(prompt).toContain('read-only checkout')

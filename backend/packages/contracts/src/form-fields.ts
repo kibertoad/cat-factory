@@ -257,6 +257,11 @@ export function validateDescriptorFields(
     if (!isDescriptorFieldVisible(field, values)) continue
     const value = values[field.key]
     if (!isFilled(value)) {
+      // Equivalent to `unfilledRequiredDescriptorFields` by construction: visibility and
+      // filled-ness are already decided by the two lines above, so all that is left of that
+      // predicate here is `required`. Calling it would allocate a list and a Set per validation
+      // to re-derive what this loop has in hand. The shared rule is what the OTHER caller (the
+      // input gate) needs, because it reports the descriptors rather than walking them.
       if (field.required) problems.push(`Field "${field.key}" is required.`)
       continue
     }
@@ -268,6 +273,33 @@ export function validateDescriptorFields(
   }
 
   return problems
+}
+
+/**
+ * The required fields a descriptor form declares that this value bag does NOT answer, in
+ * declaration order.
+ *
+ * Split out of {@link validateDescriptorFields} because two very different doors ask it and must
+ * agree: the create FORM refuses a submission, and the pre-dispatch INPUT GATE parks a run whose
+ * task reached the board some other way (the public API, an initiative spawn, a tracker import
+ * and every path the form never guarded). One rule, so a deployment that marks a field required
+ * cannot have it enforced at one door and ignored at the other.
+ *
+ * VISIBILITY is honoured, and it is the whole subtlety: a field hidden by its own `showWhen`
+ * is not required, because a form that never showed it cannot have asked for it. Parking a run
+ * on such a field would name an input with nowhere to go and fix it.
+ *
+ * Returns the DESCRIPTORS rather than the keys, so a caller rendering a refusal has the human
+ * label without a second lookup against a list it would have to be handed anyway.
+ */
+export function unfilledRequiredDescriptorFields(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorField[] {
+  return fields.filter(
+    (field) =>
+      field.required && isDescriptorFieldVisible(field, values) && !isFilled(values[field.key]),
+  )
 }
 
 /** The per-type semantic checks, once the value is present and structurally right. */

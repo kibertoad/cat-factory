@@ -35,7 +35,11 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-const API_VERSION = '1.9.0'
+// 1.10.0, not 1.9.0: this branch and main BOTH bumped 1.8.0 -> 1.9.0 while it was in flight, and
+// git auto-merged the identical line with no conflict, exactly as the note above predicts. main's
+// 1.9.0 is already published and describes a surface WITHOUT the six run-evidence and key
+// operations added here, so reusing the number would put two different surfaces behind it.
+const API_VERSION = '1.10.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

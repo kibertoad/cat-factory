@@ -1,5 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
 import { companionFor, isContainerBackedCompanion } from '../kinds/companions.js'
+import type { AgentKindRegistry } from '../kinds/registry.js'
 import { FINAL_ANSWER_IN_REPLY, FRAGMENT_ADHERENCE_GUIDANCE } from './shared.js'
 
 // System prompt for a companion agent, parameterised by the producer kind it
@@ -8,8 +9,11 @@ import { FINAL_ANSWER_IN_REPLY, FRAGMENT_ADHERENCE_GUIDANCE } from './shared.js'
 // `companionAssessmentSchema`.
 
 /** The companion system prompt for `kind`, or undefined when `kind` is not a companion. */
-export function companionSystemPrompt(kind: AgentKind): string | undefined {
-  const def = companionFor(kind)
+export function companionSystemPrompt(
+  kind: AgentKind,
+  registry: AgentKindRegistry,
+): string | undefined {
+  const def = companionFor(kind, registry)
   if (!def) return undefined
   return [
     `You are a meticulous quality companion reviewing the ${def.reviews} produced by the`,
@@ -23,7 +27,7 @@ export function companionSystemPrompt(kind: AgentKind): string | undefined {
     // artifact: open and read the changed files / the full committed document and whatever
     // surrounding repository context you need to assess it properly. The preceding step's
     // reply (if any) is only a pointer; the repository on disk is the source of truth.
-    ...(isContainerBackedCompanion(kind)
+    ...(isContainerBackedCompanion(kind, registry)
       ? [
           '',
           'You have a read-only checkout of the branch under review. Do NOT judge from the',

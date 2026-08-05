@@ -854,7 +854,7 @@ function registerTaskRoutes(app: Hono<AppEnv>): void {
           container,
           auth,
           boardPipeline,
-          inputGateInputOf(found.block),
+          inputGateInputOf(found.block, container.taskTypeRegistry),
           PUBLIC_TASK_STOP_PATH,
         )
       : null

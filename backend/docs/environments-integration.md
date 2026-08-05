@@ -272,8 +272,48 @@ export class MyEnvironmentProvider implements EnvironmentProvider {
   async teardown(req) {
     /* destroy; best-effort, retried by the sweep */
   }
+  // OPTIONAL, and the difference between a reported reclaim and a proven one.
+  async confirmTeardown(req): Promise<TeardownProbe> {
+    /* look the resource up again and say what you found */
+  }
 }
 ```
+
+### Confirming a teardown (`confirmTeardown`)
+
+`teardown()` returning without throwing does **not** mean anything was destroyed: the generic
+manifest provider reports `torn_down` even when its manifest declares no `teardown:` request, and
+an asynchronous delete (a Kubernetes namespace) is accepted while the resource is still
+terminating. So the platform never reads a teardown call's success as the environment's death. It
+asks separately, and only a probe that positively finds the resource gone is recorded as a
+reclaim:
+
+```ts
+type TeardownProbe =
+  | { state: 'gone' } // the ONLY answer that proves a teardown
+  | { state: 'present'; terminating: boolean; detail?: string }
+  | { state: 'unknown'; reason: string; retryable: boolean }
+```
+
+Three rules for writing one:
+
+- **Under-claim.** Anything you cannot establish is `unknown`, never `gone`. A 404 from a
+  misconfigured base URL and a 404 from a reclaimed environment are the same response; if your
+  adapter cannot tell them apart, say so. This signal exists to be trusted, so the only safe
+  direction to be wrong in is the cautious one.
+- **`terminating` and `retryable` decide whether anyone should wait.** A resource draining its
+  finalizers will confirm on a later pass; one that is simply still there never will. Likewise a
+  transient outage (`retryable: true`) is worth re-probing and a permanent inability to verify
+  (no status endpoint in the manifest) will answer identically forever and is only ever fixed by a
+  human.
+- **Don't reach for `status()` instead.** Every `status()` implementation is written to describe a
+  LIVE environment, so its answers about a destroyed one are incidental — the generic provider
+  with no `status:` template returns `ready` forever, which as a teardown verdict is a confident
+  lie in the worst direction.
+
+Omitting `confirmTeardown` is a supported choice, not a bug: the teardown is then recorded as
+`unverifiable` and reported as such, rather than as a reclaim. The probe is bounded in wall-clock
+time by the platform, so an unresponsive one costs the confirmation and never the teardown.
 
 The adapter still registers a connection (so secrets are encrypted at rest and the
 module assembles), but the `manifest`'s request templates are ignored in favour of

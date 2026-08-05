@@ -1,4 +1,5 @@
 import type { Clock, ExecutionInstance, PipelineStep } from '@cat-factory/kernel'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionTargets } from '@cat-factory/agents'
 import { restartRalphState } from './ralph.logic.js'
 
@@ -17,7 +18,16 @@ import { restartRalphState } from './ralph.logic.js'
  * pulling in the whole persistence/emission surface.
  */
 export class StepGraph {
-  constructor(private readonly clock: Clock) {}
+  constructor(
+    private readonly clock: Clock,
+    /**
+     * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion's targets are
+     * found by the same producer search the built-ins use. Optional because a unit test
+     * exercising the pure step mutators has no registry to give and needs none: the built-in
+     * catalog answers for every built-in companion.
+     */
+    private readonly agentKindRegistry?: AgentKindRegistry,
+  ) {}
 
   /** Transition a step into `working`, stamping its start time once, and resume its clock. */
   startStep(step: PipelineStep): void {
@@ -171,7 +181,10 @@ export class StepGraph {
    * extra-round resolution.
    */
   companionProducerIndex(instance: ExecutionInstance, companionIndex: number): number {
-    const targets = companionTargets(instance.steps[companionIndex]!.agentKind)
+    const targets = companionTargets(
+      instance.steps[companionIndex]!.agentKind,
+      this.agentKindRegistry,
+    )
     for (let i = companionIndex - 1; i >= 0; i--) {
       if (targets.includes(instance.steps[i]!.agentKind)) return i
     }

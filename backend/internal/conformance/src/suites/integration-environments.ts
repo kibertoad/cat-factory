@@ -23,9 +23,113 @@ export function defineEnvironmentsConformance(harness: ConformanceHarness): void
     registerEnvironmentBackendTests(harness)
     registerInfraHandlerTests(harness)
     registerProvisioningDetectionTests(harness)
+    registerDisposerTests(harness)
   })
 
   registerBoardMutationTests(harness)
+}
+
+/**
+ * The `disposer` step: the deployer's counterpart, reclaiming inside the run what the run stood
+ * up. Runtime-neutral engine behaviour, so it belongs here rather than in either facade — what
+ * each case really asserts is that the reclaim round-trips through the facade's REAL registry
+ * repository (D1 ⇄ Drizzle) to the same answer.
+ */
+function registerDisposerTests(harness: ConformanceHarness): void {
+  /** Stands an environment up, and confirms its own teardown when asked to. */
+  const provider = {
+    provision: async () =>
+      ({
+        externalId: 'env-1',
+        status: 'ready',
+        url: 'https://preview.example',
+        expiresAt: null,
+        access: null,
+        fields: {},
+      }) as never,
+    status: async () =>
+      ({ externalId: 'env-1', status: 'ready', url: 'https://preview.example' }) as never,
+    teardown: async () => ({ status: 'torn_down' }) as never,
+    confirmTeardown: async () => ({ state: 'gone' }) as never,
+  } as unknown as EnvironmentProvider
+
+  const MANIFEST = {
+    providerId: 'acme-envs',
+    label: 'Acme Ephemeral Envs',
+    baseUrl: 'https://envs.test/api',
+    auth: { type: 'bearer', secretRef: { key: 'API_TOKEN' } },
+    provision: { method: 'POST', pathTemplate: '/environments' },
+    response: { urlPath: 'url', statusPath: 'state', externalIdPath: 'id' },
+  }
+
+  async function runDeployThenDispose(
+    environmentProvider: EnvironmentProvider,
+  ): Promise<{ app: ConformanceApp; wsId: string; exec: ExecutionInstance }> {
+    const app = harness.makeApp(undefined, { environmentProvider })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const registered = await app.call('POST', `/workspaces/${wsId}/environments/connection`, {
+      config: { kind: 'manifest', manifest: MANIFEST },
+      secrets: { API_TOKEN: 'super-secret-env-token' },
+    })
+    expect(registered.status).toBe(201)
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Deploy then dispose',
+      agentKinds: ['deployer', 'disposer'],
+    })
+    await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    return { app, wsId, exec }
+  }
+
+  it('reclaims the run’s own environment inside the run, and confirms it gone', async () => {
+    // The point of the step over the TTL sweep: the environment is gone by the time the run
+    // settles, so the PR's lifecycle proof can close while something is still watching. The
+    // registry read at the end is the cross-runtime half — a facade whose repo mapped the
+    // tombstone differently would still list the environment here.
+    const { app, wsId, exec } = await runDeployThenDispose(provider)
+
+    expect(exec.status).toBe('done')
+    const deployStep = exec.steps.find((s) => s.agentKind === 'deployer')!
+    const disposeStep = exec.steps.find((s) => s.agentKind === 'disposer')!
+    expect(disposeStep.state).toBe('done')
+
+    // The disposer reclaimed EXACTLY the environment the deployer recorded — the invariant that
+    // keeps it off an environment this run never provisioned.
+    const deployed = Object.values(deployStep.deployEnvs ?? {})[0]
+    const disposed = Object.values(disposeStep.disposeEnvs ?? {})[0]
+    expect(deployed?.environmentId).toBeTruthy()
+    expect(disposed).toMatchObject({
+      status: 'reclaimed',
+      confirmation: 'confirmed',
+      environmentId: deployed?.environmentId,
+    })
+
+    const envs = await app.call<{ id: string }[]>('GET', `/workspaces/${wsId}/environments`)
+    expect(envs.body).toHaveLength(0)
+  })
+
+  it('never fails the run when the reclaim cannot be confirmed', async () => {
+    // Disposal is cleanup, not a prerequisite, and a disposer commonly sits after `merger`: a
+    // teardown the platform cannot vouch for must not flip a shipped, merged pipeline to failed.
+    // It is recorded as the unproven thing it is instead.
+    const unverifiable = {
+      ...provider,
+      confirmTeardown: undefined,
+    } as unknown as EnvironmentProvider
+    const { exec } = await runDeployThenDispose(unverifiable)
+
+    expect(exec.status).toBe('done')
+    const disposeStep = exec.steps.find((s) => s.agentKind === 'disposer')!
+    expect(disposeStep.state).toBe('done')
+    expect(Object.values(disposeStep.disposeEnvs ?? {})[0]).toMatchObject({
+      status: 'reclaimed',
+      confirmation: 'unverifiable',
+    })
+    expect(disposeStep.output).toContain('could not confirm')
+  })
 }
 
 /**

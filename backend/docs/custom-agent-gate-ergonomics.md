@@ -91,6 +91,28 @@ Pass `{ shapeHint }` to override the auto-derived hint for an unusual shape.
 Kernel's `AgentStepSpec.output` keeps its plain-string shape; only the derived spec crosses into
 it: the schema/parser stays in the agents registration layer.
 
+## Companions (registering a rework pair)
+
+A companion GRADES the immediately-preceding producer's output and, below the step's threshold,
+loops THAT producer back for automatic rework on a bounded budget before any human is asked.
+Choose it over a [judge](../../docs/initiatives/judge-registry.md) when the remedy is the producer
+running again rather than a verdict being disposed.
+
+Register it with `AgentKindRegistry.registerCompanion`, beside the kind's own registration: a
+companion is a relationship BETWEEN kinds, so it lives on the kind registry rather than a registry
+of its own. Three things bite:
+
+- **The pairing is registered SEPARATELY from the kind**, so every read goes through the registry.
+  A projection built off the kind's own definition sees no companions at all.
+- **The free lookups take the registry OPTIONALLY** and fall back to the built-ins (the shape
+  `isGatableKind` uses), so a call site that omits it silently sees built-in pairs only. That is a
+  wrong ANSWER rather than a missing argument, which is why it survives a typecheck.
+- **Adjacency is an invariant**, enforced by `assertValidCompanionPlacement`: the engine grades the
+  immediate predecessor, so a companion separated from its producer would grade whatever happens to
+  sit in front of it. The same reasoning drives the cascade-skip rule in
+  [`pipeline-catalog-collapse.md`](../../docs/initiatives/pipeline-catalog-collapse.md), where a
+  skipped producer takes its companion with it.
+
 ## Boot-time registration validation
 
 `validateRegistrations()` (`@cat-factory/orchestration`) cross-checks the registries and throws an

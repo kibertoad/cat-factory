@@ -399,7 +399,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     // Mimic a companion step grading the prior producer: return the configured rating
     // (default 1 = pass) as the JSON assessment the engine parses. A `companionRatings`
     // sequence walks one rating per grade (last repeats) so a test can fail then pass.
-    if (isCompanionKind(context.agentKind)) {
+    if (isCompanionKind(context.agentKind, this.agentKindRegistry)) {
       // A companion whose reply can't be parsed: return prose, not JSON, so the engine's
       // verdict parse (and its repair retry) fail and the run surfaces for a human.
       if (this.options.companionMalformed) {

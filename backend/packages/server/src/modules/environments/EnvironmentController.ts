@@ -310,7 +310,10 @@ function registerEnvironmentRegistryRoutes(app: Hono<AppEnv>): void {
 
   buildHonoRoute(app, teardownEnvironmentContract, async (c) => {
     const env = requireEnvironments(c)
-    const handle = await env.teardownService.teardown(
+    // The confirmation rides the returned result too, but this endpoint answers with the handle
+    // its contract declares; an operator reads what the probe found in the provisioning log
+    // drawer, which the `teardown-verify` row lands in.
+    const { handle } = await env.teardownService.teardown(
       param(c, 'workspaceId'),
       c.req.valid('param').environmentId,
     )

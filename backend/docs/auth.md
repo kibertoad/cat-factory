@@ -47,7 +47,16 @@ Sessions are **stateless**: the token is `base64url(JSON).base64url(HMAC)` with
 an absolute expiry, verified per request (see `infrastructure/auth/signing.ts`).
 There is no server-side session store: logout is a client-side token drop, and
 expiry bounds the blast radius. (User-session revocation remains a possible
-follow-up; MACHINE tokens are revocable, below.)
+follow-up, and it is NOT free, because nothing on this path reads the user row:
+see [`audit-log-and-session-revocation.md`](../../docs/initiatives/audit-log-and-session-revocation.md).
+MACHINE tokens are revocable, below.)
+
+**Enterprise SSO is not here yet.** All three methods above are consumer identity
+providers, so an org cannot express its own directory membership, sit behind its
+IdP's MFA / conditional access, or offboard by disabling an account. The generic
+OIDC design (one adapter configured per deployment, reusing `user_identities`
+as-is) is tracked in
+[`enterprise-sso-oidc.md`](../../docs/initiatives/enterprise-sso-oidc.md).
 
 **Machine tokens are revocable.** Every `POST /auth/machine-token` mint is
 recorded on the machine-node roster (`machine_nodes`), and the shared machine

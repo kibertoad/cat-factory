@@ -4,17 +4,22 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicInputGateDecisionIssue} wire model.
  * @param code the {@code code} field.
+ * @param field May be absent entirely.
  * @param severity the {@code severity} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicInputGateDecisionIssue(
     @JsonProperty("code") PublicInputGateDecisionIssueCode code,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("field") @Nullable PublicInputGateDecisionIssueField field,
 
     @JsonProperty("severity") PublicInputGateDecisionIssueSeverity severity
 ) {
@@ -32,11 +37,18 @@ public record PublicInputGateDecisionIssue(
      */
     public static final class Builder {
         private @Nullable PublicInputGateDecisionIssueCode code;
+        private @Nullable PublicInputGateDecisionIssueField field;
         private @Nullable PublicInputGateDecisionIssueSeverity severity;
 
         /** Set {@code code}. */
         public Builder code(@Nullable PublicInputGateDecisionIssueCode code) {
             this.code = code;
+            return this;
+        }
+
+        /** Set {@code field}. */
+        public Builder field(@Nullable PublicInputGateDecisionIssueField field) {
+            this.field = field;
             return this;
         }
 
@@ -48,7 +60,7 @@ public record PublicInputGateDecisionIssue(
 
         /** Build the {@link PublicInputGateDecisionIssue}. */
         public PublicInputGateDecisionIssue build() {
-            return new PublicInputGateDecisionIssue(code, severity);
+            return new PublicInputGateDecisionIssue(code, field, severity);
         }
     }
 }

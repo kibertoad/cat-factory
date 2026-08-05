@@ -333,8 +333,8 @@ export class StepDecisionController {
         // requesting changes here must re-run the producer (with the human's feedback
         // folded in) and re-grade, NOT re-run the companion. Redirect the rework to the
         // nearest preceding step of one of the companion's target kinds.
-        if (isCompanionKind(step.agentKind)) {
-          const targets = companionTargets(step.agentKind)
+        if (isCompanionKind(step.agentKind, this.deps.agentKindRegistry)) {
+          const targets = companionTargets(step.agentKind, this.deps.agentKindRegistry)
           let producerIndex = -1
           for (let i = stepIndex - 1; i >= 0; i--) {
             if (targets.includes(inst.steps[i]!.agentKind)) {

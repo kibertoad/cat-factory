@@ -675,6 +675,10 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
   precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
   Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Companions**: a REWORK PAIR looping the preceding producer back on a bounded budget before a
+  human is asked; **added with `AgentKindRegistry.registerCompanion`**. Trap: the pairing is stored
+  SEPARATELY from the kind and the lookups take the registry OPTIONALLY, so a read off a kind's own
+  definition sees built-in pairs only. Doc: [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md).
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
@@ -832,6 +836,12 @@ marker-delimited section of the PR body (idempotent, no persisted state). Trap: 
 step settlement, not a pipeline step, and it composes from state already in memory (the CI gate's
 RECORDED verdict, never a re-probe). Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+
+**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
+it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
+being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass.
+Doc: [`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`

@@ -43,12 +43,9 @@ import { createBoardLayoutWrites } from './layoutWrites.js'
 import { createMountProjection } from './mountProjection.js'
 import { pruneDanglingEdges, reclaimDoomedEntities } from './removal-cascade.js'
 import {
-  aprioriBranchesError,
   canReparent,
   descendantIds,
   gridSlot,
-  involvedServiceIdsError,
-  serviceConnectionsError,
   serviceOf,
   tasksOf,
   unfinishedTasksUnder,
@@ -61,6 +58,8 @@ import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { PublicBoardReads } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
+import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
+import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 
@@ -224,6 +223,7 @@ export class BoardService {
    * the fragment set it owns from creation, and the pipeline its Run controls default to.
    */
   private readonly taskTypeDefaults: TaskTypeCreationDefaults
+  private readonly patchNarrowing: BlockPatchNarrowing
 
   constructor({
     workspaceRepository,
@@ -276,6 +276,21 @@ export class BoardService {
     this.taskTypeDefaults = createTaskTypeCreationDefaults({
       taskTypeRegistry,
       logger: this.log,
+    })
+    // Bound callbacks rather than the service, so the narrowing depends on the two reads and the
+    // one validator it actually uses instead of on everything `BoardService` can do.
+    this.patchNarrowing = createBlockPatchNarrowing({
+      listByWorkspace: (homeWorkspaceId) => blockRepository.listByWorkspace(homeWorkspaceId),
+      // The cross-home resolve is BEST-EFFORT here on purpose: an id that cannot be reached is
+      // not yet a refusal, it is simply absent from the universe the validators then judge
+      // against, which is what produces the specific "not a connection neighbor" message.
+      resolveForeign: (workspaceId, id) =>
+        this.resolveBlock(workspaceId, id).then(
+          (found) => found.block,
+          () => null,
+        ),
+      validatedFields: (taskType, fields) =>
+        this.taskTypeDefaults.validatedFields(taskType, fields),
     })
     this.layout = createBoardLayoutWrites({
       blockRepository,
@@ -1018,64 +1033,26 @@ export class BoardService {
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
-    // `serviceFragmentIds` is a service-level (frame) setting the engine only reads off
-    // the owning service frame; ignore it on non-frame blocks so it never persists as
-    // dead data (the inspector only exposes the picker on frames anyway).
-    let effective = patch
-    if (patch.serviceFragmentIds !== undefined && block.level !== 'frame') {
-      const { serviceFragmentIds: _ignored, ...rest } = patch
-      effective = rest
-    }
-    // `serviceConnections` lives only on service-type frames; dropped elsewhere and validated on
-    // a service frame with edges (see {@link applyServiceConnectionsPatch}).
-    effective = await this.applyServiceConnectionsPatch(
-      effective,
-      block,
+    // Each patch field that belongs to a DIFFERENT kind of block than the one addressed is
+    // dropped rather than persisted as dead data, and the three that name other entities are
+    // validated against them. One collaborator (`blockPatchNarrowing.ts`) owns all of it.
+    const narrow = this.patchNarrowing
+    let effective = narrow.serviceFragmentIds(patch, block)
+    effective = await narrow.serviceConnections(effective, block, id, homeWorkspaceId, workspaceId)
+    effective = await narrow.involvedServiceIds(effective, block, homeWorkspaceId, workspaceId)
+    effective = narrow.referenceRepos(effective, block)
+    effective = narrow.aprioriBranches(effective, block)
+    // AFTER both of its inputs have settled: the branch invariants are cross-field, so they read
+    // the effective branch list against the effective involved set.
+    narrow.aprioriBranchInvariants(effective, block)
+    // LAST, because it is the one narrowing that changes the patch's SHAPE: the request names
+    // `customTaskTypeFields` (the half that may be patched) and the row stores the whole
+    // `taskTypeFields`, so this is where the request type becomes the repository's.
+    await this.blockRepository.update(
+      homeWorkspaceId,
       id,
-      homeWorkspaceId,
-      workspaceId,
+      narrow.customTaskTypeFields(effective, block),
     )
-    // `involvedServiceIds` is a task-level selection drawn from the enclosing service frame's
-    // connection neighbors; dropped on non-tasks, validated on tasks (see
-    // {@link applyInvolvedServiceIdsPatch}).
-    effective = await this.applyInvolvedServiceIdsPatch(
-      effective,
-      block,
-      homeWorkspaceId,
-      workspaceId,
-    )
-    // `referenceRepos` is a DOCUMENT-task-only attachment (read-only reference repos for the
-    // `doc-writer` agent): the inspector shows the picker only for `taskType === 'document'`, and
-    // the executor consumes it only for the doc-writer kind. Dropped on any other block (a frame, a
-    // module, or a non-document task) so nothing persists dead data no code path reads. The repo
-    // identities are self-contained (contract-capped), so there is nothing to cross-validate here.
-    const isDocumentTask = block.level === 'task' && block.taskType === 'document'
-    if (effective.referenceRepos !== undefined && !isDocumentTask) {
-      const { referenceRepos: _ignored, ...rest } = effective
-      effective = rest
-    }
-    // `aprioriBranches` is a task-level input (pre-existing branches of the target repo).
-    // Dropped on non-tasks; on a task the cross-entry invariants (single working, no dupes,
-    // mode-disjoint, frozen-after-PR, multi-repo exclusion) are validated against the task's
-    // CURRENT state plus the effective `involvedServiceIds` this patch resolves to.
-    if (effective.aprioriBranches !== undefined && block.level !== 'task') {
-      const { aprioriBranches: _ignored, ...rest } = effective
-      effective = rest
-    }
-    // The multi-repo exclusion is a cross-field invariant (a `working` branch is barred once a
-    // task involves peer services), so it must be re-checked whenever EITHER field is patched —
-    // otherwise adding `involvedServiceIds` to a task that already carries a working branch would
-    // slip past the guard. Revalidate against the effective branch list + involved set on a task.
-    if (
-      block.level === 'task' &&
-      (effective.aprioriBranches !== undefined || effective.involvedServiceIds !== undefined)
-    ) {
-      const effectiveBranches = effective.aprioriBranches ?? block.aprioriBranches ?? []
-      const effectiveInvolved = effective.involvedServiceIds ?? block.involvedServiceIds ?? []
-      const error = aprioriBranchesError(effectiveBranches, block, effectiveInvolved.length > 0)
-      if (error) throw new ValidationError(error)
-    }
-    await this.blockRepository.update(homeWorkspaceId, id, effective)
     // Origin = the block's HOME so editing a shared block fans out to every board mounting it.
     // Forward the acting tab's connection id so the realtime transport SKIPS echoing this coarse
     // signal back to it: the REST response already carried the authoritative block (the SPA
@@ -1090,88 +1067,6 @@ export class BoardService {
       workspaceId,
       assertFound(await this.blockRepository.get(homeWorkspaceId, id), 'Block', id),
     )
-  }
-
-  /**
-   * Validate + narrow the `serviceConnections` patch field. It lives only on service-type frames
-   * (the consumer end of each edge), so it is dropped on any other block for the same
-   * never-persist-dead-data reason as `serviceFragmentIds`. On a service frame with edges each
-   * target is resolved from ONE home-workspace read — only ids not homed here (a service mounted
-   * from another workspace) fall back to the cross-home-aware per-id resolve, a bounded
-   * user-authored list, not a data-sized loop — and the edge list validated. Returns the
-   * (possibly-narrowed) patch; throws {@link ValidationError} on an invalid edge. Split out of
-   * {@link updateBlock} to keep it under the complexity ceiling.
-   */
-  private async applyServiceConnectionsPatch(
-    effective: UpdateBlockInput,
-    block: Block,
-    id: string,
-    homeWorkspaceId: string,
-    workspaceId: string,
-  ): Promise<UpdateBlockInput> {
-    if (effective.serviceConnections === undefined) return effective
-    if (block.level !== 'frame' || block.type !== 'service') {
-      const { serviceConnections: _ignored, ...rest } = effective
-      return rest
-    }
-    if (effective.serviceConnections.length) {
-      const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-      const byId = new Map(homeBlocks.map((b) => [b.id, b]))
-      const resolved = new Map<string, Block>()
-      for (const { serviceBlockId } of effective.serviceConnections) {
-        if (byId.has(serviceBlockId) || resolved.has(serviceBlockId)) continue
-        const found = await this.resolveBlock(workspaceId, serviceBlockId).catch(() => null)
-        if (found) resolved.set(serviceBlockId, found.block)
-      }
-      const error = serviceConnectionsError(
-        id,
-        effective.serviceConnections,
-        (targetId) => byId.get(targetId) ?? resolved.get(targetId),
-      )
-      if (error) throw new ValidationError(error)
-    }
-    return effective
-  }
-
-  /**
-   * Validate + narrow the `involvedServiceIds` patch field: a task-level selection drawn from the
-   * enclosing service frame's connection neighbors, dropped on non-tasks. On a task each selected
-   * id is validated against the same universe the SPA offers — a connection neighbor can be a
-   * service mounted from another workspace, so each id not homed here is resolved (cross-home
-   * aware) and folded in, making an INCOMING edge from a mounted foreign consumer count as a
-   * neighbor too. A bounded user-authored list (contract-capped), not a data-sized loop. Returns
-   * the (possibly-narrowed) patch; throws {@link ValidationError} on an invalid selection. Split
-   * out of {@link updateBlock} to keep it under the complexity ceiling.
-   */
-  private async applyInvolvedServiceIdsPatch(
-    effective: UpdateBlockInput,
-    block: Block,
-    homeWorkspaceId: string,
-    workspaceId: string,
-  ): Promise<UpdateBlockInput> {
-    if (effective.involvedServiceIds === undefined) return effective
-    if (block.level !== 'task') {
-      const { involvedServiceIds: _ignored, ...rest } = effective
-      return rest
-    }
-    if (effective.involvedServiceIds.length) {
-      const homeBlocks = await this.blockRepository.listByWorkspace(homeWorkspaceId)
-      const byId = new Set(homeBlocks.map((b) => b.id))
-      const foreign: Block[] = []
-      for (const sid of effective.involvedServiceIds) {
-        if (byId.has(sid)) continue
-        byId.add(sid)
-        const found = await this.resolveBlock(workspaceId, sid).catch(() => null)
-        if (found) foreign.push(found.block)
-      }
-      const error = involvedServiceIdsError(
-        [...homeBlocks, ...foreign],
-        block,
-        effective.involvedServiceIds,
-      )
-      if (error) throw new ValidationError(error)
-    }
-    return effective
   }
 
   /** Move a block into a new container at a new local position. */

@@ -34,6 +34,11 @@ import * as v from 'valibot'
  *   nothing for the run to open.
  * - `success_criteria_missing`: a `spike` with no stated success criteria or research
  *   question, so nothing decides when the timebox has been spent well (advisory).
+ * - `required_field_missing`: a CUSTOM (deployment-registered) task type declared one of its
+ *   own create-form fields `required`, and the task does not answer it. The one code that
+ *   covers every deployment's types, because a deployment cannot add a member to a closed,
+ *   persisted union: WHICH field is missing rides on the finding's {@link inputGateIssueSchema}
+ *   `field` instead, so an org registering twenty operations adds no vocabulary at all.
  */
 export const INPUT_GATE_ISSUE_CODES = [
   'description_missing',
@@ -42,6 +47,7 @@ export const INPUT_GATE_ISSUE_CODES = [
   'reproduction_missing',
   'review_target_missing',
   'success_criteria_missing',
+  'required_field_missing',
 ] as const
 export const inputGateIssueCodeSchema = v.picklist(INPUT_GATE_ISSUE_CODES)
 export type InputGateIssueCode = v.InferOutput<typeof inputGateIssueCodeSchema>
@@ -58,10 +64,32 @@ export type InputGateIssueCode = v.InferOutput<typeof inputGateIssueCodeSchema>
 export const inputGateSeveritySchema = v.picklist(['blocking', 'advisory'])
 export type InputGateSeverity = v.InferOutput<typeof inputGateSeveritySchema>
 
-/** One structural finding: its code and the severity it carried in THIS evaluation. */
+/**
+ * Which declared field a `required_field_missing` finding is about.
+ *
+ * `key` is what a machine matches on (an SDK client deciding what to fill in); `label` is the
+ * deployment-supplied English a human reads. Both, because neither substitutes for the other:
+ * a key is a stable identifier nobody wants in a sentence, and a label is prose a deployment
+ * may re-word between releases.
+ */
+export const inputGateIssueFieldSchema = v.object({
+  key: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+  label: v.pipe(v.string(), v.minLength(1), v.maxLength(200)),
+})
+export type InputGateIssueField = v.InferOutput<typeof inputGateIssueFieldSchema>
+
+/**
+ * One structural finding: its code, the severity it carried in THIS evaluation, and, for the
+ * codes that are about a NAMED input rather than the task as a whole, which one.
+ *
+ * `field` is optional because most codes need it to be absent, not empty: `description_missing`
+ * is about the description and says so by its code alone. Only `required_field_missing` carries
+ * it, and it is what keeps a deployment's twenty task types from each needing a code of their own.
+ */
 export const inputGateIssueSchema = v.object({
   code: inputGateIssueCodeSchema,
   severity: inputGateSeveritySchema,
+  field: v.optional(inputGateIssueFieldSchema),
 })
 export type InputGateIssue = v.InferOutput<typeof inputGateIssueSchema>
 

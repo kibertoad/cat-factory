@@ -223,12 +223,16 @@ export function assertValidSkillSteps({ agentKinds, enabled, stepOptions }: Pipe
  * producer and its companion". Companions are surfaced in the builder as toggles attached to
  * their producer and run immediately after it, so adjacency is required.
  */
-export function assertValidCompanionPlacement({ agentKinds, enabled }: PipelineShape): void {
+export function assertValidCompanionPlacement({
+  agentKinds,
+  enabled,
+  agentKindRegistry,
+}: PipelineShape): void {
   const isEnabled = (i: number) => enabled?.[i] !== false
   for (let i = 0; i < agentKinds.length; i++) {
     const kind = agentKinds[i]
-    if (kind === undefined || !isCompanionKind(kind) || !isEnabled(i)) continue
-    const targets = companionTargets(kind)
+    if (kind === undefined || !isCompanionKind(kind, agentKindRegistry) || !isEnabled(i)) continue
+    const targets = companionTargets(kind, agentKindRegistry)
     // The nearest preceding ENABLED step must be a producer this companion can review.
     let predecessor: string | undefined
     for (let j = i - 1; j >= 0; j--) {

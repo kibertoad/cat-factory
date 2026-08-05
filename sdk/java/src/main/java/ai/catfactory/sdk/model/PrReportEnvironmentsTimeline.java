@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  * @param provisionFailures the {@code provisionFailures} field.
  * @param provisionedAt Always present; {@code null} when the server has no value for it.
  * @param teardownFailures the {@code teardownFailures} field.
+ * @param teardownsUnconfirmed the {@code teardownsUnconfirmed} field.
  * @param tornDownAt Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -31,6 +32,8 @@ public record PrReportEnvironmentsTimeline(
     @JsonProperty("provisionedAt") @Nullable Double provisionedAt,
 
     @JsonProperty("teardownFailures") Double teardownFailures,
+
+    @JsonProperty("teardownsUnconfirmed") Double teardownsUnconfirmed,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("tornDownAt") @Nullable Double tornDownAt
@@ -53,6 +56,7 @@ public record PrReportEnvironmentsTimeline(
         private @Nullable Double provisionFailures;
         private @Nullable Double provisionedAt;
         private @Nullable Double teardownFailures;
+        private @Nullable Double teardownsUnconfirmed;
         private @Nullable Double tornDownAt;
 
         /** Set {@code gap}. */
@@ -85,6 +89,12 @@ public record PrReportEnvironmentsTimeline(
             return this;
         }
 
+        /** Set {@code teardownsUnconfirmed}. */
+        public Builder teardownsUnconfirmed(@Nullable Double teardownsUnconfirmed) {
+            this.teardownsUnconfirmed = teardownsUnconfirmed;
+            return this;
+        }
+
         /** Set {@code tornDownAt}. */
         public Builder tornDownAt(@Nullable Double tornDownAt) {
             this.tornDownAt = tornDownAt;
@@ -93,7 +103,7 @@ public record PrReportEnvironmentsTimeline(
 
         /** Build the {@link PrReportEnvironmentsTimeline}. */
         public PrReportEnvironmentsTimeline build() {
-            return new PrReportEnvironmentsTimeline(gap, note, provisionFailures, provisionedAt, teardownFailures, tornDownAt);
+            return new PrReportEnvironmentsTimeline(gap, note, provisionFailures, provisionedAt, teardownFailures, teardownsUnconfirmed, tornDownAt);
         }
     }
 }

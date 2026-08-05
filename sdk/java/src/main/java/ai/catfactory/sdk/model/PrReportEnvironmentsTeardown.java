@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
  */
 public enum PrReportEnvironmentsTeardown {
     CONFIRMED("confirmed"),
+    UNCONFIRMED("unconfirmed"),
     PENDING("pending"),
     FAILED("failed"),
     NOT_APPLICABLE("not_applicable"),
