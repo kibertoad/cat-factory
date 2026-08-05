@@ -137,6 +137,18 @@ function retryFailureEvidence() {
 }
 
 /**
+ * Show the trajectory tab, loading it if this is the first look.
+ *
+ * A named handler rather than two statements in the template: an inline handler is parsed as a
+ * single expression, so the multi-statement form is a build-time syntax error that neither the
+ * typecheck nor the unit tests compile a template to catch.
+ */
+function openToolsView() {
+  view.value = 'tools'
+  ensureTrajectoryLoaded()
+}
+
+/**
  * Load the trajectory the first time it is actually looked at.
  *
  * Deferred because it is the one read on this panel whose size scales with how much the run DID
@@ -484,10 +496,7 @@ function exportJson() {
                     ? 'bg-slate-800 text-slate-100'
                     : 'text-slate-400 hover:text-slate-200'
                 "
-                @click="
-                  view = 'tools'
-                  ensureTrajectoryLoaded()
-                "
+                @click="openToolsView()"
               >
                 {{ t('observability.toolCalls.title') }}
               </button>
