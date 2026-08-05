@@ -47,7 +47,9 @@ registry.registerToolServer({
   guidance: 'Look up a dependency here before judging whether a version bump is risky.',
   transport: { kind: 'stdio', command: 'npx', args: ['-y', '@example-org/advisories-mcp@1.4.2'] },
   allowedTools: ['lookup_advisory'],
-  secretKeys: [{ key: 'MCP_ORG_ADVISORY_TOKEN', usage: 'A read token from the advisory admin page.' }],
+  secretKeys: [
+    { key: 'MCP_ORG_ADVISORY_TOKEN', usage: 'A read token from the advisory admin page.' },
+  ],
 })
 
 // Attach it to a BUILT-IN kind without redefining it, or list it in a custom kind's `toolServers`.
@@ -72,11 +74,11 @@ for the composition-root ordering that makes it deterministic.
 Which transports each CLI's MCP client reaches is a fact about the CLI, held once in kernel's
 `MCP_HARNESS_TRANSPORTS` (`packages/kernel/src/domain/agent-capabilities.ts`):
 
-| Harness       | `stdio` | `http` | Notes                                                                                            |
-| ------------- | ------- | ------ | ------------------------------------------------------------------------------------------------ |
-| `claude-code` | yes     | yes    | Config rides a per-run `--mcp-config` file, so ambient (developer-login) runs are served too.    |
-| `codex`       | yes     | no     | Stdio-only client. An AMBIENT Codex run has no per-run config home, so it is not served at all.  |
-| `pi`          | no      | no     | Pi has no MCP client (a standing non-goal, ADR 0029). Tool servers never apply on Pi runs.       |
+| Harness       | `stdio` | `http` | Notes                                                                                           |
+| ------------- | ------- | ------ | ----------------------------------------------------------------------------------------------- |
+| `claude-code` | yes     | yes    | Config rides a per-run `--mcp-config` file, so ambient (developer-login) runs are served too.   |
+| `codex`       | yes     | no     | Stdio-only client. An AMBIENT Codex run has no per-run config home, so it is not served at all. |
+| `pi`          | no      | no     | Pi has no MCP client (a standing non-goal, ADR 0029). Tool servers never apply on Pi runs.      |
 
 A definition's `harnesses` field may NARROW this (a server that only makes sense under one CLI)
 but never widen it. Narrowing to a combination no harness can serve (an `http` server on
