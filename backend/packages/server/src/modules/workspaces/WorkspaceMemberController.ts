@@ -59,7 +59,12 @@ export function workspaceMemberController(): Hono<AppEnv> {
     const service = requireMemberService(c)
     requirePermission(c, 'members.manage')
     const { workspaceId, userId } = c.req.valid('param')
-    const member = await service.setRole(workspaceId, userId, c.req.valid('json').role)
+    const member = await service.setRole(
+      workspaceId,
+      userId,
+      c.req.valid('json').role,
+      c.get('user')?.id ?? null,
+    )
     return c.json(member, 200)
   })
 
@@ -67,7 +72,7 @@ export function workspaceMemberController(): Hono<AppEnv> {
     const service = requireMemberService(c)
     requirePermission(c, 'members.manage')
     const { workspaceId, userId } = c.req.valid('param')
-    await service.remove(workspaceId, userId)
+    await service.remove(workspaceId, userId, c.get('user')?.id ?? null)
     return c.body(null, 204)
   })
 
@@ -77,6 +82,7 @@ export function workspaceMemberController(): Hono<AppEnv> {
     const workspace = await service.setAccessMode(
       param(c, 'workspaceId'),
       c.req.valid('json').accessMode,
+      c.get('user')?.id ?? null,
     )
     return c.json(workspace, 200)
   })

@@ -187,6 +187,21 @@ const NON_REMOTE: Record<string, Record<string, Reason>> = {
     isRevoked: 'admin',
     deleteExpired: 'sweeper',
   },
+  // The account audit log. Every action instrumented so far is an ADMIN-gated account mutation
+  // (membership, roles, budget/settings, invitations, the board roster), and every one of those
+  // repositories is itself 'admin' here for the same stated reason: the machine token scopes
+  // ACCOUNTS not ROLES and the RPC bypasses the service-layer `requireAdmin`. An action a node
+  // cannot perform needs no route for the audit row that describes it.
+  //
+  // `append` carries a second, sharper reason not to expose it. The event names its own ACTOR, so
+  // a role-blind token that could reach `append` could forge entries attributing any action to
+  // any user inside its account scope — which is not a gap in the audit log so much as the end of
+  // it. Whenever the run-lifecycle slice audits a node-driven run, the row must be written by the
+  // mothership from what it already observes, never accepted from the node's own say-so.
+  //
+  // `listByAccount` is the admin-tier viewer read, off the machine API exactly like
+  // `accountSettingsRepository.getByAccount`. Mothership-internal by construction, not a backlog.
+  auditEventRepository: { append: 'admin', listByAccount: 'admin' },
   // The auth-attempt ledger (SEC-4) is the password throttle's own state. A node that could
   // reach it over the RPC could read attempt patterns or flood a victim's bucket; nothing on
   // a satellite ever needs it. Mothership-internal by construction, like the roster above.

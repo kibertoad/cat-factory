@@ -144,6 +144,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
           userRepository: dependencies.userRepository,
           clock: dependencies.clock,
           workspaceAccessCache: caches.workspaceAccess,
+          audit: dependencies.auditRecorder,
         })
       : undefined,
   )
@@ -162,6 +163,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // Reject an account budget above the operator cap on write (late-bound: spendService
     // is built after the foundation, and the cap is a static deployment fact once it is).
     resolveAccountBudgetCap: () => getSpendService()?.budgetCaps().accountMonthlyLimitMax,
+    // Membership, role and budget/settings edits are the account-admin actions the audit log
+    // exists for. Required on `CoreDependencies`, so this is never accidentally absent.
+    audit: dependencies.auditRecorder,
   })
   const userService = new UserService({
     userRepository: dependencies.userRepository,
@@ -191,6 +195,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
           appBaseUrl: dependencies.appBaseUrl,
           // Accepting an invitation grants membership ⇒ drop the workspace-access cache (workspace-rbac).
           onAccountMembershipChanged: () => caches.workspaceAccess.invalidateAll(),
+          audit: dependencies.auditRecorder,
         })
       : undefined,
   )

@@ -603,3 +603,4 @@ export {
   type EmailConnectionServiceDependencies,
   type EmailConnection,
 } from './modules/email/EmailConnectionService.js'
+export { AuditService, type AuditServiceDependencies } from './modules/audit/AuditService.js'

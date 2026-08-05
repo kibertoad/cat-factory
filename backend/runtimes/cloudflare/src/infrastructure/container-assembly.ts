@@ -27,6 +27,7 @@ import type {
   ValidationConfigService,
   UserSecretService,
 } from '@cat-factory/integrations'
+import { AuditService } from '@cat-factory/integrations'
 import {
   logger,
   mcpOAuthContainerFields,
@@ -51,6 +52,7 @@ import type { NotificationChannel, PlatformAlertSink, RunLifecycleSink } from '@
 import type { AppConfig } from './config'
 import { selectEnvConfigRepairer, selectRepoBootstrapper } from './container-dispatchers'
 import type { Env } from './env'
+import { requireAuditDb } from './env'
 import type { WorkerRegistries } from './container-registries.js'
 import { baseUrlFor } from './ai/providerEndpoints'
 import { bedrockModelsCapability } from './ai/registries'
@@ -75,6 +77,7 @@ import { D1BootstrapJobRepository } from './repositories/D1BootstrapJobRepositor
 import { CryptoIdGenerator } from './runtime'
 import { D1AuthAttemptRepository } from './repositories/D1AuthAttemptRepository'
 import { D1ConsensusSessionRepository } from './repositories/D1ConsensusSessionRepository'
+import { D1AuditEventRepository } from './repositories/D1AuditEventRepository'
 import { D1MachineNodeRepository } from './repositories/D1MachineNodeRepository'
 import { D1EnvConfigRepairJobRepository } from './repositories/D1EnvConfigRepairJobRepository'
 import { D1EnvironmentTestRunRepository } from './repositories/D1EnvironmentTestRunRepository'
@@ -450,6 +453,17 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // an un-wired collector reads as "none of this ever happened". On this runtime it is
     // per-ISOLATE, which is why the entry points flush it rather than the cron alone.
     operationalMetrics,
+    // The third member of that obligation: where privileged actions are RECORDED for an account
+    // admin. Same position, same reason — an un-wired audit log reads as "nobody changed
+    // anything", which is the assurance it exists to give.
+    auditRecorder: new AuditService({
+      // The dedicated AUDIT_DB, not `db`: the log is retained for years and must not compete
+      // with live transactional state for the 10 GB per-database ceiling.
+      auditEventRepository: new D1AuditEventRepository({ db: requireAuditDb(env) }),
+      idGenerator,
+      clock,
+      logger,
+    }),
     // App-owned backend registries (kind → provider) the connection services resolve through.
     environmentBackendRegistry,
     runnerBackendRegistry,
