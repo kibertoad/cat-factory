@@ -204,7 +204,9 @@ describe('RunDebugService with unwired sinks', () => {
       llmCalls: { available: false, count: 0 },
       agentContext: { available: false, count: 0 },
       searchQueries: { available: false, count: 0 },
-      toolCalls: { available: false, count: 0 },
+      // `failed: 0` beside `available: false` is not a claim that nothing failed: the
+      // `available` flag it sits next to is what says the sink was never wired.
+      toolCalls: { available: false, count: 0, failed: 0 },
       provisioningLog: { available: false, count: 0 },
     })
     expect(overview.signals.filter((s) => s.code === 'telemetry_unavailable')).toHaveLength(5)

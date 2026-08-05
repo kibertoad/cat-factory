@@ -226,6 +226,8 @@ type DebugListToolCallsQuery struct {
 	JobID *string
 	// Order zero value means "not sent".
 	Order *ListDebugToolCallsOrder
+	// Outcome zero value means "not sent".
+	Outcome *ListDebugToolCallsOutcome
 }
 
 func (q *DebugListToolCallsQuery) values() map[string]string {
@@ -244,6 +246,9 @@ func (q *DebugListToolCallsQuery) values() map[string]string {
 	}
 	if q.Order != nil {
 		out["order"] = fmt.Sprintf("%v", *q.Order)
+	}
+	if q.Outcome != nil {
+		out["outcome"] = fmt.Sprintf("%v", *q.Outcome)
 	}
 	return out
 }

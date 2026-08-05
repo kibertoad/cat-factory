@@ -8,6 +8,7 @@ import type {
   AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
   AgentToolCall,
+  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
   AgentToolCallTrajectoryQuery,
@@ -498,9 +499,14 @@ function toolCallsReadThrough(
     },
 
     async countByExecution(ws, executionId) {
-      const n = await local.countByExecution(ws, executionId)
-      if (ctx.whole(ws, executionId, n)) return n
-      return ctx.read<number>('agentToolCallRepository', 'countByExecution', ws, [executionId])
+      const counts = await local.countByExecution(ws, executionId)
+      // Coverage is judged on the TOTAL, never on the failure count: a run whose local rows were
+      // all pruned reports `{ total: 0, failed: 0 }`, and a zero failure count would read as
+      // "nothing failed here", the false clean bill this whole read-through exists to prevent.
+      if (ctx.whole(ws, executionId, counts.total)) return counts
+      return ctx.read<AgentToolCallCounts>('agentToolCallRepository', 'countByExecution', ws, [
+        executionId,
+      ])
     },
   }
 }

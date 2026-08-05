@@ -40,6 +40,16 @@ export const MAX_TOOL_BODY_CHARS = 8 * 1024
  */
 const SEQ_ID_WIDTH = 6
 
+/**
+ * Cap on the trajectory a RENDERING surface (the observability panel) is handed.
+ *
+ * Sized against the panel's job rather than the store's: a tool loop fires several calls per
+ * model turn, so it sits well above the LLM call list's own 1,000-row cap, and a run past it is
+ * long enough that the browser, not the query, is the binding constraint. Applied to the OLDEST
+ * end like every trajectory read, so a truncated one is a genuine prefix of the run.
+ */
+const DEFAULT_TRAJECTORY_LIMIT = 2_000
+
 /** Clamp one body, reporting what it dropped rather than silently shortening. */
 function clamp(text: string, alreadyDropped: number): { text: string; dropped: number } {
   if (text.length <= MAX_TOOL_BODY_CHARS) return { text, dropped: alreadyDropped }
@@ -99,6 +109,23 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
     query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
     return this.repository.listByExecution(workspaceId, query)
+  }
+
+  /**
+   * A run's trajectory for a RENDERING surface: oldest first, capped at
+   * {@link DEFAULT_TRAJECTORY_LIMIT}.
+   *
+   * The cap is the panel's, not the store's, and it is deliberately the whole prefix rather than
+   * the failing rows alone: the surface pins the failures at the top AND lets an operator read
+   * what led up to one, so narrowing here would cost a second request for the context that makes
+   * a failure legible. The debug API, whose caller pays for every row in its own context budget,
+   * narrows in SQL instead ({@link AgentToolCallTrajectoryQuery.outcome}).
+   */
+  listForRun(workspaceId: string, executionId: string): Promise<AgentToolCall[]> {
+    return this.repository.listByExecution(workspaceId, {
+      executionId,
+      limit: DEFAULT_TRAJECTORY_LIMIT,
+    })
   }
 
   /** One bounded page of a run's trajectory, newest first on the `(createdAt, id)` keyset. */

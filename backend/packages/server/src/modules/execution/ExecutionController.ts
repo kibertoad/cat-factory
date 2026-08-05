@@ -5,6 +5,7 @@ import {
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
+  getExecutionToolCallsContract,
   getSpendStatusContract,
   getWorkspaceUsageContract,
   mergeBlockContract,
@@ -287,6 +288,19 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
       ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
       : []
     return c.json({ executionId, searchQueries }, 200)
+  })
+
+  // The tool-call TRAJECTORY: every tool each container agent invoked, oldest first, in the
+  // order it invoked them. The half of "what happened" no model call answers: a tool-execution
+  // failure leaves the model call that requested it reporting `ok`, so the panel's LLM rollups
+  // see a healthy run right up to the moment it dies. Empty when the sink is not wired.
+  buildHonoRoute(app, getExecutionToolCallsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').toolCallObservability
+    const toolCalls = observability
+      ? await observability.listForRun(param(c, 'workspaceId'), executionId)
+      : []
+    return c.json({ executionId, toolCalls }, 200)
   })
 
   // LLM-friendly export of a run's model activity: a self-describing JSON bundle

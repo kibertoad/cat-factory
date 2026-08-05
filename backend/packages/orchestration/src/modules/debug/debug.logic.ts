@@ -16,6 +16,7 @@ import type {
   DebugRunSummary,
   DebugSignal,
   DebugSinkStatus,
+  DebugToolCallSinkStatus,
   DebugText,
   LlmExportInsight,
   LlmExportTotals,
@@ -357,7 +358,7 @@ export interface SignalInput {
     llmCalls: DebugSinkStatus
     agentContext: DebugSinkStatus
     searchQueries: DebugSinkStatus
-    toolCalls: DebugSinkStatus
+    toolCalls: DebugToolCallSinkStatus
     provisioningLog: DebugSinkStatus
   }
   /** Provisioning attempts for this run recorded as failures. */
@@ -425,6 +426,22 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       count: totals.errors,
     })
   }
+  // The failure class that had no rollup at all until this signal existed. A tool-EXECUTION
+  // error happens inside the container, so the model call that requested the tool still reports
+  // `ok` with a clean finish reason and `llm.totals` above sees a perfectly healthy run.
+  //
+  // WARNING, not error, and deliberately so: a failing tool call is routine in a run that ends
+  // well (a search that matches nothing, a build that fails and is then fixed), so grading it as
+  // an error would sort noise above the run's actual cause. What makes it worth a signal is that
+  // it is otherwise INVISIBLE: the count says whether to look, and the query below says where.
+  if (sinks.toolCalls.failed > 0) {
+    push(
+      'tool_calls_failed',
+      'warning',
+      `${sinks.toolCalls.failed} of the run's ${sinks.toolCalls.count} tool call(s) reported failure. Individually that is ordinary; read them in the order they happened (GET /debug/runs/:runId/tool-calls?order=trajectory&outcome=error) to tell one tool that failed and was worked around from an edit loop stuck repeating the same failing call.`,
+      { count: sinks.toolCalls.failed },
+    )
+  }
   for (const step of steps) {
     if (step.evictionRecoveries > 0) {
       push(
@@ -458,10 +475,20 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     totals.errors === 0 &&
     totals.truncatedCalls === 0
   ) {
+    // The trajectory sink has already COUNTED the failing tool calls by the time this fires, so
+    // the pointer states what is there rather than sending the caller to look. The two answers
+    // need different next steps, which is why they are different sentences: rows to read, versus
+    // a cause with no row anywhere.
+    const toolLead =
+      sinks.toolCalls.failed > 0
+        ? `${sinks.toolCalls.failed} of its ${sinks.toolCalls.count} TOOL call(s) did fail: read those first, in the order they happened (GET /debug/runs/:runId/tool-calls?order=trajectory&outcome=error).`
+        : sinks.toolCalls.available && sinks.toolCalls.count > 0
+          ? `None of its ${sinks.toolCalls.count} tool call(s) failed either, so the cause left no row in any sink: look at the engine.`
+          : 'No tool calls were recorded for it, so the trajectory cannot answer this one: the container may have died before the harness numbered any calls, or the image predates the sink.'
     push(
       'failure_outside_model_calls',
       'warning',
-      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated: the model side looks healthy, so the cause most likely sits in tool execution inside the container or in the engine. Read the trajectory for failing tool calls (GET /debug/runs/:runId/tool-calls?order=trajectory), then search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what the engine never recorded, and check each step's firstEvictionDetail plus /logs.`,
+      `The run failed but none of its ${totals.calls} model call(s) failed or was truncated: the model side looks healthy, so the cause sits in tool execution inside the container or in the engine. ${toolLead} Then search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what the engine never recorded, and check each step's firstEvictionDetail plus /logs.`,
       { count: totals.calls },
     )
   }

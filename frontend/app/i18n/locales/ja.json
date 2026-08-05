@@ -1629,6 +1629,47 @@
       "provider": "プロバイダー",
       "resultsCount": "{count} 件の結果 | {count} 件の結果",
       "queriesTitle": "実行した検索"
+    },
+    "callsTitle": "モデル呼び出し",
+    "noCallsMatching": "このフィルターに一致するモデル呼び出しはありません。",
+    "filter": {
+      "all": "すべて",
+      "failed": "失敗",
+      "warning": "打ち切り",
+      "ok": "正常"
+    },
+    "failure": {
+      "title": "何が失敗したか",
+      "kind": "失敗: {kind}",
+      "atStep": "ステップ {index} で",
+      "lastErroredCall": "最後に失敗したモデル呼び出し",
+      "moreErroredCalls": "ほかに、それ以前の失敗した呼び出しが {count} 件 | ほかに、それ以前の失敗した呼び出しが {count} 件",
+      "lastFailedToolCall": "最後に失敗したツール呼び出し",
+      "moreFailedToolCalls": "ほかに、それ以前の失敗したツール呼び出しが {count} 件 | ほかに、それ以前の失敗したツール呼び出しが {count} 件",
+      "toolReturnedNothing": "ツールは何も返しませんでした。",
+      "toolBodiesWithheld": "この実行では引数と結果が記録されていないため、ツール自身のエラーテキストは参照できません。",
+      "noFailingCall": {
+        "recorded-clean": "モデル呼び出しもツール呼び出しも失敗を報告していません。原因はどちらの記録にも行を残していないため、エンジン、失敗したステップのコンテナ事後解析、プロビジョニングログを確認してください。",
+        "partial-calls-only": "モデル呼び出しに失敗はなく、この実行ではツール呼び出しが記録されていないため、軌跡からは判断できません。",
+        "partial-tools-only": "ツール呼び出しに失敗はなく、この実行ではモデル呼び出しが記録されていません。",
+        "no-telemetry": "この実行ではモデル呼び出しもツール呼び出しも記録されていないため、エージェントの作業の前（または外）で失敗しています。プロビジョニングログを確認してください。"
+      }
+    },
+    "toolCalls": {
+      "title": "ツール呼び出し",
+      "subtitle": "エージェントが行ったことを、行った順に",
+      "loading": "ツール呼び出しを読み込んでいます…",
+      "error": "ツール呼び出しを読み込めませんでした。",
+      "none": "この実行で記録されたツール呼び出しはありません。",
+      "noneMatching": "このフィルターに一致するツール呼び出しはありません。",
+      "failed": "失敗",
+      "durationHint": "ツールの所要時間",
+      "dispatch": "ディスパッチ {jobId}",
+      "seq": "このディスパッチの {seq} 番目の呼び出し",
+      "bodiesWithheld": "引数と結果は記録されていないため、その不在からは何も判断できません。",
+      "arguments": "引数",
+      "result": "結果",
+      "dropped": "記録時に {chars} 文字を破棄"
     }
   },
   "platformObservability": {

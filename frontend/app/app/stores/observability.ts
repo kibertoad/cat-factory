@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
+  AgentToolCall,
   LlmCallActivity,
   LlmCallMetric,
 } from '~/types/execution'
@@ -38,6 +39,17 @@ export const useObservabilityStore = defineStore('observability', () => {
   const searchQueriesByExecution = ref<Record<string, AgentSearchQuery[]>>({})
   /** Execution ids whose search queries are currently loading. */
   const searchQueriesLoading = ref<Set<string>>(new Set())
+  /** Per-execution-id tool-call trajectory (OLDEST first, the order the agent worked in). */
+  const toolCallsByExecution = ref<Record<string, AgentToolCall[]>>({})
+  /** Execution ids whose tool calls are currently loading. */
+  const toolCallsLoading = ref<Set<string>>(new Set())
+  /**
+   * Last tool-call load error per execution id, or null. Recorded for the same reason the
+   * context load records its own: a swallowed failure would render as the "no tool calls
+   * recorded" empty state, and on THIS sink that empty state is a claim the panel makes at the
+   * top of the page ("nothing failed in the container"), not merely a blank tab.
+   */
+  const toolCallErrors = ref<Record<string, string | null>>({})
   /** Execution ids currently loading. */
   const loading = ref<Set<string>>(new Set())
   /** Execution ids currently exporting. */
@@ -183,6 +195,31 @@ export const useObservabilityStore = defineStore('observability', () => {
     }
   }
 
+  function toolCallsFor(executionId: string): AgentToolCall[] {
+    return toolCallsByExecution.value[executionId] ?? []
+  }
+  function isToolCallsLoading(executionId: string): boolean {
+    return toolCallsLoading.value.has(executionId)
+  }
+
+  /** Load (or refresh) the tool-call trajectory for a run. */
+  async function loadToolCalls(executionId: string) {
+    if (!workspace.workspaceId) return
+    withFlag(toolCallsLoading, executionId, true)
+    toolCallErrors.value = { ...toolCallErrors.value, [executionId]: null }
+    try {
+      const { toolCalls } = await api.getToolCalls(workspace.requireId(), executionId)
+      toolCallsByExecution.value = { ...toolCallsByExecution.value, [executionId]: toolCalls }
+    } catch (err) {
+      toolCallErrors.value = {
+        ...toolCallErrors.value,
+        [executionId]: err instanceof Error ? err.message : 'Failed to load tool calls',
+      }
+    } finally {
+      withFlag(toolCallsLoading, executionId, false)
+    }
+  }
+
   /**
    * Fetch the LLM-friendly export bundle and trigger a client-side download. The
    * events socket auths via a Bearer header (a plain `<a download>` can't), so we
@@ -223,5 +260,10 @@ export const useObservabilityStore = defineStore('observability', () => {
     searchQueriesFor,
     isSearchQueriesLoading,
     loadSearchQueries,
+    toolCallsByExecution,
+    toolCallErrors,
+    toolCallsFor,
+    isToolCallsLoading,
+    loadToolCalls,
   }
 })

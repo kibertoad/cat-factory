@@ -17,7 +17,7 @@ function fakeRepo() {
       },
       listByExecution: async () => [],
       listPage: async () => [],
-      countByExecution: async () => 0,
+      countByExecution: async () => ({ total: 0, failed: 0 }),
       deleteOlderThan: async () => 0,
     },
   }

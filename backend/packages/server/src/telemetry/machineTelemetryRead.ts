@@ -3,6 +3,7 @@ import type {
   AgentContextSnapshotIndex,
   AgentSearchQuery,
   AgentToolCall,
+  AgentToolCallCounts,
   LlmCallMetric,
   LlmCallMetricPage,
   LlmCallMetricSummary,
@@ -297,7 +298,7 @@ export interface TelemetryReadResults {
   'agentSearchQueryRepository.countByExecution': number
   'agentToolCallRepository.listPage': AgentToolCall[]
   'agentToolCallRepository.listByExecution': AgentToolCall[]
-  'agentToolCallRepository.countByExecution': number
+  'agentToolCallRepository.countByExecution': AgentToolCallCounts
 }
 
 /** The client half: performs one bounded telemetry read against the mothership. */

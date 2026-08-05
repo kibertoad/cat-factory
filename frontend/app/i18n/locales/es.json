@@ -1629,6 +1629,47 @@
       "provider": "Proveedor",
       "resultsCount": "{count} resultado | {count} resultados",
       "queriesTitle": "Búsquedas realizadas"
+    },
+    "callsTitle": "Llamadas al modelo",
+    "noCallsMatching": "Ninguna llamada al modelo coincide con este filtro.",
+    "filter": {
+      "all": "Todas",
+      "failed": "Fallidas",
+      "warning": "Truncadas",
+      "ok": "Correctas"
+    },
+    "failure": {
+      "title": "Qué falló",
+      "kind": "Fallo: {kind}",
+      "atStep": "en el paso {index}",
+      "lastErroredCall": "Última llamada al modelo fallida",
+      "moreErroredCalls": "y {count} llamada fallida anterior | y {count} llamadas fallidas anteriores",
+      "lastFailedToolCall": "Última llamada a herramienta fallida",
+      "moreFailedToolCalls": "y {count} llamada a herramienta fallida anterior | y {count} llamadas a herramienta fallidas anteriores",
+      "toolReturnedNothing": "La herramienta no devolvió nada.",
+      "toolBodiesWithheld": "Los argumentos y resultados no se capturaron en esta ejecución, así que no se dispone del texto de error de la herramienta.",
+      "noFailingCall": {
+        "recorded-clean": "Ninguna llamada al modelo ni a herramientas informó de un fallo, así que la causa no dejó ningún registro en ninguna de las dos fuentes: revise el motor, la autopsia del contenedor del paso fallido y el registro de aprovisionamiento.",
+        "partial-calls-only": "Ninguna llamada al modelo informó de un fallo, y no se registraron llamadas a herramientas en esta ejecución, así que la trayectoria no puede decir si alguna falló.",
+        "partial-tools-only": "Ninguna llamada a herramienta informó de un fallo, y no se registraron llamadas al modelo en esta ejecución.",
+        "no-telemetry": "No se registraron llamadas al modelo ni a herramientas en esta ejecución, así que falló antes de (o fuera de) todo trabajo de agente. Revise el registro de aprovisionamiento."
+      }
+    },
+    "toolCalls": {
+      "title": "Llamadas a herramientas",
+      "subtitle": "lo que hicieron los agentes, en el orden en que lo hicieron",
+      "loading": "Cargando llamadas a herramientas…",
+      "error": "No se pudieron cargar las llamadas a herramientas.",
+      "none": "No se registraron llamadas a herramientas en esta ejecución.",
+      "noneMatching": "Ninguna llamada a herramienta coincide con este filtro.",
+      "failed": "Fallida",
+      "durationHint": "Cuánto tardó la herramienta",
+      "dispatch": "Despacho {jobId}",
+      "seq": "Llamada n.º {seq} de este despacho",
+      "bodiesWithheld": "Los argumentos y resultados no se capturaron, así que su ausencia no permite concluir nada.",
+      "arguments": "Argumentos",
+      "result": "Resultado",
+      "dropped": "{chars} caracteres descartados al capturar"
     }
   },
   "platformObservability": {

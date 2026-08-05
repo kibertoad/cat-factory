@@ -241,7 +241,8 @@ export function publicDebugController(): Hono<AppEnv> {
   // capture, so the page size is computable before the request) with `bodies` saying whether
   // they were retained at all. Two orders: the keyset page every sibling list serves, and the
   // TRAJECTORY — what the agent did, in the order it did it, which is the read this sink
-  // exists for and the one a client cannot correctly derive from the rows itself.
+  // exists for and the one a client cannot correctly derive from the rows itself. `?outcome=`
+  // narrows either order to the calls that FAILED, the one failure class no LLM rollup sees.
   buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) return refuse(c, gate.fail)
@@ -259,6 +260,7 @@ export function publicDebugController(): Hono<AppEnv> {
       ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
       ...(query.jobId ? { jobId: query.jobId } : {}),
       ...(query.order ? { order: query.order } : {}),
+      ...(query.outcome ? { outcome: query.outcome } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })

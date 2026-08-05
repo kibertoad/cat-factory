@@ -111,7 +111,7 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
 | `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
-| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?limit=`, `?cursor=`                             |
+| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?outcome=`, `?jobId=`, `?limit=`, `?cursor=`                |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
 
 The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
@@ -132,7 +132,20 @@ dispatches by agent-kind spelling and its re-runs `-10` before `-2`. The server 
 each call actually STARTED, with `seq` separating the calls that share a millisecond.
 
 Both orders take `?jobId=` to narrow to ONE dispatch, which is how "what did the third ci-fixer
-round actually do, in order" is asked.
+round actually do, in order" is asked, and `?outcome=ok|error` to narrow to the calls that
+FAILED. That one matters more than it looks: a tool-EXECUTION error happens inside the container,
+so the model call that requested the tool still reports `ok` with a clean finish reason and every
+number in `llm.totals` reads healthy. `?order=trajectory&outcome=error` is the request that tells
+one tool that failed and was worked around from an edit loop stuck repeating the same failing
+call. Like every other narrowing here it is applied in SQL, so a run whose failures sit past the
+trajectory's bounded prefix still returns them rather than a page of its opening moves.
+
+The overview counts the same thing in one number: `sinks.toolCalls.failed`, counted in the same
+aggregate pass as its `count` (so it can never exceed it), plus a `tool_calls_failed` signal
+carrying it. The signal is a WARNING rather than an error on purpose: a failing tool call is
+ordinary in a run that ends well (a search that matches nothing, a build that fails and is then
+fixed), so grading it as an error would sort noise above the run's actual cause. What earns it a
+signal is that it is otherwise invisible.
 
 The two point reads are addressed by the row's **own** id rather than nested under the run: the
 list already handed the caller that id, and nesting would let a mismatched pair form a request that
@@ -166,11 +179,13 @@ The failure classes and where each one's evidence lives:
 - **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
   is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
   reason, so it fires on a failure the model side cannot explain: tool execution inside the
-  container, or the engine. Read the trajectory first
-  (`/tool-calls?order=trajectory`, `?jobId=` to narrow to the dispatch that died): a tool-EXECUTION
-  error is a row of its own, `ok: false`, with the tool's own error text in `result`. Two gaps stay
-  behind it, and both are the search workflow below: a workspace with bodies `withheld` gives the
-  failing call but not what it said, and an ENGINE-side failure records no call anywhere.
+  container, or the engine. The signal states which, because the overview has already counted the
+  failing tool calls. With `sinks.toolCalls.failed > 0`, read those first
+  (`/tool-calls?order=trajectory&outcome=error`, `?jobId=` to narrow to the dispatch that died):
+  each is a row of its own with the tool's own error text in `result`. With `failed: 0` on a sink
+  that HELD rows, the cause left no row anywhere and the engine is the place to look. Two gaps
+  stay behind it, and both are the search workflow below: a workspace with bodies `withheld` gives
+  the failing call but not what it said, and an ENGINE-side failure records no call anywhere.
 - **`prompt_cache_cold` / a cost question.** The overview's `llm.totals` and `byAgentKind` carry
   the three input classes (fresh / cache read / cache write) separately: a loop that keeps
   invalidating its prefix and one riding a warm cache are indistinguishable when they are summed.
@@ -293,15 +308,12 @@ stored character is reachable; a body larger than one window is read in stitched
   other side (it is the harness's JOB-scoped counter, so a re-dispatch starts it over). Neither is
   a step index: they mark the boundary without naming which attempt sits on either side of it, and
   a proxied call reports `turnIndex: null` rather than participating in the sequence at all.
-- **Tool-execution errors are rows, but no rollup counts them.** Each is its own tool-call row
-  (`ok: false`), so each is readable with what the tool returned. What is missing is aggregation:
-  there is no `?ok=` filter, the overview reports only how many tool calls the run made, and no
-  signal is derived from how many of them failed. Finding a stuck edit loop is a walk of
-  `?order=trajectory`, not a number on the overview. Two things
-  genuinely fall outside the sink: an engine-side failure, which no producer records, and an older
-  harness image, which reports `bodies: 'withheld'` when it captured no argument text and has its
-  whole dispatch skipped when it numbers no calls at all. Neither is reconstructed from
-  pattern-matching at record time.
+- **Two failure sources stay outside the tool-call sink**, and neither is reconstructed from
+  pattern-matching at record time: an engine-side failure, which no producer records at all, and
+  an older harness image, which reports `bodies: 'withheld'` when it captured no argument text
+  and has its whole dispatch skipped when it numbers no calls at all. A run hitting either shows
+  `toolCalls.failed: 0`, which is why the `failure_outside_model_calls` signal says WHICH of the
+  three it is looking at rather than pointing at the trajectory unconditionally.
 - **Search case folding is ASCII.** SQLite's `LIKE` folds only ASCII and Postgres' `ILIKE`
   follows its locale; conformance pins the ASCII behaviour the two stores share. Search terms are
   literal substrings, not patterns.

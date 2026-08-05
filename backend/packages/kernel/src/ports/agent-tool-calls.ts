@@ -24,8 +24,8 @@
 // source of truth is the valibot schema in `@cat-factory/contracts`; re-exported here so
 // the port and the route contract can't drift. The recorder/repository interfaces below
 // stay in kernel (they have no wire form).
-import type { AgentToolCall, ToolCallBodiesState } from '@cat-factory/contracts'
-export type { AgentToolCall, ToolCallBodiesState }
+import type { AgentToolCall, ToolCallBodiesState, ToolCallOutcome } from '@cat-factory/contracts'
+export type { AgentToolCall, ToolCallBodiesState, ToolCallOutcome }
 
 /**
  * The fields a producer hands the recorder. The service assigns `id` (derived from
@@ -59,6 +59,15 @@ export interface AgentToolCallTrajectoryQuery {
   limit: number
   /** Restrict to one dispatch, so "what did the third ci-fixer round do, in order" composes. */
   jobId?: string
+  /**
+   * Restrict to the calls that failed (`error`) or the ones that did not (`ok`), applied IN SQL.
+   *
+   * Filtering after the read would spend the whole `limit` on rows it then discards, which on
+   * this sink is the difference between a bounded prefix that CONTAINS the failures and one that
+   * stops before reaching them: an agent's failing calls are a handful among thousands, and the
+   * prefix rule means the un-narrowed read shows the run's beginning rather than its trouble.
+   */
+  outcome?: ToolCallOutcome
 }
 
 /** A bounded, keyset-paginated query over one run's tool calls. */
@@ -73,6 +82,23 @@ export interface AgentToolCallPageQuery {
    * alone rather than every round interleaved by timestamp.
    */
   jobId?: string
+  /** Narrow to failing or non-failing calls, applied IN SQL (see the trajectory query above). */
+  outcome?: ToolCallOutcome
+}
+
+/**
+ * How many tool calls a run made, and how many of them FAILED.
+ *
+ * One value rather than two methods because both come from ONE aggregate pass: a caller that
+ * counted them separately could be handed a total and a failure count read at different
+ * instants, and a `failed` above its own `total` is the kind of impossible number a reader
+ * spends an hour disbelieving. The provisioning log's `countByExecution` returns its total and
+ * failures together for the same reason.
+ */
+export interface AgentToolCallCounts {
+  total: number
+  /** Rows with `ok: false`: a tool-EXECUTION failure, which no LLM rollup can see. */
+  failed: number
 }
 
 export interface AgentToolCallRepository {
@@ -124,8 +150,11 @@ export interface AgentToolCallRepository {
    * stored unbounded and sliced at read time), so there is no offset read to serve.
    */
   listPage(workspaceId: string, query: AgentToolCallPageQuery): Promise<AgentToolCall[]>
-  /** How many tool calls the run made — one indexed COUNT, no rows read. */
-  countByExecution(workspaceId: string, executionId: string): Promise<number>
+  /**
+   * How many tool calls the run made and how many FAILED, in one indexed aggregate pass with no rows
+   * read. Both numbers come back together by construction; see {@link AgentToolCallCounts}.
+   */
+  countByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallCounts>
   /**
    * Retention: delete rows older than `epochMs` (exclusive), returning how many were
    * removed. Pruned to the same window as the per-call LLM telemetry.

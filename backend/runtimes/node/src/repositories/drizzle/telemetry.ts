@@ -15,6 +15,7 @@ import type {
   AgentSearchQueryPageQuery,
   AgentSearchQueryRepository,
   AgentToolCall,
+  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
   AgentToolCallTrajectoryQuery,
@@ -32,6 +33,7 @@ import type {
   ProvisioningLogQuery,
   ProvisioningLogRecord,
   ProvisioningLogRepository,
+  ToolCallOutcome,
 } from '@cat-factory/kernel'
 import { LLM_WARNING_FINISH_REASONS, escapeLikePattern } from '@cat-factory/kernel'
 import { isWebSearchProvider } from '@cat-factory/contracts'
@@ -1014,6 +1016,9 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
       eq(agentToolCalls.execution_id, query.executionId),
     ]
     if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
+    // Narrowed IN SQL, before the limit takes the oldest end: filtered afterwards, a run whose
+    // failures sit past the prefix would report none at all.
+    if (query.outcome) filters.push(eq(agentToolCalls.ok, okFlagFor(query.outcome)))
     const rows = await this.db
       .select()
       .from(agentToolCalls)
@@ -1029,6 +1034,7 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
       eq(agentToolCalls.execution_id, query.executionId),
     ]
     if (query.jobId) filters.push(eq(agentToolCalls.job_id, query.jobId))
+    if (query.outcome) filters.push(eq(agentToolCalls.ok, okFlagFor(query.outcome)))
     if (query.cursor) {
       const { createdAt, id } = query.cursor
       filters.push(
@@ -1047,9 +1053,14 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
     return rows.map(rowToAgentToolCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+  async countByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallCounts> {
+    // Total and failures in ONE pass over the same index range: two queries could be read at
+    // different instants mid-run and report more failures than calls.
     const rows = await this.db
-      .select({ n: count() })
+      .select({
+        n: count(),
+        failed: sql<number>`COALESCE(SUM(CASE WHEN ${agentToolCalls.ok} = 0 THEN 1 ELSE 0 END), 0)`,
+      })
       .from(agentToolCalls)
       .where(
         and(
@@ -1057,7 +1068,9 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
           eq(agentToolCalls.execution_id, executionId),
         ),
       )
-    return Number(rows[0]?.n ?? 0)
+    // `Number` on both: Postgres returns `COUNT`/`SUM` as bigint strings through the driver, and
+    // an unconverted string would compare and add as text on the way to the wire.
+    return { total: Number(rows[0]?.n ?? 0), failed: Number(rows[0]?.failed ?? 0) }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {
@@ -1067,6 +1080,15 @@ export class DrizzleAgentToolCallRepository implements AgentToolCallRepository {
       .returning({ id: agentToolCalls.id })
     return deleted.length
   }
+}
+
+/**
+ * The stored `ok` value an outcome filter selects. The column is an INTEGER flag (mirroring
+ * D1's, which has no boolean type), so the mapping is stated once rather than spelled at each
+ * call site, where inverting it returns a plausible-looking page of exactly the wrong rows.
+ */
+function okFlagFor(outcome: ToolCallOutcome): number {
+  return outcome === 'ok' ? 1 : 0
 }
 
 function rowToBinaryArtifact(row: typeof binaryArtifacts.$inferSelect): BinaryArtifactRecord {

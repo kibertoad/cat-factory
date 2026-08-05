@@ -1,8 +1,10 @@
 import type {
   AgentToolCall,
+  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRepository,
   AgentToolCallTrajectoryQuery,
+  ToolCallOutcome,
 } from '@cat-factory/kernel'
 import type { D1Database } from '@cloudflare/workers-types'
 
@@ -53,6 +55,15 @@ function rowToCall(row: ToolCallRow): AgentToolCall {
  * implicit transaction; chunking keeps a tool-heavy poll window off any single-request ceiling.
  */
 const INSERT_CHUNK_SIZE = 50
+
+/**
+ * The stored `ok` value an outcome filter selects. The column is an INTEGER flag (SQLite has no
+ * boolean), so the mapping is stated once here rather than spelled `ok = 0` at each call site,
+ * where inverting it is a one-character bug that returns a plausible-looking page.
+ */
+function okFlagFor(outcome: ToolCallOutcome): number {
+  return outcome === 'ok' ? 1 : 0
+}
 
 /**
  * D1-backed sink for the tool-call trajectory. Lives in the dedicated TELEMETRY_DB database
@@ -120,6 +131,13 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
     }
+    if (query.outcome) {
+      // Narrowed IN SQL, before the `limit` takes the oldest end: filtering afterwards would
+      // spend the prefix on rows it discards, so a run whose failures sit past call 200 would
+      // report none at all.
+      clauses.push('ok = ?')
+      binds.push(okFlagFor(query.outcome))
+    }
     binds.push(query.limit)
     const { results } = await this.db
       .prepare(
@@ -139,6 +157,10 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
     if (query.jobId) {
       clauses.push('job_id = ?')
       binds.push(query.jobId)
+    }
+    if (query.outcome) {
+      clauses.push('ok = ?')
+      binds.push(okFlagFor(query.outcome))
     }
     if (query.cursor) {
       // Composite keyset matching the ORDER BY, so rows sharing a `created_at` millisecond are
@@ -160,14 +182,20 @@ export class D1AgentToolCallRepository implements AgentToolCallRepository {
     return (results ?? []).map(rowToCall)
   }
 
-  async countByExecution(workspaceId: string, executionId: string): Promise<number> {
+  async countByExecution(workspaceId: string, executionId: string): Promise<AgentToolCallCounts> {
+    // Total and failures in ONE pass over the same index range: two queries could be read at
+    // different instants mid-run and report more failures than calls.
     const row = await this.db
       .prepare(
-        'SELECT COUNT(*) AS n FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?',
+        `SELECT COUNT(*) AS n, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failed
+           FROM agent_tool_calls WHERE workspace_id = ? AND execution_id = ?`,
       )
       .bind(workspaceId, executionId)
-      .first<{ n: number }>()
-    return row?.n ?? 0
+      .first<{ n: number; failed: number | null }>()
+    // `SUM` over no rows is NULL, not 0, and that NULL means "this run recorded nothing",
+    // the same fact the 0 total states, so it is read as 0 rather than left to surface as a
+    // `null` the wire schema does not allow.
+    return { total: row?.n ?? 0, failed: row?.failed ?? 0 }
   }
 
   async deleteOlderThan(epochMs: number): Promise<number> {

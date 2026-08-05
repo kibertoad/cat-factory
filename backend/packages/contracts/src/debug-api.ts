@@ -7,6 +7,7 @@ import {
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
+  toolCallOutcomeSchema,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
 
@@ -309,6 +310,29 @@ export const debugSinkStatusSchema = v.object({
 })
 export type DebugSinkStatus = v.InferOutput<typeof debugSinkStatusSchema>
 
+/**
+ * The tool-call sink's status, which carries one number the other four have no analogue for:
+ * how many of the run's tool calls FAILED.
+ *
+ * It sits here rather than on the shared {@link debugSinkStatusSchema} because it is not a
+ * property of "a sink": a context snapshot or a search query has no success axis to count. It
+ * exists at all because a tool-execution error is otherwise a row nothing aggregates: the model
+ * call that requested the tool still reports `ok` with a clean finish reason, so `llm.totals`
+ * sees a healthy run, and finding the failures meant walking the trajectory. One number here
+ * (and the `tool_calls_failed` signal derived from it) is what makes them visible in the same
+ * cheap first call every other failure class is.
+ *
+ * `failed` is counted in the SAME aggregate pass as `count`, so the two can never disagree, and
+ * it is 0 rather than null when the sink is unavailable, because the enclosing `available: false`
+ * already says the count means "we never recorded this".
+ */
+export const debugToolCallSinkStatusSchema = v.object({
+  ...debugSinkStatusSchema.entries,
+  /** How many of the run's tool calls reported failure (`ok: false`). */
+  failed: v.number(),
+})
+export type DebugToolCallSinkStatus = v.InferOutput<typeof debugToolCallSinkStatusSchema>
+
 /** Severity of a derived diagnostic signal. */
 export const debugSignalSeveritySchema = v.picklist(['info', 'warning', 'error'])
 export type DebugSignalSeverity = v.InferOutput<typeof debugSignalSeveritySchema>
@@ -356,7 +380,7 @@ export const debugRunOverviewSchema = v.object({
     llmCalls: debugSinkStatusSchema,
     agentContext: debugSinkStatusSchema,
     searchQueries: debugSinkStatusSchema,
-    toolCalls: debugSinkStatusSchema,
+    toolCalls: debugToolCallSinkStatusSchema,
     provisioningLog: debugSinkStatusSchema,
   }),
   /**
@@ -737,6 +761,17 @@ export const listDebugToolCallsQuerySchema = v.object({
   cursor: v.optional(cursorSchema),
   jobId: v.optional(v.string()),
   order: v.optional(toolCallOrderSchema),
+  /**
+   * Narrow to the calls that FAILED (or, with `ok`, the ones that did not), applied in SQL like
+   * every other narrowing here: a filter applied after the read has already paid for the rows it
+   * discards, and spends the page's `limit` on them, which on this sink is the difference
+   * between one request and paging a thousand-call trajectory to find the four rows that matter.
+   *
+   * It composes with both orders. `order=trajectory&outcome=error` is the failing calls in the
+   * sequence the agent made them, which is how a stuck edit loop (the same tool failing the same
+   * way, round after round) is told apart from one tool that failed once and was worked around.
+   */
+  outcome: v.optional(toolCallOutcomeSchema),
 })
 export type ListDebugToolCallsQuery = v.InferOutput<typeof listDebugToolCallsQuerySchema>
 

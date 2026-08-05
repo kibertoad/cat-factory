@@ -172,6 +172,11 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
       }
       // Totals are folded from the SQL rollup, so they exist even for a run with no calls.
       expect(overview.body.llm.totals.calls).toBe(overview.body.sinks.llmCalls.count)
+      // The tool-call sink carries the one number no LLM rollup can: how many of the run's tool
+      // calls FAILED. It is counted in the same pass as the total, so it can never exceed it.
+      expect(overview.body.sinks.toolCalls.failed).toBeLessThanOrEqual(
+        overview.body.sinks.toolCalls.count,
+      )
     })
 
     it('serves every per-run detail list for a real run, bounded and empty-safe', async () => {
@@ -249,6 +254,40 @@ export function definePublicDebugConformance(harness: ConformanceHarness): void 
         auth,
       )
       expect(resumedRecent.status).toBe(200)
+
+      // The outcome narrowing rides BOTH orders (its SQL semantics are pinned by the per-store
+      // suite; what only this can see is that each facade wired the param through to the query,
+      // which is the difference between a filter and a parameter the controller silently drops).
+      for (const url of [
+        `/api/v1/debug/runs/${runId}/tool-calls?outcome=error&limit=5`,
+        `/api/v1/debug/runs/${runId}/tool-calls?order=trajectory&outcome=error&limit=5`,
+      ]) {
+        const failing = await app.call<{ toolCalls: unknown[] }>('GET', url, undefined, auth)
+        expect(failing.status).toBe(200)
+        expect(Array.isArray(failing.body.toolCalls)).toBe(true)
+      }
+      // Outside the picklist is a 400, not a silently unfiltered page: a caller that asked for
+      // the failures and got every row back would read the run as all-failing.
+      const badOutcome = await app.call(
+        'GET',
+        `/api/v1/debug/runs/${runId}/tool-calls?outcome=warning`,
+        undefined,
+        auth,
+      )
+      expect(badOutcome.status).toBe(400)
+
+      // The SPA reads the SAME sink through its own workspace-scoped route, and that route hangs
+      // off `container.toolCallObservability` — a module the engine builds from the tool-call
+      // repository. An unbuilt module does not error, it answers `[]`, which on this surface is
+      // the "nothing failed in the container" claim the panel prints at the top of the page. So
+      // the assertion that matters is that the route EXISTS and answers, on both facades.
+      const panelRead = await app.call<{ executionId: string; toolCalls: unknown[] }>(
+        'GET',
+        `/workspaces/${wsId}/executions/${runId}/tool-calls`,
+      )
+      expect(panelRead.status).toBe(200)
+      expect(panelRead.body.executionId).toBe(runId)
+      expect(Array.isArray(panelRead.body.toolCalls)).toBe(true)
 
       // The search and ordering narrowings ride the same route (their SQL semantics are pinned
       // by the per-store suite; what only this can see is that each facade wired the params).

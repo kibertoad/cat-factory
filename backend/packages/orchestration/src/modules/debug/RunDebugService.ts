@@ -22,6 +22,7 @@ import type {
   DebugRunOverview,
   DebugRunSummary,
   ToolCallOrder,
+  ToolCallOutcome,
 } from '@cat-factory/contracts'
 import {
   deriveSignals,
@@ -164,11 +165,16 @@ export class RunDebugService {
     const runId = execution.id
     // Independent aggregates over five separate stores — issued together rather than in
     // sequence, since the overview's whole value proposition is that it is one cheap call.
-    const [summaries, contextCount, searchCount, toolCallCount, logCounts] = await Promise.all([
+    const [summaries, contextCount, searchCount, toolCallCounts, logCounts] = await Promise.all([
       this.deps.priceRollup?.(workspaceId, runId) ?? this.unpricedRollup(workspaceId, runId),
       this.deps.agentContextSnapshotRepository?.countByExecution(workspaceId, runId) ?? 0,
       this.deps.agentSearchQueryRepository?.countByExecution(workspaceId, runId) ?? 0,
-      this.deps.agentToolCallRepository?.countByExecution(workspaceId, runId) ?? 0,
+      // Total + failures in one aggregate pass: the overview always wants both, and a
+      // tool-execution failure is the one class the LLM rollup beside it structurally cannot see.
+      this.deps.agentToolCallRepository?.countByExecution(workspaceId, runId) ?? {
+        total: 0,
+        failed: 0,
+      },
       // Total + failures in one aggregate pass — the overview always wants both.
       this.deps.provisioningLogRepository?.countByExecution(workspaceId, runId) ?? {
         total: 0,
@@ -187,7 +193,11 @@ export class RunDebugService {
         count: contextCount,
       },
       searchQueries: { available: !!this.deps.agentSearchQueryRepository, count: searchCount },
-      toolCalls: { available: !!this.deps.agentToolCallRepository, count: toolCallCount },
+      toolCalls: {
+        available: !!this.deps.agentToolCallRepository,
+        count: toolCallCounts.total,
+        failed: toolCallCounts.failed,
+      },
       provisioningLog: { available: !!this.deps.provisioningLogRepository, count: logCounts.total },
     }
     return {
@@ -367,7 +377,13 @@ export class RunDebugService {
   async listToolCalls(
     workspaceId: string,
     runId: string,
-    opts: { limit: number; cursor?: DebugCursor; jobId?: string; order?: ToolCallOrder },
+    opts: {
+      limit: number
+      cursor?: DebugCursor
+      jobId?: string
+      order?: ToolCallOrder
+      outcome?: ToolCallOutcome
+    },
   ): Promise<DebugPage<AgentToolCall>> {
     const repo = this.deps.agentToolCallRepository
     if (!repo) return { items: [], nextCursor: null }
@@ -376,6 +392,7 @@ export class RunDebugService {
         executionId: runId,
         limit: opts.limit,
         ...(opts.jobId ? { jobId: opts.jobId } : {}),
+        ...(opts.outcome ? { outcome: opts.outcome } : {}),
       })
       return { items, nextCursor: null }
     }
@@ -384,6 +401,7 @@ export class RunDebugService {
       limit: opts.limit + 1,
       ...(opts.cursor ? { cursor: opts.cursor } : {}),
       ...(opts.jobId ? { jobId: opts.jobId } : {}),
+      ...(opts.outcome ? { outcome: opts.outcome } : {}),
     })
     return paginate(
       rows,

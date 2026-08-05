@@ -9,11 +9,15 @@
 // (D1 on Cloudflare, Drizzle/Postgres on Node).
 
 /**
- * Upstream finish reasons that are not failures but warrant a warning: the model
- * was cut short by the output limit, or filtered. Shared by the service's
- * classification and each repo's summary aggregation so the two runtimes agree.
+ * Upstream finish reasons that are not failures but warrant a warning: the model was cut short
+ * by the output limit, or filtered. Shared by the service's classification and each repo's
+ * summary aggregation so the two runtimes agree.
+ *
+ * DEFINED in `@cat-factory/contracts` and re-exported here: the SPA must make the same
+ * judgement to badge and to FILTER a call list, and it cannot see kernel. Re-exported rather
+ * than moved outright so every backend consumer keeps importing it from the port it belongs to.
  */
-export const LLM_WARNING_FINISH_REASONS = ['length', 'content_filter'] as const
+export { LLM_WARNING_FINISH_REASONS } from '@cat-factory/contracts'
 
 /** One proxied LLM call, with its full prompt/response and timing breakdown. */
 export interface LlmCallMetric {

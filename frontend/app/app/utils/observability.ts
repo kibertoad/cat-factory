@@ -2,7 +2,16 @@
 // rollups + the drill-down panel). Kept here so the components stay declarative and
 // the number-crunching is unit-testable.
 
-import type { PipelineStep, StepMetrics, StepPhaseMetrics } from '~/types/execution'
+import { classifyLlmCallOutcome } from '@cat-factory/contracts'
+import type {
+  AgentFailure,
+  AgentToolCall,
+  LlmCallMetric,
+  LlmCallOutcome,
+  PipelineStep,
+  StepMetrics,
+  StepPhaseMetrics,
+} from '~/types/execution'
 
 /** Compact token count: 1234 → "1.2k", 980 → "980", 2_500_000 → "2.5M". */
 export function formatTokens(n: number): string {
@@ -172,6 +181,147 @@ export function foldRunPhaseMetrics(steps: readonly PipelineStep[]): StepPhaseMe
   return [...byPhase.values()].sort(
     (a, b) => b.carryCostTokens - a.carryCostTokens || b.calls - a.calls,
   )
+}
+
+// --- failing-call-first triage ---------------------------------------------------------------
+// The panel's top section answers "what broke" before the operator reads anything. Everything it
+// shows is DERIVED here rather than in the component, for the usual reason plus one specific to
+// this surface: the difference between "nothing failed" and "we recorded nothing" is a judgement
+// with three inputs, and getting it wrong renders a confident all-clear over a run that died.
+
+/** Which calls a drill-down list is narrowed to. `all` is the default: no filter. */
+export type CallOutcomeFilter = 'all' | LlmCallOutcome
+/** Which tool calls a trajectory list is narrowed to (a tool has no `warning` class). */
+export type ToolOutcomeFilter = 'all' | 'ok' | 'error'
+
+/** How many calls fall in each outcome class, so a filter control can state what it hides. */
+export interface CallOutcomeCounts {
+  all: number
+  ok: number
+  warning: number
+  error: number
+}
+
+/**
+ * Count a run's calls by outcome, classified through the SHARED rule in `@cat-factory/contracts`
+ * (the same one the row badge and the backend's `?outcome=` predicate use), so a chip reading
+ * "2 errors" and a list showing three red rows is not a state this can reach.
+ */
+export function countCallOutcomes(calls: readonly LlmCallMetric[]): CallOutcomeCounts {
+  const counts: CallOutcomeCounts = { all: calls.length, ok: 0, warning: 0, error: 0 }
+  for (const call of calls) counts[classifyLlmCallOutcome(call)] += 1
+  return counts
+}
+
+/** Narrow a call list to one outcome class; `all` passes the list through untouched. */
+export function filterCallsByOutcome(
+  calls: readonly LlmCallMetric[],
+  filter: CallOutcomeFilter,
+): LlmCallMetric[] {
+  if (filter === 'all') return [...calls]
+  return calls.filter((call) => classifyLlmCallOutcome(call) === filter)
+}
+
+/** Narrow a tool-call trajectory to the failing (or the succeeding) calls. */
+export function filterToolCallsByOutcome(
+  toolCalls: readonly AgentToolCall[],
+  filter: ToolOutcomeFilter,
+): AgentToolCall[] {
+  if (filter === 'all') return [...toolCalls]
+  return toolCalls.filter((call) => call.ok === (filter === 'ok'))
+}
+
+/**
+ * What the run's telemetry says about its failure, ready to render.
+ *
+ * `failure` is the run's own structured record (the `agent_runs.failure` JSON the engine writes);
+ * the two `*Evidence` rows are the calls that ACTUALLY failed, which is the part the operator
+ * otherwise finds by scrolling. They are independent: a run can fail with neither (the engine
+ * died, or the container never came up), with one, or with both.
+ */
+export interface RunFailureEvidence {
+  /** The run's structured failure record, or null when it did not fail (or recorded nothing). */
+  failure: AgentFailure | null
+  /** The most recent call that FAILED outright, or null when none did. */
+  lastErroredCall: LlmCallMetric | null
+  /** How many of the run's loaded calls failed outright. */
+  erroredCallCount: number
+  /** The last tool call that reported failure, or null when none did. */
+  lastFailedToolCall: AgentToolCall | null
+  /** How many of the run's loaded tool calls reported failure. */
+  failedToolCallCount: number
+  /**
+   * Whether the two sinks hold ANY row for this run.
+   *
+   * This is what keeps "nothing failed" apart from "nothing was recorded". A run whose container
+   * died before the harness reported anything has zero failing calls in both sinks, exactly like
+   * a run whose every call succeeded, and only these flags tell the panel which sentence to
+   * write. An unwired sink, a workspace that turned capture off and a run that predates the sink
+   * all land here as `false`, and the panel says the trajectory cannot answer, not that it did.
+   */
+  hasCalls: boolean
+  hasToolCalls: boolean
+}
+
+/**
+ * Fold a run's failure record and its two telemetry sinks into the evidence the panel pins.
+ *
+ * The calls arrive NEWEST-first (the metrics list's own order) and the tool calls OLDEST-first
+ * (trajectory order), so "the last one that failed" is the FIRST match in one and the LAST in
+ * the other. Reading either in the wrong direction still returns a failing call, which is why it
+ * is worth stating: it would just be the wrong one, and the row nearest the failure is the whole
+ * reason to pin one at all.
+ */
+export function deriveRunFailureEvidence(input: {
+  failure?: AgentFailure | null
+  calls: readonly LlmCallMetric[]
+  toolCalls: readonly AgentToolCall[]
+}): RunFailureEvidence {
+  const errored = input.calls.filter((call) => !call.ok)
+  const failedTools = input.toolCalls.filter((call) => !call.ok)
+  return {
+    failure: input.failure ?? null,
+    lastErroredCall: errored[0] ?? null,
+    erroredCallCount: errored.length,
+    lastFailedToolCall: failedTools[failedTools.length - 1] ?? null,
+    failedToolCallCount: failedTools.length,
+    hasCalls: input.calls.length > 0,
+    hasToolCalls: input.toolCalls.length > 0,
+  }
+}
+
+/** Whether the pinned failure section has anything to say about this run. */
+export function hasFailureEvidence(evidence: RunFailureEvidence): boolean {
+  return !!evidence.failure || evidence.erroredCallCount > 0 || evidence.failedToolCallCount > 0
+}
+
+/**
+ * Why the pinned section can point at no failing call, as a discriminated reason rather than a
+ * bare absence. Each needs different words and a different next step from the operator:
+ *
+ * - `recorded-clean`: both sinks hold rows and none of them failed, so the cause sits where no
+ *   producer records anything (the engine, or a container that died between calls).
+ * - `no-telemetry`: neither sink holds a row for this run at all, so the run failed before (or
+ *   outside of) any agent work, and this panel is the wrong place to look.
+ * - `partial-calls-only` / `partial-tools-only`: one sink answered and the other did not, named
+ *   by the one that DID. Which is silent matters, because a silent sink is not evidence of
+ *   anything and the panel must not let it read as a clean bill.
+ *
+ * Null when a failing call WAS found: there is nothing to explain.
+ */
+export type NoFailingCallReason =
+  | 'recorded-clean'
+  | 'no-telemetry'
+  | 'partial-calls-only'
+  | 'partial-tools-only'
+
+/** Why nothing failing could be pinned, or null when something was. */
+export function noFailingCallReason(evidence: RunFailureEvidence): NoFailingCallReason | null {
+  if (evidence.erroredCallCount > 0 || evidence.failedToolCallCount > 0) return null
+  if (evidence.hasCalls && evidence.hasToolCalls) return 'recorded-clean'
+  if (evidence.hasCalls) return 'partial-calls-only'
+  if (evidence.hasToolCalls) return 'partial-tools-only'
+  return 'no-telemetry'
 }
 
 /** Tailwind text/bg colour for an output-headroom level (green → amber → red). */

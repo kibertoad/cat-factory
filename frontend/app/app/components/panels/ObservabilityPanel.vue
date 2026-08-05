@@ -1,22 +1,32 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onKeyStroke } from '@vueuse/core'
+import { isLlmWarningFinishReason } from '@cat-factory/contracts'
 import type {
   AgentContextSnapshot,
   AgentSearchQuery,
+  AgentToolCall,
   LlmCallMetric,
   WebSearchProvider,
 } from '~/types/execution'
 import { agentKindMeta } from '~/utils/catalog'
+import type { CallOutcomeFilter, ToolOutcomeFilter } from '~/utils/observability'
 import {
+  countCallOutcomes,
+  deriveRunFailureEvidence,
+  filterCallsByOutcome,
   foldRunPhaseMetrics,
   formatCost,
   formatMs,
   formatTokens,
+  hasFailureEvidence,
   pct,
   sumCosts,
   totalInputTokens,
 } from '~/utils/observability'
+import OutcomeFilterChips from '~/components/observability/OutcomeFilterChips.vue'
+import RunFailureSummary from '~/components/observability/RunFailureSummary.vue'
+import ToolCallList from '~/components/observability/ToolCallList.vue'
 
 // Drill-down overlay for a run's LLM activity. Opened via
 // `ui.openObservability(instanceId)` from a step surface; loads the full per-call
@@ -24,6 +34,11 @@ import {
 // transport-vs-execution latency split) from the observability store and lists
 // every model call, each expandable to its full prompt + response. Offers the
 // LLM-friendly JSON export for handing a run to a model to analyse.
+//
+// Failing-call FIRST: when the run failed (or any call did), the panel opens with a pinned
+// summary naming the structured failure and the two calls that actually failed, so the cause is
+// visible before anything is read. The lists below it narrow by outcome for the same reason:
+// a tool-execution error is a row nothing aggregates, so finding one used to mean scrolling.
 const ui = useUiStore()
 const execution = useExecutionStore()
 const board = useBoardStore()
@@ -56,9 +71,9 @@ function retryContext() {
   if (executionId.value) void observability.loadContext(executionId.value)
 }
 
-// Which view is shown: per-call model activity, the complete provided context, or the
-// performed web searches.
-const view = ref<'calls' | 'context' | 'search'>('calls')
+// Which view is shown: per-call model activity, the tool-call trajectory, the complete provided
+// context, or the performed web searches.
+const view = ref<'calls' | 'tools' | 'context' | 'search'>('calls')
 
 const contextSnapshots = computed<AgentContextSnapshot[]>(() =>
   executionId.value ? observability.contextFor(executionId.value) : [],
@@ -73,6 +88,90 @@ const searchQueries = computed<AgentSearchQuery[]>(() =>
 const searchLoading = computed(
   () => !!executionId.value && observability.isSearchQueriesLoading(executionId.value),
 )
+
+const toolCalls = computed<AgentToolCall[]>(() =>
+  executionId.value ? observability.toolCallsFor(executionId.value) : [],
+)
+const toolCallsLoading = computed(
+  () => !!executionId.value && observability.isToolCallsLoading(executionId.value),
+)
+const toolCallError = computed(() =>
+  executionId.value ? (observability.toolCallErrors[executionId.value] ?? null) : null,
+)
+function retryToolCalls() {
+  if (executionId.value) void observability.loadToolCalls(executionId.value)
+}
+
+// --- failing-call-first triage ------------------------------------------------------------
+// Both drill-downs narrow by outcome. The state lives HERE rather than in each list so the
+// pinned summary's "show me the failing tool calls" can set it, and so switching views does not
+// silently drop a narrowing the operator is still reading under.
+const callFilter = ref<CallOutcomeFilter>('all')
+const toolFilter = ref<ToolOutcomeFilter>('all')
+
+const callOutcomeCounts = computed(() => countCallOutcomes(calls.value))
+const callFilterOptions = computed(
+  () =>
+    [
+      { value: 'all', label: t('observability.filter.all'), count: callOutcomeCounts.value.all },
+      {
+        value: 'error',
+        label: t('observability.filter.failed'),
+        count: callOutcomeCounts.value.error,
+        tone: 'error',
+      },
+      {
+        value: 'warning',
+        label: t('observability.filter.warning'),
+        count: callOutcomeCounts.value.warning,
+        tone: 'warning',
+      },
+      { value: 'ok', label: t('observability.filter.ok'), count: callOutcomeCounts.value.ok },
+    ] as const,
+)
+/** The rows the call list actually renders, after the outcome narrowing. */
+const visibleCalls = computed(() => filterCallsByOutcome(calls.value, callFilter.value))
+
+/**
+ * What the panel pins at the top: the run's structured failure record plus the last call that
+ * failed in each sink. Derived from the loaded rows, so it sharpens as the two lists arrive
+ * rather than blocking on both.
+ */
+const failureEvidence = computed(() =>
+  deriveRunFailureEvidence({
+    failure: instance.value?.failure ?? null,
+    calls: calls.value,
+    toolCalls: toolCalls.value,
+  }),
+)
+/**
+ * Whether to pin the section at all.
+ *
+ * Deliberately NOT gated on `status === 'failed'`: a run still in flight whose calls are already
+ * erroring is exactly the one worth interrupting, and a run that ended `done` after recovering
+ * from a failure still has the failures worth reading. What the section never does is appear
+ * with nothing to say: `hasFailureEvidence` is false when there is no record and nothing failed.
+ */
+const showFailureSummary = computed(() => hasFailureEvidence(failureEvidence.value))
+
+/** Open one call's row in the list below, expanded, from the pinned summary. */
+async function revealCall(callId: string) {
+  view.value = 'calls'
+  // Clear a narrowing that would hide the row we are about to scroll to. Every filter but
+  // `error` can do that, and a jump to a row the list is not rendering silently does nothing.
+  if (callFilter.value !== 'all' && callFilter.value !== 'error') callFilter.value = 'all'
+  expanded[callId] = true
+  await nextTick()
+  document.getElementById(callRowId(callId))?.scrollIntoView({ block: 'center' })
+}
+/** Open the trajectory narrowed to the failures, from the pinned summary. */
+function revealFailingToolCalls() {
+  view.value = 'tools'
+  toolFilter.value = 'error'
+}
+function callRowId(callId: string): string {
+  return `obs-call-${callId}`
+}
 
 // Brand names, kept verbatim across locales (not translatable prose).
 const PROVIDER_LABEL: Record<WebSearchProvider, string> = { brave: 'Brave', searxng: 'SearXNG' }
@@ -107,9 +206,15 @@ watch(
   (id) => {
     if (id) {
       view.value = 'calls'
+      callFilter.value = 'all'
+      toolFilter.value = 'all'
       void observability.load(id)
       void observability.loadContext(id)
       void observability.loadSearchQueries(id)
+      // Loaded on OPEN rather than when the tools tab is first shown: the pinned failure summary
+      // reads this sink, and it is the one holding the failure class no other number reveals.
+      // Deferring it would make the panel's headline answer arrive a tab-click late.
+      void observability.loadToolCalls(id)
     }
   },
   // Lazy v-if mount: the panel mounts with executionId already set, so load immediately.
@@ -209,8 +314,15 @@ function carryShare(carryCostTokens: number): number | null {
 function phaseLabel(phase: string): string {
   return phase || t('observability.phase.unattributed')
 }
+/**
+ * Whether a successful call's finish reason is a warning (cut short, or filtered).
+ *
+ * The rule itself lives in `@cat-factory/contracts` beside the backend's own classification: a
+ * hand-copied list here was fine while it only picked a badge colour, and stopped being fine the
+ * moment the outcome FILTER decides which rows the operator is shown.
+ */
 function isWarning(finishReason: string | null): boolean {
-  return finishReason === 'length' || finishReason === 'content_filter'
+  return isLlmWarningFinishReason(finishReason)
 }
 
 const expanded = reactive<Record<string, boolean>>({})
@@ -291,6 +403,17 @@ function exportJson() {
               <button
                 class="rounded-md px-2.5 py-1 transition"
                 :class="
+                  view === 'tools'
+                    ? 'bg-slate-800 text-slate-100'
+                    : 'text-slate-400 hover:text-slate-200'
+                "
+                @click="view = 'tools'"
+              >
+                {{ t('observability.toolCalls.title') }}
+              </button>
+              <button
+                class="rounded-md px-2.5 py-1 transition"
+                :class="
                   view === 'context'
                     ? 'bg-slate-800 text-slate-100'
                     : 'text-slate-400 hover:text-slate-200'
@@ -337,6 +460,17 @@ function exportJson() {
 
         <div class="flex-1 overflow-auto px-6 py-6">
           <div v-if="view === 'calls'" class="mx-auto max-w-4xl space-y-5">
+            <!-- What broke, pinned ABOVE everything: the structured failure record plus the last
+                 call that failed in each sink. The point of the panel's first screen is that the
+                 cause is read, not hunted. -->
+            <RunFailureSummary
+              v-if="showFailureSummary"
+              :evidence="failureEvidence"
+              :loading="loading || toolCallsLoading"
+              @show-call="revealCall"
+              @show-failing-tools="revealFailingToolCalls"
+            />
+
             <!-- run-level summary -->
             <section class="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
               <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-[13px] sm:grid-cols-4">
@@ -576,144 +710,184 @@ function exportJson() {
               {{ t('observability.noCalls') }}
             </p>
 
-            <!-- per-call list -->
-            <ul v-else class="space-y-2">
-              <li
-                v-for="c in calls"
-                :key="c.id"
-                class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
-                :class="!c.ok ? 'border-rose-900/60' : ''"
-              >
-                <button
-                  class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
-                  @click="toggle(c)"
-                >
-                  <UIcon
-                    name="i-lucide-chevron-right"
-                    class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
-                    :class="expanded[c.id] ? 'rotate-90' : ''"
-                  />
-                  <UIcon
-                    :name="agentMeta(c.agentKind).icon"
-                    class="h-4 w-4 shrink-0"
-                    :style="{ color: agentMeta(c.agentKind).color }"
-                  />
-                  <span class="text-[13px] text-slate-200">{{ agentMeta(c.agentKind).label }}</span>
-                  <span
-                    class="hidden truncate text-[11px] text-slate-500 sm:inline"
-                    :title="c.model"
-                  >
-                    {{ c.provider }}:{{ c.model }}
-                  </span>
-                  <div
-                    class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
-                  >
-                    <span
-                      :title="
-                        t('observability.call.tokensTitle', {
-                          input: totalInputTokens(c),
-                          fresh: c.promptTokens,
-                          completion: c.completionTokens,
-                        })
-                      "
-                    >
-                      {{ formatTokens(totalInputTokens(c)) }}↑
-                      {{ formatTokens(c.completionTokens) }}↓
-                    </span>
-                    <span
-                      v-if="headroomOf(c) !== null"
-                      :title="t('observability.call.outputUsedVsLimit')"
-                    >
-                      {{ headroomOf(c) }}%
-                    </span>
-                    <span :title="t('observability.call.transportVsExecution')">
-                      {{ formatMs(c.overheadMs) }} / {{ formatMs(c.upstreamMs) }}
-                    </span>
-                    <UBadge v-if="!c.ok" color="error" variant="subtle" size="sm">
-                      {{ c.httpStatus ?? t('observability.call.error') }}
-                    </UBadge>
-                    <UBadge
-                      v-else-if="isWarning(c.finishReason)"
-                      color="warning"
-                      variant="subtle"
-                      size="sm"
-                    >
-                      {{ c.finishReason }}
-                    </UBadge>
-                    <span v-else class="text-slate-600">{{
-                      c.finishReason ?? t('observability.call.ok')
-                    }}</span>
-                    <span class="hidden text-slate-600 md:inline">{{ clock(c.createdAt) }}</span>
-                  </div>
-                </button>
+            <!-- per-call list, narrowable by outcome -->
+            <template v-else>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-[11px] uppercase tracking-wide text-slate-500">
+                  {{ t('observability.callsTitle') }}
+                </h2>
+                <OutcomeFilterChips v-model="callFilter" :options="callFilterOptions" />
+              </div>
 
-                <div v-if="expanded[c.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
-                  <p v-if="c.errorMessage" class="text-[12px] text-rose-400">
-                    {{ c.errorMessage }}
-                  </p>
-                  <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
-                    <span>{{ t('observability.call.messages', { count: c.messageCount }) }}</span>
-                    <span>{{ t('observability.call.tools', { count: c.toolCount }) }}</span>
-                    <span>{{
-                      c.streaming
-                        ? t('observability.call.streamed')
-                        : t('observability.call.buffered')
+              <!-- Narrowed to nothing reads differently from recorded nothing, and on this
+                   surface it is the good news: the operator asked for the failures and there
+                   are none. -->
+              <p
+                v-if="!visibleCalls.length"
+                class="rounded-lg border border-dashed border-slate-800 py-8 text-center text-sm text-slate-500"
+              >
+                {{ t('observability.noCallsMatching') }}
+              </p>
+
+              <ul v-else class="space-y-2">
+                <li
+                  v-for="c in visibleCalls"
+                  :id="callRowId(c.id)"
+                  :key="c.id"
+                  class="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40"
+                  :class="!c.ok ? 'border-rose-900/60' : ''"
+                >
+                  <button
+                    class="flex w-full items-center gap-3 px-4 py-2.5 text-start transition hover:bg-slate-900/70"
+                    @click="toggle(c)"
+                  >
+                    <UIcon
+                      name="i-lucide-chevron-right"
+                      class="h-4 w-4 shrink-0 text-slate-500 transition-transform"
+                      :class="expanded[c.id] ? 'rotate-90' : ''"
+                    />
+                    <UIcon
+                      :name="agentMeta(c.agentKind).icon"
+                      class="h-4 w-4 shrink-0"
+                      :style="{ color: agentMeta(c.agentKind).color }"
+                    />
+                    <span class="text-[13px] text-slate-200">{{
+                      agentMeta(c.agentKind).label
                     }}</span>
-                    <span v-if="c.requestMaxTokens != null">{{
-                      t('observability.call.maxTokens', { value: c.requestMaxTokens })
-                    }}</span>
-                    <span v-if="c.cacheReadTokens > 0 || c.cacheWriteTokens > 0">{{
-                      t('observability.call.fresh', { tokens: c.promptTokens })
-                    }}</span>
-                    <span v-if="c.cacheReadTokens > 0" class="text-emerald-400">{{
-                      t('observability.call.cacheRead', { tokens: c.cacheReadTokens })
-                    }}</span>
-                    <span v-if="c.cacheWriteTokens > 0" class="text-amber-400">{{
-                      t('observability.call.cacheWrite', { tokens: c.cacheWriteTokens })
-                    }}</span>
-                    <span>{{
-                      t('observability.call.total', { duration: formatMs(c.totalMs) })
-                    }}</span>
-                  </div>
-                  <div>
-                    <div
-                      class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                    <span
+                      class="hidden truncate text-[11px] text-slate-500 sm:inline"
+                      :title="c.model"
                     >
-                      <span>{{ t('observability.call.prompt') }}</span>
+                      {{ c.provider }}:{{ c.model }}
+                    </span>
+                    <div
+                      class="ms-auto flex items-center gap-2.5 text-[11px] tabular-nums text-slate-400"
+                    >
                       <span
-                        v-if="c.promptPrefixCount > 0"
-                        class="normal-case tracking-normal text-slate-600"
-                      >
-                        {{
-                          t('observability.call.promptPrefixOmitted', {
-                            count: c.promptPrefixCount,
+                        :title="
+                          t('observability.call.tokensTitle', {
+                            input: totalInputTokens(c),
+                            fresh: c.promptTokens,
+                            completion: c.completionTokens,
                           })
-                        }}
+                        "
+                      >
+                        {{ formatTokens(totalInputTokens(c)) }}↑
+                        {{ formatTokens(c.completionTokens) }}↓
                       </span>
+                      <span
+                        v-if="headroomOf(c) !== null"
+                        :title="t('observability.call.outputUsedVsLimit')"
+                      >
+                        {{ headroomOf(c) }}%
+                      </span>
+                      <span :title="t('observability.call.transportVsExecution')">
+                        {{ formatMs(c.overheadMs) }} / {{ formatMs(c.upstreamMs) }}
+                      </span>
+                      <UBadge v-if="!c.ok" color="error" variant="subtle" size="sm">
+                        {{ c.httpStatus ?? t('observability.call.error') }}
+                      </UBadge>
+                      <UBadge
+                        v-else-if="isWarning(c.finishReason)"
+                        color="warning"
+                        variant="subtle"
+                        size="sm"
+                      >
+                        {{ c.finishReason }}
+                      </UBadge>
+                      <span v-else class="text-slate-600">{{
+                        c.finishReason ?? t('observability.call.ok')
+                      }}</span>
+                      <span class="hidden text-slate-600 md:inline">{{ clock(c.createdAt) }}</span>
                     </div>
-                    <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ prettyPrompt(c.promptText) }}</pre>
-                  </div>
-                  <div>
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      {{ t('observability.call.response') }}
+                  </button>
+
+                  <div v-if="expanded[c.id]" class="border-t border-slate-800 px-4 py-3 space-y-3">
+                    <p v-if="c.errorMessage" class="text-[12px] text-rose-400">
+                      {{ c.errorMessage }}
+                    </p>
+                    <div class="flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-slate-500">
+                      <span>{{ t('observability.call.messages', { count: c.messageCount }) }}</span>
+                      <span>{{ t('observability.call.tools', { count: c.toolCount }) }}</span>
+                      <span>{{
+                        c.streaming
+                          ? t('observability.call.streamed')
+                          : t('observability.call.buffered')
+                      }}</span>
+                      <span v-if="c.requestMaxTokens != null">{{
+                        t('observability.call.maxTokens', { value: c.requestMaxTokens })
+                      }}</span>
+                      <span v-if="c.cacheReadTokens > 0 || c.cacheWriteTokens > 0">{{
+                        t('observability.call.fresh', { tokens: c.promptTokens })
+                      }}</span>
+                      <span v-if="c.cacheReadTokens > 0" class="text-emerald-400">{{
+                        t('observability.call.cacheRead', { tokens: c.cacheReadTokens })
+                      }}</span>
+                      <span v-if="c.cacheWriteTokens > 0" class="text-amber-400">{{
+                        t('observability.call.cacheWrite', { tokens: c.cacheWriteTokens })
+                      }}</span>
+                      <span>{{
+                        t('observability.call.total', { duration: formatMs(c.totalMs) })
+                      }}</span>
                     </div>
-                    <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
-                      >{{ c.responseText || '—' }}</pre>
-                  </div>
-                  <div v-if="c.reasoningText">
-                    <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                      {{ t('observability.call.reasoning') }}
+                    <div>
+                      <div
+                        class="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500"
+                      >
+                        <span>{{ t('observability.call.prompt') }}</span>
+                        <span
+                          v-if="c.promptPrefixCount > 0"
+                          class="normal-case tracking-normal text-slate-600"
+                        >
+                          {{
+                            t('observability.call.promptPrefixOmitted', {
+                              count: c.promptPrefixCount,
+                            })
+                          }}
+                        </span>
+                      </div>
+                      <pre
+                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                        >{{ prettyPrompt(c.promptText) }}</pre>
                     </div>
-                    <pre
-                      class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
-                      >{{ c.reasoningText }}</pre>
+                    <div>
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                        {{ t('observability.call.response') }}
+                      </div>
+                      <pre
+                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-300"
+                        >{{ c.responseText || '—' }}</pre>
+                    </div>
+                    <div v-if="c.reasoningText">
+                      <div class="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+                        {{ t('observability.call.reasoning') }}
+                      </div>
+                      <pre
+                        class="max-h-72 overflow-auto rounded-lg bg-slate-950/70 p-3 text-[11px] leading-relaxed text-slate-400"
+                        >{{ c.reasoningText }}</pre>
+                    </div>
                   </div>
-                </div>
-              </li>
-            </ul>
+                </li>
+              </ul>
+            </template>
+          </div>
+
+          <!-- Tool-call trajectory: what the run's agents DID, in the order they did it. -->
+          <div v-else-if="view === 'tools'" class="mx-auto max-w-4xl space-y-5">
+            <RunFailureSummary
+              v-if="showFailureSummary"
+              :evidence="failureEvidence"
+              :loading="loading || toolCallsLoading"
+              @show-call="revealCall"
+              @show-failing-tools="revealFailingToolCalls"
+            />
+            <ToolCallList
+              v-model:filter="toolFilter"
+              :tool-calls="toolCalls"
+              :loading="toolCallsLoading"
+              :error="toolCallError"
+              @retry="retryToolCalls"
+            />
           </div>
 
           <!-- Provided context: the complete context each container agent was given. -->

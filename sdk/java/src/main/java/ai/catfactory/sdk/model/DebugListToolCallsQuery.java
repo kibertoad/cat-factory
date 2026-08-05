@@ -22,7 +22,10 @@ public record DebugListToolCallsQuery(
     @Nullable String jobId,
 
     /** Null means "not sent". */
-    @Nullable ListDebugToolCallsOrder order
+    @Nullable ListDebugToolCallsOrder order,
+
+    /** Null means "not sent". */
+    @Nullable ListDebugToolCallsOutcome outcome
 ) {
 
     /** An empty parameter set. */
@@ -50,6 +53,9 @@ public record DebugListToolCallsQuery(
         if (order != null) {
             out.put("order", String.valueOf(order));
         }
+        if (outcome != null) {
+            out.put("outcome", String.valueOf(outcome));
+        }
         return out;
     }
 
@@ -59,6 +65,7 @@ public record DebugListToolCallsQuery(
         private @Nullable String cursor;
         private @Nullable String jobId;
         private @Nullable ListDebugToolCallsOrder order;
+        private @Nullable ListDebugToolCallsOutcome outcome;
 
         /** Set {@code limit}. */
         public Builder limit(@Nullable Integer limit) {
@@ -84,9 +91,15 @@ public record DebugListToolCallsQuery(
             return this;
         }
 
+        /** Set {@code outcome}. */
+        public Builder outcome(@Nullable ListDebugToolCallsOutcome outcome) {
+            this.outcome = outcome;
+            return this;
+        }
+
         /** Build the {@link DebugListToolCallsQuery}. */
         public DebugListToolCallsQuery build() {
-            return new DebugListToolCallsQuery(limit, cursor, jobId, order);
+            return new DebugListToolCallsQuery(limit, cursor, jobId, order, outcome);
         }
     }
 }

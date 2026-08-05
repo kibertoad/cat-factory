@@ -168,12 +168,14 @@ export type {
 } from './agent-search-queries.js'
 export type {
   AgentToolCall,
+  AgentToolCallCounts,
   AgentToolCallPageQuery,
   AgentToolCallRecorder,
   AgentToolCallRepository,
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
+  ToolCallOutcome,
 } from './agent-tool-calls.js'
 export type {
   LlmGenerationEvent,

@@ -5,6 +5,7 @@ import {
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
+  getExecutionToolCallsContract,
   getWorkspaceUsageContract,
   mergeBlockContract,
   rejectStepContract,
@@ -161,6 +162,15 @@ export function executionApi({ send, sendWith, ws, pwHeaders }: ApiContext) {
     // result count). Empty when not wired / storing is off.
     getSearchQueries: (workspaceId: string, executionId: string) =>
       send(getExecutionSearchQueriesContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { executionId },
+      }),
+
+    // The tool-call trajectory: what the run's agents DID, oldest first. The half of a
+    // failure no model call reports: a tool that errors leaves the call that asked for it
+    // reporting `ok`. Empty when the sink is not wired / storing is off.
+    getToolCalls: (workspaceId: string, executionId: string) =>
+      send(getExecutionToolCallsContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { executionId },
       }),

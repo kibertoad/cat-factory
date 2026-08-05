@@ -210,16 +210,16 @@ carries it; "done" means that slice has landed.
 
 From the 2026-08-05 external-servers review (dispositions follow the same vocabulary):
 
-| Finding (2026-08-05)                                                              | Disposition                   |
-| --------------------------------------------------------------------------------- | ----------------------------- |
-| Blind run (stale runner image) is the likeliest adopter failure; land it first    | Slice 5 (ordering note)       |
-| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable    | Slice 7 (criticality note)    |
-| No boot signal when no resolvable harness serves any registered server           | Slice 8                       |
-| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story     | Slice 8 (docs half done)      |
-| Consuming-side docs buried in `custom-agents.md`; no single authority doc        | Done (`mcp-tool-servers.md`)  |
-| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source      | Done (same change)            |
-| Silent last-write-wins on a re-registered tool-server id                          | Not pursued (below)           |
-| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob                  | Not pursued (below)           |
+| Finding (2026-08-05)                                                           | Disposition                  |
+| ------------------------------------------------------------------------------ | ---------------------------- |
+| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (ordering note)      |
+| OAuth is THE external-vendor gap; intermediate deployment-level flow is viable | Slice 7 (criticality note)   |
+| No boot signal when no resolvable harness serves any registered server         | Slice 8                      |
+| `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story   | Slice 8 (docs half done)     |
+| Consuming-side docs buried in `custom-agents.md`; no single authority doc      | Done (`mcp-tool-servers.md`) |
+| `security-model.md` silent on MCP tool RESULTS as an untrusted-input source    | Done (same change)           |
+| Silent last-write-wins on a re-registered tool-server id                       | Not pursued (below)          |
+| `TOOL_SERVER_BUDGET` is a fixed constant with no deployment knob               | Not pursued (below)          |
 
 ## Deliberately not pursued
 

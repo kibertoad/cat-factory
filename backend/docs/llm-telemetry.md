@@ -171,6 +171,21 @@ the backend drains a window's worth on its existing job poll and sends it to two
 - **The gate is applied ONCE, at the drain** (`toolTrajectory.ts`), not in either destination:
   the store and the external trace sinks receive the same already-gated batch. Reading it per
   destination is how a body withheld from the store gets shipped to Langfuse anyway.
+- **A FAILING tool call is the one failure class no other sink can see.** The tool executes inside
+  the container, so the model call that requested it still records `ok` with a clean finish reason
+  and every `llm_call_metrics` rollup reads healthy on a run whose edit loop is wedged. Both reads
+  therefore narrow on it in SQL (`outcome: 'ok' | 'error'` on the port, `?outcome=` on the debug
+  list), and `countByExecution` returns `{ total, failed }` from ONE aggregate pass so the debug
+  overview can carry the count (`sinks.toolCalls.failed`) and derive a `tool_calls_failed` signal
+  from it. Narrowing in SQL rather than after the read is what makes it correct on a long run: the
+  trajectory read is bounded to a PREFIX, so a post-filter would report no failures on any run
+  whose failures came after its opening moves.
+
+The SPA reads the same trajectory through `GET /workspaces/:ws/executions/:id/tool-calls`
+(bounded, oldest-first) and the observability panel pins the last failing call from this sink and
+from `llm_call_metrics` above its lists, beside the run's own structured `failure` record. It
+holds the three apart deliberately: no failing call recorded, and no rows recorded at all, are
+different statements, and rendering them alike puts a clean bill of health over a run that died.
 
 On the trace side the bodies ride span EVENTS (`gen_ai.tool.arguments` / `gen_ai.tool.result`)
 rather than attributes, like a generation's prompt and for the same reason: they are payloads,

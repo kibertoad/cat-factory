@@ -7,6 +7,7 @@ import { resolveIterationCapSchema } from '../iteration-cap.js'
 import {
   agentContextSnapshotSchema,
   agentSearchQuerySchema,
+  agentToolCallSchema,
   llmMetricsExportSchema,
   llmMetricsResponseSchema,
 } from '../observability.js'
@@ -46,6 +47,15 @@ const agentContextResponseSchema = v.object({
 const searchQueriesResponseSchema = v.object({
   executionId: v.string(),
   searchQueries: v.array(agentSearchQuerySchema),
+})
+
+// The tool-call trajectory response, `{ executionId, toolCalls }`: oldest first, in the order
+// the run's agents actually made the calls. Bounded server-side like every other read here; the
+// panel filters and pins client-side off the rows it holds, because the whole point of the
+// surface is that the failing call is visible WITHOUT another request.
+const toolCallsResponseSchema = v.object({
+  executionId: v.string(),
+  toolCalls: v.array(agentToolCallSchema),
 })
 
 // ---- run lifecycle --------------------------------------------------------
@@ -120,6 +130,13 @@ export const getExecutionSearchQueriesContract = defineApiContract({
   requestPathParamsSchema: executionIdParams,
   pathResolver: ({ executionId }) => `/executions/${executionId}/search-queries`,
   responsesByStatusCode: { 200: searchQueriesResponseSchema, ...errorResponses },
+})
+
+export const getExecutionToolCallsContract = defineApiContract({
+  method: 'get',
+  requestPathParamsSchema: executionIdParams,
+  pathResolver: ({ executionId }) => `/executions/${executionId}/tool-calls`,
+  responsesByStatusCode: { 200: toolCallsResponseSchema, ...errorResponses },
 })
 
 export const exportExecutionLlmMetricsContract = defineApiContract({

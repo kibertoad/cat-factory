@@ -25,7 +25,7 @@ public record DebugRunOverviewSinks(
 
     @JsonProperty("searchQueries") DebugRunOverviewSinksAgentContext searchQueries,
 
-    @JsonProperty("toolCalls") DebugRunOverviewSinksAgentContext toolCalls
+    @JsonProperty("toolCalls") DebugRunOverviewSinksToolCalls toolCalls
 ) {
 
     /** A new builder for {@link DebugRunOverviewSinks}. */
@@ -44,7 +44,7 @@ public record DebugRunOverviewSinks(
         private @Nullable DebugRunOverviewSinksAgentContext llmCalls;
         private @Nullable DebugRunOverviewSinksAgentContext provisioningLog;
         private @Nullable DebugRunOverviewSinksAgentContext searchQueries;
-        private @Nullable DebugRunOverviewSinksAgentContext toolCalls;
+        private @Nullable DebugRunOverviewSinksToolCalls toolCalls;
 
         /** Set {@code agentContext}. */
         public Builder agentContext(@Nullable DebugRunOverviewSinksAgentContext agentContext) {
@@ -71,7 +71,7 @@ public record DebugRunOverviewSinks(
         }
 
         /** Set {@code toolCalls}. */
-        public Builder toolCalls(@Nullable DebugRunOverviewSinksAgentContext toolCalls) {
+        public Builder toolCalls(@Nullable DebugRunOverviewSinksToolCalls toolCalls) {
             this.toolCalls = toolCalls;
             return this;
         }

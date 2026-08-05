@@ -208,11 +208,85 @@ export function defineAgentToolCallSuite(
       })
       expect(second.map((c) => c.id)).toEqual([`${ws}-a`])
 
-      expect(await repo.countByExecution(ws, e1)).toBe(3)
-      expect(await repo.countByExecution(ws, e2)).toBe(1)
+      expect(await repo.countByExecution(ws, e1)).toEqual({ total: 3, failed: 0 })
+      expect(await repo.countByExecution(ws, e2)).toEqual({ total: 1, failed: 0 })
       // A run that called no tools counts 0 rather than throwing — the overview reports that
-      // differently from an unwired sink.
-      expect(await repo.countByExecution(ws, 'exec-nothing')).toBe(0)
+      // differently from an unwired sink. `failed` is 0 and not null: `SUM` over no rows is NULL
+      // in both SQL dialects, and letting that reach the wire would put a null where the
+      // overview's schema promises a number.
+      expect(await repo.countByExecution(ws, 'exec-nothing')).toEqual({ total: 0, failed: 0 })
+    })
+
+    it('counts the FAILED tool calls in the same pass as the total', async () => {
+      // The rollup that did not exist: a tool-execution failure leaves the model call that
+      // requested it reporting `ok`, so nothing in the LLM telemetry counts these.
+      const repo = makeRepo()
+      const { ws, e1, e2 } = ids()
+      await repo.recordMany([
+        call({ id: `${ws}-ok`, workspaceId: ws, executionId: e1, seq: 0, ok: true }),
+        call({ id: `${ws}-bad1`, workspaceId: ws, executionId: e1, seq: 1, ok: false }),
+        call({ id: `${ws}-bad2`, workspaceId: ws, executionId: e1, seq: 2, ok: false }),
+        // A failure in a DIFFERENT run must not leak into this one's count.
+        call({ id: `${ws}-other`, workspaceId: ws, executionId: e2, seq: 0, ok: false }),
+      ])
+      expect(await repo.countByExecution(ws, e1)).toEqual({ total: 3, failed: 2 })
+      expect(await repo.countByExecution(ws, e2)).toEqual({ total: 1, failed: 1 })
+    })
+
+    it('narrows BOTH reads to the failing calls, in SQL', async () => {
+      // Narrowed in the store rather than after the read, so the bound applies to the MATCHES:
+      // the failing calls here sit past a `limit: 2` prefix, which a post-filter would return
+      // empty, which is the "this run's tools all worked" answer that is exactly wrong.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        call({ id: `${ws}-1`, workspaceId: ws, executionId: e1, seq: 0, startedAt: 10, ok: true }),
+        call({ id: `${ws}-2`, workspaceId: ws, executionId: e1, seq: 1, startedAt: 20, ok: true }),
+        call({ id: `${ws}-3`, workspaceId: ws, executionId: e1, seq: 2, startedAt: 30, ok: false }),
+        call({ id: `${ws}-4`, workspaceId: ws, executionId: e1, seq: 3, startedAt: 40, ok: false }),
+      ])
+
+      // Trajectory: oldest-first, still in the order the agent made the calls.
+      expect(
+        (await repo.listByExecution(ws, { executionId: e1, limit: 2, outcome: 'error' })).map(
+          (c) => c.id,
+        ),
+      ).toEqual([`${ws}-3`, `${ws}-4`])
+      expect(
+        (await repo.listByExecution(ws, { executionId: e1, limit: 10, outcome: 'ok' })).map(
+          (c) => c.id,
+        ),
+      ).toEqual([`${ws}-1`, `${ws}-2`])
+      // Page: newest-first on the keyset, same predicate.
+      expect(
+        (await repo.listPage(ws, { executionId: e1, limit: 10, outcome: 'error' })).map(
+          (c) => c.id,
+        ),
+      ).toEqual([`${ws}-4`, `${ws}-3`])
+      // Absent is NOT `ok`: no filter returns every row, which is what makes the two-member
+      // picklist safe to carry on a query string.
+      expect((await repo.listPage(ws, { executionId: e1, limit: 10 })).length).toBe(4)
+    })
+
+    it('composes the outcome filter with the dispatch filter', async () => {
+      // "Did the third ci-fixer round keep hitting the same failing tool" needs both at once.
+      const repo = makeRepo()
+      const { ws, e1 } = ids()
+      await repo.recordMany([
+        call({ id: `${ws}-r1a`, workspaceId: ws, executionId: e1, jobId: 'r1', seq: 0, ok: false }),
+        call({ id: `${ws}-r2a`, workspaceId: ws, executionId: e1, jobId: 'r2', seq: 0, ok: false }),
+        call({ id: `${ws}-r2b`, workspaceId: ws, executionId: e1, jobId: 'r2', seq: 1, ok: true }),
+      ])
+      expect(
+        (
+          await repo.listByExecution(ws, {
+            executionId: e1,
+            limit: 10,
+            jobId: 'r2',
+            outcome: 'error',
+          })
+        ).map((c) => c.id),
+      ).toEqual([`${ws}-r2a`])
     })
 
     it('narrows a page to ONE dispatch', async () => {

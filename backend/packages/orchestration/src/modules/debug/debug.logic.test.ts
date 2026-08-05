@@ -67,7 +67,7 @@ const EMPTY_SINKS = {
   llmCalls: { available: true, count: 1 },
   agentContext: { available: true, count: 1 },
   searchQueries: { available: true, count: 0 },
-  toolCalls: { available: true, count: 0 },
+  toolCalls: { available: true, count: 0, failed: 0 },
   provisioningLog: { available: true, count: 0 },
 }
 
@@ -487,8 +487,41 @@ describe('deriveSignals', () => {
     })
     const pointer = signals.find((s) => s.code === 'failure_outside_model_calls')
     expect(pointer).toMatchObject({ severity: 'warning', count: 40 })
-    expect(pointer!.message).toContain('tool-calls?order=trajectory')
     expect(pointer!.message).toContain('contains=')
+    // The base fixture's trajectory sink holds NOTHING, so the pointer says the trajectory
+    // cannot answer rather than sending the caller to an endpoint with no rows in it.
+    expect(pointer!.message).not.toContain('tool-calls?order=trajectory')
+    expect(pointer!.message).toContain('No tool calls were recorded')
+
+    // With failing tool calls counted, the pointer leads with them and hands over the exact
+    // narrowed query, which is the whole reason the sink now counts its failures.
+    const withFailingTools = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      sinks: { ...base.sinks, toolCalls: { available: true, count: 120, failed: 4 } },
+      ...foldLlmRollup([summary({ calls: 40, errors: 0, truncatedCalls: 0 })]),
+    })
+    const toolPointer = withFailingTools.find((s) => s.code === 'failure_outside_model_calls')
+    expect(toolPointer!.message).toContain('4 of its 120 TOOL call(s) did fail')
+    expect(toolPointer!.message).toContain('tool-calls?order=trajectory&outcome=error')
+    // …and the standalone count signal fires beside it, which is the rollup that did not exist.
+    expect(withFailingTools.find((s) => s.code === 'tool_calls_failed')).toMatchObject({
+      severity: 'warning',
+      count: 4,
+    })
+
+    // A trajectory that answered and found nothing failing is a THIRD statement, distinct from
+    // both: the cause left no row in any sink at all.
+    const cleanTools = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      sinks: { ...base.sinks, toolCalls: { available: true, count: 120, failed: 0 } },
+      ...foldLlmRollup([summary({ calls: 40, errors: 0, truncatedCalls: 0 })]),
+    })
+    expect(cleanTools.find((s) => s.code === 'failure_outside_model_calls')!.message).toContain(
+      'look at the engine',
+    )
+    expect(cleanTools.map((s) => s.code)).not.toContain('tool_calls_failed')
 
     // Any model-side anomaly claims the diagnosis instead: the pointer must not fire beside
     // a failed call…

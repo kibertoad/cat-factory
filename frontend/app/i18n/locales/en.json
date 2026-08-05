@@ -1724,6 +1724,47 @@
       "provider": "Provider",
       "resultsCount": "{count} result | {count} results",
       "queriesTitle": "Performed searches"
+    },
+    "callsTitle": "Model calls",
+    "noCallsMatching": "No model calls match this filter.",
+    "filter": {
+      "all": "All",
+      "failed": "Failed",
+      "warning": "Cut short",
+      "ok": "OK"
+    },
+    "failure": {
+      "title": "What failed",
+      "kind": "Failure: {kind}",
+      "atStep": "at step {index}",
+      "lastErroredCall": "Last failed model call",
+      "moreErroredCalls": "and {count} earlier failed call | and {count} earlier failed calls",
+      "lastFailedToolCall": "Last failed tool call",
+      "moreFailedToolCalls": "and {count} earlier failed tool call | and {count} earlier failed tool calls",
+      "toolReturnedNothing": "The tool returned nothing.",
+      "toolBodiesWithheld": "Arguments and results were not captured for this run, so the tool's own error text is not available.",
+      "noFailingCall": {
+        "recorded-clean": "No model call and no tool call reported failure, so the cause left no row in either sink: look at the engine, the container post-mortem on the failing step, and the provisioning log.",
+        "partial-calls-only": "No model call reported failure, and no tool calls were recorded for this run, so the trajectory cannot say whether one did.",
+        "partial-tools-only": "No tool call reported failure, and no model calls were recorded for this run.",
+        "no-telemetry": "Neither model calls nor tool calls were recorded for this run, so it failed before (or outside of) any agent work. Check the provisioning log."
+      }
+    },
+    "toolCalls": {
+      "title": "Tool calls",
+      "subtitle": "what the agents did, in the order they did it",
+      "loading": "Loading tool calls…",
+      "error": "Could not load the tool calls.",
+      "none": "No tool calls recorded for this run.",
+      "noneMatching": "No tool calls match this filter.",
+      "failed": "Failed",
+      "durationHint": "How long the tool took",
+      "dispatch": "Dispatch {jobId}",
+      "seq": "Call #{seq} of this dispatch",
+      "bodiesWithheld": "Arguments and results were not captured, so nothing can be concluded from their absence.",
+      "arguments": "Arguments",
+      "result": "Result",
+      "dropped": "{chars} characters dropped at capture"
     }
   },
   "platformObservability": {
