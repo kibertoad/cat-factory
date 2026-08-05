@@ -103,12 +103,10 @@ describe('wrapResolverWithInlineHarness', () => {
 
   it('serves via the CONTAINER on a leased personal credential when no host CLI is present', async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
-    const runInline = vi.fn(
-      async (req: InlineContainerRequest): Promise<InlineJobResult> => ({
-        text: `ran ${req.model} via ${req.subscriptionBaseUrl ?? 'anthropic'}`,
-        usage: { inputTokens: 3, outputTokens: 1 },
-      }),
-    )
+    const runInline = vi.fn(async (req: InlineContainerRequest): Promise<InlineJobResult> => ({
+      text: `ran ${req.model} via ${req.subscriptionBaseUrl ?? 'anthropic'}`,
+      usage: { inputTokens: 3, outputTokens: 1 },
+    }))
     const leasePersonalSubscriptionToken = vi.fn(async () => ({ secret: 'oat-token' }))
     const wrap = wrapResolverWithInlineHarness({
       inlineHarnesses: ['claude-code'],
@@ -139,9 +137,9 @@ describe('wrapResolverWithInlineHarness', () => {
 
   it('leases a POOLED token (workspace only) for a poolable vendor via the container', async () => {
     const inner: ModelProvider = { resolve: vi.fn(() => delegated) }
-    const runInline = vi.fn(
-      async (_req: InlineContainerRequest): Promise<InlineJobResult> => ({ text: 'ok' }),
-    )
+    const runInline = vi.fn(async (_req: InlineContainerRequest): Promise<InlineJobResult> => ({
+      text: 'ok',
+    }))
     const leaseSubscriptionToken = vi.fn(async () => ({ secret: 'pool-token' }))
     const wrap = wrapResolverWithInlineHarness({
       inlineHarnesses: ['claude-code'],

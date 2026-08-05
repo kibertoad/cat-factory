@@ -59,18 +59,16 @@ function contractRepo(seed: ApiContractRecord[] = []): ApiContractRepository {
     listManifestByOwner: async (ownerKind, ownerId) =>
       rows
         .filter((r) => r.ownerKind === ownerKind && r.ownerId === ownerId)
-        .map(
-          (r): ApiContractManifestEntry => ({
-            serviceId: r.serviceId,
-            contractId: r.contractId,
-            format: r.format,
-            title: r.title,
-            size: r.body.length,
-            operations: r.operations,
-            omittedOperations: r.omittedOperations,
-            sourcePath: r.sourcePath,
-          }),
-        ),
+        .map((r): ApiContractManifestEntry => ({
+          serviceId: r.serviceId,
+          contractId: r.contractId,
+          format: r.format,
+          title: r.title,
+          size: r.body.length,
+          operations: r.operations,
+          omittedOperations: r.omittedOperations,
+          sourcePath: r.sourcePath,
+        })),
     listByServiceIds: async (ownerKind, ownerId, serviceIds) =>
       serviceIds.length === 0
         ? []
