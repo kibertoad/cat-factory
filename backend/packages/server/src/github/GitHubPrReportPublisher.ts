@@ -68,7 +68,9 @@ type RecordedPullRequest = ReturnType<typeof allPullRequests>[number]
 function connectionId(connection: VcsConnectionRef): number {
   const id = Number(connection.connectionId)
   if (!Number.isInteger(id)) {
-    throw new Error(`PR report target carries an unusable connection id "${connection.connectionId}".`)
+    throw new Error(
+      `PR report target carries an unusable connection id "${connection.connectionId}".`,
+    )
   }
   return id
 }

@@ -23,7 +23,13 @@ const CONNECTION = { provider: 'github', connectionId: '1' } as const
  * Bodies are keyed per PULL REQUEST, not per block, because a multi-repo run publishes a
  * DIFFERENT report to each of its PRs (a peer's copy withholds the own-service-only sections).
  * One body per block would let the two overwrite each other and the suite would pass while the
- * peers carried the own-service report.
+ * peers carried the own-service report. It is the port's own unit too: `publish` addresses a
+ * pull request and is handed nothing else.
+ *
+ * Each block therefore gets its OWN pull-request number (see `ownTarget`), so two blocks never
+ * share a body by accident. Two blocks deliberately seeded with the SAME peer PR do share one,
+ * which is the truth being modelled: that is one pull request, and a real adapter would write
+ * both reports into it.
  */
 export class FakePrReportPublisher implements PrVerificationReportPublisher {
   /**
