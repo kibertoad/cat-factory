@@ -1379,6 +1379,8 @@ type PrReportJudge struct {
 	MaxBounces  float64                   `json:"maxBounces"`
 	// Model always present; nil when the server has no value for it.
 	Model *string `json:"model"`
+	// ModelPin may be absent entirely.
+	ModelPin *PrReportJudgeModelPin `json:"modelPin,omitempty"`
 	// RubricName always present; nil when the server has no value for it.
 	RubricName       *string `json:"rubricName"`
 	RubricOverridden bool    `json:"rubricOverridden"`
@@ -1406,6 +1408,27 @@ const (
 
 // PrReportJudgeDispositionValues lists every PrReportJudgeDisposition this SDK release knows.
 var PrReportJudgeDispositionValues = []PrReportJudgeDisposition{PrReportJudgeDispositionPass, PrReportJudgeDispositionPark, PrReportJudgeDispositionBounce, PrReportJudgeDispositionFail}
+
+// PrReportJudgeModelPin is the `PrReportJudgeModelPin` wire model.
+type PrReportJudgeModelPin struct {
+	Requested string                      `json:"requested"`
+	Status    PrReportJudgeModelPinStatus `json:"status"`
+}
+
+// PrReportJudgeModelPinStatus is the `PrReportJudgeModelPinStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PrReportJudgeModelPinStatus string
+
+const (
+	PrReportJudgeModelPinStatusApplied     PrReportJudgeModelPinStatus = "applied"
+	PrReportJudgeModelPinStatusOverridden  PrReportJudgeModelPinStatus = "overridden"
+	PrReportJudgeModelPinStatusUnavailable PrReportJudgeModelPinStatus = "unavailable"
+)
+
+// PrReportJudgeModelPinStatusValues lists every PrReportJudgeModelPinStatus this SDK release knows.
+var PrReportJudgeModelPinStatusValues = []PrReportJudgeModelPinStatus{PrReportJudgeModelPinStatusApplied, PrReportJudgeModelPinStatusOverridden, PrReportJudgeModelPinStatusUnavailable}
 
 // PrReportJudges is the `PrReportJudges` wire model.
 type PrReportJudges struct {

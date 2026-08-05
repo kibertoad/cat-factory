@@ -1,4 +1,4 @@
-import type { Block, JudgeVerdict, PipelineStep, RiskPolicy } from './types.js'
+import type { Block, JudgeModelPin, JudgeVerdict, PipelineStep, RiskPolicy } from './types.js'
 import type { RaiseNotificationInput } from '../ports/notification-channel.js'
 import type { Clock } from '../ports/runtime.js'
 import type { RunInitiatorScope } from '../ports/user-secret-repositories.js'
@@ -74,6 +74,12 @@ export interface JudgeSubject {
   priorOutputs: { agentKind: string; output: string }[]
   /** The rework feedback from an earlier bounce round, when this is a re-judgement. */
   previousFindings?: JudgeVerdict | null
+  /**
+   * The catalog model id the registration pinned for this rubric ({@link JudgeDefinition.modelId}),
+   * passed through so the assessor resolves it under the deployment's own catalog and route
+   * order. Absent ⇒ the judge named no model.
+   */
+  modelId?: string
 }
 
 /**
@@ -93,8 +99,14 @@ export interface JudgeAssessor {
    * Produce ONE verdict. Returns the RAW value plus the model that produced it; the engine
    * parses it against the registration's schema (so a registration owns its own shape) and
    * treats a parse failure as a failing verdict rather than a crashed run.
+   *
+   * `modelPin` reports what became of {@link JudgeSubject.modelId}: applied, overridden by a
+   * more specific choice, or unresolvable in this deployment. The engine records it on the step
+   * verbatim; an assessor that resolves no model of its own (a test fake) simply omits it.
    */
-  assess(subject: JudgeSubject): Promise<{ verdict: unknown; model: string }>
+  assess(
+    subject: JudgeSubject,
+  ): Promise<{ verdict: unknown; model: string; modelPin?: JudgeModelPin }>
 }
 
 /**
@@ -107,6 +119,34 @@ export interface JudgeDefinition {
   kind: string
   /** The rubric this judge assesses against. */
   rubric: JudgeRubric
+  /**
+   * The CATALOG MODEL ID this rubric was authored for (e.g. `claude-opus`), when the judgement
+   * needs a particular model rather than whatever the workspace runs its ordinary steps on. A
+   * doc-completeness rubric and a security rubric are not the same ask, and a registration is
+   * the only thing that knows which of the two it is.
+   *
+   * A catalog id rather than a `ModelRef`, deliberately: an id is resolved through the
+   * deployment's own catalog under the ROUTE ORDER the task's preset states, so a pinned judge
+   * still honours a residency-constrained preset. A `provider:model` pair would bypass both.
+   *
+   * It is a DEFAULT, not an override. The model resolves in this order, most specific first:
+   *
+   *   1. the task's own pinned model (`Block.modelId`);
+   *   2. a workspace preset override NAMING this judge's kind (`overrides['scope-adherence']`);
+   *   3. this pin;
+   *   4. the preset's base model, then the deployment's routing default.
+   *
+   * It sits above the preset BASE model on purpose: a base is a blanket statement about every
+   * kind, so a pin placed under it could never be reached. It sits below an override that names
+   * the kind for the same reason the threshold lives on the merge preset rather than here: a
+   * deployment-global constant no workspace could relax is not a policy, and the model-defaults
+   * panel already lists every registered judge as its own row.
+   *
+   * An id this deployment cannot serve is NOT a silent fallback: the assessment runs on the
+   * default and `step.judge.modelPin` records `unavailable`, because a rubric scored by a model
+   * its author rejected otherwise reads exactly like one it approved.
+   */
+  modelId?: string
   /**
    * Parse the raw assessment into a verdict. Defaults to the contract's `judgeVerdictSchema`
    * (via `parseJudgeVerdict`) when omitted; a registration with a richer rubric shape passes

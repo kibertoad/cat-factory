@@ -305,6 +305,46 @@ describe('composePrVerificationReport', () => {
       reportUrl: null,
     })
   })
+
+  it('says when a rubric was scored by a model it was not written for', () => {
+    // The reviewer is reading a verdict, and the model NAME alone reads as the rubric author's
+    // choice. Only the unserved pin earns words: an honoured one repeats the model name, and
+    // being overridden by the task's own choice is the ordinary outcome.
+    const judged = (modelPin: { requested: string; status: 'applied' | 'unavailable' }) =>
+      instance([
+        step({ agentKind: 'coder', output: 'built it' }),
+        step({
+          agentKind: 'scope-adherence',
+          judge: {
+            status: 'passed',
+            rubricName: 'Scope adherence',
+            rubricOverridden: false,
+            verdict: { score: 0.9, summary: 'in scope', findings: [] },
+            threshold: 0.7,
+            disposition: 'pass',
+            bounces: 0,
+            maxBounces: 1,
+            rounds: [],
+            model: 'cloudflare:glm',
+            modelPin,
+          },
+        }),
+      ])
+
+    const unavailable = renderPrVerificationReport(
+      composePrVerificationReport(
+        judged({ requested: 'claude-opus', status: 'unavailable' }),
+        INPUTS,
+      ),
+    )
+    expect(unavailable).toContain('rubric pinned `claude-opus`, unavailable')
+
+    const applied = renderPrVerificationReport(
+      composePrVerificationReport(judged({ requested: 'claude-opus', status: 'applied' }), INPUTS),
+    )
+    expect(applied).toContain('`cloudflare:glm`')
+    expect(applied).not.toContain('rubric pinned')
+  })
 })
 
 describe('renderPrVerificationReport', () => {

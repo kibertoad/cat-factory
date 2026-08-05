@@ -66,7 +66,7 @@ export {
 } from './stack-deploy.js'
 
 // The REUSABLE OPERATION example: a custom task type bundling a per-case form, standing-context
-// fragments and its own canned pipeline (docs/initiatives/reusable-operations.md).
+// fragments and its own canned pipeline (backend/docs/reusable-operations.md).
 import { registerIntroduceApiOperation } from './introduce-api.js'
 export {
   INTRODUCE_API_FRAGMENT_IDS,

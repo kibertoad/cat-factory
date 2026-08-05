@@ -45,7 +45,7 @@ and cross-references where a fix belongs to them:
 - [`platform-operator-observability.md`](./platform-operator-observability.md): owns the
   operator dashboard + `platform_health` alert (slices 4b/6/7 still open). This doc records the
   signals that projection structurally lacks.
-- `docs/code-quality-observability-extensibility-review-2026-07.md` §7 independently flagged four
+- `docs/internal/code-quality-observability-extensibility-review-2026-07.md` §7 independently flagged four
   of these gaps (no HTTP spans, no operational metrics, uncounted best-effort drops, no client
   error reporting); this doc turns them into an actionable plan.
 

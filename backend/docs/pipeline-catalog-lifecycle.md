@@ -74,7 +74,7 @@ re-adopted after a version bump) by `reseed`, cloned to deviate. Registered VERS
 an editable copy each workspace owns, and `reseed` then refuses the stored row ("Only built-in
 pipelines can be reseeded"), so a deployment can never roll a fix out to a board that already holds
 it. Anything that PINS a pipeline by id wants the first shape: a reusable operation's
-`defaultPipelineId` ([`reusable-operations.md`](../../docs/initiatives/reusable-operations.md) D10)
+`defaultPipelineId` ([`reusable-operations.md`](./reusable-operations.md))
 or an initiative preset's `seedPlan` routing both break if a workspace edits or deletes the
 definition out from under them.
 

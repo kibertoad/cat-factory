@@ -21,7 +21,7 @@ import { registerPromptFragments } from '@cat-factory/prompt-fragments'
 //
 // Nothing here is cat-factory product: the platform ships the MECHANISMS and this package plays
 // the part of a proprietary org package registering its own operation through them. See
-// `docs/initiatives/reusable-operations.md` for the model and the boundary against initiative
+// `backend/docs/reusable-operations.md` for the model and the boundary against initiative
 // presets (which are the vehicle when the work must be PLANNED and decomposed instead).
 // ---------------------------------------------------------------------------
 

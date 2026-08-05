@@ -860,6 +860,7 @@ export interface PrReportJudge {
   maxBounces: number
   /** Always present; `null` when the server has no value for it. */
   model: string | null
+  modelPin?: PrReportJudgeModelPin | null
   /** Always present; `null` when the server has no value for it. */
   rubricName: string | null
   rubricOverridden: boolean
@@ -876,6 +877,16 @@ export type PrReportJudgeDisposition = 'pass' | 'park' | 'bounce' | 'fail'
 
 /** Every `PrReportJudgeDisposition` value, for exhaustive handling and runtime validation. */
 export const PR_REPORT_JUDGE_DISPOSITION_VALUES = ['pass', 'park', 'bounce', 'fail'] as const
+
+export interface PrReportJudgeModelPin {
+  requested: string
+  status: PrReportJudgeModelPinStatus
+}
+
+export type PrReportJudgeModelPinStatus = 'applied' | 'overridden' | 'unavailable'
+
+/** Every `PrReportJudgeModelPinStatus` value, for exhaustive handling and runtime validation. */
+export const PR_REPORT_JUDGE_MODEL_PIN_STATUS_VALUES = ['applied', 'overridden', 'unavailable'] as const
 
 export interface PrReportJudges {
   note?: string | null

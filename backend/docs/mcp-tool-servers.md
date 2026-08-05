@@ -390,7 +390,7 @@ everything about operating one:
 - **Pre-installing the package into the runner image** removes the cold start and the registry
   dependence, and is an image-affecting change with everything that implies (an
   `@cat-factory/executor-harness` version bump and a fresh immutable tag; see
-  [`docs/releases.md`](../../docs/releases.md)).
+  [`docs/internal/releases.md`](../../docs/internal/releases.md)).
 - **Non-secret process config rides `transport.env`; anything secret rides `secretKeys`.** The
   harness redacts exactly the resolved credential values from its logs, by name, so putting a token
   into `transport.env` (or a `--api-key=…` argv entry) bypasses both the credential chain and the

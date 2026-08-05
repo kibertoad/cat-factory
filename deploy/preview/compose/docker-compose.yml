@@ -13,7 +13,7 @@
 #   docker compose up --build --wait     # then open the printed http://localhost:8080
 #   docker compose down -v               # stack + database volume
 #
-# See ../README.md for how to wire it into a board, and ../../../docs/dogfooding.md for the
+# See ../README.md for how to wire it into a board, and ../../../docs/internal/dogfooding.md for the
 # full "develop cat-factory with cat-factory" guide.
 #
 # Deliberate properties (all load-bearing for the compose environment backend):

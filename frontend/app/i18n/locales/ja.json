@@ -4709,6 +4709,7 @@
     "threshold": "しきい値 {threshold}",
     "thresholdHint": "このステップが達成すべきスコアで、タスクのマージポリシーから取られます。これを下回ると、ジャッジは指摘事項を手戻りとして生成元のステップに差し戻すか、試行回数の予算が尽きている場合は実行を保留してあなたの判断を待ちます。",
     "rubricOverridden": "ワークスペースのルーブリック",
+    "modelPinUnavailable": "このレビューは {model} モデル向けに書かれていますが、このデプロイでは実行できないため、別のモデルが作業を採点しました。",
     "reworkRounds": "手戻り {spent}/{budget}",
     "findingsHeading": "ルーブリックが指摘した点",
     "roundsHeading": "レビューの回数",

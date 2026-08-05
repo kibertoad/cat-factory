@@ -1128,6 +1128,33 @@
               }
             ]
           },
+          "modelPin": {
+            "anyOf": [
+              {
+                "properties": {
+                  "requested": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "applied",
+                      "overridden",
+                      "unavailable"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requested",
+                  "status"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rubricName": {
             "anyOf": [
               {

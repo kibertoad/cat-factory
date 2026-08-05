@@ -4,8 +4,13 @@ Repo-wide documentation. Backend-specific reference lives next to the backend in
 [`backend/docs/`](../backend/docs); the design records it accumulates are in
 [`backend/docs/adr/`](../backend/docs/adr).
 
-This directory holds three different kinds of document, and mistaking one for
-another is the usual way to be misled:
+The split that matters first is by AUDIENCE: everything under
+[`internal/`](./internal) is about developing THIS repository (its release
+process, its CI tooling, its own cleanup backlog) and describes nothing a
+deployment or an integration can use. Everything else describes the platform.
+
+Past that, this directory holds three different kinds of document, and mistaking
+one for another is the usual way to be misled:
 
 ## Reference
 
@@ -20,11 +25,6 @@ would otherwise outdate it.
   agent process.
 - [`execution-state-machine.md`](./execution-state-machine.md): the run
   lifecycle, its states and transitions, and why it is not XState.
-- [`releases.md`](./releases.md): changesets, the runner-image rollout recipe,
-  and the checklist for a newly published package.
-- [`dogfooding.md`](./dogfooding.md): cat-factory developing cat-factory, and
-  the per-PR preview stacks under [`deploy/preview`](../deploy/preview).
-- [`localization.md`](./localization.md): i18n status and the migration plan.
 - [`benchmarks/`](./benchmarks): agent benchmark runs and candidate models.
 
 ## In-flight initiatives
@@ -33,17 +33,39 @@ Trackers for multi-PR work **in progress**. Each describes a target state that
 is only partly built, so none of them describes what ships today. Index, reading
 guide and lifecycle: [`initiatives/README.md`](./initiatives/README.md).
 
-## Point-in-time records
+(These are contributor material too, but they stay here rather than under
+`internal/`: essentially every flow doc and CLAUDE.md entry links them, and
+moving the tree would rewrite those references, generated CHANGELOGs included,
+for no reader's benefit.)
+
+## Contributor-only: [`internal/`](./internal)
+
+How this repository is developed, released and kept honest. Nothing here is part
+of the product.
+
+- [`internal/releases.md`](./internal/releases.md): changesets, the runner-image
+  rollout recipe, and the checklist for a newly published package.
+- [`internal/mutation-testing.md`](./internal/mutation-testing.md): the nightly
+  Stryker flow, which packages it mutates, and how to read a score.
+- [`internal/dogfooding.md`](./internal/dogfooding.md): cat-factory developing
+  cat-factory, and the per-PR preview stacks under
+  [`deploy/preview`](../deploy/preview).
+- [`internal/localization.md`](./internal/localization.md): i18n status and the
+  migration plan.
+
+### Point-in-time records
 
 Written against the repo as it stood on a date, and deliberately **not**
 maintained afterwards. Useful as history and as a list of things somebody once
 found; check anything you plan to act on against the current code first.
 
-- [`code-quality-observability-extensibility-review-2026-07.md`](./code-quality-observability-extensibility-review-2026-07.md)
-- [`race-condition-audit-2026-07.md`](./race-condition-audit-2026-07.md)
-- [`pr-review-run-efficiency-and-parking-fixes-2026-07.md`](./pr-review-run-efficiency-and-parking-fixes-2026-07.md)
-- [`refactoring-candidates.md`](./refactoring-candidates.md): a standing backlog
-  of structural cleanups, referenced by the file-size ratchet's comments.
-- [`modularisation.md`](./modularisation.md): the modularisation tracker.
-- [`handover/`](./handover): notes and reference material handed between agent
-  sessions on a specific piece of work.
+- [`internal/code-quality-observability-extensibility-review-2026-07.md`](./internal/code-quality-observability-extensibility-review-2026-07.md)
+- [`internal/race-condition-audit-2026-07.md`](./internal/race-condition-audit-2026-07.md)
+- [`internal/pr-review-run-efficiency-and-parking-fixes-2026-07.md`](./internal/pr-review-run-efficiency-and-parking-fixes-2026-07.md)
+- [`internal/refactoring-candidates.md`](./internal/refactoring-candidates.md): a
+  standing backlog of structural cleanups, referenced by the file-size ratchet's
+  comments.
+- [`internal/modularisation.md`](./internal/modularisation.md): the
+  modularisation tracker.
+- [`internal/handover/`](./internal/handover): notes and reference material
+  handed between agent sessions on a specific piece of work.

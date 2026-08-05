@@ -4932,6 +4932,7 @@
     "threshold": "threshold {threshold}",
     "thresholdHint": "The score this step had to reach, taken from the task's merge policy. Below it the judge sends the work back to the step that produced it, with its findings as rework, or parks the run for you when no attempt budget is left.",
     "rubricOverridden": "workspace rubric",
+    "modelPinUnavailable": "This review was written for the {model} model, which this deployment cannot run, so another model scored the work.",
     "reworkRounds": "rework {spent}/{budget}",
     "findingsHeading": "What the rubric flagged",
     "roundsHeading": "Review rounds",

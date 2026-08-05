@@ -55,10 +55,6 @@ const API_PREFIX = '/api/v1'
 // main that bumps it to the same number produce byte-identical text, so git auto-merges them with
 // no conflict and the branch ships a DIFFERENT surface under a version main already used. Re-check
 // this against `origin/main` after every merge rather than trusting a clean one.
-// 1.11.0, not 1.10.0: main reached 1.10.0 while this branch was in flight (the run-evidence and
-// key-provisioning operations), and that number is already published against a surface WITHOUT the
-// follow-up and interview operations added here. The same collision the note above describes, the
-// second time in three releases.
 // 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
 // so a consumer built against 1.11.0 keeps parsing.
 // 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
@@ -67,12 +63,18 @@ const API_PREFIX = '/api/v1'
 // as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
 // only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
 // that clean merge.
+// 1.14.0: additive only, an optional `modelPin` on the report's judge verdicts (which model the
+// rubric was authored for, and whether the run got it). Third number that change held: it was
+// written against 1.12.0, moved to 1.13.0 when the validation field took that, and again once the
+// debug surface took 1.13.0. Every one of those was found by re-reading this line after a merge,
+// which is the only thing that catches it.
 // 1.15.0, not 1.12.0: `GET /api/v1/me` and `unanswerable[]` on the decision list, both additive,
-// written against a main that was still on 1.11.0. The number has now moved three times under this
-// branch: main published 1.12.0 for `configUnreadable`, 1.13.0 for the run-debugging surface, and
-// 1.14.0 for the per-judge model pin, which is the sibling branch an earlier note here predicted
-// would collide. Re-checked against `origin/main` on every merge, which is the only reason this
-// line is right; a clean auto-merge of it has never once meant agreement.
+// written against a main that was still on 1.11.0. Four numbers have gone past this branch while
+// it was in flight (`configUnreadable`, the run-debugging surface, the judge model pin, and the
+// release that published them), so it takes the next free one. Nothing about that is unusual any
+// more, which is the point of the note at the top of this block: on a repo landing this many
+// additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
+// someone else already published. Re-read it against `origin/main` every time.
 const API_VERSION = '1.15.0'
 
 /**

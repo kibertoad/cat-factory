@@ -1,0 +1,142 @@
+name: Mutation
+
+# Stryker mutation testing, deliberately kept OUT of `ci.yml`.
+#
+# Mutation testing re-runs a package's suite once per mutant, so a run is minutes to tens of
+# minutes of CPU per package. That is the wrong shape for a per-PR gate on two counts: it would
+# put the slowest job in the repo on every PR's critical path, and its output is not a pass/fail
+# fact about a diff but a slow-moving quality measurement ("do these tests actually assert what
+# they cover"). So it lives here, on a nightly schedule plus manual dispatch, and it is
+# NON-BLOCKING by construction: a separate workflow contributes no check to `ci.yml`'s aggregated
+# `Build` / `Test` gates, so a red run can never block a merge.
+#
+# It is also never expected to run on a developer's machine (see CLAUDE.md → "Run the CI guard
+# scripts locally before committing"). Model, scope and how a package joins the set:
+# docs/mutation-testing.md.
+
+on:
+  # Nightly, off-peak. Scheduled runs only ever fire on the default branch, so this is the
+  # main-branch trend line.
+  schedule:
+    - cron: '20 3 * * *'
+  # A change to the mutation flow ITSELF runs it on the PR making the change. `workflow_dispatch`
+  # only exists once a workflow sits on the default branch, so without this the flow could first be
+  # proven only AFTER merging it, and a broken matrix or a renamed script would surface as a red
+  # nightly on main. An ordinary PR matches none of these paths and pays nothing.
+  pull_request:
+    paths:
+      - '.github/workflows/mutation.yml'
+      - 'scripts/stryker-base.mjs'
+      - 'scripts/mutation-targets.mjs'
+      - 'scripts/mutation-summary.mjs'
+      - 'backend/**/stryker.config.mjs'
+  # Manual runs on any branch, so a change to the mutated packages can be measured before it merges,
+  # optionally narrowed to one package.
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Mutate only this package (e.g. @cat-factory/kernel). Empty = every target.'
+        required: false
+        default: ''
+
+# Cancel a superseded run on the same ref: two overlapping nightly-length runs would just
+# compete for runners.
+concurrency:
+  group: mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  # Which packages are mutation-tested is decided by the presence of a `stryker.config.mjs`, not
+  # by a list in this file: adding a package is then one file rather than a config plus a workflow
+  # edit that is silently a no-op when forgotten. The script FAILS on an empty result (and on an
+  # unknown `--only`), because an empty matrix runs no jobs and reports this workflow green, which
+  # is indistinguishable from a nightly that mutated everything and found nothing wrong.
+  targets:
+    name: Discover targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Pure node, no install needed. The dispatch input arrives via env, never interpolated into
+      # the script body (repo convention; keeps this off zizmor's template-injection radar).
+      - id: discover
+        env:
+          ONLY: ${{ inputs.package }}
+        run: |
+          if [ -n "$ONLY" ]; then
+            matrix="$(node scripts/mutation-targets.mjs --json --only "$ONLY")"
+          else
+            matrix="$(node scripts/mutation-targets.mjs --json)"
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "mutation targets: $matrix"
+
+  mutate:
+    name: Mutate ${{ matrix.target.name }}
+    needs: targets
+    runs-on: ubuntu-latest
+    # Sized off the measured runs: the small packages are ~2 minutes on a 4-vCPU runner, kernel's
+    # ~5,800 mutants are the outlier at well under an hour. Generous on purpose (this blocks
+    # nothing), but bounded so a mutant that hangs the runner cannot burn six hours. If the tail
+    # gets uncomfortable, Stryker's `--incremental` is the lever, not a smaller scope: see
+    # docs/mutation-testing.md.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      # One package's score says nothing about another's, and there is no shared setup to abandon.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm + Node + install
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+
+      # Through Turbo, so the `^build` edge builds the package's workspace dependencies first.
+      # Stryker's first act is an ordinary run of the suite, which resolves those deps through
+      # their `dist`; against a stale one the initial run fails and the whole thing aborts before
+      # the first mutant. The task itself is uncached (turbo.json says why).
+      #
+      # `stryker run` exits non-zero when the score falls below the package's floor, which is the
+      # signal this workflow exists to produce: a red job here means a change landed tests that
+      # cover code without pinning its behaviour.
+      - name: Run mutation testing
+        env:
+          PACKAGE: ${{ matrix.target.name }}
+        run: pnpm exec turbo run test:mutation --filter="$PACKAGE"
+
+      # Both of these run even when the step above went red: a below-floor run still wrote a full
+      # report, and that report is the whole point of looking. `!cancelled()` rather than
+      # `always()` so a cancelled nightly doesn't publish a half-written one.
+      - name: Summarise score
+        if: ${{ !cancelled() }}
+        env:
+          DIR: ${{ matrix.target.dir }}
+        run: node scripts/mutation-summary.mjs "$DIR" >> "$GITHUB_STEP_SUMMARY"
+
+      # The HTML report is what a human acts on: it lists every surviving mutant against its
+      # source line, which is the shortest path from "the score dropped" to "this assertion is
+      # missing".
+      - name: Upload mutation report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-report-${{ matrix.target.slug }}
+          path: ${{ matrix.target.dir }}/reports/mutation
+          retention-days: 14
+          if-no-files-found: error
