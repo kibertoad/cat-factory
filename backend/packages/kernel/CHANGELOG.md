@@ -1,5 +1,120 @@
 # @cat-factory/kernel
 
+## 0.242.0
+
+### Minor Changes
+
+- f775c1d: Job tokens are scoped to the repos a run resolved, not the whole installation
+
+  A container dispatch's clone/push credential was a GitHub App token minted with no
+  `repository_ids`, so it reached every repository the workspace's installation covered. That made
+  the installation the blast radius of a fully compromised run, and the mitigation was advice
+  (scope the installation narrowly) rather than a mechanism. The narrowing mechanism already
+  existed and was proven on the mothership delegation path; this brings it to every dispatch.
+
+  `jobTokenRepoIds` collects the repos ONE job body names (the primary checkout plus fan-out
+  peers, the conflict-resolver's targeted peer, the merger's combined-diff siblings, and read-only
+  reference repos) and `buildDispatchTokenMint` turns them into `repository_ids`. That builder is
+  shared by both facades, which previously carried byte-identical copies of the "initiator PAT
+  first, else the deployment credential" decision: whose token and how wide are one question, so
+  they now have one implementation and cannot drift.
+
+  **Every path that hands a container a GitHub credential goes through it**, not just the step
+  executor: the repo bootstrapper, the env-config repairer, the frontend preview job and the
+  deploy clone target each name the one repo they touch. That totality is held by the TYPE, not by
+  review. Supplying the run context is what makes a mint a dispatch mint, and a context must carry
+  `repoIds`, so a new dispatcher cannot ship without deciding its scope. Engine calls (`RepoFiles`
+  reads, the gate and merge clients) pass no context and stay installation-wide by design: they act
+  as the deployment, and nothing they do reaches a container.
+
+  Three dispositions are deliberate. A leg on a DIFFERENT installation is dropped rather than
+  requested: one job carries one token, so such a repo is unreachable either way, and naming it
+  would only make GitHub reject the mint. A scope that cannot be expressed as repo ids widens to
+  installation-wide rather than dropping a leg the harness is about to clone, since minting for the
+  parseable remainder would trade a data problem for a run that fails deep in a `git clone`. And a
+  dispatcher whose own lookup came back empty passes an EMPTY scope rather than none, because
+  "could not resolve my repos" and "I am not a dispatch" are opposite facts that an absent field
+  renders identically. Neither widening is silent: a `warn` naming the run plus the new
+  `dispatch.token_scope_widened` counter, because a security property degrading quietly reads
+  exactly like one holding.
+
+  What this does NOT narrow, both by construction: the token still carries `Contents: write` for
+  the repos it covers (App tokens cannot be branch-scoped), and an initiator's personal PAT is
+  unaffected, since `repository_ids` is an App-token mechanism with no PAT equivalent.
+  `allowInitiatorPat` remains what bounds that.
+
+  The mothership delegation endpoint takes the same scope. A node may now name `repositoryIds`,
+  which is INTERSECTED with the installation's App-linked projection server-side: asking narrows
+  and can never widen, nothing left in scope is the existing uniform 404, and a malformed ask falls
+  back to the full linked set rather than a partial one.
+
+  Worth reviewing: what a scoped mint changed about CACHING. `GitHubAppAuth` keyed its in-memory
+  token cache by installation id alone, which made a scoped entry unsafe to store (it would
+  over-grant a later engine call, and be under-granted by one), so scoped mints bypassed the cache
+  entirely. On the delegation path that was already true and cheap; on the standard dispatch path
+  it would have put an RSA signature plus a GitHub round trip on every step and every re-dispatch
+  epoch, where a warm process previously paid one mint per installation per hour. Both sides now
+  key by installation + sorted scope through one `InstallationTokenCache`, so a narrowed token
+  caches beside the unscoped one and neither can serve or poison the other. That cache also evicts
+  lapsed entries, which keying by scope made necessary: a map bounded by the installation count
+  became one bounded by the number of distinct repo SETS a long-running node dispatches over.
+
+  The dispatch also reorders: the auxiliary-checkout resolution moved INTO the parallel I/O wave
+  and the token mint moved out behind it, because the mint's scope is what that resolution
+  produces. One round trip left the wave as another entered it, and the ordering is pinned by a
+  test, so a later latency pass cannot re-parallelise the mint back to installation-wide.
+  `backend/docs/security-model.md` Layer 3 is updated, and the "job tokens are installation-wide"
+  known gap is closed.
+
+- 3857ea4: Close the merge-preset selection escape hatch in the role-scoped merge policy
+
+  ADR 0037 sandboxes a role's runs (`dryRunRoles`) and narrows what they may auto-merge
+  (`classRulesByRole`), reading both off the merge preset the TASK selects, and concluded that a
+  sandboxed member cannot un-sandbox themselves because editing a preset is admin-tier. That covered
+  only one door. Which preset a task is under is `riskPolicyId` on the block patch: a plain
+  `board.write`, member tier, on the same board. Re-pointing the task at a preset that sandboxes
+  nobody was one PATCH or one click in the inspector's picker, and authoring a new task straight onto
+  one was the same escape a door along, since a task that picks nothing is governed by the workspace
+  default. Both built-in presets ship with empty `dryRunRoles`, so an open preset is always to hand.
+
+  Gating preset selection behind `settings.manage` was the obvious fix and the wrong one: the preset
+  library exists to be chosen from per task, and taking that from members would make every preset
+  admin-only on deployments that authored no role policy at all. So the fix applies the feature's own
+  narrow-only property one level up: a selection may not drop a restriction the SELECTOR's own role
+  was under, either the sandbox or a class rule the ROLE LAYER narrowed. It deliberately does not
+  compare the presets' base policy (ceilings, `autoMergeEnabled`, `classRules`), which says the same
+  thing to every tier, so on a workspace whose presets treat every initiator alike, which is every
+  built-in, the guard cannot refuse anything and selection behaves exactly as before.
+
+  Worth reviewing: the refusal binds at `BoardService`, not in a controller, because `riskPolicyId` is
+  writable at creation AND by patch and the escape is whichever door a caller reaches for. The rule
+  itself lives in `@cat-factory/contracts` so the SPA's picker disables an option the engine would
+  refuse rather than offering it and returning a 403. `resolveMergeClassRule` /
+  `resolveRoleScopedMergeClassRule` moved from kernel to contracts for that reason; the engine imports
+  them from there now.
+
+  Internal break, per the pre-1.0 rule: every board-write entry point now requires the acting
+  `BlockEditActor`. `BoardService.addTask` / `updateBlock` / `addServiceTask` and the `BoardWritePort`
+  they satisfy, plus the methods that write blocks on a caller's behalf: `TaskLinkService`'s
+  `createTaskFromIssue` / `spawnEpic`, `DocumentLinkService.spawn` and `BugHuntService.adopt`. Required
+  rather than optional so a new call site cannot inherit an exemption from a default.
+
+  The reason it reaches that far is the part worth reviewing. A service that hardcodes
+  `UNATTRIBUTED_BLOCK_EDITOR` inside itself exempts every route above it while looking correct at the
+  call site, which is how filing a tracker issue, spawning an epic, spawning a document's structure
+  and adopting a hunted bug were all member-tier writes made under no tier. So the decision moves to
+  the layer that can answer it: the acting tier is a fact about the REQUEST, services take it and
+  never invent one, and `blockEditActor.coverage.spec.ts` classifies each site that NAMES an actor
+  (rather than each site that calls a board write, which is what missed those four) as attributed or
+  deliberately unattributed with a reason. None of them can carry a merge preset today, so there is no
+  behaviour change; the point is that the next one to gain the field is judged rather than exempt.
+
+### Patch Changes
+
+- Updated dependencies [bac6776]
+- Updated dependencies [3857ea4]
+  - @cat-factory/contracts@0.243.0
+
 ## 0.241.1
 
 ### Patch Changes
