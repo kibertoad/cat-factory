@@ -433,8 +433,11 @@ export interface Env {
 
   /**
    * The redirect URL a vendor's authorization server sends an operator's browser back to when they
-   * connect a remote (`http`) MCP tool server — this deployment's public `/mcp/oauth/callback` URL,
-   * and the same string registered as the OAuth client's redirect URI at the vendor.
+   * connect a remote (`http`) MCP tool server: this deployment's public app URL followed by
+   * `/mcp-oauth-callback`, and the same string registered as the OAuth client's redirect URI at the
+   * vendor. It points at the SPA rather than at this Worker on purpose: the page there re-presents
+   * the vendor's `code` and `state` over the authenticated API, which is what lets the completion
+   * be gated on a session at all (a vendor's redirect carries no bearer token).
    *
    * Operator-set rather than derived from the request, because the vendor has this exact value on
    * file: a `Host`-derived string differs behind every route a Worker is reachable by, and the

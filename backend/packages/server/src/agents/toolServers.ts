@@ -429,11 +429,17 @@ function buildJobSpec(
   // declared for the same header name. That collision is a declaration fault boot validation
   // warns about, and the resolution has to be one of the two: silently keeping the static value
   // would send a stale token that the vendor's own consent screen has just been used to replace.
-  const credentials = {
-    ...headerSecrets(definition.secretKeys, secrets),
-    ...(oauthHeader ? { [oauthHeader.name]: oauthHeader.value } : {}),
-  }
-  const headers = { ...definition.transport.headers, ...credentials }
+  //
+  // "The same header name" is decided CASE-INSENSITIVELY, because HTTP header names are, and
+  // because that is the rule boot validation warns under. A plain object spread would compare them
+  // as strings instead, so a declaration pairing `authorization` with the default `Authorization`
+  // would produce two entries, both would go out, and the win the comment above describes would
+  // silently not happen, on a collision the WARNING said was resolved.
+  const credentials = mergeHeaders(
+    headerSecrets(definition.secretKeys, secrets),
+    oauthHeader ? { [oauthHeader.name]: oauthHeader.value } : {},
+  )
+  const headers = mergeHeaders(definition.transport.headers ?? {}, credentials)
   return {
     id: definition.id,
     transport: 'http',
@@ -442,6 +448,31 @@ function buildJobSpec(
     ...allowed,
     ...secretKeyNames(credentials),
   }
+}
+
+/**
+ * Fold `overrides` onto `base` with header names compared case-insensitively, keeping the SPELLING
+ * the override used.
+ *
+ * Object spread is the wrong tool for a header map: `{...{authorization: a}, ...{Authorization: b}}`
+ * keeps both, and every one of them is sent. Wherever this platform decides one header value must
+ * WIN over another (a granted OAuth token over a static credential; a resolved credential over a
+ * declaration's own header), that decision has to be made under HTTP's own equality rule or it is
+ * not made at all.
+ */
+export function mergeHeaders(
+  base: Record<string, string>,
+  overrides: Record<string, string>,
+): Record<string, string> {
+  const merged: Record<string, string> = { ...base }
+  for (const [name, value] of Object.entries(overrides)) {
+    for (const existing of Object.keys(merged)) {
+      if (existing !== name && existing.toLowerCase() === name.toLowerCase())
+        delete merged[existing]
+    }
+    merged[name] = value
+  }
+  return merged
 }
 
 /**
@@ -573,6 +604,31 @@ export interface DispatchToolServerDeps {
   resolveToolSecrets?: ToolSecretResolver
   resolveToolServerOAuth?: McpOAuthTokenSource
   logger?: Logger
+}
+
+/**
+ * Pick exactly the four things {@link resolveDispatchToolServers} needs out of a wider executor
+ * dependency bag.
+ *
+ * Here rather than spread at the call site (`{...this.deps, agentKindRegistry}`), which typechecks
+ * against a structural parameter and quietly hands this seam every unrelated field the executor
+ * holds. Naming them keeps the seam's surface honest and puts the next credential channel's wiring
+ * in one place, the same reason the binding function itself lives beside what it binds.
+ */
+export function dispatchToolServerDeps(
+  deps: {
+    resolveToolSecrets?: ToolSecretResolver | undefined
+    resolveToolServerOAuth?: McpOAuthTokenSource | undefined
+    logger?: Logger | undefined
+  },
+  agentKindRegistry: AgentKindRegistry,
+): DispatchToolServerDeps {
+  return {
+    agentKindRegistry,
+    ...(deps.resolveToolSecrets ? { resolveToolSecrets: deps.resolveToolSecrets } : {}),
+    ...(deps.resolveToolServerOAuth ? { resolveToolServerOAuth: deps.resolveToolServerOAuth } : {}),
+    ...(deps.logger ? { logger: deps.logger } : {}),
+  }
 }
 
 /**

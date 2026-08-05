@@ -2881,7 +2881,16 @@
         "lastError": "Ostatnie odnowienie tokenu nie powiodło się: {detail}",
         "connect": "Połącz",
         "reconnect": "Połącz ponownie",
-        "disconnect": "Rozłącz"
+        "disconnect": "Rozłącz",
+        "callback": {
+          "working": "Kończenie połączenia…",
+          "done": "Połączono z {server}",
+          "doneHint": "Uruchomienia tej tablicy mogą teraz korzystać z serwera narzędzi na koncie, na które się zalogowano.",
+          "back": "Powrót do aplikacji",
+          "failedTitle": "Nie udało się zakończyć połączenia",
+          "failed": "Nie udało się dokończyć autoryzacji. Rozpocznij połączenie ponownie w oknie Infrastruktura.",
+          "missingParams": "W tym odnośniku brakuje wartości zwracanych przez dostawcę, więc nie ma czego kończyć. Rozpocznij połączenie ponownie."
+        }
       },
       "test": "Testuj",
       "notProbeable": {

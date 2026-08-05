@@ -148,8 +148,12 @@ clean and shipped the deployment's master sealing key to a third party. So:
   carries the flow is SEALED rather than signed (it holds the PKCE verifier, which travels the same
   browser redirect the authorization code does) and binds the user who started it, so an
   authorization link opened by an admin cannot plant someone else's vendor account as the board's
-  connection. And `secrets.manage` is re-checked at the CALLBACK, not assumed from the Connect
-  press, because a grant takes minutes of human time. What OAuth does NOT change: a wired server's
+  connection. And `secrets.manage` is re-resolved WHEN THE TOKEN IS STORED, not assumed from the
+  Connect press, because a grant takes minutes of human time. Both of those last two are enforceable
+  only because the vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a
+  session-gated endpoint: a backend route receiving a third-party browser navigation directly has no
+  bearer token to resolve a user from, so it would have to sit outside the default-deny session gate
+  and every check it made about the caller would be unreachable code. What OAuth does NOT change: a wired server's
   results are still untrusted input, and the granted SCOPES are the boundary that actually bounds
   what a subverted agent can do with the connection.
 - **The dispatch-time check sits at the CALL SITE, not inside the env resolver**, so it holds for

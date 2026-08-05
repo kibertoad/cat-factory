@@ -108,7 +108,7 @@ async function connect(
     serverUrl: 'https://mcp.example.com/mcp',
     oauth: OAUTH,
     userId: 'usr_1',
-    redirectUri: 'https://app.example.com/mcp/oauth/callback',
+    redirectUri: 'https://app.example.com/mcp-oauth-callback',
   })
   const state = new URL(url).searchParams.get('state')!
   const request = (await h.service.readAuthorizationRequest(state))!
@@ -124,7 +124,7 @@ describe('McpOAuthService.startAuthorization', () => {
       serverUrl: 'https://mcp.example.com/mcp',
       oauth: OAUTH,
       userId: 'usr_1',
-      redirectUri: 'https://app.example.com/mcp/oauth/callback',
+      redirectUri: 'https://app.example.com/mcp-oauth-callback',
     })
     const params = new URL(url).searchParams
     expect(url.startsWith('https://auth.example.com/authorize?')).toBe(true)
@@ -170,7 +170,7 @@ describe('McpOAuthService.startAuthorization', () => {
         serverUrl: 'https://mcp.example.com/mcp',
         oauth: { ...OAUTH, grant: 'client_credentials' } satisfies McpOAuthConfig,
         userId: 'usr_1',
-        redirectUri: 'https://app.example.com/mcp/oauth/callback',
+        redirectUri: 'https://app.example.com/mcp-oauth-callback',
       }),
     ).rejects.toMatchObject({ details: { reason: 'oauth_grant_not_interactive' } })
   })
@@ -322,5 +322,108 @@ describe('McpOAuthService.accessToken', () => {
       oauth: OAUTH,
     })
     expect(result).toMatchObject({ status: 'token_failed' })
+  })
+
+  it('clears a recorded failure once a stored token serves a dispatch again', async () => {
+    // `lastError` is written by whichever dispatch could not mint a token. A dispatch that is
+    // served from the STORE mints nothing, so without an explicit clear one transient vendor
+    // outage would leave the panel claiming a working connection had stopped working.
+    const h = harness(() => ({ body: { access_token: 'at-1', refresh_token: 'rt-1' } }))
+    await connect(h)
+    const row = (await h.repository.get('ws1', 'linear'))!
+    await h.repository.compareAndSwap(
+      { ...row, summary: JSON.stringify({ lastError: 'the vendor was down' }), rev: row.rev + 1 },
+      row.rev,
+    )
+
+    const result = await h.service.accessToken({
+      workspaceId: 'ws1',
+      serverId: 'linear',
+      serverUrl: 'https://mcp.example.com/mcp',
+      oauth: OAUTH,
+    })
+    expect(result).toMatchObject({ status: 'ok' })
+    expect((await h.service.listStatuses('ws1')).get('linear')?.lastError).toBeUndefined()
+  })
+})
+
+// Two dispatches finding the same access token spent is the ORDINARY case, not a rare one: a board
+// with several runs in flight refreshes from whichever reaches the expiry first. Against an
+// authorization server that ROTATES refresh tokens the loser's copy is dead the moment the winner's
+// exchange lands, and the loser must end up on the winner's tokens rather than reporting a failure
+// while a live token sits in the row. The two ways to lose need separate cover because only one of
+// them reaches the rev guard.
+describe('McpOAuthService.accessToken under a concurrent refresh', () => {
+  /**
+   * Land a peer dispatch's refreshed grant on the row, synchronously, from inside the fetch
+   * responder, which is the only place it reproduces anything. Planted BEFORE the call it races
+   * would just be read at the top of the loop and served, testing nothing; the race is a write that
+   * lands between this dispatch's read and its own swap, so that is where it has to happen.
+   */
+  function plantWinner(h: ReturnType<typeof harness>, accessToken: string): void {
+    const row = h.repository.rows.get('ws1|linear')!
+    h.repository.rows.set('ws1|linear', {
+      ...row,
+      tokens: `sealed(${JSON.stringify({
+        kind: 'tokens',
+        accessToken,
+        refreshToken: 'rt-rotated',
+        expiresAt: h.now.value + 3_600_000,
+      })})`,
+      rev: row.rev + 1,
+    })
+  }
+
+  it('adopts the winner’s token when the rotation kills its own refresh call', async () => {
+    // The likelier loss, and the one the rev guard cannot see: the winner's exchange has already
+    // INVALIDATED this dispatch's refresh token, so it fails at the token endpoint and never
+    // reaches the compareAndSwap that would have told it it lost.
+    const h: ReturnType<typeof harness> = harness((call) => {
+      if (call.params.get('grant_type') !== 'refresh_token') {
+        return { body: { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 60 } }
+      }
+      plantWinner(h, 'at-winner')
+      return { status: 400, body: { error: 'invalid_grant', error_description: 'rotated' } }
+    })
+    await connect(h)
+    h.now.value = 10_000 + 120_000
+
+    const result = await h.service.accessToken({
+      workspaceId: 'ws1',
+      serverId: 'linear',
+      serverUrl: 'https://mcp.example.com/mcp',
+      oauth: OAUTH,
+    })
+    expect(result).toEqual({ status: 'ok', header: 'Authorization', value: 'Bearer at-winner' })
+    // And the winner's row is left alone: no `lastError` stamped on a grant that is working, which
+    // is what a bare "report the failure" would have written onto someone else's healthy state.
+    expect((await h.service.listStatuses('ws1')).get('linear')?.lastError).toBeUndefined()
+  })
+
+  it('adopts the winner’s token when it loses the compare-and-swap', async () => {
+    // The other half: this dispatch's own exchange SUCCEEDS (an authorization server that does not
+    // rotate, or a winner that landed a moment later), so it reaches the rev guard and loses there.
+    // Re-reading rather than re-applying is what keeps the row on ONE coherent token set.
+    let refreshes = 0
+    const h: ReturnType<typeof harness> = harness((call) => {
+      if (call.params.get('grant_type') !== 'refresh_token') {
+        return { body: { access_token: 'at-1', refresh_token: 'rt-1', expires_in: 60 } }
+      }
+      refreshes++
+      if (refreshes === 1) plantWinner(h, 'at-winner')
+      return { body: { access_token: `at-mine-${refreshes}`, expires_in: 3600 } }
+    })
+    await connect(h)
+    h.now.value = 10_000 + 120_000
+
+    const result = await h.service.accessToken({
+      workspaceId: 'ws1',
+      serverId: 'linear',
+      serverUrl: 'https://mcp.example.com/mcp',
+      oauth: OAUTH,
+    })
+    expect(result).toEqual({ status: 'ok', header: 'Authorization', value: 'Bearer at-winner' })
+    // Exactly one refresh: the retry reads the winner's live token instead of exchanging again.
+    expect(refreshes).toBe(1)
   })
 })

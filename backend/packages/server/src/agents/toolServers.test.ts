@@ -760,3 +760,58 @@ describe('resolveToolServers with OAuth', () => {
     expect(result.mcpServers).toHaveLength(1)
   })
 })
+
+describe('the OAuth header and a static credential naming it', () => {
+  // Boot validation WARNS about this collision and says the granted token wins. A plain object
+  // spread would only make that true when the two spellings match byte for byte, so a declaration
+  // pairing lowercase `authorization` with the default `Authorization` would ship BOTH headers and
+  // the stated resolution would silently not have happened.
+  const collidingCase: McpServerDefinition = {
+    id: 'linear',
+    transport: { kind: 'http', url: 'https://mcp.linear.app/mcp' },
+    oauth: { grant: 'authorization_code', clientId: 'cid' },
+    secretKeys: [{ key: 'LINEAR_TOKEN', header: 'authorization' }],
+  }
+
+  it('lets the granted token win over a static credential spelled in another case', async () => {
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith(collidingCase),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ LINEAR_TOKEN: 'static-token' }),
+      resolveToolServerOAuth: tokenSource({
+        status: 'ok',
+        header: 'Authorization',
+        value: 'Bearer live-token',
+      }),
+    })
+
+    const headers = result.mcpServers[0]?.headers ?? {}
+    expect(Object.keys(headers)).toEqual(['Authorization'])
+    expect(headers).toEqual({ Authorization: 'Bearer live-token' })
+    expect(JSON.stringify(headers)).not.toContain('static-token')
+  })
+
+  it('lets a resolved credential win over the declaration’s own header in another case', async () => {
+    // The same rule one layer down: `transport.headers` is the declaration's static half, and a
+    // credential resolved for the same header must replace it rather than travel beside it.
+    const result = await resolveToolServers({
+      context: context(),
+      agentKindRegistry: registryWith({
+        id: 'docs',
+        transport: {
+          kind: 'http',
+          url: 'https://docs.example.com/mcp',
+          headers: { 'X-Api-Key': 'placeholder' },
+        },
+        secretKeys: [{ key: 'DOCS_TOKEN', header: 'x-api-key' }],
+      }),
+      harness: 'claude-code',
+      workspaceId: 'ws1',
+      resolveToolSecrets: resolver({ DOCS_TOKEN: 'resolved' }),
+    })
+
+    expect(result.mcpServers[0]?.headers).toEqual({ 'x-api-key': 'resolved' })
+  })
+})

@@ -329,12 +329,32 @@ Recorded so the next iteration does not re-propose them.
   authorization code travels in. The residual gap, recorded rather than hidden: with no row there is
   no single-use enforcement, so a replayed state re-presents a code the authorization server has
   already spent and refuses.
+- **The vendor redirects to the SPA, and the backend has no public callback at all** (review
+  follow-up; the original slice shipped one). The redirect is a top-level browser navigation a third
+  party triggers, and sessions here are bearer tokens, which such a navigation cannot carry. So a
+  backend receiver sees no user on EVERY request (on an authenticated deployment exactly as in
+  dev-open), and the user binding and `secrets.manage` re-check written on it were unreachable code
+  that read like protection; it also had to be exempted from the default-deny session gate to be
+  reachable at all, which the first cut missed, leaving the flow returning 401 to the vendor on any
+  deployment with authentication. The page at `/mcp-oauth-callback` re-presents `code` and `state`
+  to a session-gated `POST /mcp/oauth/complete` instead. Cost: one SPA page. Gain: both checks
+  execute, the route inherits the shared gate rather than an exemption, and the workspace still
+  comes out of the sealed state (so access is resolved through the one `loadWorkspaceAccess`, the
+  path having no `:workspaceId` for the gate to bind to).
 - **The refresh race resolves by ADOPTING the winner's tokens, not by re-applying.** Every other
   rev-guarded path in this repo reloads and re-applies on the winner's snapshot. Here that would be
   actively wrong: an authorization server that rotates refresh tokens has already invalidated the
   loser's, so re-applying replaces a working grant with a dead one. The loser re-reads and uses what
   the winner stored. This is the one place the repo's standard CAS idiom needed inverting, and it
   reads as a bug until the rotation is in view.
+  **And the rev guard is only half of it** (review follow-up): against a rotating server the
+  LIKELIER loss never reaches the swap at all. Both dispatches POST the same refresh token, the
+  winner's exchange rotates it, and the loser's request fails at the token endpoint with
+  `invalid_grant`, so the adoption has to hang off the exchange FAILING, not only off the CAS
+  returning false. Without that, a dispatch loses its tool while a live token sits in the row, and
+  the `lastError` it records lands on the winner's healthy grant. The mirror image is `lastError`
+  never being cleared: only an exchange cleared it, and the common dispatch is served from the store
+  and mints nothing, so one transient outage left a permanent red banner on a working connection.
 - **Discovery is performed, and its results are held to the URL floor.** Requiring both endpoints in
   the declaration would have been half the code, and it makes a vendor server a scavenger hunt
   through a changelog for two strings that change when the vendor re-platforms. The MCP spec

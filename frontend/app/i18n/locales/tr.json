@@ -3022,7 +3022,16 @@
         "lastError": "Son belirteç yenileme başarısız oldu: {detail}",
         "connect": "Bağlan",
         "reconnect": "Yeniden bağlan",
-        "disconnect": "Bağlantıyı kes"
+        "disconnect": "Bağlantıyı kes",
+        "callback": {
+          "working": "Bağlantı tamamlanıyor…",
+          "done": "{server} bağlandı",
+          "doneHint": "Bu panonun çalıştırmaları artık araç sunucusunu oturum açtığınız hesapla kullanabilir.",
+          "back": "Uygulamaya dön",
+          "failedTitle": "Bağlantı tamamlanamadı",
+          "failed": "Yetkilendirme tamamlanamadı. Bağlantıyı Altyapı penceresinden yeniden başlatın.",
+          "missingParams": "Bu bağlantıda sağlayıcının geri gönderdiği değerler eksik, bu yüzden tamamlanacak bir şey yok. Bağlantıyı yeniden başlatın."
+        }
       },
       "test": "Test et",
       "notProbeable": {

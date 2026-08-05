@@ -116,8 +116,9 @@ export const useToolServersStore = defineStore('toolServers', () => {
    *
    * A full-page navigation rather than a popup: the operator has to sign in at a third party, and a
    * popup is what a browser blocks and a password manager cannot fill. Nothing is stored here — the
-   * callback lands back on the app and the panel re-reads the inventory, so the connection state
-   * comes from the row rather than from anything this store guessed.
+   * vendor redirects back to `/mcp-oauth-callback`, which finishes the grant over the authenticated
+   * API and returns here, so the connection state comes from the row rather than from anything this
+   * store guessed across a navigation that leaves the app entirely.
    */
   async function connectOAuth(id: string) {
     const ws = useWorkspaceStore()

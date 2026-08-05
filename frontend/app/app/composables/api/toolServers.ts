@@ -1,4 +1,5 @@
 import {
+  completeToolServerOAuthContract,
   disconnectToolServerOAuthContract,
   listToolServersContract,
   probeToolServerContract,
@@ -31,5 +32,12 @@ export function toolServersApi({ send, ws }: ApiContext) {
 
     disconnectToolServerOAuth: (workspaceId: string, id: string) =>
       send(disconnectToolServerOAuthContract, { pathPrefix: ws(workspaceId), pathParams: { id } }),
+
+    // Finish a grant with what the vendor's redirect carried. NOT workspace-prefixed: the board is
+    // sealed into the `state`, so the caller does not know it and could not be trusted with it
+    // anyway. This is the request that makes the flow's session, user binding and permission
+    // re-check enforceable, which a vendor's redirect landing on the backend never could.
+    completeToolServerOAuth: (body: { code: string; state: string }) =>
+      send(completeToolServerOAuthContract, { body }),
   }
 }

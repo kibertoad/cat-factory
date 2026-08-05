@@ -1,4 +1,5 @@
-import { isAllowedMcpHttpUrl, redactSecrets } from '@cat-factory/kernel'
+import { isAllowedMcpHttpUrl, isCloudMetadataHost, redactSecrets } from '@cat-factory/kernel'
+import { safeFetch } from '../shared/safe-fetch.js'
 
 // ---------------------------------------------------------------------------
 // The OAuth 2.1 wire half of MCP authorization: discovering where a remote server's authorization
@@ -20,6 +21,54 @@ export const MCP_OAUTH_TIMEOUT_MS = 10_000
 
 /** How many metadata documents one discovery walk fetches before giving up. */
 const MAX_METADATA_FETCHES = 6
+
+/**
+ * Redirect hops one METADATA fetch follows. Well-known paths redirect in the wild (a vendor
+ * serving `/.well-known/openid-configuration` off its identity host), and a metadata GET carries
+ * no credential, so following is right where refusing would be wrong. Every hop is re-validated:
+ * see {@link assertAllowedOAuthUrl}.
+ */
+const MAX_METADATA_REDIRECTS = 3
+
+/**
+ * The one URL floor every request in this module is held to, applied to DECLARED endpoints,
+ * DISCOVERED ones, and every redirect hop alike.
+ *
+ * Two rules, and the second is here because discovery reads a THIRD PARTY's document. A remote
+ * server's protected-resource metadata names its authorization servers, so a compromised or hostile
+ * server chooses URLs this deployment then fetches; `isAllowedMcpHttpUrl` alone would accept
+ * `https://169.254.169.254/…` and turn the walk into a probe of the instance-metadata service.
+ * Blocking metadata hosts while still ALLOWING private and loopback ones is the same trade the
+ * Kubernetes apiserver guard makes, and it keeps a sidecar MCP server on a private host connectable.
+ *
+ * One floor for every URL rather than a stricter rule for discovered ones: a declaration pointing an
+ * OAuth endpoint at a metadata host is nonsense too, so there is nothing to gain by admitting it.
+ */
+export function assertAllowedOAuthUrl(raw: string, what: string): void {
+  if (!isAllowedMcpHttpUrl(raw)) {
+    throw new McpOAuthError(
+      `The ${what} ${raw} is not https (plain http is accepted only on loopback), and an OAuth ` +
+        `exchange carries the client secret and the tokens.`,
+      true,
+    )
+  }
+  let host: string
+  try {
+    host = new URL(raw).hostname
+  } catch {
+    // silent-catch-ok: `isAllowedMcpHttpUrl` already parsed it, so this cannot be reached with a
+    // value that would tell an operator anything the refusal above did not.
+    throw new McpOAuthError(`The ${what} ${raw} is not a URL this deployment can use.`, true)
+  }
+  if (isCloudMetadataHost(host)) {
+    throw new McpOAuthError(
+      `The ${what} ${raw} names a cloud instance-metadata address. An OAuth endpoint is never ` +
+        `link-local, and following one would point this deployment's own credentials at its ` +
+        `instance metadata.`,
+      true,
+    )
+  }
+}
 
 /** Injected so tests drive the whole flow without a network. */
 export interface McpOAuthFetch {
@@ -72,10 +121,11 @@ export class McpOAuthError extends Error {
  * Without it a deployment has to find two endpoint URLs in a vendor's docs, and they are exactly
  * the strings a vendor changes when it re-platforms.
  *
- * Both discovered URLs are held to `isAllowedMcpHttpUrl` — the SAME floor a declared endpoint is
- * held to. A metadata document is a third party telling this deployment where to send its client
- * secret and receive its tokens, so the one rule that must not be relaxed by discovery is the one
- * that keeps that exchange off cleartext.
+ * EVERY url the walk touches goes through {@link assertAllowedOAuthUrl}: each candidate, each
+ * redirect hop, and both endpoints that come out of it. A metadata document is a third party
+ * telling this deployment where to send its client secret and receive its tokens, which is the one
+ * place in this flow where an outsider chooses a URL this side then fetches, so it is also the one
+ * place where checking the first URL and trusting the rest would not be checking at all.
  */
 export async function discoverMcpOAuthEndpoints(
   serverUrl: string,
@@ -88,14 +138,28 @@ export async function discoverMcpOAuthEndpoints(
   const getJson = async (url: string): Promise<Record<string, unknown> | undefined> => {
     if (spent++ >= MAX_METADATA_FETCHES) return undefined
     try {
-      const res = await doFetch(url, {
-        headers: { accept: 'application/json' },
-        signal: controller.signal,
-      })
+      // Redirects followed BY HAND so the floor runs on every hop, not just the first URL: with
+      // the platform's `redirect: 'follow'` a permitted metadata host could bounce the walk to an
+      // internal address or downgrade it to http, and nothing would re-check. Same helper, and
+      // the same reason, as the environment and runner-pool adapters.
+      const res = await safeFetch(
+        url,
+        { headers: { accept: 'application/json' }, signal: controller.signal },
+        (hop) => assertAllowedOAuthUrl(hop, 'OAuth metadata endpoint'),
+        (_status, message) => new McpOAuthError(message, true),
+        MAX_METADATA_REDIRECTS,
+        doFetch,
+      )
       if (!res.ok) return undefined
       const body = (await res.json()) as unknown
       return body && typeof body === 'object' ? (body as Record<string, unknown>) : undefined
-    } catch {
+    } catch (error) {
+      // A URL this deployment REFUSES is not a candidate that merely missed, so it propagates
+      // instead of reading as one more 404. The distinction matters to whoever has to act: an
+      // exhausted walk means "declare the endpoints", while a refused hop means a third party's
+      // metadata pointed somewhere this deployment will not send its client secret, and silently
+      // trying the next candidate would leave that fact nowhere.
+      if (error instanceof McpOAuthError) throw error
       // A metadata document that is absent, unparseable or unreachable is not a failure on its
       // own: the walk has several candidates and only the LAST one exhausting them is the error.
       // silent-catch-ok: the caller throws a single, better-worded failure once every candidate is
@@ -190,14 +254,8 @@ function readEndpoints(metadata: Record<string, unknown>): McpOAuthEndpoints | u
   const authorizationUrl = metadata.authorization_endpoint
   const tokenUrl = metadata.token_endpoint
   if (typeof authorizationUrl !== 'string' || typeof tokenUrl !== 'string') return undefined
-  if (!isAllowedMcpHttpUrl(authorizationUrl) || !isAllowedMcpHttpUrl(tokenUrl)) {
-    throw new McpOAuthError(
-      `The authorization server's metadata names endpoints this deployment refuses to use ` +
-        `(${authorizationUrl} / ${tokenUrl}). An OAuth exchange carries the client secret and the ` +
-        `tokens, so the endpoints must be https (plain http only on loopback).`,
-      true,
-    )
-  }
+  assertAllowedOAuthUrl(authorizationUrl, "authorization server's authorization endpoint")
+  assertAllowedOAuthUrl(tokenUrl, "authorization server's token endpoint")
   const methods = metadata.token_endpoint_auth_methods_supported
   const supported = Array.isArray(methods) ? methods : []
   return {
@@ -303,13 +361,7 @@ async function tokenRequest(
   params: Record<string, string>,
   deps: McpOAuthFetch,
 ): Promise<McpOAuthTokens> {
-  if (!isAllowedMcpHttpUrl(input.tokenUrl)) {
-    throw new McpOAuthError(
-      `The token endpoint ${input.tokenUrl} is not https (plain http is accepted only on ` +
-        `loopback), and an OAuth exchange carries the client secret and the tokens.`,
-      true,
-    )
-  }
+  assertAllowedOAuthUrl(input.tokenUrl, 'token endpoint')
   const body = new URLSearchParams({
     ...params,
     client_id: input.clientId,
@@ -336,6 +388,14 @@ async function tokenRequest(
       method: 'POST',
       headers,
       body,
+      // NOT followed, unlike the metadata walk above, and this is the sharpest rule in the file:
+      // this request body carries the client secret and the grant. The platform's `fetch` would
+      // follow a 30x itself, and while it strips `Authorization` across origins it does NOT strip
+      // a form body, so a token endpoint that redirects would hand the deployment's client secret
+      // to wherever it pointed. RFC 6749's token endpoint is a fixed URL, so a redirect here is a
+      // misconfiguration or an attack and neither is worth following: refused BY NAME, because
+      // "your token endpoint redirects" is the fix, where a silently re-sent secret is not.
+      redirect: 'manual',
       signal: controller.signal,
     })
   } catch (error) {
@@ -346,6 +406,15 @@ async function tokenRequest(
     )
   } finally {
     clearTimeout(timer)
+  }
+  if (response.status >= 300 && response.status < 400) {
+    throw new McpOAuthError(
+      `The token endpoint answered with a redirect (HTTP ${response.status}). This deployment ` +
+        `will not follow it: the request carries the OAuth client secret, so re-sending it to ` +
+        `wherever the redirect points is exactly what must not happen. Point tokenUrl at the ` +
+        `endpoint that answers directly.`,
+      true,
+    )
   }
 
   const text = await readBody(response)

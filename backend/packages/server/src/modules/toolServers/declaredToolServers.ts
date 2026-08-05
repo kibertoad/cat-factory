@@ -148,7 +148,11 @@ function oauthStatus(
   const oauth = definition.oauth
   if (!oauth) return {}
   const stored = grants.get(definition.id)
-  return { oauth: { grant: oauth.grant, connected: Boolean(stored), ...stored } }
+  // The stored half is spread FIRST so the two derived fields cannot be overwritten by it. The
+  // summary is a JSON blob parsed back out of a row, so its shape is a claim rather than a
+  // guarantee, and a drifted one must not be able to say a server is `connected` when no row was
+  // read or to rename the grant the DECLARATION states.
+  return { oauth: { ...stored, grant: oauth.grant, connected: Boolean(stored) } }
 }
 
 /**

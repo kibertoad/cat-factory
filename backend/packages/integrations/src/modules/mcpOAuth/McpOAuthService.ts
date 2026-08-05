@@ -11,7 +11,6 @@ import {
   MCP_OAUTH_DEFAULT_HEADER,
   MCP_OAUTH_DEFAULT_HEADER_TEMPLATE,
   ValidationError,
-  isAllowedMcpHttpUrl,
   noopLogger,
   redactSecrets,
 } from '@cat-factory/kernel'
@@ -21,6 +20,7 @@ import {
   McpOAuthError,
   type McpOAuthFetch,
   type McpOAuthTokens,
+  assertAllowedOAuthUrl,
   buildAuthorizationUrl,
   discoverMcpOAuthEndpoints,
   exchangeAuthorizationCode,
@@ -338,7 +338,14 @@ export class McpOAuthService {
     for (let attempt = 0; attempt < MAX_REFRESH_ATTEMPTS; attempt++) {
       const record = await this.deps.mcpOAuthGrantRepository.get(input.workspaceId, input.serverId)
       const stored = record ? await this.openTokens(record) : null
-      if (stored && !this.isSpent(stored)) return stored.accessToken
+      if (stored && !this.isSpent(stored)) {
+        // A live token also settles any failure the summary still claims: `lastError` is written by
+        // whichever dispatch could not mint one, and nothing else would ever take it back off a
+        // connection that started working again. Only touches the row when there is something to
+        // clear, so the ordinary dispatch stays a single read.
+        if (record && parseSummary(record).lastError !== undefined) await this.clearFailure(record)
+        return stored.accessToken
+      }
 
       if (input.oauth.grant === 'authorization_code' && !stored) return null
       if (input.oauth.grant === 'authorization_code' && !stored?.refreshToken) {
@@ -348,32 +355,27 @@ export class McpOAuthService {
           true,
         )
       }
-      const endpoints = await this.resolveEndpoints(input.serverUrl, input.oauth)
-      const resource = input.oauth.resource ?? input.serverUrl
-      const tokens =
-        input.oauth.grant === 'client_credentials'
-          ? await requestClientCredentialsToken(
-              {
-                tokenUrl: endpoints.tokenUrl,
-                clientId: input.oauth.clientId,
-                ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
-                useBasicAuth: endpoints.useBasicAuth,
-                resource,
-                ...(input.oauth.scopes?.length ? { scopes: input.oauth.scopes } : {}),
-              },
-              this.fetchDeps,
-            )
-          : await refreshAccessToken(
-              {
-                tokenUrl: endpoints.tokenUrl,
-                clientId: input.oauth.clientId,
-                ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
-                useBasicAuth: endpoints.useBasicAuth,
-                resource,
-                refreshToken: stored!.refreshToken!,
-              },
-              this.fetchDeps,
-            )
+      let tokens: McpOAuthTokens
+      try {
+        tokens = await this.mintTokens(input, stored?.refreshToken)
+      } catch (error) {
+        // The refresh race the rev guard below CANNOT settle, and the likelier half of it against a
+        // rotating authorization server. Two dispatches find the same token spent and POST the same
+        // refresh token; the winner's exchange rotates it, which INVALIDATES the loser's copy, so
+        // the loser fails right here with `invalid_grant` and never reaches the compareAndSwap that
+        // would have told it it lost. Re-reading is what tells the two apart: a row that has moved
+        // on to a live token means a peer succeeded, and this dispatch wants a token rather than a
+        // diagnosis. With nothing new stored, the failure is real and propagates untouched.
+        const adopted = await this.adoptConcurrentToken(input.workspaceId, input.serverId, record)
+        if (adopted) {
+          this.log.info('adopted a concurrently refreshed mcp oauth token after a lost race', {
+            workspaceId: input.workspaceId,
+            toolServerId: input.serverId,
+          })
+          return adopted
+        }
+        throw error
+      }
 
       const now = this.deps.clock.now()
       const swapped = await this.deps.mcpOAuthGrantRepository.compareAndSwap(
@@ -409,20 +411,73 @@ export class McpOAuthService {
     )
   }
 
+  /**
+   * One exchange at the token endpoint: the machine grant mints from the deployment's own client,
+   * the interactive one spends the stored refresh token.
+   *
+   * Split out of {@link resolveToken} so that method reads as what it is (the read, the spend
+   * check, the race handling and the swap) rather than carrying the wire shape of two requests
+   * through the middle of it.
+   */
+  private async mintTokens(
+    input: {
+      serverUrl: string
+      oauth: McpOAuthConfig
+      clientSecret?: string
+    },
+    refreshToken: string | undefined,
+  ): Promise<McpOAuthTokens> {
+    const endpoints = await this.resolveEndpoints(input.serverUrl, input.oauth)
+    const common = {
+      tokenUrl: endpoints.tokenUrl,
+      clientId: input.oauth.clientId,
+      ...(input.clientSecret ? { clientSecret: input.clientSecret } : {}),
+      useBasicAuth: endpoints.useBasicAuth,
+      resource: input.oauth.resource ?? input.serverUrl,
+    }
+    const scopes = input.oauth.scopes?.length ? { scopes: input.oauth.scopes } : {}
+    return input.oauth.grant === 'client_credentials'
+      ? requestClientCredentialsToken({ ...common, ...scopes }, this.fetchDeps)
+      : // Reached only past the guards above, which return or throw when there is no refresh token.
+        refreshAccessToken({ ...common, refreshToken: refreshToken! }, this.fetchDeps)
+  }
+
+  /**
+   * The token a CONCURRENT dispatch stored while this one was failing to mint its own, or null.
+   *
+   * Best effort by construction: it runs on a path that already has a real error to report, so
+   * anything that goes wrong here (an unreadable row, a rotated key) means only that there is
+   * nothing to adopt, and the caller rethrows the failure that brought it here. Requires the row to
+   * have MOVED: an unchanged `rev` is the same grant this attempt already read and failed with,
+   * and returning its expired token would hand the run a credential the vendor has finished with.
+   */
+  private async adoptConcurrentToken(
+    workspaceId: string,
+    serverId: string,
+    seen: McpOAuthGrantRecord | null,
+  ): Promise<string | null> {
+    try {
+      const record = await this.deps.mcpOAuthGrantRepository.get(workspaceId, serverId)
+      if (!record || record.rev === seen?.rev) return null
+      const stored = await this.openTokens(record)
+      return stored && !this.isSpent(stored) ? stored.accessToken : null
+    } catch {
+      // silent-catch-ok: this is a recovery read behind an error that is about to propagate, and
+      // its own failure is not a second thing to report: it only means nothing could be adopted.
+      return null
+    }
+  }
+
   /** Endpoints: the declaration's, when it pinned them, else discovered from the server url. */
   private async resolveEndpoints(
     serverUrl: string,
     oauth: McpOAuthConfig,
   ): Promise<McpOAuthEndpoints> {
     if (oauth.authorizationUrl && oauth.tokenUrl) {
-      for (const url of [oauth.authorizationUrl, oauth.tokenUrl]) {
-        if (isAllowedMcpHttpUrl(url)) continue
-        throw new McpOAuthError(
-          `The declared OAuth endpoint ${url} is not https (plain http is accepted only on ` +
-            `loopback), and the exchange carries the client secret and the tokens.`,
-          true,
-        )
-      }
+      // The SAME floor a discovered endpoint and every redirect hop is held to, from the one
+      // implementation: a rule enforced on two of three paths is not a rule.
+      assertAllowedOAuthUrl(oauth.authorizationUrl, 'declared OAuth authorizationUrl')
+      assertAllowedOAuthUrl(oauth.tokenUrl, 'declared OAuth tokenUrl')
       return {
         authorizationUrl: oauth.authorizationUrl,
         tokenUrl: oauth.tokenUrl,
@@ -503,9 +558,9 @@ export class McpOAuthService {
    * connection stopped working without anyone reading a run's prompt.
    *
    * Best effort by construction, and it only ever touches a row that already exists: a failure with
-   * nothing stored is `not_connected`, which the surface already states. It is also deliberately
-   * NOT rev-guarded — the note is advisory, and losing it to a concurrent refresh that SUCCEEDED is
-   * the correct outcome rather than a lost write.
+   * nothing stored is `not_connected`, which the surface already states. The rev guard is NOT
+   * retried on a lost swap: the note is advisory, and losing it to a concurrent refresh that
+   * SUCCEEDED is the correct outcome rather than a lost write.
    */
   private async recordFailure(
     workspaceId: string,
@@ -514,7 +569,24 @@ export class McpOAuthService {
   ): Promise<void> {
     const record = await this.deps.mcpOAuthGrantRepository.get(workspaceId, serverId)
     if (!record) return
-    const summary: GrantSummary = { ...parseSummary(record), lastError: message }
+    await this.writeSummary(record, { ...parseSummary(record), lastError: message })
+  }
+
+  /**
+   * Take a recorded failure back off a connection that has started working again.
+   *
+   * The other half of {@link recordFailure}, and the surface reads wrong without it: `lastError`
+   * describes the last exchange that failed, so on a token that is merely CACHED (the common
+   * dispatch, which mints nothing) nothing would ever clear it, and one transient vendor outage
+   * would leave a red "the last token renewal failed" banner on a working grant until the access
+   * token happened to expire. Same advisory, same unretried rev guard.
+   */
+  private async clearFailure(record: McpOAuthGrantRecord): Promise<void> {
+    await this.writeSummary(record, dropError(parseSummary(record)))
+  }
+
+  /** One rev-guarded, unretried write of the non-secret half. */
+  private async writeSummary(record: McpOAuthGrantRecord, summary: GrantSummary): Promise<void> {
     await this.deps.mcpOAuthGrantRepository.compareAndSwap(
       {
         ...record,

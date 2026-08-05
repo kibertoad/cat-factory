@@ -47,7 +47,11 @@ import {
 } from '@cat-factory/agents'
 import { ModelRouter } from './ModelRouter.js'
 import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
-import { resolveDispatchToolServers, type ResolvedToolServers } from './toolServers.js'
+import {
+  dispatchToolServerDeps,
+  resolveDispatchToolServers,
+  type ResolvedToolServers,
+} from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
@@ -1048,7 +1052,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // the injected deps onto the resolution lives beside the resolution, because each new credential
     // channel adds another optional dep and this file sits at its size ratchet.
     const tools = await resolveDispatchToolServers(
-      { ...this.deps, agentKindRegistry: this.agentKindRegistry },
+      dispatchToolServerDeps(this.deps, this.agentKindRegistry),
       context,
       {
         harness,

@@ -247,17 +247,25 @@ about the other. Pin both when you do not want a third party's metadata document
 your client secret is sent.
 
 **A discovered endpoint is held to the same URL floor a declared one is** (https, or plain http on
-loopback). A metadata document is a third party telling this deployment where to send its client
-secret and receive its tokens, so that is the one rule discovery may not relax.
+loopback; never a cloud instance-metadata address). A metadata document is a third party telling
+this deployment where to send its client secret and receive its tokens, so that is the one rule
+discovery may not relax. The floor runs on EVERY url the walk touches, each candidate and each
+redirect hop, because checking the first one and following whatever it points at is not checking.
+
+**The token endpoint's redirects are refused rather than followed.** That request body carries the
+client secret and the grant, and while `fetch` strips an `Authorization` header across origins it
+never strips a form body, so following a 30x there would hand the client secret to wherever it
+pointed. A metadata GET carries no credential and does follow, up to three re-validated hops.
 
 ### What a deployment has to configure
 
 - **`ENCRYPTION_KEY`**, because a grant is sealed at rest like every other credential in the
   platform. Without it there is nowhere to keep one, and every OAuth server is stated to its agent
   as `oauth_not_connected` rather than dispatched without a token.
-- **`MCP_OAUTH_REDIRECT_URL`**, for the interactive grant only: this deployment's public
-  `/mcp/oauth/callback` URL, and the SAME string registered as the client's redirect URI at the
-  vendor. Operator-set rather than derived from the request, because a `Host`-derived value differs
+- **`MCP_OAUTH_REDIRECT_URL`**, for the interactive grant only: this deployment's public app URL
+  followed by `/mcp-oauth-callback`, and the SAME string registered as the client's redirect URI at
+  the vendor. It points at the SPA, not at the backend, for the reason the security notes below
+  give. Operator-set rather than derived from the request, because a `Host`-derived value differs
   behind every proxy and preview URL a deployment sits behind, and the vendor then refuses the
   exchange with `redirect_uri_mismatch`, which names nothing on this side. Unset ⇒ Connect refuses
   with a 503 naming the variable, before the browser leaves the app.
@@ -290,13 +298,27 @@ Three things worth knowing before you wire one:
 
 ### Security notes specific to OAuth
 
+- **The vendor's redirect lands on the SPA, and the backend never receives one.** This is the
+  load-bearing choice of the whole flow. A redirect target is reached by a top-level browser
+  navigation a third party triggers, and sessions here are BEARER TOKENS, which such a navigation
+  cannot carry, so a backend route receiving the redirect directly sees no user on every request,
+  on an authenticated deployment exactly as in dev-open, and any "same user" or "still permitted"
+  check written there is unreachable code that reads like protection. The page at
+  `/mcp-oauth-callback` re-presents the `code` and `state` to `POST /mcp/oauth/complete`, which is
+  ordinary session-gated API, so the two checks below actually run. (It also means the completion
+  route is behind the shared default-deny gate rather than exempted from it.)
 - **The `state` is SEALED, not signed.** It carries the PKCE verifier, so it is encrypted under the
   deployment's own key rather than merely authenticated: the state travels through the same browser
   redirect the authorization code does. It also carries the user who STARTED the flow, and the
-  callback refuses a completion by anyone else — without that binding, getting an admin to open an
-  attacker's authorization link plants the attacker's vendor account as the board's connection.
-- **`secrets.manage` is re-checked at the callback**, not assumed from the Connect press. A grant
-  takes minutes of human time and the permission can be revoked inside that window.
+  completion refuses anyone else. Without that binding, getting an admin to open an attacker's
+  authorization link plants the attacker's vendor account as the board's connection.
+- **`secrets.manage` is re-resolved when the token is stored**, not assumed from the Connect press.
+  A grant takes minutes of human time and the permission can be revoked inside that window. It goes
+  through the same single `loadWorkspaceAccess` the workspace gate uses; that gate cannot do it
+  itself, because the board is sealed into the state rather than named in the path.
+- **A grant row is reclaimed with the board.** `mcp_oauth_grants` is in the workspace-delete
+  cascade, so deleting a workspace does not leave live vendor tokens behind. Neither disconnect nor
+  delete REVOKES at the vendor (no RFC 7009 call is made), so revoke there too when that matters.
 - **The `resource` indicator (RFC 8707) is always sent**, defaulting to the server's own url, so a
   token minted for one MCP server is not replayable against another behind the same authorization
   server.

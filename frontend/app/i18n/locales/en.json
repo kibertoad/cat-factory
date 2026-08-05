@@ -3132,7 +3132,16 @@
         "lastError": "The last token renewal failed: {detail}",
         "connect": "Connect",
         "reconnect": "Reconnect",
-        "disconnect": "Disconnect"
+        "disconnect": "Disconnect",
+        "callback": {
+          "working": "Finishing the connection…",
+          "done": "Connected to {server}",
+          "doneHint": "This board's runs can now use the tool server as the account you signed in with.",
+          "back": "Back to the app",
+          "failedTitle": "The connection could not be finished",
+          "failed": "The authorization could not be completed. Start the connection again from the Infrastructure window.",
+          "missingParams": "This link is missing the values the vendor sends back, so there is nothing to complete. Start the connection again."
+        }
       },
       "test": "Test",
       "notProbeable": {

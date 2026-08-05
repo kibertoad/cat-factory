@@ -608,7 +608,7 @@ describe('toolServerController', () => {
       const res = await build({
         agentKindRegistry: registryWith((r) => r.registerToolServer(OAUTH_SERVER)),
         mcpOAuth: fakeOAuth(),
-        mcpOAuthRedirectUrl: 'https://app.example.com/mcp/oauth/callback',
+        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
       }).request('/workspaces/ws_1/tool-servers/linear/oauth/authorize', { method: 'POST' })
 
       expect(res.status).toBe(200)
@@ -631,7 +631,7 @@ describe('toolServerController', () => {
       const res = await build({
         agentKindRegistry: registryWith((r) => r.registerToolServer(HTTP_SERVER)),
         mcpOAuth: fakeOAuth(),
-        mcpOAuthRedirectUrl: 'https://app.example.com/mcp/oauth/callback',
+        mcpOAuthRedirectUrl: 'https://app.example.com/mcp-oauth-callback',
       }).request('/workspaces/ws_1/tool-servers/issues/oauth/authorize', { method: 'POST' })
 
       expect(res.status).toBe(422)

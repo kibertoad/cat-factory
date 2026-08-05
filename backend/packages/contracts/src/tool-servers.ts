@@ -308,6 +308,41 @@ export const toolServerOAuthStartSchema = v.object({
 export type ToolServerOAuthStart = v.InferOutput<typeof toolServerOAuthStartSchema>
 
 /**
+ * What the SPA hands back to finish a grant: the two values the vendor put in the redirect it sent
+ * the operator's browser to.
+ *
+ * POSTED BY THE SPA rather than read off a redirect the backend receives, and that is the whole
+ * security shape of this flow. A vendor's redirect is a third-party browser navigation carrying no
+ * `Authorization` header, so a backend route receiving it directly cannot know WHO is completing
+ * the grant, and the session and permission checks such a route makes are unreachable code on any
+ * deployment where sessions are bearer tokens. Landing the redirect on an SPA page that re-presents
+ * these two values over the authenticated API is what makes the user binding and the
+ * `secrets.manage` re-check real rather than decorative.
+ *
+ * Neither value is a secret this side minted: `code` is single-use at the authorization server and
+ * `state` is sealed, so the pair is inert to anyone who cannot also open the seal.
+ */
+export const toolServerOAuthCompletionSchema = v.object({
+  code: v.string(),
+  state: v.string(),
+})
+export type ToolServerOAuthCompletion = v.InferOutput<typeof toolServerOAuthCompletionSchema>
+
+/**
+ * What completing a grant answers: which server was connected, so the page that finishes the flow
+ * can name it before sending the operator back to the panel.
+ *
+ * The server id comes from the SEALED state rather than from anything the caller sent, which is
+ * why it is worth returning at all: it is the one fact the SPA could not otherwise know, having
+ * handed off to the vendor and come back on a fixed redirect URL that carries no board or server.
+ */
+export const toolServerOAuthCompletedSchema = v.object({
+  serverId: v.string(),
+  workspaceId: v.string(),
+})
+export type ToolServerOAuthCompleted = v.InferOutput<typeof toolServerOAuthCompletedSchema>
+
+/**
  * How many tool NAMES a probe result carries back.
  *
  * The list is for recognition ("yes, that is the Slack server") and for the `allowedTools`

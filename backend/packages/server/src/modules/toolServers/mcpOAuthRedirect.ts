@@ -2,12 +2,17 @@ import { UnavailableError } from '@cat-factory/kernel'
 import type { ServerContainer } from '../../http/env.js'
 
 /**
- * The path the vendor's authorization server redirects a browser back to. Fixed, and mounted at
- * the APP ROOT rather than under `/workspaces/:ws`, because the redirect URI is a string the
- * vendor has on file: it cannot carry a board id, and it cannot be behind the workspace gate a
- * third-party navigation has no way to satisfy.
+ * The path in the SPA that a vendor's authorization server redirects an operator's browser to.
+ *
+ * A page in the APP rather than a route on this backend, and that is a security decision rather
+ * than a routing preference. A redirect target is reached by a third-party browser navigation,
+ * which carries no bearer token, so a backend route receiving it could never tell who was
+ * completing the grant; the page re-presents the vendor's `code` and `state` over the authenticated
+ * API instead (`completeToolServerOAuthContract`), where the session, the user binding and the
+ * `secrets.manage` re-check all apply. Exported for the docs and tests that must state the exact
+ * string an operator registers at the vendor.
  */
-export const MCP_OAUTH_CALLBACK_PATH = '/mcp/oauth/callback'
+export const MCP_OAUTH_CALLBACK_PATH = '/mcp-oauth-callback'
 
 /**
  * The configured redirect URL, or the refusal that names what to configure.
@@ -26,8 +31,8 @@ export function requireMcpOAuthRedirectUrl(container: ServerContainer): string {
   if (!url) {
     throw new UnavailableError(
       'Tool-server OAuth needs a redirect URL. Set MCP_OAUTH_REDIRECT_URL to this deployment’s ' +
-        `public ${MCP_OAUTH_CALLBACK_PATH} URL and register the same value as the OAuth client’s ` +
-        'redirect URI at the vendor.',
+        `public app URL followed by ${MCP_OAUTH_CALLBACK_PATH}, and register the same value as ` +
+        'the OAuth client’s redirect URI at the vendor.',
       'mcp_oauth_redirect_url_not_configured',
     )
   }

@@ -10,6 +10,7 @@ import { isReservedPlatformEnvKey, reservedEnvKeyMessage } from '@cat-factory/co
 import type { ToolServerProbeResult } from '@cat-factory/contracts'
 import { MCP_PROBE_TOOL_NAME_CAP } from '@cat-factory/contracts'
 import type { AgentKindRegistry } from '@cat-factory/agents'
+import { mergeHeaders } from '../../agents/toolServers.js'
 import { notProbeableReason, resolveDeclaredToolServers } from './declaredToolServers.js'
 import { type McpProbeDeps, probeMcpHttpServer } from './mcpProbe.js'
 
@@ -92,8 +93,9 @@ export async function probeToolServer(input: ProbeToolServerInput): Promise<Tool
       // The granted token joins the CREDENTIAL side, not the declaration's own headers: it is the
       // secret a cross-origin redirect must not carry, which is the whole reason the probe keeps
       // the two apart. Last, so it wins a header a static credential also names — the same
-      // precedence the dispatch applies, and boot warns about the collision.
-      credentialHeaders: { ...credentials.headers, ...granted.headers },
+      // precedence the dispatch applies (through the same case-insensitive merge, so the probe
+      // cannot report on a header pair the dispatch would collapse), and boot warns about it.
+      credentialHeaders: mergeHeaders(credentials.headers, granted.headers),
     },
     input.probe,
   )

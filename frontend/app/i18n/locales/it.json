@@ -634,7 +634,16 @@
         "lastError": "L’ultimo rinnovo del token non è riuscito: {detail}",
         "connect": "Collega",
         "reconnect": "Ricollega",
-        "disconnect": "Scollega"
+        "disconnect": "Scollega",
+        "callback": {
+          "working": "Completamento della connessione…",
+          "done": "Collegato a {server}",
+          "doneHint": "Le esecuzioni di questa lavagna possono ora usare il server di strumenti con l’account con cui hai effettuato l’accesso.",
+          "back": "Torna all’app",
+          "failedTitle": "Non è stato possibile completare la connessione",
+          "failed": "Non è stato possibile completare l’autorizzazione. Riavvia la connessione dalla finestra Infrastruttura.",
+          "missingParams": "A questo link mancano i valori restituiti dal fornitore, quindi non c’è nulla da completare. Riavvia la connessione."
+        }
       },
       "test": "Prova",
       "notProbeable": {

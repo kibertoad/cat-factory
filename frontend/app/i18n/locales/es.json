@@ -2881,7 +2881,16 @@
         "lastError": "La última renovación del token falló: {detail}",
         "connect": "Conectar",
         "reconnect": "Volver a conectar",
-        "disconnect": "Desconectar"
+        "disconnect": "Desconectar",
+        "callback": {
+          "working": "Finalizando la conexión…",
+          "done": "Conectado a {server}",
+          "doneHint": "Las ejecuciones de este tablero ya pueden usar el servidor de herramientas con la cuenta con la que iniciaste sesión.",
+          "back": "Volver a la aplicación",
+          "failedTitle": "No se pudo finalizar la conexión",
+          "failed": "No se pudo completar la autorización. Vuelve a iniciar la conexión desde la ventana de Infraestructura.",
+          "missingParams": "A este enlace le faltan los valores que devuelve el proveedor, así que no hay nada que completar. Vuelve a iniciar la conexión."
+        }
       },
       "test": "Probar",
       "notProbeable": {

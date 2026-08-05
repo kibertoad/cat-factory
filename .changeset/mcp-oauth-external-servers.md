@@ -25,7 +25,15 @@ snapshot.
 Two new unavailability reasons (`oauth_not_connected`, `oauth_token_failed`) and the matching probe
 verdicts keep "nobody connected", "the connection stopped working" and "no credential configured"
 apart, since each sends an operator somewhere different. New table `mcp_oauth_grants` on both
-runtimes (D1 migration 0082 ⇄ a Drizzle migration), in the mothership `remote` bucket. Interactive
-grants need `MCP_OAUTH_REDIRECT_URL` set to the deployment's public `/mcp/oauth/callback` URL and
-`ENCRYPTION_KEY` for the sealed store; without either, an OAuth server is stated to its agent as
-unavailable rather than dispatched without a token.
+runtimes (D1 migration 0082 ⇄ a Drizzle migration), in the mothership `remote` bucket and in the
+workspace-delete cascade. Interactive grants need `MCP_OAUTH_REDIRECT_URL` set to the deployment's
+public app URL followed by `/mcp-oauth-callback` and `ENCRYPTION_KEY` for the sealed store; without
+either, an OAuth server is stated to its agent as unavailable rather than dispatched without a
+token.
+
+The vendor's redirect lands on the SPA, which re-presents the `code` and `state` to a session-gated
+`POST /mcp/oauth/complete`. A backend route receiving the redirect directly could not be gated:
+sessions are bearer tokens and a third-party browser navigation carries none, so it would have to
+sit outside the default-deny session gate, and the "same user who started the flow" and "still
+holds `secrets.manage`" checks would never execute. Routing it through the app is what makes both
+enforceable.

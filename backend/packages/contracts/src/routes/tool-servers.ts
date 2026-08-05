@@ -1,5 +1,7 @@
 import { ContractNoBody, defineApiContract } from '@toad-contracts/valibot'
 import {
+  toolServerOAuthCompletedSchema,
+  toolServerOAuthCompletionSchema,
   toolServerOAuthStartSchema,
   toolServerProbeResultSchema,
   toolServersViewSchema,
@@ -46,9 +48,13 @@ export const probeToolServerContract = defineApiContract({
 //
 // The grant itself is per (workspace, server), which is why these sit on the workspace-scoped
 // controller beside the probe: the DECLARATION is deployment-wide, and who authorised what against
-// it is a board's own business. The callback the vendor redirects to is deliberately NOT here — it
-// is a browser navigation from a third party, so it cannot be workspace-scoped, cannot be gated on
-// this controller's permission, and is mounted at the app root instead.
+// it is a board's own business.
+//
+// COMPLETING a grant is the exception and lives at the root ({@link completeToolServerOAuthContract}),
+// because the board it belongs to is sealed into the `state` rather than carried in the path: a
+// vendor's redirect URI is one fixed string registered at the vendor, so nothing in the round trip
+// can name a workspace. It is still session-gated, which is the whole point of routing it through
+// the SPA instead of receiving the vendor's redirect directly.
 
 // Begin an `authorization_code` grant: returns the vendor's authorization URL to send the operator
 // to. A POST because it MINTS state (a sealed, expiring authorization request bound to this
@@ -70,4 +76,21 @@ export const disconnectToolServerOAuthContract = defineApiContract({
   requestPathParamsSchema: singleStringParam('id'),
   pathResolver: ({ id }) => `/tool-servers/${id}/oauth`,
   responsesByStatusCode: { 204: ContractNoBody, ...errorResponses },
+})
+
+/**
+ * Finish a grant with the `code` and `state` the vendor sent the operator's browser back with.
+ *
+ * ROOT-MOUNTED and session-scoped, the shape `/user-secrets` already has: the workspace comes out
+ * of the sealed state, so there is no `:workspaceId` segment for the shared workspace gate to bind
+ * to, and the handler resolves access for the state's board through the same single
+ * `loadWorkspaceAccess` that gate uses. What it must NOT be is public: reached by a session, the
+ * "same user who started it" and "still holds `secrets.manage`" checks are enforceable, and reached
+ * by a vendor's redirect they are not.
+ */
+export const completeToolServerOAuthContract = defineApiContract({
+  method: 'post',
+  pathResolver: () => '/mcp/oauth/complete',
+  requestBodySchema: toolServerOAuthCompletionSchema,
+  responsesByStatusCode: { 200: toolServerOAuthCompletedSchema, ...errorResponses },
 })
