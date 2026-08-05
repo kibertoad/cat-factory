@@ -6023,7 +6023,11 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Appliquée parce que cette tâche ne choisit aucune politique.",
-      "noneHint": "Aucune politique de risque configurée. Chaque pull request attend une revue humaine."
+      "noneHint": "Aucune politique de risque configurée. Chaque pull request attend une revue humaine.",
+      "refused": {
+        "relaxes_role_sandbox": "Indisponible pour votre rôle : les exécutions de cette tâche sont isolées, et cette politique les laisserait fusionner. Un administrateur de l’espace de travail peut le changer.",
+        "relaxes_role_class_rule": "Indisponible pour votre rôle : cette politique fusionne automatiquement des changements que vous devez relire sur cette tâche. Un administrateur de l’espace de travail peut le changer."
+      }
     },
     "preview": {
       "defaultBadge": "Par défaut",

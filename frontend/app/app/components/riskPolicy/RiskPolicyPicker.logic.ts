@@ -6,6 +6,11 @@
 // riskPolicies store's `resolve()` falls back to the workspace default for both an empty id
 // and a dangling one; this mirrors that, so the picker can never tell the user "no risk policy
 // configured" about a task the default is quietly governing.
+import {
+  refuseRiskPolicySelection,
+  type BlockEditActor,
+  type RiskPolicySelectionRefusal,
+} from '@cat-factory/contracts'
 import type { RiskPolicy } from '~/types/merge'
 
 export interface RiskPolicyPickerState {
@@ -44,4 +49,39 @@ export function resolveRiskPolicyPicker(input: RiskPolicyPickerInput): RiskPolic
   const named = id ? input.options.find((p) => p.id === id) : undefined
   if (named) return { policy: named, viaWorkspaceDefault: false }
   return { policy: input.defaultPolicy, viaWorkspaceDefault: !!input.defaultPolicy }
+}
+
+/**
+ * Which of the offered policies this user may not move THIS task to, keyed by option id (`''`
+ * for the "workspace default" row), with the reason.
+ *
+ * A task's policy decides whether its runs are sandboxed for the initiator's role and how their
+ * auto-merge is narrowed, so the backend refuses a selection that would relax what the selector's
+ * own role is held to (ADR 0037). The picker applies the SAME contracts rule rather than offering
+ * a row and handing back a 403: an authoring surface that offers what the engine discards is
+ * telling someone they made a choice they did not make.
+ *
+ * The policy being moved AWAY from is resolved exactly as the engine resolves it: the named
+ * option, else the workspace default. That is what makes the same call correct on the create form
+ * (nothing picked yet, so the default is what would have governed the task) and in the inspector.
+ */
+export function refusedRiskPolicySelections(input: {
+  options: readonly RiskPolicy[]
+  defaultPolicy: RiskPolicy | null
+  modelValue: string
+  actor: BlockEditActor
+}): Map<string, RiskPolicySelectionRefusal> {
+  const refusals = new Map<string, RiskPolicySelectionRefusal>()
+  const from =
+    (input.modelValue ? input.options.find((p) => p.id === input.modelValue) : undefined) ??
+    input.defaultPolicy
+  if (!from) return refusals
+  const judge = (id: string, to: RiskPolicy | null) => {
+    if (!to) return
+    const refusal = refuseRiskPolicySelection({ from, to, actor: input.actor })
+    if (refusal) refusals.set(id, refusal)
+  }
+  judge('', input.defaultPolicy)
+  for (const policy of input.options) judge(policy.id, policy)
+  return refusals
 }

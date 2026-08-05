@@ -6023,7 +6023,11 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Bu görev kendine bir ilke seçmediği için uygulanır.",
-      "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler."
+      "noneHint": "Yapılandırılmış risk ilkesi yok. Her pull request insan incelemesini bekler.",
+      "refused": {
+        "relaxes_role_sandbox": "Rolün için kullanılamaz: bu görevin çalışmaları yalıtılmış çalışır ve bu ilke birleştirmelerine izin verirdi. Bir çalışma alanı yöneticisi bunu değiştirebilir.",
+        "relaxes_role_class_rule": "Rolün için kullanılamaz: bu ilke, bu görevde incelemen gereken değişiklikleri otomatik birleştirir. Bir çalışma alanı yöneticisi bunu değiştirebilir."
+      }
     },
     "preview": {
       "defaultBadge": "Varsayılan",

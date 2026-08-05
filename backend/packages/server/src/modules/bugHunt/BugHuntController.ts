@@ -14,6 +14,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { runInitiatorRole } from '../../http/runAdmission.js'
+import { blockEditActor } from '../../http/workspaceAccess.js'
 import { personalGateForBlock, readPersonalPassword } from '../providers/personalCredentialGate.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -84,14 +85,17 @@ export function bugHuntController(): Hono<AppEnv> {
     const { externalId, containerId, pipelineId: requested } = c.req.valid('json')
     const pipelineId = requested || BUGFIX_PIPELINE_ID
 
-    const { block, task } = await tasks.bugHuntService.adopt(
+    const { block, task } = await tasks.bugHuntService.adopt({
       workspaceId,
-      sourceParam(c),
+      source: sourceParam(c),
       externalId,
       containerId,
-      c.get('user')?.id ?? null,
+      // Adopting is a member-tier board write, and the start below is an attributed one. Both
+      // read the acting tier through their one accessor so the pair cannot disagree (ADR 0037).
+      editor: blockEditActor(c),
+      createdBy: c.get('user')?.id ?? null,
       pipelineId,
-    )
+    })
     // Individual-usage models (Claude/GLM/Codex) require the initiator's personal
     // subscription, so the run start goes through the same gate every other start does —
     // resolved AFTER the block exists, since the gate reads the block's resolved models.

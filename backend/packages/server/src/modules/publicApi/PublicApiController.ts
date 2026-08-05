@@ -18,6 +18,7 @@ import {
   retryPublicTaskContract,
   startPublicTaskContract,
   stopPublicTaskContract,
+  UNATTRIBUTED_BLOCK_EDITOR,
   updatePublicTaskContract,
   type ExecutionInstance,
   type PublicJob,
@@ -942,6 +943,10 @@ function registerTaskLifecycleRoutes(app: Hono<AppEnv>): void {
       auth.workspaceId,
       taskId,
       c.req.valid('json'),
+      // Unattributed by the same reading a headless start gets (ADR 0037): an API key holds
+      // scopes, not a workspace tier. The contract exposes title/description only, so no merge
+      // preset can be selected here in any case.
+      UNATTRIBUTED_BLOCK_EDITOR,
     )
     return c.json(toPublicTask(block, found.service.id), 200)
   })

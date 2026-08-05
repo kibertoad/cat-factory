@@ -1,4 +1,4 @@
-import type { AddTaskInput } from '@cat-factory/contracts'
+import type { AddTaskInput, BlockEditActor } from '@cat-factory/contracts'
 import type { Block, BlockRepository, BlockStatus } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
 import { serviceOf } from './board.logic.js'
@@ -23,6 +23,7 @@ export interface PublicBoardReadsDeps {
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
+    editor: BlockEditActor,
     createdBy: string | null,
   ): Promise<Block>
 }
@@ -63,14 +64,20 @@ export class PublicBoardReads {
    * Create a task under a visible SERVICE FRAME the workspace owns. Rejects a missing / non-frame
    * / internal / archived container, then delegates to the normal `addTask` (which reuses all the
    * placement + task-type validation). Headless / no initiator.
+   *
+   * `editor` is supplied by the caller rather than fixed here even though every caller today is
+   * the headless `/api/v1` surface: `input` is a full {@link AddTaskInput}, so it can carry a
+   * merge preset the moment the public contract exposes one, and an exemption written INSIDE a
+   * collaborator is one no route states and no coverage spec can see.
    */
   async addServiceTask(
     workspaceId: string,
     serviceId: string,
     input: AddTaskInput,
+    editor: BlockEditActor,
   ): Promise<Block> {
     await this.assertTaskContainer(workspaceId, serviceId)
-    return this.deps.addTask(workspaceId, serviceId, input, null)
+    return this.deps.addTask(workspaceId, serviceId, input, editor, null)
   }
 
   /**

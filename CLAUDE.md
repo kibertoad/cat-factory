@@ -813,8 +813,10 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`). Traps:
   narrowing is subtractive; absent is not a rule; the role and mode are PINNED at admission and a pin is
   only pinned if it PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`;
-  starting a run reads its tier through the one `runInitiatorRole(c)` accessor or is named in
-  `runAdmission.coverage.spec.ts` as deliberately unattributed. Doc:
+  a task's PRESET is the policy, so SELECTING one is guarded like editing one (a selection may not
+  relax the selector's own role, at both doors that write `riskPolicyId`); starting a run or writing
+  a block reads its tier through the one `runInitiatorRole(c)` / `blockEditActor(c)` accessor or is
+  named in the matching `*.coverage.spec.ts` as deliberately unattributed. Doc:
   [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md).
 - **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
   yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.

@@ -6023,7 +6023,11 @@
     },
     "picker": {
       "workspaceDefaultCaption": "Se aplica porque esta tarea no elige una política propia.",
-      "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana."
+      "noneHint": "No hay ninguna política de riesgo configurada. Cada pull request espera una revisión humana.",
+      "refused": {
+        "relaxes_role_sandbox": "No disponible para tu rol: las ejecuciones de esta tarea están en un entorno aislado y esta política permitiría fusionarlas. Un administrador del espacio de trabajo puede cambiarlo.",
+        "relaxes_role_class_rule": "No disponible para tu rol: esta política fusiona automáticamente cambios que tú debes revisar en esta tarea. Un administrador del espacio de trabajo puede cambiarlo."
+      }
     },
     "preview": {
       "defaultBadge": "Predeterminada",

@@ -9,8 +9,11 @@ import type {
   MergeClassRules,
   MergeDecision,
 } from '@cat-factory/kernel'
-import { isDryRun, parseMergeAssessment } from '@cat-factory/contracts'
-import { resolveRoleScopedMergeClassRule } from '@cat-factory/kernel'
+import {
+  isDryRun,
+  parseMergeAssessment,
+  resolveRoleScopedMergeClassRule,
+} from '@cat-factory/contracts'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MergeTrackRecordService } from '../merge/MergeTrackRecordService.js'
 

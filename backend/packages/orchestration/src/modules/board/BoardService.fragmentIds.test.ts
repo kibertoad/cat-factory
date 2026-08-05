@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Block, RecordedLogLine, TaskTypeRegistry } from '@cat-factory/kernel'
 import { createRecordingLogger, defaultTaskTypeRegistry } from '@cat-factory/kernel'
@@ -63,25 +64,40 @@ describe('BoardService fragment pinning at creation', () => {
   }
 
   it('persists the picked fragments on a normal task', async () => {
-    const task = await build().addTask(WS, 'frame_svc', {
-      title: 'Feature',
-      taskType: 'feature',
-      fragmentIds: ['node.errors', 'react.hooks'],
-    })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Feature',
+        taskType: 'feature',
+        fragmentIds: ['node.errors', 'react.hooks'],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual(['node.errors', 'react.hooks'])
   })
 
   it('leaves fragmentIds unset when none are picked', async () => {
-    const task = await build().addTask(WS, 'frame_svc', { title: 'Feature', taskType: 'feature' })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      { title: 'Feature', taskType: 'feature' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toBeUndefined()
   })
 
   it('unions the picked fragments with the document writing-style defaults', async () => {
-    const task = await build().addTask(WS, 'frame_svc', {
-      title: 'Doc',
-      taskType: 'document',
-      fragmentIds: ['style.anti-llmisms', 'doc.structure'],
-    })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Doc',
+        taskType: 'document',
+        fragmentIds: ['style.anti-llmisms', 'doc.structure'],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     // The default style ids are present exactly once (deduped) alongside the extra pick.
     expect(new Set(task.fragmentIds)).toEqual(
       new Set([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS, 'doc.structure']),
@@ -90,13 +106,23 @@ describe('BoardService fragment pinning at creation', () => {
   })
 
   it('still applies the document defaults when nothing is picked', async () => {
-    const task = await build().addTask(WS, 'frame_svc', { title: 'Doc', taskType: 'document' })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      { title: 'Doc', taskType: 'document' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual([...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS])
   })
 
   it('seeds a deployment-registered task-type default (e.g. review) onto a new task', async () => {
     registerTaskTypeDefaultFragments('review', ['org.review-checklist'])
-    const task = await build().addTask(WS, 'frame_svc', { title: 'Review', taskType: 'review' })
+    const task = await build().addTask(
+      WS,
+      'frame_svc',
+      { title: 'Review', taskType: 'review' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual(['org.review-checklist'])
   })
 
@@ -106,33 +132,49 @@ describe('BoardService fragment pinning at creation', () => {
       WS,
       'frame_svc',
       { title: 'Feature', taskType: 'feature' },
+      UNATTRIBUTED_BLOCK_EDITOR,
     )
     expect(task.fragmentIds).toEqual(['node.best-practices', 'org.feature-default'])
   })
 
   it("inherits the service's standards when the form sends no list", async () => {
-    const task = await build(['node.best-practices', 'node.performance']).addTask(WS, 'frame_svc', {
-      title: 'Feature',
-      taskType: 'feature',
-    })
+    const task = await build(['node.best-practices', 'node.performance']).addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Feature',
+        taskType: 'feature',
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual(['node.best-practices', 'node.performance'])
   })
 
   it('an explicit list is authoritative over the inherited standards', async () => {
-    const task = await build(['node.best-practices', 'node.performance']).addTask(WS, 'frame_svc', {
-      title: 'Feature',
-      taskType: 'feature',
-      fragmentIds: ['react.hooks'],
-    })
+    const task = await build(['node.best-practices', 'node.performance']).addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Feature',
+        taskType: 'feature',
+        fragmentIds: ['react.hooks'],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toEqual(['react.hooks'])
   })
 
   it('an explicit EMPTY list clears the inherited standards (task authoritative)', async () => {
-    const task = await build(['node.best-practices']).addTask(WS, 'frame_svc', {
-      title: 'Feature',
-      taskType: 'feature',
-      fragmentIds: [],
-    })
+    const task = await build(['node.best-practices']).addTask(
+      WS,
+      'frame_svc',
+      {
+        title: 'Feature',
+        taskType: 'feature',
+        fragmentIds: [],
+      },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
     expect(task.fragmentIds).toBeUndefined()
   })
 
@@ -157,10 +199,15 @@ describe('BoardService fragment pinning at creation', () => {
     }
 
     it('seeds them onto a new task of that type', async () => {
-      const task = await withOperation().addTask(WS, 'frame_svc', {
-        title: 'Expose orders',
-        taskType: 'org:introduce-api',
-      })
+      const task = await withOperation().addTask(
+        WS,
+        'frame_svc',
+        {
+          title: 'Expose orders',
+          taskType: 'org:introduce-api',
+        },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(task.fragmentIds).toEqual(['org.api-guidelines', 'org.api-auth-requirements'])
     })
 
@@ -169,6 +216,7 @@ describe('BoardService fragment pinning at creation', () => {
         WS,
         'frame_svc',
         { title: 'Expose orders', taskType: 'org:introduce-api' },
+        UNATTRIBUTED_BLOCK_EDITOR,
       )
       expect(task.fragmentIds).toEqual([
         'node.best-practices',
@@ -180,11 +228,16 @@ describe('BoardService fragment pinning at creation', () => {
     it('applies them even when the create form pins its own picks', async () => {
       // An explicit list is authoritative over what the task INHERITS, but the operation's
       // standing context is part of the type, not something a picker chose to include.
-      const task = await withOperation().addTask(WS, 'frame_svc', {
-        title: 'Expose orders',
-        taskType: 'org:introduce-api',
-        fragmentIds: ['react.hooks'],
-      })
+      const task = await withOperation().addTask(
+        WS,
+        'frame_svc',
+        {
+          title: 'Expose orders',
+          taskType: 'org:introduce-api',
+          fragmentIds: ['react.hooks'],
+        },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(task.fragmentIds).toEqual([
         'react.hooks',
         'org.api-guidelines',
@@ -193,10 +246,15 @@ describe('BoardService fragment pinning at creation', () => {
     })
 
     it('leaves a task of any other type untouched', async () => {
-      const task = await withOperation().addTask(WS, 'frame_svc', {
-        title: 'Feature',
-        taskType: 'feature',
-      })
+      const task = await withOperation().addTask(
+        WS,
+        'frame_svc',
+        {
+          title: 'Feature',
+          taskType: 'feature',
+        },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(task.fragmentIds).toBeUndefined()
     })
 
@@ -210,6 +268,7 @@ describe('BoardService fragment pinning at creation', () => {
         WS,
         'frame_svc',
         { title: 'Expose orders', taskType: 'org:introduce-api' },
+        UNATTRIBUTED_BLOCK_EDITOR,
       )
       expect(task.fragmentIds).toBeUndefined()
       const warning = lines.find((line) => line.level === 'warn')
@@ -219,10 +278,15 @@ describe('BoardService fragment pinning at creation', () => {
 
     it('stays silent for a BUILT-IN type, which has no registration to miss', async () => {
       const lines: RecordedLogLine[] = []
-      await build(undefined, defaultTaskTypeRegistry(), lines).addTask(WS, 'frame_svc', {
-        title: 'Feature',
-        taskType: 'feature',
-      })
+      await build(undefined, defaultTaskTypeRegistry(), lines).addTask(
+        WS,
+        'frame_svc',
+        {
+          title: 'Feature',
+          taskType: 'feature',
+        },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(lines.filter((line) => line.level === 'warn')).toEqual([])
     })
 
@@ -238,10 +302,15 @@ describe('BoardService fragment pinning at creation', () => {
           description: 'An operation carrying no standing context.',
         },
       })
-      const task = await build(undefined, registry, lines).addTask(WS, 'frame_svc', {
-        title: 'Expose orders',
-        taskType: 'org:no-standards',
-      })
+      const task = await build(undefined, registry, lines).addTask(
+        WS,
+        'frame_svc',
+        {
+          title: 'Expose orders',
+          taskType: 'org:no-standards',
+        },
+        UNATTRIBUTED_BLOCK_EDITOR,
+      )
       expect(task.fragmentIds).toBeUndefined()
       expect(lines.filter((line) => line.level === 'warn')).toEqual([])
     })

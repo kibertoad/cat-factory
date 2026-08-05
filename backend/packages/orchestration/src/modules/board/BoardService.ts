@@ -4,6 +4,7 @@ import type {
   AddModuleInput,
   AddServiceFromRepoInput,
   AddTaskInput,
+  BlockEditActor,
   ReparentInput,
   ResizeBlockInput,
   UpdateBlockInput,
@@ -23,6 +24,7 @@ import type {
   Logger,
   RepoProjectionRepository,
   ResolveRunRepoContext,
+  RiskPolicyRepository,
   Service,
   ServiceFragmentDefaultsRepository,
   ServiceRepository,
@@ -62,6 +64,8 @@ import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
 import { createBlockPatchNarrowing } from './blockPatchNarrowing.js'
 import type { TaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
+import type { RiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
+import { createRiskPolicySelectionGuard } from './riskPolicySelectionGuard.js'
 
 export type { ReviewFrictionNotificationReader } from './reviewFrictionGuard.js'
 export type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
@@ -171,6 +175,17 @@ export interface BoardServiceDependencies {
    * target is taken on trust, exactly as before.
    */
   resolveRunRepoContext?: ResolveRunRepoContext
+  /**
+   * The workspace's merge-threshold preset library, read by the preset-SELECTION guard: a task's
+   * `riskPolicyId` decides which roles its runs sandbox and how their auto-merge is narrowed
+   * (ADR 0037), so re-pointing a task is a policy decision, not a preference.
+   *
+   * Absent is not a hole to guard. With no preset library there is nothing for a task to point
+   * at: every task resolves the built-in `DEFAULT_RISK_POLICY`, whose role layer is empty and
+   * therefore holds nobody to anything, so the guard is VACUOUS rather than skipped: the same
+   * answer it gives on a workspace whose presets treat every initiator alike.
+   */
+  riskPolicyRepository?: RiskPolicyRepository
 }
 
 // The board-changed reason vocabulary lives in `board.logic.ts` (pure, and shared with the
@@ -224,6 +239,13 @@ export class BoardService {
    */
   private readonly taskTypeDefaults: TaskTypeCreationDefaults
   private readonly patchNarrowing: BlockPatchNarrowing
+  /**
+   * Refuses a task's merge-preset selection that would relax what the EDITOR's own role is held
+   * to (ADR 0037). Lives on the service rather than in a controller so every door enforces it:
+   * `riskPolicyId` is writable at creation and by patch, and the escape hatch is whichever of
+   * those a caller reaches for.
+   */
+  private readonly riskPolicySelection: RiskPolicySelectionGuard
 
   constructor({
     workspaceRepository,
@@ -244,6 +266,7 @@ export class BoardService {
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
+    riskPolicyRepository,
     logger,
   }: BoardServiceDependencies) {
     this.workspaceRepository = workspaceRepository
@@ -277,6 +300,7 @@ export class BoardService {
       taskTypeRegistry,
       logger: this.log,
     })
+    this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
     // Bound callbacks rather than the service, so the narrowing depends on the two reads and the
     // one validator it actually uses instead of on everything `BoardService` can do.
     this.patchNarrowing = createBlockPatchNarrowing({
@@ -305,8 +329,8 @@ export class BoardService {
     this.publicReads = new PublicBoardReads({
       blockRepository,
       requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
-      addTask: (workspaceId, containerId, input, createdBy) =>
-        this.addTask(workspaceId, containerId, input, createdBy),
+      addTask: (workspaceId, containerId, input, editor, createdBy) =>
+        this.addTask(workspaceId, containerId, input, editor, createdBy),
     })
   }
 
@@ -664,14 +688,30 @@ export class BoardService {
     }
   }
 
-  /** Add a task inside a container (a service frame or a module). */
+  /**
+   * Add a task inside a container (a service frame or a module).
+   *
+   * `editor` is who is creating it, for the merge-preset selection guard: authoring a task
+   * straight onto a permissive preset moves it off the workspace default that would otherwise
+   * have governed it, so creation is the same decision as a later swap and takes the same check.
+   * Pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no workspace tier (see its doc).
+   */
   async addTask(
     workspaceId: string,
     containerId: string,
     input: AddTaskInput,
+    editor: BlockEditActor,
     createdBy?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
+    // Before any side effect, and against the workspace default: a task does not exist yet, so
+    // the policy this creation is moving AWAY from is the one it would have resolved unpicked.
+    await this.riskPolicySelection.assertMaySelect({
+      workspaceId,
+      actor: editor,
+      currentId: null,
+      nextId: input.riskPolicyId,
+    })
     // The container may be a frame/module of a service mounted from another workspace; create
     // the task in that service's home workspace so it joins the one shared subtree.
     const { homeWorkspaceId, block: container } = await this.resolveBlock(workspaceId, containerId)
@@ -863,8 +903,13 @@ export class BoardService {
   }
 
   /** Public-API: create a task under a visible service frame the workspace owns. */
-  addServiceTask(workspaceId: string, serviceId: string, input: AddTaskInput): Promise<Block> {
-    return this.publicReads.addServiceTask(workspaceId, serviceId, input)
+  addServiceTask(
+    workspaceId: string,
+    serviceId: string,
+    input: AddTaskInput,
+    editor: BlockEditActor,
+  ): Promise<Block> {
+    return this.publicReads.addServiceTask(workspaceId, serviceId, input, editor)
   }
 
   /** Public-API: refuse a service frame that cannot hold a new task, before doing work for one. */
@@ -1025,14 +1070,31 @@ export class BoardService {
     return this.layout.resizeBlock(workspaceId, id, bounds, originConnectionId)
   }
 
+  /**
+   * Apply a patch to a block. `editor` is who is applying it, for the merge-preset selection
+   * guard (see {@link addTask}); pass `UNATTRIBUTED_BLOCK_EDITOR` for a caller with no tier.
+   */
   async updateBlock(
     workspaceId: string,
     id: string,
     patch: UpdateBlockInput,
+    editor: BlockEditActor,
     originConnectionId?: string | null,
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     const { homeWorkspaceId, block } = await this.resolveBlock(workspaceId, id)
+    // Re-pointing a task at another merge preset re-decides which roles its runs sandbox and how
+    // their auto-merge is narrowed, so it is refused when it would relax what the EDITOR's own
+    // role is held to. Before the write, and only when the patch names the field: an untouched
+    // `riskPolicyId` is not a selection.
+    if (patch.riskPolicyId !== undefined) {
+      await this.riskPolicySelection.assertMaySelect({
+        workspaceId,
+        actor: editor,
+        currentId: block.riskPolicyId,
+        nextId: patch.riskPolicyId,
+      })
+    }
     // Each patch field that belongs to a DIFFERENT kind of block than the one addressed is
     // dropped rather than persisted as dead data, and the three that name other entities are
     // validated against them. One collaborator (`blockPatchNarrowing.ts`) owns all of it.

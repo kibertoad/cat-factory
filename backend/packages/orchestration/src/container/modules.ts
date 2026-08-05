@@ -12,6 +12,7 @@
  * back here type-only), so the value dependency is one-way `container.ts` → this file.
  */
 
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type {
   AppCaches,
   BugHuntAssessor,
@@ -1252,14 +1253,18 @@ export function createRecurringModule(
             )
             if (issue.linkedBlockId) return null
 
-            const { block } = await tasks.linkService.createTaskFromIssue(
-              input.workspaceId,
-              input.containerId,
-              input.source,
-              input.externalId,
-              null,
-              { pipelineId: input.pipelineId },
-            )
+            const { block } = await tasks.linkService.createTaskFromIssue({
+              workspaceId: input.workspaceId,
+              containerId: input.containerId,
+              source: input.source,
+              externalId: input.externalId,
+              // A ticket arriving on a schedule or a webhook is filed by nobody: there is no
+              // session, so no workspace tier, and inventing one would scope the whole
+              // integration to a role no operator granted (ADR 0037).
+              editor: UNATTRIBUTED_BLOCK_EDITOR,
+              createdBy: null,
+              shape: { pipelineId: input.pipelineId },
+            })
             return { blockId: block.id }
           },
         }

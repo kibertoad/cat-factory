@@ -15,8 +15,9 @@ else imports its **ports** and domain types from here.
   correlate an inbound webhook, which names a repository by exactly that id.
 - `domain/`: domain types (`types.ts`, re-exporting contracts), pure logic + constants
   (`seed.ts`, `catalog.ts`, `models.ts`, `subtasks.logic.ts`, `change-class.ts`, the
-  deterministic changed-file → change-class classifier + its risk ranking and the per-class
-  merge-rule resolution), and the **public extension
+  deterministic changed-file → change-class classifier + its risk ranking; what a preset then DOES
+  with a class lives in `@cat-factory/contracts` beside the rule maps, because the SPA has to
+  reach the same verdict), and the **public extension
   registries**: `gate-registry.ts` + `gate-logic.ts`, `judge-registry.ts` + `judge-logic.ts`,
   `pipeline-registry.ts`, `provider-registry.ts`, `vcs-registry.ts`, `step-resolver-registry.ts`,
   `foundational-service-registry.ts` (the shared capabilities a DEPLOYMENT declares in code: the
