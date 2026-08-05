@@ -5,6 +5,7 @@ import {
   redactSecrets,
   resolveWritebackFlag,
   runBestEffort,
+  REVIEW_QUESTION_POLICIES,
   REVIEW_QUESTION_POST_CLAIM_TTL_MS,
   type Block,
   type Clock,
@@ -13,11 +14,13 @@ import {
   type ReviewQuestionPost,
   type ReviewQuestionPostOutcome,
   type ReviewQuestionPostRepository,
+  type TaskConnectionRepository,
   type TaskRecord,
   type TaskRepository,
   type TaskSourceKind,
   type ReviewReplyAck,
   type TrackerSettingsRepository,
+  trackerWebhookSecret,
 } from '@cat-factory/kernel'
 import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.logic.js'
 import { renderReviewReplyAck } from './reviewReplies.logic.js'
@@ -101,6 +104,22 @@ export interface IssueWritebackServiceDependencies {
    * findings on every durable-driver replay (see the port doc).
    */
   reviewQuestionPostRepository?: ReviewQuestionPostRepository
+  /**
+   * The per-`(workspace, source)` tracker connection, read for ONE thing here: whether an inbound
+   * webhook secret has been minted, which is what decides if a reply typed on the ticket can ever
+   * reach the run (`backend/docs/adr/0032-tracker-webhook-intake.md` fails closed without one).
+   *
+   * A question comment that leads with `@cat-factory answer …` on a connection with no secret is
+   * advice that silently does nothing, and it is the reporter — the one person who came in through
+   * the ticket — who follows it. So the copy asks before it promises. Absent ⇒ the ticket channel
+   * is reported UNWIRED, which is the honest reading: a facade that cannot establish the fact
+   * cannot offer the channel.
+   *
+   * Only the per-workspace half is visible from here. The other half is the facade's own
+   * `trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker
+   * webhook conformance suite proves end to end.
+   */
+  taskConnectionRepository?: TaskConnectionRepository
   /**
    * Wall clock for the marker rows and their abandonment window. The facade's shared `Clock`,
    * like every other service here; defaults to the real clock so a test can pin time without
@@ -186,29 +205,6 @@ export class IssueWritebackService implements IssueWritebackProvider {
     )
   }
 
-  async postQuestions(workspaceId: string, blockId: string, questions: string[]): Promise<void> {
-    // Echo the clarification gate's open questions onto the linked tracker issue(s) so the
-    // reporter sees the ask where they filed the bug. Like `onIssuePickedUp`, NOT gated on
-    // the workspace writeback settings (see the port doc), and best-effort per issue.
-    const asked = questions.map((q) => q.trim()).filter((q) => q.length > 0)
-    if (asked.length === 0) return
-    const issues = await this.deps.taskRepository.listByBlock(workspaceId, blockId)
-    if (issues.length === 0) return
-    const body = [
-      '🤖 cat-factory needs a few clarifications before it can fix this bug. Please answer ' +
-        'in the platform (these are echoed here for visibility):',
-      '',
-      ...asked.map((q) => `- ${q}`),
-    ].join('\n')
-    await this.forEachIssue(
-      { label: 'writeback.postQuestions', workspaceId },
-      issues,
-      async (issue) => {
-        await this.comment(workspaceId, issue, body)
-      },
-    )
-  }
-
   async postReviewQuestions(
     workspaceId: string,
     block: Block,
@@ -220,17 +216,34 @@ export class IssueWritebackService implements IssueWritebackProvider {
     // rather than post unsafely; the park is still surfaced by the in-app review card.
     if (!markers || post.findings.length === 0) return empty
 
-    const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
-    const enabled = resolveWritebackFlag(
-      settings?.writebackQuestionsOnPark ?? false,
-      block.trackerQuestionsOnPark,
-    )
-    if (!enabled) return empty
+    // Only an OPT-IN subject reads the settings, and only then does it pay for the read: bug-report
+    // triage asks the reporter for what they left out, which is intake semantics (the same stance
+    // `onIssuePickedUp` takes) rather than an optional courtesy about someone else's tracker.
+    if (REVIEW_QUESTION_POLICIES[post.subject].optIn) {
+      const settings = await this.deps.trackerSettingsRepository.get(workspaceId)
+      const enabled = resolveWritebackFlag(
+        settings?.writebackQuestionsOnPark ?? false,
+        block.trackerQuestionsOnPark,
+      )
+      if (!enabled) return empty
+    }
 
     const issues = await this.deps.taskRepository.listByBlock(workspaceId, block.id)
     if (issues.length === 0) return empty
 
-    const body = renderReviewQuestionsComment(post)
+    // Which of these issues can be REPLIED to, resolved once per distinct source rather than per
+    // issue: the answer is a property of the `(workspace, source)` connection, and several issues
+    // on one block routinely share one. Two bodies at most, so the render is memoised on the same
+    // boolean instead of being recomputed alongside it.
+    const repliesBySource = await this.resolveTicketReplyChannels(workspaceId, issues)
+    const bodies = new Map<boolean, string>()
+    const bodyFor = (ticketReplies: boolean): string => {
+      const cached = bodies.get(ticketReplies)
+      if (cached !== undefined) return cached
+      const rendered = renderReviewQuestionsComment(post, { ticketReplies })
+      bodies.set(ticketReplies, rendered)
+      return rendered
+    }
     const now = () => (this.deps.clock ?? Date).now()
     const outcome = { ...empty }
     // Sequential on purpose: a review typically has ONE linked issue, and posting the same
@@ -267,6 +280,21 @@ export class IssueWritebackService implements IssueWritebackProvider {
         outcome.skipped += 1
         continue
       }
+      const ticketReplies = repliesBySource.get(issue.source) ?? false
+      if (!ticketReplies) {
+        // Said once per claimed post (the marker bounds it), because the remedy is the operator's
+        // and the symptom otherwise reaches nobody: the reporter is being asked a question they
+        // cannot answer from where they are reading it, and the comment they get says so only by
+        // omission.
+        this.log.warn('review questions posted with no ticket reply channel', {
+          workspaceId,
+          blockId: block.id,
+          subject: post.subject,
+          source: issue.source,
+          externalId: issue.externalId,
+          remedy: `mint an inbound webhook secret for the ${issue.source} connection`,
+        })
+      }
       try {
         // Deliberately NOT wrapped in a wall-clock deadline. A timeout cannot distinguish "the
         // comment never landed" from "it landed, slowly": settling `failed` on that guess makes
@@ -274,7 +302,7 @@ export class IssueWritebackService implements IssueWritebackProvider {
         // outcome this whole marker exists to prevent. A hung transport is instead cut off by
         // the driver's own step limit, and the claim's abandonment window (above) makes that
         // row re-claimable — self-healing without ever inventing a duplicate.
-        const delivered = await this.comment(workspaceId, issue, body)
+        const delivered = await this.comment(workspaceId, issue, bodyFor(ticketReplies))
         if (!delivered) throw new Error(`No ${issue.source} comment transport is wired`)
         await markers.settle(key, { status: 'posted' }, now())
         outcome.posted += 1
@@ -302,6 +330,44 @@ export class IssueWritebackService implements IssueWritebackProvider {
       }
     }
     return outcome
+  }
+
+  /**
+   * Whether a reply typed on a ticket reaches the run, per DISTINCT source across the block's
+   * linked issues.
+   *
+   * One connection read per distinct source, indexed into a `Map`, rather than one per issue: the
+   * fact belongs to `(workspace, source)`, and a block linked to three issues on one tracker would
+   * otherwise pay three decrypting reads for one answer.
+   *
+   * An unreadable connection resolves to `false` and is REPORTED, never guessed at: the failure
+   * mode of guessing `true` is a reporter told to reply where nothing listens, which is the exact
+   * thing this resolution exists to prevent.
+   */
+  private async resolveTicketReplyChannels(
+    workspaceId: string,
+    issues: readonly Pick<TaskRecord, 'source'>[],
+  ): Promise<Map<TaskSourceKind, boolean>> {
+    const wired = new Map<TaskSourceKind, boolean>()
+    const connections = this.deps.taskConnectionRepository
+    if (!connections) return wired
+    const sources = [...new Set(issues.map((issue) => issue.source))]
+    await Promise.all(
+      sources.map(async (source) => {
+        try {
+          const connection = await connections.getByWorkspace(workspaceId, source)
+          wired.set(source, trackerWebhookSecret(connection?.credentials) !== '')
+        } catch (error) {
+          this.log.warn('tracker connection unreadable; offering the API answer path only', {
+            workspaceId,
+            source,
+            ...describeError(error),
+          })
+          wired.set(source, false)
+        }
+      }),
+    )
+    return wired
   }
 
   /**

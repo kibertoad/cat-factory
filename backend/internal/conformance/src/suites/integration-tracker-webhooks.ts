@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import type { Block, RequirementReview, SourceTask, WorkspaceSnapshot } from '@cat-factory/kernel'
+import type {
+  Block,
+  ClarityReview,
+  RequirementReview,
+  SourceTask,
+  WorkspaceSnapshot,
+} from '@cat-factory/kernel'
 import type { ConformanceApp, ConformanceHarness } from '../harness.js'
 import { signFakeTrackerDelivery } from '../fakeTrackerWebhook.js'
 
 // Cross-runtime conformance for INBOUND tracker webhooks — push-driven intake and ticket replies
-// to a parked requirements review (backend/docs/adr/0032-tracker-webhook-intake.md).
+// to a parked review, requirements or bug-triage clarity
+// (backend/docs/adr/0032-tracker-webhook-intake.md).
 //
 // What only a shared suite can prove here is that BOTH facades wired the whole chain, because
 // every link is per-facade: the route must be mounted, the session gate must let an anonymous
@@ -219,6 +226,57 @@ export function defineTrackerWebhookConformance(harness: ConformanceHarness): vo
         `/workspaces/${ws}/blocks/${blockId}/requirement-review`,
       )
       expect(followUp.body.items[0]!.reply).toBe('Actually, make it 7 days.')
+    })
+
+    it('applies a ticket reply to a parked CLARITY (bug-triage) review too', async () => {
+      // The half of the reply loop that has a runtime dimension: the clarity subject's gateway is
+      // composed against the facade's OWN clarity store and engine actions, so a facade that wired
+      // only the requirements one answers a bug reporter's comment with silence. The finding ids
+      // are what make this reachable at all — the gate used to echo its questions as bare prose,
+      // giving the reporter nothing to name.
+      const app = harness.makeApp()
+      const { call } = app
+      const { ws, blockId, secret, externalId } = await setupTracker(app)
+
+      await app.seedReadyClarityReview(ws, blockId, 2)
+      const before = await call<ClarityReview>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/clarity-review`,
+      )
+      const itemId = before.body.items[0]!.id
+      expect(before.body.items[0]!.status).toBe('open')
+
+      expect(
+        (
+          await deliver(app, ws, secret, {
+            kind: 'comment',
+            source: 'jira',
+            externalId,
+            commentId: 'cmt-clarity-1',
+            body: `@cat-factory answer ${itemId} Click Save twice on the invoice screen.`,
+            author: { id: 'u1', handle: 'reporter', email: 'r@acme.test', bot: false },
+          })
+        ).status,
+      ).toBe(202)
+
+      const applied = await call<ClarityReview>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/clarity-review`,
+      )
+      expect(applied.body.items[0]!.reply).toBe('Click Save twice on the invoice screen.')
+      expect(applied.body.items[0]!.status).toBe('answered')
+      // The second finding is untouched, so the triage is still parked — no incorporation, which
+      // would need a real reworking model.
+      expect(applied.body.items[1]!.status).toBe('open')
+      expect(applied.body.status).toBe('ready')
+
+      // The requirements review is not touched by a clarity reply: the block has none, and a
+      // gateway resolution that fell back to the wrong subject would 404 or answer nothing here.
+      const requirements = await call<RequirementReview | null>(
+        'GET',
+        `/workspaces/${ws}/blocks/${blockId}/requirement-review`,
+      )
+      expect(requirements.body).toBeNull()
     })
 
     it('ignores a comment with no command, and a comment from a bot author', async () => {

@@ -1,3 +1,4 @@
+import { reviewAwaitsHuman } from '@cat-factory/contracts'
 import {
   type Clock,
   getErrorMessage,
@@ -10,7 +11,9 @@ import {
   type RequirementReviewItem,
   type ResolveRequirementsExceededChoice,
   type ReviewItemStatus,
+  REVIEW_QUESTION_POLICIES,
   type ReviewQuestionFinding,
+  type ReviewQuestionSubject,
   type ReviewReplyAck,
   type ReviewReplyRejection,
   type TaskConnectionRepository,
@@ -38,11 +41,11 @@ import {
 //    `backend/docs/adr/0032-tracker-webhook-intake.md`) is that push removes the latency and reuses the
 //    unchanged `BugIntakeService` path for everything else, so there is exactly one intake
 //    implementation and its dedup/replace-link/pickup-mark behaviour cannot drift.
-//  - A COMMENT event on an issue linked to a block with a parked requirements review may answer
-//    that review's findings by their stable ids. Every mutation routes through the SAME service
-//    methods the SPA and `PublicDecisionController` call, so the park's CAS/approval-id
-//    arbitration and the task's preset knobs apply identically. There is NEVER a parallel
-//    mutation path into the engine.
+//  - A COMMENT event on an issue linked to a block with a parked review (requirements OR the
+//    bug-triage clarity gate) may answer that review's findings by their stable ids. Every
+//    mutation routes through the SAME service methods the SPA and `PublicDecisionController`
+//    call, so the park's CAS/approval-id arbitration and the task's preset knobs apply
+//    identically. There is NEVER a parallel mutation path into the engine.
 //
 // Everything is best-effort and degrades to a no-op: an unwired dependency, an unlinked issue, a
 // settled review or a comment with no commands all resolve to an ignored outcome rather than an
@@ -50,41 +53,88 @@ import {
 // delivery we will never act on just makes the tracker redeliver it.
 
 /**
- * The requirements-review surface, narrowed to what a ticket reply drives.
+ * A live review, narrowed to what a ticket reply reads off it.
+ *
+ * The two subjects persist the same item shape and the same lifecycle and differ only in the
+ * DOCUMENT each converges on, which a reply never touches — so one structural type covers both
+ * rather than a union the apply loop would have to narrow on every branch.
+ */
+export interface ReplyableReview {
+  id: string
+  status: RequirementReview['status']
+  items: RequirementReviewItem[]
+}
+
+/**
+ * One review subject's surface, narrowed to what a ticket reply drives.
  *
  * Declared structurally rather than imported: `@cat-factory/orchestration` depends on this
  * package, so naming its types here would invert the layering. The composition root binds these
- * to `requirements.service` + `executionService.requirementsReview` — the very methods the SPA
- * controller calls — which is what makes "no parallel mutation path" true by construction rather
- * than by discipline.
+ * to the review's own service + `executionService.{requirements,clarity}Review` — the very
+ * methods the SPA controller calls — which is what makes "no parallel mutation path" true by
+ * construction rather than by discipline.
  */
 export interface ReviewReplyGateway {
   /** The block's live review, or null when it has none. */
-  getForBlock(workspaceId: string, blockId: string): Promise<RequirementReview | null>
+  getForBlock(workspaceId: string, blockId: string): Promise<ReplyableReview | null>
   /** Record a human answer against one finding. */
   replyToItem(
     workspaceId: string,
     reviewId: string,
     itemId: string,
     reply: string,
-  ): Promise<RequirementReview>
+  ): Promise<ReplyableReview>
   /** Set a finding's status (dismiss / reopen). */
   setItemStatus(
     workspaceId: string,
     reviewId: string,
     itemId: string,
     status: ReviewItemStatus,
-  ): Promise<RequirementReview>
+  ): Promise<ReplyableReview>
   /** Fold the recorded answers in and re-review — the async path the durable driver runs. */
-  incorporate(workspaceId: string, blockId: string, feedback?: string): Promise<RequirementReview>
+  incorporate(workspaceId: string, blockId: string, feedback?: string): Promise<ReplyableReview>
   /** Settle the review with the last incorporated document and advance the parked run. */
-  proceed(workspaceId: string, blockId: string): Promise<RequirementReview>
+  proceed(workspaceId: string, blockId: string): Promise<ReplyableReview>
   /** Resolve a review that hit its iteration cap. */
   resolveExceeded(
     workspaceId: string,
     blockId: string,
     choice: ResolveRequirementsExceededChoice,
-  ): Promise<RequirementReview>
+  ): Promise<ReplyableReview>
+}
+
+/** The review a comment resolved to, with the surface that drives it. */
+interface ReplyTarget {
+  subject: ReviewQuestionSubject
+  gateway: ReviewReplyGateway
+  review: ReplyableReview
+  /**
+   * Finding ids that are real but belong to one of the block's OTHER live reviews.
+   *
+   * Carried from the resolution (which held every candidate) so the apply loop can tell
+   * "there is no such finding" from "that finding is in the other loop on this ticket". Both are
+   * rejections, but only the second has a remedy the reporter can act on, and a comment answering
+   * both reviews at once is the ordinary way to produce one: they are reading a single ticket
+   * carrying both sets of ids.
+   */
+  foreignItemIds: ReadonlySet<string>
+}
+
+/**
+ * The order candidate reviews are considered in when a comment names no finding id.
+ *
+ * Derived from the policy table rather than written out, so a subject added there is considered
+ * here too instead of being silently unreachable from a ticket.
+ */
+const REPLY_SUBJECTS = Object.keys(REVIEW_QUESTION_POLICIES) as ReviewQuestionSubject[]
+
+/** The finding ids a comment's commands name, across every id-addressed verb. */
+function namedItemIds(commands: readonly ReviewReplyCommand[]): ReadonlySet<string> {
+  return new Set(
+    commands.flatMap((command) =>
+      command.verb === 'answer' || command.verb === 'dismiss' ? [command.itemId] : [],
+    ),
+  )
 }
 
 export interface TrackerWebhookServiceDependencies {
@@ -97,8 +147,12 @@ export interface TrackerWebhookServiceDependencies {
    * behaviour, so an unwired facade is byte-for-byte unchanged).
    */
   triggerIntake?: (workspaceId: string, event: TrackerIssueEvent) => Promise<number>
-  /** The requirements-review surface. Absent ⇒ ticket replies are ignored. */
-  reviewGateway?: ReviewReplyGateway
+  /**
+   * The review surfaces a ticket reply may drive, per subject. An empty/absent map ⇒ replies are
+   * ignored; a partially-wired one drives only what it holds, which is the same branch-by-branch
+   * degradation every other collaborator here gets.
+   */
+  reviewGateways?: Partial<Record<ReviewQuestionSubject, ReviewReplyGateway>>
   /**
    * Idempotency markers. Absent ⇒ replies are ignored entirely, because applying without a claim
    * would re-answer the same finding on every redelivery — the same "pass through rather than act
@@ -173,9 +227,11 @@ export class TrackerWebhookService {
     workspaceId: string,
     event: TrackerCommentEvent,
   ): Promise<TrackerWebhookOutcome> {
-    const gateway = this.deps.reviewGateway
+    const gateways = this.deps.reviewGateways
     const markers = this.deps.commentIngestRepository
-    if (!gateway || !markers) return { kind: 'ignored', reason: 'replies_not_wired' }
+    if (!gateways || !markers || REPLY_SUBJECTS.every((s) => !gateways[s])) {
+      return { kind: 'ignored', reason: 'replies_not_wired' }
+    }
 
     // Our OWN comments, refused structurally before anything else. The author-side bot check below
     // catches them on GitHub and Jira, but Linear flags no bots and the default allow-list admits
@@ -209,8 +265,8 @@ export class TrackerWebhookService {
     const blockId = issue?.linkedBlockId
     if (!blockId) return { kind: 'ignored', reason: 'issue_not_linked' }
 
-    const review = await gateway.getForBlock(workspaceId, blockId)
-    if (!review) return { kind: 'ignored', reason: 'no_review' }
+    const target = await this.resolveReview(workspaceId, blockId, commands, gateways)
+    if (!target) return { kind: 'ignored', reason: 'no_review' }
 
     // Claim BEFORE applying: a crash between applying an answer and writing the marker must not
     // re-answer on the next delivery. A `failed` marker is re-claimable so a transient failure is
@@ -237,7 +293,7 @@ export class TrackerWebhookService {
     if (!claimed) return { kind: 'ignored', reason: 'already_ingested' }
 
     try {
-      const ack = await this.applyCommands(workspaceId, blockId, review, commands, gateway)
+      const ack = await this.applyCommands(workspaceId, blockId, target, commands)
       await markers.settle(key, { status: 'applied' }, this.now())
       // Commit the state, THEN talk to the tracker: a failed ack must never look like a failed
       // reply, and the answer is already durable by the time this runs.
@@ -273,6 +329,70 @@ export class TrackerWebhookService {
   }
 
   /**
+   * Which of the block's reviews this comment is answering.
+   *
+   * A block can hold a live review of more than one subject (a task re-run under a different
+   * pipeline leaves the earlier one behind), and both were posted onto the same issue with their
+   * own ids, so the comment itself is the only thing that says which loop the reporter is in.
+   * Three tie-breaks, most specific first:
+   *
+   *  1. **A named finding id decides it.** The ids are platform-minted and unique across both
+   *     stores, so a comment that names one is unambiguous no matter how many reviews are live.
+   *     A comment naming ids from BOTH reviews still resolves to one of them, and `applyCommands`
+   *     then rejects the other's ids as belonging to another review — reported in the ack rather
+   *     than dropped, because "that id is real, just not in the loop you are answering" is the one
+   *     rejection a reporter can act on.
+   *  2. **Otherwise the review PARKED ON A HUMAN decides it** (`reviewAwaitsHuman`). A bare
+   *     `proceed` is about the loop that stopped the run, which is the one holding a human's
+   *     answer and not merely the one that has not settled: `incorporating` / `reviewing` are the
+   *     driver's own transients, and picking one of those over a review sitting at `exceeded`
+   *     would drive the wrong loop with the reporter's verb.
+   *  3. **Otherwise the declaration order.** Reached only by a control verb sent to a block whose
+   *     every review is settled or mid-cycle, where the ack says what it did (`settled`, or the
+   *     current state) whichever one is picked, so the choice cannot mislead.
+   *
+   * Deliberately NO special case for a single candidate. Tie-break 1 already answers the one-review
+   * case correctly (there is nothing to break a tie between), so a `length <= 1` short-circuit
+   * would only create a second path that could answer differently from the general one.
+   *
+   * Reads every wired subject's store in parallel: they are independent point lookups on a path
+   * that has already established the comment carries commands.
+   */
+  private async resolveReview(
+    workspaceId: string,
+    blockId: string,
+    commands: ReviewReplyCommand[],
+    gateways: Partial<Record<ReviewQuestionSubject, ReviewReplyGateway>>,
+  ): Promise<ReplyTarget | null> {
+    type Candidate = Omit<ReplyTarget, 'foreignItemIds'>
+    const candidates = (
+      await Promise.all(
+        REPLY_SUBJECTS.map(async (subject) => {
+          const gateway = gateways[subject]
+          if (!gateway) return null
+          const review = await gateway.getForBlock(workspaceId, blockId)
+          return review ? { subject, gateway, review } : null
+        }),
+      )
+    ).filter((candidate): candidate is Candidate => candidate !== null)
+
+    const named = namedItemIds(commands)
+    const chosen =
+      candidates.find((c) => c.review.items.some((item) => named.has(item.id))) ??
+      candidates.find((c) => reviewAwaitsHuman(c.review.status)) ??
+      candidates[0]
+    if (!chosen) return null
+    return {
+      ...chosen,
+      foreignItemIds: new Set(
+        candidates
+          .filter((c) => c !== chosen)
+          .flatMap((c) => c.review.items.map((item) => item.id)),
+      ),
+    }
+  }
+
+  /**
    * Apply a comment's commands to a live review, in the order written, and describe what happened.
    *
    * A review that has already SETTLED (`incorporated`) applies nothing — the run is no longer
@@ -282,13 +402,14 @@ export class TrackerWebhookService {
   private async applyCommands(
     workspaceId: string,
     blockId: string,
-    review: RequirementReview,
+    target: ReplyTarget,
     commands: ReviewReplyCommand[],
-    gateway: ReviewReplyGateway,
   ): Promise<ReviewReplyAck> {
+    const { subject, gateway, review, foreignItemIds } = target
     const runId = (await this.deps.resolveRunId?.(workspaceId, blockId)) ?? ''
     if (review.status === 'incorporated') {
       return {
+        subject,
         reviewId: review.id,
         runId,
         outcome: 'settled',
@@ -300,6 +421,17 @@ export class TrackerWebhookService {
     }
 
     const byId = new Map(review.items.map((item) => [item.id, item]))
+    /**
+     * Why an id-addressed command found no finding. A ticket can carry the question comments of
+     * BOTH live reviews, so an id that is real but in the other loop is the likely mistake, and it
+     * has a remedy: a separate comment naming only that review's ids resolves to that review.
+     * Reporting it as "no finding" would tell a reporter an id they can see is not real.
+     */
+    const missingReason = (itemId: string): string =>
+      foreignItemIds.has(itemId)
+        ? `finding \`${itemId}\` belongs to the other review on this ticket — answer it in a ` +
+          'separate comment naming only its findings'
+        : `no finding \`${itemId}\``
     const answered: string[] = []
     const dismissed: string[] = []
     const rejected: ReviewReplyRejection[] = []
@@ -310,7 +442,7 @@ export class TrackerWebhookService {
       switch (command.verb) {
         case 'answer': {
           if (!byId.has(command.itemId)) {
-            rejected.push({ command: command.line, reason: `no finding \`${command.itemId}\`` })
+            rejected.push({ command: command.line, reason: missingReason(command.itemId) })
             break
           }
           const reply = (redactSecrets(command.text) ?? '').trim().slice(0, MAX_REPLY_CHARS)
@@ -324,7 +456,7 @@ export class TrackerWebhookService {
         }
         case 'dismiss': {
           if (!byId.has(command.itemId)) {
-            rejected.push({ command: command.line, reason: `no finding \`${command.itemId}\`` })
+            rejected.push({ command: command.line, reason: missingReason(command.itemId) })
             break
           }
           current = await gateway.setItemStatus(
@@ -368,6 +500,7 @@ export class TrackerWebhookService {
           ? await gateway.proceed(workspaceId, blockId)
           : await gateway.resolveExceeded(workspaceId, blockId, control)
       return {
+        subject,
         reviewId: current.id,
         runId,
         outcome: 'resolved',
@@ -385,6 +518,7 @@ export class TrackerWebhookService {
     if (outstanding.length === 0 && (answered.length > 0 || dismissed.length > 0)) {
       current = await gateway.incorporate(workspaceId, blockId)
       return {
+        subject,
         reviewId: current.id,
         runId,
         outcome: 'incorporating',
@@ -396,6 +530,7 @@ export class TrackerWebhookService {
     }
 
     return {
+      subject,
       reviewId: current.id,
       runId,
       outcome: current.status === 'exceeded' ? 'exceeded' : 'awaiting',

@@ -159,6 +159,11 @@ export function selectRecurringDeps(
     }
     trackerDeps.resolveLinearConnection = resolveLinearConnection
     writebackDeps.resolveLinearConnection = resolveLinearConnection
+    // The same store, read for the ONE fact the parked-review question comment needs before it
+    // tells a reporter to answer on the ticket: whether an inbound webhook secret was ever minted
+    // for that connection. Without it the reply path fails closed, so the copy offers the API
+    // route alone. Mirrored in the Node facade's `buildNodeIssueWriteback`.
+    writebackDeps.taskConnectionRepository = taskConnectionRepository
   }
   return {
     pipelineScheduleRepository: new D1PipelineScheduleRepository({ db }),

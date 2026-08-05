@@ -43,7 +43,7 @@ Detailed per-item checklists live at the end of each slice section.
 between them: the question comment (persistence + the engine park hook) and the reply ingest (a
 grammar, two ingest transports, an identity allow-list, cursor dedup, follow-up comments). 2a is
 useful on its own: the comment renders each finding's stable id, which is exactly what
-`POST /api/v1/runs/:runId/decisions/requirements/items/:itemId/reply` from slice 1 takes, so the
+`POST /api/v1/runs/:runId/decisions/requirements/findings/:itemId/reply` from slice 1 takes, so the
 loop already closes over the API. 2b then upgrades the answer channel from "the API, using the ids
 we posted" to "reply in the ticket". Landing them together would have made one PR roughly three
 times the size of slice 1 with no reviewable seam in the middle.
@@ -300,8 +300,8 @@ driver's replays cannot double-post.
 - **The public decision surface**, keyed by RUN id so it serves both a headless initiative job
   and a board task run:
   - `GET /api/v1/runs/:runId/decisions`; the run's open decisions.
-  - `POST /api/v1/runs/:runId/decisions/requirements/items/:itemId/reply`
-  - `PATCH /api/v1/runs/:runId/decisions/requirements/items/:itemId`
+  - `POST /api/v1/runs/:runId/decisions/requirements/findings/:itemId/reply`
+  - `PATCH /api/v1/runs/:runId/decisions/requirements/findings/:itemId`
   - `POST /api/v1/runs/:runId/decisions/requirements/incorporate`
   - `POST /api/v1/runs/:runId/decisions/requirements/re-review`
   - `POST /api/v1/runs/:runId/decisions/requirements/proceed`
@@ -443,10 +443,51 @@ registry the `headlessStartable` flag is computed against.
 | 2a.7 | SPA: the workspace toggle + the per-task override, all 10 locales                | ✅ done |
 | 2a.8 | Docs sweep + changeset                                                           | ✅ done |
 
-**On the subject scope.** The echo rides the REQUIREMENTS subject only (`ReviewKind.questionsOnPark`).
-The clarity gate already echoes its questions from its own `review()` closure as INTAKE semantics
-(every run, UI or headless, ungated by the workspace writeback settings) so opting it in here would
-post the same questions twice. A brainstorm dialogue has no linked-issue surface at all.
+**On the subject scope (SUPERSEDED, and worth reading for why).** Slice 2a shipped the echo on the
+REQUIREMENTS subject only. The clarity gate had a bespoke echo of its own, posting the question
+PROSE with no ids, and the reasoning recorded here was that opting it in would post the same
+questions twice. That was the right call about duplication and the wrong shape: the ids are what a
+ticket reply names, so a comment without them was unanswerable by construction, and slice 2b's
+reply grammar (ADR 0032) landed against a surface the clarity gate could never reach.
+
+Both subjects now ride `ReviewKind.questionsOnPark` (a `ReviewQuestionSubject` rather than a
+boolean), and what genuinely differs between them is read off kernel's `REVIEW_QUESTION_POLICIES`
+instead of being a second code path: `requirements` is headless-only and workspace-opt-in,
+`clarity` fires on every run and is ungated, exactly as its bespoke echo did. A brainstorm dialogue
+is still absent: it converges on a direction rather than answering a reporter's filing, and its
+block has no issue whose author asked for it.
+
+**On which answer channel the comment may OFFER.** The comment leads with the ticket grammar
+(`@cat-factory answer <id> …`) because the reporter is reading it in their tracker, and telling them
+only about an HTTP route asks the one person who came in through the ticket to leave it. But the
+inbound path FAILS CLOSED without a minted per-connection webhook secret (ADR 0032), and a workspace
+on pull-based intake has none, so the grammar there is advice that silently does nothing.
+
+So the provider establishes the fact before the copy promises it: `IssueWritebackService` reads
+`taskConnectionRepository` for `trackerWebhookSecret(...) !== ''`, once per DISTINCT source across
+the block's linked issues, and the renderer takes it as a required `ReviewQuestionChannels`. Three
+rules hold it honest:
+
+- **Absent or unreadable ⇒ UNWIRED.** A facade that cannot establish the fact, or a credential bag
+  that will not decrypt, offers the API route alone. Guessing the other way costs a reporter a reply
+  nobody receives, which is the whole failure this resolution exists to prevent.
+- **The grammar is OMITTED, never printed and disclaimed.** A reader either gets an instruction that
+  works or does not get one.
+- **It is said ONCE per claimed post**, at `warn`, naming the remedy (mint the connection's webhook
+  secret). The reporter's comment says nothing is wrong; the operator's log does.
+
+Only the per-workspace half is visible from the provider. The facade half is
+`trackerCommentIngestRepository`, which both runtimes wire unconditionally and the tracker-webhook
+conformance suite proves end to end.
+
+**On the API path the comment prints.** It comes from the route CONTRACT's own `pathResolver`
+(`replyPublicRunFindingContract` / `replyPublicRunClarityFindingContract`), never a hand-written
+string. The hand-written one said `…/decisions/requirements/items/<id>/reply` where the surface
+serves `…/findings/:itemId/reply`, so every question comment carried a 404 onto a customer's
+ticket — and the test that should have caught it had copied the same mistake. Deriving it means the
+two cannot disagree again. Same reason the per-subject opening is a FUNCTION rather than a
+`{n}`/`{s}`/`{i}`/`{max}` template: a mistyped placeholder shipped a literal `{n}` to a reporter
+with nothing failing, where a wrong arity is a typecheck.
 
 **On D8's in-app fallback.** The design asked for a failed question post to raise the in-app
 `requirement_review` card so the park is never invisible. That card is already raised

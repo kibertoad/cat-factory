@@ -12,7 +12,7 @@ import { Hono } from 'hono'
 import { createMcpOAuthTokenSource } from '../../agents/mcpOAuthTokenSource.js'
 import type { AppEnv } from '../../http/env.js'
 import { requireCapability } from '../../http/guards.js'
-import { requireWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requestLogger } from '../../http/requestLogging.js'
 import { collectDeclaredToolServers, resolveDeclaredToolServers } from './declaredToolServers.js'
@@ -29,7 +29,7 @@ import { requireMcpOAuthRedirectUrl } from './mcpOAuthRedirect.js'
  * two for real, by resolving the credential through the same chain a dispatch uses and speaking the
  * protocol.
  *
- * `secrets.manage`-gated INCLUDING THE READ, via {@link requireWorkspacePermissionIncludingReads}
+ * `secrets.manage`-gated INCLUDING THE READ, via {@link mountWorkspacePermissionIncludingReads}
  * rather than the usual writes-only mount. The projection names the credential KEYS this
  * deployment's capabilities want, which is the same content the workspace snapshot deliberately
  * withholds from a viewer ("no business learning which environment variables the deployment sets"),
@@ -39,13 +39,7 @@ import { requireMcpOAuthRedirectUrl } from './mcpOAuthRedirect.js'
  */
 export function toolServerController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  // Mounted on this controller's OWN patterns rather than `'*'`, and both are needed (Hono's `*`
-  // does not match the bare prefix). A `'*'` mount becomes `ALL /workspaces/:workspaceId/*` on the
-  // shared app and would refuse every SIBLING controller's route registered after this one — which
-  // is survivable for a writes-only gate and fatal for one that gates reads.
-  const gate = requireWorkspacePermissionIncludingReads('secrets.manage')
-  app.use('/tool-servers', gate)
-  app.use('/tool-servers/*', gate)
+  mountWorkspacePermissionIncludingReads(app, 'secrets.manage', ['/tool-servers'])
 
   buildHonoRoute(app, listToolServersContract, async (c) => {
     const container = c.get('container')

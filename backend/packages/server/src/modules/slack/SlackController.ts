@@ -15,7 +15,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError, UnauthorizedError } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
@@ -41,7 +41,7 @@ function requireSlack<E extends AppEnv>(c: Context<E>): SlackModule {
  */
 export function slackController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/slack'])
 
   // ---- connection (per-account) ------------------------------------------
 

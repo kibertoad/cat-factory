@@ -255,19 +255,29 @@ export function renderReviewReplyAck(ack: ReviewReplyAck): string {
     lines.push(
       '',
       'This review has used its full iteration budget. Reply `@cat-factory proceed` to go ahead ' +
-        'with the requirements as they stand, `@cat-factory extra-round` for one more pass, or ' +
-        '`@cat-factory stop` to park the task for reworking.',
+        `with the ${SUBJECT_NOUN[ack.subject]} as it stands, \`@cat-factory extra-round\` for ` +
+        'one more pass, or `@cat-factory stop` to park the task for reworking.',
     )
   }
 
   return lines.join('\n')
 }
 
+/**
+ * What each subject's loop folds the answers INTO, named so the headline below reads as a
+ * statement about this ticket rather than about requirements the reporter never wrote. A
+ * `Record` over the closed union, so a third subject cannot inherit the first one's noun.
+ */
+const SUBJECT_NOUN: Record<ReviewReplyAck['subject'], string> = {
+  requirements: 'requirements',
+  clarity: 'bug report',
+}
+
 /** The headline: what the RUN is doing now, in the reporter's terms. */
 function outcomeLine(ack: ReviewReplyAck): string {
   switch (ack.outcome) {
     case 'incorporating':
-      return 'Thanks — that answers everything outstanding. The requirements are being folded in and re-reviewed; the run will continue on its own.'
+      return `Thanks — that answers everything outstanding. The ${SUBJECT_NOUN[ack.subject]} is being folded in and re-reviewed; the run will continue on its own.`
     case 'awaiting':
       return 'Thanks — your answers were recorded. The run is still waiting on the questions below.'
     case 'exceeded':

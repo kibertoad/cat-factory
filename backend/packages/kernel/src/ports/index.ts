@@ -729,11 +729,14 @@ export type { CreateTicketRequest, CreatedTicket, TicketTrackerProvider } from '
 export type {
   IssueWritebackProvider,
   ReviewQuestionFinding,
+  ReviewQuestionPolicy,
   ReviewQuestionPost,
   ReviewQuestionPostOutcome,
+  ReviewQuestionSubject,
   ReviewReplyAck,
   ReviewReplyRejection,
 } from './issue-writeback.js'
+export { REVIEW_QUESTION_POLICIES } from './issue-writeback.js'
 export type {
   ReviewQuestionPostClaimWindow,
   ReviewQuestionPostKey,

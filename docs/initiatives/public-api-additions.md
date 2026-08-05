@@ -1,8 +1,9 @@
 # Initiative: public API additions (completing the parked-decision surface)
 
 **Status:** A0, C1, D1, D2, **E1 and E2** landed; **A1–A6 landed together**; **A7 (follow-up
-triage) and A8 (interview gates) landed together**; the start-path scope question settled by
-[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); B1, B2, C2 and F1 not started ·
+triage) and A8 (interview gates) landed together**; **B1 and B2 landed together, with the
+unanswerable-park report beside them**; the start-path scope question settled by
+[ADR 0034](../../backend/docs/adr/0034-public-api-stability.md); C2 and F1 not started ·
 **Owner:** core · **Started:** 2026-08-02
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
@@ -36,7 +37,7 @@ surface discovered later belongs in this table rather than in a revised number:
 | PR deep-review selection  | `step.prReview`      | ✅ `/runs/:runId/decisions/pr-review/*`          |
 | human-test window         | `step.humanTest`     | ✅ `/runs/:runId/decisions/human-test/*`         |
 | visual-confirmation gate  | `step.visualConfirm` | ✅ `…/visual-confirmation/*`                     |
-| `human-review` gate       | `step.gate`          | ❌ none, unranked (see below)                    |
+| `human-review` gate       | `step.gate`          | ❌ unanswerable by construction, but now NAMED   |
 | follow-up triage          | `step.followUps`     | ✅ `…/decisions/follow-ups/items/:itemId/*`      |
 | interview gate            | interview modules    | ✅ `/runs/:runId/decisions/interview/*`          |
 
@@ -80,9 +81,12 @@ the SPA can get it out of.
 the tracker was opened for is closed: of the surfaces a pipeline can park on, `human-review` is the
 only one a `decide` key can start and not answer, and it is unanswerable by construction rather than
 unbuilt. E1/E2 then closed the other half of "what can a headless consumer NOT do here": read what a
-run PROVED, and get a key without a browser. What remains is B1/B2 (key introspection, spec
-endpoint) and C2 (step output), none of which is a park, plus the ONE admission gap A8 surfaced and
-did not close (a deployment's own unbounded-wait gate, ranked as F1). The former [open question](#open-question-for-the-maintainer-settled) about the
+run PROVED, and get a key without a browser. B1/B2 closed the discovery half (what is my key, what
+is this API), and B3 beside them turned the one remaining ❌ from silence into a named report: a run
+stopped on `human-review` now SAYS so, which is as close to answering it as this surface can get.
+What remains is C2 (step output), which is not a park, plus the ONE admission gap A8 surfaced and
+did not close (a deployment's own unbounded-wait gate, ranked as F1 — B3 reports such a gate at run
+time but deliberately does not classify it). The former [open question](#open-question-for-the-maintainer-settled) about the
 `POST /tasks/:taskId/start` scope rule is settled (tightened, with
 [ADR 0034](../../backend/docs/adr/0034-public-api-stability.md)). When the committed scope
 completes, this tracker converts to a numbered ADR under `backend/docs/adr/` (per CLAUDE.md); if it
@@ -288,17 +292,96 @@ whether `parkSurfacesOf` can see them at all, and the two answers came out oppos
   asymmetry is STATED in `public-api.md`'s scope section rather than left for an operator to
   discover, which is the same honesty rule A0 established for the refusal message.
 
-### B1: `GET /api/v1/me` (key introspection) ⬜
+### B1: `GET /api/v1/me` (key introspection) ✅
 
-There is no way for a caller to ask what its own key can do. Every `403 insufficient_scope` is
-currently discovered by attempting the action. A two-field response (workspace id, scope) makes an
-integration's startup self-check possible and costs one read. Small, and it pairs naturally with the
-scope work above, since A1–A4 make scope more load-bearing.
+`{ keyId, accountId, workspaceId, scope, label, createdAt }` at `read` scope. Two departures from
+the plan, both about where the answer comes from:
 
-### B2: `GET /api/v1/openapi.json` ⬜
+- **It costs NO read**, where the plan budgeted one. `PublicApiKeyService.authenticate` already
+  loads the row to verify the secret, so the two extra facts ride out on `PublicApiKeyAuth` rather
+  than being fetched again. Anything else `/me` grows should come from there for the same reason,
+  or it turns the cheapest call on the surface into two round trips.
+- **It is its OWN small resource, not the `publicApiKey` row `/api/v1/keys` lists.** This answers
+  "who am I", which must stay answerable to every key including a `read` one, where listing keys is
+  an `admin` operation. Reusing the row would also have published a shape whose audience is key
+  ADMINISTRATION — revocation, provenance — in the one call an integration makes before it does
+  anything.
 
-ADR 0030 already calls this "trivial once wanted: the spec already ships as a repo file, so an
-endpoint is only packaging". It becomes materially more useful once A1–A4 widen the surface.
+### B2: `GET /api/v1/openapi.json` ✅
+
+ADR 0030 called this "trivial once wanted: the spec already ships as a repo file, so an endpoint is
+only packaging", and packaging is exactly where the work was:
+
+- **The facades cannot read the repo file.** The Worker is a bundle with no filesystem and the
+  published `@cat-factory/server` ships `dist` alone, so `pnpm gen:openapi` now writes a SECOND
+  artifact, `server/src/modules/publicApi/openapiDocument.generated.ts`, holding the document as
+  one JSON string. The `.generated.ts` suffix is load-bearing (it is what the formatter and linter
+  already exempt; a reflowed file would sit permanently at odds with its own drift guard), and a
+  string rather than an object literal because the endpoint answers with bytes (so nothing
+  re-serialises it, and the served and committed copies cannot differ) where a 360 KB object
+  literal would cost every `tsc` run a structural check for nothing. `check:openapi`
+  diffs BOTH copies, and reports both before exiting so one regeneration does not look like a
+  partial fix.
+- **It is deliberately NOT an operation in the spec it serves.** Its response schema is "any JSON
+  object", which would mint an untyped method in four generated clients and an MCP tool that pours
+  the whole schema into a model's context to describe tools it already has. Hand-mounted like
+  `POST /api/v1/mcp`, with the same obligation: it is public surface under the stability
+  commitment, and `backend/docs/public-api.md` carries that in the spec's place.
+- **Authenticated**, at `read`. The document leaks no workspace state, but an anonymous route here
+  would be the one endpoint a probe could confirm without a key, and the spec is the map of
+  everything else.
+- **It puts the spec on every future addition's growth path**, which is worth naming before someone
+  hits it under pressure. Both facades bundle that string, and Cloudflare's limit is on the
+  COMPRESSED bundle, where a JSON spec does very well, so there is no problem today and no reason to
+  pre-optimise. The escape hatch when there is one is to gzip at generate time and inflate through a
+  `DecompressionStream` in the handler, which both runtimes have: that keeps the endpoint answering
+  with bytes and the drift guard diffing one artifact, where a runtime read of `docs/openapi.json`
+  (the obvious alternative) is the thing neither facade can do. Recorded so the first person to see
+  a bundle warning does not re-litigate the generated-module decision.
+
+### B3: name the parks the decision list cannot model ✅
+
+Not in the original ranking, and it is the other half of what A0 started: A0 stopped the REFUSAL
+advertising unanswerable parks, and this stops the RUN reporting one as silence.
+
+`publicDecisionList` gained `unanswerable[]`, each entry naming a wait this surface cannot answer
+with a closed `reason`, the `stepKind`/`stepIndex` holding the run, and prose saying where the
+answer lives. Three causes: `human_wait_gate` (a shipped rearming gate — `human-review`),
+`unclassified_gate` (a gate the DEPLOYMENT registered, whose `pollExhaustion` F1 explains is
+unreadable at request time) and `unwired_interview_gate` (the registered-but-unwired state A8
+recorded and left reported as nothing).
+
+Four things worth reading before extending it:
+
+- **The riddle's worst form was not `parked: true`.** An unbounded wait gate re-arms and leaves the
+  run `running` between polls (the honest state — the engine is still probing), so the case a
+  caller actually hit was a run that read as WORKING and never moved. `unanswerable` is therefore
+  not gated on `parked`, and this tracker's own prose describing the symptom as "`parked: true`
+  with an empty list" was half the picture.
+- **A BOUNDED built-in gate is never listed.** `ci` looping through its fixer is the gate doing its
+  job; reporting it would read as a demand for a human nobody has to meet, which is the same
+  misreport in the other direction (a caller escalating a run that was going to resolve itself).
+  Telling the two apart needed a second shared constant, `BUILTIN_GATE_KINDS`, pinned by the same
+  drift guard as `HUMAN_WAIT_GATE_KINDS` and read for its NEGATIVE.
+- **"Unanswerable" is a claim about THIS response, and about a run that is still going.** Two more
+  exclusions belong to that same misreport-in-the-other-direction family, and neither is visible
+  from the step chain alone, which is why both are passed IN rather than re-derived:
+  - A run that has ENDED lists nothing. `failRun` records the failure and stops; it never walks the
+    chain settling steps, so a stopped run keeps its in-flight gate step exactly as it stood. Read
+    off the steps alone, the surface answered someone who had just cancelled a run with "a reviewer
+    must approve the pull request" and offered them the stop call they had already made.
+  - A wait the SAME payload answers is not listed. A deployment gate that exhausts hands off to
+    `onExhausted`, which raises an ordinary step approval: a `decisions[]` entry. The gate state
+    stays on the step, so both halves of one response described it, and only one of them was true.
+    The excluded set is derived from the assembled decisions (every kind carrying a `stepIndex`)
+    rather than re-deduced, so a new step-anchored decision kind joins it with no second edit.
+- **It does not close F1, and must not look like it.** Naming a custom gate is not classifying it:
+  the surface says "the run is on this gate, and whether it ever ends is declared where the gate
+  was built". A future `pollExhaustion`-at-registration (F1's shape) would let this promote such a
+  gate to `human_wait_gate`, and until then over-reporting is the safe direction, because the
+  alternative is silence about a run that may never move.
+- **The prose `detail` is a `reason` first.** The vocabulary is what an integration branches on;
+  the sentence is for the human reading the alert it raised.
 
 ### C1: Notification-webhook management under `/api/v1` ✅
 
@@ -529,7 +612,12 @@ declaration-derived, so this is the last hand-kept entry in the enumeration.
 
 Until then the gap is documented in three places that a person actually reads: the note on
 `HUMAN_WAIT_GATE_KINDS`, `parkSurfacesOf`'s "deliberately not here" list, and the scope section of
-`backend/docs/public-api.md`.
+`backend/docs/public-api.md`. **And B3 now reports it at RUN time**, as an `unclassified_gate`
+entry in the decision list's `unanswerable[]`: a caller no longer discovers such a gate as an
+unexplained stall. That is a report, not a classification — the surface says the run is on the gate
+and that whether it ever ends is declared where the gate was built — so the fix above still has
+work to do, and doing it would let the run-time report promote the gate to `human_wait_gate`
+instead of adding a third mechanism.
 
 ### C2: Step output on `GET /api/v1/tasks/:taskId/run` ⬜
 
@@ -571,7 +659,9 @@ Recorded so these are not re-proposed:
 - **`PublicDecisionController` keeps hand-built error envelopes on purpose**: failures are DATA
   there, so the contract handlers stay typed against their declared response schemas. Follow the
   existing shape rather than throwing a `DomainError`.
-- **Scope placement.** A1–A8 are `decide`. C1 is `admin`. B1/B2 are `read`.
+- **Scope placement.** A1–A8 are `decide`. C1 is `admin`. B1/B2 are `read`, and `read` for those two
+  is load-bearing rather than a default: a startup self-check gated above the floor is a check that
+  itself needs a wider key.
 - **Add the surface to `PUBLICLY_ANSWERABLE_PARK_SURFACES`** (`publicApiAdmission.ts`) as part of the
   slice. That set is what the A0 refusal message and its drift-guard test read, so a slice that ships
   an answer path without updating it leaves the API still telling operators the park is unanswerable.

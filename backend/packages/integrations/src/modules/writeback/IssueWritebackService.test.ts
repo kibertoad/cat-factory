@@ -7,6 +7,7 @@ import type {
   ReviewQuestionPostKey,
   ReviewQuestionPostRecord,
   ReviewQuestionPostRepository,
+  TaskConnectionRepository,
   TaskRecord,
   TrackerSettings,
   TrackerSettingsRepository,
@@ -52,6 +53,27 @@ function fakeTasks(issues: TaskRecord[]): TaskRepository {
     claimBlockLink: async () => true,
     unlinkAllFromBlock: async () => {},
     unlinkAllFromBlocks: async () => {},
+  }
+}
+
+/**
+ * A connection store whose `github` row carries (or lacks) a minted inbound webhook secret — the
+ * one fact that decides whether a reply typed on the ticket reaches the run, and therefore whether
+ * the question comment may tell a reporter to type one.
+ */
+function fakeConnections(
+  options: { webhookSecret?: string; throws?: boolean } = {},
+): TaskConnectionRepository {
+  return {
+    getByWorkspace: async () => {
+      if (options.throws) throw new Error('cipher unavailable')
+      return {
+        credentials: options.webhookSecret ? { webhookSecret: options.webhookSecret } : {},
+      } as never
+    },
+    listByWorkspace: async () => [],
+    upsert: async () => {},
+    softDelete: async () => {},
   }
 }
 
@@ -419,38 +441,6 @@ describe('IssueWritebackService — issue pickup (bug intake)', () => {
     expect(labels).toEqual(['in-progress'])
   })
 
-  it('echoes clarification questions as a comment on the linked issue (best-effort, not gated)', async () => {
-    const comments: string[] = []
-    const svc = new IssueWritebackService({
-      // Both writeback flags OFF: echoing the ask is intake semantics, not settings-gated.
-      trackerSettingsRepository: fakeTrackerSettings(settings()),
-      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
-    })
-    await svc.postQuestions('ws', 'blk_1', ['  ', 'What are the repro steps?', 'Which browser?'])
-    expect(comments).toHaveLength(1)
-    // Blank questions are dropped; the rest render as a markdown list.
-    expect(comments[0]!).toContain('- What are the repro steps?')
-    expect(comments[0]!).toContain('- Which browser?')
-  })
-
-  it('posts nothing when there are no non-blank questions or no linked issue', async () => {
-    const comments: string[] = []
-    const deps = {
-      trackerSettingsRepository: fakeTrackerSettings(settings()),
-      commentOnGitHubIssue: async (_ws: string, _id: string, body: string) =>
-        void comments.push(body),
-    }
-    const withIssue = new IssueWritebackService({
-      ...deps,
-      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
-    })
-    await withIssue.postQuestions('ws', 'blk_1', ['   ', ''])
-    const noIssue = new IssueWritebackService({ ...deps, taskRepository: fakeTasks([]) })
-    await noIssue.postQuestions('ws', 'blk_1', ['A real question?'])
-    expect(comments).toHaveLength(0)
-  })
-
   it('transitions a Jira issue into the In Progress (indeterminate) category', async () => {
     const calls: { method: string; url: string; body: string | undefined }[] = []
     const fetchImpl = async (
@@ -532,6 +522,7 @@ function markerKey(): ReviewQuestionPostKey {
 
 function questionPost(over: Partial<ReviewQuestionPost> = {}): ReviewQuestionPost {
   return {
+    subject: 'requirements',
     reviewId: 'rr_1',
     iteration: 1,
     maxIterations: 6,
@@ -610,6 +601,31 @@ describe('IssueWritebackService.postReviewQuestions', () => {
       failed: 0,
     })
     expect(comments).toEqual([])
+  })
+
+  it('posts a CLARITY park with both flags off — asking a bug reporter is intake, not opt-in', async () => {
+    const comments: string[] = []
+    const svc = new IssueWritebackService({
+      // Workspace flag off AND the per-task override off: neither governs this subject, because
+      // asking the reporter for what they left out is how the bug gets fixed at all.
+      trackerSettingsRepository: fakeTrackerSettings(settings()),
+      taskRepository: fakeTasks([githubIssue('acme/web#3')]),
+      reviewQuestionPostRepository: fakeMarkers(),
+      taskConnectionRepository: fakeConnections({ webhookSecret: 'whsec' }),
+      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
+    })
+    const outcome = await svc.postReviewQuestions(
+      'ws',
+      block({ trackerQuestionsOnPark: 'off' }),
+      questionPost({ subject: 'clarity', reviewId: 'clr_1' }),
+    )
+    expect(outcome).toEqual({ posted: 1, skipped: 0, failed: 0 })
+    // The id is what makes it answerable from the ticket at all — the bespoke echo this replaced
+    // rendered the question prose alone.
+    expect(comments[0]).toContain('`itm_1`')
+    expect(comments[0]).toContain('@cat-factory answer <id>')
+    // …and the copy is about the bug, not about requirements the reporter never wrote.
+    expect(comments[0]).toContain('fix this bug')
   })
 
   it('honours the per-task override in both directions', async () => {
@@ -789,5 +805,96 @@ describe('IssueWritebackService.postReviewQuestions', () => {
     })
     expect(comments).toHaveLength(1)
     expect((await markers.get(markerKey()))?.status).toBe('posted')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Which answer channels the comment may offer.
+//
+// The comment leads with `@cat-factory answer <id> …` because the reporter is reading it in their
+// tracker — but that path fails closed without a minted per-connection webhook secret, and a
+// workspace on pull-based intake has none. Printing the grammar there is advice that silently does
+// nothing, followed by the one person who came in through the ticket. So the provider establishes
+// the fact (it owns the settings read and the linked-issue lookup already) and the renderer offers
+// only what works.
+// ---------------------------------------------------------------------------
+
+describe('IssueWritebackService.postReviewQuestions — answer channels', () => {
+  /** Post one question comment and hand back what landed on the issue. */
+  async function postWith(
+    connections: TaskConnectionRepository | undefined,
+    issues = [githubIssue('acme/web#3')],
+  ): Promise<string> {
+    const comments: string[] = []
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
+      taskRepository: fakeTasks(issues),
+      reviewQuestionPostRepository: fakeMarkers(),
+      ...(connections ? { taskConnectionRepository: connections } : {}),
+      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
+    })
+    expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
+      posted: 1,
+      skipped: 0,
+      failed: 0,
+    })
+    return comments[0]!
+  }
+
+  it('offers the ticket grammar once a webhook secret is minted', async () => {
+    expect(await postWith(fakeConnections({ webhookSecret: 'whsec' }))).toContain(
+      '@cat-factory answer <id>',
+    )
+  })
+
+  it('offers the API path ALONE on a connection with no secret', async () => {
+    // The exact configuration a workspace lands in by connecting a tracker and importing tickets
+    // without ever minting a delivery secret: supported, common, and the reply path fails closed.
+    const body = await postWith(fakeConnections())
+    expect(body).not.toContain('@cat-factory')
+    expect(body).toContain('/decisions/requirements/findings/<id>/reply')
+  })
+
+  it('offers the API path alone when the facade wired no connection store at all', async () => {
+    // Absent ⇒ unwired, never assumed wired: a facade that cannot establish the fact cannot
+    // promise the channel.
+    expect(await postWith(undefined)).not.toContain('@cat-factory')
+  })
+
+  it('treats an unreadable connection as unwired rather than guessing it open', async () => {
+    // A decrypt failure must not resolve to "yes": the cost of guessing wrong is a reporter told
+    // to reply where nothing listens, which is what this resolution exists to prevent.
+    expect(await postWith(fakeConnections({ throws: true }))).not.toContain('@cat-factory')
+  })
+
+  it('reads the connection ONCE per distinct source, not once per linked issue', async () => {
+    // A block can carry several issues on one tracker; the reply channel is a property of the
+    // `(workspace, source)` connection, and each read decrypts a credential bag.
+    let reads = 0
+    const counting: TaskConnectionRepository = {
+      ...fakeConnections({ webhookSecret: 'whsec' }),
+      getByWorkspace: async () => {
+        reads += 1
+        return { credentials: { webhookSecret: 'whsec' } } as never
+      },
+    }
+    const comments: string[] = []
+    const svc = new IssueWritebackService({
+      trackerSettingsRepository: fakeTrackerSettings(settings({ writebackQuestionsOnPark: true })),
+      taskRepository: fakeTasks([
+        githubIssue('acme/web#3'),
+        githubIssue('acme/web#4'),
+        githubIssue('acme/web#5'),
+      ]),
+      reviewQuestionPostRepository: fakeMarkers(),
+      taskConnectionRepository: counting,
+      commentOnGitHubIssue: async (_ws, _id, body) => void comments.push(body),
+    })
+    expect(await svc.postReviewQuestions('ws', block(), questionPost())).toEqual({
+      posted: 3,
+      skipped: 0,
+      failed: 0,
+    })
+    expect(reads).toBe(1)
   })
 })

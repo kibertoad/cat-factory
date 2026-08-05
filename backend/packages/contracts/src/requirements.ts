@@ -105,6 +105,29 @@ export const requirementReviewStatusSchema = v.picklist([
 export type RequirementReviewStatus = v.InferOutput<typeof requirementReviewStatusSchema>
 
 /**
+ * Whether a review of ANY iterative subject (requirements / clarity / a brainstorm stage: one
+ * lifecycle, one vocabulary) has STOPPED on a human.
+ *
+ * Exactly two statuses park. `ready` is the ordinary "findings are open, answer them"; `exceeded`
+ * is the cap, where the human picks how to proceed rather than answering. Everything else is the
+ * driver's own work: `incorporating` / `reviewing` / `merged` are transients it will leave on its
+ * own, and `incorporated` has settled.
+ *
+ * Stated ONCE here because three layers ask it and each had started spelling it for itself: the
+ * engine deciding whether a park is worth echoing onto a tracker issue, the tracker-reply path
+ * deciding WHICH of a block's live reviews a bare control verb is about, and any surface
+ * describing why a run stopped. The spellings had already drifted — a `!== 'incorporated'` test
+ * counts a review the reviewer model is still running as one waiting for a person, which then
+ * loses a tie-break to the review actually holding the run.
+ *
+ * Deliberately NOT the same question as "is this review still live" (`incorporating` IS live and
+ * worth showing a poller); that one belongs to the surface doing the showing.
+ */
+export function reviewAwaitsHuman(status: RequirementReviewStatus): boolean {
+  return status === 'ready' || status === 'exceeded'
+}
+
+/**
  * Lifecycle of a single Requirement-Writer recommendation:
  * - `pending`: a placeholder created the moment the human requested the recommendation;
  *   the Writer is still producing the suggestion in the durable driver (the async story —

@@ -6,11 +6,9 @@ import type {
   ExecutionEventPublisher,
   ExecutionInstance,
   ExecutionRepository,
-  IssueWritebackProvider,
-  Logger,
   RequirementReview,
 } from '@cat-factory/kernel'
-import { assertFound, ConflictError, noopLogger, runBestEffort } from '@cat-factory/kernel'
+import { assertFound, ConflictError } from '@cat-factory/kernel'
 import { bugInvestigation } from '@cat-factory/agents'
 import type { ReviewKind } from './ReviewGateController.js'
 import type { RequirementReviewService } from '../requirements/RequirementReviewService.js'
@@ -36,9 +34,6 @@ export interface ReviewKindDeps {
   requirementReviewService?: RequirementReviewService
   clarityReviewService?: ClarityReviewService
   brainstormServices?: Record<BrainstormStage, BrainstormService>
-  issueWriteback?: IssueWritebackProvider
-  /** Where the clarity-question echo below reports a drop. Absent ⇒ `noopLogger`. */
-  logger?: Logger
 }
 
 /**
@@ -92,10 +87,9 @@ export function buildRequirementsKind(deps: ReviewKindDeps): ReviewKind<Requirem
       })
     },
     emit: (ws, review) => deps.events.requirementReviewChanged?.(ws, review) ?? Promise.resolve(),
-    // The headless clarification loop's question writeback rides the requirements subject
-    // ONLY — the clarity gate has its own intake-semantics echo (see `echoClarityQuestions`)
-    // and a brainstorm dialogue has no linked-issue surface at all.
-    questionsOnPark: true,
+    // The headless clarification loop: echoed only for a run whose requester is not in the app,
+    // and only where the workspace opted in (`REVIEW_QUESTION_POLICIES.requirements`).
+    questionsOnPark: 'requirements',
   }
 }
 
@@ -154,10 +148,6 @@ export function buildClarityKind(deps: ReviewKindDeps): ReviewKind<ClarityReview
           investigation: await investigationForBlock(deps, ws, block.id),
         })
       }
-      // Whenever the gate parks with open questions — from the deterministic seed OR the LLM
-      // reviewer — best-effort echo them onto the linked tracker issue (answers still arrive
-      // in-app). A settled/auto-passed review echoes nothing; a tracker outage never fails the run.
-      await echoClarityQuestions(deps, ws, block.id, review)
       return review
     },
     reReview: async (ws, reviewId, preset) => {
@@ -184,6 +174,12 @@ export function buildClarityKind(deps: ReviewKindDeps): ReviewKind<ClarityReview
     markIncorporating: (ws, reviewId) => require().markIncorporating(ws, reviewId),
     grantExtraRound: (ws, reviewId) => require().grantExtraRound(ws, reviewId),
     emit: (ws, review) => deps.events.clarityReviewChanged?.(ws, review) ?? Promise.resolve(),
+    // Bug-report triage asks the REPORTER for what they left out, which is intake semantics: the
+    // echo fires on every run and is ungated by the workspace writeback settings
+    // (`REVIEW_QUESTION_POLICIES.clarity`). It rides the shared park path rather than a bespoke
+    // one so its findings reach the ticket WITH their ids, which is what makes a reply able to
+    // name one; the private `echoClarityQuestions` this replaced posted bare strings.
+    questionsOnPark: 'clarity',
   }
 }
 
@@ -284,29 +280,4 @@ async function structuredInvestigationForBlock(
   if (!block?.executionId) return undefined
   const instance = await deps.executionRepository.get(workspaceId, block.executionId)
   return instance ? structuredInvestigationFor(instance) : undefined
-}
-
-/**
- * Best-effort echo of a parked clarity review's open questions onto the block's linked tracker
- * issue (see {@link IssueWritebackProvider.postQuestions}). Fires for BOTH the deterministic
- * investigator seed and the LLM reviewer, so identical human-parked states behave the same. A
- * settled/auto-passed review (status `incorporated`) or one with no open items echoes nothing,
- * and a tracker outage never fails the run.
- */
-async function echoClarityQuestions(
-  deps: ReviewKindDeps,
-  workspaceId: string,
-  blockId: string,
-  review: ClarityReview,
-): Promise<void> {
-  const writeback = deps.issueWriteback
-  if (!writeback || review.status === 'incorporated') return
-  const questions = review.items.filter((i) => i.status === 'open').map((i) => i.detail)
-  if (questions.length === 0) return
-  await runBestEffort(
-    deps.logger ?? noopLogger,
-    'writeback.postClarityQuestions',
-    () => writeback.postQuestions(workspaceId, blockId, questions),
-    { workspaceId, blockId, questionCount: questions.length },
-  )
 }

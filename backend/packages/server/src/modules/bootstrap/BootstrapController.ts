@@ -12,7 +12,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { BootstrapModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
@@ -30,7 +30,7 @@ function requireBootstrap<E extends AppEnv>(c: Context<E>): BootstrapModule {
  */
 export function bootstrapController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/bootstrap'])
 
   // ---- reference architectures -------------------------------------------
 

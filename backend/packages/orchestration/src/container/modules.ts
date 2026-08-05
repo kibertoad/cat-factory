@@ -103,6 +103,7 @@ import type {
 } from '../container.js'
 import type {
   AgentPromptsModule,
+  ClarityModule,
   IncidentEnrichmentModule,
   KaizenModule,
   MergeTrackRecordModule,
@@ -1149,12 +1150,14 @@ export function createTrackerWebhookModule(
     tasks: TasksModule | undefined
     recurring: RecurringModule | undefined
     requirements: RequirementsModule | undefined
+    clarity: ClarityModule | undefined
     executionService: ExecutionService
   },
 ): TrackerWebhookModule | undefined {
   const { taskRepository, taskConnectionRepository } = deps
   if (!taskRepository || !taskConnectionRepository || !input.tasks) return undefined
   const requirementsService = input.requirements?.service
+  const clarityService = input.clarity?.service
   const recurring = input.recurring
   const service = new TrackerWebhookService({
     taskRepository,
@@ -1165,26 +1168,45 @@ export function createTrackerWebhookModule(
             recurring.service.triggerForIssueEvent(workspaceId, event),
         }
       : {}),
-    ...(requirementsService
-      ? {
-          reviewGateway: {
-            getForBlock: (ws, blockId) => requirementsService.getForBlock(ws, blockId),
-            replyToItem: (ws, reviewId, itemId, reply) =>
-              requirementsService.replyToItem(ws, reviewId, itemId, reply),
-            setItemStatus: (ws, reviewId, itemId, status) =>
-              requirementsService.setItemStatus(ws, reviewId, itemId, status),
-            // The run-DRIVING half goes through the engine's window actions, not the review
-            // service, so the park's CAS/approval-id arbitration and the task's preset knobs
-            // apply exactly as they do for the SPA and the public decision surface.
-            incorporate: (ws, blockId, feedback) =>
-              input.executionService.requirementsReview.incorporate(ws, blockId, feedback),
-            proceed: (ws, blockId) =>
-              input.executionService.requirementsReview.proceed(ws, blockId),
-            resolveExceeded: (ws, blockId, choice) =>
-              input.executionService.requirementsReview.resolveExceeded(ws, blockId, choice),
-          },
-        }
-      : {}),
+    reviewGateways: {
+      // Both subjects are bound the same way, and the split inside each is the point: the ITEM
+      // mutations go through the review service, while the run-DRIVING half goes through the
+      // engine's window actions, so the park's CAS/approval-id arbitration and the task's preset
+      // knobs apply exactly as they do for the SPA and the public decision surface.
+      ...(requirementsService
+        ? {
+            requirements: {
+              getForBlock: (ws, blockId) => requirementsService.getForBlock(ws, blockId),
+              replyToItem: (ws, reviewId, itemId, reply) =>
+                requirementsService.replyToItem(ws, reviewId, itemId, reply),
+              setItemStatus: (ws, reviewId, itemId, status) =>
+                requirementsService.setItemStatus(ws, reviewId, itemId, status),
+              incorporate: (ws, blockId, feedback) =>
+                input.executionService.requirementsReview.incorporate(ws, blockId, feedback),
+              proceed: (ws, blockId) =>
+                input.executionService.requirementsReview.proceed(ws, blockId),
+              resolveExceeded: (ws, blockId, choice) =>
+                input.executionService.requirementsReview.resolveExceeded(ws, blockId, choice),
+            },
+          }
+        : {}),
+      ...(clarityService
+        ? {
+            clarity: {
+              getForBlock: (ws, blockId) => clarityService.getForBlock(ws, blockId),
+              replyToItem: (ws, reviewId, itemId, reply) =>
+                clarityService.replyToItem(ws, reviewId, itemId, reply),
+              setItemStatus: (ws, reviewId, itemId, status) =>
+                clarityService.setItemStatus(ws, reviewId, itemId, status),
+              incorporate: (ws, blockId, feedback) =>
+                input.executionService.clarityReview.incorporate(ws, blockId, feedback),
+              proceed: (ws, blockId) => input.executionService.clarityReview.proceed(ws, blockId),
+              resolveExceeded: (ws, blockId, choice) =>
+                input.executionService.clarityReview.resolveExceeded(ws, blockId, choice),
+            },
+          }
+        : {}),
+    },
     ...(deps.trackerCommentIngestRepository
       ? { commentIngestRepository: deps.trackerCommentIngestRepository }
       : {}),
