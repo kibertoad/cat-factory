@@ -38,6 +38,7 @@ function makeController(overrides: {
   assessor?: JudgeAssessor
   fragmentBody?: string
   onFail?: 'park' | 'bounce' | 'fail'
+  modelId?: string
 }) {
   const judgeRegistry = defaultJudgeRegistry()
   judgeRegistry.register('scope', () => ({
@@ -49,6 +50,7 @@ function makeController(overrides: {
       fragmentId: 'frag_scope',
     },
     onFail: overrides.onFail ?? 'park',
+    ...(overrides.modelId ? { modelId: overrides.modelId } : {}),
   }))
   const stepGraph = new StepGraph(clock)
   const recordStepResult = vi.fn(async () => ({ kind: 'continue' }) as const)
@@ -149,6 +151,46 @@ describe('JudgeStepController', () => {
     expect(step.judge?.verdict?.score).toBe(0)
     expect(step.judge?.verdict?.summary).toContain('provider exploded')
     expect(step.judge?.model).toBeNull()
+  })
+
+  it('hands the registration’s model pin to the assessment and records what became of it', async () => {
+    const seen: (string | undefined)[] = []
+    const assessor: JudgeAssessor = {
+      enabled: true,
+      assess: async (subject) => {
+        seen.push(subject.modelId)
+        return {
+          verdict: { score: 1, summary: 'ok', findings: [] },
+          model: 'cloudflare:glm',
+          modelPin: { requested: subject.modelId!, status: 'unavailable' },
+        }
+      },
+    }
+    const { controller } = makeController({ assessor, modelId: 'claude-opus' })
+    const step = makeStep('scope')
+    const instance = makeInstance([makeStep('coder', 'built it'), step])
+
+    await controller.evaluate('ws', instance, step, block, false, controller.judgeFor('scope')!)
+
+    expect(seen).toEqual(['claude-opus'])
+    // A rubric authored for one model and scored by another is recorded, not smoothed over: the
+    // model name alone would read as the author's choice.
+    expect(step.judge?.modelPin).toEqual({ requested: 'claude-opus', status: 'unavailable' })
+    expect(step.judge?.model).toBe('cloudflare:glm')
+  })
+
+  it('records no pin for a judge that names no model', async () => {
+    const assessor: JudgeAssessor = {
+      enabled: true,
+      assess: async () => ({ verdict: { score: 1, summary: 'ok', findings: [] }, model: 'm' }),
+    }
+    const { controller } = makeController({ assessor })
+    const step = makeStep('scope')
+    const instance = makeInstance([makeStep('coder', 'built it'), step])
+
+    await controller.evaluate('ws', instance, step, block, false, controller.judgeFor('scope')!)
+
+    expect(step.judge?.modelPin).toBeNull()
   })
 
   it('passes through with a note when no assessor is wired', async () => {

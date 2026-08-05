@@ -9,24 +9,31 @@ import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
 const auth = useAuthStore()
 const { t } = useI18n()
 
-// Local-mode source-control PAT login. The PAT lives server-side in env (GITHUB_PAT /
-// GITLAB_PAT); the login screen only SELECTS a configured provider — no token is ever typed
-// into or shown in the browser. The brand labels / icons / token-settings URLs are the shared
-// provider descriptors in `~/utils/vcs` (brand names stay verbatim across locales, so they are
-// constants rather than catalog keys — the same convention as ApiKeysSection). The "create a
-// token" link prefers the server's scopes-preselected deep link (`patLogin.setupUrls`); the
-// descriptor's URL is the fallback.
+// Local-mode source-control PAT login. A configured token lives server-side and is selected by
+// PROVIDER (no token is typed into the browser); a deployment that holds none can be handed one
+// here, and it becomes both this sign-in and the credential the deployment operates with. The
+// brand labels / icons / token-settings URLs are the shared provider descriptors in `~/utils/vcs`
+// (brand names stay verbatim across locales, so they are constants rather than catalog keys — the
+// same convention as ApiKeysSection). The "create a token" link prefers the server's
+// scopes-preselected deep link (`patLogin.setupUrls`); the descriptor's URL is the fallback.
 type PatProvider = VcsProvider
+/** Every provider a token page exists for — the fallback link set when none can be installed. */
 const ALL_PROVIDERS: PatProvider[] = ['github', 'gitlab']
 const PROVIDER_LABELS = VCS_PROVIDER_LABELS
 const PROVIDER_ICONS = VCS_PROVIDER_ICONS
 const PROVIDER_TOKEN_URLS = VCS_PROVIDER_TOKEN_URLS
 
 const patLoginCfg = computed(() => auth.localMode?.patLogin)
-// Only providers whose PAT is configured in env can sign in (the token is the operational
-// credential too). A provider without one gets no button — see the no-PAT notice instead.
+// Providers whose token the deployment already holds: one-click sign-in. A provider without one
+// gets no button — it is offered in the paste form below instead.
 const configuredProviders = computed<PatProvider[]>(
   () => (patLoginCfg.value?.configured ?? []) as PatProvider[],
+)
+// Providers the server will ACCEPT a token for from here. Empty when `.env` owns the credential
+// (it wins, so a pasted token would be ignored) or nothing can seal one — the notice then falls
+// back to telling the developer where the token actually has to go.
+const installableProviders = computed<PatProvider[]>(
+  () => (patLoginCfg.value?.installable ?? []) as PatProvider[],
 )
 const isLocalMode = computed(() => auth.localMode?.enabled === true)
 const hasConfiguredPat = computed(() => configuredProviders.value.length > 0)
@@ -137,13 +144,15 @@ const ssoErrorMessage = computed(() =>
   auth.ssoError ? t(SSO_ERROR_MESSAGE_KEYS[auth.ssoError]) : null,
 )
 
-// Hosted (remote node) PAT login: the user pastes their OWN source-control PAT, which the
-// server resolves to an account and holds to its login/org/domain allowlist. The available
-// providers come from the server (`auth.patProviders`) — GitHub always, GitLab when configured,
-// on both hosted facades (Node + Worker); empty in local mode (which uses the configured-token
-// flow above).
+// Paste-a-token sign-in. The user supplies a source-control PAT and the server resolves it to an
+// account. What it MEANS differs per facade, which is why the providers come from two places:
+//  - hosted (remote node): the user's OWN token, held to the login/org/domain allowlist. GitHub
+//    always, GitLab when configured, on both hosted facades (Node + Worker).
+//  - local: the token also becomes the DEPLOYMENT's credential, so the server names the providers
+//    it will accept one for (`installable`) — empty once `.env` owns it.
+// One form serves both; the local-only hint below says what the token is additionally used for.
 const remotePatProviders = computed<PatProvider[]>(() =>
-  isLocalMode.value ? [] : (auth.patProviders as PatProvider[]),
+  isLocalMode.value ? installableProviders.value : (auth.patProviders as PatProvider[]),
 )
 const remotePatProvider = ref<PatProvider>('github')
 watch(
@@ -251,16 +260,24 @@ const noSignInMethod = computed(
           {{ t('auth.localMode.continueWithConfigured', { provider: PROVIDER_LABELS[p] }) }}
         </UButton>
 
-        <!-- Neither GITHUB_PAT nor GITLAB_PAT is set: tell the developer how to configure one -->
+        <!-- The deployment holds no token. When one can be installed from here the notice says
+             so and the create-token links feed the form below; when it can't (`.env` owns the
+             credential, or nothing can seal one) it names where the token has to go instead. -->
         <template v-if="!hasConfiguredPat">
           <UAlert
             color="warning"
             variant="subtle"
             icon="i-lucide-key-round"
             :title="t('auth.localMode.noPatTitle')"
-            :description="t('auth.localMode.noPatBody')"
+            :description="
+              installableProviders.length > 0
+                ? t('auth.localMode.setupBody')
+                : t('auth.localMode.noPatBody')
+            "
           />
-          <div class="flex flex-wrap gap-3 px-1">
+          <!-- Only when nothing can be installed here: the paste form below carries its own
+               per-provider link, so showing these too would offer the same thing twice. -->
+          <div v-if="installableProviders.length === 0" class="flex flex-wrap gap-3 px-1">
             <a
               v-for="p in ALL_PROVIDERS"
               :key="p"
@@ -423,10 +440,16 @@ const noSignInMethod = computed(
         </p>
       </form>
 
-      <!-- Hosted (remote node) PAT login: paste your own source-control PAT -->
+      <!-- Paste-a-token sign-in: your own PAT on a hosted node; on local mode the token this
+           deployment will operate with (see `remotePatProviders`). -->
       <template v-if="remotePatProviders.length > 0 && mode !== 'forgot'">
         <div
-          v-if="auth.providers.github || auth.providers.google || auth.providers.password"
+          v-if="
+            auth.providers.github ||
+            auth.providers.google ||
+            auth.providers.password ||
+            hasConfiguredPat
+          "
           class="my-4 flex items-center gap-3 text-xs text-slate-500"
         >
           <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
@@ -471,6 +494,11 @@ const noSignInMethod = computed(
           >
             {{ t('auth.login.signInWithPat', { provider: PROVIDER_LABELS[remotePatProvider] }) }}
           </UButton>
+          <!-- Local mode only: say what else the token is for BEFORE it is handed over, since it
+               becomes the credential every agent step on this machine clones and pushes with. -->
+          <p v-if="isLocalMode" class="px-1 text-xs text-slate-400">
+            {{ t('auth.localMode.tokenBecomesCredential') }}
+          </p>
           <p class="px-1 text-center">
             <a
               :href="tokenCreateUrl(remotePatProvider)"

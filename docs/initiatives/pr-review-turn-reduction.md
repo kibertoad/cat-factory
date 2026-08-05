@@ -8,7 +8,7 @@
 ## Goal & rationale
 
 A single deep PR review burned an enormous number of tokens for what it produced. The #1261
-investigation (`docs/pr-review-run-efficiency-and-parking-fixes-2026-07.md`, §1) measured one
+investigation (`docs/internal/pr-review-run-efficiency-and-parking-fixes-2026-07.md`, §1) measured one
 run: **350 model calls** (164 tool-call turns + 5 sub-agents), **31.1M summed prompt tokens**
 of which **99.998% were cache reads**, because the single agentic conversation grows and is
 re-sent every turn (per-call prompt ramped ~18K → ~219K). Cache reads are cheap per token but

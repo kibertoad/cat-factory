@@ -92,6 +92,29 @@ export const judgeStatusSchema = v.picklist([
 ])
 export type JudgeStatus = v.InferOutput<typeof judgeStatusSchema>
 
+/**
+ * What became of the model a judge REGISTRATION pinned for its rubric:
+ *  - `applied`: the assessment ran on the pinned model;
+ *  - `overridden`: something more specific won (the task's own pin, or a workspace preset that
+ *    names this judge's kind). The pin is a default, so this is the normal case;
+ *  - `unavailable`: the pinned id resolved to nothing this deployment can serve, so the
+ *    assessment ran on the workspace/deployment default instead.
+ *
+ * `unavailable` is the reason this is a field rather than a silent fallback: a rubric authored
+ * for a strong reasoning model, scored by whatever the workspace's base preset happens to be,
+ * reads exactly like a verdict that model gave.
+ */
+export const judgeModelPinStatusSchema = v.picklist(['applied', 'overridden', 'unavailable'])
+export type JudgeModelPinStatus = v.InferOutput<typeof judgeModelPinStatusSchema>
+
+/** The registration's model pin, and what the engine did with it. */
+export const judgeModelPinSchema = v.object({
+  /** The catalog model id the judge's registration asked for. */
+  requested: v.string(),
+  status: judgeModelPinStatusSchema,
+})
+export type JudgeModelPin = v.InferOutput<typeof judgeModelPinSchema>
+
 /** One completed round of the judge loop (assessment + what the engine did with it). */
 export const judgeRoundSchema = v.object({
   /** 1-based round number; the first assessment is round 1. */
@@ -129,6 +152,12 @@ export const judgeStepStateSchema = v.object({
   maxBounces: v.optional(v.number(), DEFAULT_JUDGE_MAX_BOUNCES),
   /** The model that produced the most recent verdict. */
   model: v.optional(v.nullable(v.string())),
+  /**
+   * The registration's model pin and its fate, when the judge declared one. Absent ⇒ the judge
+   * named no model and the assessment ran on the workspace/deployment default, which is the
+   * stock case and needs no explaining.
+   */
+  modelPin: v.optional(v.nullable(judgeModelPinSchema)),
   /** Every settled round, oldest first — so the window shows the loop, not just its end. */
   rounds: v.optional(v.array(judgeRoundSchema), []),
   /**

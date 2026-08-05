@@ -4,6 +4,7 @@ import {
   type JudgeAssessor,
   type JudgeRegistry,
   type JudgeStepState,
+  type JudgeSubject,
   type Pipeline,
   defaultJudgeRegistry,
 } from '@cat-factory/kernel'
@@ -20,14 +21,19 @@ import type { ConformanceHarness } from '../harness.js'
 // bounce's producer rewind, and the unwired pass-through.
 
 /** A deterministic {@link JudgeAssessor}: replays a queued score list (the last entry repeats). */
-function fakeAssessor(scores: number[], enabled = true): JudgeAssessor & { calls: number } {
+function fakeAssessor(
+  scores: number[],
+  enabled = true,
+): JudgeAssessor & { calls: number; subjects: JudgeSubject[] } {
   let i = 0
   return {
     enabled,
     calls: 0,
-    async assess() {
-      const self = this as { calls: number }
+    subjects: [],
+    async assess(subject) {
+      const self = this as { calls: number; subjects: JudgeSubject[] }
       self.calls += 1
+      self.subjects.push(subject)
       const score = scores[Math.min(i, scores.length - 1)] ?? 1
       i += 1
       return {
@@ -46,6 +52,12 @@ function fakeAssessor(scores: number[], enabled = true): JudgeAssessor & { calls
               : [],
         },
         model: 'fake:judge',
+        // What the real inline assessor reports back about the model the REGISTRATION pinned.
+        // Faked here so the round-trip of that state through each runtime's step store is
+        // asserted without a model.
+        ...(subject.modelId
+          ? { modelPin: { requested: subject.modelId, status: 'applied' as const } }
+          : {}),
       }
     },
   }
@@ -56,6 +68,9 @@ function makeJudgeRegistry(onFail: 'park' | 'bounce' | 'fail'): JudgeRegistry {
   const registry = defaultJudgeRegistry()
   registry.register('scope-judge', () => ({
     kind: 'scope-judge',
+    // The model this rubric is authored for. The engine passes it to the assessor, which decides
+    // whether it survives the task's own pin and the workspace's per-kind default.
+    modelId: 'pinned-model',
     rubric: {
       id: 'rubric_scope',
       name: 'Scope adherence',
@@ -113,6 +128,11 @@ export function defineJudgeConformance(harness: ConformanceHarness): void {
       expect(judge?.threshold).toBe(0.7)
       expect(judge?.verdict?.score).toBe(0.9)
       expect(judge?.model).toBe('fake:judge')
+      // The registration's model pin reaches the assessment and its fate is persisted beside the
+      // verdict, so "which model was this rubric written for, and did it get it" survives the
+      // step store on both runtimes.
+      expect(judgeAssessor.subjects[0]?.modelId).toBe('pinned-model')
+      expect(judge?.modelPin).toEqual({ requested: 'pinned-model', status: 'applied' })
       // The whole round history is persisted, not just the latest verdict.
       expect(judge?.rounds?.length).toBe(1)
       expect(judgeAssessor.calls).toBe(1)

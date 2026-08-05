@@ -394,6 +394,78 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
   }
 }
 
+/**
+ * How this facade resolves the agent executor: the container/inline selection, wrapped for
+ * consensus panels when the dispatched step runs as one.
+ *
+ * Split out of the core-dependency literal because it is the one entry there that RESOLVES rather
+ * than names a collaborator, and it is the only reader of four of `input`'s fields (the executor
+ * package registries, the web-search account settings, the tool-secret chain and the MCP OAuth
+ * store), so keeping it here keeps those four out of the literal's destructuring too.
+ */
+function selectWorkerAgentExecutor(
+  input: WorkerContainerAssemblyInput,
+): Pick<CoreDependencies, 'agentExecutor'> {
+  const {
+    env,
+    config,
+    db,
+    clock,
+    caches,
+    overrides,
+    registries,
+    resolveTransport,
+    subscriptions,
+    personalSubscriptions,
+    agentContextObservability,
+    executorPackageRegistries,
+    webSearchAccountSettings,
+    toolSecretChain,
+    mcpOAuthService,
+    eventPublisher,
+  } = input
+  const { agentKindRegistry } = registries
+
+  return {
+    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor) skip selection
+    // entirely: selectAgentExecutor throws when a sandbox is opted in but its prerequisites are
+    // missing, which is the desired loud failure in production but must not fire for tests that
+    // never reach the real executor.
+    agentExecutor:
+      overrides.agentExecutor ??
+      maybeWrapConsensus({
+        standard: selectAgentExecutor({
+          env,
+          config,
+          db,
+          clock,
+          caches,
+          resolveTransport,
+          agentKindRegistry,
+          subscriptions,
+          personalSubscriptions,
+          agentContextObservability,
+          resolvePackageRegistries: executorPackageRegistries,
+          webSearchAccountSettings,
+          resolveToolSecrets: toolSecretChain.resolver,
+          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
+          // what resolves the OAuth client secret.
+          ...mcpOAuthExecutorDeps({
+            oauth: mcpOAuthService,
+            resolveToolSecrets: toolSecretChain.resolver,
+            logger,
+          }),
+        }),
+        env,
+        config,
+        db,
+        eventPublisher,
+        agentKindRegistry,
+        caches,
+      }),
+  }
+}
+
 function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreDependencies {
   const {
     env,
@@ -410,7 +482,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     resolveTransport,
     subscriptions,
     testSecretsService,
-    mcpOAuthService,
     validationConfigService,
     personalSubscriptions,
     apiKeys,
@@ -421,9 +492,6 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     agentContextObservability,
     searchQueryObservability,
     accountSettings,
-    executorPackageRegistries,
-    webSearchAccountSettings,
-    toolSecretChain,
     resolveBinaryArtifactStore,
     githubWebhookIngest,
   } = input
@@ -498,42 +566,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     }),
     idGenerator,
     clock,
-    // When a caller injects its own agentExecutor (tests pass a FakeAgentExecutor)
-    // skip selection entirely — selectAgentExecutor throws when a sandbox is opted
-    // in but its prerequisites are missing, which is the desired loud failure in
-    // production but must not fire for tests that never reach the real executor.
-    agentExecutor:
-      overrides.agentExecutor ??
-      maybeWrapConsensus({
-        standard: selectAgentExecutor({
-          env,
-          config,
-          db,
-          clock,
-          caches,
-          resolveTransport,
-          agentKindRegistry,
-          subscriptions,
-          personalSubscriptions,
-          agentContextObservability,
-          resolvePackageRegistries: executorPackageRegistries,
-          webSearchAccountSettings,
-          resolveToolSecrets: toolSecretChain.resolver,
-          // The OAuth half of the same seam: the sealed grant store plus the chain above, which is
-          // what resolves the OAuth client secret.
-          ...mcpOAuthExecutorDeps({
-            oauth: mcpOAuthService,
-            resolveToolSecrets: toolSecretChain.resolver,
-            logger,
-          }),
-        }),
-        env,
-        config,
-        db,
-        eventPublisher,
-        agentKindRegistry,
-        caches,
-      }),
+    ...selectWorkerAgentExecutor(input),
     agentKindRegistry,
     // The app-owned gate + step-resolver registries; the engine's gate machine + completion hub
     // read them, and the gate registry is re-exposed on Core for the boot-time validation.

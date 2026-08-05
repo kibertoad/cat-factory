@@ -9,6 +9,7 @@ import type {
   ResolveBinaryArtifactStore,
   ConsensusSessionRepository,
   ResolveRunRepoContext,
+  LocalVcsSetup,
   Logger,
   SealedSecretInventory,
   ToolSecretResolver,
@@ -363,6 +364,16 @@ export interface ServerContainer extends Core {
    * `VcsIdentityRegistry`.
    */
   vcsIdentity?: VcsIdentityRegistry
+  /**
+   * First-run installation of the deployment's OWN source-control credential (kernel's
+   * `LocalVcsSetup`). Present only on the local-mode facade, where one token is both the sign-in
+   * identity and the credential every agent step clones/pushes/merges with: `/auth/pat` adopts a
+   * pasted token as that credential so a developer who has just created one is not sent back to
+   * `.env` and a restart. Absent on hosted facades (their credential is a GitHub App or a
+   * per-workspace connection, neither of which a signed-out caller may set), and the pasted token
+   * there is only ever an identity.
+   */
+  localVcsSetup?: LocalVcsSetup
   /**
    * The reflective repository registry the mothership-mode machine API
    * (`POST /internal/persistence`) dispatches over: repo name → repo instance. Attached by a

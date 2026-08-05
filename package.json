@@ -31,6 +31,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.1",
+    "@stryker-mutator/api": "9.6.1",
     "@valibot/to-json-schema": "^1.7.1",
     "knip": "^6.31.0",
     "oxfmt": "^0.62.0",

@@ -376,7 +376,7 @@ export {
   type ForkChatGrounding,
   renderForkChatPrompt,
 } from './agents/prompts/fork-decision.js'
-export { JUDGE_AGENT_KIND, JUDGE_SYSTEM_PROMPT, renderJudgePrompt } from './agents/prompts/judge.js'
+export { JUDGE_SYSTEM_PROMPT, renderJudgePrompt } from './agents/prompts/judge.js'
 export {
   BUG_HUNT_AGENT_KIND,
   BUG_HUNT_SYSTEM_PROMPT,

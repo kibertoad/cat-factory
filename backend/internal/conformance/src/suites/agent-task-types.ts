@@ -5,7 +5,7 @@ import type { ConformanceHarness } from '../harness.js'
 
 /**
  * A deployment-registered custom TASK TYPE, and the REUSABLE OPERATION bundle built on it
- * (`docs/initiatives/reusable-operations.md`): the descriptor's snapshot projection and pipeline
+ * (`backend/docs/reusable-operations.md`): the descriptor's snapshot projection and pipeline
  * pin, the standing-context fragments a new task is seeded with, the collected per-case values on
  * their way to a prompt, and the creation-time check that they are the values the type declares.
  *
@@ -80,7 +80,7 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
       expect(block?.taskTypeFields?.custom?.severity).toBe('sev1')
     })
 
-    // The REUSABLE OPERATION bundle (docs/initiatives/reusable-operations.md): a registered type
+    // The REUSABLE OPERATION bundle (backend/docs/reusable-operations.md): a registered type
     // carrying a per-case form AND its standing-context fragments. Both halves are engine-level,
     // but both cross persistence (the seeded fragment ids onto the task row, the collected values
     // through the sparse `custom` JSON column), so a mapper that dropped either would ship.

@@ -1884,7 +1884,9 @@
       "continueWithConfigured": "Sign in with configured {provider} PAT",
       "noPatTitle": "No source-control token configured",
       "noPatBody": "Set GITHUB_PAT or GITLAB_PAT in your .env to sign in with a personal access token, then restart the server.",
+      "setupBody": "Create a personal access token and paste it below. It signs you in and becomes the token this deployment clones, pushes and merges with.",
       "createToken": "Create a {provider} token ↗",
+      "tokenBecomesCredential": "This token is stored on this machine and used for every clone, push, PR and merge the agents make.",
       "orDivider": "or",
       "failed": "Sign-in failed. Check that the configured token is valid and try again."
     },
@@ -4932,6 +4934,7 @@
     "threshold": "threshold {threshold}",
     "thresholdHint": "The score this step had to reach, taken from the task's merge policy. Below it the judge sends the work back to the step that produced it, with its findings as rework, or parks the run for you when no attempt budget is left.",
     "rubricOverridden": "workspace rubric",
+    "modelPinUnavailable": "This review was written for the {model} model, which this deployment cannot run, so another model scored the work.",
     "reworkRounds": "rework {spent}/{budget}",
     "findingsHeading": "What the rubric flagged",
     "roundsHeading": "Review rounds",

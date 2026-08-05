@@ -8,6 +8,7 @@ import type {
   JudgeContext,
   JudgeDefinition,
   JudgeRegistry,
+  JudgeModelPin,
   JudgeStepState,
   JudgeVerdict,
   PipelineStep,
@@ -220,7 +221,7 @@ export class JudgeStepController {
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
 
     const stepIndex = instance.steps.indexOf(step)
-    const { verdict, model } = await this.assess(
+    const { verdict, model, modelPin } = await this.assess(
       assessor,
       {
         workspaceId,
@@ -230,6 +231,9 @@ export class JudgeStepController {
         rubricName: judge.rubric.name,
         priorOutputs: priorOutputsFor(instance, stepIndex),
         previousFindings: judgeState.verdict ?? null,
+        // The model the registration authored this rubric for. The assessor resolves it against
+        // the deployment's catalog and reports back whether it was honoured.
+        ...(judge.modelId ? { modelId: judge.modelId } : {}),
       },
       judge,
       { workspaceId, initiatedBy: instance.initiatedBy },
@@ -249,6 +253,9 @@ export class JudgeStepController {
       ...judgeState,
       verdict,
       model,
+      // Kept even when null so a pin that stopped resolving between rounds clears rather than
+      // leaving the last round's answer standing.
+      modelPin: modelPin ?? null,
       disposition: decision.disposition,
       note: decision.note ?? null,
       rounds: [
@@ -304,11 +311,15 @@ export class JudgeStepController {
     subject: Parameters<JudgeAssessor['assess']>[0],
     judge: JudgeDefinition,
     scope: RunCredentialScope,
-  ): Promise<{ verdict: JudgeVerdict; model: string | null }> {
+  ): Promise<{ verdict: JudgeVerdict; model: string | null; modelPin?: JudgeModelPin }> {
     const parse = judge.parseVerdict ?? parseJudgeVerdict
     try {
       const raw = await this.deps.runInitiatorScope(scope, () => assessor.assess(subject))
-      return { verdict: parse(raw.verdict), model: raw.model }
+      return {
+        verdict: parse(raw.verdict),
+        model: raw.model,
+        ...(raw.modelPin ? { modelPin: raw.modelPin } : {}),
+      }
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)
       return {

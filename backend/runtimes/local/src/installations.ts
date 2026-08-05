@@ -43,14 +43,21 @@ export interface PatAccount {
 export class AutoProvisioningInstallationRepository implements GitHubInstallationRepository {
   constructor(
     private readonly inner: GitHubInstallationRepository,
-    private readonly resolveAccount: () => Promise<PatAccount>,
     /**
-     * The deployment's VCS provider ('github' with a GitHub PAT, 'gitlab' with a GitLab PAT).
-     * Local mode is single-provider, so the synthetic connection is stamped with it — the
+     * The account the deployment's token belongs to, or NULL when it holds no token yet. Null is
+     * a distinct answer from "the `/user` call failed", which still provisions (the link flow
+     * only needs the row to exist): with no token there is nothing to be connected TO, so no row
+     * is written and the workspace reports disconnected until one is installed.
+     */
+    private readonly resolveAccount: () => Promise<PatAccount | null>,
+    /**
+     * The deployment's VCS provider ('github' with a GitHub PAT, 'gitlab' with a GitLab PAT),
+     * read at provision time because local mode's credential can be installed while the server
+     * runs. Local mode is single-provider, so the synthetic connection is stamped with it — the
      * account metadata can't distinguish the two (a GitLab-only deployment can't read GitHub's
      * `/user`), so it's injected rather than inferred.
      */
-    private readonly provider: VcsProvider = 'github',
+    private readonly provider: () => VcsProvider = () => 'github',
     private readonly now: () => number = () => Date.now(),
   ) {}
 
@@ -58,6 +65,7 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
     const existing = await this.inner.getByWorkspace(workspaceId)
     if (existing && !existing.deletedAt) return existing
     const account = await this.resolveAccount()
+    if (!account) return null
     const installation: GitHubInstallation = {
       installationId: syntheticInstallationId(workspaceId),
       workspaceId,
@@ -65,7 +73,7 @@ export class AutoProvisioningInstallationRepository implements GitHubInstallatio
       accountLogin: account.accountLogin,
       targetType: account.targetType,
       appId: null,
-      provider: this.provider,
+      provider: this.provider(),
       cachedToken: null,
       tokenExpiresAt: null,
       // Local mode authenticates every workspace with the one deployment PAT (the

@@ -3644,7 +3644,9 @@
       "continueWithConfigured": "Mit konfiguriertem {provider}-PAT anmelden",
       "noPatTitle": "Kein Versionsverwaltungs-Token konfiguriert",
       "noPatBody": "Setzen Sie GITHUB_PAT oder GITLAB_PAT in Ihrer .env, um sich mit einem Personal Access Token anzumelden, und starten Sie dann den Server neu.",
+      "setupBody": "Erstellen Sie einen Personal Access Token und fügen Sie ihn unten ein. Er meldet Sie an und wird zum Token, mit dem diese Installation klont, pusht und merged.",
       "createToken": "Einen {provider}-Token erstellen ↗",
+      "tokenBecomesCredential": "Dieser Token wird auf diesem Rechner gespeichert und für jeden Clone, Push, PR und Merge der Agenten verwendet.",
       "orDivider": "oder",
       "failed": "Anmeldung fehlgeschlagen. Prüfen Sie, ob der konfigurierte Token gültig ist, und versuchen Sie es erneut."
     },
@@ -5567,6 +5569,7 @@
     "threshold": "Schwellenwert {threshold}",
     "thresholdHint": "Der Wert, den dieser Schritt erreichen musste, aus der Merge-Policy der Aufgabe. Darunter schickt der Judge die Arbeit mit seinen Befunden als Nacharbeit an den erzeugenden Schritt zurück oder parkt den Lauf für Sie, wenn kein Versuchsbudget mehr übrig ist.",
     "rubricOverridden": "Raster des Arbeitsbereichs",
+    "modelPinUnavailable": "Diese Prüfung wurde für das Modell {model} geschrieben, das diese Installation nicht ausführen kann. Die Arbeit wurde daher von einem anderen Modell bewertet.",
     "reworkRounds": "Überarbeitung {spent}/{budget}",
     "findingsHeading": "Was das Bewertungsraster beanstandet hat",
     "roundsHeading": "Prüfrunden",

@@ -65,7 +65,7 @@
   REUSABLE OPERATION's brief), and has THREE emit points, not one: `renderStandardUserPrompt`, the
   generic branch of `buildBaseUserPrompt`, and the prepend a registered kind that authors its own
   user prompt gets. A new prompt-assembly site owes it the same emit, or an operation's parameters
-  silently vanish for that path. See `docs/initiatives/reusable-operations.md`.
+  silently vanish for that path. See `backend/docs/reusable-operations.md`.
 - `providers/`, the **AI provisioning facade**: `registry.ts` (`CompositeModelProvider`),
   `resolvers.ts` (the runtime-neutral single-provider resolvers), `endpoints.ts`
   (`providerEndpoints`, the base-URL/key source of truth, also used by the LLM proxy), and

@@ -16,8 +16,10 @@ import { FINAL_ANSWER_IN_REPLY } from './shared.js'
 // comparable across judges: the scale, the "evidence, not vibes" rule, and the JSON shape.
 // ---------------------------------------------------------------------------
 
-/** The inline agent kind a judge assessment runs under (for observability + model scope). */
-export const JUDGE_AGENT_KIND = 'judge'
+// There is deliberately no `JUDGE_AGENT_KIND` constant: an assessment runs under the REGISTERED
+// judge's own kind, both for model resolution and for observability, so each rubric is its own
+// row in the workspace's model defaults and its own line in the spend rollup. A shared `judge`
+// key would silently collapse every registered rubric onto one model default again.
 
 /**
  * The role prompt every judge assessment runs under. Its deliverable IS a JSON object the

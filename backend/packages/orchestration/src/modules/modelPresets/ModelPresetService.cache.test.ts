@@ -168,7 +168,14 @@ describe('resolvePresetRouting', () => {
     })
     const before = repo.reads
     const routing = await resolvePresetRouting(repo, WS, 'coder', 'mdp_1')
-    expect(routing).toEqual({ modelId: 'claude-opus-5', providerPreference: ['bedrock'] })
+    // `pinnedForKind` reports that the id came from the preset NAMING `coder`, not from its base
+    // model: the two are the same string here and mean different things to a caller carrying a
+    // model default of its own.
+    expect(routing).toEqual({
+      modelId: 'claude-opus-5',
+      pinnedForKind: true,
+      providerPreference: ['bedrock'],
+    })
     expect(repo.reads - before).toBe(1)
   })
 

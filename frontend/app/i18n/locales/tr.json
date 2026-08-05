@@ -1789,7 +1789,9 @@
       "continueWithConfigured": "Yapılandırılmış {provider} PAT ile oturum aç",
       "noPatTitle": "Yapılandırılmış kaynak denetimi token'ı yok",
       "noPatBody": "Kişisel erişim token'ı ile oturum açmak için .env dosyanızda GITHUB_PAT veya GITLAB_PAT ayarlayın, ardından sunucuyu yeniden başlatın.",
+      "setupBody": "Bir kişisel erişim token’ı oluşturup aşağıya yapıştırın. Hem oturumunuzu açar hem de bu kurulumun klonlama, push ve birleştirme işlemlerinde kullandığı token olur.",
       "createToken": "{provider} token'ı oluştur ↗",
+      "tokenBecomesCredential": "Bu token bu makinede saklanır ve ajanların yaptığı her klonlama, push, PR ve birleştirmede kullanılır.",
       "orDivider": "veya",
       "failed": "Oturum açma başarısız. Yapılandırılan token'ın geçerli olduğunu kontrol edip tekrar deneyin."
     },
@@ -4709,6 +4711,7 @@
     "threshold": "eşik {threshold}",
     "thresholdHint": "Bu adımın ulaşması gereken puan; görevin birleştirme politikasından alınır. Altında kaldığında hakem, bulgularını yeniden çalışma olarak ekleyip işi üreten adıma geri gönderir; deneme bütçesi kalmadıysa çalıştırmayı sizin için beklemeye alır.",
     "rubricOverridden": "çalışma alanı ölçütü",
+    "modelPinUnavailable": "Bu inceleme {model} modeli için yazıldı ancak bu kurulum onu çalıştıramıyor, bu yüzden işi başka bir model puanladı.",
     "reworkRounds": "yeniden çalışma {spent}/{budget}",
     "findingsHeading": "Ölçütün işaretledikleri",
     "roundsHeading": "İnceleme turları",

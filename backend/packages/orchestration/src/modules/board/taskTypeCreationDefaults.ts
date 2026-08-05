@@ -12,7 +12,7 @@ import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 // fragment set it owns from creation, the pipeline its Run controls default to, and whether the
 // per-case values it arrived with are the ones its type actually declares. All three answers join a
 // deployment-registered descriptor (a REUSABLE OPERATION's bundle,
-// `docs/initiatives/reusable-operations.md`) with the built-in per-type defaults, which is why they
+// `backend/docs/reusable-operations.md`) with the built-in per-type defaults, which is why they
 // live together rather than inline: it is one lookup against one registry, read three times.
 //
 // Extracted from `BoardService` when the standing-context union pushed that file over its size
@@ -76,7 +76,7 @@ export interface TaskTypeCreationDefaults {
    * Three cases pass straight through, each deliberately:
    * - a BUILT-IN type, whose fields are the schema-typed top-level keys, already validated there;
    * - a type this process does not REGISTER, because an unregistered namespaced type is a supported
-   *   row (task types are node-local by design, D11) and degrading data must not brick creation;
+   *   row (task types are node-local by design) and degrading data must not brick creation;
    * - a descriptor declaring a `formPanel`, whose bespoke create-form section owns the whole bag
    *   (the platform cannot read its required semantics, the existing AddTaskModal contract).
    */
@@ -88,10 +88,10 @@ export interface TaskTypeCreationDefaults {
 
 /**
  * The STANDING CONTEXT a registered custom task type contributes: a reusable operation's
- * `defaultFragmentIds` (`docs/initiatives/reusable-operations.md` D4).
+ * `defaultFragmentIds` (`backend/docs/reusable-operations.md`).
  *
  * STATES a namespaced type this process does not register, rather than contributing nothing in
- * silence. Task types are node-local by design (D11), so an org deployment routinely runs a process
+ * silence. Task types are node-local by design, so an org deployment routinely runs a process
  * whose package predates a registration, or has none at all; a task created there is ACCEPTED (an
  * unregistered namespaced type is a supported row) and would then carry NONE of the operation's
  * standing context. Unlike the run-time projection, which degrades to raw keys and self-heals as

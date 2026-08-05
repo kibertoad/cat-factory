@@ -85,11 +85,51 @@ export interface VcsIdentityEntry {
   /** Turns a raw PAT into a {@link VcsIdentity} for this provider. */
   resolver: VcsIdentityResolver
   /**
-   * A PAT the deployment configured for this provider (env). Present ⇒ one-click login is
-   * available (the user need not paste a token); absent ⇒ enter-a-PAT only. NEVER serialized
-   * to the client — only the provider name is advertised.
+   * The PAT the deployment has configured for this provider, READ AT CALL TIME. Present ⇒
+   * one-click login is available (the user need not paste a token); absent ⇒ enter-a-PAT only.
+   * NEVER serialized to the client — only the provider name is advertised.
+   *
+   * A function rather than a value because local mode's credential can be installed while the
+   * server is running ({@link LocalVcsSetup}), and a snapshot taken at container-build time would
+   * keep reporting the state the process booted in.
    */
-  configuredToken?: string
+  configuredToken?(): string | undefined
+}
+
+/**
+ * First-run installation of the deployment's OWN source-control credential, from the browser.
+ *
+ * Local mode has no GitHub-App connect flow: one PAT is both the sign-in identity and the
+ * operational credential every agent step clones, pushes, gates and merges with. It is normally
+ * set in `.env`, which leaves a developer with no token at a dead end — the sign-in screen can
+ * send them to the right token page and then has nowhere for them to put the result. This port is
+ * that missing step: the login screen posts the token they just created, the facade validates it,
+ * seals it on the machine, and re-derives the wiring that reads through it, so the credential is
+ * live without a restart.
+ *
+ * Wired by the local facade only. A hosted deployment leaves it undefined (its credential is a
+ * GitHub App / a per-workspace connection, neither of which a signed-out caller may set), and the
+ * route then reports the capability as absent.
+ */
+export interface LocalVcsSetup {
+  /**
+   * The providers whose credential may be installed RIGHT NOW. Empty once the deployment's
+   * ENVIRONMENT names a token: that one wins, so installing another would change nothing but the
+   * user's belief about which is in use.
+   *
+   * An already-INSTALLED credential does not close the flow. It can expire or be revoked, and the
+   * sign-in screen is the only surface a locked-out developer can reach, so refusing to replace it
+   * would recreate the dead end this port exists to remove. It grants nothing extra either:
+   * whoever can reach that screen can already sign in with the stored token in one click.
+   */
+  installable(): VcsProvider[]
+  /**
+   * Seal `token` as the deployment's source-control credential and re-derive everything that
+   * reads through it. The caller has already resolved the token to an identity, so this does not
+   * re-validate it (and takes the resolved `login` for display). Throws when the provider is not
+   * currently {@link installable}.
+   */
+  install(provider: VcsProvider, token: string, options?: { login?: string | null }): Promise<void>
 }
 
 /**

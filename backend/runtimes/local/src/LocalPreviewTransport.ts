@@ -25,7 +25,7 @@ import {
   resolveInstallId,
 } from './runtimes/index.js'
 import { requireHarnessSharedSecret } from './config.js'
-import { harnessAllowedHosts } from './github.js'
+import { type LocalVcsCredential, harnessAllowedHosts } from './vcsCredential.js'
 import { resolveHarnessImage } from './harnessImage.js'
 
 const execFileAsync = promisify(execFile)
@@ -55,6 +55,12 @@ export interface LocalPreviewTransportOptions {
   sharedSecret: string
   network?: string
   env?: Record<string, string>
+  /**
+   * Extra container env resolved PER PREVIEW START (merged over {@link env}). Carries the
+   * clone/push host allow-list, which follows the deployment's source-control credential and can
+   * change while this transport is alive.
+   */
+  resolveEnv?: () => Record<string, string>
   exec?: ContainerExec
   fetchImpl?: typeof fetch
   readyTimeoutMs?: number
@@ -97,6 +103,7 @@ export class LocalPreviewTransport implements PreviewTransport {
   private readonly sharedSecret: string
   private readonly network?: string
   private readonly extraEnv: Record<string, string>
+  private readonly resolveExtraEnv: (() => Record<string, string>) | undefined
   private readonly exec: ContainerExec
   private readonly fetchImpl: typeof fetch
   private readonly readyTimeoutMs: number
@@ -123,6 +130,7 @@ export class LocalPreviewTransport implements PreviewTransport {
     this.sharedSecret = options.sharedSecret
     this.network = options.network
     this.extraEnv = options.env ?? {}
+    this.resolveExtraEnv = options.resolveEnv
     this.exec = options.exec ?? defaultExec(this.adapter.binary)
     this.fetchImpl = options.fetchImpl ?? fetch
     this.readyTimeoutMs = options.readyTimeoutMs ?? 60_000
@@ -147,7 +155,7 @@ export class LocalPreviewTransport implements PreviewTransport {
         // A preview only builds + serves a static app (no Docker-in-Docker), so never privileged.
         privileged: false,
         network: this.network,
-        env: this.extraEnv,
+        env: { ...this.extraEnv, ...this.resolveExtraEnv?.() },
         publishPorts: [
           pinsHostPort ? { container: servePort, host: servePort } : { container: servePort },
         ],
@@ -287,15 +295,16 @@ export class LocalPreviewTransport implements PreviewTransport {
 export function createLocalPreviewTransportFromEnv(
   env: NodeJS.ProcessEnv,
   _settings?: LocalSettings,
+  credential?: () => LocalVcsCredential | undefined,
 ): LocalPreviewTransport {
-  const extraEnv: Record<string, string> = {}
-  const allowedHosts = harnessAllowedHosts(env)
-  if (allowedHosts) extraEnv.GITHUB_ALLOWED_HOSTS = allowedHosts
   return new LocalPreviewTransport({
     image: resolveHarnessImage(env),
     adapter: createRuntimeAdapter(env),
     sharedSecret: requireHarnessSharedSecret(env),
     network: env.LOCAL_DOCKER_NETWORK?.trim() || undefined,
-    ...(Object.keys(extraEnv).length > 0 ? { env: extraEnv } : {}),
+    resolveEnv: (): Record<string, string> => {
+      const allowedHosts = harnessAllowedHosts(env, credential?.())
+      return allowedHosts ? { GITHUB_ALLOWED_HOSTS: allowedHosts } : {}
+    },
   })
 }
