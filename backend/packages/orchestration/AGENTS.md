@@ -10,7 +10,7 @@ ones (requirements / clarity / brainstorm) in `src/container/review-modules.ts`,
 `modules.ts`), and their optional
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`:
-see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
+see `docs/internal/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
 `OptionalCoreModules` (registry-assembled). `createCore` itself is kept under its per-function
 line budget by four verbatim slice extractions, each registering in the SAME order (which IS
 dependency order for the registry) and returning only what the rest of `createCore` consumes:
@@ -168,5 +168,5 @@ both invited a site to take the model and miss the order (silent: the run works,
 provider) and read that row twice per call.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
-"Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/modularisation.md` +
-`docs/refactoring-candidates.md` for the god-file backlog.
+"Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/internal/modularisation.md` +
+`docs/internal/refactoring-candidates.md` for the god-file backlog.

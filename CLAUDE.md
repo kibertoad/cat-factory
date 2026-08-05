@@ -37,8 +37,8 @@ When your change pushes a file or function over budget, extract the concern your
 cohesive collaborator taking a small deps object of bound callbacks, leaving a thin delegate behind (the
 model: the `RunDispatcher` controller extractions, `FetchGitHubClient` → `reviewPosting.ts`). A budget
 number may only change in your PR when a split made it smaller. If you believe a split is impossible,
-STOP and say so rather than bumping silently. The same ratchet covers THIS file: shrink it by moving
-detail to the flow docs, never by raising the budget.
+STOP and say so rather than bumping silently. It covers THIS file too: shrink it by moving detail to the
+flow docs, never by raising the budget.
 
 ## Compatibility: the public API is STABLE; everything internal is not
 
@@ -87,8 +87,7 @@ so adding a member still fails the build, and a member that was removed still re
 ## PR workflow
 
 **Always finish a task with a PR, unprompted.** When the work is done, branch, commit, push, open a PR.
-Don't commit task work directly to `main` unless explicitly asked; if you started on `main`, branch off
-it before committing.
+Never commit task work to `main` unless asked; if you started there, branch off it before committing.
 
 **A PR description is a reviewer briefing, never a restated diff.** Give the context the diff cannot
 show: the problem and why now, the decisions made (especially alternatives considered and rejected: say
@@ -109,7 +108,7 @@ one-line internal fix needs none; a new export / env var / capability / flow doe
 
 - The package's own `README.md` + `AGENTS.md`.
 - The root `README.md`: the repository-layout row, plus a "What it supports" row for a new user-facing
-  capability.
+  capability. A CONTRIBUTOR-only doc goes under `docs/internal/`, framed from the README's last section.
 - This file, only for a new CROSS-CUTTING convention or a change to a flow it indexes. Detail about one
   flow goes in that flow's doc.
 - A higher-level doc must POINT AT a new deeper doc rather than restate or omit it, or it is lost.
@@ -118,15 +117,14 @@ one-line internal fix needs none; a new export / env var / capability / flow doe
 
 Multi-PR work (cross-cutting refactor, registry-by-registry migration, strangler conversion) gets a
 tracker under `docs/initiatives/` with the first PR: goal and rationale, target pattern (link the pilot),
-a per-item checklist with PR links updated each slice, and the gotchas the pilot surfaced. A tracker also
-earns its keep when an initiative is REDIRECTED, so the next iteration doesn't re-propose a withdrawn
-approach.
+a per-item checklist with PR links updated each slice, and the gotchas the pilot surfaced. It also earns
+its keep when an initiative is REDIRECTED, so the next iteration can't re-propose a withdrawn approach.
 
 **When the committed scope completes, convert the tracker into a numbered ADR under `backend/docs/adr/`
 (`NNNN-slug.md`, next free number) and `git rm` the tracker in the same PR.** Keep Context / Decision /
 Rationale / Consequences; drop the checklists. Header shape: `# ADR NNNN: <title>` plus a `Status` /
-`Date` / `Context layer` bullet block. Check the number against ALL existing files first: two ADRs
-landing from parallel branches have collided on one number three times.
+`Date` / `Context layer` bullet block. Check the number against ALL existing files first: parallel
+branches have collided on one number three times.
 
 ## Writing style: no em-dashes, no LLM-tell prose
 
@@ -154,12 +152,11 @@ messages, code comments, UI copy.
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
-- **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm exec oxfmt .` from the root, or
-  `pnpm lint:fix` for both. **NEVER** pass a path or glob to `oxfmt`/`oxlint`, for any reason: the only
-  correct argument is `.`. On Windows the whole-tree run rewrites line endings across hundreds of files;
-  that churn is expected and git's line-ending normalization absorbs it at commit time. Run it ONCE at
-  the end and trust the result: do not diff, stash, or investigate why an untouched file was reformatted
-  (it sweeps up pre-existing drift, which is correct).
+- **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
+  `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
+  Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
+  normalization absorbs it at commit time. Run it ONCE at the end and trust the result: do not diff,
+  stash, or investigate why an untouched file was reformatted (it sweeps up pre-existing drift).
 
 ## Keep the runtimes symmetric
 
@@ -536,7 +533,7 @@ adapters) live in its own `AGENTS.md`.
   surface on a shared deployment. Doc: [`backend/docs/model-support.md`](./backend/docs/model-support.md).
 - **`deploy/preview`** carries the per-PR TEST environments for THIS repo. Board wiring AND the three
   editing constraints (no `include:`/bind mounts/`env_file`, the empty `apiBase`, the per-PR name
-  templates): [`docs/dogfooding.md`](./docs/dogfooding.md).
+  templates): [`docs/internal/dogfooding.md`](./docs/internal/dogfooding.md).
 
 ## Dependencies, releases, new packages
 
@@ -564,12 +561,14 @@ a versioned package**; empty changeset for docs/CI/test-only. CI enforces this.
 tag everywhere it appears, then publishes and deploys a FRESH immutable tag: reusing a tag does NOT
 deploy** (`wrangler deploy` diffs by tag string; the symptom is `Container dispatch failed (HTTP 404)`).
 The full rollout recipe, the release-PR re-sync behaviour, and the new-published-package checklist (a
-folder is not wired up by existing): [`docs/releases.md`](./docs/releases.md).
+folder is not wired up by existing): [`docs/internal/releases.md`](./docs/internal/releases.md).
 
 ### Run the CI guard scripts locally before committing
 
-> **Do NOT run `pnpm lint:knip` or `node scripts/check-package-catalog.mjs` locally.** They are slow and
-> CI's `Build & typecheck` job is authoritative for both.
+> **Do NOT run locally: `pnpm lint:knip`, `node scripts/check-package-catalog.mjs`** (slow; CI's
+> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (Stryker: minutes of CPU per
+> package, so it runs ONLY in its own nightly non-blocking workflow, never in `pnpm test:run`; scope,
+> floors and how to read a survivor: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -1012,7 +1011,7 @@ All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display 
 authoring how-to (catalog layout, key conventions, component mechanics, translator descriptions, the
 drift guards) is
 [`frontend/app/README.md`](./frontend/app/README.md#internationalization-i18n-authoring); migration
-status: [`docs/localization.md`](./docs/localization.md). What binds beyond the SPA:
+status: [`docs/internal/localization.md`](./docs/internal/localization.md). What binds beyond the SPA:
 
 - **The backend does not localize prose.** A localizable condition emits a machine-readable
   `error.details.reason`/`code` that the SPA maps to a frontend key (the `usePipelineErrorToast.ts`

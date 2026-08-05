@@ -2,7 +2,7 @@
 // implementations are split by domain under ./drizzle/*; this module assembles them
 // into the CoreRepositories set and re-exports the handful consumed directly by
 // callers (index.ts, container.ts, the test harness). Split out of a single
-// ~5,000-line module — see docs/refactoring-candidates.md #1.
+// ~5,000-line module — see docs/internal/refactoring-candidates.md #1.
 
 import type {
   AccountInvitationRepository,

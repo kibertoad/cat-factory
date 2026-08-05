@@ -30,7 +30,7 @@ ways:
 
 The prompt for this work was the #1261 PR-review investigation, where a run surfaced "31M
 tokens" that was 99.998% cache reads: cheap per token but neither free nor visible for what it
-was. (See `docs/pr-review-run-efficiency-and-parking-fixes-2026-07.md`; the sibling
+was. (See `docs/internal/pr-review-run-efficiency-and-parking-fixes-2026-07.md`; the sibling
 `pr-review-turn-reduction.md` initiative attacks the _cause_: this one makes the _accounting_
 honest.) The `token-burn-instrumentation.md` initiative consumes Slice 1 below as its dependency:
 its per-phase attribution is meaningless until cache read vs write are orthogonal here.

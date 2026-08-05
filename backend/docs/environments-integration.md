@@ -29,7 +29,7 @@ see [Native environment adapters](./native-environment-adapter.md).
 > API, so it needs nothing but outbound HTTPS and therefore works on every facade, including the
 > Cloudflare Worker one that has no Docker daemon and no filesystem. Its reference workflow and
 > the one-time account setup live in [`deploy/preview`](../../deploy/preview/README.md); wiring
-> it to a board is [`docs/dogfooding.md`](../../docs/dogfooding.md).
+> it to a board is [`docs/internal/dogfooding.md`](../../docs/internal/dogfooding.md).
 
 > **The connection is now per provision type, not one per workspace.** This doc describes the
 > generic HTTP `manifest` backend, which today serves the **`custom` provision type** via the

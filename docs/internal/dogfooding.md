@@ -4,7 +4,7 @@ How to point a cat-factory workspace at **this repository** so its pipelines can
 review, deploy and test cat-factory itself, and, in particular, how a run gets a **live test
 environment** to check its own work against instead of stopping at unit tests.
 
-The environment stacks themselves live in [`deploy/preview/`](../deploy/preview) and are
+The environment stacks themselves live in [`deploy/preview/`](../../deploy/preview) and are
 documented there (including which options were considered and why these two won). This page is
 the **board wiring**: the frames, the handler, the provisioning config, the pipeline, and the
 things that bite.
@@ -25,10 +25,10 @@ Steps 1, 3 and 4 needed no new configuration. Step 2 is what `deploy/preview/` a
 
 The orchestrator's own runtime decides what it can stand up, so this is not really a preference:
 
-| cat-factory runs on…                                               | Track                                      | Provision type          |
-| ------------------------------------------------------------------ | ------------------------------------------ | ----------------------- |
-| `@cat-factory/local-server` (or Node with a reachable Docker host) | [compose](../deploy/preview/compose)       | `docker-compose`        |
-| `@cat-factory/worker` (Cloudflare)                                 | [cloudflare](../deploy/preview/cloudflare) | `cloudflare` (built in) |
+| cat-factory runs on…                                               | Track                                         | Provision type          |
+| ------------------------------------------------------------------ | --------------------------------------------- | ----------------------- |
+| `@cat-factory/local-server` (or Node with a reachable Docker host) | [compose](../../deploy/preview/compose)       | `docker-compose`        |
+| `@cat-factory/worker` (Cloudflare)                                 | [cloudflare](../../deploy/preview/cloudflare) | `cloudflare` (built in) |
 
 `local-docker` needs a Docker daemon, which the Worker facade does not have; the Cloudflare
 track is driven entirely over HTTPS, so it works from either. If you run cat-factory locally but
@@ -71,7 +71,7 @@ Local deployments also widen the environment-URL policy by default
 (`ENVIRONMENTS_ALLOW_HTTP_URLS` plus a loopback allow-list), which is what lets
 `http://localhost:<ephemeral-port>` be accepted as an environment URL. On a plain Node
 deployment set those explicitly: see
-[`local-k3s-environments.md`](../backend/docs/local-k3s-environments.md) for the same knobs.
+[`local-k3s-environments.md`](../../backend/docs/local-k3s-environments.md) for the same knobs.
 
 ### Cloudflare track
 
@@ -86,13 +86,13 @@ Infrastructure → Test environments, fill in its section:
 | Advanced              | leave blank unless you renamed things in the workflow                                  |
 
 The two name templates under **Advanced** are the contract with
-[`.github/workflows/preview-env.yml`](../.github/workflows/preview-env.yml): cat-factory derives
+[`.github/workflows/preview-env.yml`](../../.github/workflows/preview-env.yml): cat-factory derives
 the environment name and the Worker URL from them, and the workflow names its resources the same
 way. Blank means the reference workflow's naming (`pr-<n>` / `cat-factory-pr-<n>`), so leave them
 alone unless you have changed the workflow too.
 
 Complete the one-time GitHub `preview` environment setup in
-[`deploy/preview/README.md`](../deploy/preview/README.md) first, or the deployments will fire a
+[`deploy/preview/README.md`](../../deploy/preview/README.md) first, or the deployments will fire a
 workflow that has no credentials to build with. **Test connection** verifies the token can reach
 the repository, and the handler pre-flights that the repo actually carries a preview workflow
 before a run waits on a build that was never going to happen.
@@ -168,7 +168,7 @@ preview Worker's secrets) if you specifically want to test agent behaviour end t
   on the PR are the record of what happened.
 - **A preview runs unreviewed branch code with whatever credentials you give it.** Keep the
   preview Cloudflare account and GitHub App separate from production; see the security note in
-  [`deploy/preview/README.md`](../deploy/preview/README.md).
+  [`deploy/preview/README.md`](../../deploy/preview/README.md).
 
 ## Editing `deploy/preview`: three constraints that bite
 
@@ -182,11 +182,11 @@ preview Worker's secrets) if you specifically want to test agent behaviour end t
 
 ## Related
 
-- [`deploy/preview/README.md`](../deploy/preview/README.md): the stacks, and the options weighed.
-- [`backend/docs/per-service-provisioning.md`](../backend/docs/per-service-provisioning.md): the
+- [`deploy/preview/README.md`](../../deploy/preview/README.md): the stacks, and the options weighed.
+- [`backend/docs/per-service-provisioning.md`](../../backend/docs/per-service-provisioning.md): the
   provision-type / handler model this page configures.
-- [`backend/docs/local-k3s-environments.md`](../backend/docs/local-k3s-environments.md): the
+- [`backend/docs/local-k3s-environments.md`](../../backend/docs/local-k3s-environments.md): the
   Kubernetes alternative, if you already run a cluster.
-- [`backend/internal/e2e/README.md`](../backend/internal/e2e/README.md): the assembled-product
+- [`backend/internal/e2e/README.md`](../../backend/internal/e2e/README.md): the assembled-product
   test suite, which covers the same surfaces deterministically with every external dependency
   faked. Previews complement it; they do not replace it.

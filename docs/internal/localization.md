@@ -8,7 +8,7 @@ It is a **living status doc**. For the authoritative _how-to_ (catalog layout, t
 add-a-string workflow, key conventions, plural/date/number rules, translator
 descriptions, and the CI drift guards) see the **Internationalization (i18n)
 authoring** section of
-[`frontend/app/README.md`](../frontend/app/README.md#internationalization-i18n-authoring):
+[`frontend/app/README.md`](../../frontend/app/README.md#internationalization-i18n-authoring):
 this file does not duplicate those rules, it only records **what is done and what
 is left**.
 
@@ -45,7 +45,7 @@ origin/<base>` requires a PR that adds, changes or removes an `en.json` key to m
   vue-i18n's default selector, which is correct for their catalogs. Each overridden
   locale's entries carry that locale's CLDR forms, optionally behind the leading zero
   form `en` also uses; the shapes and the gate that enforces them are in
-  [`frontend/app/README.md`](../frontend/app/README.md#internationalization-i18n-authoring).
+  [`frontend/app/README.md`](../../frontend/app/README.md#internationalization-i18n-authoring).
 
 ## Progress
 

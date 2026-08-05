@@ -297,7 +297,7 @@ now. Verified by `nuxt typecheck`.
 the constructor trimmed of its vestigial fields. The step-handler and completion-resolver
 registries (`step-handler-registry.ts`, `buildStepResolverRegistry`) are in place. The
 run/step lifecycle reference (and the recorded decision not to adopt XState) lives in
-[`execution-state-machine.md`](./execution-state-machine.md).
+[`execution-state-machine.md`](../execution-state-machine.md).
 
 > **Follow-on watch item.** The split moved much of the complexity into
 > `RunDispatcher.ts` (**2,779 lines**, ~30 injected deps, a ~256-line `pollAgentJob`),

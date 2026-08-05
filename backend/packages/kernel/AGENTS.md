@@ -186,3 +186,6 @@ else imports its **ports** and domain types from here.
 
 **See also:** `CLAUDE.md` → "Gates vs agents (the step taxonomy)", "Custom agents",
 "Merge track record", "Logging goes through the kernel `Logger` port".
+
+**Mutation-tested** (`stryker.config.mjs`): nightly, non-blocking, never run locally. Scope and
+score floor: [`mutation-testing.md`](../../../docs/internal/mutation-testing.md).
