@@ -883,6 +883,8 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   around the gap instead of discovering it mid-run.
 - **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the checkout.
   Changing what it writes means an image bump.
+- **A deployment's own TASK TYPES ride the same kind of seam**, and one bundling a per-case form, its
+  standing context and its own canned pipeline is a REUSABLE OPERATION: [`reusable-operations.md`](./backend/docs/reusable-operations.md).
 - **NOT yet done**: the built-in agents aren't migrated to this model; their rendering still lives in the
   harness. Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
 

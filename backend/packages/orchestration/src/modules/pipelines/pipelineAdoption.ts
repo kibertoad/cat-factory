@@ -18,7 +18,7 @@ import { noopLogger } from '@cat-factory/kernel'
 // new-pipeline advisory plus a reseed.
 //
 // That is a fine story for a human browsing the pipeline library and a bad one for a REUSABLE
-// OPERATION (`docs/initiatives/reusable-operations.md`), because an operation PINS its pipeline by
+// OPERATION (`backend/docs/reusable-operations.md`), because an operation PINS its pipeline by
 // id: a task of the operation is creatable on a board that never adopted it (the pin resolves off
 // the task-type registry, which knows nothing about rows) and then refuses to start. So the run
 // path adopts on first use, which is this module.
