@@ -1,5 +1,170 @@
 # @cat-factory/server
 
+## 0.219.0
+
+### Minor Changes
+
+- dd90c1e: A deployment can register its own REWORK PAIR: a producer, and a companion that grades its
+  output and loops that producer back for automatic rework below the step's threshold.
+
+  The companion catalog was a module-global `Map` of four built-ins, so the only way to express
+  "my producer, reviewed and bounced below a bar" was to reach for a judge, a different machine.
+  A judge scores against a rubric and disposes (advance / park / bounce / fail); a companion drives
+  the producer's own bounded rework budget and only then involves a human. The workaround got the
+  scoring and lost the loop.
+
+  The pairing now lives on `AgentKindRegistry` (`registerCompanion`), beside traits, skills, tool
+  servers and variants, rather than on a sixth registry: a companion is a relationship BETWEEN
+  agent kinds. The built-in catalog is pre-loaded, so registering one adds rather than replaces,
+  and module identity stops mattering for a separately-published extension package.
+
+  Two things a reviewer should look at. The free lookups take the registry OPTIONALLY and fall
+  back to the built-ins, copying `isGatableKind`, which means a call site that omits it silently
+  sees built-ins only, so every engine site that could meet a deployment's pair now threads it
+  (dispatch routing, the rework loop's producer search, the step-gating cascade, run-start
+  threshold seeding, pipeline-shape validation, the container job body, the prompt). And the
+  pairing is registered SEPARATELY from the kind, so the snapshot projection asks the registry
+  rather than reading a kind's own definition, which would have missed every one.
+
+  The SPA learns a custom pairing from the snapshot (`customAgentKinds[].companionTargets`) so the
+  builder renders it as an "add companion" toggle on its producer rather than a placeable palette
+  block that pipeline validation would then refuse on save. Built-in pairings win on collision: a
+  deployment cannot silently re-point `coder` at its own reviewer and change what every stock
+  pipeline does.
+
+- 289b3de: Disposer step, and a teardown that is proved rather than assumed
+
+  A run's PR asserts a three-leg proof — the test environment came up, evidence was captured against
+  it, and it was torn down again — and the third leg had two problems.
+
+  Nothing closed it inside the run. Teardown happened only on the TTL sweep, a manual Destroy, a
+  `human-test` resolution, or a re-provision supersede. The sweep fires long after the last step
+  settled, so the report was published saying the environment was still live and corrected later
+  through a back-channel, and only where a provisioning log is retained. TTL is a backstop; it
+  cannot be a proof.
+
+  Worse, the teardowns that did happen were never checked. Success was recorded whenever
+  `provider.teardown()` returned without throwing, which is a different fact from the environment
+  being gone: `HttpEnvironmentProvider` reports `torn_down` unconditionally, so a manifest with no
+  `teardown:` request destroys nothing and still reports success, and a Kubernetes namespace
+  `DELETE` returns while the namespace is still `Terminating`. The section could therefore render a
+  green tick about an environment that was still running and still billing.
+
+  So teardown now has two halves. A new optional `EnvironmentProvider.confirmTeardown` re-probes
+  after the destroy call and the result is recorded as its own `teardown-verify` log row; only a
+  probe that positively finds the environment gone counts as a reclaim. This is deliberately not
+  folded into `status()`, whose implementations are all written to describe a LIVE environment — the
+  generic provider with no `status:` template answers `ready` forever, and the compose mapping reads
+  an empty project as `failed`, both of which are exactly inverted as teardown verdicts. The four
+  outcomes stay distinct because each needs a different person: confirmed, still standing (the
+  teardown was a no-op — fix the config and reclaim by hand), unverifiable (the provider has no way
+  to tell you, and no retry will change that), and unconfirmed (transient; the next sweep re-probes).
+
+  And a new `disposer` step, the deployer's counterpart, reclaims what the run provisioned wherever
+  its author places it — after the automated tester, or after a human has finished with the live
+  URL. It never fails the run: it commonly sits after `merger`, so an un-reclaimed environment is a
+  recorded warning and an operator's job, not a failed pipeline. It is palette-addable rather than
+  seeded into the built-in pipelines; seeding it is a follow-up that needs its own version bumps.
+
+  Crucially it reclaims BY IDENTITY, not by re-resolving. The deployer now records which environment
+  each frame got (`deployEnvs[frame].environmentId`) and the disposer tears down exactly that one.
+  Re-resolving from `(block, frame)` reads correct and is not: that lookup falls back to the block's
+  frame-less row, which is where the manual and `human-test` environments live, so a disposer running
+  after a supersede, an operator's Destroy or a TTL sweep on a long run would have destroyed an
+  environment the run never provisioned and recorded it as the frame's clean reclaim.
+
+  The provisioning-log operation vocabulary is part of `/api/v1`, so `teardown-verify` is an
+  ADDITIVE public-API change: the OpenAPI surface goes to 1.9.0 and the four SDK clients plus the
+  MCP facade are regenerated from it. The SDKs tolerate unknown enum values by design, so an older
+  client decodes the new row as a plain string rather than failing.
+
+  One ordering detail is worth understanding, because getting it wrong made the whole feature
+  unreachable while every unit test still passed. The hook that re-publishes the PR report on a
+  teardown fires from the same place that writes the log rows, and its consumer RE-READS that log.
+  Fired between the teardown row and the confirmation row it sees a teardown nothing has verified,
+  publishes `unconfirmed`, and — being the last edge on an already-settled run — is never corrected.
+  Both writes and the notification therefore happen in one method that takes the confirmation, and
+  the regression test asserts the row count at hook time rather than the final rows, since only that
+  can see the order.
+
+  Two things to watch when reviewing. The report gains a `teardown: 'unconfirmed'` state, and
+  because a missing verify row is treated as "not proved" rather than as a pass, runs whose
+  teardowns predate this change will report unconfirmed rather than confirmed. That is a correction,
+  but a visible one. And the confirmation applies to every teardown path, not just the new step, so
+  a deployment whose provider config makes teardown a silent no-op will start being told so.
+
+- dd90c1e: Join the platform's telemetry to a caller's own distributed trace.
+
+  `mountRequestLogging` now adopts an inbound W3C `traceparent`, binding `traceId`/`spanId` onto
+  the request-scoped logger so an SDK client or gateway already collecting a trace sees this
+  deployment's log lines inside it rather than beside it. A line naming a RUN still takes that
+  run's derived trace id: that derivation is the only thing joining a run's logs to its spans, and
+  nothing else asserts it, so the caller's context fills in everywhere else (which is most of what
+  an API request emits). The header is untrusted, so the parse admits only the exact fixed-width
+  hex grammar and refuses the spec's all-zero sentinels; malformed means ignored, never a refused
+  request.
+
+  Not shipped, deliberately, after weighing it: exporting COST over OTLP. It is derived data
+  (`tokens x rates`) in a store that cannot reprice it, so a corrected rate table would leave
+  history permanently wrong with nothing marking it, and it would sit beside `SpendService` as a
+  second answer for money, at a grain that drops `workspace_id` and therefore can never be
+  reconciled against what anyone is billed. The exporter carries the observed facts a downstream
+  consumer prices FROM instead: the model, the three input token classes kept apart, and the
+  output count. The reasoning is recorded in the README's not-emitted list so it is not
+  re-proposed.
+
+- dd90c1e: The pre-dispatch input gate now judges a CUSTOM task type's own required fields, so a deployment
+  registering its own work items gets the same free refusal the built-in types get.
+
+  It reads the declaration the type ALREADY makes: its create-form field descriptors' `required`
+  markers, through the same rule the create form's validator uses, rather than adding a second
+  place to say it. That is the whole design: the two doors agree by construction, which is also why
+  the gate takes the same two stand-downs the create door takes (an unregistered type declares
+  nothing; a `formPanel` type has a bespoke section owning the whole bag). `showWhen` is honoured,
+  so a field the form would have hidden is never required.
+
+  What the gate adds over the create door is WHEN it asks. The create check fires once, against the
+  declaration as it stood that day, on the paths that reach `addTask`. The gate fires at every run
+  against the declaration as it stands now, so a requirement added in a later release reaches the
+  tasks that predate it, and a task created on a node that never registered the type is judged
+  where it runs.
+
+  One new finding code covers every deployment's every type (`required_field_missing`), with WHICH
+  field carried on the finding: a `key` for a machine and the deployment's own `label` for a
+  human. The codes are a closed, persisted vocabulary, so an org registering twenty operations adds
+  nothing to it. Additive on the wire: the `field` is optional and the code is a new enum member,
+  so the SDKs tolerate it by design (OpenAPI `info.version` 1.8.0 → 1.9.0).
+
+  A blocking finding also owes an ANSWER path, and this one did not have it: `taskTypeFields` was
+  write-once, so a parked run's only exit was a human waiving the gate while every surface told the
+  reader to go and fill the field in. So `updateBlockSchema` gains `customTaskTypeFields`, validated
+  through the create door's own `validatedFields`, and the block inspector gains a `task-type-fields`
+  panel rendering the same `DescriptorFields` against the same declaration. The patch is deliberately
+  narrower than the whole `taskTypeFields`: the built-in per-type fields are resolved at creation with
+  side effects the patch path does not repeat (a `review` task's PR reference is verified against the
+  provider), whereas the custom bag is exactly the declared answers.
+
+  Reviewer note: findings are one per unanswered field rather than collapsed, because three
+  missing inputs are three things to go and do. The conformance suite drives BOTH exits, the waiver
+  and the answer-then-recheck release, since a gate whose only exit is "ignore me" is a gate that
+  cannot be satisfied. `review_target_missing` still has the original gap and is now the only
+  blocking finding whose remedy the product does not offer.
+
+### Patch Changes
+
+- Updated dependencies [dd90c1e]
+- Updated dependencies [289b3de]
+- Updated dependencies [dd90c1e]
+- Updated dependencies [dd90c1e]
+  - @cat-factory/contracts@0.240.0
+  - @cat-factory/agents@0.112.0
+  - @cat-factory/orchestration@0.207.0
+  - @cat-factory/kernel@0.239.0
+  - @cat-factory/integrations@0.128.0
+  - @cat-factory/mcp-server@0.8.0
+  - @cat-factory/prompt-fragments@0.15.66
+  - @cat-factory/spend@0.15.2
+
 ## 0.218.0
 
 ### Minor Changes
