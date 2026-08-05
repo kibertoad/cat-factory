@@ -1028,11 +1028,10 @@ Per-workspace authorization (ADR [`0025-workspace-rbac`](./backend/docs/adr/0025
 enforced in exactly three shared places, never re-derived per controller:
 
 1. **Resolution + the 404 hide**: `mountAuthGate` calls the single `loadWorkspaceAccess` on every
-   `/workspaces/:ws/*` request, publishes `{ role, permissions }` (`admin | member | viewer` over seven
-   permissions, a fixed kernel table), and returns the SAME 404 for a denied or absent board.
+   `/workspaces/:ws/*` request, publishes `{ role, permissions }`, and 404s a denied or absent board alike.
 2. **The viewer write floor**, also in the gate: any non-GET/HEAD requires `≥ member` (sole exemption: the
-   read-only WS ticket mint), covering the whole member tier with zero per-controller code. It is also
-   what a member-tier write relies on, so such a route mounts NO gate of its own.
+   read-only WS ticket mint). It covers the member tier with zero per-controller code, so a member-tier
+   write relies on it and mounts NO gate of its own.
 3. **The admin-tier permission gate**: `mountWorkspacePermission(app, perm, prefixes)`, on each admin
    controller's OWN top-level paths. It gates every write served under them (now and future), lets reads
    through, and runs ahead of body validation and the handler's 503, so a refusal never reveals wiring.
@@ -1041,11 +1040,11 @@ enforced in exactly three shared places, never re-derived per controller:
    `DocumentSourceController` splits by TIER (credential + role-link prefixes gated, authoring free).
 
 **It takes PREFIXES, never `'*'`; no gate factory is exported, so the wildcard is unrepresentable.**
-`app.route(prefix, sub)` re-registers a sub-app's `use('*')` as `ALL <prefix>/*`, which Hono runs for
-every route registered AFTER it, so each admin gate silently refused the siblings mounted later in
-`app.ts`. A NEW admin controller joins `WORKSPACE_CONTROLLERS` (what `app.ts` mounts from), gates its own
-prefixes, and gains a `member 403` case in `defineWorkspaceRbacSuite`; `permissionMounts.test.ts` asserts
-a member is refused exactly the writes their OWN controller gates.
+`app.route(prefix, sub)` re-registers a sub-app's `use('*')` as `ALL <prefix>/*`, which Hono runs for every
+route registered AFTER it, so each admin gate silently refused the siblings mounted later in `app.ts`. A
+NEW admin controller joins `WORKSPACE_CONTROLLERS` (what `app.ts` mounts from), gates its own prefixes, and
+gains a `member 403` case in `defineWorkspaceRbacSuite`; `permissionMounts.test.ts` asserts a member is
+refused exactly the writes their OWN controller gates.
 
 ## Conventions
 
