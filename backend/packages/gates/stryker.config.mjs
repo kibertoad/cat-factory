@@ -9,5 +9,5 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // public seam a deployment uses and has its own suite, so it is behaviour rather than a barrel.
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts'],
-  minimumScore: 38,
+  minimumScore: 36,
 })

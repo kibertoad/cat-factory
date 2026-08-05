@@ -48,7 +48,8 @@ export function findMutationTargets() {
 
 const args = process.argv.slice(2)
 const asJson = args.includes('--json')
-const only = args[args.indexOf('--only') + 1]
+const onlyIndex = args.indexOf('--only')
+const only = onlyIndex === -1 ? undefined : args[onlyIndex + 1]
 
 let targets = findMutationTargets()
 
@@ -63,7 +64,14 @@ if (targets.length === 0) {
   process.exit(1)
 }
 
-if (args.includes('--only') && only) {
+if (onlyIndex !== -1) {
+  // A `--only` with nothing after it (or another flag) is a mistake, and the harmful reading is
+  // the permissive one: ignoring it would silently mutate EVERY package when the caller asked for
+  // one. Refuse instead.
+  if (!only || only.startsWith('--')) {
+    console.error('--only needs a package name or directory after it.')
+    process.exit(1)
+  }
   const match = targets.filter((t) => t.name === only || t.dir === only)
   // Same rule for an explicit selection: a typo'd package name must name itself, not quietly
   // shrink the run to nothing.

@@ -41,7 +41,7 @@ saturate every core.
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
 | `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 5,805   | 54.63% / 74.65%         | 52%   |
-| `@cat-factory/gates`  | all of `src/`                    | 654     | 40.98% / 60.50%         | 38%   |
+| `@cat-factory/gates`  | all of `src/`                    | 654     | 38.84% / 57.34%         | 36%   |
 | `@cat-factory/spend`  | all of `src/`                    | 400     | 54.75% / 69.75%         | 52%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
@@ -81,10 +81,17 @@ scope.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-The floors above are the first measured scores (kernel 54.63, gates 40.98, spend 54.75) less a
-two-point margin, because those numbers were measured on a developer machine and the first nightly
-is the first Linux baseline. **Raise each floor to its measured value once that baseline exists**:
-the margin exists to keep day one from failing over a platform difference, not as permanent slack.
+The floors above are the measured scores (kernel 54.63, gates 38.84, spend 54.75) less a two-point
+margin, because those numbers were measured on a developer machine and the first nightly is the
+first Linux baseline. **Raise each floor to its measured value once that baseline exists**: the
+margin exists to keep day one from failing over a platform difference, not as permanent slack.
+
+**Measure on an idle machine, one package at a time.** A `Timeout` counts as DETECTED, and a test
+process starved of CPU trips the timeout exactly like a mutant that hangs, so a saturated machine
+reports a HIGHER score than the code deserves: gates first measured 40.98% with 19 timeouts while a
+second Stryker run was competing for the same cores, and 38.84% with zero timeouts on its own. The
+inflated number was the wrong one. This is also why `timeoutMS` is well above the default and why
+nothing in CI runs two of these jobs on one runner.
 
 Raise a floor when a change earns the win. The ONE legitimate lowering is a deliberate expansion of
 the mutate scope that pulls in code which had no tests, and the PR that does it says so: everything
