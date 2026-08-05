@@ -903,8 +903,13 @@ export class BoardService {
   }
 
   /** Public-API: create a task under a visible service frame the workspace owns. */
-  addServiceTask(workspaceId: string, serviceId: string, input: AddTaskInput): Promise<Block> {
-    return this.publicReads.addServiceTask(workspaceId, serviceId, input)
+  addServiceTask(
+    workspaceId: string,
+    serviceId: string,
+    input: AddTaskInput,
+    editor: BlockEditActor,
+  ): Promise<Block> {
+    return this.publicReads.addServiceTask(workspaceId, serviceId, input, editor)
   }
 
   /** Public-API: refuse a service frame that cannot hold a new task, before doing work for one. */

@@ -243,6 +243,30 @@ deliberately unattributed with a reason: the typecheck forces a value, only the 
 RIGHT one. That pairing is copied from the run-start attribution above for the same reason: this
 feature has now shipped twice with one door enforced and another open.
 
+The spec classifies the sites that NAME an actor rather than the sites that CALL a board write,
+and that is the second lesson rather than a detail. Its first cut matched
+`boardService.addTask|updateBlock`, which saw four routes and missed the public-API creation path
+(a different method name) and the tracker / document spawns (a different package). Each of those
+was deciding its own exemption inside a collaborator, where no route stated it. So the exemption
+now travels to the layer that can answer it: a service takes the editor and never invents one,
+and every site that names a value is classified wherever it lives. What a module does with an
+actor is a typecheck's business; which actor it is, is a fact about the request.
+
+#### What the rule does NOT cover: a service mounted on two boards
+
+The guard judges a swap against the ACTING workspace's preset library, which is what the engine
+resolves too, so the two agree. A SHARED service frame mounted on a second board is where that
+agreement stops being enough: the task is one row, but `riskPolicyId` resolves against whichever
+board it is read from, and an id belonging to board A's library is simply dangling on board B (it
+falls back to B's default, exactly like a deleted preset). A member of both boards can therefore
+re-point a shared task from B, where the sandbox that governs it on A is invisible, and A then
+resolves its own default rather than the preset the task was pinned to.
+
+Closing this means deciding that a shared task's policy resolves against its HOME workspace
+everywhere, engine included, which changes what a preset means on a mounted board rather than
+tightening a guard. It is left open deliberately and recorded here rather than in a comment,
+because the fix belongs to the shared-service model and not to this one.
+
 ### Why the PR still opens
 
 The deliverable a non-developer initiator needs to SEE is the diff. Withholding the push would

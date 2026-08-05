@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type { Block, TaskContent, TaskDependencyLink } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { TaskLinkService } from './TaskLinkService.js'
@@ -120,7 +121,13 @@ describe('TaskLinkService.spawnEpic dependency seeding', () => {
       },
     })
 
-    const { tasks } = await svc.spawnEpic('ws', 'jira', 'EPIC', container.id)
+    const { tasks } = await svc.spawnEpic({
+      workspaceId: 'ws',
+      source: 'jira',
+      epicRef: 'EPIC',
+      containerId: container.id,
+      editor: UNATTRIBUTED_BLOCK_EDITOR,
+    })
 
     // Tasks are titled `${externalId}: ${title}` ("A: A" / "B: B").
     const a = tasks.find((t) => t.title.startsWith('A:'))!
@@ -147,7 +154,13 @@ describe('TaskLinkService.spawnEpic dependency seeding', () => {
       },
     })
 
-    const { tasks } = await svc.spawnEpic('ws', 'jira', 'EPIC', container.id)
+    const { tasks } = await svc.spawnEpic({
+      workspaceId: 'ws',
+      source: 'jira',
+      epicRef: 'EPIC',
+      containerId: container.id,
+      editor: UNATTRIBUTED_BLOCK_EDITOR,
+    })
     expect(board.blocks.get(tasks[0]!.id)!.dependsOn).toEqual([])
   })
 })

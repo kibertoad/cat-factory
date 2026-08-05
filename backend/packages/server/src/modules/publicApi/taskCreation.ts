@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import type { Block, CreatePublicTaskInput } from '@cat-factory/contracts'
 import type { Logger } from '@cat-factory/kernel'
 import type { ServerContainer } from '../../http/env.js'
@@ -62,7 +63,16 @@ export async function createTaskWithAttachments(
   const linkage = ticket ? await resolveTicket(deps, workspaceId, ticket) : null
   const attachment = documents?.length ? await resolveDocuments(deps, workspaceId, documents) : null
 
-  const block = await deps.boardService.addServiceTask(workspaceId, serviceId, input)
+  // Unattributed by the same reading the headless RUN start gets (ADR 0037): an API key holds
+  // scopes, not a workspace tier, so no role-scoped merge restriction applies to it and none can
+  // be dropped by what it selects. Stated HERE, at the route that knows how the caller
+  // authenticated, rather than inside `addServiceTask`, which serves whoever calls it.
+  const block = await deps.boardService.addServiceTask(
+    workspaceId,
+    serviceId,
+    input,
+    UNATTRIBUTED_BLOCK_EDITOR,
+  )
 
   if (attachment) {
     // Attached BEFORE the ticket is claimed, so this rollback can be a plain removal: a block

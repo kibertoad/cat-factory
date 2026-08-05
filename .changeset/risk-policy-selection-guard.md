@@ -34,8 +34,18 @@ refuse rather than offering it and returning a 403. `resolveMergeClassRule` /
 `resolveRoleScopedMergeClassRule` moved from kernel to contracts for that reason; the engine imports
 them from there now.
 
-Internal break, per the pre-1.0 rule: `BoardService.addTask` / `updateBlock` and the `BoardWritePort`
-they satisfy now require the acting `BlockEditActor`. Required rather than optional so a new call
-site cannot inherit an exemption from a default; `blockEditActor.coverage.spec.ts` then classifies
-each route as attributed or deliberately unattributed with a reason, since the typecheck can force a
-value but not the right one.
+Internal break, per the pre-1.0 rule: every board-write entry point now requires the acting
+`BlockEditActor`. `BoardService.addTask` / `updateBlock` / `addServiceTask` and the `BoardWritePort`
+they satisfy, plus the methods that write blocks on a caller's behalf: `TaskLinkService`'s
+`createTaskFromIssue` / `spawnEpic`, `DocumentLinkService.spawn` and `BugHuntService.adopt`. Required
+rather than optional so a new call site cannot inherit an exemption from a default.
+
+The reason it reaches that far is the part worth reviewing. A service that hardcodes
+`UNATTRIBUTED_BLOCK_EDITOR` inside itself exempts every route above it while looking correct at the
+call site, which is how filing a tracker issue, spawning an epic, spawning a document's structure
+and adopting a hunted bug were all member-tier writes made under no tier. So the decision moves to
+the layer that can answer it: the acting tier is a fact about the REQUEST, services take it and
+never invent one, and `blockEditActor.coverage.spec.ts` classifies each site that NAMES an actor
+(rather than each site that calls a board write, which is what missed those four) as attributed or
+deliberately unattributed with a reason. None of them can carry a merge preset today, so there is no
+behaviour change; the point is that the next one to gain the field is judged rather than exempt.

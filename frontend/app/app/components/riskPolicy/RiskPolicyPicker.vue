@@ -81,6 +81,19 @@ const refused = computed(() =>
 const previewRefusal = computed(() => refused.value.get(activeId.value ?? props.modelValue))
 
 /**
+ * The same reason as a tooltip on the row itself, `undefined` when the row is selectable.
+ *
+ * A refused row is `aria-disabled`, NOT `disabled`: a disabled button is unfocusable, so keyboard
+ * users could never land on it, and landing on it is precisely what puts the reason in the detail
+ * pane (the `@focus` handler below drives the preview). Refusing the click is `choose`'s job, so
+ * the row stays reachable by both routes and explains itself on both.
+ */
+function refusalText(id: string): string | undefined {
+  const refusal = refused.value.get(id)
+  return refusal ? t(`riskPolicy.picker.refused.${refusal}`) : undefined
+}
+
+/**
  * Tabbing BETWEEN two rows fires `focusout` on the one being left, so only focus leaving the
  * panel altogether may drop the preview back to the selection.
  */
@@ -131,7 +144,8 @@ function choose(id: string) {
                 refused.has('') ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
                 modelValue ? 'text-slate-300' : 'text-slate-100',
               ]"
-              :disabled="refused.has('')"
+              :aria-disabled="refused.has('')"
+              :title="refusalText('')"
               data-testid="risk-policy-option-none"
               @mouseenter="activeId = ''"
               @focus="activeId = ''"
@@ -157,7 +171,8 @@ function choose(id: string) {
                 refused.has(p.id) ? 'cursor-not-allowed opacity-50' : 'hover:bg-slate-800/60',
                 modelValue === p.id ? 'text-slate-100' : 'text-slate-300',
               ]"
-              :disabled="refused.has(p.id)"
+              :aria-disabled="refused.has(p.id)"
+              :title="refusalText(p.id)"
               :data-testid="`risk-policy-option-${p.id}`"
               @mouseenter="activeId = p.id"
               @focus="activeId = p.id"
