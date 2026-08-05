@@ -1817,9 +1817,24 @@
       "signInFailed": "Oturum açma başarısız. Bilgilerinizi kontrol edip tekrar deneyin.",
       "genericError": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
       "notConfiguredTitle": "Kimlik doğrulama yapılandırılmamış",
-      "notConfiguredBody": "Bu dağıtımda etkin bir oturum açma yöntemi yok, bu nedenle oturum açamaz veya çalışma alanlarınıza erişemezsiniz. Bir yönetici, bir kimlik doğrulama sağlayıcısı (GitHub veya Google OAuth ya da e-posta ve parola ile oturum açma) yapılandırmalıdır.",
+      "notConfiguredBody": "Bu dağıtımda etkin bir oturum açma yöntemi yok, bu nedenle oturum açamaz veya çalışma alanlarınıza erişemezsiniz. Bir yönetici, bir kimlik doğrulama sağlayıcısı (kuruluşunuzun kimlik sağlayıcısı üzerinden tek oturum açma, GitHub veya Google OAuth ya da e-posta ve parola ile oturum açma) yapılandırmalıdır.",
       "patPlaceholder": "{provider} kişisel erişim belirteci",
       "signInWithPat": "{provider} PAT ile oturum aç"
+    },
+    "sso": {
+      "continueWith": "{provider} ile devam et",
+      "failedTitle": "Tek oturum açma tamamlanamadı",
+      "errors": {
+        "stateInvalid": "Bu oturum açma denemesinin süresi doldu veya daha önce kullanıldı. Bu sayfadan yeniden başlayın.",
+        "providerDenied": "Kimlik sağlayıcınız oturum açmayı reddetti. İptal eden siz değilseniz, bu uygulamanın size atanıp atanmadığını BT ekibinize sorun.",
+        "exchangeFailed": "Bu dağıtım, kimlik sağlayıcınızla değişimi tamamlayamadı. Bir yöneticinin tek oturum açma istemci parolasını ve yönlendirme adresini kontrol etmesi gerekiyor.",
+        "tokenInvalid": "Kimlik sağlayıcınızdan gelen yanıt doğrulanamadı. Bir yöneticinin bu dağıtımın tek oturum açma yapılandırmasını kontrol etmesi gerekiyor.",
+        "subjectMissing": "Kimlik sağlayıcınız bir kullanıcı tanımlayıcısı döndürmedi, bu nedenle hiçbir hesap çözümlenemedi. Bir yöneticinin hangi taleplerin (claims) paylaşıldığını kontrol etmesi gerekiyor.",
+        "groupRequired": "Oturum açma başarılı oldu, ancak bu dağıtımı kullanmasına izin verilen bir dizin grubunda değilsiniz. BT ekibinizden sizi eklemesini isteyin.",
+        "domainNotAllowed": "E-posta alan adınızın bu dağıtımda oturum açma izni yok. Hangi hesabı kullanmanız gerektiğini BT ekibinize sorun.",
+        "emailRequired": "Bu dağıtım oturum açmayı e-posta alan adına göre kısıtlıyor, ancak kimlik sağlayıcınız doğrulanmış bir e-posta adresi paylaşmadı. Bir yöneticinin e-posta talebini etkinleştirmesi gerekiyor.",
+        "unknown": "Tek oturum açma, bu sürümün tanımadığı bir nedenle başarısız oldu. Tekrar deneyin ve sorun sürerse bir yöneticiye bildirin."
+      }
     },
     "resetPassword": {
       "title": "Parolayı sıfırla",

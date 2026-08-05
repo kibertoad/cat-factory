@@ -82,7 +82,10 @@ export {
 } from './auth/GoogleOAuth.js'
 export { LinearOAuth, type LinearOAuthDependencies } from './auth/LinearOAuth.js'
 export { WebCryptoPasswordHasher } from './crypto/WebCryptoPasswordHasher.js'
-export { authController, pickPostLoginRedirect } from './modules/auth/AuthController.js'
+export { authController } from './modules/auth/AuthController.js'
+// The shared browser-login mechanics (the allow-listed post-login redirect, the session mint),
+// used by every redirecting provider and by the local mothership-connect controller.
+export { mintSession, pickPostLoginRedirect } from './modules/auth/loginFlow.js'
 export { llmProxyController } from './modules/llmProxy/LlmProxyController.js'
 export {
   ContainerSessionService,
@@ -441,8 +444,22 @@ export type {
   RetentionConfig,
   RunnerPoolConfig,
   SlackConfig,
+  SsoConfig,
   TasksConfig,
 } from './config/types.js'
+// Enterprise SSO (generic OIDC): the shared env resolver both facades call, and the pieces a
+// facade or a test needs to reach the flow without going through the HTTP routes.
+export { resolveSsoConfig, type SsoEnv } from './config/sso.js'
+export { OidcProviderDirectory, readProviderMetadata } from './auth/oidc/discovery.js'
+export { OidcClient, OidcFlowError, createPkcePair, type PkcePair } from './auth/oidc/OidcClient.js'
+export {
+  judgeSsoAdmission,
+  needsUserinfo,
+  readGroupClaim,
+  readSsoIdentity,
+  type SsoAdmission,
+  type SsoIdentity,
+} from './auth/oidc/claims.js'
 export {
   parsePlatformObservabilityWindow,
   resolvePlatformAlertConfig,

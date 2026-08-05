@@ -105,7 +105,18 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   ⚠️ The CF facade has **same-named** classes under `runtimes/cloudflare/src/infrastructure/ai/`:
   those are the runtime **wiring**; the ones here are the shared **abstraction** (see
   `docs/glossary.md` → shared-vs-facade).
-- `auth/`: HMAC signing, GitHub OAuth helper, WS tickets (`wsTicket.ts`).
+- `auth/`: HMAC signing, GitHub/Google OAuth helpers, WS tickets (`wsTicket.ts`), and
+  `auth/oidc/` — the enterprise-SSO adapter: `discovery.ts` (the cached
+  `/.well-known/openid-configuration` + JWKS read, and the key-rotation refetch),
+  `OidcClient.ts` (Authorization Code + PKCE, ID-token verification via `jose` against an
+  asymmetric-only algorithm allow-list), `claims.ts` (the pure identity/admission rules).
+  ONE adapter serves every OIDC provider; nothing under here branches on which one answered.
+- `modules/auth/loginFlow.ts`: the mechanics EVERY redirecting login provider shares — the
+  cookie-bound CSRF state, the allow-listed post-login redirect (`pickPostLoginRedirect` guards a
+  token-exfiltration primitive), the session mint, the invite handling. A new provider extends
+  this, never a second copy. `modules/auth/ssoRoutes.ts` is the SSO registrar; its round-trip state
+  rides an httpOnly cookie rather than the URL, because PKCE's verifier and OIDC's nonce are
+  secrets. Configuration + admission model: [`backend/docs/auth.md`](../../docs/auth.md).
 - `http/errorHandler.ts`: the ONE `app.onError` both facades mount. A controller signals a
   refusal by THROWING a kernel `DomainError`; the handler maps its `code` to a status and emits
   `{ error: { code, message, details? } }`. **Do not hand-roll that envelope**: a literal

@@ -1,9 +1,12 @@
-# Authentication (GitHub / Google / password sign-in)
+# Authentication (SSO / GitHub / Google / password sign-in)
 
-cat-factory gates the API behind a sign-in. GitHub is the primary identity
-provider (the product already relies on GitHub, since the App integration
-operates on real repos), and two more login methods are offered when configured:
-**Google OAuth** and **email/password**. All three resolve to one canonical
+cat-factory gates the API behind a sign-in. For an organisation the primary
+method is **enterprise SSO**: one generic OpenID Connect adapter pointed at the
+deployment's own identity provider (Okta, Microsoft Entra ID, Auth0, Keycloak,
+PingFederate, OneLogin, JumpCloud, Google Workspace, a Shibboleth IdP running the
+OIDC OP plugin). Three consumer methods sit alongside it: **GitHub OAuth**
+(historically the primary one, since the App integration operates on real repos),
+**Google OAuth** and **email/password**. All four resolve to one canonical
 `users` row, so a person keeps the same internal identity (`usr_*`) however they
 signed in.
 
@@ -51,11 +54,12 @@ follow-up, and it is NOT free, because nothing on this path reads the user row:
 see [`audit-log-and-session-revocation.md`](../../docs/initiatives/audit-log-and-session-revocation.md).
 MACHINE tokens are revocable, below.)
 
-**Enterprise SSO is not here yet.** All three methods above are consumer identity
-providers, so an org cannot express its own directory membership, sit behind its
-IdP's MFA / conditional access, or offboard by disabling an account. The generic
-OIDC design (one adapter configured per deployment, reusing `user_identities`
-as-is) is tracked in
+**Enterprise SSO is the org-shaped path**, and it is what lets a deployment sit
+behind its own directory's MFA, conditional access and offboarding rather than
+asking an operator to maintain a list of named users. See
+[Enterprise SSO](#enterprise-sso-generic-oidc) below. What is NOT yet covered is
+a SAML-2.0-only provider (a classic Shibboleth IdP without the OIDC OP plugin,
+or an org that has standardised on SAML): tracked, with its cost, in
 [`enterprise-sso-oidc.md`](../../docs/initiatives/enterprise-sso-oidc.md).
 
 **Machine tokens are revocable.** Every `POST /auth/machine-token` mint is
@@ -181,8 +185,127 @@ sharing the same `AUTH_SESSION_SECRET`:
 | `AUTH_ALLOWED_EMAIL_DOMAINS` | Comma-separated email domains allowed to self-signup (Google/password) | none (invite-only)              |
 
 `/auth/config` reports which providers are live (`providers.github` /
-`providers.password` / `providers.google`) so the SPA shows only the controls it
-can serve.
+`providers.password` / `providers.google` / `providers.sso`) so the SPA shows only
+the controls it can serve. When SSO is configured it also carries
+`sso: { label, protocol }`, the operator's own button wording.
+
+---
+
+## Enterprise SSO (generic OIDC)
+
+Sign-in through the deployment's OWN identity provider. **One generic adapter, not
+per-vendor integrations**: Okta, Entra ID, Auth0, Keycloak, PingFederate, OneLogin,
+JumpCloud, Google Workspace and a Shibboleth IdP with the OIDC OP plugin are all
+OpenID Connect providers, so a discovery document plus a client id/secret is the
+entire configuration for any of them. A provider not named here works too, as long
+as it publishes a discovery document: there is no per-vendor list to be on.
+
+```
+ SPA ──/auth/sso/login──▶ backend ──302──▶ <issuer>/authorize?…PKCE S256
+                                                  │ the IdP authenticates the user
+ SPA ◀──302 #token=…── backend ◀──/auth/sso/callback?code&state── the IdP
+```
+
+What each leg does:
+
+1. **`GET /auth/sso/login`** resolves the provider's
+   `/.well-known/openid-configuration` (cached through the app cache seam), mints a
+   PKCE pair plus an OIDC `nonce`, signs the whole round-trip into ONE **httpOnly**
+   cookie, and redirects with only an opaque nonce in the `state` parameter.
+2. **`GET /auth/sso/callback`** verifies the cookie against `state`, exchanges the
+   code (PKCE verifier + client secret), verifies the ID token against the
+   provider's JWKS, applies admission, resolves the canonical user, and hands the
+   SPA the SAME session token every other login mints.
+
+### What differs from the OAuth legs, and why
+
+- **The round-trip state lives in the cookie, not the URL.** PKCE's
+  `code_verifier` and OIDC's `nonce` are secrets; a verifier travelling beside the
+  code it protects protects nothing. A side effect worth having: the post-login
+  redirect target cannot be tampered with in the URL at all.
+- **A refusal REDIRECTS with `#sso_error=<reason>`**, not a JSON envelope: a
+  browser mid-redirect that lands on raw JSON has no way back. The reason vocabulary
+  is closed (`@cat-factory/contracts`' `SSO_ERROR_REASONS`) and the SPA maps each
+  member to translated copy, because the remedies genuinely differ: a missing
+  directory group is the user's to take to IT, a failed code exchange is the
+  operator's own configuration.
+- **The identity subject is `<discovered issuer>#<sub>`**, never the email. A `sub`
+  is unique per issuer only, and emails are reassigned inside orgs, so keying on
+  either alone eventually hands one person another's account.
+- **ID tokens verify against ASYMMETRIC algorithms only.** That is what refuses both
+  `alg: none` and an `HS256` token forged with the deployment's own client secret.
+- **A rotated signing key costs ONE refetch.** An unknown `kid` invalidates the
+  cached provider and refetches (rate-limited), rather than failing every login
+  until a TTL lapses.
+
+### Configuration
+
+Register a **web / confidential** application with your provider, with the
+redirect URI `<backend-origin>/auth/sso/callback`, then:
+
+| Var                              | Purpose                                                                               | Default                      |
+| -------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
+| `AUTH_SSO_ISSUER_URL`            | The provider's issuer URL. The `/.well-known/openid-configuration` suffix is optional | unset (SSO off)              |
+| `AUTH_SSO_CLIENT_ID`             | The application's client id                                                           | unset                        |
+| `AUTH_SSO_CLIENT_SECRET`         | The application's client secret                                                       | unset                        |
+| `AUTH_SSO_LABEL`                 | Sign-in button label, e.g. `Acme SSO`                                                 | `Single sign-on`             |
+| `AUTH_SSO_SCOPES`                | Space-separated scopes (`openid` is added when absent)                                | `openid profile email`       |
+| `AUTH_SSO_REDIRECT_URL`          | Override `redirect_uri` when the public URL differs from the request origin           | `<origin>/auth/sso/callback` |
+| `AUTH_SSO_ALLOWED_EMAIL_DOMAINS` | Optional narrowing: only these verified email domains may sign in                     | none (the IdP is the gate)   |
+| `AUTH_SSO_GROUPS_CLAIM`          | The claim carrying group memberships                                                  | `groups`                     |
+| `AUTH_SSO_REQUIRED_GROUPS`       | Optional narrowing: the user must be in at least one of these groups                  | none                         |
+
+Issuer URLs by provider, for reference: Okta
+`https://<org>.okta.com/oauth2/default`; Entra ID
+`https://login.microsoftonline.com/<tenant-id>/v2.0`; Auth0
+`https://<tenant>.eu.auth0.com`; Keycloak `https://<host>/realms/<realm>`; Google
+Workspace `https://accounts.google.com`; a Shibboleth IdP with the OIDC OP plugin
+`https://<idp-host>` (the plugin serves its
+`/.well-known/openid-configuration`).
+
+**Four combinations refuse to boot** rather than resolving to a deployment that
+looks configured and is not. Each lands on the misconfiguration screen naming the
+variable and its remedy:
+
+1. **Partially configured** — any of the three required variables set without the
+   others. Disabling quietly would leave an operator who believes SSO is live on the
+   consumer logins they adopted SSO to replace.
+2. **A non-https issuer** on a non-loopback host (the code and ID token would cross
+   the network in clear). Plain `http` is accepted for `localhost` / `127.0.0.0/8` /
+   `::1`, so a Keycloak or Dex container on a developer's own machine works.
+3. **A weak `AUTH_SESSION_SECRET`.** SSO decides _who_ signs in; the session it
+   mints is the same HMAC bearer, so a brute-forceable secret makes the IdP's
+   guarantees irrelevant.
+4. **`AUTH_DEV_OPEN` (or `TESTING_NO_AUTH`) alongside SSO.** Dev-open serves every
+   protected route anonymously. A deployment that configured SSO to satisfy a
+   security review must not have a variable combination that opens the API, and an
+   operator cannot be relied on to notice they set both, so the pair is refused
+   rather than one silently winning.
+
+### Why SSO is configured by ENVIRONMENT, not in the UI
+
+Every other integration this product talks to (trackers, document sources, model
+providers, runner pools, email senders) is onboarded in the UI and stored sealed in
+the database, per account. SSO deliberately is not, for three reasons:
+
+- **It is the deployment's trust root, not tenant configuration.** Whoever can edit
+  the SSO provider can point it at an IdP they control and then sign in as anybody.
+  A UI-editable identity provider turns "workspace admin" into a path to every
+  account on the deployment, a privilege-escalation seam no per-field permission
+  really closes.
+- **The bootstrap is circular.** SSO gates who reaches the UI at all, so configuring
+  it from inside the UI needs a second, already-working login to exist first, which
+  is precisely the consumer login an org adopting SSO wants gone.
+- **The refusals above are BOOT-time.** "SSO and dev-open cannot both be on" and
+  "the session secret must be strong enough to sign what SSO mints" belong where the
+  process starts, not on a form submission that could leave a running deployment in
+  the refused state.
+
+The trade is real: rotating a client secret means a config change and a restart
+rather than a form. If a UI surface is wanted later, the honest shape is a
+**deployment-operator** surface (not a workspace-admin one) with the boot refusals
+re-expressed as runtime guards; it is a separate slice, recorded in the initiative
+tracker.
 
 ---
 
@@ -191,22 +314,49 @@ can serve.
 Authentication answers _who is signing in_; **access control** answers _who is
 allowed_. Once login is enabled the deployment is **private and fails closed**.
 
-Gating is **per login method**, and the three allowlists are not interchangeable.
-The GitHub login/org allowlists govern GitHub sign-in only; the email-domain
-allowlist governs Google and password self-signup only. There is no single setting
-that applies to all three providers at once, and the criteria do not combine across
-methods (no "must be in org X _and_ have a @company.com email" mode).
+Gating is **per login method**, and the allowlists are not interchangeable. The
+GitHub login/org allowlists govern GitHub sign-in only; the `AUTH_ALLOWED_*`
+email-domain allowlist governs Google and password self-signup only; the SSO
+narrowings govern SSO only. There is no single setting that applies to every
+provider at once, and the criteria do not combine across methods (no "must be in
+org X _and_ have a @company.com email" mode).
 
-| Login method   | Gated on…                                    | By                             | When                 |
-| -------------- | -------------------------------------------- | ------------------------------ | -------------------- |
-| GitHub OAuth   | `AUTH_ALLOWED_LOGINS` OR `AUTH_ALLOWED_ORGS` | GitHub login or org membership | every sign-in        |
-| Google OAuth   | `AUTH_ALLOWED_EMAIL_DOMAINS`                 | the verified email's domain    | new-user signup only |
-| Email/password | `AUTH_ALLOWED_EMAIL_DOMAINS`                 | the email's domain             | new-user signup only |
+| Login method   | Gated on…                                                      | By                                | When                 |
+| -------------- | -------------------------------------------------------------- | --------------------------------- | -------------------- |
+| Enterprise SSO | the IdP's own app assignment, plus the optional SSO narrowings | directory group / verified domain | every sign-in        |
+| GitHub OAuth   | `AUTH_ALLOWED_LOGINS` OR `AUTH_ALLOWED_ORGS`                   | GitHub login or org membership    | every sign-in        |
+| Google OAuth   | `AUTH_ALLOWED_EMAIL_DOMAINS`                                   | the verified email's domain       | new-user signup only |
+| Email/password | `AUTH_ALLOWED_EMAIL_DOMAINS`                                   | the email's domain                | new-user signup only |
 
 A matching **invitation** (see below) admits a user under any method, bypassing
 that method's allowlist. Anyone who matches neither an allowlist nor an invite
 gets `403 forbidden`, so they reach neither the API (BE) nor, with no session
 minted, the SPA (FE) past its login gate.
+
+### SSO: the directory is the allowlist
+
+SSO is the one method that **admits by default**, and that is the feature rather
+than an oversight. With SSO configured, who may sign in is expressed by which
+people the application is assigned to in the directory: that is what makes
+onboarding and — the one that matters — **offboarding** a directory action instead
+of an edit to a list here. Contrast the GitHub path, which fails closed with both
+its lists empty, because there nothing else expresses who is allowed.
+
+Two optional narrowings exist for orgs whose IdP serves more than the population
+that should reach this deployment, checked in that order:
+
+1. **`AUTH_SSO_REQUIRED_GROUPS`** — the user must be in at least one named
+   directory group (read from `AUTH_SSO_GROUPS_CLAIM`; the reader tolerates every
+   shape providers ship groups in, since an unread claim would refuse the whole org).
+2. **`AUTH_SSO_ALLOWED_EMAIL_DOMAINS`** — their **verified** email's domain must be
+   listed. A configured domain gate with no email released is **refused**
+   (`email_required`), not admitted: admitting would silently void a rule the
+   operator wrote, and releasing the claim is their fix.
+
+Group memberships are read on **every** sign-in, so removing someone from a group
+blocks their next login. As with every other method, a session already minted lapses
+at its own expiry rather than being revoked (see the session-revocation note above),
+which is the gap between "disabled in the IdP" and "locked out here".
 
 ### GitHub: login + org allowlists
 

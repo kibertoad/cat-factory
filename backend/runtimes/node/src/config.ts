@@ -12,6 +12,7 @@ import type {
   EmailConfig,
   GitLabConfig,
   PrivilegedAppConfig,
+  SsoConfig,
   TasksConfig,
 } from '@cat-factory/server'
 import {
@@ -26,6 +27,7 @@ import {
   requireEncryptionKey,
   requireGitHubAppPrivateKey,
   resolveMachineTokenTtlMs,
+  resolveSsoConfig,
   resolveTrustedProxyHops,
   resolveInfraReachabilityConfig,
   resolvePlatformAlertConfig,
@@ -419,6 +421,7 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   googleEnabled: boolean
   passwordEnabled: boolean
   authEnabled: boolean
+  sso: SsoConfig | undefined
 } {
   const sessionSecret = env.AUTH_SESSION_SECRET?.trim() ?? ''
   const clientId = env.GITHUB_OAUTH_CLIENT_ID?.trim() ?? ''
@@ -439,7 +442,14 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
   const testingNoAuth = env.TESTING_NO_AUTH?.trim() === 'true' && nonProd
   const devOpen = (env.AUTH_DEV_OPEN?.trim() === 'true' || testingNoAuth) && nonProd
 
-  const authEnabled = githubEnabled || googleEnabled || passwordEnabled
+  // Enterprise SSO: parsed by the SHARED resolver the Worker facade calls too, so the nine
+  // variables and the four boot refusals live in ONE place. Resolved BEFORE the generic
+  // `assertNodeAuthConfigured` guards below so a partial/unsafe SSO combination reports its own
+  // specific problem (which variable, and why) rather than surfacing as the generic
+  // "no login provider configured".
+  const sso = resolveSsoConfig(env, { strongSessionSecret: strongSecret, devOpen })
+
+  const authEnabled = githubEnabled || googleEnabled || passwordEnabled || sso !== undefined
   assertNodeAuthConfigured({ clientId, clientSecret, sessionSecret, devOpen, authEnabled })
 
   return {
@@ -455,6 +465,7 @@ function resolveNodeAuthEnablement(env: NodeJS.ProcessEnv): {
     googleEnabled,
     passwordEnabled,
     authEnabled,
+    sso,
   }
 }
 
@@ -472,6 +483,7 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
     googleEnabled,
     passwordEnabled,
     authEnabled,
+    sso,
   } = resolveNodeAuthEnablement(env)
 
   return {
@@ -509,6 +521,7 @@ function buildAuthConfig(env: NodeJS.ProcessEnv): AppConfig['auth'] {
           },
         }
       : {}),
+    ...(sso ? { sso } : {}),
     allowedEmailDomains: csv(env.AUTH_ALLOWED_EMAIL_DOMAINS).map((d) => d.toLowerCase()),
     allowedLogins: csv(env.AUTH_ALLOWED_LOGINS).map((l) => l.toLowerCase()),
     allowedOrgs: csv(env.AUTH_ALLOWED_ORGS).map((o) => o.toLowerCase()),

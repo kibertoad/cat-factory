@@ -3647,9 +3647,24 @@
       "signInFailed": "Anmeldung fehlgeschlagen. Prüfen Sie Ihre Angaben und versuchen Sie es erneut.",
       "genericError": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
       "notConfiguredTitle": "Authentifizierung ist nicht konfiguriert",
-      "notConfiguredBody": "Für dieses Deployment ist keine Anmeldemethode aktiviert, daher können Sie sich nicht anmelden oder auf Ihre Workspaces zugreifen. Ein Administrator muss einen Authentifizierungs-Provider konfigurieren (GitHub- oder Google-OAuth oder E-Mail-/Passwort-Anmeldung).",
+      "notConfiguredBody": "Für dieses Deployment ist keine Anmeldemethode aktiviert, daher können Sie sich nicht anmelden oder auf Ihre Workspaces zugreifen. Ein Administrator muss einen Authentifizierungs-Provider konfigurieren (Single Sign-on über den Identitätsprovider Ihrer Organisation, GitHub- oder Google-OAuth oder E-Mail-/Passwort-Anmeldung).",
       "patPlaceholder": "{provider} Personal Access Token",
       "signInWithPat": "Mit {provider}-PAT anmelden"
+    },
+    "sso": {
+      "continueWith": "Mit {provider} fortfahren",
+      "failedTitle": "Single Sign-on wurde nicht abgeschlossen",
+      "errors": {
+        "stateInvalid": "Dieser Anmeldeversuch ist abgelaufen oder wurde bereits verwendet. Beginnen Sie erneut auf dieser Seite.",
+        "providerDenied": "Ihr Identitätsprovider hat die Anmeldung abgelehnt. Falls Sie sie nicht selbst abgebrochen haben, fragen Sie Ihre IT-Abteilung, ob diese Anwendung Ihnen zugewiesen ist.",
+        "exchangeFailed": "Dieses Deployment konnte den Austausch mit Ihrem Identitätsprovider nicht abschließen. Ein Administrator muss das Single-Sign-on-Client-Secret und die Redirect-URL prüfen.",
+        "tokenInvalid": "Die Antwort Ihres Identitätsproviders konnte nicht verifiziert werden. Ein Administrator muss die Single-Sign-on-Konfiguration dieses Deployments prüfen.",
+        "subjectMissing": "Ihr Identitätsprovider hat keine Benutzerkennung zurückgegeben, daher konnte kein Konto ermittelt werden. Ein Administrator muss prüfen, welche Claims freigegeben werden.",
+        "groupRequired": "Die Anmeldung hat funktioniert, aber Sie sind in keiner Verzeichnisgruppe, die dieses Deployment nutzen darf. Bitten Sie Ihre IT-Abteilung, Sie hinzuzufügen.",
+        "domainNotAllowed": "Ihre E-Mail-Domain darf sich bei diesem Deployment nicht anmelden. Fragen Sie Ihre IT-Abteilung, welches Konto Sie verwenden sollen.",
+        "emailRequired": "Dieses Deployment beschränkt die Anmeldung auf bestimmte E-Mail-Domains, aber Ihr Identitätsprovider hat keine verifizierte E-Mail-Adresse freigegeben. Ein Administrator muss den E-Mail-Claim aktivieren.",
+        "unknown": "Single Sign-on ist aus einem Grund fehlgeschlagen, den diese Version nicht kennt. Versuchen Sie es erneut und informieren Sie einen Administrator, falls es weiterhin auftritt."
+      }
     },
     "resetPassword": {
       "title": "Passwort zurücksetzen",

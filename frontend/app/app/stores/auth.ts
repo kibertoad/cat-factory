@@ -2,6 +2,7 @@ import type {
   BackendMisconfigured,
   InfrastructureCapabilities,
   LocalModeConfig,
+  SsoConfigView,
 } from '@cat-factory/contracts'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
@@ -9,6 +10,7 @@ import type { AuthUser } from '~/types/domain'
 import { retryWhileBackendUnreachable } from '~/utils/backendReady'
 import { createAuthSessionActions } from '~/stores/auth/session'
 import { createAuthRedirectActions } from '~/stores/auth/mothership'
+import type { SsoLoginFailure } from '~/utils/sso'
 
 /**
  * "Login with GitHub" session state. The backend mints a signed session token
@@ -31,7 +33,20 @@ export const useAuthStore = defineStore(
     /** Whether the backend requires authentication. */
     const required = ref(false)
     /** Which login providers the backend offers (drives the login UI). */
-    const providers = ref({ github: false, password: false, google: false })
+    const providers = ref({ github: false, password: false, google: false, sso: false })
+    /**
+     * Presentation for the deployment's OWN identity provider (enterprise SSO) — its
+     * operator-supplied label and protocol. Null unless `providers.sso` is set. The label names
+     * the operator's IdP, so it is the one piece of login copy the SPA renders verbatim rather
+     * than through the catalog.
+     */
+    const sso = ref<SsoConfigView | null>(null)
+    /**
+     * Why the last enterprise-SSO sign-in produced no session, when one was refused. Captured
+     * from the `#sso_error=` fragment on boot so the login screen can name the rule that refused
+     * instead of returning the user to an unchanged sign-in button.
+     */
+    const ssoError = ref<SsoLoginFailure | null>(null)
     /**
      * Source-control providers a HOSTED facade (remote node) accepts a user-supplied PAT for.
      * Drives the login screen's "sign in with a PAT" option on non-local deployments. Empty on
@@ -134,14 +149,29 @@ export const useAuthStore = defineStore(
       user,
       autoLoginProvider,
     })
-    const { consumeRedirectToken, maybeConnectMothership, signInViaMothership, maybeAcceptInvite } =
-      createAuthRedirectActions({ api, token, localMode, mothershipError, applySession })
+    const {
+      consumeRedirectToken,
+      consumeSsoError,
+      maybeConnectMothership,
+      signInViaMothership,
+      maybeAcceptInvite,
+    } = createAuthRedirectActions({
+      api,
+      token,
+      localMode,
+      mothershipError,
+      ssoError,
+      applySession,
+    })
 
     /** Resolve auth state: capture any redirect token, then check the backend. */
     async function bootstrap() {
       // A returning mothership-connect redirect is handled first (it carries a mothership session,
       // which must be exchanged — not stored as a local token by `consumeRedirectToken`).
       if (!(await maybeConnectMothership())) consumeRedirectToken()
+      // A refused SSO round-trip returns a reason instead of a token, and it must be read BEFORE
+      // the config call: the login screen renders from the same settled state either way.
+      consumeSsoError()
       try {
         // Tolerate a cold-start race: when the SPA and backend boot together, this first call
         // can beat the backend's listener by a second or two. Retry a not-listening-yet socket
@@ -149,6 +179,7 @@ export const useAuthStore = defineStore(
         const config = await retryWhileBackendUnreachable(() => api.getAuthConfig())
         required.value = config.enabled
         if (config.providers) providers.value = config.providers
+        sso.value = config.sso ?? null
         patProviders.value = config.patLogin?.providers ?? []
         testingNoAuth.value = config.testingNoAuth ?? false
         localMode.value = config.localMode ?? null
@@ -211,6 +242,8 @@ export const useAuthStore = defineStore(
       user,
       required,
       providers,
+      sso,
+      ssoError,
       patProviders,
       testingNoAuth,
       localMode,

@@ -20,21 +20,14 @@ import {
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { GitHubOAuth } from '../../auth/GitHubOAuth.js'
 import { GoogleOAuth } from '../../auth/GoogleOAuth.js'
 import { verifySession } from '../../auth/middleware.js'
 import { mintMachineToken } from '../../auth/machineToken.js'
 import { passwordAttemptLimited, tooManyAttempts } from './authThrottle.js'
-import {
-  HmacSigner,
-  type SessionPayload,
-  type SessionUser,
-  TOKEN_AUDIENCE,
-} from '../../auth/signing.js'
 import type { AuthConfig } from '../../config/types.js'
 import type { AppEnv } from '../../http/env.js'
-import type { UserRecord, VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
+import type { VcsIdentity, VcsIdentityResolver } from '@cat-factory/kernel'
 import {
   ConflictError,
   ForbiddenError,
@@ -44,30 +37,32 @@ import {
   UnauthorizedError,
 } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
+// The mechanics every redirecting login provider shares — the cookie-bound CSRF state, the
+// allow-listed post-login redirect, the session mint, the invite handling. Extracted when
+// enterprise SSO landed so there is exactly ONE implementation of each (see loginFlow.ts).
+import {
+  acceptInvite,
+  authConfig,
+  beginRoundTrip,
+  consumeState,
+  emailDomainAllowed,
+  emailMatchesInvite,
+  mintSession,
+  peekInvite,
+  sessionUser,
+  withToken,
+} from './loginFlow.js'
+import { registerSsoRoutes } from './ssoRoutes.js'
 
 // Authentication endpoints. The SPA is handed a signed session token (via the URL
 // fragment for OAuth redirects, or the JSON body for password login) which it carries
-// as `Authorization: Bearer` on subsequent calls. Three login providers compose here:
+// as `Authorization: Bearer` on subsequent calls. Four login providers compose here:
 //   - GitHub OAuth (browser round-trip)
 //   - Google OAuth (browser round-trip)
+//   - enterprise SSO / generic OIDC (browser round-trip, in `ssoRoutes.ts`)
 //   - email/password (direct JSON)
 // All resolve to ONE canonical `users` row via the UserService, so the session id is
 // always the internal `usr_*` id regardless of how the user signed in.
-
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
-
-/** Browser-binding cookie for an OAuth round-trip (see the GitHub flow notes below). */
-const OAUTH_STATE_COOKIE = 'cf_oauth_state'
-
-interface OAuthState {
-  aud: typeof TOKEN_AUDIENCE.oauthState
-  nonce: string
-  /** Where to send the browser (with the token) after a successful login. */
-  redirect: string
-  /** Optional invite token to redeem after a brand-new Google/GitHub signup. */
-  invite?: string
-  exp: number
-}
 
 // The one controller that keeps a local thrower rather than `requireCapability`: what it
 // guards is a boolean FLAG (`cfg.githubEnabled` / `cfg.passwordEnabled`), not an absent
@@ -82,10 +77,6 @@ function requireGoogle(cfg: AuthConfig) {
 
 const unavailable = (): never => {
   throw new UnavailableError('Authentication is not configured')
-}
-
-function authConfig<E extends AppEnv>(c: Context<E>): AuthConfig {
-  return c.get('container').config.auth
 }
 
 function githubClient(cfg: AuthConfig): GitHubOAuth {
@@ -115,92 +106,6 @@ function githubCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): st
 function googleCallbackUrl<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
   if (cfg.google?.redirectUrl) return cfg.google.redirectUrl
   return `${new URL(c.req.url).origin}/auth/google/callback`
-}
-
-/**
- * A loopback host (the user's OWN machine): `localhost`, the `127.0.0.0/8` block, or IPv6 `::1`.
- * A redirect to one of these is not an exfiltration vector — capturing the fragment there means
- * already running a server on the victim's own machine. This is what lets a mothership honour the
- * post-login redirect back to a mothership-mode LOCAL node (`http://localhost:PORT`), which is
- * neither same-origin nor pre-allowlisted, without an operator hand-listing every dev port.
- */
-function isLoopbackRedirect(url: URL): boolean {
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
-  return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host)
-}
-
-/**
- * Choose the post-login landing URL from the (untrusted) `redirect` query. The
- * session token is appended as a fragment, so an unrestricted redirect is a
- * token-exfiltration primitive — only same-origin, an explicitly allowlisted origin, or a
- * loopback host (the caller's own machine) is honoured, else the request origin.
- */
-export function pickPostLoginRedirect(
-  requested: string | undefined,
-  requestOrigin: string,
-  cfg: Pick<AuthConfig, 'successRedirectUrl' | 'allowedRedirectOrigins'>,
-): string {
-  if (cfg.successRedirectUrl) return cfg.successRedirectUrl
-  const fallback = `${requestOrigin}/`
-  if (!requested) return fallback
-  try {
-    const url = new URL(requested)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback
-    if (
-      url.origin === requestOrigin ||
-      cfg.allowedRedirectOrigins.includes(url.origin) ||
-      isLoopbackRedirect(url)
-    ) {
-      return requested
-    }
-  } catch {
-    // fall through to the safe origin-relative default
-  }
-  return fallback
-}
-
-function resolveRedirect<E extends AppEnv>(c: Context<E>, cfg: AuthConfig): string {
-  return pickPostLoginRedirect(c.req.query('redirect'), new URL(c.req.url).origin, cfg)
-}
-
-/** Append the session token as a URL fragment on the landing URL. */
-function withToken(redirect: string, token: string): string {
-  const url = new URL(redirect)
-  url.hash = `token=${token}`
-  return url.toString()
-}
-
-/** Build the SessionUser surface from a canonical user + chosen display login. */
-function sessionUser(user: UserRecord, login: string): SessionUser {
-  return {
-    id: user.id,
-    login,
-    name: user.name,
-    avatarUrl: user.avatarUrl,
-    email: user.email,
-  }
-}
-
-/**
- * Mint a user SESSION token, returning the signed token and the exact `exp` it committed to so a
- * caller can report the real expiry without a second clock read. Shared by every login path AND
- * the local-mode mothership-connect controller, so the session claim shape lives in one place.
- */
-export async function mintSession(
-  cfg: AuthConfig,
-  user: SessionUser,
-): Promise<{ token: string; exp: number }> {
-  const exp = Date.now() + cfg.sessionTtlMs
-  const session: SessionPayload = { ...user, aud: TOKEN_AUDIENCE.session, exp }
-  return { token: await new HmacSigner(cfg.sessionSecret).sign(session), exp }
-}
-
-/** Whether an email's domain is on the self-signup allowlist. */
-function emailDomainAllowed(email: string, cfg: AuthConfig): boolean {
-  const at = email.lastIndexOf('@')
-  if (at < 0) return false
-  const domain = email.slice(at + 1).toLowerCase()
-  return cfg.allowedEmailDomains.includes(domain)
 }
 
 /**
@@ -266,6 +171,11 @@ export function authController(): Hono<AppEnv> {
   // recovery, session) purely so no single function exceeds the size budget; each registers
   // onto the shared `app` and depends only on the module-level helpers above.
   registerOAuthRoutes(app)
+  // Enterprise SSO lives in its own registrar: its round-trip carries PKCE + OIDC nonce secrets
+  // that must stay out of the URL, so it owns a different state mechanism (a signed httpOnly
+  // cookie) than the two consumer-OAuth legs above, while sharing their signer and redirect
+  // allow-list through `loginFlow.ts`.
+  registerSsoRoutes(app)
   registerCredentialRoutes(app)
   registerMachineNodeRoutes(app)
   registerAccountRecoveryRoutes(app)
@@ -295,7 +205,11 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
           github: cfg.githubEnabled,
           password: cfg.passwordEnabled,
           google: !!cfg.google,
+          sso: !!cfg.sso,
         },
+        // The operator's own button wording travels beside the boolean, because it names THEIR
+        // identity provider and so is the one part of the login screen the SPA cannot localize.
+        ...(cfg.sso ? { sso: { label: cfg.sso.label, protocol: 'oidc' as const } } : {}),
         ...(localMode ? { localMode } : {}),
         ...(patProviders.length > 0 ? { patLogin: { providers: patProviders } } : {}),
         // Test-only: advertise that the deployment runs with no auth, so the SPA renders the
@@ -312,22 +226,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, githubLoginContract, async (c) => {
     const cfg = authConfig(c)
     if (!cfg.githubEnabled) return unavailable()
-    const nonce = crypto.randomUUID()
-    const state: OAuthState = {
-      aud: TOKEN_AUDIENCE.oauthState,
-      nonce,
-      redirect: resolveRedirect(c, cfg),
-      ...(c.req.query('invite') ? { invite: c.req.query('invite') } : {}),
-      exp: Date.now() + OAUTH_STATE_TTL_MS,
-    }
-    const signedState = await new HmacSigner(cfg.sessionSecret).sign(state)
-    setCookie(c, OAUTH_STATE_COOKIE, nonce, {
-      httpOnly: true,
-      secure: new URL(c.req.url).protocol === 'https:',
-      sameSite: 'Lax',
-      path: '/auth',
-      maxAge: OAUTH_STATE_TTL_MS / 1000,
-    })
+    const signedState = await beginRoundTrip(c, cfg)
     const url = githubClient(cfg).authorizeUrl({
       redirectUri: githubCallbackUrl(c, cfg),
       state: signedState,
@@ -384,22 +283,7 @@ function registerOAuthRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, googleLoginContract, async (c) => {
     const cfg = authConfig(c)
     const google = requireGoogle(cfg)
-    const nonce = crypto.randomUUID()
-    const state: OAuthState = {
-      aud: TOKEN_AUDIENCE.oauthState,
-      nonce,
-      redirect: resolveRedirect(c, cfg),
-      ...(c.req.query('invite') ? { invite: c.req.query('invite') } : {}),
-      exp: Date.now() + OAUTH_STATE_TTL_MS,
-    }
-    const signedState = await new HmacSigner(cfg.sessionSecret).sign(state)
-    setCookie(c, OAUTH_STATE_COOKIE, nonce, {
-      httpOnly: true,
-      secure: new URL(c.req.url).protocol === 'https:',
-      sameSite: 'Lax',
-      path: '/auth',
-      maxAge: OAUTH_STATE_TTL_MS / 1000,
-    })
+    const signedState = await beginRoundTrip(c, cfg)
     return c.redirect(
       google.authorizeUrl({ redirectUri: googleCallbackUrl(c, cfg), state: signedState }),
     )
@@ -880,46 +764,4 @@ function registerSessionRoutes(app: Hono<AppEnv>): void {
 
   // Stateless sessions: logout is a client-side token drop. Provided for symmetry.
   buildHonoRoute(app, logoutContract, (c) => c.body(null, 204))
-}
-
-/** Verify + single-use the OAuth state (signature, expiry, browser-binding cookie). */
-async function consumeState<E extends AppEnv>(
-  c: Context<E>,
-  cfg: AuthConfig,
-): Promise<OAuthState | null> {
-  const state = await new HmacSigner(cfg.sessionSecret).verify<OAuthState>(c.req.query('state'), {
-    aud: TOKEN_AUDIENCE.oauthState,
-  })
-  const boundNonce = getCookie(c, OAUTH_STATE_COOKIE)
-  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/auth' })
-  if (!state || !boundNonce || boundNonce !== state.nonce) return null
-  return state
-}
-
-async function peekInvite<E extends AppEnv>(c: Context<E>, token: string) {
-  const inv = c.get('container').invitations
-  return inv ? inv.peek(token) : null
-}
-
-/** Whether a sign-in email matches the address an invitation was sent to. */
-function emailMatchesInvite(signInEmail: string | null | undefined, inviteEmail: string): boolean {
-  return !!signInEmail && signInEmail.toLowerCase().trim() === inviteEmail
-}
-
-async function acceptInvite<E extends AppEnv>(
-  c: Context<E>,
-  token: string,
-  userId: string,
-  userEmail: string | null,
-): Promise<void> {
-  const inv = c.get('container').invitations
-  if (!inv) return
-  try {
-    await inv.accept(token, userId, userEmail)
-  } catch (err) {
-    // Expected invite states (expired / already-used / wrong email) must not block an
-    // otherwise-valid login; an unexpected infra error should still surface.
-    if (err instanceof ConflictError || err instanceof NotFoundError) return
-    throw err
-  }
 }

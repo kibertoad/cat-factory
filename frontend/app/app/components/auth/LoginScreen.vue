@@ -4,6 +4,7 @@ import { apiErrorEnvelope } from '~/composables/api/errors'
 import SecretInput from '~/components/common/SecretInput.vue'
 import type { VcsProvider } from '~/types/domain'
 import { VCS_PROVIDER_ICONS, VCS_PROVIDER_LABELS, VCS_PROVIDER_TOKEN_URLS } from '~/utils/vcs'
+import { SSO_ERROR_MESSAGE_KEYS } from '~/utils/sso'
 
 const auth = useAuthStore()
 const { t } = useI18n()
@@ -124,6 +125,18 @@ const showOAuthDivider = computed(
   () => auth.providers.password && (auth.providers.github || auth.providers.google),
 )
 
+// Enterprise SSO. Led with, above the consumer providers, because on a deployment that configures
+// it that is the intended way in — a person arriving at an org's board should not have to find
+// their company's button under two they must not use. The label is the operator's own wording
+// (it names their IdP), so it is rendered verbatim rather than through the catalog.
+const ssoLabel = computed(() => auth.sso?.label ?? '')
+// Translated copy for a refused round-trip, keyed off the machine-readable reason the backend
+// handed back. Each reason has its own wording because the remedies differ: a missing directory
+// group is something the user takes to IT, a failed code exchange is the operator's own config.
+const ssoErrorMessage = computed(() =>
+  auth.ssoError ? t(SSO_ERROR_MESSAGE_KEYS[auth.ssoError]) : null,
+)
+
 // Hosted (remote node) PAT login: the user pastes their OWN source-control PAT, which the
 // server resolves to an account and holds to its login/org/domain allowlist. The available
 // providers come from the server (`auth.patProviders`) — GitHub always, GitLab when configured,
@@ -157,6 +170,16 @@ async function submitRemotePat() {
   }
 }
 
+// Only divide SSO from what follows when something actually follows it.
+const showSsoDivider = computed(
+  () =>
+    auth.providers.sso &&
+    (auth.providers.github ||
+      auth.providers.google ||
+      auth.providers.password ||
+      remotePatProviders.value.length > 0),
+)
+
 // A remote deployment (node service / Worker) that advertises no sign-in method at all:
 // no OAuth, no password, no PAT, and not local mode. The auth gate still routes here (a
 // remote facade has no anonymous tier), so instead of a blank card we explain that
@@ -167,6 +190,7 @@ const noSignInMethod = computed(
     !auth.providers.github &&
     !auth.providers.google &&
     !auth.providers.password &&
+    !auth.providers.sso &&
     remotePatProviders.value.length === 0,
 )
 </script>
@@ -258,6 +282,41 @@ const noSignInMethod = computed(
         class="my-4 flex items-center gap-3 text-xs text-slate-500"
       >
         <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.localMode.orDivider') }}
+        <span class="h-px flex-1 bg-slate-800" />
+      </div>
+
+      <!-- A refused SSO round-trip: name the rule that refused, don't return the user to an
+           unchanged sign-in button. -->
+      <UAlert
+        v-if="ssoErrorMessage && mode !== 'forgot'"
+        class="mb-4"
+        color="error"
+        variant="subtle"
+        icon="i-lucide-shield-x"
+        :title="t('auth.sso.failedTitle')"
+        :description="ssoErrorMessage"
+        data-testid="sso-error"
+      />
+
+      <!-- Enterprise SSO: the deployment's OWN identity provider, led with where configured. -->
+      <div v-if="auth.providers.sso && mode !== 'forgot'" class="mb-2 space-y-2">
+        <UButton
+          block
+          size="lg"
+          color="primary"
+          icon="i-lucide-building-2"
+          data-testid="sso-signin"
+          @click="auth.loginWithSso(invite)"
+        >
+          {{ t('auth.sso.continueWith', { provider: ssoLabel }) }}
+        </UButton>
+      </div>
+
+      <div
+        v-if="showSsoDivider && mode !== 'forgot'"
+        class="my-4 flex items-center gap-3 text-xs text-slate-500"
+      >
+        <span class="h-px flex-1 bg-slate-800" /> {{ t('auth.login.or') }}
         <span class="h-px flex-1 bg-slate-800" />
       </div>
 

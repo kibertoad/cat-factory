@@ -1817,9 +1817,24 @@
       "signInFailed": "Error al iniciar sesión. Revisa tus datos e inténtalo de nuevo.",
       "genericError": "Algo salió mal. Inténtalo de nuevo.",
       "notConfiguredTitle": "La autenticación no está configurada",
-      "notConfiguredBody": "Este despliegue no tiene ningún método de inicio de sesión habilitado, por lo que no puedes iniciar sesión ni acceder a tus espacios de trabajo. Un administrador debe configurar un proveedor de autenticación (OAuth de GitHub o Google, o inicio de sesión con correo y contraseña).",
+      "notConfiguredBody": "Este despliegue no tiene ningún método de inicio de sesión habilitado, por lo que no puedes iniciar sesión ni acceder a tus espacios de trabajo. Un administrador debe configurar un proveedor de autenticación (inicio de sesión único mediante el proveedor de identidad de tu organización, OAuth de GitHub o Google, o inicio de sesión con correo y contraseña).",
       "patPlaceholder": "Token de acceso personal de {provider}",
       "signInWithPat": "Iniciar sesión con un PAT de {provider}"
+    },
+    "sso": {
+      "continueWith": "Continuar con {provider}",
+      "failedTitle": "El inicio de sesión único no se completó",
+      "errors": {
+        "stateInvalid": "Ese intento de inicio de sesión ha caducado o ya se usó. Vuelve a empezar desde esta página.",
+        "providerDenied": "Tu proveedor de identidad rechazó el inicio de sesión. Si no lo cancelaste tú, pregunta a tu equipo de TI si esta aplicación está asignada a ti.",
+        "exchangeFailed": "Este despliegue no pudo completar el intercambio con tu proveedor de identidad. Un administrador debe revisar el secreto de cliente y la URL de redirección del inicio de sesión único.",
+        "tokenInvalid": "No se pudo verificar la respuesta de tu proveedor de identidad. Un administrador debe revisar la configuración de inicio de sesión único de este despliegue.",
+        "subjectMissing": "Tu proveedor de identidad no devolvió un identificador de usuario, por lo que no se pudo resolver ninguna cuenta. Un administrador debe revisar qué claims publica.",
+        "groupRequired": "Te has autenticado correctamente, pero no perteneces a ningún grupo del directorio autorizado a usar este despliegue. Pide a tu equipo de TI que te añada.",
+        "domainNotAllowed": "Tu dominio de correo no tiene permitido iniciar sesión en este despliegue. Pregunta a tu equipo de TI qué cuenta debes usar.",
+        "emailRequired": "Este despliegue restringe el inicio de sesión por dominio de correo, pero tu proveedor de identidad no publicó una dirección de correo verificada. Un administrador debe habilitar el claim de correo.",
+        "unknown": "El inicio de sesión único falló por un motivo que esta versión no reconoce. Inténtalo de nuevo y avisa a un administrador si sigue ocurriendo."
+      }
     },
     "resetPassword": {
       "title": "Restablecer contraseña",
