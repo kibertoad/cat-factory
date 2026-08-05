@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { HARNESS_BODY_CAPABILITIES } from './agent-capabilities.js'
 import { parseAgentJob, parseInlineJob } from './job.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
@@ -122,6 +123,7 @@ const server = createServer((req, res) => {
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
+        capabilities: HARNESS_BODY_CAPABILITIES,
       })
     }
     // All non-health endpoints are gated by the optional shared secret.
@@ -155,7 +157,16 @@ const server = createServer((req, res) => {
         }
         const job = entry.parse(raw)
         const view = entry.registry.start(job.jobId, job as never)
-        return send(res, 202, { jobId: view.id, state: view.state })
+        // The capability handshake rides the ACCEPTANCE, not the poll view. The dispatch site
+        // is the only place the body it just sent is still in scope, and it is the last moment
+        // a blind run can be refused before the agent starts working from a prompt the body
+        // cannot back up. It is also a static fact about the IMAGE, so repeating it on every
+        // poll of a job that may run for an hour would be noise.
+        return send(res, 202, {
+          jobId: view.id,
+          state: view.state,
+          capabilities: HARNESS_BODY_CAPABILITIES,
+        })
       } catch (error) {
         // Parse failures (incl. host-allowlist rejection) are client errors → 400.
         const message = redactSecrets(error instanceof Error ? error.message : String(error))

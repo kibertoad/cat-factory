@@ -1,6 +1,7 @@
 import {
   DispatchError,
   getErrorMessage,
+  type RunnerDispatchAck,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
@@ -49,7 +50,7 @@ export class RunnerPoolTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const jobId = ref.jobId
     // A pool runs the SAME executor-harness image as the Cloudflare backend, so it
     // serves every harness route. Runtime parity is the default and assumed (the "keep
@@ -64,18 +65,20 @@ export class RunnerPoolTransport implements RunnerTransport {
     // kubectl/kustomize/helm) for a container-backed Kubernetes provision, `ui` the heavier
     // Playwright image, else the default executor image.
     try {
-      await this.provider.dispatch({
-        manifest: this.manifest,
-        jobId,
-        spec: {
-          ...spec,
-          kind,
-          ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
-          ...(options?.provider ? { cloudProvider: options.provider } : {}),
-          ...(options?.image ? { image: options.image } : {}),
-        },
-        resolveSecret: this.resolveSecret,
-      })
+      return (
+        (await this.provider.dispatch({
+          manifest: this.manifest,
+          jobId,
+          spec: {
+            ...spec,
+            kind,
+            ...(options?.instanceTypeId ? { instanceType: options.instanceTypeId } : {}),
+            ...(options?.provider ? { cloudProvider: options.provider } : {}),
+            ...(options?.image ? { image: options.image } : {}),
+          },
+          resolveSecret: this.resolveSecret,
+        })) ?? undefined
+      )
     } catch (error) {
       // The pool rejected the job: re-throw as a structured DispatchError (carrying the pool's
       // HTTP status) so the engine + the bootstrap / env-config services classify it as a

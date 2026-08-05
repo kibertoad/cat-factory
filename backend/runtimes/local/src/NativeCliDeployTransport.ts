@@ -1,4 +1,5 @@
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
@@ -61,7 +62,7 @@ class JobScopedRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind?: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | void> {
     return this.inner.dispatch(this.rekey(ref), spec, kind, options)
   }
 

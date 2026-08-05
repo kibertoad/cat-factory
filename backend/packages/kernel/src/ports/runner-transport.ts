@@ -518,6 +518,22 @@ export interface RunnerJobRef {
   jobId: string
 }
 
+/**
+ * What the harness said when it ACCEPTED a job. Read at the dispatch site, where the body that
+ * was just sent is still in scope, which is the only place the answer can be acted on before
+ * the agent starts working from a prompt the body may not be able to back up.
+ *
+ * Everything on it is optional and everything absent means "this backend could not tell",
+ * never "no". See `domain/harness-capabilities.ts` for why that distinction is load-bearing.
+ */
+export interface RunnerDispatchAck {
+  /**
+   * The optional job-body capability fields the running image parses, verbatim off the wire
+   * (`HarnessBodyCapability[]` once narrowed). Absent on an image older than the handshake.
+   */
+  capabilities?: readonly string[]
+}
+
 export interface RunnerTransport {
   /**
    * A stable identifier for this backend (`local-native` / `local-container` / `runner-pool` /
@@ -533,13 +549,19 @@ export interface RunnerTransport {
    * replayed dispatch never starts a duplicate. `kind` is the single manifest-driven
    * `agent` kind (carried in the job body; the body's `mode` + data select the flow);
    * the job is polled via {@link poll}.
+   *
+   * Returns the harness's {@link RunnerDispatchAck} when the backend can see it. `void` is a
+   * first-class answer, not a stub: a transport whose control plane does not forward the
+   * harness's own response (a self-hosted pool's job API, a deploy backend that runs no agent)
+   * genuinely does not know, and the capability handshake reads that as `unknown` rather than as
+   * a refusal. See `domain/harness-capabilities.ts`.
    */
   dispatch(
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind?: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void>
+  ): Promise<RunnerDispatchAck | void>
   /** Poll the job's current state. */
   poll(ref: RunnerJobRef): Promise<RunnerJobView>
   /**

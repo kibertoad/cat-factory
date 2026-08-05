@@ -512,6 +512,7 @@ export { NoopEnvironmentTestRunner } from './environment-test.js'
 export type {
   ContainerEvictionKind,
   HarnessCallMetric,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobContainer,

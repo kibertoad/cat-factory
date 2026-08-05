@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
@@ -355,7 +356,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
@@ -371,7 +372,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // The container is per-RUN: a run's first step starts it, later steps re-attach to
     // it (resolved by the run id), and the harness keys each step's job by the per-step
     // `ref.jobId` carried in the spec body.
@@ -408,7 +409,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
     // re-attaching to an already-running container re-POSTs, which the harness's per-id
     // registry treats as a re-attach.
-    await this.postJob(resolved, { ...spec, kind })
+    return this.postJob(resolved, { ...spec, kind })
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -575,7 +576,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const repoKey = repoKeyOf(spec)
     // Later steps of the same run re-attach to the member it already holds (idempotent).
     let member = this.members.find((m) => m.leasedTo === ref.runId)
@@ -583,11 +584,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (repoKey) member.repo = repoKey
     // Tell the harness to reuse its per-repo checkout (clean-sweep + fetch + switch branch)
     // rather than clone fresh — the whole point of repo-affinity pooling.
-    await this.postJob(member, { ...spec, kind, persistentCheckout: true })
+    return this.postJob(member, { ...spec, kind, persistentCheckout: true })
   }
 
-  /** POST a job body to a harness, throwing on a non-OK response. */
-  private postJob(endpoint: HarnessEndpoint, body: Record<string, unknown>): Promise<void> {
+  /**
+   * POST a job body to a harness, throwing on a non-OK response and returning the harness's
+   * capability handshake (undefined when the acceptance carried none).
+   */
+  private postJob(
+    endpoint: HarnessEndpoint,
+    body: Record<string, unknown>,
+  ): Promise<RunnerDispatchAck | undefined> {
     return postHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint,

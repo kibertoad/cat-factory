@@ -467,6 +467,21 @@ export {
   failureKindFromHarnessCause,
 } from './domain/harness-failure.js'
 
+// The job-body capability handshake: which optional body fields the running image parses, and
+// the three-state answer a dispatch draws from that. See `domain/harness-capabilities.ts`.
+export {
+  HARNESS_BODY_CAPABILITIES,
+  type HarnessBodyCapability,
+  type HarnessCapabilitySupport,
+  describeHarnessBodyCapability,
+  harnessCapabilityUnsupportedMessage,
+  isHarnessBodyCapability,
+  parseHarnessBodyCapabilities,
+  readRunnerDispatchAck,
+  requiredHarnessCapabilities,
+  resolveHarnessCapabilitySupport,
+} from './domain/harness-capabilities.js'
+
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
 export {

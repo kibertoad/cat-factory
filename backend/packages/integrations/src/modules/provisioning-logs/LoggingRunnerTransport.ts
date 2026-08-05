@@ -1,5 +1,6 @@
 import type {
   ProvisioningSubsystem,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
@@ -51,10 +52,11 @@ export class LoggingRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     try {
-      await this.opts.inner.dispatch(ref, spec, kind, options)
+      const ack = (await this.opts.inner.dispatch(ref, spec, kind, options)) ?? undefined
       await this.log('dispatch', ref, 'success', null, { kind, ...options })
+      return ack
     } catch (error) {
       // The verbatim transport error ("… dispatch failed (HTTP X): body") IS the
       // diagnostic the operator needs — log it, then rethrow so the engine still

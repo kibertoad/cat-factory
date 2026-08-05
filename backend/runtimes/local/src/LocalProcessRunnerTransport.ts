@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerJobRef,
   RunnerJobView,
@@ -149,11 +150,11 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const proc = await this.ensureProcess()
     // The harness keys jobs by the per-step `ref.jobId` in the body; a re-dispatch
     // (durable-driver replay) re-POSTs, which the JobRegistry treats as a re-attach.
-    await postHarnessJob({
+    return postHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(proc.port),
       secret: this.sharedSecret,

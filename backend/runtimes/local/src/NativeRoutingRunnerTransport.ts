@@ -1,4 +1,5 @@
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
@@ -41,10 +42,12 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const transport = await (spec.ambientAuth === true ? this.ambient() : this.managed())
     this.routed.set(refKey(ref), transport)
-    await transport.dispatch(ref, spec, kind, options)
+    // Forward the leg's capability handshake: the routing decorator picks WHICH harness serves
+    // the job, so it is also the only thing that can tell the dispatch site which image answered.
+    return (await transport.dispatch(ref, spec, kind, options)) ?? undefined
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {

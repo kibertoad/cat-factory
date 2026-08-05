@@ -2,6 +2,7 @@ import type {
   ConnectionTestResult,
   HarnessCallMetric,
   ProviderConfigField,
+  RunnerDispatchAck,
   RunnerDispatchRequest,
   RunnerJobResult,
   RunnerValidationReport,
@@ -21,6 +22,7 @@ import type {
 import {
   CONTAINER_EVICTION_ERROR,
   isHarnessFailureCause,
+  readRunnerDispatchAck,
   STRICT_URL_SAFETY_POLICY,
 } from '@cat-factory/kernel'
 import { DOCS } from '../../docs.js'
@@ -99,13 +101,19 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     this.urlPolicy = options.urlPolicy ?? STRICT_URL_SAFETY_POLICY
   }
 
-  async dispatch(req: RunnerDispatchRequest): Promise<void> {
-    await this.execute(
+  async dispatch(req: RunnerDispatchRequest): Promise<RunnerDispatchAck | undefined> {
+    const json = await this.execute(
       req.manifest,
       req.manifest.dispatch,
       this.scope(req.jobId, req.spec),
       req.resolveSecret,
     )
+    // The capability handshake, IF the scheduler passes the harness's acceptance body through.
+    // Read off the scheduler's response directly rather than through a manifest mapping: the
+    // field is the harness's, not the scheduler's, so a pool that proxies the body needs no
+    // configuration and a pool that does not has nothing to map. Absent ⇒ unknown, never a
+    // refusal. See `domain/harness-capabilities.ts`.
+    return readRunnerDispatchAck(json)
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {

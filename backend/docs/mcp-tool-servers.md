@@ -121,6 +121,41 @@ survivors are not a prefix of the declaration. And the drop list itself has no b
 `maxStatedUnavailable` the prompt folds the remainder into a count instead of one line each, while
 the run context keeps them all.
 
+## Does the runner image serve them at all (the capability handshake)
+
+A runner image older than the `mcpServers` field does not REJECT it, it ignores it. The prompt
+this backend composed has already told the agent it has the tools, so the run is misinformed
+rather than merely unequipped: a blind run, not a failed one. It is the failure an adopting
+deployment is likeliest to hit, because self-hosted runner pools lag the backend by design.
+
+So the harness reports the body-capability field names it parses, on `GET /health` and on the
+`POST /jobs` ACCEPTANCE. The acceptance is the load-bearing one: the dispatch site is the only
+place the body it just sent is still in scope, and the last moment before the agent starts.
+
+There are THREE answers, not two, and which one a dispatch got decides what happens:
+
+| Answer                     | What it means                                                        | What the dispatch does                                                               |
+| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Named the capability       | The image parses the field                                           | Nothing. The run proceeds.                                                           |
+| Reported a list WITHOUT it | The image said it cannot serve it                                    | REFUSED. The started job is released and the step fails as a `preflight` fault.      |
+| Reported no list at all    | An image older than the handshake, or a pool that did not forward it | Proceeds, and the blind spot is logged and counted (`container.capability_unknown`). |
+
+The third row is why this is not a boolean. Every image between "tool servers landed" and "the
+handshake landed" serves them perfectly and reports nothing, so treating silence as a refusal
+would take those runs out on no evidence at all.
+
+**For a self-hosted pool, forward the harness's acceptance body.** The handshake is read straight
+off the scheduler's dispatch response, with no manifest mapping to configure. The `capabilities`
+field is the harness's, not the scheduler's. A pool that proxies `POST /jobs` gets the check for
+free; a pool that answers with its own envelope lands in the third row, so its dispatches are
+counted as unverifiable and the operator obligation to keep the image current stands unchanged.
+
+The refused case names the capability, the fix and whose fix it is, and it is a configuration
+fault rather than a container failure: an operator updates the pool, or removes the capability
+from the agent kind. The counters are `container.capability_unsupported` and
+`container.capability_unknown`, both dimensioned by the capability alone; the run and workspace ids
+ride the log line, since a metric dimension has to be bounded.
+
 ## What the agent may call (`allowedTools`)
 
 - **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
@@ -425,17 +460,16 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   cannot be connected. Registering a client at runtime would be deployment state with no home in a
   composition-root registration and no operator-visible identity at the vendor, which is why it is
   deferred rather than absent by accident.
-- **Runner-pool images must be current, or the run is BLIND** (slice 5 carries the handshake that
-  closes this). A self-hosted runner image older than the backend parses the job body without the
-  `mcpServers` field and runs with the prompt still promising the tools; nothing states the gap.
-  Until the handshake lands, keeping pool images at the pinned tag is an adopter obligation, not a
-  nicety.
+- **A runner pool whose scheduler does not proxy the harness's acceptance body gets no capability
+  handshake** (see below). Its dispatches are then counted as UNVERIFIABLE rather than confirmed,
+  which is honest but is not the same as safe: keeping pool images at the pinned tag remains an
+  adopter obligation.
 - **No per-workspace or per-step server selection** (slice 6). A registered server applies to
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
   slice.
-- **What a run actually reached is not yet recorded on a typed surface** (slice 5). Today the
-  evidence is the prompt's tool-server section and the agent-context snapshot.
+- **What a run actually reached is not yet recorded on a typed surface** (slice 5's remaining
+  half). Today the evidence is the prompt's tool-server section and the agent-context snapshot.
 - **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
   resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
 - **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary

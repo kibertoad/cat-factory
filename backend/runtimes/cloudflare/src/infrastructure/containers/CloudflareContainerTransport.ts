@@ -1,6 +1,8 @@
 import {
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
+  readRunnerDispatchAck,
+  type RunnerDispatchAck,
   type RunnerDispatchKind,
   type RunnerJobRef,
   type RunnerJobView,
@@ -88,7 +90,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // The container is per-RUN (one Durable Object per run id), so every step of a run
     // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the
     // spec body), unique per step, so siblings never collide in its registries.
@@ -116,6 +118,9 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // across a run's steps — the store preserves the earliest startedAt for a key.
     // Best-effort — the registry swallows store errors.
     await this.registry?.register(ref.runId, kind)
+    // The harness's capability handshake rides the acceptance body. Read AFTER the registry
+    // write so a malformed/absent body can never cost the reaper its record of a live container.
+    return readRunnerDispatchAck(await safeJson(res))
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -181,6 +186,19 @@ export class CloudflareContainerTransport implements RunnerTransport {
     }
     const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
     await stub.shutdown()
+  }
+}
+
+/**
+ * The acceptance body as JSON, or undefined for anything unreadable. Never throws: the job is
+ * already accepted by the time this runs, so a body this transport cannot parse must degrade to
+ * "no handshake" (which the dispatch site reads as unknown) rather than fail a live dispatch.
+ */
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch {
+    return undefined
   }
 }
 

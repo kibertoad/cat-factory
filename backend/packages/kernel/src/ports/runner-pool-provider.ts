@@ -4,7 +4,7 @@ import type {
   RunnerPoolManifest,
 } from '../domain/types.js'
 import type { SecretResolver } from './environment-provider.js'
-import type { RunnerJobView } from './runner-transport.js'
+import type { RunnerDispatchAck, RunnerJobView } from './runner-transport.js'
 
 // Port for a self-hosted runner-pool provider: the thing that actually calls an
 // org's pool scheduler API to dispatch/poll/release coding jobs. The worker
@@ -36,8 +36,16 @@ export interface RunnerPoolConnectionTestRequest {
 }
 
 export interface RunnerPoolProvider {
-  /** Start (or re-attach to) the job on the pool. Idempotent per `jobId`. */
-  dispatch(req: RunnerDispatchRequest): Promise<void>
+  /**
+   * Start (or re-attach to) the job on the pool. Idempotent per `jobId`.
+   *
+   * Returns a {@link RunnerDispatchAck} when the SCHEDULER's response carries the harness's own
+   * acceptance body (a pool that proxies `POST /jobs` gets the capability handshake for free);
+   * `void` when it does not, which the dispatch site reads as "could not tell". A pool is the
+   * deployment shape most likely to lag the backend's image, so forwarding that body is worth a
+   * scheduler author's attention. See `backend/docs/mcp-tool-servers.md`.
+   */
+  dispatch(req: RunnerDispatchRequest): Promise<RunnerDispatchAck | void>
   /** Read the job's current state, mapped onto the canonical view. */
   poll(req: RunnerPollRequest): Promise<RunnerJobView>
   /** Free the job/runner (only when the manifest declares a `release` template). */

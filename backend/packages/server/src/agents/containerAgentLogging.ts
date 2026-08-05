@@ -1,8 +1,10 @@
 import {
+  type HarnessCapabilitySupport,
   type LogFields,
   type Logger,
   type OperationalMetrics,
   describeError,
+  describeHarnessBodyCapability,
   noopLogger,
   noopOperationalMetrics,
 } from '@cat-factory/kernel'
@@ -51,6 +53,16 @@ export interface ContainerJobLog {
   progress(fields?: LogFields): void
   /** The job reached a terminal state — `info` when it produced work, `warn` when it did not. */
   settled(outcome: 'done' | 'failed', fields?: LogFields): void
+  /**
+   * The job body carried a capability and the harness's handshake did not confirm it. Reports
+   * BOTH non-`supported` answers, because they are different facts needing different reactions
+   * and only this seam sees either: `unsupported` is a run about to be refused (a runner image
+   * behind the backend), `unknown` is the deployment's own blind spot (an image or a pool control
+   * plane that reports nothing, so a blind run cannot be ruled out).
+   *
+   * A no-op on `supported`, so every dispatch site can call it unconditionally.
+   */
+  capabilityGap(support: HarnessCapabilitySupport): void
 }
 
 /**
@@ -71,6 +83,40 @@ function countFailure(
   kind: unknown,
 ): void {
   metrics.increment(counter, typeof kind === 'string' ? { kind } : {})
+}
+
+/**
+ * Report one capability-handshake answer: a line naming the run, and a counter per CAPABILITY so
+ * a standing rate is readable per signal. Both are needed and neither substitutes: the line says
+ * which run lost its tools, the counter says how much of the fleet is behind.
+ *
+ * `capability` is the dimension because it is a closed union; the workspace/run/job ids that
+ * would be the interesting split are unbounded and stay on the line, per the metrics rule.
+ */
+function reportCapabilityGap(
+  logger: Logger,
+  metrics: OperationalMetrics,
+  support: HarnessCapabilitySupport,
+): void {
+  if (support.kind === 'supported') return
+  const capabilities = support.kind === 'unsupported' ? support.missing : support.required
+  const described = capabilities.map(describeHarnessBodyCapability)
+  if (support.kind === 'unsupported') {
+    logger.warn('container job refused: runner image cannot serve a declared capability', {
+      capabilities,
+      described,
+    })
+  } else {
+    logger.warn('container job dispatched without a capability handshake', {
+      capabilities,
+      described,
+    })
+  }
+  const counter =
+    support.kind === 'unsupported'
+      ? 'container.capability_unsupported'
+      : 'container.capability_unknown'
+  for (const capability of capabilities) metrics.increment(counter, { capability })
 }
 
 /**
@@ -111,5 +157,6 @@ export function containerJobLog(
       // EVICTION cause, named explicitly so a later `kind` field on this line cannot displace it.
       if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
     },
+    capabilityGap: (support) => reportCapabilityGap(logger, metrics, support),
   }
 }
