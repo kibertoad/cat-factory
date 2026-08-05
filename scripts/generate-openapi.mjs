@@ -41,7 +41,13 @@ const API_PREFIX = '/api/v1'
 // second time in three releases.
 // 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
 // so a consumer built against 1.11.0 keeps parsing.
-const API_VERSION = '1.12.0'
+// 1.13.0, not 1.12.0: additive only, on the run-debugging surface (a new `ok` filter on the
+// tool-call list and a `toolCalls` rollup on the run overview), but main reached 1.12.0 with
+// `configUnreadable` while this branch was in flight. The collision note above, arriving exactly
+// as it describes: both sides wrote the same number, so the VERSION line auto-merged clean and
+// only the comment beside it conflicted. Re-checked against `origin/main` rather than trusting
+// that clean merge.
+const API_VERSION = '1.13.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

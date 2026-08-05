@@ -44,6 +44,16 @@ export function createAuthSessionActions(ctx: AuthSessionContext) {
     window.location.href = `${apiBase}/auth/google/login?${redirectTarget(invite)}`
   }
 
+  /**
+   * Send the browser to the deployment's OWN identity provider (enterprise SSO), returning here
+   * after. One entry point whichever IdP is configured: the backend resolves the provider from its
+   * discovery document, so there is nothing per-vendor for the SPA to know.
+   */
+  function loginWithSso(invite?: string) {
+    if (typeof window === 'undefined') return
+    window.location.href = `${apiBase}/auth/sso/login?${redirectTarget(invite)}`
+  }
+
   /** Apply a freshly-minted token + user (from password signup/login). */
   function applySession(result: { token: string; user: AuthUser }) {
     token.value = result.token
@@ -107,6 +117,7 @@ export function createAuthSessionActions(ctx: AuthSessionContext) {
     applySession,
     login,
     loginWithGoogle,
+    loginWithSso,
     signup,
     passwordLogin,
     patLogin,

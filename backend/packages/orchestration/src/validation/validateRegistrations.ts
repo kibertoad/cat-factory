@@ -16,6 +16,7 @@ import {
   CONFLICT_RESOLVER_AGENT_KIND,
   FIXER_AGENT_KIND,
   ON_CALL_AGENT_KIND,
+  MCP_OAUTH_DEFAULT_HEADER,
   MCP_SUPPORTED_HARNESSES,
   TOOL_SERVER_BUDGET,
   describeFoundationalProblem,
@@ -693,6 +694,79 @@ function checkToolServerDefinition(
   }
   for (const secret of server.secretKeys ?? []) {
     problems.push(...checkToolServerSecret(kind, server, secret))
+  }
+  problems.push(...checkToolServerOAuth(kind, server))
+  return problems
+}
+
+/**
+ * A tool server's OAUTH declaration, when it has one. Four rules, and each of them names a failure
+ * that is otherwise invisible until a run or a button press:
+ *
+ * - `oauth` on a `stdio` server is an ERROR. A stdio server is a child process the CLI spawns;
+ *   there is no request to authorise, so the declaration is inert and reads as configured. The
+ *   dispatch drops the OAuth half silently for the mothership case, which is exactly why boot is
+ *   where the fault has to be named.
+ * - a declared endpoint that fails the URL floor is an ERROR, and this is the sharpest one here:
+ *   an OAuth exchange carries the client secret and the tokens, so a cleartext endpoint puts both
+ *   on the wire. A DISCOVERED endpoint is held to the same rule at the moment it is read.
+ * - a reserved `clientSecretKey` is an ERROR for the reason every capability credential is: the
+ *   declaration names both the key it wants and the token endpoint that key is posted to.
+ * - a `secretKeys` entry naming the same header the access token rides is a WARNING. Both would
+ *   land in one header map and the granted token wins, so the static credential silently does
+ *   nothing — which reads, to whoever declared it, as the platform ignoring their credential.
+ */
+function checkToolServerOAuth(kind: AgentKind, server: McpServerDefinition): RegistrationProblem[] {
+  const oauth = server.oauth
+  if (!oauth) return []
+  const problems: RegistrationProblem[] = []
+  const on = `(on agent kind "${kind}")`
+  if (server.transport.kind !== 'http') {
+    problems.push({
+      severity: 'error',
+      code: 'oauth_requires_http_transport',
+      message:
+        `Tool server "${server.id}" ${on} declares OAuth on a "${server.transport.kind}" ` +
+        `transport. OAuth authenticates a REQUEST, and a stdio server is a child process the ` +
+        `agent CLI spawns with no request to authorise — pass its credential through secretKeys ` +
+        `instead.`,
+    })
+  }
+  for (const [field, url] of [
+    ['authorizationUrl', oauth.authorizationUrl],
+    ['tokenUrl', oauth.tokenUrl],
+  ] as const) {
+    if (url === undefined || isAllowedMcpHttpUrl(url)) continue
+    problems.push({
+      severity: 'error',
+      code: 'insecure_oauth_endpoint',
+      message:
+        `Tool server "${server.id}" ${on} declares OAuth ${field} "${url}". The exchange carries ` +
+        `the client secret and the access token, so the endpoint must be https (plain http is ` +
+        `accepted only on loopback).`,
+    })
+  }
+  if (oauth.clientSecretKey !== undefined && isReservedPlatformEnvKey(oauth.clientSecretKey)) {
+    problems.push({
+      severity: 'error',
+      code: 'reserved_credential_key',
+      message:
+        `Tool server "${server.id}" ${on} declares OAuth client secret ` +
+        reservedEnvKeyMessage(oauth.clientSecretKey),
+    })
+  }
+  const tokenHeader = (oauth.header ?? MCP_OAUTH_DEFAULT_HEADER).toLowerCase()
+  for (const secret of server.secretKeys ?? []) {
+    if (secret.header?.toLowerCase() !== tokenHeader) continue
+    problems.push({
+      severity: 'warn',
+      code: 'oauth_header_collision',
+      message:
+        `Tool server "${server.id}" ${on} declares credential "${secret.key}" on header ` +
+        `"${secret.header}", which is also where its OAuth access token is sent. The granted ` +
+        `token wins, so that credential reaches the server as nothing at all — send it under a ` +
+        `different header, or drop it.`,
+    })
   }
   return problems
 }

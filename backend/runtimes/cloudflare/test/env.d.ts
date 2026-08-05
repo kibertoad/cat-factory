@@ -15,6 +15,7 @@ declare global {
       TEST_TELEMETRY_MIGRATIONS: D1Migration[]
       TEST_SANDBOX_MIGRATIONS: D1Migration[]
       TEST_MIGRATIONS_PROVISIONING: D1Migration[]
+      TEST_MIGRATIONS_AUDIT: D1Migration[]
     }
   }
 }

@@ -36,6 +36,7 @@ import type {
   AgentToolCallRepository,
   ApiContractRepository,
   AppCaches,
+  AuditRecorder,
   BinaryGeneratorRegistry,
   BinaryGeneratorSource,
   BlockRepository,
@@ -257,6 +258,18 @@ export interface CoreDependencies {
    * `noopOperationalMetrics` explicitly, which says that in code.
    */
   operationalMetrics: OperationalMetrics
+  /**
+   * Where privileged and destructive actions are RECORDED for an account admin to read back
+   * (kernel `ports/audit.ts`). The narrow write seam, not the store: `record` never throws, so
+   * an audited service is unchanged in shape from an unaudited one.
+   *
+   * REQUIRED for the third time and the same reason as `logger` and `operationalMetrics`, with
+   * the sharpest version of the failure: an un-wired audit log reads as "nobody has changed
+   * anything", which is indistinguishable from a quiet month and is the precise assurance the
+   * log exists to give. A facade that does not persist audit events passes `noopAuditRecorder`
+   * explicitly, which says so in code.
+   */
+  auditRecorder: AuditRecorder
   blockRepository: BlockRepository
   pipelineRepository: PipelineRepository
   executionRepository: ExecutionRepository

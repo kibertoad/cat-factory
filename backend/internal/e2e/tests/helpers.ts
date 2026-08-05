@@ -132,6 +132,24 @@ export async function createTask(
   )
 }
 
+/**
+ * Patch a block (the `PATCH /blocks/:id` the inspector's edits post to). Used as a TRIGGER by
+ * the input-gate spec: the gate's `recheck` re-evaluates the task AS IT NOW STANDS, so proving
+ * the release needs the task to actually change between the park and the click.
+ */
+export async function updateTask(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+  patch: { title?: string; description?: string; pipelineId?: string },
+): Promise<Block> {
+  return json<Block>(
+    await request.patch(`${BACKEND_URL}/workspaces/${workspaceId}/blocks/${blockId}`, {
+      data: patch,
+    }),
+  )
+}
+
 // Shared timeouts for LIVE (WebSocket-pushed) assertions. A live run advances through
 // several durable pg-boss steps, so web-first assertions need headroom over the default
 // 5s — but we still want NO fixed sleeps. Named here so every spec uses the same budget.

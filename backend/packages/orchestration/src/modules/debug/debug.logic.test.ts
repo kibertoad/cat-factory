@@ -8,6 +8,7 @@ import type {
 import {
   deriveSignals,
   foldLlmRollup,
+  foldToolCallRollup,
   sliceText,
   toDebugAgentContextDetail,
   toDebugLlmCall,
@@ -386,6 +387,7 @@ describe('deriveSignals', () => {
     ...foldLlmRollup([]),
     sinks: EMPTY_SINKS,
     provisioningFailures: 0,
+    toolCells: [],
   }
 
   it('leads with the failure, then the provisioning cause, then the failed calls', () => {
@@ -484,11 +486,13 @@ describe('deriveSignals', () => {
       ...base,
       execution: run({ status: 'failed' }),
       ...foldLlmRollup([summary({ calls: 40, errors: 0, truncatedCalls: 0 })]),
+      sinks: { ...EMPTY_SINKS, toolCalls: { available: true, count: 12 } },
+      toolCells: [{ agentKind: 'coder', tool: 'edit', calls: 12, failures: 3 }],
     })
     const pointer = signals.find((s) => s.code === 'failure_outside_model_calls')
     expect(pointer).toMatchObject({ severity: 'warning', count: 40 })
-    expect(pointer!.message).toContain('tool-calls?order=trajectory')
-    expect(pointer!.message).toContain('contains=')
+    // Failing tool calls exist, so the pointer says so and sends the reader at the rows.
+    expect(pointer!.message).toContain('tool-calls?ok=false')
 
     // Any model-side anomaly claims the diagnosis instead: the pointer must not fire beside
     // a failed call…
@@ -518,6 +522,159 @@ describe('deriveSignals', () => {
       ...foldLlmRollup([]),
     })
     expect(noCalls.map((s) => s.code)).not.toContain('failure_outside_model_calls')
+  })
+
+  it('distinguishes an unrecorded tool loop from a recorded one that failed nothing', () => {
+    // The two look identical in every count on the overview and mean opposite things: one is
+    // "the container's work was not captured", the other is "the container's work was fine, so
+    // look at the engine". Collapsing them sends a debugger past the evidence they need.
+    const failedRun = { ...base, execution: run({ status: 'failed' }) }
+    const rollup = foldLlmRollup([summary({ calls: 40 })])
+
+    const clean = deriveSignals({
+      ...failedRun,
+      ...rollup,
+      sinks: { ...EMPTY_SINKS, toolCalls: { available: true, count: 12 } },
+      toolCells: [{ agentKind: 'coder', tool: 'edit', calls: 12, failures: 0 }],
+    })
+    const cleanMessage = clean.find((s) => s.code === 'failure_outside_model_calls')!.message
+    expect(cleanMessage).toContain('points at the engine')
+    expect(cleanMessage).not.toContain('ok=false')
+
+    const unwired = deriveSignals({
+      ...failedRun,
+      ...rollup,
+      sinks: { ...EMPTY_SINKS, toolCalls: { available: false, count: 0 } },
+    })
+    const unwiredMessage = unwired.find((s) => s.code === 'failure_outside_model_calls')!.message
+    expect(unwiredMessage).toContain('not wired on this deployment')
+    expect(unwiredMessage).not.toContain('points at the engine')
+
+    // Wired but holding nothing for this run is the same absence with a different cause, so it
+    // states the absence without blaming the deployment's wiring for it.
+    const empty = deriveSignals({ ...failedRun, ...rollup })
+    const emptyMessage = empty.find((s) => s.code === 'failure_outside_model_calls')!.message
+    expect(emptyMessage).toContain('unrecorded rather than uneventful')
+    expect(emptyMessage).not.toContain('not wired on this deployment')
+  })
+
+  it('counts tool-EXECUTION failures, which every LLM rollup beside them reports as healthy', () => {
+    const signals = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [
+        { agentKind: 'coder', tool: 'bash', calls: 30, failures: 2 },
+        { agentKind: 'coder', tool: 'edit', calls: 10, failures: 2 },
+      ],
+    })
+    const failed = signals.find((s) => s.code === 'tool_calls_failed')
+    // `info`, not `warning`: a failing tool call is the ordinary shape of an agent loop (a test
+    // that fails before it is fixed, a `grep` that matches nothing), so a warning here would fire
+    // on most healthy runs and cost the severity ordering the thing it exists for. The count is
+    // context; `tool_retry_loop` is the diagnosis.
+    expect(failed).toMatchObject({ severity: 'info', count: 4 })
+    expect(failed!.message).toContain('10%')
+    expect(failed!.message).toContain('ok=false')
+    // Scattered failures are NOT a retry loop: no cell is mostly-failing, so the sharper
+    // finding must not fire on a shape that does not have it.
+    expect(signals.map((s) => s.code)).not.toContain('tool_retry_loop')
+    // A run whose tools all worked says nothing at all rather than a reassuring zero row.
+    const healthy = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [{ agentKind: 'coder', tool: 'bash', calls: 30, failures: 0 }],
+    })
+    expect(healthy.map((s) => s.code)).not.toContain('tool_calls_failed')
+  })
+
+  it('names the (agentKind, tool) pair a retry loop concentrated on', () => {
+    // The finding is the CONCENTRATION, which both of the overview's breakdowns have folded
+    // away by the time a reader sees them.
+    const signals = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [
+        { agentKind: 'coder', tool: 'bash', calls: 100, failures: 3 },
+        { agentKind: 'ci-fixer', tool: 'apply_patch', calls: 9, failures: 8 },
+      ],
+    })
+    const loop = signals.find((s) => s.code === 'tool_retry_loop')
+    expect(loop).toMatchObject({ severity: 'warning', count: 8, agentKind: 'ci-fixer' })
+    expect(loop!.message).toContain('apply_patch')
+
+    // Both conditions are load-bearing. A single failing command is not a loop…
+    const oneFailure = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [{ agentKind: 'coder', tool: 'bash', calls: 1, failures: 1 }],
+    })
+    expect(oneFailure.map((s) => s.code)).not.toContain('tool_retry_loop')
+    // …and neither is a thorough agent whose many calls mostly worked.
+    const busy = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [{ agentKind: 'coder', tool: 'bash', calls: 400, failures: 20 }],
+    })
+    expect(busy.map((s) => s.code)).not.toContain('tool_retry_loop')
+  })
+
+  it('finds the loop behind a busier cell that carries more raw failures', () => {
+    // A coder running tests that fail is not a loop and outranks the wedged fixer on failure
+    // COUNT, so the loop is only found by testing every cell rather than the top-ranked one.
+    // The run this fires on is the motivating case for the whole sink.
+    const signals = deriveSignals({
+      ...base,
+      execution: run({ status: 'failed' }),
+      toolCells: [
+        { agentKind: 'coder', tool: 'bash', calls: 100, failures: 6 },
+        { agentKind: 'ci-fixer', tool: 'apply_patch', calls: 5, failures: 5 },
+      ],
+    })
+    expect(signals.find((s) => s.code === 'tool_retry_loop')).toMatchObject({
+      agentKind: 'ci-fixer',
+      count: 5,
+    })
+  })
+
+  it('orders the tool diagnosis above the tool count, as their severities say', () => {
+    // The list is read top-down and truncated by callers, so a `warning` that names where to look
+    // must not sit under the `info` that merely counts.
+    const codes = deriveSignals({
+      ...base,
+      execution: run(),
+      toolCells: [{ agentKind: 'ci-fixer', tool: 'apply_patch', calls: 6, failures: 6 }],
+    }).map((s) => s.code)
+    expect(codes.indexOf('tool_retry_loop')).toBeLessThan(codes.indexOf('tool_calls_failed'))
+  })
+})
+
+describe('foldToolCallRollup', () => {
+  it('re-cuts one aggregate along both axes, each row carrying the ratio it means something as', () => {
+    const rollup = foldToolCallRollup([
+      { agentKind: 'coder', tool: 'edit', calls: 6, failures: 5 },
+      { agentKind: 'coder', tool: 'bash', calls: 30, failures: 1 },
+      { agentKind: 'ci-fixer', tool: 'edit', calls: 4, failures: 0 },
+    ])
+    expect(rollup.totals).toEqual({ calls: 40, failures: 6, failureRate: 0.15 })
+    expect(rollup.byTool).toEqual([
+      { tool: 'edit', calls: 10, failures: 5, failureRate: 0.5 },
+      { tool: 'bash', calls: 30, failures: 1, failureRate: 1 / 30 },
+    ])
+    expect(rollup.byAgentKind.map((row) => row.agentKind)).toEqual(['coder', 'ci-fixer'])
+    // Both breakdowns fold the same cells, so neither can drift from the totals above it.
+    for (const axis of [rollup.byTool, rollup.byAgentKind]) {
+      expect(axis.reduce((acc, row) => acc + row.calls, 0)).toBe(rollup.totals.calls)
+      expect(axis.reduce((acc, row) => acc + row.failures, 0)).toBe(rollup.totals.failures)
+    }
+  })
+
+  it('reports a NULL failure rate for a run that called no tools', () => {
+    // Not 0%, which would file "nothing happened" beside "everything worked".
+    expect(foldToolCallRollup([])).toEqual({
+      totals: { calls: 0, failures: 0, failureRate: null },
+      byTool: [],
+      byAgentKind: [],
+    })
   })
 })
 

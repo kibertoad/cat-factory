@@ -14,11 +14,18 @@
  * The login providers an identity can come from. `github`/`gitlab` are sourced from a
  * source-control account (OAuth in hosted mode, or a PAT in local mode — both resolve to
  * the provider's stable numeric user id as the `subject`); `google` from Google OAuth;
+ * `oidc` from the deployment's own enterprise identity provider (Okta, Entra ID, Keycloak,
+ * PingFederate, a Shibboleth OP …), reached through one generic OpenID Connect adapter;
  * `password` is a cat-factory-generated account keyed on the email. Because the identity
  * store keys on `(provider, subject)`, these namespaces never collide — a GitHub user, a
  * GitLab user, and a password user are distinct rows even if their subjects coincide.
+ *
+ * `oidc` is the one member whose subject is COMPOUND (`<issuer>#<sub>`, minted by
+ * `oidcIdentitySubject`): an OIDC `sub` is unique per issuer and not globally, so keying on
+ * it alone would let two directories collide on one row the day a deployment re-points at a
+ * second provider.
  */
-export type IdentityProvider = 'github' | 'gitlab' | 'password' | 'google'
+export type IdentityProvider = 'github' | 'gitlab' | 'password' | 'google' | 'oidc'
 
 /** The canonical user record. */
 export interface UserRecord {

@@ -1,6 +1,8 @@
 import type { Ref } from 'vue'
+import { SSO_ERROR_FRAGMENT_KEY, parseSsoErrorReason } from '@cat-factory/contracts'
 import type { LocalModeConfig } from '@cat-factory/contracts'
 import type { AuthUser } from '~/types/domain'
+import type { SsoLoginFailure } from '~/utils/sso'
 
 /**
  * Shared reactive state + injected dependencies the auth-store redirect factory closes over.
@@ -13,6 +15,8 @@ export interface AuthRedirectContext {
   token: Ref<string | null>
   localMode: Ref<LocalModeConfig | null>
   mothershipError: Ref<string | null>
+  /** Why the last enterprise-SSO round-trip produced no session, when one was refused. */
+  ssoError: Ref<SsoLoginFailure | null>
   /** Apply a freshly-minted token + user (the session factory's setter). */
   applySession: (result: { token: string; user: AuthUser }) => void
 }
@@ -23,7 +27,7 @@ export interface AuthRedirectContext {
  * mode — exchanging a returning MOTHERSHIP session for a local one.
  */
 export function createAuthRedirectActions(ctx: AuthRedirectContext) {
-  const { api, token, localMode, mothershipError, applySession } = ctx
+  const { api, token, localMode, mothershipError, ssoError, applySession } = ctx
 
   /** Pull a token handed back in the post-login URL fragment (#token=…). */
   function consumeRedirectToken() {
@@ -32,6 +36,27 @@ export function createAuthRedirectActions(ctx: AuthRedirectContext) {
     if (!match) return
     token.value = decodeURIComponent(match[1]!)
     // Strip the token from the URL so it isn't left in history or shared.
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
+
+  /**
+   * Pull the reason a REFUSED enterprise-SSO round-trip handed back (`#sso_error=<reason>`), the
+   * sibling of the `#token=` a successful one sets.
+   *
+   * A fragment rather than a query for the same reason the token is: it never reaches a server log
+   * or a `Referer`, and the reason names the deployment's own admission rules. Stripped from the
+   * URL afterwards so a reload doesn't resurrect a stale failure.
+   */
+  function consumeSsoError() {
+    if (typeof window === 'undefined') return
+    const match = new RegExp(`(?:^#|[#&])${SSO_ERROR_FRAGMENT_KEY}=([^&]+)`).exec(
+      window.location.hash,
+    )
+    if (!match) return
+    // An unrecognised value came from a newer backend than this build: reported as `unknown`
+    // rather than rendered raw, and never dropped — the user clicked a button and is owed an
+    // answer about why they are back here.
+    ssoError.value = parseSsoErrorReason(decodeURIComponent(match[1]!)) ?? 'unknown'
     history.replaceState(null, '', window.location.pathname + window.location.search)
   }
 
@@ -101,6 +126,7 @@ export function createAuthRedirectActions(ctx: AuthRedirectContext) {
 
   return {
     consumeRedirectToken,
+    consumeSsoError,
     maybeConnectMothership,
     signInViaMothership,
     maybeAcceptInvite,

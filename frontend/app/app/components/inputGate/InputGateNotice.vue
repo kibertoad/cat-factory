@@ -148,6 +148,9 @@ async function resolve(choice: 'recheck' | 'proceed') {
             v-for="issue in issues"
             :key="`${issue.code}:${issue.field?.key ?? ''}`"
             class="flex items-start gap-2 text-xs"
+            data-testid="input-gate-issue"
+            :data-issue-code="issue.code"
+            :data-issue-severity="issue.severity"
           >
             <UBadge
               :color="issue.severity === 'blocking' ? 'warning' : 'neutral'"

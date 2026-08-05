@@ -37,7 +37,8 @@ import {
   start,
 } from '@cat-factory/node-server'
 import { createE2eGitHubClient, type GitHubSeed, seedGitHubForWorkspace } from './fakeGitHub.ts'
-import { fakeInlineModelResolver } from './fakeInlineModel.ts'
+import { E2eInlineModels } from './fakeInlineModel.ts'
+import { E2eJudgeAssessor, registerE2eJudge } from './fakeJudge.ts'
 import {
   E2eFakeAgentExecutor,
   E2eGateProviders,
@@ -121,6 +122,13 @@ const repoBootstrapper = new E2eRepoBootstrapper(profiles)
 // PR → conflict-resolver, a regressed release → on-call). They only run when a pipeline includes
 // the gate step, so the pre-existing specs are unaffected.
 const gateProviders = new E2eGateProviders(profiles)
+// The INLINE LLM path — the requirements-review loop, the initiative/document interviewers —
+// which the agent-executor fake above does not touch (it fakes CONTAINER steps). Per-workspace
+// and dispatched on the prompt's shape; see `fakeInlineModel.ts`.
+const inlineModels = new E2eInlineModels(profiles)
+// The JUDGE verdict producer (the fourth step-taxonomy bucket). Per-workspace verdict script;
+// the judge itself is registered on the built container below. See `fakeJudge.ts`.
+const judgeAssessor = new E2eJudgeAssessor(profiles)
 
 // GitHub App integration, faked ON with NO real credentials (see fakeGitHub.ts). The shared
 // catalogued fake client backs the interactive connect/link flows; per-workspace connection +
@@ -395,10 +403,14 @@ await start({
         agentExecutor,
         repoBootstrapper,
         // Fake the INLINE LLM path too (the agent executor above only fakes CONTAINER steps). The
-        // full-interview `pl_initiative` pipeline runs its interviewer inline through this resolver;
-        // on the keyless e2e backend the real resolver would fault it, so serve a converging mock.
-        // See `fakeInlineModel.ts` — safe for existing specs (none assert on an inline-gate outcome).
-        modelProviderResolver: fakeInlineModelResolver,
+        // full-interview `pl_initiative` pipeline runs its interviewer inline through this resolver,
+        // as does the whole requirements-review loop; on the keyless e2e backend the real resolver
+        // would fault them. See `fakeInlineModel.ts` — the reply is chosen by the prompt's shape and
+        // the workspace's profile, so an unscripted workspace gets exactly the prior behaviour.
+        modelProviderResolver: inlineModels.resolver,
+        // The judge verdict producer. Wiring it turns judge steps from a pass-through (`enabled:
+        // false`) into the real evaluate → bounce/park machine, driven by the per-workspace script.
+        judgeAssessor,
         // GitHub App faked ON via overrides (no GITHUB_APP_ID/private key): the fake client + the
         // real Drizzle projection repos + a pass-through webhook verifier. The read endpoints serve
         // from the projections; `seedGitHubForWorkspace` populates them per workspace.
@@ -424,6 +436,10 @@ await start({
         releaseHealth: gateProviders.releaseHealth,
       },
     })
+    // Register the example `scope-adherence` judge on the container's own registry (the engine
+    // and the SPA both read it lazily, so registering here is in time for every run). Without a
+    // registration there is no judge in the product at all: the registry ships empty.
+    registerE2eJudge(container)
     // Capture the built container for the `/rbac-seed` control route (real user / account /
     // workspace services). Read only after boot, when a spec fires the route.
     rbacContainer = container

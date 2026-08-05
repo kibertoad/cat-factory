@@ -30,6 +30,12 @@ prerequisites are configured.
   `startNode`/`startLocal`'s `seedSharedStacks` flows through it, idempotently by NAME.
 - `datadog/` + `observability/`: release-health providers; `pagerduty/`, `incidentio/`,
   `incident/`, `incidentEnrichment/`: incident enrichment.
+- `mcpOAuth/`: the per-workspace OAuth grants a remote (`http`) MCP tool server needs.
+  `McpOAuthService.ts` owns the lifecycle (start → sealed state → exchange → refresh → disconnect)
+  and `mcpOAuthClient.ts` is the wire half (RFC 9728/8414 endpoint discovery plus the three token
+  calls, hand-rolled on `fetch` so it bundles into a Worker). Separate from `capabilityCredentials/`
+  on purpose: a grant expires, is rewritten by the dispatch path, and belongs to a person's vendor
+  account, none of which a typed credential's shape can hold. See `backend/docs/mcp-tool-servers.md`.
 - `testSecrets/`: sealed per-service test credentials; `validation/`: per-service PRE-PR
   validation checks (the commands the harness runs before a PR opens; frame-chain resolved) plus
   the DEPENDENCY PREPOPULATION install on the same row (run before the agent's first turn, and
@@ -43,6 +49,13 @@ prerequisites are configured.
   OUT) and its sibling `reviewReplies.logic.ts` (the reply grammar + the acknowledgement), kept
   side by side because they share the finding ids, and splitting them is how the two halves would
   desync.
+- `audit/`: `AuditService`, the ONE writer of the account audit log and the implementation of
+  kernel's `AuditRecorder`. It lives here rather than beside the tenancy services that call it
+  because those are in `@cat-factory/workspaces`, which the facades do not depend on; they consume
+  the kernel PORT, so only the facade that builds the service needs to see this. `record` never
+  throws (a store outage costs the row, not the mutation) but IS awaited, because an un-awaited
+  write is dropped when a Worker isolate freezes after the response; `listByAccount` propagates,
+  because an empty page and an unreachable store are opposite facts.
 - `backend-registries.ts`: a loose registration file sitting among the module dirs.
 
 **See also:** `CLAUDE.md` → "Post-release health flow", "Pre-PR validation flow", "Inbound tracker webhooks", "Bug hunt"; `backend/docs/`
