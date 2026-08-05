@@ -371,6 +371,7 @@ function selectTask() {
           :icon="!runnable ? 'i-lucide-lock' : sandboxed ? 'i-lucide-shield' : 'i-lucide-play'"
           :loading="starting"
           :disabled="!runnable || starting"
+          data-testid="task-start"
           :title="
             !runnable
               ? t('board.task.waitingOn', { deps: unmet.map((d) => d.title).join(', ') })

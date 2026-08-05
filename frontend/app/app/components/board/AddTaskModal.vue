@@ -891,6 +891,7 @@ function openReviewFrictionDialog(conflict: NonNullable<ReturnType<typeof parseC
                     : t('board.addTask.descriptionPlaceholder')
                 "
                 class="w-full"
+                data-testid="add-task-description"
               />
             </UFormField>
           </template>

@@ -161,7 +161,9 @@ exactly like the rest of the report. A judge step that did not run records
   both runtimes with no model.
 - **Unwired ⇒ byte-for-byte the old behaviour.** No assessor ⇒ `status: 'skipped'`, the step
   records a pass-through output and advances. Assert this explicitly in conformance; it is
-  what keeps every existing pipeline and the e2e suite green.
+  what keeps every existing pipeline green. The e2e backend now WIRES an assessor
+  (`backend/internal/e2e/src/fakeJudge.ts`) and registers the slice-10 example, so the browser
+  suite drives the real machine; a workspace that places no judge step is unaffected either way.
 - **`step.judge` must survive `resetStepForRerun`** (like `forkDecision` / `followUps`), or a
   bounce would erase the very verdict it is looping on.
 - **A bounce re-runs the producer AND the judge.** Use `rerunProducerThrough`, never a
@@ -190,6 +192,7 @@ exactly like the rest of the report. A judge step that did not run records
 | 10  | Worked example: `scope-adherence` judge in `@cat-factory/example-custom-agent`                                                                         | done   | this PR |
 | 11  | Docs sweep: `CLAUDE.md` taxonomy (fourth bucket), `backend/docs/custom-agents.md`, package READMEs/AGENTS.md, root README                              | done   | this PR |
 | 12  | Strangler: re-express requirements auto-pass on the judge machine                                                                                      | todo   | —       |
+| 12a | E2E: the bounce loop + the parked verdict answered from the judge window (`judge-gate.spec.ts`), driving the worked example of slice 10                | done   | —       |
 | 13  | Convert this tracker to an ADR once slice 12 lands (or is formally dropped)                                                                            | todo   | —       |
 
 ## Deliberately NOT pursued

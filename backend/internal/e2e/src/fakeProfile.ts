@@ -49,6 +49,37 @@ export interface FakeProfile {
    */
   initiativePlan?: unknown
 
+  // ---- Inline-LLM scripts (consumed by `E2eInlineModels`, NOT the agent executor: the
+  // requirements-review loop's three calls run inline through the `ModelProvider` port). ----
+  /**
+   * The findings the requirements REVIEWER raises on its first pass, in the wire shape
+   * `coerceReviewItems` reads. Absent / empty ⇒ the reviewer finds nothing and the gate
+   * auto-passes, which is the base behaviour every other spec relies on. The re-review always
+   * converges, so a scripted set drives exactly one park → answer → incorporate → settle loop.
+   *
+   * Keep `autoAnswerable` false (the default) unless the spec is about the auto-recommendation
+   * automation: a `true` finding makes the engine fire the Requirement Writer over it, which is
+   * a second inline call and a second thing for the spec to wait on.
+   */
+  reviewFindings?: {
+    title: string
+    detail: string
+    category?: 'gap' | 'clarification' | 'assumption' | 'risk' | 'question'
+    severity?: 'low' | 'medium' | 'high'
+    autoAnswerable?: boolean
+  }[]
+  /** The document the incorporation companion returns when folding the answers in. */
+  incorporatedRequirements?: string
+
+  // ---- Judge verdicts (consumed by `E2eJudgeAssessor`) — a queue whose last entry repeats. ----
+  /**
+   * The score the registered JUDGE returns per assessment: `[0.4, 0.9]` fails the default
+   * threshold once (bouncing the producer) then passes, `[0.4, 0.4]` spends the bounce budget
+   * and parks for a human. Absent ⇒ a passing `1`, so a workspace that never places a judge step
+   * is unaffected.
+   */
+  judgeScores?: number[]
+
   // ---- Operational-gate verdict scripts (consumed by the E2eGateProviders wrapper, NOT the
   // agent executor) — each is a per-probe queue whose last entry repeats. ----
   /** CI check verdict per gate probe: `[false, true]` = red then green after the ci-fixer round. */
@@ -98,8 +129,12 @@ type BootstrapHandle = Parameters<FakeRepoBootstrapper['pollBootstrap']>[0]
 
 const DEFAULT_KEY = '__default__'
 
-/** A cache of per-workspace fakes derived from {@link FakeProfile}s, re-armable per workspace. */
-interface WorkspaceScopedFakes {
+/**
+ * A cache of per-workspace fakes derived from {@link FakeProfile}s, re-armable per workspace.
+ * Exported because two of those caches live in sibling modules (`fakeInlineModel.ts`,
+ * `fakeJudge.ts`) — a fake that registers itself is how a profile write reaches it.
+ */
+export interface WorkspaceScopedFakes {
   /** Drop the cached fake(s) for `workspaceId` so the next call rebuilds from the live profile. */
   resetWorkspace(workspaceId: string): void
 }
