@@ -5913,11 +5913,15 @@
       "awaiting_merge": "Wartet auf das Zusammenführen",
       "in_flight": "Läuft noch",
       "needs_attention": "Braucht Aufmerksamkeit",
-      "not_run": "Noch nicht gelaufen"
+      "not_run": "Noch nicht gelaufen",
+      "unknown": "Lauf nicht geladen"
     },
     "ask": {
       "title": "Was gefordert war",
       "none": "Diese Aufgabe hat keine Beschreibung, es gibt hier also nichts, womit sich das Ergebnis vergleichen ließe."
+    },
+    "gap": {
+      "run_unavailable": "Der Lauf dieser Aufgabe wurde nicht geladen, deshalb können die von ihm erfassten Belege hier nicht gezeigt werden. Das ist nicht dasselbe wie ein Lauf, der nichts erfasst hat."
     },
     "requirements": {
       "title": "Geprüfte Anforderungen",
@@ -5926,7 +5930,12 @@
       "notCovered": "Nicht geprüft: {count}",
       "regressions": "Regressionen: {count}",
       "regressionTag": "Regression",
-      "specUnavailable": "Die Spezifikation des Dienstes konnte nicht gelesen werden. Angezeigt werden daher die Anforderungs-IDs aus dem Testbericht, ohne ihre Titel.",
+      "idOnly": "nur ID",
+      "idOnlyHint": "Diese ID steht nicht in der Service-Spezifikation, deshalb gibt es dafür keinen Titel.",
+      "spec": {
+        "not_read": "Die Service-Spezifikation wurde nicht gelesen, deshalb stehen hier die vom Tester gemeldeten Anforderungs-IDs ohne ihre Titel.",
+        "unmatched": "Keine dieser Anforderungs-IDs steht in der gelesenen Service-Spezifikation, deshalb werden nur die vom Tester gemeldeten IDs gezeigt."
+      },
       "verdict": {
         "met": "Bestätigt",
         "not_met": "Fehlgeschlagen",

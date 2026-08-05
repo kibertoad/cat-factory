@@ -43,6 +43,12 @@ export type OutcomeDisposition =
   | 'in_flight'
   | 'needs_attention'
   | 'not_run'
+  /**
+   * The block names a run nobody resolved (see {@link RunUnavailableGap}), and its status is
+   * not one the merge lifecycle writes. What the run did is exactly the fact a block alone
+   * cannot carry, and `not_run` would be this card's most visible lie.
+   */
+  | 'unknown'
 
 /** One pull request the run opened: the own-service PR, plus a peer PR per connected repo. */
 export interface OutcomePullRequest {
@@ -55,14 +61,45 @@ export interface OutcomePullRequest {
 
 // ---- Requirement coverage --------------------------------------------------
 
+/**
+ * The gap EVERY evidence section shares: the block names a run (`block.executionId`) the
+ * caller could not resolve, so nothing any step recorded is knowable here.
+ *
+ * It is kept apart from every other gap in this module, which report what a RESOLVED run did
+ * or did not produce. "The store does not have this run" and "this pipeline has no tester
+ * step" are opposite facts about opposite things, and a card that reported the second for the
+ * first would blame the pipeline for a read that never happened, on the one surface whose
+ * whole job is to say what is known and what is not.
+ */
+export type RunUnavailableGap = 'run_unavailable'
+
 /** Why there is no requirement coverage to show. Each needs a different reaction. */
-export type RequirementsGap = 'no_tester_step' | 'tester_not_reported' | 'no_verdicts'
+export type RequirementsGap =
+  | RunUnavailableGap
+  | 'no_tester_step'
+  | 'tester_not_reported'
+  | 'no_verdicts'
+
+/**
+ * Whether the requirement rows carry the spec's titles and, when they do not, WHY. The two
+ * causes leave IDENTICAL rows behind and need different fixes, so they are never merged:
+ * `not_read` is a spec this card never got (there was nothing to join against), `unmatched` is
+ * a spec it DID read that holds none of the ids the tester reported (a spec rewritten since,
+ * or a tester keying its verdicts by something else). Reporting the second as the first would
+ * send a reader to fix a read that worked.
+ */
+export type OutcomeSpecJoin = 'joined' | 'not_read' | 'unmatched'
 
 /** One requirement the tester ruled on, joined to the spec when the spec could be read. */
 export interface OutcomeRequirement {
-  /** The spec requirement id: the join key, and all there is when the spec is unavailable. */
+  /** The spec requirement id: the join key, and all there is when the join did not land. */
   id: string
-  /** The requirement's headline from `spec/`, or null when it could not be joined. */
+  /**
+   * The requirement's headline from `spec/`, or null when this id is not in the spec that was
+   * read. Null on a row of an otherwise JOINED section is the partial-miss case the render
+   * site marks per row: the id is all there is for THIS requirement, and left unmarked beside
+   * its titled neighbours it reads as a requirement someone named after a slug.
+   */
   title: string | null
   verdict: RequirementVerdictStatus
   /** What the tester observed, when it said. */
@@ -83,7 +120,7 @@ export type OutcomeRequirements =
   | {
       status: 'reported'
       /** Whether the rows carry spec titles, or only the ids the tester keyed them by. */
-      spec: 'joined' | 'unavailable'
+      spec: OutcomeSpecJoin
       met: number
       notMet: number
       notCovered: number
@@ -94,7 +131,7 @@ export type OutcomeRequirements =
 
 // ---- The tester's report ---------------------------------------------------
 
-export type TestsGap = 'no_tester_step' | 'tester_not_reported'
+export type TestsGap = RunUnavailableGap | 'no_tester_step' | 'tester_not_reported'
 
 /**
  * The tester's disposition. `could_not_run` is kept apart from `concerns` because they call
@@ -128,7 +165,7 @@ export type OutcomeTests =
 
 // ---- What it looked like ---------------------------------------------------
 
-export type VisualsGap = 'no_visual_step' | 'none_captured'
+export type VisualsGap = RunUnavailableGap | 'no_visual_step' | 'none_captured'
 
 /** One captured view, paired with the reference design it was reviewed against when there is one. */
 export interface OutcomeVisual {
@@ -192,7 +229,13 @@ export interface RunOutcome {
 
 export interface ComposeRunOutcomeInput {
   block: Block
-  /** The run, or null when the task has none yet (a task can carry a PR with no live run). */
+  /**
+   * The run, or null when the caller has none. Null is TWO facts, and the block tells them
+   * apart: a task with no `executionId` never ran, while a task that names one the caller
+   * could not resolve has run and this card simply cannot see it (see
+   * {@link RunUnavailableGap}). Callers pass what their store holds and never substitute one
+   * for the other.
+   */
   instance: ExecutionInstance | null
   /** The enclosing service's spec, when it has been loaded. Absent ⇒ ids without titles. */
   spec?: ServiceSpecView | null
@@ -229,6 +272,16 @@ const VERDICT_ORDER: Record<RequirementVerdictStatus, number> = {
   not_covered: 3,
 }
 
+/**
+ * How the rows joined to the spec. Asked of the index rather than of the rows alone, because
+ * "no titles" has two causes and only the index can tell them apart: an index with entries
+ * that matched nothing is a spec that WAS read (see {@link OutcomeSpecJoin}).
+ */
+function specJoin(entries: readonly OutcomeRequirement[], specRead: boolean): OutcomeSpecJoin {
+  if (entries.some((e) => e.title !== null)) return 'joined'
+  return specRead ? 'unmatched' : 'not_read'
+}
+
 function composeRequirements(
   step: PipelineStep | null,
   spec: ServiceSpecView | null | undefined,
@@ -253,16 +306,16 @@ function composeRequirements(
   })
   entries.sort((a, b) => {
     if (a.regression !== b.regression) return a.regression ? -1 : 1
-    const order = (VERDICT_ORDER[a.verdict] ?? 9) - (VERDICT_ORDER[b.verdict] ?? 9)
+    const order = VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict]
     return order !== 0 ? order : (a.title ?? a.id).localeCompare(b.title ?? b.id)
   })
 
   return {
     status: 'reported',
-    // A spec that resolved NO id is reported as unavailable rather than as a joined spec full
-    // of blank titles: the two look the same in the rows and mean opposite things about whether
-    // the reader is seeing everything.
-    spec: entries.some((e) => e.title !== null) ? 'joined' : 'unavailable',
+    // A spec that resolved NO id says WHICH of the two reasons applies rather than reading as a
+    // joined spec full of blank titles: the rows look the same either way and mean opposite
+    // things about whether the reader is seeing everything.
+    spec: specJoin(entries, spec?.spec != null),
     met: entries.filter((e) => e.verdict === 'met').length,
     notMet: entries.filter((e) => e.verdict === 'not_met').length,
     notCovered: entries.filter((e) => e.verdict === 'not_covered').length,
@@ -328,8 +381,13 @@ function composeVisuals(
 
   // Nothing to show: say whether anything was ever meant to capture a view. A gate that ran
   // and gathered nothing recorded WHY, and that reason is the whole answer for the reader.
+  //
+  // Asked of EVERY step, not of the tester whose report was selected: a pipeline can carry a
+  // `tester-ui` that has not reported beside a `tester-api` that has, and the selected step is
+  // then the api one. Reading the producer off it would tell a reader looking at a UI pipeline
+  // that nothing in it captures the interface.
   const degraded = gate?.degradedReason?.trim() || null
-  const hadProducer = Boolean(gate) || tester?.agentKind === 'tester-ui'
+  const hadProducer = Boolean(gate) || steps.some((s) => s.agentKind === 'tester-ui')
   return {
     status: 'absent',
     gap: hadProducer ? 'none_captured' : 'no_visual_step',
@@ -368,12 +426,18 @@ function composeChecks(steps: readonly PipelineStep[]): OutcomeCheck[] {
   return checks
 }
 
-function composeDisposition(block: Block, instance: ExecutionInstance | null): OutcomeDisposition {
+function composeDisposition(
+  block: Block,
+  instance: ExecutionInstance | null,
+  unresolvedRun: boolean,
+): OutcomeDisposition {
   if (block.status === 'done') return 'merged'
   if (block.status === 'pr_ready') return 'awaiting_merge'
   if (instance?.status === 'failed' || block.status === 'blocked') return 'needs_attention'
-  if (instance) return 'in_flight'
-  return 'not_run'
+  // `in_progress` is the block's OWN word for a live run, so it stands whether or not the run
+  // itself resolved — the one in-flight reading that needs nothing from the instance.
+  if (instance || block.status === 'in_progress') return 'in_flight'
+  return unresolvedRun ? 'unknown' : 'not_run'
 }
 
 /**
@@ -384,11 +448,29 @@ function composeDisposition(block: Block, instance: ExecutionInstance | null): O
 export function composeRunOutcome({ block, instance, spec }: ComposeRunOutcomeInput): RunOutcome {
   const steps = instance?.steps ?? []
   const tester = testerStep(steps)
-  return {
-    disposition: composeDisposition(block, instance),
+  // The block names a run the caller could not resolve. Everything below is read off that run's
+  // steps, so composing from the empty list would report a pipeline that ran and produced
+  // nothing — the exact misreading this card exists to prevent (see `RunUnavailableGap`).
+  const unresolvedRun = !instance && Boolean(block.executionId)
+  const asked = {
+    disposition: composeDisposition(block, instance, unresolvedRun),
     title: block.title,
     ask: block.description?.trim() || null,
+    // Read off the BLOCK, so they survive a run this card cannot see: the pull request is what
+    // a merged task is usually reopened for, long after its run left the store.
     pullRequests: allPullRequests(block).map(({ repo, ref }) => toOutcomePr(ref, repo)),
+  }
+  if (unresolvedRun) {
+    return {
+      ...asked,
+      requirements: { status: 'absent', gap: 'run_unavailable' },
+      tests: { status: 'absent', gap: 'run_unavailable' },
+      visuals: { status: 'absent', gap: 'run_unavailable', detail: null },
+      checks: [],
+    }
+  }
+  return {
+    ...asked,
     requirements: composeRequirements(tester, spec),
     tests: composeTests(tester),
     visuals: composeVisuals(steps, tester),
@@ -407,9 +489,14 @@ function toOutcomePr(ref: PullRequestRef, repo: string | undefined): OutcomePull
 
 /**
  * Whether a run has anything an outcome summary could show beyond the task's own title: a PR to
- * open, or a step that recorded evidence. The entry points ask this so the affordance appears
+ * open, or a step that recorded evidence. EVERY entry point asks this (the board card and the
+ * inspector alike, off the one reduction, so they can never disagree) so the affordance appears
  * on a run that produced something and stays absent on one that has not yet, rather than
  * offering a card whose every section reads "nothing here".
+ *
+ * A run this card could not resolve answers false unless the block still carries a pull
+ * request: there is nothing to show, and an affordance that opened onto four "not loaded"
+ * notices would be the same empty card by another route.
  */
 export function hasOutcomeToShow(outcome: RunOutcome): boolean {
   return (

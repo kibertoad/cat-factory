@@ -19,6 +19,7 @@ import type {
   OutcomeCheckKind,
   OutcomeCheckState,
   OutcomeDisposition,
+  OutcomeSpecJoin,
   OutcomeVisual,
   RequirementsGap,
   TestsGap,
@@ -86,6 +87,7 @@ const DISPOSITION_KEYS: Record<OutcomeDisposition, string> = {
   in_flight: 'outcome.disposition.in_flight',
   needs_attention: 'outcome.disposition.needs_attention',
   not_run: 'outcome.disposition.not_run',
+  unknown: 'outcome.disposition.unknown',
 }
 /** The badge palette, named once so every colour map below is checked against it. */
 type BadgeColor = 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
@@ -96,20 +98,37 @@ const DISPOSITION_COLOR: Record<OutcomeDisposition, BadgeColor> = {
   in_flight: 'primary',
   needs_attention: 'error',
   not_run: 'neutral',
+  unknown: 'neutral',
 }
 
+// A run this card could not resolve is the SAME fact in every section, so all three name one
+// key: it is about the read, not about what any particular producer did or did not do.
+const RUN_UNAVAILABLE_KEY = 'outcome.gap.run_unavailable'
+
 const REQUIREMENTS_GAP_KEYS: Record<RequirementsGap, string> = {
+  run_unavailable: RUN_UNAVAILABLE_KEY,
   no_tester_step: 'outcome.requirements.gap.no_tester_step',
   tester_not_reported: 'outcome.requirements.gap.tester_not_reported',
   no_verdicts: 'outcome.requirements.gap.no_verdicts',
 }
 const TESTS_GAP_KEYS: Record<TestsGap, string> = {
+  run_unavailable: RUN_UNAVAILABLE_KEY,
   no_tester_step: 'outcome.tests.gap.no_tester_step',
   tester_not_reported: 'outcome.tests.gap.tester_not_reported',
 }
 const VISUALS_GAP_KEYS: Record<VisualsGap, string> = {
+  run_unavailable: RUN_UNAVAILABLE_KEY,
   no_visual_step: 'outcome.visuals.gap.no_visual_step',
   none_captured: 'outcome.visuals.gap.none_captured',
+}
+/**
+ * Why the rows carry no spec titles. `joined` is excluded rather than mapped to an empty
+ * string, so the note renders only where there is one to make and a new join state cannot ship
+ * without copy of its own.
+ */
+const SPEC_JOIN_KEYS: Record<Exclude<OutcomeSpecJoin, 'joined'>, string> = {
+  not_read: 'outcome.requirements.spec.not_read',
+  unmatched: 'outcome.requirements.spec.unmatched',
 }
 
 const VERDICT_META: Record<RequirementVerdictStatus, { color: string; key: string }> = {
@@ -166,6 +185,34 @@ const TESTS_VERDICT_COLOR: Record<TestsVerdict, BadgeColor> = {
 const headerTitle = computed(() => outcome.value?.title ?? t('outcome.title'))
 const disposition = computed(() => outcome.value?.disposition ?? 'not_run')
 
+/**
+ * The note under the requirement counts when the rows carry no spec titles, null when they do.
+ * Resolved here so the `joined` exclusion is checked by the compiler once, rather than by a
+ * template condition that would silently render nothing if the union grew.
+ */
+const specNote = computed(() => {
+  const requirements = outcome.value?.requirements
+  if (!requirements || requirements.status !== 'reported' || requirements.spec === 'joined') {
+    return null
+  }
+  return t(SPEC_JOIN_KEYS[requirements.spec])
+})
+
+/**
+ * The requirement rows, each carrying whether its id is standing in for a title it has no way
+ * to show. Marked per row ONLY where the section as a whole joined: an id sitting unmarked
+ * between two named requirements reads as a requirement someone named after a slug, while a
+ * marker on every row of a section the note above already explains is just noise.
+ */
+const requirementRows = computed(() => {
+  const requirements = outcome.value?.requirements
+  if (!requirements || requirements.status !== 'reported') return []
+  return requirements.entries.map((entry) => ({
+    ...entry,
+    idOnly: requirements.spec === 'joined' && entry.title === null,
+  }))
+})
+
 /** The captured views, resolved to blobs as they arrive (the card shows them inline). */
 const views = computed(() =>
   outcome.value?.visuals.status === 'reported' ? outcome.value.visuals.views : [],
@@ -193,11 +240,16 @@ const lightboxItems = computed(() =>
 )
 const lightboxOpen = ref(false)
 const lightboxIndex = ref(0)
-/** Open the zoom viewer on a captured view. A view whose capture is missing has nothing to open. */
-function openShot(view: OutcomeVisual) {
+/**
+ * Open the zoom viewer on a captured view. A view whose capture is missing has nothing to open.
+ *
+ * The viewer's index is counted over the views that HAVE a capture, in order, rather than
+ * looked up by artifact id: two views of one artifact (a gate that captured a shared reference,
+ * a re-captured view) are distinct rows that would otherwise both open the first of them.
+ */
+function openShot(view: OutcomeVisual, position: number) {
   if (!view.artifactId) return
-  const i = lightboxItems.value.findIndex((it) => it.artifactId === view.artifactId)
-  lightboxIndex.value = i < 0 ? 0 : i
+  lightboxIndex.value = views.value.slice(0, position).filter((v) => v.artifactId).length
   lightboxOpen.value = true
 }
 
@@ -321,18 +373,18 @@ function openTestReport() {
               }}
             </UBadge>
           </div>
-          <!-- The ids are all there is when the service spec could not be read: say so, rather
-               than letting a slug read as the name of a requirement. -->
+          <!-- The ids are all there is: say WHICH reason, rather than letting a slug read as
+               the name of a requirement (never read, versus read and naming none of these). -->
           <p
-            v-if="outcome.requirements.spec === 'unavailable'"
+            v-if="specNote"
             class="mb-2 text-[11px] leading-relaxed text-amber-300/90"
-            data-testid="outcome-spec-unavailable"
+            data-testid="outcome-spec-note"
           >
-            {{ t('outcome.requirements.specUnavailable') }}
+            {{ specNote }}
           </p>
           <ul class="space-y-1.5">
             <li
-              v-for="req in outcome.requirements.entries"
+              v-for="req in requirementRows"
               :key="req.id"
               class="flex items-start gap-2 rounded-md border border-slate-800 bg-slate-950/40 p-2"
               data-testid="outcome-requirement"
@@ -344,6 +396,18 @@ function openTestReport() {
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="text-[13px] text-slate-200">{{ req.title ?? req.id }}</span>
+                  <!-- This row's id is standing in for a title the spec does not have for it,
+                       beside rows that DO carry one. -->
+                  <UBadge
+                    v-if="req.idOnly"
+                    color="neutral"
+                    variant="subtle"
+                    size="sm"
+                    :title="t('outcome.requirements.idOnlyHint')"
+                    data-testid="outcome-requirement-id-only"
+                  >
+                    {{ t('outcome.requirements.idOnly') }}
+                  </UBadge>
                   <UBadge
                     v-if="req.regression"
                     color="error"
@@ -458,13 +522,13 @@ function openTestReport() {
           </p>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <button
-              v-for="view in outcome.visuals.views"
-              :key="view.view"
+              v-for="(view, position) in outcome.visuals.views"
+              :key="`${position}:${view.view}`"
               type="button"
               class="group overflow-hidden rounded-md border border-slate-800 bg-slate-950/60 text-start transition hover:border-slate-600"
               :disabled="!view.artifactId"
               data-testid="outcome-shot"
-              @click="openShot(view)"
+              @click="openShot(view, position)"
             >
               <img
                 v-if="view.artifactId && blobs.urlFor(view.artifactId)"

@@ -212,14 +212,14 @@ describe('composeRunOutcome', () => {
     expect(outcome.requirements.entries[0]?.title).toBe('A user can sign in')
   })
 
-  it('says the spec is unavailable rather than rendering ids as titles', () => {
+  it('says the spec was never read rather than rendering ids as titles', () => {
     const outcome = composeRunOutcome({
       block: block(),
       instance: run([
         testerStep({ requirementVerdicts: [{ requirementId: 'req-reset', status: 'met' }] }),
       ]),
     })
-    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'unavailable' })
+    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'not_read' })
     if (outcome.requirements.status !== 'reported') throw new Error('expected a reported section')
     expect(outcome.requirements.entries[0]).toMatchObject({
       id: 'req-reset',
@@ -227,6 +227,42 @@ describe('composeRunOutcome', () => {
       state: null,
       regression: false,
     })
+  })
+
+  // A spec that WAS read and names none of the reported ids leaves identical rows behind, and
+  // sends the reader to a different fix: the spec moved on, or the tester keyed its verdicts by
+  // something else. Reporting it as a failed read would send them to fix a read that worked.
+  it('keeps a spec that was never read apart from one that named none of these ids', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep({ requirementVerdicts: [{ requirementId: 'req-gone', status: 'met' }] }),
+      ]),
+      spec,
+    })
+    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'unmatched' })
+  })
+
+  // The partial join is the case a section-level note cannot state: some rows carry titles, and
+  // an id sitting unmarked between them reads as a requirement named after a slug.
+  it('marks the rows the spec did not name while the section as a whole joined', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        testerStep({
+          requirementVerdicts: [
+            { requirementId: 'req-login', status: 'met' },
+            { requirementId: 'req-gone', status: 'met' },
+          ],
+        }),
+      ]),
+      spec,
+    })
+    expect(outcome.requirements).toMatchObject({ status: 'reported', spec: 'joined' })
+    if (outcome.requirements.status !== 'reported') throw new Error('expected a reported section')
+    const rows = outcome.requirements.entries
+    expect(rows.find((e) => e.id === 'req-login')?.title).toBe('A user can sign in')
+    expect(rows.find((e) => e.id === 'req-gone')?.title).toBeNull()
   })
 
   it('separates a tester report with no verdicts from a tester that never reported', () => {
@@ -342,6 +378,51 @@ describe('composeRunOutcome', () => {
     expect(outcome.checks).toEqual([{ kind: 'ci', state: 'pass', reproduction: null }])
   })
 
+  // A block that NAMES a run the caller could not resolve is the trap this whole module is
+  // about: composed from the empty step list it would report a pipeline that ran and produced
+  // nothing, which is the opposite of "nobody could read what it produced".
+  it('says the run could not be read rather than blaming the pipeline for the missing steps', () => {
+    const outcome = composeRunOutcome({
+      block: block({ status: 'done', executionId: 'exe_gone' }),
+      instance: null,
+    })
+
+    expect(outcome.requirements).toEqual({ status: 'absent', gap: 'run_unavailable' })
+    expect(outcome.tests).toEqual({ status: 'absent', gap: 'run_unavailable' })
+    expect(outcome.visuals).toEqual({ status: 'absent', gap: 'run_unavailable', detail: null })
+    expect(outcome.checks).toEqual([])
+    // The block still carries what the block knows.
+    expect(outcome.disposition).toBe('merged')
+    expect(outcome.title).toBe('Password reset')
+  })
+
+  it('keeps a task that never ran apart from one whose run could not be read', () => {
+    const never = composeRunOutcome({ block: block({ status: 'ready' }), instance: null })
+    const unread = composeRunOutcome({
+      block: block({ status: 'ready', executionId: 'exe_gone' }),
+      instance: null,
+    })
+
+    expect(never.disposition).toBe('not_run')
+    expect(never.tests).toEqual({ status: 'absent', gap: 'no_tester_step' })
+    expect(unread.disposition).toBe('unknown')
+    expect(unread.tests).toEqual({ status: 'absent', gap: 'run_unavailable' })
+  })
+
+  // The selected tester is the one that REPORTED, which can be the api half of a pipeline whose
+  // ui half has not. Reading the producer off it would tell a reader looking at a UI pipeline
+  // that nothing in it captures the interface.
+  it('finds the interface producer anywhere in the pipeline, not only on the reporting tester', () => {
+    const outcome = composeRunOutcome({
+      block: block(),
+      instance: run([
+        step({ agentKind: 'tester-ui' }),
+        testerStep({ screenshots: [] }, 'tester-api'),
+      ]),
+    })
+    expect(outcome.visuals).toEqual({ status: 'absent', gap: 'none_captured', detail: null })
+  })
+
   it('derives the disposition from the block, and from the run only where the block cannot', () => {
     const dispositions = [
       composeRunOutcome({ block: block({ status: 'done' }), instance: null }).disposition,
@@ -353,6 +434,11 @@ describe('composeRunOutcome', () => {
         block: block({ status: 'in_progress' }),
         instance: run([step()], { status: 'failed' }),
       }).disposition,
+      // `in_progress` is the block's own word for a live run, so it stands with no instance.
+      composeRunOutcome({
+        block: block({ status: 'in_progress', executionId: 'exe_gone' }),
+        instance: null,
+      }).disposition,
     ]
     expect(dispositions).toEqual([
       'merged',
@@ -360,6 +446,7 @@ describe('composeRunOutcome', () => {
       'not_run',
       'in_flight',
       'needs_attention',
+      'in_flight',
     ])
   })
 })
@@ -368,6 +455,19 @@ describe('hasOutcomeToShow', () => {
   it('is false for a run that has produced nothing to read yet', () => {
     expect(
       hasOutcomeToShow(composeRunOutcome({ block: block({ status: 'planned' }), instance: null })),
+    ).toBe(false)
+  })
+
+  // The affordance the board card and the inspector both gate on: a task marked done by hand,
+  // carrying no pull request and no readable run, has nothing an outcome card could show.
+  it('is false for a task whose run cannot be read and which carries no pull request', () => {
+    expect(
+      hasOutcomeToShow(
+        composeRunOutcome({
+          block: block({ status: 'done', executionId: 'exe_gone' }),
+          instance: null,
+        }),
+      ),
     ).toBe(false)
   })
 

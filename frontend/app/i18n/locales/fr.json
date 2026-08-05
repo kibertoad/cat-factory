@@ -5358,11 +5358,15 @@
       "awaiting_merge": "En attente de fusion",
       "in_flight": "Toujours en cours",
       "needs_attention": "Demande votre attention",
-      "not_run": "Pas encore exécuté"
+      "not_run": "Pas encore exécuté",
+      "unknown": "Exécution non chargée"
     },
     "ask": {
       "title": "Ce qui était demandé",
       "none": "Cette tâche n'a pas de description, il n'y a donc rien à quoi comparer le résultat."
+    },
+    "gap": {
+      "run_unavailable": "L'exécution de cette tâche n'a pas été chargée : les éléments qu'elle a enregistrés ne peuvent donc pas être affichés ici. Ce n'est pas la même chose qu'une exécution qui n'a rien enregistré."
     },
     "requirements": {
       "title": "Exigences vérifiées",
@@ -5371,7 +5375,12 @@
       "notCovered": "Non vérifiées : {count}",
       "regressions": "Régressions : {count}",
       "regressionTag": "Régression",
-      "specUnavailable": "La spécification du service n'a pas pu être lue : voici donc les identifiants d'exigence rapportés par le testeur, sans leurs intitulés.",
+      "idOnly": "identifiant seul",
+      "idOnlyHint": "Cet identifiant ne figure pas dans la spécification du service, il n'y a donc aucun titre à afficher.",
+      "spec": {
+        "not_read": "La spécification du service n'a pas été lue : voici donc les identifiants d'exigence signalés par le testeur, sans leurs titres.",
+        "unmatched": "Aucun de ces identifiants d'exigence ne figure dans la spécification du service qui a été lue ; seuls les identifiants signalés par le testeur sont affichés."
+      },
       "verdict": {
         "met": "Vérifiée",
         "not_met": "En échec",

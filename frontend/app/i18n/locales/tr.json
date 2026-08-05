@@ -5358,11 +5358,15 @@
       "awaiting_merge": "Birleştirilmeyi bekliyor",
       "in_flight": "Hâlâ çalışıyor",
       "needs_attention": "İlgilenilmesi gerekiyor",
-      "not_run": "Henüz çalıştırılmadı"
+      "not_run": "Henüz çalıştırılmadı",
+      "unknown": "Çalışma yüklenmedi"
     },
     "ask": {
       "title": "Ne istenmişti",
       "none": "Bu görevin açıklaması yok, dolayısıyla sonucu karşılaştıracak bir şey de yok."
+    },
+    "gap": {
+      "run_unavailable": "Bu görevin çalışması yüklenmediği için kaydettiği kanıtlar burada gösterilemiyor. Bu, hiçbir şey kaydetmemiş bir çalışmayla aynı şey değildir."
     },
     "requirements": {
       "title": "Denetlenen gereksinimler",
@@ -5371,7 +5375,12 @@
       "notCovered": "Denetlenmeyen: {count}",
       "regressions": "Gerilemeler: {count}",
       "regressionTag": "Gerileme",
-      "specUnavailable": "Servisin belirtimi okunamadı; bu nedenle burada testçinin bildirdiği gereksinim kimlikleri, başlıkları olmadan görünüyor.",
+      "idOnly": "yalnızca kimlik",
+      "idOnlyHint": "Bu kimlik servis şartnamesinde yer almadığı için gösterilecek bir başlık yok.",
+      "spec": {
+        "not_read": "Servis şartnamesi okunmadı; bu nedenle burada test edicinin bildirdiği gereksinim kimlikleri, başlıkları olmadan yer alıyor.",
+        "unmatched": "Okunan servis şartnamesinde bu gereksinim kimliklerinin hiçbiri yok; bu nedenle yalnızca test edicinin bildirdiği kimlikler gösteriliyor."
+      },
       "verdict": {
         "met": "Doğrulandı",
         "not_met": "Başarısız",

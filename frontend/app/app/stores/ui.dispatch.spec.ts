@@ -169,7 +169,21 @@ describe('dispatchStepView routing', () => {
       })
     })
 
-    it('does nothing for a run the store has not hydrated', () => {
+    // The link the deep-link consumer passes carries BOTH ids, and the run is only a lookup:
+    // following one into a task that finished long ago is the normal case, and the snapshot
+    // that hydrates the board is not obliged to still carry that run.
+    it('opens on the block the link names even when the run was never hydrated', () => {
+      ui.openRunOutcome('missing', 'b1')
+
+      expect(ui.resultView).toEqual({
+        view: 'outcome',
+        blockId: 'b1',
+        instanceId: 'missing',
+        stepIndex: null,
+      })
+    })
+
+    it('does nothing for a run the store has not hydrated and a link with no block', () => {
       ui.openRunOutcome('missing')
 
       expect(ui.resultView).toBeNull()

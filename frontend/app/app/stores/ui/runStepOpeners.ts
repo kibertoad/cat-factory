@@ -19,12 +19,8 @@ import type { ExecutionInstance, PipelineStep } from '~/types/domain'
 export interface RunStepOpenerDeps {
   /** Open a step's bespoke window through the universal routing seam. */
   dispatchStepView: (instanceId: string, stepIndex: number) => void
-  /**
-   * Set the result-view overlay directly, for a window the routing seam does not select. A null
-   * `stepIndex` is a RUN-keyed window (the outcome summary): it composes from the whole run, so
-   * there is no step for it to be about and none may be invented.
-   */
-  setResultView: (view: string, instance: ExecutionInstance, stepIndex: number | null) => void
+  /** Set the result-view overlay directly, for a window the routing seam does not select. */
+  setResultView: (view: string, instance: ExecutionInstance, stepIndex: number) => void
 }
 
 /** Index of the first step matching `predicate`, or -1. */
@@ -143,16 +139,5 @@ export function createRunStepOpeners(deps: RunStepOpenerDeps) {
     )
   }
 
-  // Open a run's OUTCOME summary from a caller that knows only the run (the `outcome` deep link
-  // a notification carries). The odd one out here: it resolves no step, because the summary is
-  // composed from the whole run rather than from anything one step produced. It still belongs
-  // beside the others — the entry point knows a run id and has to turn that into an open window,
-  // which is what this module is — and it takes the same silent no-op on an unhydrated run.
-  function openOutcome(instanceId: string) {
-    const instance = useExecutionStore().getInstance(instanceId)
-    if (!instance) return
-    deps.setResultView('outcome', instance, null)
-  }
-
-  return { openFollowUps, openForkDecision, openPrReview, openTestEvidence, openOutcome }
+  return { openFollowUps, openForkDecision, openPrReview, openTestEvidence }
 }

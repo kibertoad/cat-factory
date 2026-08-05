@@ -185,8 +185,11 @@ hoc where it can be avoided:
   hidden capability: a `pr_ready` task card offers the outcome summary in both tiers and drops
   the raw pull-request chip in basic, because the card the button opens carries that same link
   at the top. What basic mode may never do is remove the only route (the rule above); ordering
-  two routes by which one a tier's reader wants first is what the tier is for. State the pairing
-  where the control lives, so the hidden half can be checked against the surface that keeps it.
+  two routes by which one a tier's reader wants first is what the tier is for. **Write the
+  condition as that INVARIANT, not as `isAdvanced` alone** (`TaskCard`'s `showPrChip`: keep the
+  chip wherever the outcome card is not offered), because the surface that carries the hidden
+  half is itself conditional, and two predicates that must agree by coincidence eventually do
+  not: the day the leading route hides, `isAdvanced` alone takes the last route with it.
 
 ## Agent tiers (basic / intermediate / advanced)
 
@@ -716,6 +719,12 @@ example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security`
   no `stepRef` to the shell (there is no step to restart from). Available in both
   interface tiers; what `basic` changes is which affordance leads (see
   [interface modes](#interface-modes-basic--advanced)).
+  Two rules bind anything added to it. Every entry point gates on `hasOutcomeToShow`
+  from the same reduction, so the card is never offered onto sections that all read
+  "nothing here". And the window is BLOCK-keyed with the run riding along: a block
+  naming a run the store never hydrated is a distinct fact from a task that never ran
+  (`RunUnavailableGap`), so a new section reports that case rather than composing from
+  the empty step list, which would read as a pipeline that produced nothing.
 - **Pipeline builder** (`components/pipeline`): assemble/edit agent chains and
   watch `PipelineProgress`. `PipelinePicker` (+ its `PipelinePreview` pane) is the
   single way a pipeline is chosen anywhere (add-task, run settings, the recurring

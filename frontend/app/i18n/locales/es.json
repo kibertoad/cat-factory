@@ -5358,11 +5358,15 @@
       "awaiting_merge": "Esperando la fusión",
       "in_flight": "Todavía en curso",
       "needs_attention": "Requiere atención",
-      "not_run": "Aún sin ejecutar"
+      "not_run": "Aún sin ejecutar",
+      "unknown": "Ejecución no cargada"
     },
     "ask": {
       "title": "Qué se pidió",
       "none": "Esta tarea no tiene descripción, así que no hay nada con lo que comparar el resultado."
+    },
+    "gap": {
+      "run_unavailable": "La ejecución de esta tarea no se cargó, así que aquí no pueden mostrarse las pruebas que registró. No es lo mismo que una ejecución que no registró nada."
     },
     "requirements": {
       "title": "Requisitos comprobados",
@@ -5371,7 +5375,12 @@
       "notCovered": "Sin comprobar: {count}",
       "regressions": "Regresiones: {count}",
       "regressionTag": "Regresión",
-      "specUnavailable": "No se pudo leer la especificación del servicio, así que estos son los identificadores de requisito que informó el tester, sin sus títulos.",
+      "idOnly": "solo id",
+      "idOnlyHint": "Este identificador no está en la especificación del servicio, así que no hay ningún título que mostrar.",
+      "spec": {
+        "not_read": "No se leyó la especificación del servicio, así que estos son los identificadores de requisito que informó el probador, sin sus títulos.",
+        "unmatched": "Ninguno de estos identificadores de requisito aparece en la especificación del servicio que se leyó, así que solo se muestran los identificadores que informó el probador."
+      },
       "verdict": {
         "met": "Verificado",
         "not_met": "Fallido",

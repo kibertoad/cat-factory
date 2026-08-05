@@ -5358,11 +5358,15 @@
       "awaiting_merge": "Czeka na scalenie",
       "in_flight": "Wciąż trwa",
       "needs_attention": "Wymaga uwagi",
-      "not_run": "Jeszcze nie uruchomiono"
+      "not_run": "Jeszcze nie uruchomiono",
+      "unknown": "Przebieg nie został wczytany"
     },
     "ask": {
       "title": "O co proszono",
       "none": "To zadanie nie ma opisu, więc nie ma do czego porównać wyniku."
+    },
+    "gap": {
+      "run_unavailable": "Przebieg tego zadania nie został wczytany, więc zapisane w nim dowody nie są tutaj pokazane. To co innego niż przebieg, który niczego nie zapisał."
     },
     "requirements": {
       "title": "Sprawdzone wymagania",
@@ -5371,7 +5375,12 @@
       "notCovered": "Niesprawdzone: {count}",
       "regressions": "Regresje: {count}",
       "regressionTag": "Regresja",
-      "specUnavailable": "Nie udało się odczytać specyfikacji usługi, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
+      "idOnly": "sam identyfikator",
+      "idOnlyHint": "Tego identyfikatora nie ma w specyfikacji usługi, więc nie ma nazwy do pokazania.",
+      "spec": {
+        "not_read": "Specyfikacja usługi nie została odczytana, więc widoczne są identyfikatory wymagań zgłoszone przez testera, bez ich nazw.",
+        "unmatched": "Żaden z tych identyfikatorów wymagań nie występuje w odczytanej specyfikacji usługi, więc pokazane są tylko identyfikatory zgłoszone przez testera."
+      },
       "verdict": {
         "met": "Potwierdzone",
         "not_met": "Niespełnione",
