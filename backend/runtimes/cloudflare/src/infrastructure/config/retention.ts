@@ -16,12 +16,15 @@ export function loadRetentionConfig(env: Env): RetentionConfig {
     ),
     // Caps the commits projection and bounds the initial backfill to the same age.
     commitMs: retentionMs('GITHUB_COMMIT_RETENTION_DAYS', env.GITHUB_COMMIT_RETENTION_DAYS, 90),
-    // Heavy (full per-call prompt/response) and only useful for recent debugging,
-    // so pruned aggressively — default 3 days.
+    // Heavy (full per-call prompt/response), so the window trades disk against how far back a
+    // post-mortem can reach: default 14 days, matching the Node facade. The 3 days it replaced
+    // expired the record before most investigations start; a post-mortem that cannot read the
+    // calls it is about is the same as no telemetry at all. Set it back to 3 to restore the old
+    // footprint on a deployment that also stores bodies.
     llmCallMetricsMs: retentionMs(
       'LLM_CALL_METRICS_RETENTION_DAYS',
       env.LLM_CALL_METRICS_RETENTION_DAYS,
-      3,
+      14,
     ),
     // High-churn provisioning event log (separate D1 db); aggressive default of 14 days.
     provisioningLogMs: retentionMs(

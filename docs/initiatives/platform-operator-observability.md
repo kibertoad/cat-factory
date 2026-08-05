@@ -33,7 +33,7 @@ delivered through the existing `NotificationChannel` seam.
    each ONE `GROUP BY` query, mirrored D1 ⇄ Drizzle + conformance). Never load rows to
    aggregate in JS (the N+1/aggregate rule).
 2. **Retention-aware windows**: telemetry is pruned to `LLM_CALL_METRICS_RETENTION_DAYS`
-   (default 3d); `agent_runs` lives longer. Dashboard windows must degrade gracefully where
+   (default 14d); `agent_runs` lives longer. Dashboard windows must degrade gracefully where
    telemetry has been pruned (label the window, don't render misleading zeros). If longer
    trend history is wanted, add a small daily rollup table written by the existing
    retention sweep: coordinate with `storage-and-retention.md`'s deferred monthly-rollup
