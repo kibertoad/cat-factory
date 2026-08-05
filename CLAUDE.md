@@ -1069,9 +1069,8 @@ and allows everything, so conformance MUST run auth-enabled or it passes vacuous
   reviewers/companions, the requirements reviewer) MUST append the shared `FINAL_ANSWER_IN_REPLY` fragment:
   some reasoning models emit the whole answer into their private channel and return an empty visible reply,
   which the harness reads as unusable and fails the run. Do NOT append it to side-effect agents whose
-  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright,
-  business-documenter): they legitimately end with no final text. Editing a versioned prompt means bumping
-  its number.
+  product is a pushed commit (coder, ci-fixer, conflict-resolver, mocker, playwright, business-documenter):
+  they legitimately end with no final text. Editing a versioned prompt means bumping its number.
 - **Frontend extension seams** are all contributed through the one `registerAppModule` registry
   (`app/modular/registry.ts`), the frontend analogue of the backend registries: result views, inspector
   panels (`PanelEntry<Block>` in the `inspectorPanels` slot), overlays (`appOverlays` +
