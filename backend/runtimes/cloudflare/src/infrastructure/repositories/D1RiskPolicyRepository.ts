@@ -5,6 +5,7 @@ import type {
   RiskPolicy,
   RequirementConcernLevel,
   StepGating,
+  SubmissionClassesByRole,
   WorkspaceRole,
 } from '@cat-factory/contracts'
 import type { D1Database } from '@cloudflare/workers-types'
@@ -29,6 +30,7 @@ interface RiskPolicyRow {
   class_rules: string | null
   class_rules_by_role: string | null
   dry_run_roles: string | null
+  submission_classes_by_role: string | null
   version: number | null
   is_default: number
   created_at: number
@@ -61,6 +63,11 @@ function rowToPreset(row: RiskPolicyRow): RiskPolicy {
       ? (JSON.parse(row.class_rules_by_role) as ClassRulesByRole)
       : {},
     dryRunRoles: row.dry_run_roles ? (JSON.parse(row.dry_run_roles) as WorkspaceRole[]) : [],
+    // Same defensive read again, and the same identity: `{}` scopes no role, so a preset that
+    // predates the allowlist lands exactly what it always did.
+    submissionClassesByRole: row.submission_classes_by_role
+      ? (JSON.parse(row.submission_classes_by_role) as SubmissionClassesByRole)
+      : {},
     isDefault: row.is_default === 1,
     ...(row.version != null ? { version: row.version } : {}),
     createdAt: row.created_at,
@@ -131,8 +138,8 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
             release_watch_window_minutes, release_max_attempts, human_review_grace_minutes,
             judge_min_score, judge_max_bounces,
             auto_merge_enabled, fork_decision, class_rules, class_rules_by_role, dry_run_roles,
-            version, is_default, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            submission_classes_by_role, version, is_default, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (workspace_id, id) DO UPDATE SET
            name = excluded.name,
            max_complexity = excluded.max_complexity,
@@ -152,6 +159,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
            class_rules = excluded.class_rules,
            class_rules_by_role = excluded.class_rules_by_role,
            dry_run_roles = excluded.dry_run_roles,
+           submission_classes_by_role = excluded.submission_classes_by_role,
            version = excluded.version,
            is_default = excluded.is_default`,
       )
@@ -176,6 +184,7 @@ export class D1RiskPolicyRepository implements RiskPolicyRepository {
         JSON.stringify(preset.classRules ?? {}),
         JSON.stringify(preset.classRulesByRole ?? {}),
         JSON.stringify(preset.dryRunRoles ?? []),
+        JSON.stringify(preset.submissionClassesByRole ?? {}),
         preset.version ?? null,
         preset.isDefault ? 1 : 0,
         preset.createdAt,

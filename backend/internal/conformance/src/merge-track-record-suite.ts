@@ -276,6 +276,7 @@ export function defineMergeTrackRecordSuite(harness: ConformanceHarness): void {
     registerMergeClassFallbackTests(harness, driveMergerRun, rollupFor)
     registerRoleScopedPolicyTests(harness)
     registerDryRunTests(driveMergerRun)
+    registerSubmissionAllowlistTests(harness)
   })
 }
 
@@ -563,10 +564,18 @@ function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
       classRules: { docs: 'always', dependency: 'always' },
       classRulesByRole: { member: { dependency: 'never' } },
       dryRunRoles: ['viewer'],
+      // Two entries with opposite readings on purpose: an EMPTY list is "this role lands
+      // nothing", where an ABSENT one (admin, here) is unrestricted. A repository that
+      // round-tripped the map through a falsy check would collapse them.
+      submissionClassesByRole: { member: ['docs', 'dependency'], viewer: [] },
     })
     expect(created.status).toBe(201)
     expect(created.body.classRulesByRole).toEqual({ member: { dependency: 'never' } })
     expect(created.body.dryRunRoles).toEqual(['viewer'])
+    expect(created.body.submissionClassesByRole).toEqual({
+      member: ['docs', 'dependency'],
+      viewer: [],
+    })
 
     // Read back through a SECOND request, so the assertion covers the repository's row→entity
     // mapping rather than only what the create handler happened to echo.
@@ -575,6 +584,10 @@ function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
     const stored = listed.body.find((p) => p.id === created.body.id)
     expect(stored?.classRulesByRole).toEqual({ member: { dependency: 'never' } })
     expect(stored?.dryRunRoles).toEqual(['viewer'])
+    expect(stored?.submissionClassesByRole).toEqual({
+      member: ['docs', 'dependency'],
+      viewer: [],
+    })
   })
 
   it('rejects a role-scoped rule authored for the unruleable `unknown` class', async () => {
@@ -591,6 +604,24 @@ function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
       maxRequirementIterations: 6,
       maxRequirementConcernAllowed: 'none',
       classRulesByRole: { member: { unknown: 'always' } } as never,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a submission allowlist naming the unruleable `unknown` class', async () => {
+    // Same invariant, third tier: an allowlist that could name `unknown` would let an operator
+    // author a policy about a diff nobody could read.
+    const app = harness.makeApp({})
+    const { workspace } = await app.createWorkspace()
+    const res = await app.call<RiskPolicy>('POST', `/workspaces/${workspace.id}/risk-policies`, {
+      name: 'Bad allowlist',
+      maxComplexity: 0.5,
+      maxRisk: 0.4,
+      maxImpact: 0.5,
+      ciMaxAttempts: 10,
+      maxRequirementIterations: 6,
+      maxRequirementConcernAllowed: 'none',
+      submissionClassesByRole: { member: ['unknown'] } as never,
     })
     expect(res.status).toBe(400)
   })
@@ -612,6 +643,7 @@ function registerRoleScopedPolicyTests(harness: ConformanceHarness): void {
     expect(res.status).toBe(201)
     expect(res.body.classRulesByRole).toEqual({})
     expect(res.body.dryRunRoles).toEqual([])
+    expect(res.body.submissionClassesByRole).toEqual({})
   })
 }
 
@@ -671,6 +703,188 @@ function registerDryRunTests(driveMergerRun: MergerRunDriver): void {
       changedFiles: ['README.md'],
       assessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'trivial docs tweak' },
       preset: { classRules: { docs: 'always' } },
+    })
+    expect(run.status).toBe('done')
+    expect(run.decision.outcome).toBe('auto_merged')
+  })
+}
+
+/**
+ * The per-role SUBMISSION ALLOWLIST, END TO END through a real store and a real signed session.
+ *
+ * What only this can prove: the policy is keyed on the role the run PINNED at admission, so the
+ * chain under test starts at an authenticated HTTP start and runs through the persisted run row
+ * to a merge decision made on the durable path, the same chain the sandboxed-run assertions
+ * above exist for, and the one a `MergeResolver` unit test structurally cannot cover because it
+ * hands the resolver an instance it built in memory.
+ *
+ * It also asserts BOTH exits, which is the whole difference between this setting and a `never`
+ * class rule: refusing only the automatic one leaves a review card whose own button lands exactly
+ * what the allowlist withholds.
+ */
+function registerSubmissionAllowlistTests(harness: ConformanceHarness): void {
+  /** A workspace whose `task_login` runs are started by a real signed-in `member`. */
+  async function memberWorkspace(app: ConformanceApp, tag: string) {
+    const { accountId, ownerUserId: admin } = await app.onboarding().makeOrgOwner(`submit-${tag}`)
+    const member = (
+      await app.onboarding().users.findOrCreateByIdentity('github', `submit-member-${tag}`, {
+        name: 'Member',
+        email: `submit-member-${tag}@example.com`,
+      })
+    ).id
+    await app.onboarding().addAccountMember(accountId, admin, member, ['developer'])
+    const { workspace } = await app.createWorkspaceInAccount(accountId, admin, {
+      name: `Submit ${tag}`,
+      seed: true,
+    })
+    // The workspace role is written explicitly rather than inferred from the account membership:
+    // what this suite is about is which TIER the run pins, so leaving that to a default would
+    // make a change in account→workspace role mapping look like an allowlist regression.
+    await app.workspaceMemberRepository().upsert({
+      workspaceId: workspace.id,
+      userId: member,
+      role: 'member',
+      createdAt: 1,
+      addedByUserId: admin,
+    })
+    return {
+      wsId: workspace.id,
+      // Two sessions, because the split IS the scenario: authoring a merge preset is an
+      // admin-tier write (`settings.manage`), and the whole point of the setting is that the
+      // person it holds back is not the person who wrote it.
+      memberAuth: { authorization: `Bearer ${await app.session({ id: member })}` },
+      adminAuth: { authorization: `Bearer ${await app.session({ id: admin })}` },
+    }
+  }
+
+  /** Run `coder` + `merger` on `task_login` as a member, under an allowlisted preset. */
+  async function driveMemberRun(options: {
+    tag: string
+    changedFiles: string[]
+    submissionClasses: string[]
+  }) {
+    const app = harness.makeApp(
+      {
+        confidence: 1,
+        pullRequest: FAKE_PR,
+        mergeAssessment: { complexity: 0.1, risk: 0.1, impact: 0.1, rationale: 'small change' },
+      },
+      {
+        resolveRunRepoContext: async () => ({
+          repo: repoWithChangedFiles(options.changedFiles),
+          baseBranch: 'main',
+          repoId: FAKE_REPO_ID,
+          provider: 'github' as const,
+        }),
+      },
+    )
+    const { wsId, memberAuth, adminAuth } = await memberWorkspace(app, options.tag)
+    const preset = await app.call<RiskPolicy>(
+      'POST',
+      `/workspaces/${wsId}/risk-policies`,
+      {
+        name: 'Scoped',
+        maxComplexity: 0.5,
+        maxRisk: 0.4,
+        maxImpact: 0.5,
+        ciMaxAttempts: 10,
+        maxRequirementIterations: 6,
+        maxRequirementConcernAllowed: 'none',
+        // Widened to `always` on purpose: the allowlist has to beat the most permissive rule the
+        // preset can carry, or it would only be a slower way of writing `never`.
+        classRules: { docs: 'always', source: 'always' },
+        submissionClassesByRole: { member: options.submissionClasses },
+      },
+      adminAuth,
+    )
+    expect(preset.status).toBe(201)
+    await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/task_login`,
+      { riskPolicyId: preset.body.id },
+      adminAuth,
+    )
+    const pipeline = await app.call<Pipeline>(
+      'POST',
+      `/workspaces/${wsId}/pipelines`,
+      { name: 'Build + merger', agentKinds: ['coder', 'merger'] },
+      adminAuth,
+    )
+    const start = await app.call<ExecutionInstance>(
+      'POST',
+      `/workspaces/${wsId}/blocks/task_login/executions`,
+      { pipelineId: pipeline.body.id },
+      memberAuth,
+    )
+    expect(start.status).toBe(201)
+    const ticked = await app.drive(wsId)
+    const exec = ticked.find((e) => e.blockId === 'task_login')!
+    const snap = (
+      await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`, undefined, adminAuth)
+    ).body
+    return {
+      app,
+      wsId,
+      memberAuth,
+      status: snap.blocks.find((b) => b.id === 'task_login')!.status,
+      decision: exec.steps.find((s) => s.agentKind === 'merger')!.custom as {
+        outcome?: string
+        reason?: string
+        thresholds?: { initiatorRole?: string; submissionClasses?: string[] }
+      },
+    }
+  }
+
+  it('lands a class the initiator’s role allowlists', async () => {
+    const run = await driveMemberRun({
+      tag: 'allowed',
+      changedFiles: ['README.md'],
+      submissionClasses: ['docs'],
+    })
+    expect(run.status).toBe('done')
+    expect(run.decision.outcome).toBe('auto_merged')
+    // The pinned role survived the persistence round-trip, which is what the policy keys on: had
+    // it been dropped anywhere, the run would have landed as UNSCOPED and this suite would pass
+    // for the wrong reason on the refusal case below.
+    expect(run.decision.thresholds?.initiatorRole).toBe('member')
+    expect(run.decision.thresholds?.submissionClasses).toEqual(['docs'])
+  })
+
+  it('refuses a class outside it at BOTH exits', async () => {
+    const run = await driveMemberRun({
+      tag: 'refused',
+      changedFiles: ['src/login.ts'],
+      submissionClasses: ['docs'],
+    })
+    // Exit one: the automatic merge. The PR is still opened, because the work is not the harm.
+    expect(run.status).toBe('pr_ready')
+    expect(run.decision).toMatchObject({
+      outcome: 'awaiting_review',
+      reason: 'submission_not_allowed',
+    })
+
+    // Exit two: the manual merge the review card offers. Without this the allowlist is decorative,
+    // since the person who reads that card is routinely the person who started the run.
+    const merged = await run.app.call(
+      'POST',
+      `/workspaces/${run.wsId}/blocks/task_login/merge`,
+      {},
+      run.memberAuth,
+    )
+    expect(merged.status).toBe(409)
+    expect(
+      (merged.body as { error?: { details?: { reason?: string } } }).error?.details?.reason,
+    ).toBe('submission_not_allowed')
+  })
+
+  it('lands an unreadable diff whatever the allowlist says', async () => {
+    // The inert reading of `unknown`, asserted through the real classification seam: a VCS that
+    // cannot enumerate the changed files is an outage, and an outage may not change policy. That
+    // is the opposite disposition from a class the allowlist simply omits.
+    const run = await driveMemberRun({
+      tag: 'unknown',
+      changedFiles: [],
+      submissionClasses: [],
     })
     expect(run.status).toBe('done')
     expect(run.decision.outcome).toBe('auto_merged')

@@ -644,7 +644,8 @@
         "input_gate_parked": "Answer it in the task's input check",
         "ticket_already_linked": "This issue already has a task",
         "document_already_linked": "Document already attached",
-        "dry_run_not_mergeable": "Dry run cannot be merged"
+        "dry_run_not_mergeable": "Dry run cannot be merged",
+        "submission_not_allowed": "Merge not allowed for this run"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -684,7 +685,8 @@
         "input_gate_parked": "This run is parked on its input check, which the approval rail cannot answer. Use the notice on the run: fix the task and re-check, or run it anyway.",
         "ticket_already_linked": "An issue can back only one task, so linking it again would strip the existing task of the context it was created with. Open that task instead, or unlink the issue first.",
         "document_already_linked": "That document is attached to another task. Detach it there first, or attach a separate copy.",
-        "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge."
+        "dry_run_not_mergeable": "This pull request came from a dry run, so it can't be merged from here. Start the task again as a live run to produce a pull request this workspace will merge.",
+        "submission_not_allowed": "This task's merge policy doesn't let the role that started this run merge this kind of change. Somebody whose role may merge it can do so, or an admin can widen the policy in the merge preset."
       },
       "action": {
         "connectGitHub": "Connect GitHub",
@@ -1354,6 +1356,7 @@
         "class_auto_merge": "This preset always auto-merges this class of change, so the scores were not compared.",
         "class_requires_review": "This preset always sends this class of change to a human, whatever the scores.",
         "role_requires_review": "This preset holds runs started by a {role} to human review for this class of change, whatever the scores. A teammate on a higher tier can merge this PR as it stands.",
+        "submission_not_allowed": "This preset lets runs started by a {role} merge only these kinds of change: {classes}. This one is a different kind, so the pull request is waiting for somebody whose role may merge it.",
         "dry_run": "This was a dry run, so the pull request was left open for a human and the scores were not compared. Start the task again as a live run to produce a pull request this workspace will merge."
       },
       "scores": "Scores",
@@ -1365,7 +1368,11 @@
       "ceiling": "ceiling {value}",
       "rationale": "Rationale",
       "noAssessment": "The merger did not return a scored assessment.",
-      "noResult": "No merge decision recorded yet."
+      "noResult": "No merge decision recorded yet.",
+      "noSubmittableClasses": "none",
+      "@noSubmittableClasses": {
+        "description": "Substituted into the {classes} slot of `reason.submission_not_allowed` when the role's allowlist is empty, so it reads as a list with no members ('...only these kinds of change: none'), NOT as a standalone sentence or an absence of policy."
+      }
     },
     "testReport": {
       "title": "Test report",
@@ -3013,10 +3020,15 @@
       },
       "roleRules": {
         "heading": "Limits per initiator role",
-        "help": "What a run may do also depends on who started it. A role can be held to stricter rules than the ones above, or to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
-        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the class limits below add nothing. Dry runs still apply: they refuse a manual merge too.",
+        "help": "What a run may do also depends on who started it. A role can be limited to merging only certain kinds of change, held to stricter rules than the ones above, or held to dry runs only: the pipeline works and opens a pull request, and nothing merges. A role can only narrow this policy, never widen it.",
+        "autoMergeOffWarning": "Auto-merge is off for this preset, so every pull request already goes to a human and the per-class limits below add nothing. The merge limit and dry runs still apply: both refuse a manual merge too.",
         "sandboxLabel": "Dry runs only",
-        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so the class rules below cannot hold them to anything stricter.",
+        "sandboxNote": "Runs started by this role open a pull request and merge nothing, so neither limit below can hold them to anything stricter.",
+        "submissionLabel": "Limit which changes this role may merge",
+        "submissionHelp": "When on, only the ticked kinds of change are merged for runs this role starts. Anything else stays open for somebody else, whatever the scores say. The pull request is still opened, and it can still be merged by hand on the git host.",
+        "submissionNone": "Nothing is ticked, so this workspace will not merge any run this role starts.",
+        "submissionBadge": "Merge limited",
+        "classHeading": "Review required per class",
         "noRules": "No class limits",
         "ruleCount": "{count} class limited | {count} classes limited",
         "@ruleCount": {
@@ -4747,6 +4759,7 @@
       "noneHint": "No risk policy configured. Every pull request waits for a human review.",
       "refused": {
         "relaxes_role_sandbox": "Not available for your role: this task’s runs are sandboxed, and this policy would let them merge. A workspace admin can change it.",
+        "relaxes_role_submission_allowlist": "Not available for your role: this policy would let you land kinds of change this task holds you back from. A workspace admin can change it.",
         "relaxes_role_class_rule": "Not available for your role: this policy auto-merges changes you are held to review on this task. A workspace admin can change it."
       }
     },
@@ -4766,6 +4779,7 @@
       "ciAttempts": "The run may try {count} time to turn a red CI green before it gives up. | The run may try {count} times to turn a red CI green before it gives up.",
       "roleHeading": "Who started the run",
       "roleSandboxed": "Runs started by {roles} open a pull request and never merge.",
+      "roleScoped": "Runs started by {roles} merge only some kinds of change.",
       "roleNarrowed": "Runs started by {roles} follow stricter rules for some change classes."
     }
   },

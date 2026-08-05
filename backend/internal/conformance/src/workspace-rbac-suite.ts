@@ -743,8 +743,17 @@ function registerRiskPolicySelectionTests(
     error?: { details?: { reason?: string } }
   }
 
-  /** Seed a sandboxing DEFAULT preset plus an open one, and a task governed by the default. */
-  async function seedPolicySwap(app: ConformanceApp) {
+  /**
+   * Seed a RESTRICTING default preset plus an open one, and a task governed by the default.
+   *
+   * `restriction` is the role-scoped half under test, so each arm of the selection guard is driven
+   * through the same real HTTP path: the preset is written and read back by the facade's own
+   * repository, which is what makes this a cross-runtime assertion rather than a second unit test.
+   */
+  async function seedPolicySwap(
+    app: ConformanceApp,
+    restriction: Record<string, unknown> = { dryRunRoles: ['member'] },
+  ) {
     const { adminA, c, wsId } = await scenario(app) // `account` mode: C resolves as a member
     const ha = bearer(await app.session({ id: adminA }))
     const preset = async (name: string, over: Record<string, unknown>) =>
@@ -765,7 +774,7 @@ function registerRiskPolicySelectionTests(
           ha,
         )
       ).body.id
-    const sandboxed = await preset('Sandboxed', { dryRunRoles: ['member'], isDefault: true })
+    const sandboxed = await preset('Restricted', { ...restriction, isDefault: true })
     const open = await preset('Open', {})
     const frame = await app.call<Row>(
       'POST',
@@ -843,6 +852,41 @@ function registerRiskPolicySelectionTests(
       hc,
     )
     expect(backToSandbox.status).toBe(200)
+  })
+
+  it('nor re-point a task off the submission allowlist their role is held to', async () => {
+    // The same escape through ADR 0039's field: an allowlisted role moving to a preset that
+    // allowlists them nothing reads as unrestricted, which is the widest policy the setting has.
+    const app = harness.makeApp()
+    const { wsId, taskId, sandboxed, open, ha, c } = await seedPolicySwap(app, {
+      submissionClassesByRole: { member: ['docs'] },
+    })
+    const hc = bearer(await app.session({ id: c }))
+
+    const swap = await app.call<Refusal>(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      hc,
+    )
+    expect(swap.status).toBe(403)
+    expect(swap.body.error?.details?.reason).toBe('relaxes_role_submission_allowlist')
+
+    // Refused BEFORE the write, and an admin makes the same swap.
+    const after = await app.call<{ blocks: Array<{ id: string; riskPolicyId?: string }> }>(
+      'GET',
+      `/workspaces/${wsId}`,
+      undefined,
+      ha,
+    )
+    expect(after.body.blocks.find((b) => b.id === taskId)?.riskPolicyId).toBe(sandboxed)
+    const byAdmin = await app.call(
+      'PATCH',
+      `/workspaces/${wsId}/blocks/${taskId}`,
+      { riskPolicyId: open },
+      ha,
+    )
+    expect(byAdmin.status).toBe(200)
   })
 
   it('leaves an ordinary member edit of the same task untouched', async () => {

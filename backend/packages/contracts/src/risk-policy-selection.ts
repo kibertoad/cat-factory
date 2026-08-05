@@ -2,6 +2,7 @@ import {
   dryRunForcedForRole,
   mergeClassRuleRelaxes,
   resolveRoleScopedMergeClassRule,
+  submissionAllowlistForRole,
   type RiskPolicy,
 } from './merge.js'
 import { RULEABLE_CHANGE_CLASSES } from './mergeTrackRecord.js'
@@ -12,12 +13,13 @@ import type { WorkspaceRole } from './workspace-members.js'
 //
 // ADR 0037 scopes a preset's merge policy by the workspace role that STARTS a run: `dryRunRoles`
 // sandboxes a tier (its runs open a pull request and merge nothing, at either exit) and
-// `classRulesByRole` narrows what it may auto-merge. Both are read off the preset the TASK
-// selects, and selecting a task's preset is an ordinary board write (`riskPolicyId` on the block
-// patch, `board.write`, member tier). Editing the preset itself is admin-gated, so the ADR
-// concluded that a sandboxed member cannot un-sandbox themselves; that was half the picture. The
-// other way around a sandbox is not to edit the policy but to point the task at a different one:
-// one PATCH, or one click in the inspector's picker.
+// `classRulesByRole` narrows what it may auto-merge. ADR 0039 adds the third,
+// `submissionClassesByRole`, allowlisting the change classes a tier may land at all. All three are
+// read off the preset the TASK selects, and selecting a task's preset is an ordinary board write
+// (`riskPolicyId` on the block patch, `board.write`, member tier). Editing the preset itself is
+// admin-gated, so the ADR concluded that a sandboxed member cannot un-sandbox themselves; that was
+// half the picture. The other way around a sandbox is not to edit the policy but to point the task
+// at a different one: one PATCH, or one click in the inspector's picker.
 //
 // The rule below closes that, and it is the NARROW-ONLY property the role layer is already built
 // on, applied to SELECTION rather than to authoring: a selection may not drop a restriction the
@@ -79,14 +81,19 @@ export interface RolePolicyView {
   classRules?: RiskPolicy['classRules'] | null
   classRulesByRole?: RiskPolicy['classRulesByRole'] | null
   dryRunRoles?: readonly WorkspaceRole[] | null
+  submissionClassesByRole?: RiskPolicy['submissionClassesByRole'] | null
 }
 
 /**
- * Why a preset selection is refused: the machine-readable half, kept apart because the two mean
- * different things to the person holding the picker (and because only the first is about a run
- * that would otherwise merge NOTHING).
+ * Why a preset selection is refused: the machine-readable half, kept apart because the three mean
+ * different things to the person holding the picker. The first is about a run that would otherwise
+ * merge NOTHING, the second about work this tier may not land at all however it is reviewed, and
+ * the third about review the tier owes on work it may land.
  */
-export type RiskPolicySelectionRefusal = 'relaxes_role_sandbox' | 'relaxes_role_class_rule'
+export type RiskPolicySelectionRefusal =
+  | 'relaxes_role_sandbox'
+  | 'relaxes_role_submission_allowlist'
+  | 'relaxes_role_class_rule'
 
 /**
  * Whether `actor` may re-point a task from the `from` policy to the `to` policy, or the reason
@@ -97,6 +104,10 @@ export type RiskPolicySelectionRefusal = 'relaxes_role_sandbox' | 'relaxes_role_
  *  - The actor holds no workspace role, so no role-scoped restriction applies to them.
  *  - The actor manages the policy library, so a swap grants them nothing they could not author.
  *  - Neither preset's ROLE LAYER holds anything over this role that the other drops.
+ *
+ * The arms run in the precedence the engine's own merge ladder applies (sandbox, then the
+ * submission allowlist, then the class rules), so the reason a picker shows names the same
+ * restriction the run would have been refused on.
  *
  * The class arm keys on {@link resolveRoleScopedMergeClassRule}'s `narrowedByRole`, not on the
  * effective rules alone: only a class the role layer ACTUALLY narrowed is a restriction the
@@ -115,6 +126,18 @@ export function refuseRiskPolicySelection(input: {
   if (!role || actor.managesPolicy) return null
   if (dryRunForcedForRole(from.dryRunRoles, role) && !dryRunForcedForRole(to.dryRunRoles, role)) {
     return 'relaxes_role_sandbox'
+  }
+  const heldAllowlist = submissionAllowlistForRole(from.submissionClassesByRole, role)
+  if (heldAllowlist) {
+    const nextAllowlist = submissionAllowlistForRole(to.submissionClassesByRole, role)
+    // An ABSENT allowlist on the far side is the widest policy the setting can express, so it
+    // relaxes every held one — including the empty allowlist, where the two look alike in the
+    // editor and mean opposite things. Otherwise it is the same subset test the arms above make:
+    // a class `to` would land that `from` would not is capability this role did not have.
+    if (!nextAllowlist) return 'relaxes_role_submission_allowlist'
+    if (nextAllowlist.some((changeClass) => !heldAllowlist.includes(changeClass))) {
+      return 'relaxes_role_submission_allowlist'
+    }
   }
   for (const changeClass of RULEABLE_CHANGE_CLASSES) {
     const held = resolveRoleScopedMergeClassRule({

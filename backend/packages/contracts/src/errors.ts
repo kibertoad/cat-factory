@@ -63,6 +63,13 @@ export const CONFLICT_REASONS = [
   // authority to land it, and the remedy is to re-run the task live rather than to look for a
   // PR that does not exist.
   'dry_run_not_mergeable',
+  // The run's initiator holds a role whose merge preset allowlists which change classes it may
+  // land, and this pull request's class is outside that list. Kept apart from
+  // `dry_run_not_mergeable` because the remedies are opposite: re-running live changes nothing
+  // here (the same role would produce the same refusal), and what does resolve it is a teammate
+  // whose role may land this class, or an operator widening the allowlist. `details.changeClass`
+  // names the class that was refused.
+  'submission_not_allowed',
   'github_not_connected',
   'bootstrap_not_retryable',
   'bootstrap_reference_missing',

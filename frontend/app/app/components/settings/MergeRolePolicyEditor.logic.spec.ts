@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { MERGE_CLASS_RULES } from '@cat-factory/contracts'
-import type { ClassRulesByRole, MergeClassRules } from '~/types/merge'
+import { MERGE_CLASS_RULES, RULEABLE_CHANGE_CLASSES } from '@cat-factory/contracts'
+import type { ClassRulesByRole, MergeClassRules, SubmissionClassesByRole } from '~/types/merge'
 import {
   INHERIT_RULE,
   narrowingOptionsFor,
   roleClassRuleRows,
   roleNarrowedCount,
+  roleSubmissionRows,
+  roleSubmissionScoped,
   setRoleClassRule,
+  setRoleSubmissionScoped,
   toggleDryRunRole,
+  toggleSubmissionClass,
 } from '~/components/settings/MergeRolePolicyEditor.logic'
 
 describe('narrowingOptionsFor', () => {
@@ -142,5 +146,64 @@ describe('roleNarrowedCount', () => {
     expect(roleNarrowedCount(undefined)).toBe(0)
     expect(roleNarrowedCount({})).toBe(0)
     expect(roleNarrowedCount({ docs: 'never', source: 'never' })).toBe(2)
+  })
+})
+
+// The submission allowlist's editing shape turns on one distinction the wire contract makes and a
+// tick-box grid cannot render on its own: an ABSENT entry (unrestricted) and an EMPTY list (lands
+// nothing) are different policies. Every case below is about keeping those two apart.
+describe('roleSubmissionScoped', () => {
+  it('reads an EMPTY allowlist as scoped, not as the unrestricted default', () => {
+    expect(roleSubmissionScoped({ member: [] }, 'member')).toBe(true)
+    expect(roleSubmissionScoped({ member: ['docs'] }, 'member')).toBe(true)
+  })
+
+  it('reads a role with no entry as unrestricted', () => {
+    expect(roleSubmissionScoped({ member: ['docs'] }, 'admin')).toBe(false)
+    expect(roleSubmissionScoped({}, 'member')).toBe(false)
+  })
+})
+
+describe('roleSubmissionRows', () => {
+  it('renders one row per ruleable class, in the shared order, ticked by membership', () => {
+    const rows = roleSubmissionRows(['source', 'docs'])
+    expect(rows.map((r) => r.changeClass)).toEqual([...RULEABLE_CHANGE_CLASSES])
+    expect(rows.filter((r) => r.allowed).map((r) => r.changeClass)).toEqual(['docs', 'source'])
+  })
+})
+
+describe('setRoleSubmissionScoped', () => {
+  // Turning the switch ON must not silently impose a policy nobody clicked: seeding today's
+  // landable classes leaves the role exactly where it was, and the operator subtracts from there.
+  it('seeds every class when scoping is turned on', () => {
+    expect(setRoleSubmissionScoped({}, 'member', true).member).toEqual([...RULEABLE_CHANGE_CLASSES])
+  })
+
+  it('removes the entry entirely when scoping is turned off', () => {
+    const byRole: SubmissionClassesByRole = { member: [], admin: ['docs'] }
+    const next = setRoleSubmissionScoped(byRole, 'member', false)
+    expect('member' in next).toBe(false)
+    expect(next.admin).toEqual(['docs'])
+  })
+})
+
+describe('toggleSubmissionClass', () => {
+  it('adds and removes one class, keeping the shared class order', () => {
+    const ticked = toggleSubmissionClass({ member: ['source'] }, 'member', 'docs', true)
+    expect(ticked.member).toEqual(['docs', 'source'])
+    expect(toggleSubmissionClass(ticked, 'member', 'source', false).member).toEqual(['docs'])
+  })
+
+  // Unticking the last class is the policy "this role lands nothing", so it must NOT prune back
+  // to an absent entry, which would silently invert the click into "unrestricted".
+  it('leaves an EMPTY list rather than un-scoping the role', () => {
+    const next = toggleSubmissionClass({ member: ['docs'] }, 'member', 'docs', false)
+    expect(next.member).toEqual([])
+    expect(roleSubmissionScoped(next, 'member')).toBe(true)
+  })
+
+  it('leaves other roles untouched', () => {
+    const next = toggleSubmissionClass({ admin: ['docs'] }, 'member', 'docs', true)
+    expect(next.admin).toEqual(['docs'])
   })
 })

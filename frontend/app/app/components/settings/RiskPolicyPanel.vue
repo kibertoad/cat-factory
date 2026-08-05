@@ -11,6 +11,7 @@ import type {
   MergeClassRules,
   RiskPolicy,
   RequirementConcernLevel,
+  SubmissionClassesByRole,
 } from '~/types/merge'
 import type { StepGating } from '@cat-factory/contracts'
 import {
@@ -90,6 +91,9 @@ interface Draft {
   // which is why clearing one in the editor is a plain omission.
   classRulesByRole: ClassRulesByRole
   dryRunRoles: DryRunRoles
+  // Which classes each role may LAND at all. A role with no entry is unrestricted, so `{}` is the
+  // identity; an entry with no classes is the different policy that the role lands nothing.
+  submissionClassesByRole: SubmissionClassesByRole
   // Implementation-fork decision gating (edited 0..100, stored 0..1); disabled ⇒ off in `auto`.
   forkEnabled: boolean
   forkMinComplexity: number
@@ -129,6 +133,7 @@ function toDraft(p: RiskPolicy): Draft {
     classRules: { ...p.classRules },
     classRulesByRole: { ...p.classRulesByRole },
     dryRunRoles: [...p.dryRunRoles],
+    submissionClassesByRole: { ...p.submissionClassesByRole },
     forkEnabled: p.forkDecision?.enabled ?? false,
     forkMinComplexity: Math.round((p.forkDecision?.minComplexity ?? 0.5) * 100),
     forkMinRisk: Math.round((p.forkDecision?.minRisk ?? 0.4) * 100),
@@ -174,6 +179,7 @@ async function save(p: RiskPolicy) {
       classRules: d.classRules,
       classRulesByRole: d.classRulesByRole,
       dryRunRoles: d.dryRunRoles,
+      submissionClassesByRole: d.submissionClassesByRole,
       forkDecision: forkGating(d),
     })
     toast.add({
@@ -235,6 +241,7 @@ const draft = reactive<Draft>({
   classRules: {},
   classRulesByRole: {},
   dryRunRoles: [],
+  submissionClassesByRole: {},
   forkEnabled: false,
   forkMinComplexity: 50,
   forkMinRisk: 40,
@@ -395,6 +402,7 @@ async function create() {
         <MergeRolePolicyEditor
           v-model:class-rules-by-role="drafts[p.id]!.classRulesByRole"
           v-model:dry-run-roles="drafts[p.id]!.dryRunRoles"
+          v-model:submission-classes-by-role="drafts[p.id]!.submissionClassesByRole"
           :class-rules="drafts[p.id]!.classRules"
           :auto-merge-enabled="drafts[p.id]!.autoMergeEnabled"
           :disabled="busy === p.id"
