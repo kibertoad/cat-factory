@@ -413,15 +413,21 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
     if (!entry) {
       throw new UnavailableError(`${provider} sign-in is not available`)
     }
-    const pat = token ?? entry.configuredToken
+    const pat = token ?? entry.configuredToken?.()
     if (!pat) {
-      // Local mode has a server-configured one-click token, so guide the operator to set it;
-      // a hosted (multi-user) deployment has none — each user pastes their OWN PAT, so guide
-      // the user to do that rather than to set an env var they don't control.
-      const message = container.config.localMode
-        ? `No ${provider} token configured. Set ${provider === 'gitlab' ? 'GITLAB_PAT' : 'GITHUB_PAT'} in your environment to sign in.`
-        : `Paste your ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} personal access token to sign in.`
-      return c.json({ error: { code: 'validation', message } }, 400)
+      // Local mode can be handed a token right here (it becomes the deployment's own credential),
+      // so ask for one rather than for an env var the developer would have to restart to apply;
+      // a hosted (multi-user) deployment has no deployment token at all — each user pastes their
+      // OWN PAT, so the same instruction serves both.
+      return c.json(
+        {
+          error: {
+            code: 'validation',
+            message: `Paste your ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} personal access token to sign in.`,
+          },
+        },
+        400,
+      )
     }
     let identity
     try {
@@ -452,6 +458,16 @@ function registerCredentialRoutes(app: Hono<AppEnv>): void {
           403,
         )
       }
+    }
+    // Local mode's ONE token is both the identity above and the credential every agent step
+    // clones, pushes, gates and merges with, so a token pasted into a deployment that holds none
+    // is installed as that credential here — before the session is minted, so a failure to store
+    // it is reported instead of handing the user a session into a product that cannot reach any
+    // repo. Only ever a token the caller supplied (never the deployment's own, re-installed), and
+    // only while `installable` says the environment names none; the facade's `install` refuses
+    // otherwise, which the shared error handler renders as the refusal it is.
+    if (token && container.localVcsSetup?.installable().includes(provider)) {
+      await container.localVcsSetup.install(provider, token, { login: identity.login })
     }
     const user = await container.userService.findOrCreateByIdentity(provider, identity.externalId, {
       name: identity.name,

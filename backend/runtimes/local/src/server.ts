@@ -36,6 +36,7 @@ import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integ
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
 import { githubPatCreationUrl, warnOnGitHubPatProblemInBackground } from './github.js'
+import { createLocalVcsCredentialSource } from './vcsCredential.js'
 import {
   RECOMMENDED_HARNESS_IMAGE,
   type ImageExec,
@@ -243,24 +244,31 @@ async function bootLocal(
   // eagerly at boot when an image is configured — so it is not repeated here.
 
   // Source control is reached via a PAT in local mode (there is no GitHub-App connect flow):
-  // a GITHUB_PAT or a GITLAB_PAT. Without EITHER the board still serves, but every repo-
-  // operating agent step — clone, push, open PR/MR, the CI gate, the real merge — fails.
-  // Surface it at boot with a click-through URL that pre-selects the scopes, so it is a
-  // one-step fix rather than a runtime surprise.
-  if (!localized.GITHUB_PAT?.trim() && !localized.GITLAB_PAT?.trim()) {
+  // `GITHUB_PAT` / `GITLAB_PAT`, else the one a developer installed from the sign-in screen.
+  // With NONE the board still serves, but every repo-operating agent step — clone, push, open
+  // PR/MR, the CI gate, the real merge — fails. Surface it at boot with a click-through URL that
+  // pre-selects the scopes, so it is a one-step fix rather than a runtime surprise. This reads
+  // the credential through a throwaway source: the container builds its own (the one the running
+  // server then reads through), and holding a second sqlite handle open for the process lifetime
+  // to answer one boot question is not worth it.
+  const bootCredentials = createLocalVcsCredentialSource(localized)
+  const bootCredential = bootCredentials.current()
+  bootCredentials.close()
+  if (!bootCredential) {
     logger.warn(
-      `local mode: neither GITHUB_PAT nor GITLAB_PAT is set — agent steps that clone, push, ` +
+      `local mode: this deployment has no source-control token — agent steps that clone, push, ` +
         `open PRs/MRs, gate on CI or merge will fail. Create a GitHub token (scopes pre-selected) ` +
-        `at ${githubPatCreationUrl()} then set GITHUB_PAT (or set GITLAB_PAT for GitLab) and restart.`,
+        `at ${githubPatCreationUrl()} and sign in with it on the sign-in screen (no restart), or ` +
+        `set GITHUB_PAT / GITLAB_PAT in your .env and restart.`,
     )
-  } else if (localized.GITHUB_PAT?.trim()) {
+  } else if (bootCredential.provider === 'github') {
     // A PAT IS set (GitHub mode): validate it once at boot so an invalid / expired / under-scoped
     // token surfaces here — with the same one-click fix as the missing case — instead of failing
     // opaquely on the first clone/push/PR/CI/merge later. FIRE-AND-FORGET (app-startup initiative,
     // item 6): the probe is a real github.com round-trip and best-effort diagnostics only (an
     // invalid PAT still fails loudly on first use), so it must not hold the boot path for a network
     // hop — it logs its warning if/when the bounded probe later resolves.
-    warnOnGitHubPatProblemInBackground(localized, logger)
+    warnOnGitHubPatProblemInBackground(localized, bootCredential.token, logger)
   }
   bootClock.mark('patProbe')
   const preflight = bootClock.summary()

@@ -1789,7 +1789,9 @@
       "continueWithConfigured": "Se connecter avec le PAT {provider} configuré",
       "noPatTitle": "Aucun jeton de gestion de versions configuré",
       "noPatBody": "Définissez GITHUB_PAT ou GITLAB_PAT dans votre .env pour vous connecter avec un jeton d'accès personnel, puis redémarrez le serveur.",
+      "setupBody": "Créez un jeton d'accès personnel et collez-le ci-dessous. Il vous connecte et devient le jeton avec lequel cette installation clone, pousse et fusionne.",
       "createToken": "Créer un jeton {provider} ↗",
+      "tokenBecomesCredential": "Ce jeton est stocké sur cette machine et utilisé pour chaque clone, push, PR et fusion des agents.",
       "orDivider": "ou",
       "failed": "Échec de la connexion. Vérifiez que le jeton configuré est valide et réessayez."
     },

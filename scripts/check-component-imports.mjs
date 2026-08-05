@@ -34,7 +34,15 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  */
 const COMPONENT_ROOTS = ['frontend/app/app/components']
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.nuxt', '.output', '.turbo', 'coverage'])
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  '.nuxt',
+  '.output',
+  '.turbo',
+  'coverage',
+  '.stryker-tmp',
+])
 
 function* vueFiles(dirAbs) {
   for (const entry of readdirSync(dirAbs)) {

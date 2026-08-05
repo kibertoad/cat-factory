@@ -1,5 +1,188 @@
 # @cat-factory/app
 
+## 0.231.0
+
+### Minor Changes
+
+- 6d3f784: Local mode takes its source-control token from the sign-in screen
+
+  A local deployment with no `GITHUB_PAT` / `GITLAB_PAT` used to send a developer to the right
+  token page and then have nowhere to put the result: the token had to go into `.env`, followed by
+  a restart. The sign-in screen now accepts it directly, and it becomes the deployment's own
+  credential (sealed on the machine under `ENCRYPTION_KEY`), live for the next dispatch, gate probe
+  and repo read. `.env` still wins where it is set, and closes the browser flow.
+
+  `@cat-factory/server` additionally exports `githubRepoOrigin`, the clone origin a dispatch already
+  fell back to, so a facade whose own resolver handles only the non-GitHub case can delegate the
+  GitHub half instead of restating the URL.
+
+  Internal breaks in the affected packages: `VcsIdentityEntry.configuredToken` and
+  `CoreDependencies.sharedStackCloneToken` are now getters, `buildGitLabEngineClient` takes a token
+  or a getter, and the local facade's `createLocalGitHubClient` / `createLocalGitLabClient` take a
+  token getter and always return a client (an unconfigured deployment REFUSES on use, naming the
+  fix, rather than presenting no client at all).
+
+### Patch Changes
+
+- Updated dependencies [6d3f784]
+  - @cat-factory/contracts@0.248.0
+
+## 0.230.0
+
+### Minor Changes
+
+- 0937581: Enterprise SSO: sign in through the deployment's own identity provider
+
+  Sign-in was GitHub OAuth, Google OAuth, or email/password, and all three are CONSUMER identity
+  providers. For an organisation that is disqualifying before any feature comparison starts. There was
+  no way to say "only our people" (the allowlist was named users plus GitHub org membership, so
+  offboarding waited on somebody remembering to edit a list); no way to sit behind the MFA,
+  conditional access and session policy that live in the IdP; and no way to let a directory that
+  already models "engineers" and "product" mean anything here.
+
+  A deployment now configures ONE generic OpenID Connect provider by discovery URL plus client
+  credentials, and its people sign in with it: `AUTH_SSO_ISSUER_URL` / `AUTH_SSO_CLIENT_ID` /
+  `AUTH_SSO_CLIENT_SECRET`, with an optional label, scopes, redirect override, and two admission
+  narrowings. Okta, Microsoft Entra ID, Auth0, Keycloak, PingFederate, OneLogin, JumpCloud, Google
+  Workspace and a Shibboleth IdP running the OIDC OP plugin all work through it, and so does a
+  provider none of us has heard of, because nothing in the adapter branches on which one answered — a
+  per-vendor code path would mean a provider is supported only once it is named, and would pin
+  endpoints the provider is free to move.
+
+  Authorization Code + PKCE (S256), ID tokens verified against the provider's JWKS with an
+  ASYMMETRIC-only algorithm allow-list, which is what refuses both `alg: none` and an `HS256` token
+  forged with the deployment's own client secret. Verification is delegated to `jose` rather than
+  hand-rolled: it is Web-Crypto native, so it runs unchanged in a Workers isolate and on Node, and its
+  keys are supplied from OUR cache rather than through its remote-JWKS helper, so one evictable app
+  cache slice (`AppCaches.ssoDiscovery`) owns the document. A rotated signing key costs one
+  rate-limited refetch on an unknown `kid`, not a login outage until a TTL lapses.
+
+  Three readings shaped the rest. The identity subject is `<discovered issuer>#<sub>`, never the
+  email: a `sub` is unique per issuer only, and orgs reassign addresses, so keying on either alone
+  eventually hands one person another's account. The round-trip state rides an httpOnly cookie rather
+  than the URL, because PKCE's verifier and OIDC's nonce are secrets and a verifier travelling beside
+  the code it protects protects nothing — which incidentally leaves the callback leg with no untrusted
+  redirect input at all. And admission DEFAULTS TO ADMIT: with SSO configured the IdP's app assignment
+  IS the allowlist, which is the capability being bought, so the fail-closed treatment the GitHub
+  lists get would defeat it. `AUTH_SSO_REQUIRED_GROUPS` and `AUTH_SSO_ALLOWED_EMAIL_DOMAINS` are how
+  an org that needs less than its whole directory says so, re-checked every sign-in.
+
+  A refused round-trip redirects with `#sso_error=<reason>` over a closed vocabulary the SPA maps to
+  translated copy in all ten locales, rather than a JSON envelope a browser mid-redirect cannot get
+  back from. The reasons are separate because the remedies are: a missing directory group is the
+  user's to take to IT, a failed code exchange is the operator's own configuration, and an IdP that
+  stopped answering mid-round-trip (`provider_unreachable`) is neither. That last one covers the whole
+  callback leg, so a provider outage during the exchange redirects with a reason rather than rendering
+  the operator-facing envelope the LOGIN leg correctly still uses.
+
+  Four configuration combinations now REFUSE TO BOOT rather than resolving to a deployment that looks
+  configured and is not: a partial credential set, a non-https issuer on a non-loopback host, a
+  session secret too weak to sign what SSO mints, and `AUTH_DEV_OPEN`/`TESTING_NO_AUTH` alongside SSO
+  (dev-open serves every protected route anonymously, cancelling the access control SSO was configured
+  to enforce). Parsing and all four refusals live in one shared `resolveSsoConfig` both facades call,
+  so the runtimes cannot drift on admission policy.
+
+  No migration: `user_identities` is already `(provider, subject)` keyed with a metadata blob, so
+  `IdentityProvider` simply gains `'oidc'` and the column is plain text on both runtimes. Every
+  existing login path is byte-for-byte unchanged; a deployment that sets none of the new variables
+  sees no difference. `AuthConfig` gains an optional `sso`, `/auth/config` gains `providers.sso` plus
+  an `sso: { label, protocol }` presentation object, and the shared browser-login mechanics
+  (cookie-bound CSRF state, the allow-listed post-login redirect, the session mint) move from
+  `AuthController` into `modules/auth/loginFlow.ts` so there is one implementation rather than a
+  third copy — `pickPostLoginRedirect` and `mintSession` are re-exported from the same package entry
+  point, but their module path changed.
+
+  What is NOT here: SAML 2.0, so a classic Shibboleth IdP without the OIDC OP plugin is not yet
+  served; group-claim → workspace-role mapping, which is blocked on deciding WHICH workspace a
+  directory group grants a role on; and session revocation, which is what would close the gap between
+  "disabled in the IdP" and "the bearer they already hold stops working". Each is a costed slice in
+  `docs/initiatives/enterprise-sso-oidc.md`.
+
+- 250b7dc: Per-judge model pin: a rubric names the model it was written for
+
+  A judge registration could state its rubric and its verdict schema but not its model, and every
+  judge assessment resolved under the constant agent kind `judge`. That was wrong in both
+  directions. The deployment is the only party that knows scoring a security rubric is not the same
+  ask as scoring doc completeness, and had no way to say so. And a registered judge is already its
+  own row in the model-defaults panel (it reaches the palette through `customAgentKinds`), so a
+  workspace could author a per-judge default that the engine then read under a different key and
+  never applied.
+
+  `JudgeDefinition.modelId` now names the CATALOG MODEL ID the rubric was authored for, and an
+  assessment resolves under the judge's OWN kind. Precedence, most specific first: the task's pinned
+  model, a workspace preset override NAMING the judge's kind, the registration's pin, the preset's
+  base model, the deployment's routing default. A catalog id rather than a `ModelRef` on purpose, so
+  the id still resolves through the deployment's catalog under the route order the task's preset
+  states: a pinned judge in a residency-constrained workspace stays on that workspace's routes.
+
+  The pin's POSITION is the design. Above the preset's base model, because a base is a blanket
+  statement about every kind and a pin under it could never be reached; below an override naming the
+  kind, for the reason the threshold lives on the merge preset rather than the registration, that a
+  deployment-global constant no workspace can relax is not a policy. Keeping those two apart is why
+  `PresetRouting` now reports `pinnedForKind` beside the id, and why kernel gains
+  `presetOverrideForKind` next to the `modelForKindFromPreset` that collapses them.
+
+  A pin this deployment cannot serve is stated, not swapped: `step.judge.modelPin` records
+  `applied` / `overridden` / `unavailable`, the judge window shows the unavailable case, and the PR
+  verification report's rubric line calls it out beside the model that actually ran. A rubric scored
+  by a model its author rejected otherwise reads exactly like one it approved, which is the failure
+  the whole report exists to remove. Telemetry keys the same way, so each rubric's spend is its own
+  line in the `(agentKind, phase)` rollup instead of every judge's landing together.
+
+  Watch for: `JUDGE_AGENT_KIND` is gone from `@cat-factory/agents` rather than left as a constant
+  that would silently re-collapse every rubric onto one model default. `PresetRouting.pinnedForKind`
+  is required, so any producer of that shape must state it. Public API addition only: an optional
+  `modelPin` on the report's judge verdicts, spec `1.14.0`.
+
+  Design: `docs/initiatives/judge-registry.md` (D9); resolution chain:
+  `backend/docs/model-support.md`.
+
+### Patch Changes
+
+- 471f70a: E2E coverage for the four flows a human actually meets first
+
+  The browser suite covered a lot of the engine and almost none of the everyday loop. Four essentials
+  had no assembled-product coverage at all, and three of them were unreachable rather than merely
+  unwritten: the mocks did not exist.
+
+  - **The pre-dispatch input gate**, the first thing every run does. No spec reached it because every
+    REST-seeded fixture task carries a description precisely so it doesn't park. Both exits are now
+    driven, since a gate whose only exit is "ignore me" cannot be satisfied.
+  - **Requirements review**, the first step of the default pipelines and the main human-in-the-loop
+    surface. Its whole loop is three INLINE LLM calls, which the fake agent executor never sees, so
+    the keyless backend could not run it.
+  - **Judges**, the fourth step-taxonomy bucket. Two things were missing: the registry ships EMPTY, and
+    an unwired assessor makes every judge step a pass-through.
+  - **Starting and stopping a run by hand.** Every other spec starts runs over REST, which left the two
+    controls a human actually presses uncovered.
+
+  The inline-LLM mock is the interesting one. An inline call carries nothing that says which step of a
+  flow it belongs to, so the fake answers by the SHAPE OF ITS PROMPT, with markers quoted from the
+  engine's own prompt builders. That copy can rot, and it rots in the worst direction: an unmatched
+  prompt falls through to the interview reply, whose JSON carries no `items`, so a drifted marker turns
+  the requirements reviewer into one that finds nothing and auto-passes — a failure that reads as an
+  engine bug. So the browser-free lane classifies prompts built by the REAL builders
+  (`requirementsLogic`), not by hand-written strings that would only pin the fake to itself. WHAT it
+  answers is per-workspace, resolved from the same profile registry the agent and gate fakes read, so
+  an unscripted workspace keeps the historical behaviour and every pre-existing spec is byte-identical.
+
+  The judge seam registers the SHIPPED example (`@cat-factory/example-custom-agent`'s
+  `scope-adherence`, including its own valibot verdict parser) through the same public seam a
+  deployment uses, rather than a test-only lookalike — so the suite now covers the reference
+  implementation the docs point deployments at, and the fact that no frontend code names the kind: it
+  arrives through the workspace capability manifest with `resultView: 'judge'`.
+
+  The only product change is test hooks: `data-testid`s on the board card's Start button, the
+  input-gate finding rows (with the finding CODE as an attribute, so a spec asserts which input was
+  named rather than that some box appeared), the requirements-review window's findings / answer box /
+  rail actions, the add-task modal's description field, the inspector's step-open button, and the judge
+  window's round-history rows (carrying each round's DISPOSITION, so a bounce is asserted on the
+  engine's own record of it rather than inferred from the run having finished).
+
+- Updated dependencies [0937581]
+- Updated dependencies [250b7dc]
+  - @cat-factory/contracts@0.247.0
+
 ## 0.229.0
 
 ### Minor Changes

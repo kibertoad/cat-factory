@@ -10,7 +10,7 @@ ones (requirements / clarity / brainstorm) in `src/container/review-modules.ts`,
 `modules.ts`), and their optional
 wiring flows through the typed `ModuleRegistry` in `src/container/module-registry.ts` (each
 optional module is `build(key, factory)`-declared once and emitted via `...modules.assemble()`:
-see `docs/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
+see `docs/internal/refactoring-candidates.md` #6). `Core` = `CoreSpine` (always present) +
 `OptionalCoreModules` (registry-assembled). `createCore` itself is kept under its per-function
 line budget by four verbatim slice extractions, each registering in the SAME order (which IS
 dependency order for the registry) and returning only what the rest of `createCore` consumes:
@@ -136,6 +136,13 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   list. Only `builtin` entries adopt, the write is the idempotent `insertIfAbsent`, and
   `PipelineService.reseed` shares its row builder. See
   `backend/docs/pipeline-catalog-lifecycle.md`.
+- `board/taskTypeCreationDefaults.ts`: everything a new task's TYPE implies for the row
+  `BoardService.addTask` writes, together because all three are one `TaskTypeRegistry` lookup read
+  three times: the best-practice fragment union (service picks ⊕ per-type defaults ⊕ a registered
+  REUSABLE OPERATION's standing context), the default-pipeline pin, and the check of the collected
+  `custom` bag against the descriptor. Three cases pass the check through on purpose (a built-in
+  type, an unregistered namespaced one, a `formPanel` descriptor). See
+  `backend/docs/reusable-operations.md`.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review
@@ -166,5 +173,5 @@ both invited a site to take the model and miss the order (silent: the run works,
 provider) and read that row twice per call.
 
 **See also:** `CLAUDE.md` → "Execution flow", "Merge lifecycle flow", "Merge track record",
-"Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/modularisation.md` +
-`docs/refactoring-candidates.md` for the god-file backlog.
+"Requirements review flow", "Gates vs agents" (the four step buckets, judges included); `docs/execution-state-machine.md`; `docs/internal/modularisation.md` +
+`docs/internal/refactoring-candidates.md` for the god-file backlog.

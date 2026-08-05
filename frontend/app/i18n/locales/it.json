@@ -3644,7 +3644,9 @@
       "continueWithConfigured": "Accedi con il PAT {provider} configurato",
       "noPatTitle": "Nessun token di controllo del codice sorgente configurato",
       "noPatBody": "Imposta GITHUB_PAT o GITLAB_PAT nel tuo file .env per accedere con un personal access token, poi riavvia il server.",
+      "setupBody": "Crea un personal access token e incollalo qui sotto. Ti autentica e diventa il token con cui questa installazione clona, pubblica e unisce.",
       "createToken": "Crea un token {provider} ↗",
+      "tokenBecomesCredential": "Questo token viene salvato su questa macchina e usato per ogni clone, push, PR e merge degli agenti.",
       "orDivider": "oppure",
       "failed": "Accesso non riuscito. Verifica che il token configurato sia valido e riprova."
     },

@@ -13,9 +13,9 @@ Drizzle/Postgres + pg-boss) with two local differentiators:
   Podman, OrbStack, Colima and Apple's `container` are all supported (see
   [Container runtimes](#container-runtimes)). No Cloudflare and no self-hosted runner
   pool required.
-- **GitHub is reached via a personal access token** (`GITHUB_PAT`) instead of a GitHub
-  App. The agent containers clone, push branches and **open real PRs on github.com**
-  with that token.
+- **GitHub is reached via a personal access token** (`GITHUB_PAT`, or one you paste on the
+  sign-in screen) instead of a GitHub App. The agent containers clone, push branches and
+  **open real PRs on github.com** with that token.
 
 Persistence is a **local Postgres** (the bundled `docker-compose.yml`).
 
@@ -50,8 +50,8 @@ across restarts: regenerating them forces a re-login, orphans every credential s
 under the old key, or breaks re-attach to jobs still running from before the restart.
 `npx @cat-factory/cli env` writes a complete `.env` (secrets, `DATABASE_URL`, a minted
 PAT) in one step if you'd rather not assemble it by hand. Everything else is optional:
-`GITHUB_PAT` unlocks repo-operating steps and PAT sign-in, `LOCAL_HARNESS_IMAGE` is
-normally left unset.
+`GITHUB_PAT` unlocks repo-operating steps and one-click PAT sign-in (without it you can
+paste a token on the sign-in screen instead), `LOCAL_HARNESS_IMAGE` is normally left unset.
 
 `startLocal()` connects to `DATABASE_URL`, runs the schema migration, boots pg-boss +
 the durable execution worker, and serves the shared HTTP API. Agent jobs reach the
@@ -60,8 +60,10 @@ container), addressed at `host.docker.internal` from inside Docker.
 
 `pnpm start` serves the JSON API only. For the board UI run the frontend too (next
 section). You don't need `GITHUB_PAT` to boot: with it unset the service starts and the
-UI shows a banner linking to GitHub's token page (scopes pre-selected); set the token
-and restart to actually run repo-operating agent steps.
+sign-in screen links to GitHub's token page (scopes pre-selected) and takes the token you
+create there. It signs you in and becomes the deployment's credential (sealed on this
+machine), so repo-operating agent steps work from the next run, with no restart. Setting
+`GITHUB_PAT` in `.env` still wins and turns that form off.
 
 ### Recovering a wedged database
 

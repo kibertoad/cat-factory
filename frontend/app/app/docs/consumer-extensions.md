@@ -213,8 +213,8 @@ suite can address a row and the caption inside it.
 Together, `fields` + `defaultFragmentIds` + `defaultPipelineId` are what turns a task type from a
 badge into a **reusable operation**: a canned unit of work an org runs repeatedly with per-case
 input, whose collected values reach every agent's prompt. See
-[`docs/initiatives/reusable-operations.md`](../../../../docs/initiatives/reusable-operations.md)
-and the `org:introduce-api` worked example in `backend/internal/example-custom-agent`.
+[`backend/docs/reusable-operations.md`](../../../../backend/docs/reusable-operations.md) and the
+`org:introduce-api` worked example in `backend/internal/example-custom-agent`.
 
 The **same type can be delivered from the backend** instead of code-shipped: register it on the
 deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's

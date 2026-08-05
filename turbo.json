@@ -29,6 +29,17 @@
     "test:run": {
       "dependsOn": ["^build"]
     },
+    // Stryker mutation testing, for the packages that opt in with a `stryker.config.mjs`.
+    // Same `^build` edge as `test:run` for the same reason (Stryker's first act is a normal
+    // run of the package's suite, which resolves its workspace deps through their `dist`; a
+    // stale one fails the initial run and aborts the whole thing). NEVER cached: a mutation
+    // score is a measurement nothing downstream consumes, and a restored one would report a
+    // number no run in this session produced. Runs in its own nightly workflow only, never
+    // as part of `pnpm test:run` — see docs/mutation-testing.md.
+    "test:mutation": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     // Nuxt static SPA build. `^build` guarantees @cat-factory/contracts (via the
     // @cat-factory/app layer) is compiled before vite resolves it.
     "generate": {

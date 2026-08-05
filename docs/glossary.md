@@ -117,6 +117,29 @@ Distinct from a gate (whose `probe()` is a cheap programmatic precheck) and from
 - The worked example: `backend/internal/example-custom-agent` (`scope-adherence`).
 - Design + non-goals: `docs/initiatives/judge-registry.md`.
 
+### Reusable operations vs custom task types
+
+**"Reusable operation" is the product word for a PATTERN, not a type, a registry or a wire
+field.** The mechanism is the custom TASK TYPE everywhere an id or a schema appears
+(`TaskTypeRegistry`, the snapshot's `customTaskTypes`, the persisted `taskTypeFields.custom`),
+exactly as "initiative preset" is the product word over `InitiativePresetRegistration`. Do not go
+looking for an `OperationRegistry`: there is none, deliberately.
+
+A registered `CustomTaskType` is an operation once it carries the whole bundle: `fields` (the
+per-case form, folded into every agent's prompt), `defaultFragmentIds` (its standing context) and
+`defaultPipelineId` (its canned pipeline). Carrying only `presentation` it is a work-item
+CLASSIFICATION: a badge and a card. Code:
+
+- The registry + the run-time projection: `kernel/src/domain/task-type-registry.ts` +
+  `task-type-context.ts` (`describeCustomTaskType`); the wire descriptor:
+  `contracts/src/task-types.ts`.
+- Creation-time resolution (fragment union, pipeline pin, field validation):
+  `orchestration/src/modules/board/taskTypeCreationDefaults.ts`.
+- The prompt fold: `agents/src/agents/prompts/standard.ts` (`customTaskTypeSection`), emitted at
+  three sites (see the doc: missing one silently drops an operation's parameters).
+- The worked example: `backend/internal/example-custom-agent` (`org:introduce-api`).
+- Model + boundary against initiative presets: `backend/docs/reusable-operations.md`.
+
 ### Agent kinds
 
 `agentKindSchema` is an **open `v.string()`** (`contracts/src/primitives.ts`), not a closed

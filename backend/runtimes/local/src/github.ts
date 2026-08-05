@@ -12,6 +12,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { Logger, VcsIdentityRegistry, VcsProvider } from '@cat-factory/kernel'
 import { runBestEffort } from '@cat-factory/kernel'
+import type { LocalVcsCredential } from './vcsCredential.js'
 import {
   type AppTokenSource,
   FetchGitHubClient,
@@ -26,9 +27,14 @@ import {
 import type { PatAccount } from './installations.js'
 
 // PAT-backed GitHub access for local mode. The shared FetchGitHubClient normally mints
-// per-installation tokens via the GitHub App registry; here we feed it a static-token
-// source returning the developer's PAT, so the CI gate + merge / mergeability
-// providers (wired in container.ts from this client) hit real GitHub with the PAT.
+// per-installation tokens via the GitHub App registry; here we feed it a token source returning
+// the deployment's PAT, so the CI gate + merge / mergeability providers (wired in container.ts
+// from this client) hit real GitHub with the PAT.
+//
+// Every token read here goes through a getter rather than a captured string: local mode's
+// credential can be installed from the sign-in screen while the server runs (see
+// `vcsCredential.ts`), and a value snapshotted at container-build time would pin the state the
+// process booted in.
 //
 // The app-JWT paths (installation discovery / listing) are never reached in local
 // mode — those are the GitHub-App connect flow, which local mode replaces with the
@@ -53,10 +59,25 @@ export function githubPatCreationUrl(): string {
   return `https://github.com/settings/tokens/new?${params.toString()}`
 }
 
-/** An {@link AppTokenSource} that returns a fixed PAT for every installation call. */
-export class StaticTokenAppRegistry implements AppTokenSource {
+/**
+ * The refusal every credential-reading path shares, so an unconfigured deployment says the same
+ * actionable thing wherever it is hit (a gate probe, a repo enumeration, a clone) instead of a
+ * generic 500 or an empty result that reads like "no repos".
+ */
+export function noVcsCredentialError(): Error {
+  return new Error(
+    'This deployment has no source-control token yet. Sign in with a GitHub or GitLab personal access token, or set GITHUB_PAT / GITLAB_PAT in your .env.',
+  )
+}
+
+/**
+ * An {@link AppTokenSource} that returns the deployment's CURRENT PAT for every installation call.
+ * The token is read per call, so a credential installed from the sign-in screen is used by the
+ * very next dispatch.
+ */
+export class LocalPatAppTokenSource implements AppTokenSource {
   readonly defaultAppId = ''
-  constructor(private readonly token: string) {}
+  constructor(private readonly resolveToken: () => string | undefined) {}
 
   apps(): readonly { appId: string }[] {
     return [{ appId: '' }]
@@ -70,7 +91,8 @@ export class StaticTokenAppRegistry implements AppTokenSource {
   }
 
   installationToken(): Promise<string> {
-    return Promise.resolve(this.token)
+    const token = this.resolveToken()
+    return token ? Promise.resolve(token) : Promise.reject(noVcsCredentialError())
   }
 
   // A static PAT carries no App-granted permissions map; canPush then relies on the
@@ -117,7 +139,7 @@ function patHeaders(pat: string): Record<string, string> {
 class PatGitHubClient extends FetchGitHubClient {
   constructor(
     deps: ConstructorParameters<typeof FetchGitHubClient>[0],
-    private readonly pat: string,
+    private readonly resolvePat: () => string | undefined,
     /**
      * The `AppCaches.patInstallationRepos` handle (keyed/grouped by installation id). When
      * wired, the realtime picker search filters a cached complete enumeration in memory
@@ -136,7 +158,9 @@ class PatGitHubClient extends FetchGitHubClient {
     // page-by-page crawl. The rows come back stamped as personal (`user_pat`, placeholder
     // installation), so re-stamp them: local mode's shared `GITHUB_PAT` is the workspace-wide
     // credential, so repos it enumerates are App-reachable (visible to every member).
-    const { items, truncated } = await this.listReposForToken(this.pat)
+    const pat = this.resolvePat()
+    if (!pat) throw noVcsCredentialError()
+    const { items, truncated } = await this.listReposForToken(pat)
     return {
       items: items.map((r) => ({ ...r, installationId, linkedVia: 'app' as const })),
       ...(truncated !== undefined ? { truncated } : {}),
@@ -177,9 +201,11 @@ class PatGitHubClient extends FetchGitHubClient {
  * to it in the connect UI. Best-effort: a failed/forbidden call falls back to an empty
  * login (the link flow only needs the installation row to exist, not its account label).
  */
-export async function fetchPatAccount(env: NodeJS.ProcessEnv): Promise<PatAccount> {
+export async function fetchPatAccount(
+  env: NodeJS.ProcessEnv,
+  pat: string | undefined,
+): Promise<PatAccount> {
   const fallback: PatAccount = { accountId: null, accountLogin: '', targetType: 'User' }
-  const pat = env.GITHUB_PAT?.trim()
   if (!pat) return fallback
   const apiBase = (env.GITHUB_API_BASE?.trim() || 'https://api.github.com').replace(/\/+$/, '')
   try {
@@ -243,16 +269,16 @@ export function classifyPatProbe(res: {
 }
 
 /**
- * Best-effort boot-time validation of a SET `GITHUB_PAT`: one `GET /user`. Returns the verdict, or
- * undefined when there is no PAT to probe or the probe couldn't complete (network error / timeout) —
+ * Best-effort boot-time validation of the deployment's GitHub PAT: one `GET /user`. Returns the
+ * verdict, or undefined when there is no PAT to probe or the probe couldn't complete (network error / timeout) —
  * a probe must NEVER block or crash boot, so an unreachable GitHub is treated as "unknown", not a
  * failure. `fetchImpl` + `timeoutMs` are injectable for tests.
  */
 export async function probeGitHubPat(
   env: NodeJS.ProcessEnv,
+  pat: string | undefined,
   opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): Promise<PatProbeVerdict | undefined> {
-  const pat = env.GITHUB_PAT?.trim()
   if (!pat) return undefined
   const apiBase = (env.GITHUB_API_BASE?.trim() || 'https://api.github.com').replace(/\/+$/, '')
   const doFetch = opts.fetchImpl ?? fetch
@@ -274,17 +300,20 @@ export async function probeGitHubPat(
 /**
  * The boot warning for a non-OK {@link probeGitHubPat} verdict (undefined when the PAT is fine).
  * Mirrors the MISSING-PAT boot warning: it names the exact problem and links the classic-token
- * creation URL with the local-mode scopes pre-selected, so the fix is one click + restart.
+ * creation URL with the local-mode scopes pre-selected, so the fix is one click. It names BOTH
+ * ways to apply the replacement, because the token it just rejected may have come from either:
+ * `.env` (which the sign-in screen will not override) or a previous browser install.
  */
 export function describePatProbeVerdict(verdict: PatProbeVerdict): string | undefined {
   if (verdict.ok) return undefined
   const tail =
     `agent steps that clone, push, open PRs, gate on CI or merge will fail. Create a token ` +
-    `(scopes pre-selected) at ${githubPatCreationUrl()}, then set GITHUB_PAT and restart.`
+    `(scopes pre-selected) at ${githubPatCreationUrl()}, then sign in with it on the sign-in ` +
+    `screen, or set GITHUB_PAT in your .env and restart.`
   if (verdict.reason === 'underscoped') {
-    return `local mode: GITHUB_PAT is missing required scope(s) ${verdict.missing.join(', ')} — ${tail}`
+    return `local mode: the configured GitHub token is missing required scope(s) ${verdict.missing.join(', ')} — ${tail}`
   }
-  return `local mode: GITHUB_PAT was rejected by GitHub (${verdict.detail}) — ${tail}`
+  return `local mode: the configured GitHub token was rejected by GitHub (${verdict.detail}) — ${tail}`
 }
 
 /**
@@ -298,11 +327,12 @@ export function describePatProbeVerdict(verdict: PatProbeVerdict): string | unde
  */
 export function warnOnGitHubPatProblemInBackground(
   env: NodeJS.ProcessEnv,
+  pat: string | undefined,
   log: Logger,
   opts: { fetchImpl?: typeof fetch; timeoutMs?: number } = {},
 ): void {
   void runBestEffort(log, 'github.patProbe', async () => {
-    const verdict = await probeGitHubPat(env, opts)
+    const verdict = await probeGitHubPat(env, pat, opts)
     const warning = describePatProbeVerdict(verdict ?? { ok: true })
     if (warning) log.warn(warning)
   })
@@ -323,58 +353,59 @@ export function gitlabPatCreationUrl(): string {
 }
 
 /**
- * Assemble the source-control PAT-login registry from env — the provider-agnostic seam the
- * `/auth/pat` endpoint resolves through. A provider is "configured" (sign-in available) when
- * its PAT is set in env; that env token is also the operational credential, so a provider
- * without one can't sign in (the SPA shows no button for it). The browser never sees a token
- * — sign-in just selects a provider. Adding a third provider is one more entry here + its
- * resolver, with no change to the endpoint or the UI flow.
+ * Assemble the source-control PAT-login registry — the provider-agnostic seam the `/auth/pat`
+ * endpoint resolves through. A provider is "configured" (one-click sign-in available) when the
+ * deployment holds ITS token, read LIVE from `credential` so a token installed from the sign-in
+ * screen turns the button on for the next caller. The browser never sees a token — one-click
+ * sign-in just selects a provider. Adding a third provider is one more entry here + its resolver,
+ * with no change to the endpoint or the UI flow.
  */
-export function buildVcsIdentityRegistry(env: NodeJS.ProcessEnv): {
-  registry: VcsIdentityRegistry
-  configured: VcsProvider[]
-} {
+export function buildVcsIdentityRegistry(
+  env: NodeJS.ProcessEnv,
+  credential: () => LocalVcsCredential | undefined,
+): VcsIdentityRegistry {
   const githubApiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
   const gitlabApiBase = env.GITLAB_API_BASE?.trim() || undefined
-  const registry: VcsIdentityRegistry = {
+  const tokenFor = (provider: VcsProvider) => () => {
+    const current = credential()
+    return current?.provider === provider ? current.token : undefined
+  }
+  return {
     github: {
       resolver: new GitHubIdentityResolver({ apiBase: githubApiBase }),
-      configuredToken: env.GITHUB_PAT?.trim() || undefined,
+      configuredToken: tokenFor('github'),
     },
     gitlab: {
       resolver: new GitLabIdentityResolver({ apiBase: gitlabApiBase }),
-      configuredToken: env.GITLAB_PAT?.trim() || undefined,
+      configuredToken: tokenFor('gitlab'),
     },
   }
-  const configured = (Object.keys(registry) as VcsProvider[]).filter(
-    (p) => registry[p]?.configuredToken,
-  )
-  return { registry, configured }
 }
 
 /**
- * Build a {@link GitHubClient} that authenticates with the PAT, for the CI / merge /
- * mergeability gates AND the repo-link / board "add from repo" flows. Returns undefined
- * when no PAT is configured (the gates then pass through, like the Node default).
- * `repoEnumCache` is the `AppCaches.patInstallationRepos` handle backing the picker
- * typeahead (optional — absent, the search enumerates live per request).
+ * Build a {@link GitHubClient} that authenticates with the deployment's GitHub PAT, for the CI /
+ * merge / mergeability gates AND the repo-link / board "add from repo" flows. Always returns a
+ * client: the token is read per call, so "no token yet" is a REFUSAL the client raises (naming
+ * how to fix it) rather than an absent client — which the layers above would otherwise read as
+ * "this deployment has no source control at all" and wire nothing, permanently.
+ * `repoEnumCache` is the `AppCaches.patInstallationRepos` handle backing the picker typeahead
+ * (optional — absent, the search enumerates live per request).
  */
 export function createLocalGitHubClient(
   env: NodeJS.ProcessEnv,
+  resolveToken: () => string | undefined,
   repoEnumCache?: GroupCacheHandle<GitHubRepo[]>,
-): GitHubClient | undefined {
-  const pat = env.GITHUB_PAT?.trim()
-  if (!pat) return undefined
+): GitHubClient {
   const apiBase = env.GITHUB_API_BASE?.trim() || 'https://api.github.com'
   return new PatGitHubClient(
     {
-      registry: new StaticTokenAppRegistry(pat),
+      registry: new LocalPatAppTokenSource(resolveToken),
       rateLimitRepository: new NoopRateLimitRepository(),
       idGenerator: localIdGenerator,
       clock: localClock,
       apiBase,
     },
-    pat,
+    resolveToken,
     repoEnumCache,
   )
 }
@@ -407,54 +438,20 @@ export function createDelegatedGitHubClient(
  * Build a {@link GitHubClient} for a GitLab-only local deployment, through the SAME
  * {@link buildGitLabEngineClient} the hosted facades use — a PAT-backed `VcsClient` adapted to the
  * legacy `GitHubClient` port the CI / merge / mergeability gates + repo-link flows still consume.
- * So a developer who set only `GITLAB_PAT` gets the same gating/merge/repo-read surface a
+ * So a developer whose credential is a GitLab one gets the same gating/merge/repo-read surface a
  * GitHub PAT gives — the engine talks to GitLab through the adapter without being migrated to
- * the neutral port. Returns undefined when no `GITLAB_PAT` is configured (the gates then pass
- * through). For a self-managed instance set `GITLAB_API_BASE` (e.g.
- * `https://gitlab.example.com/api/v4`).
+ * the neutral port. Like {@link createLocalGitHubClient} it is always built and reads its token
+ * per call, so an installed credential is live immediately. For a self-managed instance set
+ * `GITLAB_API_BASE` (e.g. `https://gitlab.example.com/api/v4`).
  *
  * It goes THROUGH the builder rather than assembling the client + adapter pair itself, which is
  * what it did until that drifted: the builder is documented as the single source of this wiring,
  * so anything it gained reached the two hosted facades and silently skipped local.
  */
-export function createLocalGitLabClient(env: NodeJS.ProcessEnv): GitHubClient | undefined {
-  const pat = env.GITLAB_PAT?.trim()
-  if (!pat) return undefined
+export function createLocalGitLabClient(
+  env: NodeJS.ProcessEnv,
+  resolveToken: () => string | undefined,
+): GitHubClient {
   const apiBase = env.GITLAB_API_BASE?.trim() || GITLAB_PUBLIC_API_BASE
-  return buildGitLabEngineClient({ token: pat, apiBase, clock: localClock, logger })
-}
-
-/**
- * The host a GitLab local deployment clones/pushes against, derived from `GITLAB_API_BASE`'s
- * host (a self-managed instance) or the public `gitlab.com`. Single source of truth for BOTH
- * the clone URL the server builds (`resolveRepoOrigin`) and the harness host allow-list, so
- * they can never disagree. Returns undefined when no `GITLAB_PAT` is configured (GitHub mode).
- */
-export function gitlabVcsHost(env: NodeJS.ProcessEnv): string | undefined {
-  if (!env.GITLAB_PAT?.trim()) return undefined
-  const apiBase = env.GITLAB_API_BASE?.trim()
-  if (!apiBase) return 'gitlab.com'
-  try {
-    return new URL(apiBase).host
-  } catch {
-    return 'gitlab.com'
-  }
-}
-
-/**
- * The comma-separated host allow-list the harness container is given (`GITHUB_ALLOWED_HOSTS`).
- * The harness rejects any clone/push host not on this list (default github.com), so a GitLab
- * deployment must add its host or every clone is refused. Combines any operator-set
- * `GITHUB_ALLOWED_HOSTS` with the resolved GitLab host. Returns undefined when neither applies
- * (GitHub mode with no extra hosts ⇒ the harness keeps its github.com default).
- */
-export function harnessAllowedHosts(env: NodeJS.ProcessEnv): string | undefined {
-  const hosts = new Set<string>()
-  for (const h of (env.GITHUB_ALLOWED_HOSTS ?? '').split(',')) {
-    const t = h.trim()
-    if (t) hosts.add(t)
-  }
-  const gitlab = gitlabVcsHost(env)
-  if (gitlab) hosts.add(gitlab)
-  return hosts.size > 0 ? [...hosts].join(',') : undefined
+  return buildGitLabEngineClient({ token: resolveToken, apiBase, clock: localClock, logger })
 }

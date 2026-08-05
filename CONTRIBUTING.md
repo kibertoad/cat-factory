@@ -43,7 +43,7 @@ pnpm install            # one install for the whole workspace
 pnpm build              # build the publishable libraries (dist)
 pnpm build:all          # also build the SPA + internal harnesses
 pnpm typecheck          # typecheck every package
-pnpm test               # run the unit/integration suites
+pnpm test               # run the unit/integration suites (mutation testing is NOT in here)
 pnpm lint               # oxlint + oxfmt (repo-wide)
 pnpm dev:backend        # run the worker locally (deploy/backend)
 pnpm dev:node           # run the Node.js service locally (deploy/node; needs DATABASE_URL)
@@ -61,6 +61,13 @@ compiled by their own `tsc -b` project-reference build; Turbo only decides _whic
 packages run and _in what order_. `pnpm build` is scoped to the backend libraries;
 use `pnpm build:all` (or `turbo run build`) to also build the SPA and the internal
 harnesses, and `pnpm build:tsc` for the raw `tsc -b` solution build.
+
+**Mutation testing is nightly CI only, never a local step.** Stryker re-runs a
+package's suite once per mutant, so a run costs minutes of CPU per package: it lives
+in its own non-blocking workflow (`.github/workflows/mutation.yml`) and no local
+command you need for a PR runs it. To measure a branch, dispatch that workflow on it.
+Which packages are covered, how to add one, and how to read a surviving mutant:
+[`docs/internal/mutation-testing.md`](./docs/internal/mutation-testing.md).
 
 ## Changesets (REQUIRED)
 

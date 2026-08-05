@@ -44,7 +44,7 @@ remains clusters into four themes:
   (hoisting the reconcile loop); its regex conversion is I7's job.
 - Cache-slice work ([`caching-layer.md`](./caching-layer.md)), UX items
   ([`ux-papercuts.md`](./ux-papercuts.md) / [`ux-qol-pass.md`](./ux-qol-pass.md)), and the
-  strangler items in `docs/refactoring-candidates.md` (e.g. the manifest-driven agent-kind
+  strangler items in `docs/internal/refactoring-candidates.md` (e.g. the manifest-driven agent-kind
   migration).
 - The deliberately-accepted bounded reference point-reads in
   `AgentContextBuilder.ts:883-905` (documented in code as accepted; listed here so the
@@ -568,8 +568,8 @@ the inline paths" sentence when item 5 lands.
 #### 17. `refactoring-candidates.md` / `modularisation.md` stale; biggest files untracked: P3
 
 `ExecutionService.ts` is now ~3,550 lines and `RunDispatcher.ts` ~3,911: ~40% past the
-numbers recorded in `docs/refactoring-candidates.md`, and **neither** is in
-`docs/modularisation.md`'s active backlog (which lists smaller files). Frontend counts
+numbers recorded in `docs/internal/refactoring-candidates.md`, and **neither** is in
+`docs/internal/modularisation.md`'s active backlog (which lists smaller files). Frontend counts
 are similarly stale (`RequirementsReviewWindow.vue` 978→1,192, `PipelineBuilder.vue`
 890→1,040, `ui.ts` 781→1,043). Refresh the numbers and add the two engine files as
 explicit split targets so the largest, fastest-growing files stop being untracked.
@@ -597,7 +597,7 @@ caught mechanically.
 
 #### 20. Close i18n phase X: P3
 
-Tracked in detail in `docs/localization.md` (phases 0–9 done, ~117/121 components
+Tracked in detail in `docs/internal/localization.md` (phases 0–9 done, ~117/121 components
 migrated); listed here only so this checklist is complete. Remaining: the raw-English
 meta tables in `frontend/app/app/utils/catalog.ts` (`STATUS_META`, `agentKindMeta`,
 `blockTypeMeta`, `MODULE_META`; enum-keyed, so use the exhaustive-`Record` tier-2

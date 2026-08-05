@@ -27,17 +27,29 @@ export interface GitLabTokenSource {
 export const GITLAB_PUBLIC_API_BASE = 'https://gitlab.com/api/v4'
 
 /**
- * A fixed-token source: every connection uses the same token + base URL. Useful for a
+ * A single-token source: every connection uses the same token + base URL. Useful for a
  * single-token deployment (mirrors local mode's PAT model) and for tests.
+ *
+ * The token may be given as a GETTER, because a deployment's single token is not necessarily
+ * fixed for the process lifetime: local mode lets a developer install one from the sign-in screen
+ * while the server runs, and a value captured at construction would pin whatever the process
+ * booted with. A getter answering undefined means the deployment currently holds no token, which
+ * every call REFUSES with that named cause rather than sending an empty `PRIVATE-TOKEN`.
  */
 export class StaticGitLabTokenSource implements GitLabTokenSource {
   constructor(
-    private readonly accessToken: string,
+    private readonly accessToken: string | (() => string | undefined),
     private readonly base: string = GITLAB_PUBLIC_API_BASE,
   ) {}
 
   async token(): Promise<string> {
-    return this.accessToken
+    const resolved = typeof this.accessToken === 'function' ? this.accessToken() : this.accessToken
+    if (!resolved) {
+      throw new Error(
+        'This deployment has no GitLab token yet. Sign in with a GitLab personal access token, or set GITLAB_PAT in your .env.',
+      )
+    }
+    return resolved
   }
 
   apiBase(): string {

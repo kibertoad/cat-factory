@@ -29,7 +29,7 @@ export {
 // `node dist/link-repo.js <workspaceId> <frameBlockId> <owner/repo>`.
 export { linkRepo, type LinkRepoOptions, type LinkedRepo } from './linkRepo.js'
 // PAT-backed GitHub access for the CI gate + merge / mergeability providers.
-export { createLocalGitHubClient, StaticTokenAppRegistry } from './github.js'
+export { createLocalGitHubClient, LocalPatAppTokenSource } from './github.js'
 
 // Mothership mode: the local `node:sqlite` credential store (the agent/model secrets that
 // stay on the laptop, sealed with the local key, while org/durable state lives on the

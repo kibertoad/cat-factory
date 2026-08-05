@@ -88,7 +88,7 @@ rebuild, no per-workspace UI.
   `registerPromptFragments(fragments)`. Every `GET /prompt-fragments` catalog read and
   every run-time body lookup then sees them; re-registering an id overrides the built-in
   of that id. (`universalFragments()` is the merged built-in ∪ registered pool.)
-- **Mark fragments as the default for a task type**:
+- **Mark fragments as the default for a BUILT-IN task type**:
   `registerTaskTypeDefaultFragments(taskType, fragmentIds)`. Every **new** task of that
   type (`document`, `review`, `feature`, …) is then seeded with those fragments onto its
   own `fragmentIds` at creation (unioned with the built-in defaults and whatever it
@@ -97,6 +97,13 @@ rebuild, no per-workspace UI.
   document writing-style set (`DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS`), which registered
   ids augment rather than replace. Seeding is server-side and authoritative: it applies
   even for tasks created via the public API with no create-form picker.
+
+  **A deployment's OWN (namespaced) task type does not use this seam.** It declares
+  `defaultFragmentIds` on its own registration instead, where boot validation can see the
+  ids and warn on one the code pool does not resolve; this module-global exists for the
+  built-in types, which have no descriptor to carry them. That declaration is one third of
+  a **reusable operation**: see
+  [`backend/docs/reusable-operations.md`](../../docs/reusable-operations.md).
 
 ```ts
 // deployment entry, before start()/startLocal()

@@ -66,7 +66,15 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 /** Roots scanned. See the SCOPE note above for what is deliberately absent. */
 const SCAN_ROOTS = ['backend/packages', 'backend/runtimes', 'sdk/typescript/src']
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', 'drizzle', 'migrations'])
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  '.turbo',
+  'coverage',
+  'drizzle',
+  'migrations',
+  '.stryker-tmp',
+])
 
 function isTestPath(rel) {
   return (

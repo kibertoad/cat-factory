@@ -1,8 +1,13 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-4b landed (the fold + the bundle; the shared field vocabulary; the grouped
-picker; the canned-pipeline lifecycle + adoption on start); slices 5-8 pending ·
-**Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-5 landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker; the canned-pipeline lifecycle + adoption on start; the developer doc); slices 6-8
+pending · **Owner:** orchestration · **Started:** 2026-08-04
+
+> **The reference doc is now [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).**
+> It is the authority for how the shipped mechanism behaves; this tracker stays the design
+> record (the rejected alternatives, the per-slice notes, and slices 6-8). Cite the reference
+> doc from code and from other docs, never this file.
 
 > Durable source of truth for a multi-PR initiative. Read this first before picking up the
 > next slice; update the checklist at the end of each PR. Companion docs:
@@ -468,7 +473,7 @@ else could offer the way back). Mechanics:
 | 3   | **Picker grouping (D7)**: category captions in the type picker; `presentation.description` rendered; one chrome i18n key (the "Other" bucket)                                                                                                                                                                                                                                                                                                                                                                  | SPA    | 2          | ✅ done | [#1672](https://github.com/kibertoad/cat-factory/pull/1672) |
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                                                                                                                                                                                  | SYSTEM | 1          | ✅ done | [#1691](https://github.com/kibertoad/cat-factory/pull/1691) |
 | 4b  | **Adoption on start (D10b)**: `PipelineRepository.insertIfAbsent` (both runtimes); `pipelineAdoption` collaborator (`adoptForRun` / `resolveDefinition` / `adoptableCatalog`); run resolution, the personal-credential gate, both public-API start admissions and the post-merge auto-start read through it; `reseed`'s absent branch shares the row builder + the idempotent insert; the `pipeline.adopted` counter; conformance (adopt once under concurrent starts; decide-scope on an un-adopted pipeline) | SYSTEM | 4          | ✅ done | [#1691](https://github.com/kibertoad/cat-factory/pull/1691) |
-| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                                                                                                                                                                                 | DOCS   | 2          | ⬜ todo |                                                             |
+| 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                                                                                                                                                                                 | DOCS   | 2          | ✅ done |                                                             |
 | 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                                                                                                                                                                         | DOCS   | 1          | ⬜ todo |                                                             |
 | 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ⬜ todo |                                                             |
 | 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ⬜ todo |                                                             |
@@ -754,6 +759,41 @@ final so neither ships a shape that changes a slice later.
   this by accident. The distinction that decided the three fixes above from these two: does the surface
   stand in front of a RUN (then it must resolve what the run will resolve) or does it record a choice
   for later (then a refusal is honest, because nothing is executing yet).
+
+### What slice 5 surfaced (carry into the rest)
+
+- **The reference doc took over every CITATION, including the ones in code**, because a tracker is
+  `git rm`'d and converted to an ADR when its committed scope completes, and the ten-odd
+  `docs/initiatives/reusable-operations.md` comments in kernel, orchestration, conformance and the
+  example package would all have become dangling on that day. They now name
+  `backend/docs/reusable-operations.md`, and the bare `D3` / `D4` / `D11` suffixes went with them:
+  a D-number is an index into THIS file's decision list, which the ADR conversion drops. Slices 7
+  and 8 should cite the reference doc from the start rather than adding more tracker references to
+  re-point later.
+- **The doc is the flow authority; this tracker keeps the REJECTED alternatives.** The split matters
+  because the two answer different questions: "how does this behave" (which a reader must not have to
+  reconstruct from a checklist) versus "why is there no `OperationRegistry` / `promptAdditions` /
+  `TaskTypeSource`", which only stops the next iteration from re-proposing it if it stays written
+  down. So the reference doc states each non-goal in one line and points here for the argument.
+- **CLAUDE.md had exactly two lines of headroom** under its ratchet (1096 against 1098), which is
+  what the one-liner had to fit in, trap and all. The flow-index charter wants "what it is, the
+  deadliest trap, the link"; at two lines the trap loses, because the link is what a reader follows
+  and the emit-point trap is stated three times over in the doc, the kernel `AGENTS.md` and the
+  agents `AGENTS.md`. A later slice adding to that section must displace something rather than
+  assume headroom.
+- **`registerTaskTypeDefaultFragments` is now documented as the BUILT-IN-type seam** in both
+  `prompt-fragments` docs (D1 said the developer doc would stop recommending it for custom types,
+  and the README was still recommending it generally). The distinction is not stylistic: a
+  descriptor's `defaultFragmentIds` are boot-validated and warn on an unresolvable id, where the
+  module-global validates nothing at all, so the two seams differ in whether a typo is ever
+  reported.
+- **The README documentation index was missing `initiative-presets.md`** entirely, so the new entry
+  adds both. Worth a glance whenever a slice adds a `backend/docs/*.md`: the "What it supports" row
+  and the index are separate lists and only the layout table is CI-guarded.
+- **`board/taskTypeCreationDefaults.ts` earned its own `AGENTS.md` entry**, having been covered only
+  by the `board/` catch-all since slice 1. It is where three registry reads land, and the three
+  deliberate validation pass-throughs are exactly the kind of thing that reads as a bug when found
+  without the note.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 
