@@ -1285,9 +1285,29 @@
                     "description_thin",
                     "reproduction_missing",
                     "review_target_missing",
-                    "success_criteria_missing"
+                    "success_criteria_missing",
+                    "required_field_missing"
                   ],
                   "type": "string"
+                },
+                "field": {
+                  "properties": {
+                    "key": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "label": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "label"
+                  ],
+                  "type": "object"
                 },
                 "severity": {
                   "enum": [
@@ -5549,6 +5569,7 @@
                             "enum": [
                               "provision",
                               "teardown",
+                              "teardown-verify",
                               "status",
                               "dispatch",
                               "release",

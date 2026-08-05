@@ -24,6 +24,7 @@ import {
   infraEngineSchema,
   provisionTypeSchema,
   serviceProvisioningSchema,
+  teardownConfirmationSchema,
 } from './environments.js'
 import { resolvedFrontendBindingSchema } from './frontend.js'
 import { agentKindSchema, agentStateSchema } from './primitives.js'
@@ -402,6 +403,21 @@ export const deployEnvStateSchema = v.object({
   status: v.picklist(['ready', 'failed', 'skipped']),
   /** The provisioned URL for a `ready` env (absent for `failed`/`skipped`). */
   url: v.optional(v.nullable(v.string())),
+  /**
+   * The registry id of the environment this frame got, recorded for a `ready` env at the moment
+   * the deployer resolved its handle.
+   *
+   * This is the RUN's own record of WHICH environment it stood up, and it exists so that the
+   * `disposer` at the other end of the lifecycle can reclaim exactly that one. Re-resolving the
+   * environment from the frame later is not equivalent and is not safe: the block-and-frame read
+   * falls back to the block's FRAME-LESS row (a manual or `human-test` environment) when the
+   * frame's own row is gone, so a disposer running after a supersede, an operator's Destroy or a
+   * TTL sweep would resolve — and destroy — an environment this run never provisioned.
+   *
+   * Absent on a `ready` frame means the deploy predates this field, and the disposer reports that
+   * it could not identify the environment rather than guessing at one.
+   */
+  environmentId: v.optional(v.nullable(v.string())),
   /** The verbatim provider error for a `failed` env. */
   error: v.optional(v.nullable(v.string())),
 })
@@ -410,6 +426,36 @@ export type DeployEnvState = v.InferOutput<typeof deployEnvStateSchema>
 /** Per-frame deploy outcomes keyed by service-frame block id; see {@link deployEnvStateSchema}. */
 export const deployEnvsSchema = v.record(v.string(), deployEnvStateSchema)
 export type DeployEnvs = v.InferOutput<typeof deployEnvsSchema>
+
+/**
+ * The TERMINAL per-frame outcome of one environment a `disposer` step reclaimed, the mirror of
+ * {@link deployEnvStateSchema} at the other end of the lifecycle:
+ *  - `reclaimed`:  the environment was torn down. `confirmation` says whether an independent
+ *                   probe then found it gone — only `confirmed` is proof (see
+ *                   {@link teardownConfirmationSchema}).
+ *  - `failed`:     the provider refused to tear it down; `error` carries the verbatim cause. The
+ *                   environment is still standing and the TTL sweep is the remaining backstop.
+ *  - `none`:       the frame had no live environment to reclaim (it was never provisioned, or
+ *                   something already took it). Recorded rather than omitted, so a disposer that
+ *                   found nothing is distinguishable from one that never reached the frame.
+ *
+ * `confirmation` is present only on `reclaimed`: the other two states have nothing to verify.
+ */
+export const disposeEnvStateSchema = v.object({
+  status: v.picklist(['reclaimed', 'failed', 'none']),
+  /** The environment id acted on, when there was one — the id an operator greps the logs for. */
+  environmentId: v.optional(v.nullable(v.string())),
+  /** Whether an independent probe confirmed the environment gone; `reclaimed` only. */
+  confirmation: v.optional(v.nullable(teardownConfirmationSchema)),
+  /** The verbatim provider error for a `failed` reclaim, or the probe's reason when it could
+   *  not confirm one that otherwise succeeded. */
+  error: v.optional(v.nullable(v.string())),
+})
+export type DisposeEnvState = v.InferOutput<typeof disposeEnvStateSchema>
+
+/** Per-frame dispose outcomes keyed by service-frame block id; see {@link disposeEnvStateSchema}. */
+export const disposeEnvsSchema = v.record(v.string(), disposeEnvStateSchema)
+export type DisposeEnvs = v.InferOutput<typeof disposeEnvsSchema>
 
 /**
  * Per-step LLM observability rollup: a compact aggregate over every model call the
@@ -1133,6 +1179,13 @@ export const pipelineStepSchema = v.object({
    * fanned out.
    */
   deployPrimaryFrameId: v.optional(v.string()),
+  /**
+   * A `disposer` step records each service frame's TERMINAL reclaim outcome here, keyed by frame
+   * block id — the mirror of {@link deployEnvs} at the other end of the lifecycle, and, like it,
+   * what lets a durable replay resume at the first un-settled frame instead of re-tearing down an
+   * environment that is already gone. Absent until the disposer runs. See {@link disposeEnvsSchema}.
+   */
+  disposeEnvs: v.optional(disposeEnvsSchema),
 })
 export type PipelineStep = v.InferOutput<typeof pipelineStepSchema>
 

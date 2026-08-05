@@ -480,6 +480,17 @@ export {
   requiredGateApprovals,
 } from '@cat-factory/contracts'
 
+// W3C Trace Context: the shared reading of an inbound `traceparent`, so the HTTP boundary that
+// ADOPTS a caller's trace and the OTLP exporter that STAMPS it onto a line agree about the
+// field names and the validity rules. See `domain/trace-context.ts`.
+export type { InboundTraceContext } from './domain/trace-context.js'
+export {
+  SPAN_ID_FIELD,
+  TRACEPARENT_HEADER,
+  TRACE_ID_FIELD,
+  parseTraceparent,
+} from './domain/trace-context.js'
+
 // Infrastructure REACHABILITY: the pure decision the watcher sweep and the board snapshot share
 // — what to record, which transitions to announce, and how a recorded outage folds into the
 // setup projection. See `domain/infra-reachability.ts`.

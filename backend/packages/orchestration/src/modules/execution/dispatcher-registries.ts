@@ -34,7 +34,12 @@ import {
   TASK_ESTIMATOR_AGENT_KIND,
 } from '@cat-factory/agents'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import { DEPLOYER_AGENT_KIND, isDeployStep } from '@cat-factory/integrations'
+import {
+  DEPLOYER_AGENT_KIND,
+  DISPOSER_AGENT_KIND,
+  isDeployStep,
+  isDisposeStep,
+} from '@cat-factory/integrations'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
 import { BUG_INTAKE_AGENT_KIND } from '../pipelines/pipelineShape.js'
 import { renderInitiativePlanForReview } from '@cat-factory/contracts'
@@ -57,6 +62,7 @@ import {
   VISUAL_CONFIRM_AGENT_KIND,
 } from './ci.logic.js'
 import type { DeployerStepController } from './DeployerStepController.js'
+import type { DisposerStepController } from './DisposerStepController.js'
 import type { CompanionController } from './CompanionController.js'
 import type { HumanTestController } from './HumanTestController.js'
 import type { MergeResolver } from './MergeResolver.js'
@@ -106,6 +112,7 @@ export interface DispatcherRegistryDeps {
   environmentProvisioning?: EnvironmentProvisioningService
   initiativeService?: InitiativeService
   deployer: DeployerStepController
+  disposer: DisposerStepController
   companionController: CompanionController
   testerController: TesterController
   ralphController: RalphController
@@ -170,13 +177,14 @@ export interface DispatcherRegistryDeps {
 }
 
 /**
- * Build the order-sorted per-step-kind handler list (built-ins constructed inline, closing over
- * the injected {@link DispatcherRegistryDeps}). Engine-internal: there is no public
- * `registerStepHandler` seam. Phase 0 registers only the generic fallthrough; later phases
- * prepend more-specific handlers with lower `order`.
+ * The two ENVIRONMENT-LIFECYCLE step handlers, extracted as a pair because they are one concern
+ * from opposite ends: the `deployer` stands the run's throwaway infrastructure up and the
+ * `disposer` reclaims it. Split out of {@link buildStepHandlerRegistry} when adding the disposer
+ * pushed that function past its line budget — the budget is a split trigger, not a number to
+ * raise, and these two are the cohesive slice to lift.
  */
-export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler[] {
-  const handlers: StepHandler[] = [
+function buildEnvironmentLifecycleHandlers(d: DispatcherRegistryDeps): StepHandler[] {
+  return [
     // A `deployer` step provisions an ephemeral environment deterministically via the
     // provider — no LLM, no token usage — when the integration is wired. Unwired, its
     // `canHandle` is false so the step falls through to the generic agent path.
@@ -187,6 +195,32 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
       handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
         d.deployer.runDeployerStep(workspaceId, instance, step, block, isFinalStep),
     },
+    // A `disposer` step reclaims the ephemeral environments THIS RUN stood up, at the point in
+    // the pipeline its author put it — the deployer's counterpart, and the only thing that can
+    // close a run's own "environment up → evidence → torn down" proof while the run is still
+    // alive (the TTL sweep fires long after it settled). Always claims the step: when the
+    // environment integration is unwired it records "nothing to reclaim", which is exactly what
+    // a deployment that provisioned nothing should say — where falling through to the generic
+    // agent path would dispatch a container for a kind that has no prompt.
+    {
+      kind: DISPOSER_AGENT_KIND,
+      order: 105,
+      canHandle: ({ step }) => isDisposeStep(step.agentKind),
+      handle: ({ workspaceId, instance, step, block, isFinalStep }) =>
+        d.disposer.runDisposerStep(workspaceId, instance, step, block, isFinalStep),
+    },
+  ]
+}
+
+/**
+ * Build the order-sorted per-step-kind handler list (built-ins constructed inline, closing over
+ * the injected {@link DispatcherRegistryDeps}). Engine-internal: there is no public
+ * `registerStepHandler` seam. Phase 0 registers only the generic fallthrough; later phases
+ * prepend more-specific handlers with lower `order`.
+ */
+export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler[] {
+  const handlers: StepHandler[] = [
+    ...buildEnvironmentLifecycleHandlers(d),
     // A `tracker` step files a GitHub issue / Jira ticket from the preceding `analysis`
     // output (the tech-debt pipeline) — no LLM of its own. It is a pass-through when no
     // tracker provider is wired or none is configured for the workspace (handled inside
@@ -369,7 +403,8 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
       kind: 'inline-companion',
       order: 160,
       canHandle: ({ step }) =>
-        isCompanionKind(step.agentKind) && !isContainerBackedCompanion(step.agentKind),
+        isCompanionKind(step.agentKind, d.agentKindRegistry) &&
+        !isContainerBackedCompanion(step.agentKind, d.agentKindRegistry),
       handle: ({ workspaceId, instance, step, block, isFinalStep, options }) =>
         d.companionController.evaluate(workspaceId, instance, step, block, isFinalStep, options),
     },
@@ -434,7 +469,8 @@ export function buildStepCompletionInterceptors(
       kind: 'companion-verdict',
       order: 100,
       canIntercept: ({ step }) =>
-        isCompanionKind(step.agentKind) && isContainerBackedCompanion(step.agentKind),
+        isCompanionKind(step.agentKind, d.agentKindRegistry) &&
+        isContainerBackedCompanion(step.agentKind, d.agentKindRegistry),
       intercept: async ({ workspaceId, instance, step, isFinalStep, result }) => {
         const companionBlock = await d.blockRepository.get(workspaceId, instance.blockId)
         if (!companionBlock) return null

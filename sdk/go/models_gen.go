@@ -109,16 +109,17 @@ type DebugInfraLogEntry struct {
 type DebugInfraLogEntryOperation string
 
 const (
-	DebugInfraLogEntryOperationProvision   DebugInfraLogEntryOperation = "provision"
-	DebugInfraLogEntryOperationTeardown    DebugInfraLogEntryOperation = "teardown"
-	DebugInfraLogEntryOperationStatus      DebugInfraLogEntryOperation = "status"
-	DebugInfraLogEntryOperationDispatch    DebugInfraLogEntryOperation = "dispatch"
-	DebugInfraLogEntryOperationRelease     DebugInfraLogEntryOperation = "release"
-	DebugInfraLogEntryOperationPollFailure DebugInfraLogEntryOperation = "poll-failure"
+	DebugInfraLogEntryOperationProvision      DebugInfraLogEntryOperation = "provision"
+	DebugInfraLogEntryOperationTeardown       DebugInfraLogEntryOperation = "teardown"
+	DebugInfraLogEntryOperationTeardownVerify DebugInfraLogEntryOperation = "teardown-verify"
+	DebugInfraLogEntryOperationStatus         DebugInfraLogEntryOperation = "status"
+	DebugInfraLogEntryOperationDispatch       DebugInfraLogEntryOperation = "dispatch"
+	DebugInfraLogEntryOperationRelease        DebugInfraLogEntryOperation = "release"
+	DebugInfraLogEntryOperationPollFailure    DebugInfraLogEntryOperation = "poll-failure"
 )
 
 // DebugInfraLogEntryOperationValues lists every DebugInfraLogEntryOperation this SDK release knows.
-var DebugInfraLogEntryOperationValues = []DebugInfraLogEntryOperation{DebugInfraLogEntryOperationProvision, DebugInfraLogEntryOperationTeardown, DebugInfraLogEntryOperationStatus, DebugInfraLogEntryOperationDispatch, DebugInfraLogEntryOperationRelease, DebugInfraLogEntryOperationPollFailure}
+var DebugInfraLogEntryOperationValues = []DebugInfraLogEntryOperation{DebugInfraLogEntryOperationProvision, DebugInfraLogEntryOperationTeardown, DebugInfraLogEntryOperationTeardownVerify, DebugInfraLogEntryOperationStatus, DebugInfraLogEntryOperationDispatch, DebugInfraLogEntryOperationRelease, DebugInfraLogEntryOperationPollFailure}
 
 // DebugInfraLogEntryOutcome is the `DebugInfraLogEntryOutcome` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must
@@ -1467,7 +1468,9 @@ type PublicInputGateDecision struct {
 
 // PublicInputGateDecisionIssue is the `PublicInputGateDecisionIssue` wire model.
 type PublicInputGateDecisionIssue struct {
-	Code     PublicInputGateDecisionIssueCode     `json:"code"`
+	Code PublicInputGateDecisionIssueCode `json:"code"`
+	// Field may be absent entirely.
+	Field    *PublicInputGateDecisionIssueField   `json:"field,omitempty"`
 	Severity PublicInputGateDecisionIssueSeverity `json:"severity"`
 }
 
@@ -1484,10 +1487,17 @@ const (
 	PublicInputGateDecisionIssueCodeReproductionMissing    PublicInputGateDecisionIssueCode = "reproduction_missing"
 	PublicInputGateDecisionIssueCodeReviewTargetMissing    PublicInputGateDecisionIssueCode = "review_target_missing"
 	PublicInputGateDecisionIssueCodeSuccessCriteriaMissing PublicInputGateDecisionIssueCode = "success_criteria_missing"
+	PublicInputGateDecisionIssueCodeRequiredFieldMissing   PublicInputGateDecisionIssueCode = "required_field_missing"
 )
 
 // PublicInputGateDecisionIssueCodeValues lists every PublicInputGateDecisionIssueCode this SDK release knows.
-var PublicInputGateDecisionIssueCodeValues = []PublicInputGateDecisionIssueCode{PublicInputGateDecisionIssueCodeDescriptionMissing, PublicInputGateDecisionIssueCodeDescriptionPlaceholder, PublicInputGateDecisionIssueCodeDescriptionThin, PublicInputGateDecisionIssueCodeReproductionMissing, PublicInputGateDecisionIssueCodeReviewTargetMissing, PublicInputGateDecisionIssueCodeSuccessCriteriaMissing}
+var PublicInputGateDecisionIssueCodeValues = []PublicInputGateDecisionIssueCode{PublicInputGateDecisionIssueCodeDescriptionMissing, PublicInputGateDecisionIssueCodeDescriptionPlaceholder, PublicInputGateDecisionIssueCodeDescriptionThin, PublicInputGateDecisionIssueCodeReproductionMissing, PublicInputGateDecisionIssueCodeReviewTargetMissing, PublicInputGateDecisionIssueCodeSuccessCriteriaMissing, PublicInputGateDecisionIssueCodeRequiredFieldMissing}
+
+// PublicInputGateDecisionIssueField is the `PublicInputGateDecisionIssueField` wire model.
+type PublicInputGateDecisionIssueField struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
 
 // PublicInputGateDecisionIssueSeverity is the `PublicInputGateDecisionIssueSeverity` vocabulary as carried on the wire.
 // A string type rather than an int enum: the wire form IS the string, and an unknown value must

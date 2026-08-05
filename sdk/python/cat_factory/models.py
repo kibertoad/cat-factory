@@ -11,7 +11,7 @@ release older than the deployment it talks to degrades to "less typed", never to
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field as _dc_field
 from enum import Enum, StrEnum
 from typing import Any, TypeAlias
 
@@ -55,9 +55,9 @@ class CreatePublicJob:
     title: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicJob":
@@ -95,9 +95,9 @@ class CreatePublicTask:
     ticket: PublicTaskTicket | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CreatePublicTask":
@@ -147,9 +147,9 @@ class DebugAgentContextSnapshot:
     model: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugAgentContextSnapshot":
@@ -207,9 +207,9 @@ class DebugAgentContextSummary:
     model: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugAgentContextSummary":
@@ -255,9 +255,9 @@ class DebugContextFile:
     url: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugContextFile":
@@ -289,9 +289,9 @@ class DebugContextFragment:
     id: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugContextFragment":
@@ -335,9 +335,9 @@ class DebugInfraLogEntry:
     target_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugInfraLogEntry":
@@ -389,6 +389,7 @@ class DebugInfraLogEntryOperation(StrEnum):
     """
     PROVISION = "provision"
     TEARDOWN = "teardown"
+    TEARDOWN_VERIFY = "teardown-verify"
     STATUS = "status"
     DISPATCH = "dispatch"
     RELEASE = "release"
@@ -452,9 +453,9 @@ class DebugLlmAgentKindRollup:
     transport_overhead_ratio: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugLlmAgentKindRollup":
@@ -547,9 +548,9 @@ class DebugLlmCall:
     turn_index: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugLlmCall":
@@ -650,9 +651,9 @@ class DebugLlmPhaseRollup:
     cost_estimate: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugLlmPhaseRollup":
@@ -720,9 +721,9 @@ class DebugLlmTotals:
     transport_overhead_ratio: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugLlmTotals":
@@ -778,9 +779,9 @@ class DebugPromptMessage:
     tool_call_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugPromptMessage":
@@ -827,9 +828,9 @@ class DebugRunFailure:
     step_index: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunFailure":
@@ -903,9 +904,9 @@ class DebugRunOverview:
     diagnostics: DebugRunOverviewDiagnostics | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverview":
@@ -949,9 +950,9 @@ class DebugRunOverviewDiagnostics:
     last_dispatch: DebugRunOverviewDiagnosticsLastDispatch | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnostics":
@@ -981,9 +982,9 @@ class DebugRunOverviewDiagnosticsHost:
     platform: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnosticsHost":
@@ -1017,9 +1018,9 @@ class DebugRunOverviewDiagnosticsLastDispatch:
     repo: DebugRunOverviewDiagnosticsLastDispatchRepo | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnosticsLastDispatch":
@@ -1062,9 +1063,9 @@ class DebugRunOverviewDiagnosticsLastDispatchRepo:
     provider: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewDiagnosticsLastDispatchRepo":
@@ -1101,9 +1102,9 @@ class DebugRunOverviewLlm:
     cost_currency: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewLlm":
@@ -1138,9 +1139,9 @@ class DebugRunOverviewSinks:
     tool_calls: DebugRunOverviewSinksAgentContext
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewSinks":
@@ -1174,9 +1175,9 @@ class DebugRunOverviewSinksAgentContext:
     count: float
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunOverviewSinksAgentContext":
@@ -1211,9 +1212,9 @@ class DebugRunSignal:
     step_index: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunSignal":
@@ -1282,9 +1283,9 @@ class DebugRunStep:
     subtasks: RunSubtaskCounts | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunStep":
@@ -1344,9 +1345,9 @@ class DebugRunSummary:
     failure: DebugRunFailure | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugRunSummary":
@@ -1395,9 +1396,9 @@ class DebugSearchQuery:
     provider: DebugSearchQueryProvider | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugSearchQuery":
@@ -1454,9 +1455,9 @@ class DebugSubtaskCounts:
     items: list[DebugSubtaskItem] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugSubtaskCounts":
@@ -1489,9 +1490,9 @@ class DebugSubtaskItem:
     status: DebugSubtaskItemStatus
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugSubtaskItem":
@@ -1539,9 +1540,9 @@ class DebugText:
     match_offset: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugText":
@@ -1578,9 +1579,9 @@ class DebugToolCall:
     name: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "DebugToolCall":
@@ -1607,9 +1608,9 @@ class ErrorResponse:
     error: ErrorResponseError
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ErrorResponse":
@@ -1639,9 +1640,9 @@ class ErrorResponseError:
     issues: list[ErrorResponseErrorIssue] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ErrorResponseError":
@@ -1676,9 +1677,9 @@ class ErrorResponseErrorIssue:
     path: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ErrorResponseErrorIssue":
@@ -1722,9 +1723,9 @@ class ListDebugAgentContextResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugAgentContextResponse":
@@ -1767,9 +1768,9 @@ class ListDebugLlmCallsResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugLlmCallsResponse":
@@ -1798,9 +1799,9 @@ class ListDebugLogsResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugLogsResponse":
@@ -1829,9 +1830,9 @@ class ListDebugRunsResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugRunsResponse":
@@ -1860,9 +1861,9 @@ class ListDebugSearchQueriesResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugSearchQueriesResponse":
@@ -1905,9 +1906,9 @@ class ListDebugToolCallsResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugToolCallsResponse":
@@ -1949,9 +1950,9 @@ class ListDebugToolCallsResponseToolCall:
     workspace_id: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListDebugToolCallsResponseToolCall":
@@ -2022,9 +2023,9 @@ class ListPublicJobsResponse:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicJobsResponse":
@@ -2081,9 +2082,9 @@ class Notification:
     severity: NotificationSeverity | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Notification":
@@ -2179,9 +2180,9 @@ class NotificationPayload:
     unreachable_areas: list[NotificationPayloadUnreachableArea] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayload":
@@ -2282,9 +2283,9 @@ class NotificationPayloadAssessment:
     risk: float
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadAssessment":
@@ -2318,9 +2319,9 @@ class NotificationPayloadBudgetAlert:
     threshold: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadBudgetAlert":
@@ -2387,9 +2388,9 @@ class NotificationPayloadDriftAffected:
     sealed_at: float | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadDriftAffected":
@@ -2454,9 +2455,9 @@ class NotificationPayloadOnCallAssessment:
     recommendation: NotificationPayloadOnCallAssessmentRecommendation
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadOnCallAssessment":
@@ -2525,9 +2526,9 @@ class NotificationPayloadPlatformFailingRun:
     block_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadPlatformFailingRun":
@@ -2578,9 +2579,9 @@ class NotificationPayloadReleaseSignal:
     detail: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationPayloadReleaseSignal":
@@ -2728,9 +2729,9 @@ class NotificationWebhook:
     url: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "NotificationWebhook":
@@ -2800,9 +2801,9 @@ class PublicAgentDecision:
     step_kind: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicAgentDecision":
@@ -2845,9 +2846,9 @@ class PublicApprovalGateDecision:
     feedback: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicApprovalGateDecision":
@@ -2907,9 +2908,9 @@ class PublicApproveStep:
     proposal: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicApproveStep":
@@ -2944,9 +2945,9 @@ class PublicBrainstormDecision:
     converged_direction: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicBrainstormDecision":
@@ -3002,9 +3003,9 @@ class PublicChallengePrReviewFinding:
     question: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicChallengePrReviewFinding":
@@ -3035,9 +3036,9 @@ class PublicChooseFork:
     note: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicChooseFork":
@@ -3077,9 +3078,9 @@ class PublicClarityDecision:
     clarified_report: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicClarityDecision":
@@ -3122,9 +3123,9 @@ class PublicDecisionList:
     task_id: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicDecisionList":
@@ -3161,9 +3162,9 @@ class PublicForkDecision:
     seam_summary: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicForkDecision":
@@ -3202,9 +3203,9 @@ class PublicForkDecisionFork:
     risk_notes: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicForkDecisionFork":
@@ -3268,9 +3269,9 @@ class PublicHumanTestDecision:
     environment: PublicHumanTestEnvironment | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicHumanTestDecision":
@@ -3326,9 +3327,9 @@ class PublicHumanTestEnvironment:
     url: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicHumanTestEnvironment":
@@ -3376,9 +3377,9 @@ class PublicIncorporate:
     feedback: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicIncorporate":
@@ -3408,9 +3409,9 @@ class PublicInputGateDecision:
     status: PublicInputGateDecisionStatus
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicInputGateDecision":
@@ -3442,19 +3443,22 @@ class PublicInputGateDecisionIssue:
 
     code: PublicInputGateDecisionIssueCode
     severity: PublicInputGateDecisionIssueSeverity
+    #: May be absent entirely.
+    field: PublicInputGateDecisionIssueField | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicInputGateDecisionIssue":
         """Decode a `PublicInputGateDecisionIssue` from its JSON object."""
-        known = {"code", "severity"}
+        known = {"code", "severity", "field"}
         return cls(
             code=_enum(PublicInputGateDecisionIssueCode, data.get("code")),
             severity=_enum(PublicInputGateDecisionIssueSeverity, data.get("severity")),
+            field=None if data.get("field") is None else PublicInputGateDecisionIssueField.from_dict(data.get("field")),
             extra={k: v for k, v in data.items() if k not in known},
         )
 
@@ -3463,6 +3467,8 @@ class PublicInputGateDecisionIssue:
         out: dict[str, Any] = dict(self.extra)
         out["code"] = _encode(self.code)
         out["severity"] = _encode(self.severity)
+        if self.field is not None:
+            out["field"] = _encode(self.field)
         return out
 
 
@@ -3482,6 +3488,37 @@ class PublicInputGateDecisionIssueCode(StrEnum):
     REPRODUCTION_MISSING = "reproduction_missing"
     REVIEW_TARGET_MISSING = "review_target_missing"
     SUCCESS_CRITERIA_MISSING = "success_criteria_missing"
+    REQUIRED_FIELD_MISSING = "required_field_missing"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicInputGateDecisionIssueField:
+    """`PublicInputGateDecisionIssueField`, as carried on the wire."""
+
+    key: str
+    label: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicInputGateDecisionIssueField":
+        """Decode a `PublicInputGateDecisionIssueField` from its JSON object."""
+        known = {"key", "label"}
+        return cls(
+            key=data.get("key"),
+            label=data.get("label"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["key"] = self.key
+        out["label"] = self.label
+        return out
 
 
 class PublicInputGateDecisionIssueSeverity(StrEnum):
@@ -3544,9 +3581,9 @@ class PublicJob:
     result: PublicJobResult | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJob":
@@ -3583,9 +3620,9 @@ class PublicJobAccepted:
     status: PublicJobStatus
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJobAccepted":
@@ -3615,9 +3652,9 @@ class PublicJobAcceptedLinks:
     self_: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJobAcceptedLinks":
@@ -3646,9 +3683,9 @@ class PublicJobResult:
     data: Any | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJobResult":
@@ -3702,9 +3739,9 @@ class PublicJudgeDecision:
     verdict: PublicJudgeVerdict | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJudgeDecision":
@@ -3768,9 +3805,9 @@ class PublicJudgeFinding:
     where: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJudgeFinding":
@@ -3805,9 +3842,9 @@ class PublicJudgeVerdict:
     summary: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicJudgeVerdict":
@@ -3836,9 +3873,9 @@ class PublicNotificationList:
     notifications: list[Notification]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicNotificationList":
@@ -3864,9 +3901,9 @@ class PublicNotificationWebhook:
     webhook: NotificationWebhook | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicNotificationWebhook":
@@ -3895,9 +3932,9 @@ class PublicPipeline:
     steps: list[str]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPipeline":
@@ -3930,9 +3967,9 @@ class PublicPipelineList:
     pipelines: list[PublicPipeline]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPipelineList":
@@ -3965,9 +4002,9 @@ class PublicPrReviewDecision:
     summary: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecision":
@@ -4019,9 +4056,9 @@ class PublicPrReviewDecisionFinding:
     suggested_fix: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionFinding":
@@ -4089,9 +4126,9 @@ class PublicPrReviewDecisionFindingChallenge:
     question: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionFindingChallenge":
@@ -4171,9 +4208,9 @@ class PublicPrReviewDecisionSlice:
     title: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicPrReviewDecisionSlice":
@@ -4224,9 +4261,9 @@ class PublicRejectStep:
     reason: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRejectStep":
@@ -4252,9 +4289,9 @@ class PublicReplyFinding:
     reply: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicReplyFinding":
@@ -4279,9 +4316,9 @@ class PublicRequestGateFix:
     findings: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRequestGateFix":
@@ -4306,9 +4343,9 @@ class PublicRequestStepChanges:
     feedback: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRequestStepChanges":
@@ -4341,9 +4378,9 @@ class PublicRequirementsDecision:
     incorporated_requirements: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRequirementsDecision":
@@ -4400,9 +4437,9 @@ class PublicResolveAgentDecision:
     choice: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicResolveAgentDecision":
@@ -4427,9 +4464,9 @@ class PublicResolveExceeded:
     choice: PublicResolveExceededChoice
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicResolveExceeded":
@@ -4469,9 +4506,9 @@ class PublicResolveInputGate:
     choice: PublicResolveInputGateChoice
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicResolveInputGate":
@@ -4512,9 +4549,9 @@ class PublicResolveJudge:
     feedback: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicResolveJudge":
@@ -4560,9 +4597,9 @@ class PublicResolvePrReview:
     finding_ids: list[str] | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicResolvePrReview":
@@ -4613,9 +4650,9 @@ class PublicReviewFinding:
     reply: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicReviewFinding":
@@ -4710,9 +4747,9 @@ class PublicRun:
     pull_request: RunPullRequest | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRun":
@@ -4755,9 +4792,9 @@ class PublicRunStep:
     subtasks: RunSubtaskCounts | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicRunStep":
@@ -4792,9 +4829,9 @@ class PublicService:
     type_: PublicServiceType
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicService":
@@ -4827,9 +4864,9 @@ class PublicServiceList:
     services: list[PublicService]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicServiceList":
@@ -4876,9 +4913,9 @@ class PublicSetFindingStatus:
     status: PublicSetFindingStatusStatus
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicSetFindingStatus":
@@ -4927,9 +4964,9 @@ class PublicTask:
     run_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTask":
@@ -4972,9 +5009,9 @@ class PublicTaskList:
     next_cursor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTaskList":
@@ -5003,9 +5040,9 @@ class PublicTaskSourceDocument:
     source: PublicTaskSourceDocumentSource
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTaskSourceDocument":
@@ -5053,9 +5090,9 @@ class PublicTaskTicket:
     source: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTaskTicket":
@@ -5084,9 +5121,9 @@ class PublicTaskUploadedDocument:
     title: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicTaskUploadedDocument":
@@ -5118,9 +5155,9 @@ class PublicUsage:
     rows: list[PublicUsageRow]
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicUsage":
@@ -5155,9 +5192,9 @@ class PublicUsageBudget:
     output_tokens: float
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicUsageBudget":
@@ -5198,9 +5235,9 @@ class PublicUsageRow:
     vendor: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicUsageRow":
@@ -5259,9 +5296,9 @@ class PublicVisualConfirmDecision:
     degraded_reason: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicVisualConfirmDecision":
@@ -5300,9 +5337,9 @@ class PublicVisualConfirmDecisionPair:
     reference_artifact_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PublicVisualConfirmDecisionPair":
@@ -5357,9 +5394,9 @@ class PutNotificationWebhook:
     url: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PutNotificationWebhook":
@@ -5401,9 +5438,9 @@ class RunError:
     message: str
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RunError":
@@ -5432,9 +5469,9 @@ class RunPullRequest:
     branch: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RunPullRequest":
@@ -5480,9 +5517,9 @@ class RunSubtaskCounts:
     total: float
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "RunSubtaskCounts":
@@ -5528,9 +5565,9 @@ class StartPublicTask:
     pipeline_id: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "StartPublicTask":
@@ -5593,9 +5630,9 @@ class UpdatePublicTask:
     title: str | None = None
 
     #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped — a caller on an older SDK can
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
     #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "UpdatePublicTask":

@@ -1003,6 +1003,12 @@
       "inherited": "hérité du service",
       "frozen": "Figé : l'agent a démarré"
     },
+    "taskTypeFields": {
+      "title": "Champs du type de tâche",
+      "hint": "Les réponses que ce type de tâche déclare nécessaires. Une réponse obligatoire manquante met l'exécution en pause avant son démarrage.",
+      "save": "Enregistrer",
+      "revert": "Rétablir"
+    },
     "dependencies": {
       "title": "Dépend de",
       "hint": "Tâches qui doivent être fusionnées avant que celle-ci puisse s'exécuter. Le contrôle Exécuter reste verrouillé tant que toutes les dépendances ne sont pas terminées.",
@@ -4719,6 +4725,11 @@
         "title": "Aucun critère de réussite",
         "hint": "Indiquez la question à laquelle le spike répond, ou ce qu'est un bon résultat, pour donner une cible au temps imparti."
       },
+      "required_field_missing": {
+        "title": "Manquant : {field}",
+        "hint": "Ce type de tâche exige « {field} », et la tâche n’y répond pas. Renseignez-le sur la tâche, puis revérifiez.",
+        "unnamedField": "un champ obligatoire"
+      },
       "unknown": {
         "title": "Constat non reconnu",
         "hint": "Cette exécution a enregistré une vérification que cette version ne connaît plus. Relisez la tâche à la main avant de continuer."
@@ -5375,6 +5386,7 @@
     "operation": {
       "provision": "Démarrer",
       "teardown": "Démanteler",
+      "teardown-verify": "Vérification du démantèlement",
       "status": "Vérification de l'état",
       "dispatch": "Démarrer",
       "release": "Démanteler",

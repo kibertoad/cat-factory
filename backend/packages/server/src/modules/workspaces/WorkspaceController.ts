@@ -168,6 +168,13 @@ function snapshotCustomAgentKinds(
       // `assignTraits`, and a projection that read the declaration alone would tell the builder
       // a kind needs no storage selection right up until its run is refused at admission.
       ...(hasTrait(def.kind, BINARY_OUTPUT_TRAIT, registry) ? { binaryOutput: true } : {}),
+      // Asked of the REGISTRY for the same reason the trait is: a companion PAIRING is
+      // registered separately from the kind (`registerCompanion`), so reading the kind's own
+      // definition would miss every one of them. Absent for a kind that reviews nothing, which
+      // is what tells the builder to render it as an ordinary palette block.
+      ...(registry.isCompanionKind(def.kind)
+        ? { companionTargets: registry.companionTargets(def.kind) }
+        : {}),
     }))
   // Registered JUDGES (the fourth step-taxonomy bucket) reach the palette through the SAME
   // projection: a judge is a step kind the SPA must be able to place and open a result window

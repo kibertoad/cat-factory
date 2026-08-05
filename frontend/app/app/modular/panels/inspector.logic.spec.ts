@@ -97,6 +97,11 @@ describe('inspector panel group', () => {
       'task-dependencies',
       'task-run-settings',
       'task-agent-config',
+      // The custom type's own declared fields sit with the other task INPUTS (what the task is),
+      // not under run settings (how it runs). It is gated on being a task alone: the panel hides
+      // itself unless the type is one this deployment registered with descriptor fields, which
+      // the spec here cannot see and should not try to.
+      'task-type-fields',
       'task-structure',
     ])
   })

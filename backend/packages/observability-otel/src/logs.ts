@@ -83,7 +83,15 @@ function encodeLogRecord(record: MappedLogRecord): Record<string, unknown> {
     severityText: record.severityText,
     body: { stringValue: record.body },
     attributes: keyValues(record.attributes),
-    ...(record.traceId ? { traceId: record.traceId, flags: record.traceFlags } : {}),
+    ...(record.traceId
+      ? {
+          traceId: record.traceId,
+          // Only an ADOPTED trace names a span (see `MappedLogRecord.spanId`); a run-derived
+          // one attaches to the trace alone.
+          ...(record.spanId ? { spanId: record.spanId } : {}),
+          flags: record.traceFlags,
+        }
+      : {}),
   }
 }
 

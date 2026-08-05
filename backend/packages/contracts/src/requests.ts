@@ -8,6 +8,7 @@ import {
   testerQualityConfigSchema,
   writebackOverrideSchema,
 } from './entities.js'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 import { runModeSchema } from './run-provenance.js'
 import { pipelinePurposeSchema } from './pipeline-purpose.js'
 import { serviceProvisioningSchema } from './environments.js'
@@ -179,6 +180,17 @@ export const updateBlockSchema = v.partial(
     pipelineId: v.pipe(v.string(), v.maxLength(120)),
     // Task-level agent-contributed config values (id→value map; replaces the map).
     agentConfig: agentConfigValuesSchema,
+    // Task-level: the answers to a CUSTOM task type's own declared create-form fields (the
+    // `taskTypeFields.custom` bag; replaces the bag). Validated server-side through the SAME
+    // door the create form goes through, so a type's declaration is enforced identically
+    // whichever one wrote the values.
+    //
+    // Deliberately NARROWER than the whole `taskTypeFields`: the BUILT-IN per-type fields are
+    // resolved at creation with side effects the patch path does not repeat (a `review` task's
+    // PR reference is verified against the provider and folded into the description), so
+    // offering them here would quietly skip that. The custom bag has no such resolution: it is
+    // exactly the deployment-declared answers, which is why it is the half that can be patched.
+    customTaskTypeFields: descriptorFieldValuesSchema,
     // Service-level (frame): the service-owned provisioning config — the provision type it
     // produces + in-repo specifics (the "what + where"). See
     // docs/initiatives/per-service-provision-types.md.

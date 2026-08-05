@@ -9,6 +9,7 @@ import type {
   ProvisionEnvironmentRequest,
   ProvisionedEnvironment,
   RunRepoContext,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import type { PreflightRef, RecipeStepRecorder, StackRecipe } from '@cat-factory/kernel'
 import { formatPreflightFailure, preflightBlockingFailures } from '../preflight/PreflightService.js'
@@ -19,6 +20,7 @@ import {
   checkoutDepthFor,
   classifyComposePs,
   composeFileDir,
+  countComposePs,
   parseComposeEnvConfig,
   parseHostPort,
   prepareComposeProject,
@@ -192,6 +194,49 @@ export class ComposeEnvironmentProvider implements EnvironmentProvider {
     await this.safeDown(project)
     await this.runtime.cleanupProject?.(project)
     return { status: 'torn_down' }
+  }
+
+  /**
+   * Confirm the project's containers are gone, by listing them back.
+   *
+   * `compose down` is synchronous, so unlike a Kubernetes namespace there is no terminating
+   * window to wait out: any container still listed after it means the down did not take (a
+   * container with a stuck stop, a project name that never matched). `-a` is used for the same
+   * reason {@link status} uses it — a stopped-but-present container is still a container the
+   * host is holding, and an empty default `ps` would report it as reclaimed.
+   */
+  async confirmTeardown(req: EnvironmentTeardownRequest): Promise<TeardownProbe> {
+    const project = req.provisionFields.project ?? req.externalId
+    if (!project) {
+      return {
+        state: 'unknown',
+        retryable: false,
+        reason: 'No compose project recorded for this environment.',
+      }
+    }
+    const ps = await this.runtime.compose(['-p', project, 'ps', '-a', '--format', 'json'], {
+      timeoutMs: SHORT_TIMEOUT_MS,
+    })
+    if (ps.code !== 0) {
+      // The daemon could not be asked (stopped, permissions). NOT `gone`: an unreachable daemon
+      // answers nothing, and reading its silence as an empty project would confirm a teardown on
+      // a host that is not even running.
+      return {
+        state: 'unknown',
+        // The daemon may well be up again by the next sweep.
+        retryable: true,
+        reason:
+          tailOutput(ps.stderr || ps.stdout) ||
+          `Could not list compose project '${project}' to confirm teardown.`,
+      }
+    }
+    const remaining = countComposePs(ps.stdout)
+    if (remaining === 0) return { state: 'gone' }
+    return {
+      state: 'present',
+      terminating: false,
+      detail: `Compose project '${project}' still has ${remaining} container${remaining === 1 ? '' : 's'}.`,
+    }
   }
 
   async testConnection(_req: EnvironmentConnectionTestRequest): Promise<ConnectionTestResult> {

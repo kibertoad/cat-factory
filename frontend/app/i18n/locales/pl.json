@@ -1003,6 +1003,12 @@
       "inherited": "odziedziczone z usługi",
       "frozen": "Zamrożone: agent został uruchomiony"
     },
+    "taskTypeFields": {
+      "title": "Pola typu zadania",
+      "hint": "Odpowiedzi, których wymaga ten typ zadania. Brak wymaganej odpowiedzi wstrzymuje uruchomienie przed startem.",
+      "save": "Zapisz",
+      "revert": "Przywróć"
+    },
     "dependencies": {
       "title": "Zależy od",
       "hint": "Zadania, które muszą zostać scalone, zanim to będzie mogło się uruchomić. Przycisk uruchamiania pozostaje zablokowany, dopóki wszystkie zależności nie będą gotowe.",
@@ -4719,6 +4725,11 @@
         "title": "Brak kryteriów sukcesu",
         "hint": "Podaj pytanie, na które odpowiada spike, albo jak wygląda dobry wynik, żeby wyznaczony czas miał cel."
       },
+      "required_field_missing": {
+        "title": "Brakuje: {field}",
+        "hint": "Ten typ zadania wymaga pola „{field}”, a zadanie go nie wypełnia. Uzupełnij je w zadaniu i sprawdź ponownie.",
+        "unnamedField": "pole wymagane"
+      },
       "unknown": {
         "title": "Nierozpoznane ustalenie",
         "hint": "Ten przebieg zapisał kontrolę, której ta wersja już nie zna. Przejrzyj zadanie ręcznie przed kontynuowaniem."
@@ -5375,6 +5386,7 @@
     "operation": {
       "provision": "Uruchom",
       "teardown": "Zatrzymaj",
+      "teardown-verify": "Sprawdzenie zatrzymania",
       "status": "Sprawdzenie stanu",
       "dispatch": "Uruchom",
       "release": "Zatrzymaj",

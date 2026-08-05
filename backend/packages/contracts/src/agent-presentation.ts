@@ -123,6 +123,22 @@ export const customAgentKindSchema = v.object({
    * built-in kind carries the trait).
    */
   binaryOutput: v.optional(v.boolean()),
+  /**
+   * The producer kinds this kind REVIEWS, when a deployment registered it as a COMPANION: it
+   * grades the immediately-preceding step's output and, below the step's threshold, loops that
+   * producer back for automatic rework before any human is asked.
+   *
+   * The pipeline builder needs it and has no other way to know. A companion is not a standalone
+   * palette block: it renders as an "add companion" toggle ON its producer, and the builder
+   * inserts/removes it immediately after. Without this the SPA would either show a deployment's
+   * companion as a placeable block (which pipeline validation then refuses on save, because the
+   * adjacency rule is enforced server-side) or not show it at all.
+   *
+   * An ARRAY of targets rather than one, matching `CompanionDefinition.targets`: a companion may
+   * legitimately review more than one producer kind. Absent ⇒ the kind is not a companion, which
+   * is every custom kind in the stock product.
+   */
+  companionTargets: v.optional(v.array(agentKindSchema)),
 })
 export type CustomAgentKind = v.InferOutput<typeof customAgentKindSchema>
 

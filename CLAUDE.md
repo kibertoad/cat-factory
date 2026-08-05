@@ -660,15 +660,14 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   against a provider and only escalates to a helper container agent (`ci-fixer` / `conflict-resolver` /
   `on-call`) on a negative verdict; skip-unless-needed is the whole point. ONE generic machine drives
   every gate (parking on `awaiting_gate`, live state `step.gate`); a `GateDefinition` supplies only its
-  differentiators. **Adding a gate is a new registry entry, never another `evaluateX`/`pollX`/`awaiting_x`
-  triple**; ergonomics:
-  [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md). Pure gate logic
-  lives in kernel (`domain/gate-logic.ts`); `defaultGateRegistry()` is EMPTY and the built-ins
-  (`@cat-factory/gates`) install themselves through the same public seam a deployment uses.
-  **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
-  reverts), settling the gate without re-probing. **A gate's own KNOBS are DECLARED on its
-  registration** (`register(kind, factory, { configFields })`) and read off `gateState.config`, so the
-  engine never learns a gate's parameter names.
+  differentiators, its step-tunable KNOBS included (`register(kind, factory, { configFields })`, read
+  off `gateState.config`), so the engine never learns a gate's parameter names. **Adding a gate is a
+  new registry entry, never another `evaluateX`/`pollX`/`awaiting_x` triple**, and
+  `resolveHelperCompletion` is the seam for an INVESTIGATE-don't-fix helper (`on-call` never reverts),
+  settling the gate without re-probing. Pure logic lives in kernel (`domain/gate-logic.ts`);
+  `defaultGateRegistry()` is EMPTY, the built-ins (`@cat-factory/gates`) installing through the same
+  public seam a deployment uses. Ergonomics + a worked config form:
+  [`custom-agent-gate-ergonomics.md`](./backend/docs/custom-agent-gate-ergonomics.md).
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
   because they don't poll-or-escalate.
 - **Judges**: an inline LLM scores work against a rubric and the engine compares it to a per-task
@@ -678,15 +677,24 @@ A step's `agentKind` puts it in one of four buckets, and most engine handling ke
   `resetStepForRerun`; a failing verdict never silently advances. A judge is NOT a gate (no cheap
   precheck, always costs a model call) and NOT a `StepCompletionResolver` (which can't park or loop).
   Model: [`judge-registry.md`](./docs/initiatives/judge-registry.md).
+- **Companions**: a REWORK PAIR. A companion grades the immediately-preceding producer's output and,
+  below the step's threshold, loops THAT producer back for automatic rework on a bounded budget
+  before any human is asked. **Adding one is `AgentKindRegistry.registerCompanion`**, beside the
+  kind's own registration: a companion is a relationship BETWEEN kinds, so it lives on the kind
+  registry rather than a sixth. Traps: the pairing is registered SEPARATELY from the kind, so every
+  read goes through the registry (a projection off the kind's own definition misses all of them);
+  the free lookups take the registry OPTIONALLY and fall back to the built-ins (`isGatableKind`'s
+  shape), so a site that omits it silently sees built-ins only; and adjacency is an invariant
+  (`assertValidCompanionPlacement`) because the engine grades the immediate predecessor. Choose it
+  over a JUDGE when the remedy is the producer running again rather than a verdict being disposed.
 - **The `merger` resolver is a privileged built-in, deliberately NOT externalized.** It owns terminal block
   status (`ownsTerminalStatus`) and executes a policy-gated real merge, so it keeps engine-internal access
   rather than the minimal public `ResolverContext`.
 
 **A human gate carries a POLICY, PINNED when the gate is raised** (`stepOptions.gateConfig`: who may
-resolve it, how many distinct people must), because the pipeline stays editable while a run is parked
-on it. It governs approve/request-changes/reject alike, and the rules live in contracts
-(`gate-approval.ts`), never restated in the SPA. Trap: EVERY raise site goes through
-`buildStepApproval` (guard-enforced), because a hand-rolled literal drops the policy and fails OPEN.
+resolve it, how many distinct people must), governing approve/request-changes/reject alike; the rules
+live in contracts (`gate-approval.ts`), never restated in the SPA. Trap: EVERY raise site goes through
+`buildStepApproval` (guard-enforced), or the policy is silently dropped and the gate fails OPEN.
 [ADR 0038](./backend/docs/adr/0038-per-step-gate-config.md).
 
 **A step's presence may be conditional on the task estimate; a HUMAN GATE never is.** Estimate gating
@@ -842,6 +850,12 @@ marker-delimited section of the PR body (idempotent, no persisted state). Trap: 
 step settlement, not a pipeline step, and it composes from state already in memory (the CI gate's
 RECORDED verdict, never a re-probe). Doc:
 [`pr-verification-report.md`](./docs/initiatives/pr-verification-report.md).
+
+**Environment disposal**: the `disposer` step reclaims what the run provisioned where its author placed
+it, and every teardown path re-probes afterwards. Trap: a teardown call returning is not the environment
+being gone (a manifest with no `teardown:` request destroys nothing and reports `torn_down`), so only a
+`confirmed` probe is a reclaim and a missing verify row is never a pass. Doc:
+[`environment-disposal-and-teardown-proof.md`](./docs/initiatives/environment-disposal-and-teardown-proof.md).
 
 **Post-release health**, the LAST standard step: watch monitors/SLOs for a window and, on a regression,
 spawn an `on-call` agent to investigate. **It never auto-reverts.** The kernel `ReleaseHealthProvider`

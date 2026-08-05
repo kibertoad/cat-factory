@@ -1087,6 +1087,12 @@
       "inherited": "inherited from service",
       "frozen": "Frozen: the agent has started"
     },
+    "taskTypeFields": {
+      "title": "Task type fields",
+      "hint": "The answers this task type declares it needs. A required answer that is missing parks a run before it starts.",
+      "save": "Save",
+      "revert": "Revert"
+    },
     "dependencies": {
       "title": "Depends on",
       "hint": "Tasks that must merge before this one can run. The Run control stays locked until every dependency is done.",
@@ -4927,6 +4933,11 @@
         "title": "No success criteria",
         "hint": "State the question the spike answers, or what a good outcome looks like, so the timebox has a target."
       },
+      "required_field_missing": {
+        "title": "Missing: {field}",
+        "hint": "This task type requires “{field}”, and the task does not answer it. Fill it in on the task, then re-check.",
+        "unnamedField": "a required field"
+      },
       "unknown": {
         "title": "Unrecognised finding",
         "hint": "This run recorded a check this version no longer knows about. Review the task by hand before continuing."
@@ -5626,6 +5637,7 @@
     "operation": {
       "provision": "Spin up",
       "teardown": "Tear down",
+      "teardown-verify": "Teardown check",
       "status": "Status check",
       "dispatch": "Spin up",
       "release": "Tear down",

@@ -5,6 +5,8 @@ import type {
   EnvironmentManifest,
   EnvironmentStatus,
   ProviderConfigField,
+  TeardownConfirmation,
+  TeardownProbe,
 } from '@cat-factory/kernel'
 import type { EnvironmentRecord, UrlSafetyPolicy } from '@cat-factory/kernel'
 import { getErrorMessage, STRICT_URL_SAFETY_POLICY } from '@cat-factory/kernel'
@@ -19,6 +21,8 @@ import { assertSafePublicUrl } from '../shared/url-guard.js'
 
 /** The agent kind that triggers deterministic provisioning. */
 export const DEPLOYER_AGENT_KIND = 'deployer'
+/** The agent kind that triggers deterministic RECLAIM — the deployer's counterpart. */
+export const DISPOSER_AGENT_KIND = 'disposer'
 /** Board category for environment blocks (a deployer pipeline typically runs here). */
 export const ENVIRONMENT_BLOCK_TYPE = 'environment'
 
@@ -29,6 +33,83 @@ export const ENVIRONMENT_BLOCK_TYPE = 'environment'
  */
 export function isDeployStep(agentKind: string): boolean {
   return agentKind === DEPLOYER_AGENT_KIND
+}
+
+/**
+ * Whether a pipeline step should RECLAIM the run's environments deterministically. The mirror of
+ * {@link isDeployStep}: it lets an author decide WHEN the environment goes away (after the
+ * automated tester, or after a human has finished poking at it) instead of leaving that to the
+ * TTL sweep, which fires long after the run settled and therefore cannot close the run's own
+ * up → evidence → down proof.
+ */
+export function isDisposeStep(agentKind: string): boolean {
+  return agentKind === DISPOSER_AGENT_KIND
+}
+
+/**
+ * Turn a provider's post-teardown {@link TeardownProbe} into the recorded verdict, plus the
+ * verbatim reason a human needs when it is anything but `confirmed`.
+ *
+ * The mapping is the whole point of the split: `gone` is the only probe that proves a reclaim,
+ * and each of the other answers becomes a DIFFERENT verdict rather than being flattened into one
+ * "not confirmed" bucket, because each is a different person's next action (see
+ * {@link TeardownConfirmation}). A `present` probe is split by `terminating` for the same
+ * reason — a namespace draining its finalizers is on its way out and will confirm on a later
+ * pass, where an `Active` one means the teardown did nothing and will never confirm on its own.
+ */
+export function classifyTeardownProbe(probe: TeardownProbe): {
+  confirmation: TeardownConfirmation
+  reason: string | null
+} {
+  switch (probe.state) {
+    case 'gone':
+      return { confirmation: 'confirmed', reason: null }
+    case 'present':
+      return probe.terminating
+        ? {
+            confirmation: 'unconfirmed',
+            reason:
+              probe.detail ??
+              'The environment is still shutting down; it was not gone when checked.',
+          }
+        : {
+            confirmation: 'still_standing',
+            reason:
+              probe.detail ??
+              'The environment was still running after the teardown, so nothing was reclaimed.',
+          }
+    case 'unknown':
+      // A permanent inability to verify is a CONFIGURATION fact and a transient one is an
+      // outage; only the second is worth waiting on, so they must not share a verdict.
+      return {
+        confirmation: probe.retryable ? 'unconfirmed' : 'unverifiable',
+        reason: probe.reason,
+      }
+    default:
+      return describeUnrecognisedProbe(probe)
+  }
+}
+
+/**
+ * A probe state this build does not define, reported as the unusable answer it is.
+ *
+ * {@link TeardownProbe} crosses a PUBLIC port, so the value is not the platform's to trust: a
+ * deployment's own provider can return anything, and adding a state to the union without a case
+ * here must fail the build (the argument stops being `never`). What it must NOT do is fall off
+ * the end of the switch — that returns `undefined`, which then rides into the confirmation row as
+ * a missing verdict and, being neither `confirmed` nor anything else a reader recognises, is the
+ * one outcome worse than an honest refusal to say.
+ *
+ * Never guessed onto `gone`: an answer nobody can interpret is the opposite of proof.
+ */
+function describeUnrecognisedProbe(probe: never): {
+  confirmation: TeardownConfirmation
+  reason: string
+} {
+  return {
+    confirmation: 'unconfirmed',
+    reason: `The provider reported a teardown probe state this deployment does not recognise (${JSON.stringify(probe)}), so the teardown could not be verified.`,
+  }
 }
 
 /** The provider-identity fields that decide whether a superseded env's real infra is reclaimed. */

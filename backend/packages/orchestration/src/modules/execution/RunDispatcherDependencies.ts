@@ -28,7 +28,11 @@ import type {
 import { GateOutcomeRecorder } from '../observability/GateOutcomeRecorder.js'
 import type { SettledGate } from '../observability/GateOutcomeRecorder.js'
 import type { AgentKindRegistry } from '@cat-factory/agents'
-import type { BugIntakeService, EnvironmentProvisioningService } from '@cat-factory/integrations'
+import type {
+  BugIntakeService,
+  EnvironmentProvisioningService,
+  EnvironmentTeardownService,
+} from '@cat-factory/integrations'
 import type { SpendService } from '@cat-factory/spend'
 import type { AgentContextBuilder, FragmentBodyResolver } from './AgentContextBuilder.js'
 import type { CompanionController } from './CompanionController.js'
@@ -142,6 +146,12 @@ export interface RunDispatcherDeps {
   prVerificationReport: PrVerificationReportController
   runInitiatorScope: RunInitiatorScope
   environmentProvisioning?: EnvironmentProvisioningService
+  /**
+   * Reclaims (and confirms the reclaim of) provisioned environments — what the `disposer` step
+   * drives. Absent ⇒ a disposer records that there was nothing to reclaim, which is the truth
+   * for a deployment whose environment integration is unwired.
+   */
+  environmentTeardown?: EnvironmentTeardownService
   ticketTrackerProvider?: TicketTrackerProvider
   issueWriteback?: IssueWritebackProvider
   /** The recurring `bug-intake` step's read-and-claim helper; absent → the step is a no-op. */

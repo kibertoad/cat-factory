@@ -12,6 +12,7 @@ import {
   DEFAULT_COMPANION_MAX_ATTEMPTS,
   parseCompanionAssessment,
 } from '@cat-factory/contracts'
+import type { AgentKindRegistry } from '@cat-factory/agents'
 import { companionFor, companionTargets } from '@cat-factory/agents'
 import type { SpendService } from '@cat-factory/spend'
 import { extractJson } from '../requirements/requirements.logic.js'
@@ -68,6 +69,12 @@ function sumUsage(
  */
 export interface CompanionControllerDeps {
   contextBuilder: AgentContextBuilder
+  /**
+   * The app-owned agent-kind registry, so a DEPLOYMENT-registered companion is driven by this
+   * loop on the same terms as a built-in: its targets found by the same producer search, its
+   * default threshold read from its own registration.
+   */
+  agentKindRegistry: AgentKindRegistry
   spend: SpendService
   idGenerator: IdGenerator
   previewStepModel: (context: AgentRunContext) => Promise<string | undefined>
@@ -191,7 +198,7 @@ export class CompanionController {
 
   /** The nearest earlier step whose kind this companion reviews (the producer), or -1. */
   private producerIndexFor(instance: ExecutionInstance, step: PipelineStep): number {
-    const targets = companionTargets(step.agentKind)
+    const targets = companionTargets(step.agentKind, this.deps.agentKindRegistry)
     for (let i = instance.currentStep - 1; i >= 0; i--) {
       if (targets.includes(instance.steps[i]!.agentKind)) return i
     }
@@ -229,7 +236,7 @@ export class CompanionController {
   ): Promise<AdvanceResult> {
     const { producerIndex, assessment, result } = grading
     const companion = step.companion ?? {
-      threshold: companionFor(step.agentKind)?.defaultThreshold ?? 0.8,
+      threshold: companionFor(step.agentKind, this.deps.agentKindRegistry)?.defaultThreshold ?? 0.8,
       maxAttempts: DEFAULT_COMPANION_MAX_ATTEMPTS,
       attempts: 0,
       verdicts: [],

@@ -37,6 +37,7 @@ const AGENT_KINDS: AgentKind[] = [
   'business-reviewer',
   'human-test',
   'visual-confirmation',
+  'disposer',
 ]
 const BLOCK_TYPES: BlockType[] = [
   'frontend',

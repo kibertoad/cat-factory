@@ -92,10 +92,10 @@ export interface DebugInfraLogEntry {
   workspaceId: string
 }
 
-export type DebugInfraLogEntryOperation = 'provision' | 'teardown' | 'status' | 'dispatch' | 'release' | 'poll-failure'
+export type DebugInfraLogEntryOperation = 'provision' | 'teardown' | 'teardown-verify' | 'status' | 'dispatch' | 'release' | 'poll-failure'
 
 /** Every `DebugInfraLogEntryOperation` value, for exhaustive handling and runtime validation. */
-export const DEBUG_INFRA_LOG_ENTRY_OPERATION_VALUES = ['provision', 'teardown', 'status', 'dispatch', 'release', 'poll-failure'] as const
+export const DEBUG_INFRA_LOG_ENTRY_OPERATION_VALUES = ['provision', 'teardown', 'teardown-verify', 'status', 'dispatch', 'release', 'poll-failure'] as const
 
 export type DebugInfraLogEntryOutcome = 'success' | 'failure'
 
@@ -845,13 +845,21 @@ export interface PublicInputGateDecision {
 
 export interface PublicInputGateDecisionIssue {
   code: PublicInputGateDecisionIssueCode
+  field?: PublicInputGateDecisionIssueField
   severity: PublicInputGateDecisionIssueSeverity
 }
 
-export type PublicInputGateDecisionIssueCode = 'description_missing' | 'description_placeholder' | 'description_thin' | 'reproduction_missing' | 'review_target_missing' | 'success_criteria_missing'
+export type PublicInputGateDecisionIssueCode = 'description_missing' | 'description_placeholder' | 'description_thin' | 'reproduction_missing' | 'review_target_missing' | 'success_criteria_missing' | 'required_field_missing'
 
 /** Every `PublicInputGateDecisionIssueCode` value, for exhaustive handling and runtime validation. */
-export const PUBLIC_INPUT_GATE_DECISION_ISSUE_CODE_VALUES = ['description_missing', 'description_placeholder', 'description_thin', 'reproduction_missing', 'review_target_missing', 'success_criteria_missing'] as const
+export const PUBLIC_INPUT_GATE_DECISION_ISSUE_CODE_VALUES = ['description_missing', 'description_placeholder', 'description_thin', 'reproduction_missing', 'review_target_missing', 'success_criteria_missing', 'required_field_missing'] as const
+
+export interface PublicInputGateDecisionIssueField {
+  /** Length 1..200. */
+  key: string
+  /** Length 1..200. */
+  label: string
+}
 
 export type PublicInputGateDecisionIssueSeverity = 'blocking' | 'advisory'
 

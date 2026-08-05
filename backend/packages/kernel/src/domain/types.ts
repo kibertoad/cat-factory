@@ -165,6 +165,9 @@ export type {
   EnvironmentHttpMethod,
   EnvironmentRequestTemplate,
   EnvironmentStatus,
+  // What an independent probe found after a teardown call succeeded — the difference between
+  // the provider accepting the destroy request and the environment actually being gone.
+  TeardownConfirmation,
   EnvironmentAccessScheme,
   EnvironmentAccessMapping,
   EnvironmentResponseMapping,

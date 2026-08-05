@@ -259,7 +259,10 @@ export {
 } from './modules/environments/HttpEnvironmentProvider.js'
 export {
   isDeployStep,
+  isDisposeStep,
+  classifyTeardownProbe,
   DEPLOYER_AGENT_KIND,
+  DISPOSER_AGENT_KIND,
   ENVIRONMENT_BLOCK_TYPE,
 } from './modules/environments/environments.logic.js'
 

@@ -102,6 +102,38 @@ export const environmentStatusSchema = v.picklist([
 ])
 export type EnvironmentStatus = v.InferOutput<typeof environmentStatusSchema>
 
+/**
+ * What an INDEPENDENT probe found after a teardown call succeeded — the difference between
+ * "the provider accepted the destroy request" and "the environment is gone".
+ *
+ * The two are routinely not the same thing, which is why this exists as a computed observation
+ * rather than a boolean read off the teardown call's own return value. A manifest-driven
+ * provider whose manifest declares no `teardown:` template destroys nothing and reports
+ * `torn_down`; a Kubernetes namespace `DELETE` returns immediately while the namespace sits in
+ * `Terminating` for however long its finalizers take. Recording either as a reclaimed
+ * environment is how a still-running, still-billing environment comes to be reported as torn
+ * down on a pull request.
+ *
+ * The four are kept apart because each is a different person's problem:
+ *  - `confirmed`:     the probe says the environment is gone. The only state that proves it.
+ *  - `still_standing`: the probe says it is STILL THERE. The teardown was a no-op (typically a
+ *                       manifest with no `teardown:` template) and somebody has to reclaim it
+ *                       AND fix the provider config, or every future run leaks one too.
+ *  - `unverifiable`:   the provider offers no way to check (its probe is not implemented, or it
+ *                       cannot describe a resource that no longer exists). A CONFIGURATION
+ *                       fact, unchanged between runs, and not something a retry fixes.
+ *  - `unconfirmed`:    the probe ran and could not settle the question — it errored, or the
+ *                       resource is mid-`Terminating`. TRANSIENT: the TTL sweep re-probes, and
+ *                       the answer may well be `confirmed` next pass.
+ */
+export const teardownConfirmationSchema = v.picklist([
+  'confirmed',
+  'still_standing',
+  'unverifiable',
+  'unconfirmed',
+])
+export type TeardownConfirmation = v.InferOutput<typeof teardownConfirmationSchema>
+
 export const environmentAccessSchemeSchema = v.picklist([
   'none',
   'bearer',

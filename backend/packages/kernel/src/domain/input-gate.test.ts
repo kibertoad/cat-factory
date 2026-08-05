@@ -6,8 +6,10 @@ import {
   evaluateInputGate,
   hasBlockingInputIssues,
   INPUT_GATE_SEVERITY,
+  inputGateInputOf,
   type InputGateInput,
 } from './input-gate.js'
+import { defaultTaskTypeRegistry } from './task-type-registry.js'
 
 const task = (over: Partial<InputGateInput> = {}): InputGateInput => ({
   title: 'Add a retry to the webhook sender',
@@ -215,5 +217,215 @@ describe('describeInputGateIssues', () => {
   it('falls back to the advisory findings when nothing blocks', () => {
     const verdict = evaluateInputGate(task({ description: 'make it faster' }), 'standard')
     expect(describeInputGateIssues(verdict.issues)).toBe('description_thin')
+  })
+
+  it('names WHICH field a repeatable finding is about', () => {
+    // `required_field_missing` is the one code that can appear more than once, so on its own it
+    // renders as the same word repeated: a count, and nothing an operator reading the log line
+    // or the parked step's detail could act on. The KEY rides along (stable, greppable), not the
+    // deployment's label (prose that gets re-worded).
+    const verdict = evaluateInputGate(
+      {
+        title: 'EU shard outage',
+        description: 'The EU shard started refusing writes at 14:02 and recovered at 14:19.',
+        level: 'task',
+        taskType: 'acme:incident',
+        customFields: [
+          { key: 'impact', label: 'Customer impact', required: true },
+          { key: 'sev', label: 'Severity', required: true },
+        ],
+        taskTypeFields: { custom: {} },
+      },
+      'standard',
+    )
+    expect(describeInputGateIssues(verdict.issues)).toBe(
+      'required_field_missing(impact), required_field_missing(sev)',
+    )
+  })
+})
+
+describe('evaluateInputGate: a custom task type’s own required fields', () => {
+  const incident = (over: Partial<InputGateInput> = {}): InputGateInput =>
+    task({
+      taskType: 'acme:incident',
+      customFields: [
+        { key: 'impact', label: 'Customer impact', required: true },
+        { key: 'runbook', label: 'Runbook link' },
+        { key: 'sev', label: 'Severity', type: 'select', required: true },
+      ],
+      ...over,
+    })
+
+  it('parks on each unanswered required field, naming it', () => {
+    const verdict = evaluateInputGate(incident({ taskTypeFields: { custom: {} } }), 'standard')
+    // ONE finding per field: three unanswered fields are three things to go and do, and a
+    // human told "a required field is missing" would fix one and be parked again.
+    expect(verdict.issues.map((i) => i.field?.key)).toEqual(['impact', 'sev'])
+    // The deployment-supplied label rides along, because the platform has no vocabulary of its
+    // own for somebody else's task type and cannot write the sentence without it.
+    expect(verdict.issues[0]?.field?.label).toBe('Customer impact')
+    expect(verdict.status).toBe('blocked')
+  })
+
+  it('is satisfied by an answered field, whatever its type', () => {
+    const verdict = evaluateInputGate(
+      incident({ taskTypeFields: { custom: { impact: '4k users on the EU shard', sev: 'high' } } }),
+      'standard',
+    )
+    expect(verdict.status).toBe('passed')
+    expect(verdict.issues).toEqual([])
+  })
+
+  it('treats whitespace and an empty list as unanswered', () => {
+    // The same `isFilled` rule the create form applies, so the two doors cannot disagree about
+    // what counts as an answer.
+    const verdict = evaluateInputGate(
+      incident({
+        customFields: [
+          { key: 'areas', label: 'Affected areas', type: 'checkbox-group', required: true },
+        ],
+        taskTypeFields: { custom: { areas: [] } },
+      }),
+      'standard',
+    )
+    expect(verdict.issues.map((i) => i.field?.key)).toEqual(['areas'])
+  })
+
+  it('never requires a field its own showWhen would have HIDDEN', () => {
+    // The trap worth pinning: a form that never showed the field cannot have asked for it, so
+    // parking here would name an input with nowhere to go and fill it in.
+    const verdict = evaluateInputGate(
+      incident({
+        customFields: [
+          { key: 'external', label: 'Customer facing', type: 'checkbox' },
+          {
+            key: 'statusPage',
+            label: 'Status page URL',
+            required: true,
+            showWhen: { key: 'external', equals: true },
+          },
+        ],
+        taskTypeFields: { custom: {} },
+      }),
+      'standard',
+    )
+    expect(verdict.status).toBe('passed')
+
+    // …and requires it the moment the condition is met.
+    const shown = evaluateInputGate(
+      incident({
+        customFields: [
+          { key: 'external', label: 'Customer facing', type: 'checkbox' },
+          {
+            key: 'statusPage',
+            label: 'Status page URL',
+            required: true,
+            showWhen: { key: 'external', equals: true },
+          },
+        ],
+        taskTypeFields: { custom: { external: true } },
+      }),
+      'standard',
+    )
+    expect(shown.issues.map((i) => i.field?.key)).toEqual(['statusPage'])
+  })
+
+  it('finds nothing for a namespaced type no deployment registered', () => {
+    // Stale data after an extension was removed. A gone registration declares nothing, which is
+    // the honest answer: inventing a requirement for a type nothing can describe would park a
+    // run on a field no form will ever offer.
+    const verdict = evaluateInputGate(
+      task({ taskType: 'acme:incident', taskTypeFields: { custom: {} } }),
+      'standard',
+    )
+    expect(verdict.status).toBe('passed')
+  })
+
+  it('is softened by advisory mode like every other finding', () => {
+    const verdict = evaluateInputGate(incident({ taskTypeFields: { custom: {} } }), 'advisory')
+    expect(verdict.status).toBe('passed')
+    expect(verdict.issues.every((i) => i.severity === 'advisory')).toBe(true)
+  })
+
+  it('stacks with the description checks rather than replacing them', () => {
+    const verdict = evaluateInputGate(
+      incident({ description: '', taskTypeFields: { custom: {} } }),
+      'standard',
+    )
+    expect(verdict.issues.map((i) => i.code)).toEqual([
+      'description_missing',
+      'required_field_missing',
+      'required_field_missing',
+    ])
+  })
+})
+
+describe('inputGateInputOf', () => {
+  it('resolves a custom type’s declared fields off the registry', () => {
+    // The ONE mapping every evaluation site goes through, which is why the registry is a
+    // REQUIRED argument: a call site that could omit it would silently judge a deployment's
+    // task type as declaring nothing, and nothing about that reads as wrong.
+    const registry = defaultTaskTypeRegistry()
+    registry.register({
+      taskType: 'acme:incident',
+      presentation: {
+        label: 'Incident',
+        icon: 'i-lucide-siren',
+        color: 'red',
+        description: 'An incident.',
+      },
+      fields: [{ key: 'impact', label: 'Customer impact', required: true }],
+    })
+    const input = inputGateInputOf(
+      {
+        title: 'Shard outage',
+        description: 'x'.repeat(40),
+        level: 'task',
+        taskType: 'acme:incident',
+      },
+      registry,
+    )
+    expect(input.customFields?.map((f) => f.key)).toEqual(['impact'])
+    expect(evaluateInputGate(input, 'standard').status).toBe('blocked')
+  })
+
+  it('resolves nothing for a BUILT-IN type, which declares no descriptor fields', () => {
+    const input = inputGateInputOf(
+      { title: 'Retry webhooks', description: 'x'.repeat(40), level: 'task', taskType: 'feature' },
+      defaultTaskTypeRegistry(),
+    )
+    expect(input.customFields).toBeUndefined()
+  })
+
+  it('stands down for a type whose bespoke formPanel owns the whole bag', () => {
+    // The second of the two stand-downs this shares with the CREATE door
+    // (`taskTypeCreationDefaults`'s `checkCustomFields`), and the one with no other test: a
+    // `formPanel` type's descriptor fields are not what its bespoke section collected, so
+    // requiring them would park a run on inputs the form it was authored in never offered.
+    // The doors agreeing is the entire argument for reading the existing declaration instead of
+    // adding a second one, so a drift here is the argument quietly failing.
+    const registry = defaultTaskTypeRegistry()
+    const presentation = {
+      label: 'Incident',
+      icon: 'i-lucide-siren',
+      color: 'red',
+      description: 'An incident.',
+    }
+    const fields = [{ key: 'impact', label: 'Customer impact', required: true }]
+    registry.register({ taskType: 'acme:incident', presentation, fields, formPanel: 'acme:form' })
+    const block = {
+      title: 'Shard outage',
+      description: 'x'.repeat(40),
+      level: 'task' as const,
+      taskType: 'acme:incident',
+    }
+    expect(inputGateInputOf(block, registry).customFields).toBeUndefined()
+    expect(evaluateInputGate(inputGateInputOf(block, registry), 'standard').status).toBe('passed')
+
+    // ...and the SAME declaration without the panel is required, so the stand-down is what is
+    // being asserted rather than the fields being unreadable.
+    const plain = defaultTaskTypeRegistry()
+    plain.register({ taskType: 'acme:incident', presentation, fields })
+    expect(evaluateInputGate(inputGateInputOf(block, plain), 'standard').status).toBe('blocked')
   })
 })

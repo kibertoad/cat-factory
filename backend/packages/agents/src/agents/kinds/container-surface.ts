@@ -1,6 +1,6 @@
 import type { AgentKind } from '@cat-factory/kernel'
-import type { AgentKindRegistry } from './registry.js'
 import { isContainerBackedCompanion } from './companions.js'
+import type { AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
 // The ONE definition of "does this dispatch hand the agent a real checkout?".
@@ -84,7 +84,7 @@ export function runsInContainer(kind: AgentKind, registry: AgentKindRegistry): b
   return (
     CONTAINER_AGENT_KINDS.has(kind) ||
     registry.requiresContainer(kind) ||
-    isContainerBackedCompanion(kind)
+    isContainerBackedCompanion(kind, registry)
   )
 }
 

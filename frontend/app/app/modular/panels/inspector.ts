@@ -21,6 +21,7 @@ import TaskEstimateBadge from '~/components/panels/inspector/TaskEstimateBadge.v
 import TaskDependencies from '~/components/panels/inspector/TaskDependencies.vue'
 import TaskRunSettings from '~/components/panels/inspector/TaskRunSettings.vue'
 import TaskAgentConfig from '~/components/panels/inspector/TaskAgentConfig.vue'
+import TaskTypeFields from '~/components/panels/inspector/TaskTypeFields.vue'
 import TaskStructure from '~/components/panels/inspector/TaskStructure.vue'
 import ContainerSummary from '~/components/panels/inspector/ContainerSummary.vue'
 import FrontendConfig from '~/components/panels/inspector/FrontendConfig.vue'
@@ -75,6 +76,7 @@ const COMPONENTS: Record<InspectorPanelId, Component> = {
   'task-dependencies': TaskDependencies,
   'task-run-settings': TaskRunSettings,
   'task-agent-config': TaskAgentConfig,
+  'task-type-fields': TaskTypeFields,
   'task-structure': TaskStructure,
   'container-summary': ContainerSummary,
   'frontend-config': FrontendConfig,

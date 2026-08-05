@@ -98,7 +98,9 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   the distinction is an ORACLE (password reset: "no such token" vs "expired" vs "used").
   Every envelope also carries the request's `requestId` (see below).
 - `http/requestLogging.ts`: `mountRequestLogging`, mounted **first** by both facades (before
-  CORS and the per-request container). Mints/adopts `X-Request-Id`, binds a request-scoped child
+  CORS and the per-request container). Mints/adopts `X-Request-Id`, adopts an inbound W3C
+  `traceparent` as `{ traceId, spanId }` (kernel's `parseTraceparent`; malformed ⇒ ignored, never
+  refused), binds a request-scoped child
   logger, echoes the id on the response + in every error envelope, and logs one line per request
   (`info`, 4xx `warn`, 5xx `error`). Reach the bound logger from a controller with
   `requestLogger(c)`. ⚠️ It deliberately does NOT set the header on a 101: Hono implements a
