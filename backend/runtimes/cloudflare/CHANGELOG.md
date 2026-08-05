@@ -1,5 +1,13 @@
 # @cat-factory/worker
 
+## 0.160.1
+
+### Patch Changes
+
+- 5e71978: Split the Worker's agent-executor resolution out of `buildWorkerCoreDependencies` into
+  `selectWorkerAgentExecutor`, matching the file's existing selector idiom. No behaviour change: the
+  executor is composed from the same inputs in the same order, and the test override still wins.
+
 ## 0.160.0
 
 ### Minor Changes
