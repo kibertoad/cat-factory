@@ -1,5 +1,5 @@
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
-import type { ReviewQuestionPost, TaskRecord } from '@cat-factory/kernel'
+import type { ReviewQuestionPost, ReviewQuestionSubject, TaskRecord } from '@cat-factory/kernel'
 // The marker every platform-authored tracker comment opens with. Shared with the reply renderer
 // (and the ingest guard that keys off it) so the two can never emit different prefixes — a comment
 // this side stopped marking is a comment the reply path would start ingesting as a human's.
@@ -66,30 +66,60 @@ function safeProse(value: string, max: number): string {
 }
 
 /**
- * Render a parked headless requirements review's open findings as a tracker comment.
+ * Per-subject copy: what the run stopped to establish, and which decision route answers it.
  *
- * Two properties are load-bearing:
+ * A `Record` over the closed {@link ReviewQuestionSubject} union rather than a branch, so adding a
+ * subject cannot ship with the requirements loop's wording (and, worse, the requirements loop's
+ * route) on a comment about something else. `route` is the path SEGMENT the public decision
+ * surface mounts each review family under.
+ */
+const SUBJECT_COPY: Record<ReviewQuestionSubject, { opening: string; route: string }> = {
+  requirements: {
+    opening:
+      'cat-factory paused this work to get its requirements straight. It raised {n} ' +
+      'open question{s} (review pass {i} of {max}) and the run is waiting for answers before ' +
+      'any code is written.',
+    route: 'requirements',
+  },
+  clarity: {
+    opening:
+      'cat-factory cannot confidently fix this bug from the report as written. It raised {n} ' +
+      'open question{s} (triage pass {i} of {max}) and the run is waiting for answers.',
+    route: 'clarity',
+  },
+}
+
+/**
+ * Render a parked review's open findings as a tracker comment.
+ *
+ * Three properties are load-bearing:
  *
  * - **Every finding is rendered with its stable id.** That id is what a caller passes to
- *   `POST /api/v1/runs/:runId/decisions/requirements/items/:itemId/reply`, and (slice 2b) what
- *   a ticket reply names. A comment without ids is unanswerable, so the id leads each entry.
- *   Ids are platform-minted, so they are the ONE thing here rendered verbatim.
- * - **The comment states where answers go.** A headless run has no human in the app by
- *   definition; a question with no reply channel is worse than no question.
+ *   `POST /api/v1/runs/:runId/decisions/<subject>/items/:itemId/reply`, and what a ticket reply
+ *   names. A comment without ids is unanswerable, so the id leads each entry. Ids are
+ *   platform-minted, so they are the ONE thing here rendered verbatim.
+ * - **The comment states BOTH places an answer can go**, the reply grammar first. The reporter
+ *   is reading this in their tracker, and telling them only about an HTTP route asks the one
+ *   person who came through the ticket to leave it. The API line stays for the integration
+ *   watching the same run.
+ * - **The wording matches the SUBJECT.** A bug reporter asked to "get the requirements straight"
+ *   reasonably concludes the comment landed on the wrong ticket.
  *
  * Markdown is the common denominator: GitHub renders it natively, and the Jira/Linear paths
  * convert it (Jira via the ADF payload builder, Linear natively) exactly as they already do
  * for the PR-open/PR-merge comments.
  */
 export function renderReviewQuestionsComment(post: ReviewQuestionPost): string {
+  const copy = SUBJECT_COPY[post.subject]
   const shown = post.findings.slice(0, MAX_FINDINGS)
   const omitted = post.findings.length - shown.length
   const lines = [
     PLATFORM_COMMENT_MARKER +
-      'cat-factory paused this work to get its requirements straight. It raised ' +
-      `${post.findings.length} open question${post.findings.length === 1 ? '' : 's'} ` +
-      `(review pass ${post.iteration} of ${post.maxIterations}) and the run is waiting for ` +
-      'answers before any code is written.',
+      copy.opening
+        .replace('{n}', String(post.findings.length))
+        .replace('{s}', post.findings.length === 1 ? '' : 's')
+        .replace('{i}', String(post.iteration))
+        .replace('{max}', String(post.maxIterations)),
     '',
   ]
   for (const finding of shown) {
@@ -108,9 +138,10 @@ export function renderReviewQuestionsComment(post: ReviewQuestionPost): string {
     )
   }
   lines.push(
-    'Answer each question by its id through the platform API — ' +
-      `\`POST /api/v1/runs/${post.runId}/decisions/requirements/items/<id>/reply\` — or dismiss ` +
-      'the ones that do not apply. The run resumes as soon as none are left open.',
+    'Answer here by replying with `@cat-factory answer <id> <your answer>` on its own line for ' +
+      'each (or `@cat-factory dismiss <id>` for the ones that do not apply). The same answers go ' +
+      `through the platform API at \`POST /api/v1/runs/${post.runId}/decisions/${copy.route}/items/<id>/reply\`. ` +
+      'The run resumes as soon as none are left open.',
   )
   return capComment(lines.join('\n'))
 }

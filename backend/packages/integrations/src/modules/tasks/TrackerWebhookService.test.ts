@@ -114,7 +114,7 @@ function makeService(
     taskConnectionRepository: {
       getByWorkspace: async () => ({ credentials: {} }),
     } as never,
-    reviewGateway: gateway,
+    reviewGateways: { requirements: gateway },
     commentIngestRepository: makeMarkers(),
     ...over,
   })
@@ -315,10 +315,12 @@ describe('TrackerWebhookService — ticket replies', () => {
     const settle = vi.fn(async () => {})
     const { gateway } = makeGateway(review([item('a')]))
     const service = makeService(gateway, {
-      reviewGateway: {
-        ...gateway,
-        replyToItem: async () => {
-          throw new Error('boom at https://tracker.test?token=sk-secret')
+      reviewGateways: {
+        requirements: {
+          ...gateway,
+          replyToItem: async () => {
+            throw new Error('boom at https://tracker.test?token=sk-secret')
+          },
         },
       },
       commentIngestRepository: { claim: async () => true, settle, get: async () => null },
@@ -329,6 +331,77 @@ describe('TrackerWebhookService — ticket replies', () => {
       expect.objectContaining({ status: 'failed' }),
       expect.any(Number),
     )
+  })
+})
+
+// A block can hold a live review of BOTH subjects — a task re-run under a different pipeline
+// leaves the earlier one behind — and both were posted onto the same issue with their own ids, so
+// the comment itself is the only thing that says which loop the reporter is in.
+describe('TrackerWebhookService — which review a reply reaches', () => {
+  /** A clarity-shaped gateway: same lifecycle, its own review id and its own item ids. */
+  function makeClarity(items: RequirementReviewItem[], over: Partial<RequirementReview> = {}) {
+    return makeGateway(review(items, { id: 'clr_1', ...over }))
+  }
+
+  it('drives the clarity review when the comment names one of ITS findings', async () => {
+    const requirements = makeGateway(review([item('req_a')]))
+    const clarity = makeClarity([item('clri_a')])
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: requirements.gateway, clarity: clarity.gateway },
+    })
+    const outcome = await service.handle(
+      'ws1',
+      comment('@cat-factory answer clri_a Chrome 120 on macOS'),
+    )
+    expect(outcome).toEqual({ kind: 'reply', outcome: 'incorporating' })
+    expect(clarity.calls).toEqual(['reply:clri_a', 'incorporate'])
+    expect(requirements.calls).toEqual([])
+  })
+
+  it('falls back to the review still WAITING when a control verb names no id', async () => {
+    // `proceed` is about the loop that stopped the run; a settled review is not it.
+    const requirements = makeGateway(review([item('req_a')], { status: 'incorporated' }))
+    const clarity = makeClarity([item('clri_a')], { status: 'exceeded' })
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: requirements.gateway, clarity: clarity.gateway },
+    })
+    expect(await service.handle('ws1', comment('@cat-factory proceed'))).toEqual({
+      kind: 'reply',
+      outcome: 'resolved',
+    })
+    expect(clarity.calls).toEqual(['resolveExceeded:proceed'])
+    expect(requirements.calls).toEqual([])
+  })
+
+  it('acknowledges the SUBJECT it reached, so the reporter is not told about requirements', async () => {
+    const clarity = makeClarity([item('clri_a'), item('clri_b')])
+    const ack = vi.fn(makeAckSpy)
+    const service = makeService(clarity.gateway, {
+      reviewGateways: { clarity: clarity.gateway },
+      issueWriteback: { postReviewReplyAck: ack },
+    })
+    await service.handle('ws1', comment('@cat-factory answer clri_a it crashes on save'))
+    expect(ack.mock.calls[0]![2]).toMatchObject({ subject: 'clarity', answered: ['clri_a'] })
+  })
+
+  it('ignores a reply when the only wired subject has no review for the block', async () => {
+    const requirements = makeGateway(review([item('req_a')]))
+    const service = makeService(requirements.gateway, {
+      reviewGateways: { requirements: { ...requirements.gateway, getForBlock: async () => null } },
+    })
+    expect(await service.handle('ws1', comment('@cat-factory proceed'))).toEqual({
+      kind: 'ignored',
+      reason: 'no_review',
+    })
+  })
+
+  it('ignores a reply when no subject is wired at all', async () => {
+    const requirements = makeGateway(review([item('req_a')]))
+    const service = makeService(requirements.gateway, { reviewGateways: {} })
+    expect(await service.handle('ws1', comment('@cat-factory proceed'))).toEqual({
+      kind: 'ignored',
+      reason: 'replies_not_wired',
+    })
   })
 })
 
@@ -363,6 +436,7 @@ describe('TrackerWebhookService — ingest safety', () => {
     const markers = makeMarkers()
     const service = makeService(gateway, { commentIngestRepository: markers })
     const ourOwn = renderReviewReplyAck({
+      subject: 'requirements',
       reviewId: 'rrv_1',
       runId: 'run_1',
       outcome: 'awaiting',

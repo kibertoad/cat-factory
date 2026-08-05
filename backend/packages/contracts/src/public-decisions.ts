@@ -682,6 +682,40 @@ export const publicDecisionSchema = v.variant('kind', [
 export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
 
 /**
+ * Why a wait this surface cannot answer is holding the run. A CLOSED vocabulary, so an
+ * integration maps each cause to its own copy and its own escalation instead of parsing prose:
+ *
+ * - `human_wait_gate` — a shipped gate whose poll has no deadline because a PERSON is the gate
+ *   (`human-review`). Its answer is that person acting on the pull request, not an API call this
+ *   surface could offer, so there is nothing here to build.
+ * - `unclassified_gate` — a gate the DEPLOYMENT registered. Whether it ever ends on its own is
+ *   declared inside the object its factory builds, which no request-time read can reach, so this
+ *   surface says what it knows (the run is sitting on this gate) rather than guessing which.
+ *   Whoever registered the gate owns its answer.
+ * - `unwired_interview_gate` — an interviewer this deployment REGISTERED as an agent kind but
+ *   never wired a controller for. The run is genuinely parked on its questions and no surface,
+ *   here or in the app, can read them; the fix belongs to the operator, not the caller.
+ */
+export const publicUnanswerableReasonSchema = v.picklist([
+  'human_wait_gate',
+  'unclassified_gate',
+  'unwired_interview_gate',
+])
+export type PublicUnanswerableReason = v.InferOutput<typeof publicUnanswerableReasonSchema>
+
+/** One wait holding a run that `/api/v1/runs/:runId/decisions` cannot answer. */
+export const publicUnanswerableWaitSchema = v.object({
+  reason: publicUnanswerableReasonSchema,
+  /** The step kind holding the run: the gate's kind, or the interviewer's agent kind. */
+  stepKind: v.string(),
+  /** Its index in the run's step chain, so a caller can line it up with `publicRun.steps`. */
+  stepIndex: v.number(),
+  /** Where the answer actually lives, in prose, for a human reading a log or an alert. */
+  detail: v.string(),
+})
+export type PublicUnanswerableWait = v.InferOutput<typeof publicUnanswerableWaitSchema>
+
+/**
  * What a run is currently asking a human, and whether it has STOPPED to ask. The two are related
  * but not the same question, and a caller that treats `parked` as a gate on reading `decisions`
  * gets the common case right and the useful case wrong:
@@ -692,14 +726,10 @@ export type PublicDecision = v.InferOutput<typeof publicDecisionSchema>
  *   `follow-ups` does this: the Coder streams its items mid-run and they can be decided before it
  *   finishes, so an integration that polls `decisions` regardless of `parked` never sees the run
  *   stop at all. One that reads `decisions` only when `parked` is true still works, it just waits.
- * - `parked: true`, EMPTY list: the deliberately loud case. The run is waiting on a surface this
- *   projection does not model, and an empty list is the honest report of that rather than a silent
- *   `parked: false`. Two parks are still expected to produce it: `human-review`, whose answer is a
- *   person approving the PR on the VCS host rather than an API call; and an unbounded human-wait
- *   GATE a deployment registered itself, which this projection has no way to read and whose answer
- *   lives wherever that deployment put it.
- * - `parked: false`, empty list: the run is simply still working.
+ * - EMPTY list: the run is either still working or waiting on something this surface cannot
+ *   answer. `unanswerable` is what tells the two apart — see below.
  */
+
 export const publicDecisionListSchema = v.object({
   runId: v.string(),
   taskId: v.string(),
@@ -711,6 +741,25 @@ export const publicDecisionListSchema = v.object({
    */
   parked: v.boolean(),
   decisions: v.array(publicDecisionSchema),
+  /**
+   * Waits holding the run that this surface cannot answer, each NAMED.
+   *
+   * This is what an empty `decisions` used to leave as a riddle: a run stopped on a surface the
+   * projection does not model reported `parked: true` with nothing in it, indistinguishable from a
+   * bug, and a caller's only recourse was to stop the run. Reporting the wait does not make it
+   * answerable here (by construction it is not), but it turns "something is wrong" into "a person
+   * has to review the pull request", which is the difference between escalating to a human and
+   * cancelling the work.
+   *
+   * Deliberately NOT gated on `parked`. An unbounded wait GATE keeps the run `running` between
+   * polls rather than `blocked` — the honest state, since the engine is still probing — so the
+   * riddle's worst form is a run that reads as working and never moves. Populated whenever a wait
+   * is present, so a poller reading only this field sees it either way.
+   *
+   * A BOUNDED built-in gate (`ci`, `conflicts`) is never listed: it resolves itself, and putting
+   * it here would read as a demand for a human that nobody has to meet.
+   */
+  unanswerable: v.array(publicUnanswerableWaitSchema),
 })
 export type PublicDecisionList = v.InferOutput<typeof publicDecisionListSchema>
 

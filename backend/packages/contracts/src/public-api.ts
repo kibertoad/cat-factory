@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import { documentSourceKindSchema } from './documents.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
+import { publicApiScopeSchema } from './public-api-keys.js'
 import { taskSourceKindSchema } from './tasks.js'
 
 // ---------------------------------------------------------------------------
@@ -547,3 +548,35 @@ export const publicUsageSchema = v.object({
   rows: v.array(publicUsageRowSchema),
 })
 export type PublicUsage = v.InferOutput<typeof publicUsageSchema>
+
+/**
+ * What the CALLING key is, and what it may do — the answer to a question every integration has at
+ * startup and could previously only get by attempting an action and reading the 403.
+ *
+ * Deliberately a small resource of its own rather than the `publicApiKey` row `/api/v1/keys`
+ * lists: this answers "who am I", which is a fact about the request, and it must stay answerable
+ * to EVERY key (a `read` one included), where listing keys is an `admin` operation. Serving the
+ * row here would also publish a shape whose audience is key ADMINISTRATION, dragging revocation
+ * and provenance fields into the one call an integration makes before it does anything.
+ *
+ * Carries no secret and no hash. The key already knows its own secret, and nothing else here
+ * would be recoverable from it anyway.
+ */
+export const publicIdentitySchema = v.object({
+  /** The `pak_*` id of the key on this request — the non-secret half of the token. */
+  keyId: v.string(),
+  /** The account the key belongs to. */
+  accountId: v.string(),
+  /** The ONE workspace every call under this key acts within. */
+  workspaceId: v.string(),
+  /**
+   * What the key may do. The ladder is inclusive (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so an
+   * integration comparing its own scope against what it needs should test the RUNG, not equality.
+   */
+  scope: publicApiScopeSchema,
+  /** The label the key was minted with, so a caller can log which credential it is running as. */
+  label: v.string(),
+  /** When the key was minted (epoch ms). */
+  createdAt: v.number(),
+})
+export type PublicIdentity = v.InferOutput<typeof publicIdentitySchema>

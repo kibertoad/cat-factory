@@ -36,7 +36,7 @@ export {
   type OnboardingUsersProbe,
 } from './onboarding.js'
 export { makeIncorporatedReview, makeReadyReviewWithOpenItem } from './requirements-fixtures.js'
-export { makeIncorporatedClarityReview } from './clarity-fixtures.js'
+export { makeIncorporatedClarityReview, makeReadyClarityReview } from './clarity-fixtures.js'
 export {
   defineConformanceSuite,
   defineCoreConformance,

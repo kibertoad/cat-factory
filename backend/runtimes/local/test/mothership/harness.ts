@@ -11,6 +11,7 @@ import {
   deriveWorkerDatabase,
   driveWorkspace,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -507,6 +508,7 @@ export function makeMothershipConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     seedService,
     getService,
     mothershipRepos,
@@ -541,6 +543,7 @@ export function makeMothershipConformanceApp(
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     // The execution-scoped CAS assertion reads the MOTHERSHIP's execution store (the authority).
     executionRepository: () => ms.container.executionRepository,
     requirementReviewRepository: () => mothershipRepos().requirementReviewRepository,
@@ -606,6 +609,12 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
       makeIncorporatedClarityReview(blockId, report),
     )
   }
+  function seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number) {
+    return mothershipRepos().clarityReviewRepository.upsert(
+      workspaceId,
+      makeReadyClarityReview(blockId, openItems),
+    )
+  }
   function seedService(service: Service) {
     return mothershipRepos().serviceRepository.insert(service)
   }
@@ -617,6 +626,7 @@ function createMothershipSeedHelpers(db: DrizzleDb) {
     seedIncorporatedReview,
     seedReadyReview,
     seedIncorporatedClarityReview,
+    seedReadyClarityReview,
     seedService,
     getService,
     mothershipRepos,

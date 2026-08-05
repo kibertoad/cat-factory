@@ -38,6 +38,7 @@ import type {
   PublicChallengePrReviewFinding,
   PublicChooseFork,
   PublicDecisionList,
+  PublicIdentity,
   PublicIncorporate,
   PublicJob,
   PublicJobAccepted,
@@ -552,6 +553,28 @@ export class UsageResource {
     return this.#transport.request<PublicUsage>({
       method: 'GET',
       path: `/api/v1/usage`,
+      options,
+    })
+  }
+}
+
+/** What the calling key is and what it may do — the self-check an integration runs at startup. */
+export class MeResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * Describe the calling key
+   * Report what the key on this request is and what it may do: its id, its account, the ONE workspace every call under it acts within, its scope, and the label it was minted with. `read` scope, the floor of the ladder, because an integration’s startup self-check has to work whatever rung it holds. The scope ladder is INCLUSIVE (`read` ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an action needs rather than for equality.
+   * `GET /api/v1/me` — operation `getPublicIdentity`.
+   */
+  get(options: RequestOptions = {}): Promise<PublicIdentity> {
+    return this.#transport.request<PublicIdentity>({
+      method: 'GET',
+      path: `/api/v1/me`,
       options,
     })
   }
@@ -1475,6 +1498,8 @@ export abstract class CatFactoryResources {
   readonly webhook: WebhookResource
   /** The billing period's metered budget position and the per-model breakdown behind it. */
   readonly usage: UsageResource
+  /** What the calling key is and what it may do — the self-check an integration runs at startup. */
+  readonly me: MeResource
   /** Every way a run stops for a person: approval gates, review and brainstorm loops, forks, judge verdicts, PR review findings, the human-verdict gates, follow-up triage and the interview gates. */
   readonly decisions: DecisionsResource
   /** A run's recorded telemetry: LLM calls, the context each agent was given, the tool calls it made, infra logs. */
@@ -1492,6 +1517,7 @@ export abstract class CatFactoryResources {
     this.notifications = new NotificationsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)
+    this.me = new MeResource(transport)
     this.decisions = new DecisionsResource(transport)
     this.debug = new DebugResource(transport)
     this.evidence = new EvidenceResource(transport)

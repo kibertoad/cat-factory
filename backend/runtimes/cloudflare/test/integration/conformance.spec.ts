@@ -12,6 +12,7 @@ import {
   defineWorkspaceAccessSuite,
   defineWorkspaceRbacSuite,
   makeIncorporatedClarityReview,
+  makeReadyClarityReview,
   makeIncorporatedReview,
   makeOnboardingProbe,
   makeReadyReviewWithOpenItem,
@@ -192,6 +193,11 @@ const harness: ConformanceHarness = {
         new D1ClarityReviewRepository({ db: env.DB }).upsert(
           workspaceId,
           makeIncorporatedClarityReview(blockId, report),
+        ),
+      seedReadyClarityReview: (workspaceId, blockId, openItems) =>
+        new D1ClarityReviewRepository({ db: env.DB }).upsert(
+          workspaceId,
+          makeReadyClarityReview(blockId, openItems),
         ),
       seedService: (service) => new D1ServiceRepository({ db: env.DB }).insert(service),
       getService: (id) => new D1ServiceRepository({ db: env.DB }).get(id),

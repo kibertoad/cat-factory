@@ -443,10 +443,19 @@ registry the `headlessStartable` flag is computed against.
 | 2a.7 | SPA: the workspace toggle + the per-task override, all 10 locales                | ✅ done |
 | 2a.8 | Docs sweep + changeset                                                           | ✅ done |
 
-**On the subject scope.** The echo rides the REQUIREMENTS subject only (`ReviewKind.questionsOnPark`).
-The clarity gate already echoes its questions from its own `review()` closure as INTAKE semantics
-(every run, UI or headless, ungated by the workspace writeback settings) so opting it in here would
-post the same questions twice. A brainstorm dialogue has no linked-issue surface at all.
+**On the subject scope (SUPERSEDED, and worth reading for why).** Slice 2a shipped the echo on the
+REQUIREMENTS subject only. The clarity gate had a bespoke echo of its own, posting the question
+PROSE with no ids, and the reasoning recorded here was that opting it in would post the same
+questions twice. That was the right call about duplication and the wrong shape: the ids are what a
+ticket reply names, so a comment without them was unanswerable by construction, and slice 2b's
+reply grammar (ADR 0032) landed against a surface the clarity gate could never reach.
+
+Both subjects now ride `ReviewKind.questionsOnPark` (a `ReviewQuestionSubject` rather than a
+boolean), and what genuinely differs between them is read off kernel's `REVIEW_QUESTION_POLICIES`
+instead of being a second code path: `requirements` is headless-only and workspace-opt-in,
+`clarity` fires on every run and is ungated, exactly as its bespoke echo did. A brainstorm dialogue
+is still absent: it converges on a direction rather than answering a reporter's filing, and its
+block has no issue whose author asked for it.
 
 **On D8's in-app fallback.** The design asked for a failed question post to raise the in-app
 `requirement_review` card so the park is never invisible. That card is already raised

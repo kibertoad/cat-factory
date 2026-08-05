@@ -20,6 +20,26 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CONTRACTS_DIST = resolve(repoRoot, 'backend/packages/contracts/dist/index.js')
 export const OPENAPI_PATH = resolve(repoRoot, 'docs/openapi.json')
 
+/**
+ * The SERVED copy of the same document: `GET /api/v1/openapi.json` hands these bytes back.
+ *
+ * A generated TS module rather than a runtime read of `docs/openapi.json`, because neither
+ * facade can reach that path — the Worker is a bundle with no filesystem, and the published
+ * `@cat-factory/server` ships `dist` alone. It holds the spec as ONE string constant rather than
+ * an object literal for two reasons: the endpoint answers with bytes, so there is nothing to
+ * re-serialise (and therefore no way for the served document to differ from the committed one),
+ * and a 360 KB object literal would cost every `tsc` run its structural check for no gain.
+ *
+ * Both outputs come from one `buildOpenApiDoc()` call and `check:openapi` diffs both, so they
+ * cannot drift from the contracts or from each other. The `.generated.ts` suffix is load-bearing:
+ * it is what `.oxfmtrc.json` and `.oxlintrc.json` already exempt, and a formatter reflowing this
+ * file would put it permanently at odds with its own drift guard.
+ */
+export const SERVED_OPENAPI_PATH = resolve(
+  repoRoot,
+  'backend/packages/server/src/modules/publicApi/openapiDocument.generated.ts',
+)
+
 const API_PREFIX = '/api/v1'
 
 // The document's `info.version` describes the PUBLIC API surface (`/api/v1`), NOT the npm
@@ -39,7 +59,8 @@ const API_PREFIX = '/api/v1'
 // key-provisioning operations), and that number is already published against a surface WITHOUT the
 // follow-up and interview operations added here. The same collision the note above describes, the
 // second time in three releases.
-const API_VERSION = '1.11.0'
+// 1.12.0: `GET /api/v1/me`, and `unanswerable` on the decision list. Both additive.
+const API_VERSION = '1.12.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -99,6 +120,7 @@ const COMPONENT_SCHEMAS = {
   PublicUsageRow: 'publicUsageRowSchema',
   PublicUsageBudget: 'publicUsageBudgetSchema',
   PublicUsage: 'publicUsageSchema',
+  PublicIdentity: 'publicIdentitySchema',
   // Parked decisions. `PublicDecisionList` is the response of EVERY decision route, and it
   // transitively carries the full finding + fork-option + PR-finding shapes — hoisting it (and the
   // members of its variant) keeps the spec from inlining tens of KB per operation.
@@ -118,6 +140,7 @@ const COMPONENT_SCHEMAS = {
   PublicFollowUpsDecision: 'publicFollowUpsDecisionSchema',
   PublicInterviewQuestion: 'publicInterviewQuestionSchema',
   PublicInterviewDecision: 'publicInterviewDecisionSchema',
+  PublicUnanswerableWait: 'publicUnanswerableWaitSchema',
   PublicDecision: 'publicDecisionSchema',
   PublicDecisionList: 'publicDecisionListSchema',
   PublicReplyFinding: 'publicReplyFindingSchema',
@@ -308,6 +331,12 @@ const OPERATION_DOCS = {
     summary: "Read the workspace's usage for the current period",
     description:
       'Read this billing period’s METERED spend against the workspace budget (including whether it is exceeded, which pauses runs) plus the per-(billing, vendor, provider, model) token breakdown behind it. Costs on `subscription` rows are illustrative — a flat-rate plan bills nothing per token — so branch on `billing` before summing. Workspace-scoped: the account- and user-tier budgets are not reachable through this surface.',
+  },
+  getPublicIdentity: {
+    tag: 'Identity',
+    summary: 'Describe the calling key',
+    description:
+      'Report what the key on this request is and what it may do: its id, its account, the ONE workspace every call under it acts within, its scope, and the label it was minted with. `read` scope, the floor of the ladder, because an integration\u2019s startup self-check has to work whatever rung it holds. The scope ladder is INCLUSIVE (`read` \u2282 `write` \u2282 `decide` \u2282 `admin`), so compare against the rung an action needs rather than for equality.',
   },
   cancelPublicJob: {
     tag: 'Jobs',
@@ -656,6 +685,8 @@ const TAG_DESCRIPTIONS = {
   Evidence:
     'What a run PROVED: the engine’s own verification report (the same bundle it writes onto the pull request) and the binary artifacts the run captured, bytes included. The surface for a consumer that has to judge a run (accept the change, score the fleet) rather than debug one. Read-only (`read` scope).',
   Keys: 'The workspace’s public-API keys, provisioned headlessly. Requires an `admin`-scope key; a key minted here can never reach `admin` itself, and revoking a key revokes everything it minted.',
+  Identity:
+    'What the calling key is and what it may do — the self-check an integration runs at startup, so “can I do this?” does not have to be answered by attempting it and reading the 403. `read` scope.',
   Debug:
     'A run’s recorded telemetry, for diagnosing one that went wrong: the model calls it made, the context each agent was provided, the searches it ran, the tools it invoked and how its infrastructure came up. Read-only (`read` scope), and every response’s size is bounded before the request is made.',
 }
@@ -972,10 +1003,30 @@ export function serializeOpenApiDoc(doc) {
   return `${JSON.stringify(doc, null, 2)}\n`
 }
 
+/**
+ * The served copy, as a TS module. The spec rides in a JSON string literal so the endpoint can
+ * answer with the bytes verbatim; `JSON.stringify` of the serialized text is what escapes it.
+ */
+export function serializeServedOpenApiDoc(doc) {
+  return [
+    '// GENERATED by `pnpm gen:openapi` — do not edit. Change the route contracts instead.',
+    '//',
+    '// The `/api/v1` OpenAPI document, byte-identical to the committed `docs/openapi.json`, so',
+    '// `GET /api/v1/openapi.json` can hand it back on a facade with no filesystem. A single string',
+    '// rather than an object: the endpoint serves bytes, so nothing re-serialises it, and a 360 KB',
+    '// object literal would cost every typecheck its structural check for nothing.',
+    '',
+    `export const OPENAPI_JSON = ${JSON.stringify(serializeOpenApiDoc(doc))}`,
+    '',
+  ].join('\n')
+}
+
 async function main() {
   const doc = await buildOpenApiDoc()
   await writeFile(OPENAPI_PATH, serializeOpenApiDoc(doc), 'utf8')
   console.log(`Wrote ${OPENAPI_PATH}`)
+  await writeFile(SERVED_OPENAPI_PATH, serializeServedOpenApiDoc(doc), 'utf8')
+  console.log(`Wrote ${SERVED_OPENAPI_PATH}`)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -10,6 +10,7 @@ import {
   followUpLoopBudget,
 } from '@cat-factory/orchestration'
 import type { InterviewView } from '@cat-factory/orchestration'
+import { BUILTIN_GATE_KINDS, HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
 import type {
   BrainstormSession,
   BrainstormStage,
@@ -28,6 +29,7 @@ import type {
   PublicDecisionList,
   PublicPrReviewFinding,
   PublicPrReviewSlice,
+  PublicUnanswerableWait,
   RequirementReview,
   RunInputGate,
   StepApproval,
@@ -499,7 +501,7 @@ export async function buildDecisionList<E extends AppEnv>(
   const decisions: PublicDecision[] = [
     ...dialogue,
     ...fork,
-    ...interview,
+    ...interview.decisions,
     ...liveStepDecisions(execution, container.agentKindRegistry),
   ]
 
@@ -516,12 +518,75 @@ export async function buildDecisionList<E extends AppEnv>(
     status: execution.status,
     // `blocked` IS the parked state — the run is waiting on a human and will not move until one
     // of these decisions is answered. Read from the run itself rather than inferred from the
-    // decisions, so a run parked on a surface this projection doesn't model (`human-review`,
-    // whose answer is a person approving the PR on the VCS host) still reports `parked: true`
-    // with an empty list rather than silently claiming all is well.
+    // decisions, so a run parked on a surface this projection doesn't model still reports
+    // `parked: true` with an empty list rather than silently claiming all is well.
     parked: execution.status === 'blocked',
     decisions,
+    // …and `unanswerable` is what stops that empty list being a riddle: it NAMES the wait.
+    unanswerable: unanswerableWaits(execution, interview.unwiredGateKind),
   }
+}
+
+/**
+ * Every wait holding this run that the decision surface cannot answer, named.
+ *
+ * Read entirely off the instance already in hand, because each cause is visible in the step chain:
+ * a live GATE step is one whose `gate` state exists and whose step is not done, and an unwired
+ * interviewer is what {@link liveInterviewDecisions} already resolved and found no controller for.
+ *
+ * A gate is classified from what a request-time read can honestly establish, and no further:
+ * `HUMAN_WAIT_GATE_KINDS` names the shipped gates whose poll has no deadline, and a kind outside
+ * `BUILTIN_GATE_KINDS` is one the deployment registered, whose `pollExhaustion` lives on the object
+ * its factory builds and is unreadable here. The remaining built-ins are BOUNDED and deliberately
+ * absent: `ci` looping through a fixer is the gate doing its job, and listing it would read as a
+ * demand for a human nobody has to meet.
+ */
+export function unanswerableWaits(
+  execution: Pick<ExecutionInstance, 'steps'>,
+  unwiredGateKind: string | null,
+): PublicUnanswerableWait[] {
+  const waits: PublicUnanswerableWait[] = []
+  execution.steps.forEach((step, stepIndex) => {
+    if (!step.gate || step.state === 'done') return
+    if (HUMAN_WAIT_GATE_KINDS.has(step.agentKind)) {
+      waits.push({
+        reason: 'human_wait_gate',
+        stepKind: step.agentKind,
+        stepIndex,
+        detail:
+          `The run is waiting on the '${step.agentKind}' gate, which has no deadline because a ` +
+          'person is the gate. It clears when a reviewer approves the pull request on the VCS ' +
+          'host; there is no API call that answers it. Use POST /api/v1/tasks/:taskId/stop to ' +
+          'abandon the run instead.',
+      })
+      return
+    }
+    if (!BUILTIN_GATE_KINDS.has(step.agentKind)) {
+      waits.push({
+        reason: 'unclassified_gate',
+        stepKind: step.agentKind,
+        stepIndex,
+        detail:
+          `The run is on the '${step.agentKind}' gate, which this deployment registered itself. ` +
+          'Whether its poll ever ends is declared where the gate was built and cannot be read ' +
+          'here, so it may be waiting on a person indefinitely. Its answer lives wherever the ' +
+          'deployment surfaced it.',
+      })
+    }
+  })
+  if (unwiredGateKind) {
+    const stepIndex = execution.steps.findIndex((step) => step.agentKind === unwiredGateKind)
+    waits.push({
+      reason: 'unwired_interview_gate',
+      stepKind: unwiredGateKind,
+      stepIndex,
+      detail:
+        `The run is parked on the '${unwiredGateKind}' interview gate, which this deployment ` +
+        'registered as an agent kind but wired no controller for. Its questions are readable ' +
+        'from no surface, here or in the app, until the deployment wires it.',
+    })
+  }
+  return waits
 }
 
 /**
@@ -597,25 +662,32 @@ function liveBrainstormStages(kinds: Set<string>): BrainstormStage[] {
  * step-chain gating the dialogue reads use and can be, because there is no off-path interview to
  * serve: an interview exists only while its gate holds the run.
  *
- * A parked step whose gate this deployment never wired resolves to no controller and is reported
- * as nothing to answer, which is the truth: the run is stopped on a gate that cannot be driven
- * here. The routes answer such a caller with a 503 naming the unwired interviewer, rather than
- * this projection inventing a decision for it.
+ * A parked step whose gate this deployment never wired resolves to no controller and yields no
+ * decision, which is the truth — but it is REPORTED rather than dropped, as the `unwiredGateKind`
+ * this returns beside the decisions. Registered-but-unwired is a real state (admission counts the
+ * kind's trait, answering needs the controller as well), and a run stopped there used to be
+ * indistinguishable from one stopped for no visible reason at all. The routes still answer such a
+ * caller with a 503 naming the interviewer, rather than this projection inventing a decision.
  */
 async function liveInterviewDecisions<E extends AppEnv>(
   c: Context<E>,
   workspaceId: string,
   blockId: string,
   execution: ExecutionInstance,
-): Promise<PublicDecision[]> {
+): Promise<{ decisions: PublicDecision[]; unwiredGateKind: string | null }> {
   const container = c.get('container')
   const parked = findParkedInterviewStep(execution, container.agentKindRegistry)
-  if (!parked) return []
+  if (!parked) return { decisions: [], unwiredGateKind: null }
   const gate = container.executionService.interviewGateFor(parked.step.agentKind)
-  const view = await gate?.getView(workspaceId, blockId)
-  return view && view.status === 'awaiting'
-    ? [toInterviewDecision(parked.step.agentKind, blockId, view)]
-    : []
+  if (!gate) return { decisions: [], unwiredGateKind: parked.step.agentKind }
+  const view = await gate.getView(workspaceId, blockId)
+  return {
+    decisions:
+      view && view.status === 'awaiting'
+        ? [toInterviewDecision(parked.step.agentKind, blockId, view)]
+        : [],
+    unwiredGateKind: null,
+  }
 }
 
 /** The run's implementation-fork park, which the engine stores behind its own service read. */

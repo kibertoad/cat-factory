@@ -221,6 +221,16 @@ export interface ConformanceApp {
    */
   seedIncorporatedClarityReview(workspaceId: string, blockId: string, report: string): Promise<void>
   /**
+   * Seed a `ready` clarity review with `openItems` still-open findings (two by default) into the
+   * facade's real clarity store — a bug-report triage parked on a human.
+   *
+   * What it buys the suite is the half of the ticket-reply loop that is per-facade: the reply
+   * gateway for the CLARITY subject has to be composed against that facade's own clarity store
+   * and engine actions, and a facade that wired only the requirements one answers a bug
+   * reporter's comment with silence.
+   */
+  seedReadyClarityReview(workspaceId: string, blockId: string, openItems?: number): Promise<void>
+  /**
    * The facade's execution-scoped run repository over its real store, so the suite can
    * assert the optimistic-concurrency `compareAndSwap` semantics (a stale write is
    * refused, not clobbering) identically on D1 and Postgres.

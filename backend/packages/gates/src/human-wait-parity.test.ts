@@ -1,4 +1,4 @@
-import { HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
+import { BUILTIN_GATE_KINDS, HUMAN_WAIT_GATE_KINDS } from '@cat-factory/contracts'
 import { stubGateContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { gateRegistryWithBuiltins } from './index.js'
@@ -38,6 +38,15 @@ describe('human-wait gate parity', () => {
     // precisely a human park, and it is what admission must refuse a `write` key.
     const rearming = builtins.filter((g) => g.pollExhaustion === 'rearm').map((g) => g.kind)
     expect([...rearming].sort()).toEqual([...HUMAN_WAIT_GATE_KINDS].sort())
+  })
+
+  it('names exactly the shipped gates in BUILTIN_GATE_KINDS', () => {
+    // The other constant the same two packages must agree about, and it is read for its NEGATIVE:
+    // a gate step whose kind is absent was registered by the DEPLOYMENT, which is what the public
+    // decision surface reports it as when a run stops there with nothing to answer. A built-in
+    // missing here would be reported to an operator as their own registration, sending them to
+    // look for a gate they never wrote.
+    expect([...BUILTIN_GATE_KINDS].sort()).toEqual(builtins.map((g) => g.kind).sort())
   })
 
   it('keeps every bounded gate OUT of the set', () => {

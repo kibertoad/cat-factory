@@ -4,6 +4,7 @@ import { issueRefFor, renderReviewQuestionsComment } from './reviewQuestions.log
 
 function post(over: Partial<ReviewQuestionPost> = {}): ReviewQuestionPost {
   return {
+    subject: 'requirements',
     reviewId: 'rr_1',
     iteration: 1,
     maxIterations: 6,

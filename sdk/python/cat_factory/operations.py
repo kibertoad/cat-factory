@@ -46,6 +46,7 @@ from .models import (
     PublicChallengePrReviewFinding,
     PublicChooseFork,
     PublicDecisionList,
+    PublicIdentity,
     PublicIncorporate,
     PublicJob,
     PublicJobAccepted,
@@ -531,6 +532,33 @@ class UsageResource:
             timeout=timeout,
         )
         return PublicUsage.from_dict(raw)
+
+
+class MeResource:
+    """What the calling key is and what it may do — the self-check an integration runs at
+    startup.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def get(self, timeout: float | None = None) -> PublicIdentity:
+        """Describe the calling key
+        Report what the key on this request is and what it may do: its id, its account, the
+        ONE workspace every call under it acts within, its scope, and the label it was
+        minted with. `read` scope, the floor of the ladder, because an integration’s startup
+        self-check has to work whatever rung it holds. The scope ladder is INCLUSIVE (`read`
+        ⊂ `write` ⊂ `decide` ⊂ `admin`), so compare against the rung an action needs rather
+        than for equality.
+        `GET /api/v1/me` (operation `getPublicIdentity`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/me",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicIdentity.from_dict(raw)
 
 
 class DecisionsResource:
@@ -1594,6 +1622,7 @@ def build_resources(transport: Transport) -> dict[str, Any]:
         "notifications": NotificationsResource(transport),
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),
+        "me": MeResource(transport),
         "decisions": DecisionsResource(transport),
         "debug": DebugResource(transport),
         "evidence": EvidenceResource(transport),
