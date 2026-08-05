@@ -35,7 +35,7 @@ import type { TasksModule } from '@cat-factory/orchestration'
 import { LinearOAuth } from '../../auth/LinearOAuth.js'
 import { StateSigner } from '../../github/state.js'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -133,7 +133,7 @@ async function resolveListScope<E extends AppEnv>(
  */
 export function taskSourceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/task-sources', '/tasks'])
 
   // ---- source discovery ---------------------------------------------------
 

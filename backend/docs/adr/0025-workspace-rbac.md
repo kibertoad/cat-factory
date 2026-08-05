@@ -62,15 +62,42 @@ NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration)
   2. **The viewer write floor**, also in the gate: any non-GET/HEAD method requires `≥ member`,
      covering the whole member tier (`board.write` + `runs.execute`) with zero per-controller code.
      Its sole exemption is the read-only WS-ticket mint.
-  3. **The admin-tier permission gate** `requireWorkspacePermission(perm)`
-     (`server/src/http/workspaceAccess.ts`): a method-shaped Hono middleware mounted ONCE at the top
-     of each admin controller. It gates every write the controller serves (now and future) with that
-     one permission while letting reads through, and runs before the handler's 503/lookup so an
-     unauthorized member gets a clean 403 without learning whether the integration is wired. Each
-     admin controller maps to exactly ONE permission (whole-controller). Two mixed controllers
-     (`WorkspaceController`, `WorkspaceMemberController`) use the imperative `requirePermission(c,
-perm)` helper per-handler instead. A resolved-but-insufficient caller gets **403 `ForbiddenError`**
-     (`DomainErrorCode 'forbidden'`); an unresolved board gets **404** (invisibility vs insufficiency).
+  3. **The admin-tier permission gate** `mountWorkspacePermission(app, perm, prefixes)`
+     (`server/src/http/workspaceAccess.ts`): a method-shaped Hono middleware mounted on each admin
+     controller's OWN top-level path prefixes. It gates every write served under them (now and
+     future) with that one permission while letting reads through, and runs before body validation
+     and before the handler's 503/lookup, so an unauthorized member gets a clean 403 without
+     learning whether the integration is wired. Each admin controller maps to exactly ONE
+     permission. Two mixed controllers (`WorkspaceController`, `WorkspaceMemberController`) use the
+     imperative `requirePermission(c, perm)` helper per-handler instead, and one
+     (`DocumentSourceController`) splits by TIER: it gates its credential and role-link prefixes and
+     leaves its authoring writes to the viewer floor (see
+     [`document-sources.md`](../document-sources.md)). A resolved-but-insufficient caller gets
+     **403 `ForbiddenError`** (`DomainErrorCode 'forbidden'`); an unresolved board gets **404**
+     (invisibility vs insufficiency).
+
+     **The mount takes prefixes because `'*'` did not scope to the controller.** Every gate was
+     originally `app.use('*', …)`, which `app.route(prefix, sub)` re-registers as `ALL <prefix>/*` on
+     the shared app; Hono runs a matching middleware for every route registered after it, so each
+     admin gate also refused the writes of every SIBLING controller mounted later in `app.ts`. With
+     the admin document and task-source controllers registered ahead of the human-gate ones, a plain
+     `member` was refused their own review decisions, requirement answers and initiative writes with
+     `integrations.manage`; nothing caught it because an account admin resolves as a workspace admin,
+     which is who develops. No gate middleware factory is exported any more, so a `'*'` mount is
+     unrepresentable, and `http/permissionMounts.test.ts` drives `WORKSPACE_CONTROLLERS` against the
+     composed app to assert a member is refused exactly the writes their own controller gates.
+
+     **Prefixes trade the wildcard's over-reach for a possible UNDER-reach, so both directions are
+     pinned separately.** That first assertion derives what it expects from the same prefix list, so
+     it catches a gate that reaches a sibling and is structurally blind to a prefix that was never
+     declared: omitting one moves the expectation and the observation together. A second assertion
+     therefore asserts the complement without consulting the composed app at all: once a controller
+     mounts any gate, every route it serves must be covered by one of its OWN prefixes (writes
+     always; reads too on the `IncludingReads` variant), bar a write named in that test's
+     `MEMBER_TIER_WRITES` escape hatch, whose rows are also asserted to be live. A third refuses a
+     declared prefix that matches none of the controller's routes, which is dead config reading as
+     protection. `defineWorkspaceRbacSuite` cannot stand in for these: it drives ONE representative
+     write per controller, so it misses any SECOND prefix by construction.
 
 - **Caching.** Resolution runs on every workspace request (3 reads folded into one load), so it
   routes through the `workspaceAccess` AppCaches slice (group = workspace id, key = user id, negative

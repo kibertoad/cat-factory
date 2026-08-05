@@ -20,11 +20,13 @@ surfaces and the RBAC gates, plus the committed slices that close the gaps.
 
 ### 1. The designer persona cannot use the feature at all
 
-Every document-source route rides one admin gate: `documentSourceController` mounts
+**The authorization half is closed** (Track A slice 1); the discoverability half below is not.
+
+Every document-source route rode one admin gate: `documentSourceController` mounted
 `requireWorkspacePermission('integrations.manage')` on `*`, and `integrations.manage` is held by
 `admin` only (kernel `domain/workspace-access.ts`). So import-by-ref, `POST /documents/link`,
-plan and spawn are all 403 for a `member`. The Add-task modal's context picker imports-then-links
-a pasted ref, so for a member-tier designer the attach flow fails at the first write.
+plan and spawn were all 403 for a `member`. The Add-task modal's context picker imports-then-links
+a pasted ref, so for a member-tier designer the attach flow failed at the first write.
 Discoverability compounds it: the import modal is reachable only from the Integrations hub and
 the command palette, nothing on the board or the task form says "start from a design", every copy
 string is PRD/RFC-framed (`documents.connect.intro`), and no tutorial tour mentions documents.
@@ -101,17 +103,22 @@ first; E consumes D's artifact bridge. F is optional scope, committed only throu
 
 ### Track A: designer access and the start-from-design flow
 
-The target pattern for the RBAC split is the existing controller convention (ADR 0025): one
-permission per admin controller, imperative `requirePermission` where a controller mixes tiers.
-Attaching context to a task is board authoring, not integration management, so it belongs at the
-`member` tier with `board.write`; managing credentials stays admin.
+The RBAC split follows the existing controller convention (ADR 0025), and the first slice settled
+which shape it takes: the admin permission is mounted on the controller's own PATH PATTERNS and the
+member half relies on the auth gate's write floor. Attaching context to a task is board authoring,
+not integration management, so it sits at the `member` tier; managing credentials stays admin.
 
-- [ ] **Split document RBAC.** Connect/disconnect (and any credential read) keep
-      `integrations.manage`; import-by-ref, `POST /documents/link`, role-links and detach move to
-      `board.write` (imperative per-handler gates, since the controller now mixes tiers). Plan and
-      spawn create board structure, so they move to `board.write` too. Extend
-      `defineWorkspaceRbacSuite`: the member cases flip from 403 to allowed, and the connect
-      routes keep their member-403 pin.
+- [x] **Split document RBAC.** ([#1739](https://github.com/kibertoad/cat-factory/pull/1739)) Import,
+      search, plan, spawn and `POST /documents/link` are member-tier; connect/disconnect keep
+      `integrations.manage`. Two deviations from the plan above, both deliberate. The member half
+      mounts NO gate rather than an explicit `board.write` one, because the auth gate's write floor
+      already requires `≥ member` for every non-GET, so a `board.write` mount would be a no-op that
+      reads as the enforcement (`boardController`'s writes mount nothing for the same reason); and
+      the admin half is mounted on the controller's own PATH PATTERNS rather than per-handler, so
+      the refusal still lands before body validation. Role-links did NOT move: a per-DocKind
+      template tag decides what every doc run in the board writes from, which is the
+      fragment-library blast radius that keeps such config admin-tier, and no designer flow needs
+      it. `defineWorkspaceRbacSuite` asserts both halves plus the viewer floor.
 - [ ] **Figma OAuth connect.** Add `authorization_code` connect for the Figma document source
       beside the PAT field (the descriptor grows an optional OAuth half; PAT remains for
       deployments that prefer it). This is what makes "connect Figma" a designer-doable step.

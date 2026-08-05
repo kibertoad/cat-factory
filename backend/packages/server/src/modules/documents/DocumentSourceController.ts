@@ -22,7 +22,7 @@ import type { Context } from 'hono'
 import { ValidationError } from '@cat-factory/kernel'
 import type { DocumentsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { blockEditActor, requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { blockEditActor, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -48,10 +48,37 @@ function sourceParam<E extends AppEnv>(c: Context<E>): DocumentSourceKind {
  * connection management, page import, document listing, structure
  * planning/spawning, and linking a page to a block as agent context. Mounted
  * under `/workspaces/:workspaceId`.
+ *
+ * **This controller MIXES tiers, and which half a route lands in is the whole point.**
+ * Storing a credential is integration management; reaching for a page and putting it on a task is
+ * board AUTHORING, done by whoever authors the task. Holding the whole controller at
+ * `integrations.manage` made every write admin-only, so the persona the feature exists for (someone
+ * who links the spec or the design their task is about, and is not an operator) could not attach
+ * anything at all: the Add-task picker imports-then-links, so it failed on its first write. Import,
+ * search, plan, spawn and link therefore sit at the MEMBER tier the auth gate's write floor already
+ * enforces, exactly as `boardController`'s writes do, and only the two credential routes plus the
+ * workspace-wide role tags keep the admin gate below.
  */
 export function documentSourceController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  // The admin-tier half, named path by path rather than as a whole-controller mount:
+  //
+  // - connect/disconnect write and clear the per-workspace source CREDENTIAL, which is integration
+  //   management by definition. Gating at the mount rather than per-handler keeps the refusal ahead
+  //   of body validation, so a member is refused whether or not their payload is well-formed and
+  //   never learns which sources this deployment configured;
+  // - the per-DocKind template / exemplar tags are workspace-wide authoring CONFIG, not one task's
+  //   context. One tag decides what EVERY doc run in the board writes from, the same blast radius
+  //   that keeps the fragment library and the agent-prompt overrides at the admin tier. The
+  //   writes-only gate leaves the GET open, so the management panel still renders for anyone who
+  //   can read the board.
+  //
+  // Everything else this controller serves is the member half, and mounts nothing.
+  mountWorkspacePermission(app, 'integrations.manage', [
+    '/document-sources/:source/connect',
+    '/document-sources/:source/connection',
+    '/document-role-links',
+  ])
 
   // ---- source discovery ---------------------------------------------------
 
@@ -93,6 +120,9 @@ export function documentSourceController(): Hono<AppEnv> {
     return c.json(await documents.importService.listDocuments(param(c, 'workspaceId')), 200)
   })
 
+  // Member tier. It does spend an outbound call against the source under the workspace's stored
+  // credential, which is the reason the tool-server probe is gated: the difference is that here the
+  // call IS the feature, and the same credential is spent by every run a member may already start.
   buildHonoRoute(app, importDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     const document = await documents.importService.import(
@@ -117,7 +147,9 @@ export function documentSourceController(): Hono<AppEnv> {
 
   // ---- planning / spawning ------------------------------------------------
 
-  // Preview the board structure a page would expand into (no writes).
+  // Preview the board structure a page would expand into (no writes). Member tier because the
+  // spawn it previews is a board write; in `llm` planner mode it also spends one model call, a
+  // smaller spend than the run the same member may start on what it produces.
   buildHonoRoute(app, planDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     const workspaceId = param(c, 'workspaceId')
@@ -148,7 +180,8 @@ export function documentSourceController(): Hono<AppEnv> {
 
   // ---- context links ------------------------------------------------------
 
-  // Attach an imported page to a block as extra agent context.
+  // Attach an imported page to a block as extra agent context. Member tier: this is the write the
+  // designer/author flow ends on, and it edits one block's context, nothing workspace-wide.
   buildHonoRoute(app, linkDocumentContract, async (c) => {
     const documents = requireDocuments(c)
     const { source, externalId, blockId } = c.req.valid('json')

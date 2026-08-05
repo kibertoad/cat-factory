@@ -5,7 +5,7 @@ import {
   type WorkspaceAccess,
   type WorkspacePermission,
 } from '@cat-factory/kernel'
-import type { Context, MiddlewareHandler } from 'hono'
+import type { Context, Hono, MiddlewareHandler } from 'hono'
 import type { AppEnv, ServerContainer } from './env.js'
 
 // ---------------------------------------------------------------------------
@@ -116,83 +116,141 @@ export function blockEditActor<E extends AppEnv>(c: Context<E>): BlockEditActor 
 }
 
 /**
- * Controller-level admin-tier gate (workspace-rbac, slice 6). Mount ONCE at the top of an
- * admin route group — `app.use('*', requireWorkspacePermission('integrations.manage'))` —
- * and every WRITE the controller serves (now and in the future) requires that permission,
- * with ZERO per-handler code. Reads (GET/HEAD) pass straight through, so the whole controller
- * stays viewer-readable (`workspace.read`, satisfied by the gate resolution) while its mutations
- * are admin-only.
+ * The controller-level admin-tier gate (workspace-rbac, slice 6): every WRITE served under one of
+ * `prefixes` requires `permission`, with ZERO per-handler code. Reads (GET/HEAD) pass straight
+ * through, so the controller stays viewer-readable (`workspace.read`, satisfied by the gate
+ * resolution) while its mutations are admin-only. Use
+ * {@link mountWorkspacePermissionIncludingReads} for the rare controller whose READ is the
+ * sensitive half.
  *
- * This is the method-shaped counterpart to the gate's viewer floor: the floor rejects viewer
- * writes wholesale (non-GET ⇒ ≥ member) in ONE place; this rejects member writes on the admin
- * groups in ONE place per group. Because it is co-located with the controller's mount (not a
- * central path→permission table), a new route inherits the correct gate automatically — the
- * drift a shadow route-map would suffer can't happen. It runs BEFORE the handler, so an
+ * This is the method-shaped counterpart to the gate's viewer floor: the floor rejects viewer writes
+ * wholesale (non-GET ⇒ ≥ member) in ONE place; this rejects member writes on the admin groups in
+ * ONE place per group. Because it is co-located with the controller's own mount (not a central
+ * path→permission table), a new route under a gated prefix inherits the correct gate automatically:
+ * the drift a shadow route-map would suffer can't happen. It runs BEFORE the handler, so an
  * unauthorized caller is refused even when the underlying integration is unwired (a member never
- * learns whether Slack/GitHub/etc. is configured).
+ * learns whether Slack/GitHub/etc. is configured), and before body validation, so a malformed
+ * payload cannot turn a refusal into a 422 that answers the same question.
  *
  * `OPTIONS` (CORS preflight) is never gated. Where a controller mixes gated and ungated writes
- * under one mount (e.g. workspace create vs rename), call {@link requirePermission} per-handler
+ * under one prefix (e.g. workspace create vs rename), call {@link requirePermission} per-handler
  * instead of mounting this.
  *
- * ⚠️ **A `'*'` mount is NOT scoped to the controller.** `app.route('/workspaces/:workspaceId', sub)`
- * re-registers each of `sub`'s entries under that prefix, and a `sub.use('*', …)` becomes
- * `ALL /workspaces/:workspaceId/*` on the shared app — so it also matches routes OTHER controllers
- * mounted on the same prefix. Hono then runs whichever matching entry was registered first, which
- * makes the blast radius depend on the order in `app.ts`: today the run controllers are registered
- * before the config ones, so their routes win and the existing `'*'` mounts reach only the config
- * controllers listed after them (all admin-tier, which is why nothing has surfaced). Prefer mounting
- * on the controller's OWN path patterns (`/thing` and `/thing/*`), which cannot reach a sibling
- * whatever the order — as {@link requireWorkspacePermissionIncludingReads}'s two call sites do,
- * because for them the ordering accident stopped being harmless.
+ * **`prefixes` are the controller's OWN top-level paths, and taking them is the whole point of this
+ * helper.** `app.route('/workspaces/:workspaceId', sub)` re-registers each of `sub`'s entries under
+ * that prefix, so a `sub.use('*', …)` becomes `ALL /workspaces/:workspaceId/*` on the shared app and
+ * matches routes OTHER controllers mounted on the same prefix. Hono runs a matching middleware for
+ * every route registered after it, which made the blast radius depend on the order in `app.ts`: the
+ * admin document and task-source controllers are registered ahead of the human-gate controllers, so
+ * their `'*'` mounts refused a plain member's review decisions, requirement answers and initiative
+ * writes with `integrations.manage`. Nobody noticed because an account admin resolves as a workspace
+ * admin, and dogfooding happens as one. Passing prefixes cannot reach a sibling whatever the order,
+ * and it is why no middleware factory is exported from this module: a `'*'` mount is now
+ * unrepresentable rather than merely discouraged. `permissionMounts.test.ts` pins the invariant
+ * (a member is refused exactly the writes their own controller gates).
+ *
+ * Each prefix is mounted twice, bare and `/*`, because Hono's `*` does not match the bare prefix.
+ * A prefix may carry params (`/services/:blockId/test-secrets`), which is how a controller whose
+ * routes hang off a shared first segment gates its own without claiming the segment.
  */
-export function requireWorkspacePermission<E extends AppEnv>(
+export function mountWorkspacePermission<E extends AppEnv>(
+  app: Hono<E>,
   permission: WorkspacePermission,
-): MiddlewareHandler<E> {
-  return (c, next) => {
+  prefixes: readonly string[],
+): void {
+  mountGate(app, prefixes, { permission, gatesReads: false }, (c, next) => {
     const method = c.req.method
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
       requirePermission(c, permission)
     }
     return next()
-  }
+  })
 }
 
 /**
  * The same controller-level gate, applied to READS as well.
  *
- * {@link requireWorkspacePermission} lets GET/HEAD through by design: on almost every admin
+ * {@link mountWorkspacePermission} lets GET/HEAD through by design: on almost every admin
  * controller the permission guards MUTATION and the configuration itself is viewer-readable. A few
- * controllers invert that, because their READ is the sensitive half — the capability-credential
+ * controllers invert that, because their READ is the sensitive half. The capability-credential
  * checklist and the tool-server inventory both project the credential KEY NAMES this deployment's
  * capabilities want, which is exactly what the workspace snapshot withholds from a viewer ("no
  * business learning which environment variables the deployment sets"). Moving the value into a
  * sealed row did not change that judgement, and neither did adding a second surface over the same
- * registry.
+ * registry. `vcsConnectController` is the third and the plainest: it serves ONE read and no write,
+ * so the writes-only mount left it enforcing nothing at all.
  *
  * A separate function rather than an option, so the choice is legible at the mount and a controller
  * cannot acquire it by a default changing underneath it. `OPTIONS` still passes: a CORS preflight
  * carries no credentials to judge, and refusing it breaks the browser before the real request that
  * this gate is here to refuse.
  *
- * The failure this exists to prevent is not hypothetical. Both call sites documented the read as
- * gated (in the controller, in the SPA's tab gate, in the store's 403 handling) while the mount let
- * every member's GET through, because "gated on `secrets.manage`" reads as covering the controller
- * and covered only its writes.
- *
- * ⚠️ **Mount this on the controller's OWN path patterns, never `'*'`.** See the warning on
- * {@link requireWorkspacePermission}: a `'*'` mount lands on `/workspaces/:workspaceId/*` and can
- * refuse a SIBLING controller's routes. That is survivable while only writes are gated (the
- * siblings it can reach are admin-tier anyway); gating READS makes it fatal, because the same
- * pattern then refuses every member-readable GET registered after it — `GET /github/repos` was the
- * one that caught it. Two patterns are needed, `/thing` and `/thing/*`: Hono's `*` does not match
- * the bare prefix.
+ * The failure this exists to prevent is not hypothetical, and all three call sites hit it: each
+ * documented the read as gated (in the controller, in the SPA's tab gate, in the store's 403
+ * handling) while the mount let every member's GET through, because "gated on `secrets.manage`"
+ * reads as covering the controller and covered only its writes. `permissionMounts.test.ts` now
+ * asserts the READS of an `IncludingReads` controller are covered too, so the gap cannot reopen
+ * by a prefix going missing.
  */
-export function requireWorkspacePermissionIncludingReads<E extends AppEnv>(
+export function mountWorkspacePermissionIncludingReads<E extends AppEnv>(
+  app: Hono<E>,
   permission: WorkspacePermission,
-): MiddlewareHandler<E> {
-  return (c, next) => {
+  prefixes: readonly string[],
+): void {
+  mountGate(app, prefixes, { permission, gatesReads: true }, (c, next) => {
     if (c.req.method !== 'OPTIONS') requirePermission(c, permission)
     return next()
+  })
+}
+
+const MOUNTED_GATE = Symbol('workspacePermissionGate')
+
+/** What one mounted gate enforces: the permission, and whether it covers READS as well. */
+export interface MountedGate {
+  permission: WorkspacePermission
+  /** True for {@link mountWorkspacePermissionIncludingReads}, false for the writes-only mount. */
+  gatesReads: boolean
+}
+
+/**
+ * What a mounted gate enforces, or `undefined` for any other middleware.
+ *
+ * Read off a controller's route table by `permissionMounts.test.ts`, which asserts that a member is
+ * refused exactly the writes their own controller gates AND that a gated controller leaves none of
+ * its own routes uncovered. It exists because a controller's middleware is not necessarily a
+ * permission gate: `executionController` and `notificationController` both mount their own `ALL`
+ * middleware, and treating every middleware entry as a gate made the derived expectation wrong for
+ * them. Tagging the handler is what lets the invariant be READ from what the mount actually did
+ * instead of from a second list somebody has to keep in step.
+ *
+ * Read it off a STANDALONE-built controller, not the composed app: `app.route()` passes a sub-app's
+ * handlers through untouched only while the sub-app has no error handler of its own, and wraps them
+ * (losing this tag) the moment one calls `app.onError`. No controller does today, and the invariant
+ * does not depend on none ever doing.
+ */
+export function permissionGateOf(handler: unknown): MountedGate | undefined {
+  if (typeof handler !== 'function') return undefined
+  const tagged = (handler as unknown as Record<symbol, unknown>)[MOUNTED_GATE]
+  return typeof tagged === 'object' && tagged !== null ? (tagged as MountedGate) : undefined
+}
+
+/** Mount one gate on each prefix, bare and `/*` (Hono's `*` does not match the bare prefix). */
+function mountGate<E extends AppEnv>(
+  app: Hono<E>,
+  prefixes: readonly string[],
+  mounted: MountedGate,
+  gate: MiddlewareHandler<E>,
+): void {
+  if (prefixes.length === 0) {
+    // A gated controller with no prefix would gate nothing while reading as gated, which is the
+    // silent hole this whole helper exists to close. A prefix that matches none of the controller's
+    // routes is the same hole one step later, so `permissionMounts.test.ts` refuses that too: this
+    // throw can only catch the spelling of it that names no path at all.
+    throw new Error('mountWorkspacePermission: at least one path prefix is required')
+  }
+  Object.defineProperty(gate, MOUNTED_GATE, { value: mounted })
+  for (const prefix of prefixes) {
+    app.use(prefix, gate)
+    app.use(`${prefix}/*`, gate)
   }
 }

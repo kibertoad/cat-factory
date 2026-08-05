@@ -22,7 +22,7 @@ import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability, requireUser } from '../../http/guards.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 
 type Scope = 'account' | 'workspace'
 
@@ -47,22 +47,23 @@ function requireSources<E extends AppEnv>(c: Context<E>) {
 }
 
 /**
- * Every TOP-LEVEL path this controller serves at the account scope. `accountGuard` is mounted on
- * each of them and on each one's subtree, so a route is authorized by virtue of the resource it
- * hangs off rather than by someone remembering to add a `use` line beside it.
+ * Every TOP-LEVEL path this controller serves, at BOTH scopes: `accountGuard` is mounted on each of
+ * them at the account tier and `settings.manage` at the workspace tier, so a route is authorized by
+ * virtue of the resource it hangs off rather than by someone remembering to add a `use` line beside
+ * it. One list for both, so neither mount can name a subset the other doesn't.
  *
- * It is a list rather than a `use('*', …)` because this controller shares the
- * `/accounts/:accountId` mount with its siblings: Hono registers a sub-app's `use('*')` as
- * `/accounts/:accountId/*` on the parent, so it would also run against `/accounts/:id/reports`
- * and every other account route, which is a different controller's authorization to own.
+ * It is a list rather than a `use('*', …)` because this controller shares its mount with its
+ * siblings: Hono registers a sub-app's `use('*')` as `<prefix>/*` on the parent, so it would also
+ * run against `/accounts/:id/reports` and every other route on that prefix, which is a different
+ * controller's authorization to own.
  *
  * The pairing of `resource` with `resource/*` is what the enumeration existed to get right and
  * did not — `/foundational-service-suppressions` had no entry at all, leaving the account-tier
  * opt-out LIST reachable by any signed-in user for any account id. `foundationalServiceAccountGuard.spec.ts`
  * drives every route this controller registers and fails on an unguarded one, so a new resource
- * cannot repeat it.
+ * cannot repeat it; `mountWorkspacePermission` pairs them for you on the workspace side.
  */
-const ACCOUNT_GUARDED_RESOURCES = [
+const GUARDED_RESOURCES = [
   '/foundational-services',
   '/foundational-service-suppressions',
   '/foundational-service-sources',
@@ -88,14 +89,12 @@ export function foundationalServiceController(scope: Scope): Hono<AppEnv> {
   const ownerKind: FoundationalServiceOwnerKind = scope
 
   if (scope === 'account') {
-    for (const resource of ACCOUNT_GUARDED_RESOURCES) {
+    for (const resource of GUARDED_RESOURCES) {
       app.use(resource, accountGuard)
       app.use(`${resource}/*`, accountGuard)
     }
-  }
-
-  if (scope === 'workspace') {
-    app.use('*', requireWorkspacePermission('settings.manage'))
+  } else {
+    mountWorkspacePermission(app, 'settings.manage', GUARDED_RESOURCES)
   }
 
   // ---- services (this tier, raw — not merged) -----------------------------

@@ -8,7 +8,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { TestSecretsService } from '@cat-factory/integrations'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -28,7 +28,7 @@ function requireTestSecrets<E extends AppEnv>(c: Context<E>): TestSecretsService
  */
 export function testSecretsController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('secrets.manage'))
+  mountWorkspacePermission(app, 'secrets.manage', ['/services/:blockId/test-secrets'])
 
   buildHonoRoute(app, getServiceTestSecretsContract, async (c) => {
     const svc = requireTestSecrets(c)

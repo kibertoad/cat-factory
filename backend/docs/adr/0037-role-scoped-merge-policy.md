@@ -210,7 +210,7 @@ not this setting.
 more. An admin can still be the sole human on their own run's PR under any preset.
 
 **A sandboxed member cannot un-sandbox themselves, and that took TWO gates, not one.**
-`RiskPolicyController` mounts `requireWorkspacePermission('settings.manage')` on `*`, so editing
+`RiskPolicyController` mounts `mountWorkspacePermission('settings.manage')` on `/risk-policies`, so editing
 `dryRunRoles` is admin-tier. Without that the setting would be theatre, since the obvious way
 around a sandbox is to delete it.
 

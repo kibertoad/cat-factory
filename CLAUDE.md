@@ -1028,22 +1028,23 @@ Per-workspace authorization (ADR [`0025-workspace-rbac`](./backend/docs/adr/0025
 enforced in exactly three shared places, never re-derived per controller:
 
 1. **Resolution + the 404 hide**: `mountAuthGate` calls the single `loadWorkspaceAccess` on every
-   `/workspaces/:ws/*` request, publishes `{ role, permissions }` on the context, and returns the SAME 404
-   for a denied or absent board. Roles (`admin | member | viewer`) map onto seven permissions via a fixed
-   kernel table.
-2. **The viewer write floor**, also in the gate: any non-GET/HEAD requires `≥ member`, covering the whole
-   member tier with zero per-controller code. Its sole exemption is the read-only WS ticket mint.
-3. **The admin-tier permission gate**: `requireWorkspacePermission(perm)`, a Hono middleware mounted ONCE
-   at the top of each admin controller. It gates every write the controller serves (now and future) while
-   letting reads through, and runs BEFORE the handler's 503/lookup so an unauthorized member gets a clean
-   403 without learning whether the integration is wired. Co-located with the mount, not a central
-   path→permission table, so new routes inherit the right gate. Each admin controller maps to exactly ONE
-   permission; `WorkspaceController` and `WorkspaceMemberController` mix gated and ungated writes, so they
-   use the imperative `requirePermission(c, perm)` per handler.
+   `/workspaces/:ws/*` request, publishes `{ role, permissions }`, and 404s a denied or absent board alike.
+2. **The viewer write floor**, also in the gate: any non-GET/HEAD requires `≥ member` (sole exemption: the
+   read-only WS ticket mint). It covers the member tier with zero per-controller code, so a member-tier
+   write relies on it and mounts NO gate of its own.
+3. **The admin-tier permission gate**: `mountWorkspacePermission(app, perm, prefixes)`, on each admin
+   controller's OWN top-level paths. It gates every write served under them (now and future), lets reads
+   through, and runs ahead of body validation and the handler's 503, so a refusal never reveals wiring. One
+   permission per controller, except three that MIX tiers: `WorkspaceController`/`WorkspaceMemberController`
+   go imperative per handler with `requirePermission(c, perm)`, and `DocumentSourceController` by PREFIX.
 
-Adding a route to an admin controller needs no authz code. Adding a NEW admin controller: mount the
-middleware and add a `member 403` case to `defineWorkspaceRbacSuite`. Dev-open resolves no access object
-and allows everything, so conformance MUST run auth-enabled or it passes vacuously.
+**It takes PREFIXES, never `'*'`; no gate factory is exported, so the wildcard is unrepresentable.**
+`app.route(prefix, sub)` re-registers a sub-app's `use('*')` as `ALL <prefix>/*`, which Hono runs for every
+route registered AFTER it, so each admin gate silently refused the siblings mounted later in `app.ts`. A NEW
+admin controller joins `WORKSPACE_CONTROLLERS`, gates its own prefixes, and gains a `member 403` case in
+`defineWorkspaceRbacSuite`. Prefixes can UNDER-reach where `'*'` over-reached, and one assertion cannot see
+both: `permissionMounts.test.ts` pins that a member is refused exactly the writes their OWN controller gates
+AND that a gated controller leaves no route of its own uncovered.
 
 ## Conventions
 

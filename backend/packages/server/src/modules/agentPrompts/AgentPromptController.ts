@@ -11,7 +11,7 @@ import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
@@ -73,7 +73,7 @@ function detailFor<E extends AppEnv>(
  */
 export function agentPromptController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('settings.manage'))
+  mountWorkspacePermission(app, 'settings.manage', ['/agent-prompts'])
 
   buildHonoRoute(app, listAgentPromptsContract, async (c) => {
     const prompts = requireAgentPrompts(c)

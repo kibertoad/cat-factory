@@ -29,7 +29,7 @@ import type { Context } from 'hono'
 import { StateSigner } from '../../github/state.js'
 import { resolveViewerPat } from '../../github/viewerPat.js'
 import type { AppEnv } from '../../http/env.js'
-import { requirePermission, requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { requirePermission, mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { UnavailableError } from '@cat-factory/kernel'
 import { requireCapability } from '../../http/guards.js'
@@ -60,7 +60,7 @@ function assertGitHubWired<E extends AppEnv>(c: Context<E>): void {
  */
 export function githubController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('integrations.manage'))
+  mountWorkspacePermission(app, 'integrations.manage', ['/github'])
 
   // ---- connection ---------------------------------------------------------
 
@@ -218,7 +218,7 @@ export function githubController(): Hono<AppEnv> {
   // the host? Live (not projected) and explicitly invoked — see the contract for why.
   //
   // Gated IMPERATIVELY, which is the one place in this controller a READ is. The mounted
-  // `requireWorkspacePermission` deliberately lets reads through, on the premise that a read is
+  // `mountWorkspacePermission` deliberately lets reads through, on the premise that a read is
   // cheap and safe; this one is neither. It spends the installation's GitHub rate limit — a
   // shared, exhaustible budget the CI gate and the merger draw on for every run — so leaving it
   // on the read tier would let any viewer degrade the write path by holding down a button. It is

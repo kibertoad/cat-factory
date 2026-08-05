@@ -11,7 +11,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type { ReleaseHealthModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
-import { requireWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
 
@@ -30,7 +30,7 @@ function requireReleaseHealth<E extends AppEnv>(c: Context<E>): ReleaseHealthMod
  */
 export function releaseHealthController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  app.use('*', requireWorkspacePermission('settings.manage'))
+  mountWorkspacePermission(app, 'settings.manage', ['/observability', '/release-health-configs'])
 
   buildHonoRoute(app, getObservabilityConnectionContract, async (c) => {
     const rh = requireReleaseHealth(c)
