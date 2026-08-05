@@ -158,7 +158,7 @@ export function mountWorkspacePermission<E extends AppEnv>(
   permission: WorkspacePermission,
   prefixes: readonly string[],
 ): void {
-  mountGate(app, prefixes, permission, (c, next) => {
+  mountGate(app, prefixes, { permission, gatesReads: false }, (c, next) => {
     const method = c.req.method
     if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
       requirePermission(c, permission)
@@ -177,60 +177,78 @@ export function mountWorkspacePermission<E extends AppEnv>(
  * capabilities want, which is exactly what the workspace snapshot withholds from a viewer ("no
  * business learning which environment variables the deployment sets"). Moving the value into a
  * sealed row did not change that judgement, and neither did adding a second surface over the same
- * registry.
+ * registry. `vcsConnectController` is the third and the plainest: it serves ONE read and no write,
+ * so the writes-only mount left it enforcing nothing at all.
  *
  * A separate function rather than an option, so the choice is legible at the mount and a controller
  * cannot acquire it by a default changing underneath it. `OPTIONS` still passes: a CORS preflight
  * carries no credentials to judge, and refusing it breaks the browser before the real request that
  * this gate is here to refuse.
  *
- * The failure this exists to prevent is not hypothetical. Both call sites documented the read as
- * gated (in the controller, in the SPA's tab gate, in the store's 403 handling) while the mount let
- * every member's GET through, because "gated on `secrets.manage`" reads as covering the controller
- * and covered only its writes.
+ * The failure this exists to prevent is not hypothetical, and all three call sites hit it: each
+ * documented the read as gated (in the controller, in the SPA's tab gate, in the store's 403
+ * handling) while the mount let every member's GET through, because "gated on `secrets.manage`"
+ * reads as covering the controller and covered only its writes. `permissionMounts.test.ts` now
+ * asserts the READS of an `IncludingReads` controller are covered too, so the gap cannot reopen
+ * by a prefix going missing.
  */
 export function mountWorkspacePermissionIncludingReads<E extends AppEnv>(
   app: Hono<E>,
   permission: WorkspacePermission,
   prefixes: readonly string[],
 ): void {
-  mountGate(app, prefixes, permission, (c, next) => {
+  mountGate(app, prefixes, { permission, gatesReads: true }, (c, next) => {
     if (c.req.method !== 'OPTIONS') requirePermission(c, permission)
     return next()
   })
 }
 
-/**
- * The permission a mounted gate enforces, or `undefined` for any other middleware.
- *
- * Read off the composed app's route table by `permissionMounts.test.ts`, which asserts that a member
- * is refused exactly the writes their own controller gates. It exists because a controller's
- * middleware is not necessarily a permission gate: `executionController` and `notificationController`
- * both mount their own `ALL` middleware, and treating every middleware entry as a gate made the
- * derived expectation wrong for them. Tagging the handler is what lets the invariant be READ from
- * what the app actually mounted instead of from a second list somebody has to keep in step.
- */
-export function permissionGateOf(handler: unknown): WorkspacePermission | undefined {
-  if (typeof handler !== 'function') return undefined
-  const tagged = (handler as unknown as Record<symbol, unknown>)[GATED_PERMISSION]
-  return typeof tagged === 'string' ? (tagged as WorkspacePermission) : undefined
+const MOUNTED_GATE = Symbol('workspacePermissionGate')
+
+/** What one mounted gate enforces: the permission, and whether it covers READS as well. */
+export interface MountedGate {
+  permission: WorkspacePermission
+  /** True for {@link mountWorkspacePermissionIncludingReads}, false for the writes-only mount. */
+  gatesReads: boolean
 }
 
-const GATED_PERMISSION = Symbol('workspacePermissionGate')
+/**
+ * What a mounted gate enforces, or `undefined` for any other middleware.
+ *
+ * Read off a controller's route table by `permissionMounts.test.ts`, which asserts that a member is
+ * refused exactly the writes their own controller gates AND that a gated controller leaves none of
+ * its own routes uncovered. It exists because a controller's middleware is not necessarily a
+ * permission gate: `executionController` and `notificationController` both mount their own `ALL`
+ * middleware, and treating every middleware entry as a gate made the derived expectation wrong for
+ * them. Tagging the handler is what lets the invariant be READ from what the mount actually did
+ * instead of from a second list somebody has to keep in step.
+ *
+ * Read it off a STANDALONE-built controller, not the composed app: `app.route()` passes a sub-app's
+ * handlers through untouched only while the sub-app has no error handler of its own, and wraps them
+ * (losing this tag) the moment one calls `app.onError`. No controller does today, and the invariant
+ * does not depend on none ever doing.
+ */
+export function permissionGateOf(handler: unknown): MountedGate | undefined {
+  if (typeof handler !== 'function') return undefined
+  const tagged = (handler as unknown as Record<symbol, unknown>)[MOUNTED_GATE]
+  return typeof tagged === 'object' && tagged !== null ? (tagged as MountedGate) : undefined
+}
 
 /** Mount one gate on each prefix, bare and `/*` (Hono's `*` does not match the bare prefix). */
 function mountGate<E extends AppEnv>(
   app: Hono<E>,
   prefixes: readonly string[],
-  permission: WorkspacePermission,
+  mounted: MountedGate,
   gate: MiddlewareHandler<E>,
 ): void {
   if (prefixes.length === 0) {
     // A gated controller with no prefix would gate nothing while reading as gated, which is the
-    // silent hole this whole helper exists to close.
+    // silent hole this whole helper exists to close. A prefix that matches none of the controller's
+    // routes is the same hole one step later, so `permissionMounts.test.ts` refuses that too: this
+    // throw can only catch the spelling of it that names no path at all.
     throw new Error('mountWorkspacePermission: at least one path prefix is required')
   }
-  Object.defineProperty(gate, GATED_PERMISSION, { value: permission })
+  Object.defineProperty(gate, MOUNTED_GATE, { value: mounted })
   for (const prefix of prefixes) {
     app.use(prefix, gate)
     app.use(`${prefix}/*`, gate)

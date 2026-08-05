@@ -2,7 +2,7 @@ import { listVcsConnectOptionsContract, type VcsConnectOption } from '@cat-facto
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
-import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
+import { mountWorkspacePermissionIncludingReads } from '../../http/workspaceAccess.js'
 
 /**
  * Provider-neutral VCS connect capability: which connect surfaces this deployment can actually
@@ -14,11 +14,19 @@ import { mountWorkspacePermission } from '../../http/workspaceAccess.js'
  * Capability only: it reports what CAN be connected, never what IS connected (that stays
  * `GET /github/connection`, whose `provider` discriminator the SPA switches presentation on).
  * Guarded by `integrations.manage`, exactly like the GitHub + GitLab connect controllers it
- * fronts — a caller who may not connect has no use for the option list.
+ * fronts, because a caller who may not connect has no use for the option list.
+ *
+ * That takes the INCLUDING-READS mount, and this controller is the one place where the writes-only
+ * variant is provably inert rather than merely lenient: the single route it serves is a GET, which
+ * that variant passes through, so `integrations.manage` here gated nothing whatsoever. It read as
+ * enforcement for a release because the wholesale `'*'` mount it used to share DID refuse callers,
+ * just on sibling controllers' routes instead of its own. Both halves of the SPA already expect the
+ * refusal: `loadConnectOptions` degrades a 403 to an empty option list, under a store test that
+ * names a member without `integrations.manage` as the caller it is modelling.
  */
 export function vcsConnectController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
-  mountWorkspacePermission(app, 'integrations.manage', ['/vcs'])
+  mountWorkspacePermissionIncludingReads(app, 'integrations.manage', ['/vcs'])
 
   buildHonoRoute(app, listVcsConnectOptionsContract, (c) => {
     const container = c.get('container')

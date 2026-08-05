@@ -314,7 +314,7 @@ function registerRbacMemberManagementTests(
     const ha = bearer(await app.session({ id: adminA }))
     // Restrict + scope C as a plain member: full board.write / runs.execute, but none of the
     // admin permissions. Every write below passes the viewer floor (C is a member), so a 403
-    // can ONLY come from the admin-tier `requireWorkspacePermission` gate. The controller-level
+    // can ONLY come from the admin-tier `mountWorkspacePermission` gate. The controller-level
     // middleware runs BEFORE request-body validation and the handler's 503/lookup, so these
     // writes need no valid body and no configured module — a member is refused whether or not
     // the integration is wired (its config is never revealed). One representative write per
@@ -489,7 +489,7 @@ function registerRbacMemberManagementTests(
 
   it('admin-tier enforcement: the branch-protection preflight is a gated READ, unlike every other GitHub read (slice 6)', async () => {
     // Its own test rather than a row in the table above, because it breaks that table's premise:
-    // those are WRITES, which `requireWorkspacePermission` gates wholesale. A GET passes the
+    // those are WRITES, which `mountWorkspacePermission` gates wholesale. A GET passes the
     // mounted gate untouched by design — reads are presumed cheap and safe — so this route
     // gates itself imperatively, and only an explicit assertion can catch that call being lost
     // in a later refactor. The reason it must be gated is that this read is neither cheap nor
@@ -520,25 +520,33 @@ function registerRbacMemberManagementTests(
     expect((await app.call('GET', path, undefined, ha)).status).not.toBe(403)
   })
 
-  it('admin-tier enforcement: the capability-credential and tool-server READS are gated too (MCP maturation slice 4)', async () => {
+  it('admin-tier enforcement: the credential, tool-server and VCS-connect READS are gated too (MCP maturation slice 4)', async () => {
     // The other exception to the table's premise, and the opposite shape from the preflight above:
-    // these two controllers mount `requireWorkspacePermissionIncludingReads`, so the whole
-    // controller answers to `secrets.manage` rather than one handler gating itself.
+    // these three controllers mount `mountWorkspacePermissionIncludingReads`, so the whole
+    // controller answers to its permission rather than one handler gating itself.
     //
-    // They must, because on these two the READ is the sensitive half. Both project the credential
-    // KEY NAMES this deployment's capabilities want — which is precisely what the workspace
-    // snapshot withholds from a viewer — and the tool-server inventory adds the endpoints those
-    // credentials are sent to. Asserted explicitly because the ordinary mount passes GET through by
-    // design: for a release both surfaces DOCUMENTED a gated read (in the controller, in the SPA's
-    // tab gate, in the store's 403 branch) while every member's GET was answered in full, and
-    // nothing failed.
+    // They must, because on these the READ is the sensitive half. The first two project the
+    // credential KEY NAMES this deployment's capabilities want, which is precisely what the
+    // workspace snapshot withholds from a viewer, and the tool-server inventory adds the endpoints
+    // those credentials are sent to. `vcs/connect-options` reports which connect surfaces the
+    // deployment can serve, and a caller who may not connect has no use for it.
+    //
+    // Asserted explicitly because the ordinary mount passes GET through by design: for a release all
+    // three DOCUMENTED a gated read (in the controller, in the SPA's tab gate, in the store's 403
+    // branch) while every member's GET was answered in full, and nothing failed. On the third the
+    // ordinary mount was worse than lenient: `vcsConnectController` serves ONE route and it is a
+    // GET, so `integrations.manage` there gated nothing whatsoever.
     const app = harness.makeApp()
     const { adminA, c, wsId } = await scenario(app)
     const ha = bearer(await app.session({ id: adminA }))
     await app.call('PUT', `/workspaces/${wsId}/access-mode`, { accessMode: 'restricted' }, ha)
     await app.call('POST', `/workspaces/${wsId}/members`, { userId: c, role: 'member' }, ha)
     const hc = bearer(await app.session({ id: c }))
-    const reads = [`/workspaces/${wsId}/capability-credentials`, `/workspaces/${wsId}/tool-servers`]
+    const reads = [
+      `/workspaces/${wsId}/capability-credentials`,
+      `/workspaces/${wsId}/tool-servers`,
+      `/workspaces/${wsId}/vcs/connect-options`,
+    ]
 
     for (const path of reads) {
       // A plain member holds `workspace.read` and clears the viewer floor (a GET), so a 403 here is

@@ -218,7 +218,7 @@ export function githubController(): Hono<AppEnv> {
   // the host? Live (not projected) and explicitly invoked — see the contract for why.
   //
   // Gated IMPERATIVELY, which is the one place in this controller a READ is. The mounted
-  // `requireWorkspacePermission` deliberately lets reads through, on the premise that a read is
+  // `mountWorkspacePermission` deliberately lets reads through, on the premise that a read is
   // cheap and safe; this one is neither. It spends the installation's GitHub rate limit — a
   // shared, exhaustible budget the CI gate and the merger draw on for every run — so leaving it
   // on the read tier would let any viewer degrade the write path by holding down a button. It is

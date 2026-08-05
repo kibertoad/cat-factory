@@ -1034,17 +1034,17 @@ enforced in exactly three shared places, never re-derived per controller:
    write relies on it and mounts NO gate of its own.
 3. **The admin-tier permission gate**: `mountWorkspacePermission(app, perm, prefixes)`, on each admin
    controller's OWN top-level paths. It gates every write served under them (now and future), lets reads
-   through, and runs ahead of body validation and the handler's 503, so a refusal never reveals wiring.
-   One permission per admin controller; `WorkspaceController`/`WorkspaceMemberController` mix gated and
-   ungated writes, so they use the imperative `requirePermission(c, perm)` per handler, and
-   `DocumentSourceController` splits by TIER (credential + role-link prefixes gated, authoring free).
+   through, and runs ahead of body validation and the handler's 503, so a refusal never reveals wiring. One
+   permission per controller, except three that MIX tiers: `WorkspaceController`/`WorkspaceMemberController`
+   go imperative per handler with `requirePermission(c, perm)`, and `DocumentSourceController` by PREFIX.
 
 **It takes PREFIXES, never `'*'`; no gate factory is exported, so the wildcard is unrepresentable.**
 `app.route(prefix, sub)` re-registers a sub-app's `use('*')` as `ALL <prefix>/*`, which Hono runs for every
-route registered AFTER it, so each admin gate silently refused the siblings mounted later in `app.ts`. A
-NEW admin controller joins `WORKSPACE_CONTROLLERS` (what `app.ts` mounts from), gates its own prefixes, and
-gains a `member 403` case in `defineWorkspaceRbacSuite`; `permissionMounts.test.ts` asserts a member is
-refused exactly the writes their OWN controller gates.
+route registered AFTER it, so each admin gate silently refused the siblings mounted later in `app.ts`. A NEW
+admin controller joins `WORKSPACE_CONTROLLERS`, gates its own prefixes, and gains a `member 403` case in
+`defineWorkspaceRbacSuite`. Prefixes can UNDER-reach where `'*'` over-reached, and one assertion cannot see
+both: `permissionMounts.test.ts` pins that a member is refused exactly the writes their OWN controller gates
+AND that a gated controller leaves no route of its own uncovered.
 
 ## Conventions
 

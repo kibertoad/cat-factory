@@ -87,6 +87,18 @@ NULL DEFAULT 'account'` (the default = zero behaviour change, no data migration)
      unrepresentable, and `http/permissionMounts.test.ts` drives `WORKSPACE_CONTROLLERS` against the
      composed app to assert a member is refused exactly the writes their own controller gates.
 
+     **Prefixes trade the wildcard's over-reach for a possible UNDER-reach, so both directions are
+     pinned separately.** That first assertion derives what it expects from the same prefix list, so
+     it catches a gate that reaches a sibling and is structurally blind to a prefix that was never
+     declared: omitting one moves the expectation and the observation together. A second assertion
+     therefore asserts the complement without consulting the composed app at all: once a controller
+     mounts any gate, every route it serves must be covered by one of its OWN prefixes (writes
+     always; reads too on the `IncludingReads` variant), bar a write named in that test's
+     `MEMBER_TIER_WRITES` escape hatch, whose rows are also asserted to be live. A third refuses a
+     declared prefix that matches none of the controller's routes, which is dead config reading as
+     protection. `defineWorkspaceRbacSuite` cannot stand in for these: it drives ONE representative
+     write per controller, so it misses any SECOND prefix by construction.
+
 - **Caching.** Resolution runs on every workspace request (3 reads folded into one load), so it
   routes through the `workspaceAccess` AppCaches slice (group = workspace id, key = user id, negative
   outcomes cached as values). `DEFAULT_APP_CACHES_PROFILE` enabled (TTL 60s, freshness backstop

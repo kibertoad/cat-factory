@@ -181,6 +181,13 @@ write. Cross-runtime coverage is in `defineWorkspaceRbacSuite`, which asserts bo
 is allowed the five authoring writes, a viewer is still refused every one of them (the floor), and
 connect/disconnect stay admin-only.
 
+Those five are ALSO named in `permissionMounts.test.ts`'s `MEMBER_TIER_WRITES`, the one escape hatch
+from that test's rule that a gated controller covers every route it serves. They are listed as
+routes rather than waived by a flag on the controller so the split reads as five named decisions and
+adding a sixth costs a reviewer's attention: this table is the rationale that list points at. The
+same test fails on a row that matches no route, so the hatch cannot rot into a standing
+pre-approval for whatever later takes the name.
+
 `spawn` without `frameId` creates new top-level frames; with it, the plan's
 modules and tasks are added inside that existing service frame. A document linked
 to a block is resolved at execution time and injected into the agent prompt

@@ -32,19 +32,52 @@ import type { AppEnv, WorkspaceAccessContext } from './env.js'
 // production does rather than restating the mount lines. The expectations are DERIVED twice over:
 // `WORKSPACE_CONTROLLERS` is the same list `app.ts` mounts from, and each controller is also built
 // standalone so its OWN tagged gate entries say which of its own routes it means to refuse. There is
-// no table of paths to keep in step, and the last test fails if the app mounts a gate the inventory
-// does not, so the derivation cannot quietly cover less than the app serves.
+// no table of paths to keep in step, and one test fails if the app mounts a gate the inventory does
+// not, so the derivation cannot quietly cover less than the app serves.
+//
+// Deriving the expectation is what makes the first test cheap and what bounds it: it compares the
+// composed app against each controller's own prefix list, so it catches a gate that REACHES TOO FAR
+// (the bug above) and is blind to one that does not reach far enough, since an omitted prefix moves
+// both sides of the comparison. Mounting on prefixes traded the wildcard's over-reach for that
+// under-reach, so the second test asserts the complement structurally: a gated controller covers
+// every route it serves, bar a named member-tier write. Neither test subsumes the other.
 // ---------------------------------------------------------------------------
 
 /** One route of one controller, with `:params` filled so it can be requested. */
 interface Probe {
   method: string
   path: string
+  /** The controller's OWN `METHOD /pattern`, which is how a tier-split exception names a route. */
+  route: string
   /** Whether that controller's own permission gate covers this route. */
   gated: boolean
 }
 
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
+ * The writes a GATED controller deliberately leaves at the MEMBER tier, as `METHOD /own-pattern`.
+ *
+ * Every other write a gated controller serves must be covered by one of that controller's own gate
+ * prefixes, and the coverage test below refuses one that is not. This list is the escape hatch, and
+ * it is deliberately a list of ROUTES rather than a flag on the controller: a tier split is a claim
+ * about which calls are board authoring and which are integration management, so it should read as
+ * five named decisions and cost a reviewer's attention to add a sixth.
+ *
+ * `documentSource` is the only entry, and the rationale for each row is the table in
+ * `backend/docs/document-sources.md`: reaching for a page and putting it on a task is authoring,
+ * while storing the source credential is not. `defineWorkspaceRbacSuite` asserts the member half
+ * end to end (and that a viewer is still refused it by the write floor).
+ */
+const MEMBER_TIER_WRITES: Readonly<Record<string, readonly string[]>> = {
+  documentSource: [
+    'POST /document-sources/:source/import',
+    'POST /document-sources/:source/search',
+    'POST /document-sources/:source/plan',
+    'POST /document-sources/:source/spawn',
+    'POST /documents/link',
+  ],
+}
 
 /** Fill `:params` with a placeholder segment. Every probe below is refused or fails past the gate. */
 function concrete(path: string): string {
@@ -62,28 +95,41 @@ function patternCovers(pattern: string, path: string): boolean {
   return subtree ? path.startsWith(`${base}/`) : path === base
 }
 
+/**
+ * The gates one controller mounts on itself. A controller's middleware is not necessarily a
+ * permission gate (`executionController` and `notificationController` mount their own), so these come
+ * from the TAG the mount helper puts on its handler, not from "this entry is middleware".
+ */
+function gatesOf(app: Hono<AppEnv>): Array<{ pattern: string; gatesReads: boolean }> {
+  return app.routes.flatMap((r) => {
+    const gate = permissionGateOf(r.handler)
+    return gate ? [{ pattern: r.path, gatesReads: gate.gatesReads }] : []
+  })
+}
+
+/** The distinct routes one controller registers, deduped and in registration order. */
+function routesOf(app: Hono<AppEnv>): Array<{ method: string; path: string }> {
+  const seen = new Set<string>()
+  return app.routes.flatMap((route) => {
+    const key = `${route.method} ${route.path}`
+    // `buildHonoRoute` registers a validator beside each handler, and a gate is mounted twice.
+    if (seen.has(key) || route.method === 'ALL') return []
+    seen.add(key)
+    return [{ method: route.method, path: route.path }]
+  })
+}
+
 /** The write routes one controller registers, each tagged with whether that controller gates it. */
 function probesFor(app: Hono<AppEnv>, mount: string): Probe[] {
-  // A controller's middleware is not necessarily a permission gate (`executionController` and
-  // `notificationController` mount their own), so the gate patterns come from the TAG the mount
-  // helper puts on its handler, not from "this entry is middleware".
-  const gates = app.routes
-    .filter((r) => permissionGateOf(r.handler) !== undefined)
-    .map((r) => r.path)
-  const seen = new Set<string>()
-  const probes: Probe[] = []
-  for (const route of app.routes) {
-    if (!WRITE_METHODS.has(route.method)) continue
-    const key = `${route.method} ${route.path}`
-    if (seen.has(key)) continue // `buildHonoRoute` registers a validator beside each handler
-    seen.add(key)
-    probes.push({
+  const gates = gatesOf(app)
+  return routesOf(app)
+    .filter((route) => WRITE_METHODS.has(route.method))
+    .map((route) => ({
       method: route.method,
       path: `${mount}${concrete(route.path)}`,
-      gated: gates.some((pattern) => patternCovers(pattern, concrete(route.path))),
-    })
-  }
-  return probes
+      route: `${route.method} ${route.path}`,
+      gated: gates.some((g) => patternCovers(g.pattern, concrete(route.path))),
+    }))
 }
 
 /** Every `ALL` entry a set of controllers contributes, as the composed app would record it. */
@@ -146,8 +192,82 @@ describe('workspace permission mounts', () => {
       }
     }
     // Named rather than counted: a failure has to say WHICH route, because the two directions mean
-    // opposite things. An unexpected 403 is a gate reaching a sibling; a missing one is a lost gate.
+    // opposite things. An unexpected 403 is a gate reaching a sibling; a missing one is a gate the
+    // controller mounted and the composed app does not apply.
+    //
+    // What this CANNOT see is a prefix that was never declared: `probe.gated` is derived from the
+    // same prefix list, so omitting one flips the expectation and the observation together and this
+    // assertion still holds. That is the coverage test below, and the two are not redundant.
     expect(wrong).toEqual([])
+  })
+
+  it('a gated controller covers every route it serves, bar a declared member-tier write', () => {
+    // The other half of the invariant, and the half the assertion above structurally cannot make.
+    // Mounting on prefixes buys scoping at the cost of an enumeration, so a controller that means to
+    // gate itself can now under-reach: drop `/tasks` from `taskSourceController` and `POST
+    // /tasks/link` plus `POST /tasks/create-block` quietly answer to the member floor instead.
+    // Nothing above fails, because the expectation is read off the same list, and
+    // `defineWorkspaceRbacSuite` drives ONE representative write per controller (`/task-sources`
+    // here), so it misses any SECOND prefix by construction.
+    //
+    // So: once a controller mounts a gate at all, every route it serves must be covered by one of
+    // that controller's own prefixes. Writes always; reads too when the mount is the
+    // `IncludingReads` variant, where an uncovered GET is the whole failure it exists to prevent.
+    const uncovered: string[] = []
+    const stale: string[] = []
+    for (const entry of WORKSPACE_CONTROLLERS) {
+      const app = entry.build()
+      const gates = gatesOf(app)
+      // An ungated controller is not under-reaching, it is member-tier: the auth gate's write floor
+      // is its enforcement, which is what `boardController` and the human gates rely on.
+      if (gates.length === 0) continue
+      const gatesReads = gates.some((g) => g.gatesReads)
+      const declared = new Set(MEMBER_TIER_WRITES[entry.name] ?? [])
+      const claimed = new Set<string>()
+      for (const route of routesOf(app)) {
+        const name = `${route.method} ${route.path}`
+        if (declared.has(name)) claimed.add(name)
+        if (gates.some((g) => patternCovers(g.pattern, concrete(route.path)))) continue
+        if (!WRITE_METHODS.has(route.method) && !gatesReads) continue
+        if (declared.has(name)) continue
+        uncovered.push(
+          `${entry.name}: ${name} is served by a GATED controller but no prefix covers it`,
+        )
+      }
+      // A stale exception is the same hole wearing the escape hatch: a route that moved or that the
+      // controller now gates would leave a row here that silently pre-approves whatever next takes
+      // its name. Asserted together with the coverage, since either alone can be satisfied by
+      // editing this list rather than the mount.
+      for (const name of declared) {
+        if (!claimed.has(name))
+          stale.push(`${entry.name}: ${name} is declared member-tier but unserved`)
+      }
+    }
+    expect({ uncovered, stale }).toEqual({ uncovered: [], stale: [] })
+  })
+
+  it('every gate prefix a controller declares covers a route it actually serves', () => {
+    // A prefix that matches nothing is dead config that reads as protection: the spelling `mountGate`
+    // cannot refuse (it only rejects an EMPTY list), and the coverage test above sees it as a route
+    // being uncovered only while some route still needs it. A renamed path leaves both quiet.
+    //
+    // Judged per PREFIX, not per emitted pattern: the helper mounts each one bare AND as `/*`, and
+    // the `/*` half legitimately matches nothing on a controller with no sub-routes (`/settings`).
+    const dead: string[] = []
+    for (const entry of WORKSPACE_CONTROLLERS) {
+      const app = entry.build()
+      const routes = routesOf(app)
+      const prefixes = new Set(gatesOf(app).map((g) => g.pattern.replace(/\/\*$/, '')))
+      for (const prefix of prefixes) {
+        const hit = routes.some(
+          (r) =>
+            patternCovers(prefix, concrete(r.path)) ||
+            patternCovers(`${prefix}/*`, concrete(r.path)),
+        )
+        if (!hit) dead.push(`${entry.name}: gate prefix ${prefix} matches none of its routes`)
+      }
+    }
+    expect(dead).toEqual([])
   })
 
   it('no controller gates a shared mount prefix wholesale', () => {
