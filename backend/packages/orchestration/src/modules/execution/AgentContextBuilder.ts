@@ -60,8 +60,8 @@ import {
   type ResolvedFrontendBinding,
 } from './frontend-infra.logic.js'
 import { connectionDescription } from '@cat-factory/contracts'
-import type { ResolvedReproduction, ResolvedValidationChecks } from '@cat-factory/contracts'
-import { resolveReproductionSpec } from './reproductionProof.logic.js'
+import type { ResolvedValidationChecks } from '@cat-factory/contracts'
+import { reproductionFor, validationChecksFor } from './builder-validation-context.js'
 import { frameOf, validInvolvedServiceFrames } from './frame.logic.js'
 import { buildImplementationChoice } from './forkDecision.logic.js'
 import { buildRalphValidation } from './ralph.logic.js'
@@ -414,7 +414,9 @@ export class AgentContextBuilder {
       // context fields from ONE read: the PRE-PR validation checks, forwarded onto a PR-opening
       // coding job body so the harness runs them before it opens the PR; and the DEPENDENCY
       // PREPOPULATION install, forwarded onto EVERY dispatch that gets a checkout so the agent
-      // starts against a tree whose dependencies are present. `{}` ⇒ the service declared neither.
+      // starts against a tree whose dependencies are present. `{}` ⇒ the service declared neither
+      // OR the read failed, and the two are told apart on the step rather than here (see
+      // `validationChecksFor`).
       validationChecks,
       // An initiative-level run (the planning pipeline) carries the interview + analysis context
       // so the analyst/planner prompts fold in the human's intent and prior findings, plus the
@@ -456,7 +458,7 @@ export class AgentContextBuilder {
       isTesterKind(agentKind) && this.deps.resolveTestSecretRefs
         ? this.deps.resolveTestSecretRefs(workspaceId, block.id)
         : Promise.resolve<TestSecretRef[]>([]),
-      this.validationChecksFor(workspaceId, serviceFrame),
+      validationChecksFor(this.deps, workspaceId, serviceFrame, step),
       this.resolveInitiativeContext(workspaceId, block, agentKind, instance),
       block.level === 'task'
         ? this.resolveBrainstormDirection(workspaceId, block.id)
@@ -476,7 +478,7 @@ export class AgentContextBuilder {
     ])
     const agentConfig = block.agentConfig
     const customTaskType = this.customTaskTypeFor(block)
-    const reproduction = this.reproductionFor(agentKind, agentConfig, instance, validationChecks)
+    const reproduction = reproductionFor(agentKind, agentConfig, instance, validationChecks)
     const priorOutputs = [
       ...(architectureDirection
         ? [{ agentKind: 'architecture-brainstorm', output: architectureDirection }]
@@ -789,73 +791,6 @@ export class AgentContextBuilder {
       ...(promptAddition ? { promptAddition } : {}),
       ...(phaseTemplate ? { phaseTemplate } : {}),
     }
-  }
-
-  /**
-   * The service frame's PRE-PR VALIDATION CHECKS, already shaped as a spread-ready fragment (`{}`
-   * when the resolver is unwired, the block has no service frame, the service configured none, or
-   * the read failed). Returning the fragment rather than a nullable keeps both the resolution and
-   * the fold branch-free at the `buildContext` call site, which is at its complexity ceiling.
-   *
-   * Takes the frame {@link buildContext} ALREADY resolved (see {@link serviceFrameFor}) — like
-   * every other frame-scoped resolver in that wave — so the ancestry walk still runs exactly once
-   * per dispatch rather than a second time just for this read.
-   */
-  private async validationChecksFor(
-    workspaceId: string,
-    frame: Block | null,
-  ): Promise<{ validationChecks?: ResolvedValidationChecks; dependencyInstall?: string }> {
-    if (!frame) return {}
-    try {
-      const resolved = await this.deps.resolveValidationChecks?.(workspaceId, frame.id)
-      if (!resolved) return {}
-      // ONE read yields TWO context fields. The DEPENDENCY PREPOPULATION install shares the
-      // frame's config row, but the container executor gates the two differently: the checks
-      // travel only on a PR-opening dispatch, the install on every dispatch that gets a
-      // checkout. So it is lifted to its own top-level field here rather than left nested,
-      // which would tie prepopulation to the pre-PR gate and silently exclude every explore
-      // kind. Both ride the same spread-ready fragment so the fold at the `buildContext` call
-      // site stays branch-free (see this method's contract above).
-      return {
-        validationChecks: resolved,
-        ...(resolved.dependencyInstall ? { dependencyInstall: resolved.dependencyInstall } : {}),
-      }
-    } catch {
-      // A config-store read failure must never wedge a run — a mothership node whose server
-      // doesn't reflect this repository, or a transient store outage, would otherwise fail EVERY
-      // coding dispatch. Degrade to "no checks", which is exactly the unconfigured behaviour: the
-      // PR opens as it did before the feature existed rather than the whole build stopping.
-      return {}
-    }
-  }
-
-  /**
-   * The BUGFIX REPRODUCTION PROOF spec for this dispatch, as a spreadable `{ reproduction? }` —
-   * the same branch-free shape as {@link validationChecksFor}, and for the same reason: the
-   * `buildContext` call site is at its complexity ceiling.
-   *
-   * Unlike every other resolver here this is PURE and reads nothing: the declaration is already
-   * on the run's own steps (the prior `repro-test` step's structured outcome), so it costs no
-   * round-trip and needs no degrade-on-throw swallow. Reuses the service's pre-PR validation
-   * repair budget when one is configured, so an operator meets ONE attempt-budget concept rather
-   * than two — a service that set that budget to fail fast gets a matching number of proof
-   * rounds, which is the intended coupling, not a leak. Absent ⇒ no context field ⇒ no job-body
-   * field ⇒ the harness's existing path.
-   */
-  private reproductionFor(
-    agentKind: string,
-    agentConfig: Block['agentConfig'],
-    instance: ExecutionInstance,
-    validationChecks: { validationChecks?: ResolvedValidationChecks },
-  ): { reproduction?: ResolvedReproduction } {
-    const reproduction = resolveReproductionSpec({
-      agentKind,
-      agentConfig,
-      steps: instance.steps,
-      currentStep: instance.currentStep,
-      maxAttempts: validationChecks.validationChecks?.maxAttempts,
-    })
-    return reproduction ? { reproduction } : {}
   }
 
   /** The service-frame id for a block (walks up frame → module → task; cycle-guarded). */

@@ -30,7 +30,11 @@ Two tables live there: `llm_call_metrics` (per-call LLM telemetry) and
 `agent_context_snapshots` (the complete, redacted context provided to each container
 agent; composed prompts, folded-in fragment bodies, and the full content of the files
 injected into the container). Both are pruned to the same window
-(`LLM_CALL_METRICS_RETENTION_DAYS`, default 3 days).
+(`LLM_CALL_METRICS_RETENTION_DAYS`, default 14 days). The window is sized for POST-MORTEMS
+rather than for live debugging: an investigation into a failed run routinely starts days after
+it, and the earlier 3-day default expired the record first. Lower it to shrink the store on a
+deployment that also records bodies (`LLM_RECORD_PROMPTS` plus the per-workspace
+`storeAgentContext`), which are the heavy half of it.
 
 ## How the retention sweep is wired
 

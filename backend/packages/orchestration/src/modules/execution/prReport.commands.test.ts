@@ -71,6 +71,41 @@ describe('composeValidation', () => {
     expect(section.note).toContain('no check commands')
     expect(section.note).toContain('runner image')
     expect(section.commands).toEqual([])
+    expect(section.configUnreadable).toBeUndefined()
+  })
+
+  it('refuses to call an UNREADABLE configuration an unconfigured one', () => {
+    const { caps: c } = caps()
+    const section = composeValidation(
+      instance([step({ agentKind: 'coder', validationConfigUnreadable: true })]),
+      c,
+    )
+
+    expect(section.status).toBe('absent')
+    expect(section.configUnreadable).toBe(true)
+    // The claim it would otherwise make is a fabricated fact about somebody's setup: the service
+    // may configure several checks that this run never got to see. So the note is DISPLACED, not
+    // qualified: a reader who skims must not come away with the wrong one of the two.
+    expect(section.note).toContain('could not READ')
+    expect(section.note).not.toContain('configures no check commands')
+  })
+
+  it('bounds what a REPORTED section covers when a later read failed', () => {
+    const { caps: c } = caps()
+    const section = composeValidation(
+      instance([
+        step({ agentKind: 'coder', validation: VALIDATION }),
+        step({ agentKind: 'ci-fixer', validationConfigUnreadable: true }),
+      ]),
+      c,
+    )
+
+    // The evidence stands (it was captured), but it no longer describes every dispatch on the
+    // run, and the failing read is by construction on a step that produced no evidence, which
+    // is why the scan is over all steps rather than the one the section reports off.
+    expect(section.status).toBe('reported')
+    expect(section.configUnreadable).toBe(true)
+    expect(section.commands).toHaveLength(2)
   })
 
   it('retains a FAILING command’s log and drops a passing one’s', () => {
@@ -147,6 +182,24 @@ describe('renderValidation', () => {
     expect(rendered).toContain('Pre-PR validation')
     expect(rendered).toContain('no check commands')
     expect(rendered).not.toContain('| Check |')
+  })
+
+  it('warns above the table when the evidence does not cover every dispatch', () => {
+    const { caps: c } = caps()
+    const rendered = renderValidation(
+      composeValidation(
+        instance([
+          step({ agentKind: 'coder', validation: VALIDATION }),
+          step({ agentKind: 'ci-fixer', validationConfigUnreadable: true }),
+        ]),
+        c,
+      ),
+    ).join('\n')
+
+    // Above the verdict, not below the table: a reader who stops at the green ✅ is exactly the
+    // one this line exists for.
+    expect(rendered.indexOf('could not read')).toBeLessThan(rendered.indexOf('**Verdict:**'))
+    expect(rendered).toContain('| Check |')
   })
 })
 

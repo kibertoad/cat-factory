@@ -182,12 +182,24 @@ repo almost always shells out to the command the Go detector already suggested.
   nothing there is nothing to validate, and the run's real failure is "no file changes": blaming
   it for a red BASE branch would be wrong and would burn the whole repair budget re-running an
   agent that already declined to act.
-- **A config-store read failure DEGRADES, it does not fail the run.**
-  `AgentContextBuilder.validationChecksFor` swallows a resolver throw and falls back to "no
+- **A config-store read failure DEGRADES, it does not fail the run, and it SAYS SO.**
+  `AgentContextBuilder.validationChecksFor` catches a resolver throw and falls back to "no
   checks": the unconfigured behaviour. A mothership node whose server doesn't reflect
   `validationConfigRepository` (an older image), or a transient store outage, would otherwise
   fail EVERY coding dispatch. The trade is deliberate: a store outage degrades to the pre-feature
   guarantee rather than stopping all builds.
+
+  What is NOT optional is naming the degradation, because it is byte-for-byte what an
+  unconfigured service produces (see the next bullet) and that is the whole problem: left bare,
+  a service whose checks silently stopped running looks exactly like one that never had any. So
+  the catch does two things beside the fallback. It `warn`s with the frame id and the scrubbed
+  cause, and it sets `step.validationConfigUnreadable`, which the PR verification report reads
+  (`composeValidation`) to say the configuration could not be READ instead of asserting the
+  service configures none. The flag is REWRITTEN on every dispatch of the step, so a transient
+  outage that recovered before the PR-opening dispatch leaves no warning behind; and the report
+  scans every step for it, because the failing read is by construction on a step that produced
+  no validation evidence to hang it off.
+
 - **Unconfigured is byte-for-byte the old behaviour**: no row ⇒ no `validationChecks` on the
   context ⇒ no field on the job body ⇒ the harness's existing code path, untouched.
 

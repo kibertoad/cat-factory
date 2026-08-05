@@ -39,7 +39,9 @@ const API_PREFIX = '/api/v1'
 // key-provisioning operations), and that number is already published against a surface WITHOUT the
 // follow-up and interview operations added here. The same collision the note above describes, the
 // second time in three releases.
-const API_VERSION = '1.11.0'
+// 1.12.0: `PrReportValidation.configUnreadable`, an additive optional field on the run report,
+// so a consumer built against 1.11.0 keeps parsing.
+const API_VERSION = '1.12.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

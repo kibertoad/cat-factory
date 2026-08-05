@@ -759,6 +759,20 @@ export const pipelineStepSchema = v.object({
    */
   validation: v.optional(v.nullable(validationReportSchema)),
   /**
+   * Set when THIS dispatch could not READ the service frame's validation configuration (the
+   * store threw, or a mothership node's persistence RPC did). The dispatch degrades to "no
+   * checks and no dependency install" so a config-store outage cannot wedge every coding run,
+   * and that degradation is byte-for-byte what a service configuring NEITHER produces, which
+   * is exactly why the fact is recorded rather than only swallowed. Without it the PR
+   * verification report states "this service configures no check commands" about a service
+   * that may configure several, i.e. a fabricated fact about somebody's setup.
+   *
+   * Written at dispatch by `AgentContextBuilder`, and REWRITTEN on every dispatch of the step
+   * (a re-dispatch whose read succeeds clears it), so the flag always describes the read that
+   * produced the tree this step pushed. Rides the run's persisted `detail` blob, so no migration.
+   */
+  validationConfigUnreadable: v.optional(v.nullable(v.boolean())),
+  /**
    * The harness-computed BUGFIX REPRODUCTION PROOF for a coding step that carried a declared
    * reproduction: the declared command run against the pre-fix tree and the final tree, with
    * both exit codes and captured output — or the agent's structural declaration that
