@@ -615,3 +615,254 @@ describe('humanReviewGate', () => {
     expect(seen).toEqual([null, 2]) // first poll reads it; second poll passes the cached value
   })
 })
+
+describe('humanReviewGate — what the awaiting-approval card actually says', () => {
+  // Every branch below produces a DIFFERENT card for a human, and picking the wrong one sends
+  // them to the wrong action: "assign a reviewer" to someone who already approved, or "awaiting
+  // review" when a review has already happened and is blocking the merge.
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  const cardFor = async (over: Partial<PullRequestReviewSnapshot>) => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot(over),
+      resolveThreads: async () => {},
+    })
+    const raised: RaiseNotificationInput[] = []
+    const gate = humanReviewGate(
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          getBlock: async () =>
+            ({
+              id: 'b',
+              title: 'Login',
+              executionId: 'ex-1',
+              pullRequest: { url: 'https://github.com/o/r/pull/7' },
+            }) as unknown as Block,
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    const probe = await gate.probe('ws', 'b', gs)
+    return { card: raised[0], probe, raised }
+  }
+
+  it('asks for a reviewer only when nobody is assigned AND nobody has approved', async () => {
+    const { card } = await cardFor({ assignedReviewers: [], approvals: 0 })
+    expect(card?.title).toBe('Assign a reviewer for "Login"')
+    expect(card?.body).toContain('no assigned reviewer')
+  })
+
+  it('reports progress, not an unassigned PR, once someone has approved', async () => {
+    // A reviewer who approves is REMOVED from the requested-reviewer list, so an empty assignee
+    // list plus an approval is "needs another approval", not "nobody is looking at this".
+    const { card } = await cardFor({
+      assignedReviewers: [],
+      approvals: 1,
+      requiredApprovingReviewCount: 2,
+    })
+    expect(card?.title).toBe('"Login" is awaiting code review')
+    expect(card?.body).toContain('Awaiting 2 approval(s)')
+    expect(card?.body).toContain('(have 1)')
+  })
+
+  it('names the assigned-but-unreviewed case as awaiting review', async () => {
+    const { card } = await cardFor({ assignedReviewers: ['alice'], approvals: 0 })
+    expect(card?.title).toBe('"Login" is awaiting code review')
+    expect(card?.body).toContain('Awaiting 1 approval(s)')
+    expect(card?.body).toContain('(have 0)')
+  })
+
+  it('says a review HAPPENED when changes are requested with nothing actionable', async () => {
+    // The misleading card here would be "awaiting review": a review did happen, it blocks the
+    // merge, and it left the fixer nothing to act on.
+    const { card } = await cardFor({
+      assignedReviewers: ['alice'],
+      approvals: 0,
+      changesRequested: true,
+    })
+    expect(card?.title).toBe('Changes requested on "Login"')
+    expect(card?.body).toContain('left no actionable comment')
+    expect(card?.body).not.toContain('Awaiting')
+  })
+
+  it('carries the PR link so the card can open what it is talking about', async () => {
+    const { card } = await cardFor({ assignedReviewers: ['alice'], approvals: 0 })
+    expect(card?.payload).toEqual({ prUrl: 'https://github.com/o/r/pull/7' })
+  })
+
+  it('falls back to a generic subject when the block cannot be read', async () => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ assignedReviewers: [], approvals: 0 }),
+      resolveThreads: async () => {},
+    })
+    const raised: RaiseNotificationInput[] = []
+    const gate = humanReviewGate(
+      stubGateContext(
+        {
+          clock: { now: () => NOW },
+          raiseNotification: async (_ws, input) => void raised.push(input),
+        },
+        providerRegistry,
+      ),
+    )
+    await gate.probe('ws', 'b', { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState)
+    expect(raised[0]?.title).toBe('Assign a reviewer for "this task"')
+    expect(raised[0]?.executionId).toBeNull()
+    expect(raised[0]?.payload).toEqual({})
+  })
+
+  it('raises NO card while there is outstanding feedback inside the grace window', async () => {
+    // The gate is waiting on the FIXER here, not on a person, so summoning a reviewer would be
+    // noise on every poll of the window.
+    const { raised, probe } = await cardFor({
+      approvals: 0,
+      unresolvedThreads: [thread({ latestCommentAt: NOW - MIN })],
+    })
+    expect(probe.status).toBe('pending')
+    expect(raised).toEqual([])
+  })
+
+  it('raises no card at all once the PR is approved and clean', async () => {
+    const { raised, probe } = await cardFor({ approvals: 1 })
+    expect(probe.status).toBe('pass')
+    expect(raised).toEqual([])
+  })
+})
+
+describe('humanReviewGate — the grace window and the comment cursor', () => {
+  let providerRegistry: ProviderRegistry
+  beforeEach(() => {
+    providerRegistry = defaultProviderRegistry()
+  })
+
+  const probeWith = async (
+    over: Partial<PullRequestReviewSnapshot>,
+    gs: GateStepState,
+  ): Promise<{ status: string }> => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot(over),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    return gate.probe('ws', 'b', gs)
+  }
+
+  it('takes the grace window from the step CONFIG ahead of the risk-policy default', async () => {
+    const comment = { unresolvedThreads: [thread({ latestCommentAt: NOW - 20 * MIN })] }
+    // A 60-minute configured window is still open at 20 minutes: keep waiting.
+    expect(
+      (
+        await probeWith(comment, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          config: { graceMinutes: 60 },
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('pending')
+    // A 5-minute one has elapsed: dispatch the fixer.
+    expect(
+      (
+        await probeWith(comment, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          config: { graceMinutes: 5 },
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('fail')
+  })
+
+  it('falls back to the per-step value when the config names none', async () => {
+    expect(
+      (
+        await probeWith({ unresolvedThreads: [thread({ latestCommentAt: NOW - 20 * MIN })] }, {
+          phase: 'checking',
+          attempts: 0,
+          maxAttempts: 1,
+          humanReviewGraceMinutes: 60,
+        } as unknown as GateStepState)
+      ).status,
+    ).toBe('pending')
+  })
+
+  it('advances the comment cursor FORWARD only, so an older comment cannot re-open it', async () => {
+    // The cursor is what stops the same conversation comment re-triggering the fixer every poll.
+    // Moving it backwards would do exactly that.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () =>
+        snapshot({
+          approvals: 1,
+          comments: [
+            {
+              id: 'c1',
+              author: 'alice',
+              body: 'please fix',
+              isBot: false,
+              createdAt: NOW - 5 * MIN,
+            },
+          ],
+        }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = {
+      phase: 'checking',
+      attempts: 0,
+      maxAttempts: 1,
+      lastAddressedCommentAt: NOW - MIN,
+    } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(gs.lastAddressedCommentAt).toBe(NOW - MIN)
+  })
+
+  it('records the approval count each poll, for the UI’s progress read', async () => {
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ approvals: 1, requiredApprovingReviewCount: 3 }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    await gate.probe('ws', 'b', gs)
+    expect(gs.lastApprovals).toBe(1)
+  })
+
+  it('does not cache a required count read off a PR that does not exist', async () => {
+    // With no head sha there is no PR to have read branch protection from, so caching the
+    // default would pin a made-up requirement for the rest of the wait.
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ headSha: null, requiredApprovingReviewCount: 5 }),
+      resolveThreads: async () => {},
+    })
+    const gate = humanReviewGate(
+      stubGateContext(
+        { clock: { now: () => NOW }, raiseNotification: async () => {} },
+        providerRegistry,
+      ),
+    )
+    const gs = { phase: 'checking', attempts: 0, maxAttempts: 1 } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(gs.requiredApprovingReviewCount).toBeUndefined()
+  })
+})
