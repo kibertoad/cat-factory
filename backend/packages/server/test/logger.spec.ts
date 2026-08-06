@@ -1,5 +1,5 @@
 import { Writable } from 'node:stream'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { LogRecord, LogSink } from '@cat-factory/kernel'
 import {
   createPinoLogger,
@@ -16,7 +16,11 @@ import {
 // configures `LOG_LEVEL` after module load, and pino children snapshot their parent's level at
 // creation). Both properties are pinned here.
 
-afterEach(() => setLogLevel('info'))
+// This file is the one that TESTS the gate, so it states its own baseline instead of
+// inheriting the suite-wide `silent` that `test/setup/silenceLogs.ts` installs — under that
+// default a `.warn()` here would be dropped before it ever reached the assertion. `beforeEach`
+// rather than `afterEach` so each test starts from a known level no matter what ran before it.
+beforeEach(() => setLogLevel('info'))
 
 /** A logger writing into an array, plus the parsed lines it has emitted so far. */
 function capturing(): { logger: ReturnType<typeof createPinoLogger>; lines: () => unknown[] } {
@@ -51,6 +55,14 @@ describe('parseLogLevel', () => {
     expect(parseLogLevel(undefined)).toBe('info')
     expect(parseLogLevel('')).toBe('info')
     expect(parseLogLevel('verbose')).toBe('info')
+  })
+
+  it('does NOT honour silent, so LOG_LEVEL can never mute a deployment', () => {
+    // `silent` is a valid THRESHOLD (`setLogLevel` takes it, and the test harness relies on
+    // that) but deliberately not a valid LOG_LEVEL: a deployment emitting no lines at all
+    // looks exactly like one that has stopped serving. Same rule as the typo case above,
+    // and the reason `LogThreshold` is a separate type from `LogLevel`.
+    expect(parseLogLevel('silent')).toBe('info')
   })
 })
 
@@ -100,6 +112,22 @@ describe('the pino-backed logger', () => {
     child.debug('visible at debug')
     expect(lines().map((l) => (l as { msg: string }).msg)).toEqual(['visible at debug'])
     expect(getLogLevel()).toBe('debug')
+  })
+
+  it('drops every level at the silent threshold', () => {
+    // The seam the per-package `setupFiles` uses. `error` is the case worth pinning: it is the
+    // one level above every other rank, so a gate implemented as a comparison against the
+    // highest EMIT rank would still let it through.
+    const { logger, lines } = capturing()
+    setLogLevel('silent')
+
+    logger.debug('d')
+    logger.info('i')
+    logger.warn('w')
+    logger.error('e')
+
+    expect(lines()).toEqual([])
+    expect(getLogLevel()).toBe('silent')
   })
 })
 

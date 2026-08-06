@@ -15,19 +15,12 @@ import { PR_DESCRIPTION_FILE, readPrDescription } from '../src/pr-description.js
 import { buildSingleRepoCodingSpec } from '../src/agent.js'
 import { parseAgentJob } from '../src/job.js'
 import type { Logger } from '../src/logger.js'
+import { silentLogger } from './helpers.js'
 
 // The repo's own pull-request template. Neither host applies a template to an API-created pull
 // request, so the harness finds it and the agent fills it. Discovery must cover both hosts'
 // conventions, be case-insensitive, refuse to GUESS between several templates, and never throw —
 // a template is an improvement to a PR body and may not cost a run that otherwise succeeded.
-
-const silentLogger: Logger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  child: () => silentLogger,
-}
 
 /**
  * Create a symlink, or report that this machine cannot. An unprivileged Windows account cannot,
