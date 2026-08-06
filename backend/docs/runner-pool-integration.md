@@ -384,6 +384,7 @@ manifest just forwards everything; `{{input.kind}}` selects the path:
     "progressTotalPath": "progress.total",
     "callMetricsPath": "callMetrics", // per-poll model-call telemetry (see the notes below)
     "sliceReviewsPath": "sliceReviews", // a PR review's finished slices (see the notes below)
+    "dispatchCapabilitiesPath": "capabilities", // the harness handshake, off the DISPATCH response
     "errorPath": "error",
   },
 }
@@ -498,6 +499,20 @@ manifest.
   manual resume to work from: it can only be re-run from zero, discarding every slice that had
   already been reviewed. It is a latest-value publish, not a drain buffer, so re-reading it on every
   poll is free and a dropped poll response costs nothing.
+- **Set `dispatchCapabilitiesPath` if your DISPATCH response proxies the harness's acceptance
+  body** (it is `capabilities` there, and this is the one mapping read off the dispatch response
+  rather than the poll one). It is what lets the backend refuse a BLIND run: a runner image older
+  than an optional job-body capability does not reject the field, it ignores it, and the prompt has
+  already told the agent it has tools or a skill that were never installed. Leave it unset and every
+  such dispatch is counted as unverifiable and proceeds. It is deliberately not read by name without
+  this mapping: `capabilities` is an ordinary word for a scheduler to use about its own runners, and
+  reading `["gpu","docker"]` as the harness's answer would refuse every capability dispatch against
+  a perfectly current image.
+- **Declare a `release` template even if your runners are ephemeral.** It is also the only CANCEL
+  the backend has on a pool: when a dispatch is refused as blind, the harness has already started
+  an agent, and without a `release` template it runs to completion and can open a pull request for
+  a step the engine already failed. The failure states which happened, but only a person can act on
+  it. Calling `release` on an already-finished job must be a no-op.
 - Every request carries your auth automatically; per-call timeouts are bounded
   (`timeoutMs`, ≤60s, default 30s). Responses over ~200KB are rejected.
 

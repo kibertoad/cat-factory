@@ -2,13 +2,15 @@ import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { promisify } from 'node:util'
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { redactSecrets, runBestEffort } from '@cat-factory/kernel'
+import { describeError, redactSecrets, runBestEffort } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -22,6 +24,7 @@ import {
   pollInlineJob,
   pollHarnessJob,
   postHarnessJob,
+  stopHarnessJob,
   waitForHarnessHealth,
 } from './harnessHttp.js'
 import {
@@ -355,7 +358,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // Route a run to the backend it ALREADY holds, regardless of the CURRENT pool mode
     // (settings can flip pooling on/off live): a leased pool member re-attaches to the
     // pool; an existing per-run container stays per-run. Only a BRAND-NEW run picks its
@@ -371,7 +374,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // The container is per-RUN: a run's first step starts it, later steps re-attach to
     // it (resolved by the run id), and the harness keys each step's job by the per-step
     // `ref.jobId` carried in the spec body.
@@ -408,7 +411,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     // POST the job to the single harness endpoint, with the kind in the body. Idempotent:
     // re-attaching to an already-running container re-POSTs, which the harness's per-id
     // registry treats as a re-attach.
-    await this.postJob(resolved, { ...spec, kind })
+    return this.postJob(resolved, { ...spec, kind })
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -458,6 +461,56 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.cache.delete(ref.runId)
     if (!containerId) return
     await this.adapter.remove(this.exec, containerId)
+  }
+
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`, because this transport owns the
+   * container the job runs in and can therefore always make the answer true.
+   *
+   * The graceful path asks the harness to abort that job and waits for it to settle. When that
+   * fails the container is DESTROYED, which is a confirmed stop of everything inside it and the
+   * only remaining way to get one. That escalation is what makes the pooled case safe: a member
+   * whose job could not be aborted must never return to the warm pool, since `harnessHealthy`
+   * still answers 200 for it and the next run would lease a container with a live agent and a
+   * live checkout in it: the exact collision `acquireMember`'s synchronous claim exists to
+   * prevent. Destroying it removes it from the pool as well as from the job.
+   *
+   * Deliberately NOT `release`: on the pooled path release does the opposite of stopping.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const member = this.members.find((m) => m.leasedTo === ref.runId)
+    const endpoint = member ?? (await this.resolve(ref.runId))
+    // Nothing is serving this run: there is no job left to stop, which IS the stopped state.
+    if (!endpoint) return 'stopped'
+    try {
+      await stopHarnessJob({
+        fetchImpl: this.fetchImpl,
+        endpoint,
+        jobId: ref.jobId,
+        secret: this.sharedSecret,
+        timeoutMs: this.requestTimeoutMs,
+        label: 'Local container',
+      })
+      return 'stopped'
+    } catch (error) {
+      // Escalate rather than swallow. A throw from here would leave the caller reporting "could
+      // not stop" while a container it owns keeps running the agent, and (pooled) while that
+      // container stays leasable. If the teardown ALSO fails there is genuinely nothing left to
+      // try, so that error propagates with the graceful failure named as its cause.
+      logger.warn('local container job stop failed; destroying the container instead', {
+        runId: ref.runId,
+        jobId: ref.jobId,
+        ...describeError(error),
+      })
+      if (member) {
+        this.dropMember(member)
+        await this.adapter.remove(this.exec, member.containerId)
+      } else {
+        this.cache.delete(ref.runId)
+        await this.adapter.remove(this.exec, endpoint.containerId)
+      }
+      return 'stopped'
+    }
   }
 
   /**
@@ -575,7 +628,7 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const repoKey = repoKeyOf(spec)
     // Later steps of the same run re-attach to the member it already holds (idempotent).
     let member = this.members.find((m) => m.leasedTo === ref.runId)
@@ -583,11 +636,17 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     if (repoKey) member.repo = repoKey
     // Tell the harness to reuse its per-repo checkout (clean-sweep + fetch + switch branch)
     // rather than clone fresh — the whole point of repo-affinity pooling.
-    await this.postJob(member, { ...spec, kind, persistentCheckout: true })
+    return this.postJob(member, { ...spec, kind, persistentCheckout: true })
   }
 
-  /** POST a job body to a harness, throwing on a non-OK response. */
-  private postJob(endpoint: HarnessEndpoint, body: Record<string, unknown>): Promise<void> {
+  /**
+   * POST a job body to a harness, throwing on a non-OK response and returning the harness's
+   * capability handshake (undefined when the acceptance carried none).
+   */
+  private postJob(
+    endpoint: HarnessEndpoint,
+    body: Record<string, unknown>,
+  ): Promise<RunnerDispatchAck | undefined> {
     return postHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint,

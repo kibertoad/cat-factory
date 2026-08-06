@@ -143,6 +143,21 @@ export const runnerPoolResponseMappingSchema = v.object({
    * only be re-run from zero.
    */
   sliceReviewsPath: v.optional(v.string()),
+  /**
+   * Dot-path, IN THE DISPATCH RESPONSE (not the poll one), to the harness's capability handshake:
+   * the list of optional job-body fields the running image actually parses. A pool that proxies
+   * `POST /jobs` verbatim should set this to `capabilities`.
+   *
+   * Worth the one line, because it is the only thing that lets the backend refuse a BLIND run on a
+   * pool: an image older than a capability ignores the field instead of rejecting it, and the
+   * prompt has already told the agent it has tools or a skill that were never installed. Absent ⇒
+   * the dispatch cannot tell, warns, and proceeds.
+   *
+   * Deliberately not read by name without this: `capabilities` is an ordinary word for a scheduler
+   * to use about its own runners (`["gpu","docker"]`), and reading one of those as the harness's
+   * answer would refuse every capability dispatch against a current image.
+   */
+  dispatchCapabilitiesPath: v.optional(v.string()),
   /** Dot-path to a job-level error message (a failed job, or a structured error). */
   errorPath: v.optional(v.string()),
   /**

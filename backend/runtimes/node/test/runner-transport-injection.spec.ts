@@ -67,7 +67,7 @@ function fakeProvider() {
       return Promise.resolve()
     },
     poll: () => Promise.resolve({ state: 'running' as const }),
-    release: () => Promise.resolve(),
+    release: () => Promise.resolve('requested' as const),
   }
   return { provider, dispatched }
 }

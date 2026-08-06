@@ -1,6 +1,6 @@
 # MCP support maturation
 
-Status: **in progress; slices 1, 2, 3, 4 and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
+Status: **in progress; slices 1, 2, 3, 4, slice 5's HANDSHAKE half and slice 7's CONSUMING half landed.** Sources: the 2026-08-04 review of both MCP
 surfaces, and the 2026-08-05 follow-up review of one question through the same material: how well
 a deployment can add EXTERNAL tool servers programmatically, without forking. That review's
 verdict and its new findings are folded in below (the inventory rows marked 2026-08-05, slice 8,
@@ -116,23 +116,29 @@ dump and never uses the word MCP).
       declared in kernel and populated into the checklist the contract already had a field for; the
       Test button and the inventory rendered above the credential checklist; and the operator docs
       (the Slack runbook, the `MCP_*` convention). Its four decisions are below.
-- [ ] **5. Run-surface observability for tool servers.** The other half: what a RUN did, as opposed
-      to what a probe can ask now. Dispatch telemetry starts recording what the CLI actually reached
-      (server started, N tools) on a typed snapshot field instead of the raw `extras` dump the SPA
-      renders, and an unavailable server becomes a stated chip on the run surface rather than a line
-      only the agent's own prompt and a backend warn ever see. A body-level capability handshake
-      closes the blind-run case the harness CHANGELOG documents (a runner-pool image older than the
-      backend parses the body without `mcpServers` and runs with the prompt still promising tools);
-      that is a second image bump. And the job-body observation seam
+- [ ] **5. Run-surface observability for tool servers. The HANDSHAKE half has landed; the
+      TELEMETRY half has not.**
+      **Handshake (done):** the harness reports the job-body capability field names it parses
+      (`mcpServers`, `skills`) on `/health` and on the `POST /jobs` acceptance; `RunnerTransport`
+      gained a `RunnerDispatchAck` return every harness-speaking transport forwards; and the
+      dispatch site holds the body it just sent to that answer. The answer is THREE-STATE and that
+      is the design, not a hedge: `unsupported` refuses the dispatch (releasing the job the harness
+      already started) as an `UnavailableError` whose `runner_image_capability` reason makes the
+      step a `preflight` fault, while `unknown` proceeds and is reported through a warn line plus
+      `container.capability_unknown`. Its decisions and the gotchas it surfaced are below. Image
+      bumped to 1.93.0.
+      **Telemetry (open):** dispatch telemetry recording what the CLI actually reached (server
+      started, N tools) on a typed snapshot field instead of the raw `extras` dump the SPA renders,
+      and an unavailable server becoming a stated chip on the run surface rather than a line only
+      the agent's own prompt and a backend warn ever see. The job-body observation seam
       ([capability-credential-store.md](./capability-credential-store.md) slice 3, re-scoped there as
-      exactly this) lands here, giving tool servers their first cross-runtime conformance assertion.
-      It comes AFTER the probe on purpose: the chip and the snapshot field both need a wire vocabulary
-      for a tool server, and slice 4 is where that vocabulary now exists (`@cat-factory/contracts`'s
-      `tool-servers.ts`), so this slice extends one rather than inventing a second.
-      **Within the slice, the HANDSHAKE half lands first.** The 2026-08-05 review rated the
-      blind run the likeliest failure an adopting deployment actually hits (self-hosted pools lag
-      the backend by design, and nothing states the gap to anyone), and unlike the chip it needs
-      no wire vocabulary, so it should not queue behind the telemetry half.
+      exactly this) lands with it, giving tool servers their first cross-runtime conformance
+      assertion. It comes AFTER the probe on purpose: the chip and the snapshot field both need a
+      wire vocabulary for a tool server, and slice 4 is where that vocabulary now exists
+      (`@cat-factory/contracts`'s `tool-servers.ts`), so this extends one rather than inventing a
+      second. The handshake went first because the 2026-08-05 review rated the blind run the
+      likeliest failure an adopting deployment actually hits, and unlike the chip it needed no wire
+      vocabulary.
 - [ ] **6. Tenant-level configurability.** The binary-generator pattern applied to tool servers:
       a contracts-level non-secret vocabulary, a snapshot projection, per-workspace
       enable/disable, per-step selection via `stepOptions`, and a picker. The SPA finally learns
@@ -196,7 +202,7 @@ carries it; "done" means that slice has landed.
 | The credential checklist's READ was documented as gated and was not               | Slice 4 (done)                |
 | Telemetry records ids only; SPA renders raw `extras` JSON                         | Slice 5                       |
 | Dropped-server diagnosis reaches the agent and a warn log, no operator surface    | Slice 5                       |
-| Older harness image silently drops `mcpServers` (blind run)                       | Slice 5                       |
+| Older harness image silently drops `mcpServers` (blind run)                       | Slice 5 (handshake done)      |
 | Tool servers asserted nowhere cross-runtime                                       | Slice 5                       |
 | No per-workspace/per-step server selection; no wire vocabulary; no SPA visibility | Slice 6                       |
 | Capability credentials absent from the public API                                 | Slice 6                       |
@@ -215,7 +221,7 @@ From the 2026-08-05 external-servers review (dispositions follow the same vocabu
 
 | Finding (2026-08-05)                                                           | Disposition                   |
 | ------------------------------------------------------------------------------ | ----------------------------- |
-| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (ordering note)       |
+| Blind run (stale runner image) is the likeliest adopter failure; land it first | Slice 5 (handshake done)      |
 | OAuth is THE external-vendor gap; intermediate deployment-level flow is viable | Slice 7 (consuming half done) |
 | No boot signal when no resolvable harness serves any registered server         | Slice 8                       |
 | `stdio`: per-run `npx` cold start, no pre-run verification, no warm-up story   | Slice 8 (docs half done)      |
@@ -270,7 +276,7 @@ Recorded so the next iteration does not re-propose them.
 
 - **Any harness-side change is an image bump** (`@cat-factory/executor-harness` version + the
   three pinned tags + `RECOMMENDED_HARNESS_IMAGE`), and a reused tag does not deploy. Slice 1
-  bundled its harness edits into one bump (1.89.0); slice 4's handshake is a second.
+  bundled its harness edits into one bump (1.89.0); slice 5's handshake is the second (1.93.0).
 - **The kernel/harness copies are pinned by conformity tests.** The id pattern, the tool-name
   pattern and the URL rule exist twice on purpose; a validation addition must extend both sides and
   the pinning test, not just kernel.
@@ -281,7 +287,7 @@ Recorded so the next iteration does not re-propose them.
   `allToolServers()`, for the one question that walk cannot answer: which registrations no kind
   declares at all.
 - **Slice 4's harness edits: there were none.** The probe is entirely backend, so no image bump. That
-  is not a general property of this initiative, and slice 5's handshake is where the next one lands.
+  is not a general property of this initiative; slice 5's handshake was the next one (1.93.0).
 - **A new unavailability reason owes prose in `UNAVAILABLE_REASONS`** (the exhaustive `Record` in
   `prompts/capabilities.ts`), phrased for the AGENT rather than an operator: it needs to know the
   tool is absent and that trying harder will not produce it. Two reasons deliberately render the
@@ -306,6 +312,83 @@ Recorded so the next iteration does not re-propose them.
   internal-first soft launch for an endpoint whose whole point is external callers. It carries that
   obligation through `backend/docs/public-api.md` rather than the OpenAPI spec (see slice 3's
   decisions below), so a change to it must be reviewed against that doc, which no drift guard reads.
+
+## Slice 5 (handshake): its four decisions
+
+- **The ack rides the job ACCEPTANCE, not the poll view.** The poll would have cost nothing to
+  extend and reaches every transport already. It is the wrong seam twice over: the capability list
+  is a static fact about the IMAGE, so repeating it on every poll of an hour-long run is noise,
+  and by the first poll the only thing left to do about a blind run is fail a step that has already
+  begun. The dispatch site is the one place the body just sent is still in scope. Cost: a return
+  type on `RunnerTransport.dispatch`, which every implementation had to be looked at for.
+- **`void` stays a first-class return, so the check is THREE-STATE.** The cheap version treats "no
+  capabilities reported" as "does not support it" and needs no new vocabulary. It is also a false
+  accusation: every image between the capability landing (1.67.0) and the handshake landing (1.93.0)
+  parses `mcpServers` perfectly and reports no list, so a boolean would refuse every tool-server run
+  on every deployment one image behind, with no evidence and no way for an operator to tell a real
+  gap from the tooling. The version could have disambiguated it (the harness has reported one on
+  `/health` for a long time), but that buys a semver comparison plus a per-capability minimum-version
+  table to keep in step, to answer a question the image can simply be asked. So `unknown` is its own
+  disposition: proceed, and report the BLIND SPOT rather than the run. It is expected to decay to
+  zero, which is what makes `container.capability_unknown` worth having.
+- **The refusal STOPS the job through its own port method, and REPORTS whether that worked.** The
+  harness starts work on acceptance, so a throw alone leaves a blind agent running to completion
+  (possibly opening a PR) for a step the engine has already failed.
+
+  _WITHDRAWN, first attempt: reusing `release`._ It reads as the reclaim and it is, on the one
+  backend the design was checked against. It is not a stop anywhere else: `HttpRunnerPoolProvider.release`
+  is a NO-OP when the manifest declares no `release` template, and `LocalContainerRunnerTransport.releasePooled`
+  hands the warm-pool member BACK with the job still running in it. All three return the same `void`,
+  so the refusal reported an identical confident stop for a job that was destroyed, one that was
+  handed to the next run, and one that was never touched. The pooled case was the worse half: the
+  member's harness still answers `/health`, so the next run leases a container with a live agent and
+  a live checkout in it, which is the collision `acquireMember`'s synchronous claim exists to prevent.
+
+  What replaced it: `RunnerTransport.stopJob`, a harness `DELETE /jobs/{id}` that aborts ONE job
+  (never `abortAll`, since a pooled container serves other runs) and waits for it to settle before
+  answering, and a returned {`stopped` | `requested` | `unsupported`} outcome plus `failed` for a
+  throw. A container-owning backend always reaches `stopped` because a graceful abort that fails
+  ESCALATES to destroying the container, which also takes a poisoned pool member off the idle list.
+  A pool reaches at most `requested`. The three non-`stopped` outcomes are named in the refusal
+  message and counted as `container.blind_job_not_stopped`, per the degrade-loudly rule: the
+  environment-disposal flow learned the identical lesson (a teardown call returning is not the
+  environment being gone).
+
+- **A pool's ack is MANIFEST-MAPPED (`response.dispatchCapabilitiesPath`), like every other pool
+  field.**
+
+  _WITHDRAWN, first attempt: reading `capabilities` off the scheduler's response by name._ The
+  argument was that the field is the HARNESS's and not the scheduler's, so a proxying pool would
+  need no configuration and a non-proxying one would have nothing to map. It is wrong about what a
+  scheduler's response contains: `capabilities` is an ordinary word for a scheduler to use about its
+  own runners, and `{"capabilities":["gpu","docker"]}` narrows to `[]`, which resolves to
+  `unsupported` and HARD-REFUSES every capability dispatch against a perfectly current image. The
+  whole point of the three-state design is that the middle state exists to avoid a false accusation;
+  guessing at an arbitrary JSON document manufactures one. Nothing in the response can tell the two
+  apart, and the operator can, in one line. Unmapped now means `unknown`, which is the truth about a
+  control plane this backend knows nothing about.
+
+## Gotchas slice 5 (handshake) surfaced
+
+- **The capability NAME is the body FIELD name, deliberately.** That is what lets
+  `requiredHarnessCapabilities` be one filter over the union instead of a second map to keep in
+  step, and it is why the harness's list is a list of field names too. A member whose name did not
+  match its field would compile and check the wrong thing.
+- **Check what the BODY carries, never what the kind declares.** A dispatch that dropped every tool
+  server for its own reasons (Pi, a missing credential, over budget) promised the agent nothing and
+  has nothing to verify. Checking the declaration would refuse a Pi run for lacking an MCP client it
+  is documented not to have.
+- **An equality test against kernel cannot see the list LYING.** Both sides would agree and both be
+  wrong if a member were added ahead of the parser, which is exactly the blind run the handshake
+  exists to prevent. So the conformity suite also drives the real `parseAgentJob` with a body
+  carrying every declared capability and asserts each survives onto the parsed job.
+- **`DeployJobClient` is a STRUCTURAL subset, so widening `dispatch` broke it.** The integrations
+  layer declares its own narrow shape of the server's `RunnerJobClient` to stay runtime-neutral, and
+  a `Promise<void>` member is not satisfied by one returning an ack. It takes `Promise<unknown>`: a
+  deploy job runs no agent, carries no body capability, and has nothing to verify.
+- **The 400 path must NOT report capabilities.** A refused body accepted no job, so there is no
+  dispatch to hold to a handshake, and answering with one invites a caller to read a parse failure
+  as a capability verdict.
 
 ## Slice 7 (consuming) — its five decisions
 
