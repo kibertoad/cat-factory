@@ -411,6 +411,41 @@ describe('custom task types (reusable operations)', () => {
     ).toEqual([])
   })
 
+  it('ERRORS on a section declared in two places, and accepts a grouped form', () => {
+    // Grouping is presentation, and this is still an error, because neither rendering is honest: the
+    // renderer preserves declaration order, so the caption appears TWICE (reading as a platform
+    // fault rather than as the declaration it is), and merging the two runs would move a field away
+    // from where its author wrote it. Knowable from the registration, so boot is where it can be
+    // fixed. Folded on case and spacing, exactly as the renderer cuts the runs, so a case-variant
+    // re-declaration cannot pass as a distinct section.
+    const interleaved = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [
+        { key: 'style', label: 'Style', type: 'text', section: 'Shape' },
+        { key: 'dir', label: 'Directory', type: 'path', section: 'Placement' },
+        { key: 'verb', label: 'Verb', type: 'text', section: 'shape' },
+      ],
+    })
+    expect(interleaved[0]?.severity).toBe('error')
+    expect(interleaved[0]?.code).toBe('task_type_field_section_interleaved')
+    // Named by the spelling the form would render, not the one that broke it.
+    expect(interleaved[0]?.message).toContain('"Shape"')
+
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        fields: [
+          { key: 'entity', label: 'Entity', type: 'text' },
+          { key: 'style', label: 'Style', type: 'text', section: 'Shape' },
+          { key: 'verb', label: 'Verb', type: 'text', section: 'Shape' },
+          { key: 'dir', label: 'Directory', type: 'path', section: 'Placement' },
+        ],
+      }),
+    ).toEqual([])
+  })
+
   it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
     // The pipeline reference is a different bar from the fragment one: an unknown id means the
     // created task silently falls back to the workspace's positional default pipeline, and
@@ -474,6 +509,16 @@ describe('initiative presets: the OTHER descriptor-driven form', () => {
         { key: 'root', label: 'Root again', type: 'text' },
       ])[0]?.code,
     ).toBe('initiative_preset_field_duplicate')
+
+    // The grouping fault reaches this surface through the same checker, so a preset cannot declare a
+    // section the create modal would caption twice.
+    expect(
+      problemsFor([
+        { key: 'scope', label: 'Scope', type: 'text', section: 'Scope' },
+        { key: 'root', label: 'Root', type: 'path' },
+        { key: 'depth', label: 'Depth', type: 'number', section: 'Scope' },
+      ])[0]?.code,
+    ).toBe('initiative_preset_field_section_interleaved')
   })
 
   it('is silent on a well-formed form, and on the built-in presets that ride along', () => {

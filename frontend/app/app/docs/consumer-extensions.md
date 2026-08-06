@@ -185,11 +185,14 @@ module). The SPA merges it into the create-task picker and the card-badge catalo
   `category` groups the picker (below).
 - **`fields`** are descriptor-driven create-form inputs over the shared descriptor-form vocabulary
   (`text` / `textarea` / `number` / `select` / `checkbox` / `checkbox-group` / `path`, with
-  defaults and `showWhen` visibility; `password` is excluded by construction because a task field
-  value reaches prompts and telemetry). Their values land in the task's sparse
-  `taskTypeFields.custom` bag (no migration). A BACKEND-registered descriptor is enforced
-  server-side on create as well (required answers, option lists, lengths); a code-shipped one is
-  known only to the SPA, so the create form is its only check (see the Validation note below).
+  defaults, `showWhen` visibility and a `section` grouping caption; `password` is excluded by
+  construction because a task field value reaches prompts and telemetry). Their values land in the
+  task's sparse `taskTypeFields.custom` bag (no migration). A BACKEND-registered descriptor is
+  enforced server-side on create as well (required answers, option lists, lengths); a code-shipped
+  one is known only to the SPA, so the create form is its only check (see the Validation note below).
+  A `section` groups a long form into captioned runs and changes nothing else; declare a section's
+  fields consecutively, since a backend registration that splits one in two fails boot and a
+  code-shipped one would simply render its caption twice.
 - **`formPanel`** optionally names a bespoke create-form section component you contribute to the
   `taskTypeFormPanels` slot (paired by that id, like `resultViews`); shown INSTEAD of `fields`. An
   unpaired id degrades to the descriptor fields.

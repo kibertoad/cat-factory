@@ -43,6 +43,7 @@ import {
   isReservedPlatformEnvKey,
   isToolchainEnvName,
   modalitiesOfMediaType,
+  nonContiguousDescriptorSections,
   reservedEnvKeyMessage,
   toolchainEnvNameMessage,
   isValidResultViewId,
@@ -1155,12 +1156,12 @@ function hasPredicate(condition: DescriptorFieldShowWhen): boolean {
 }
 
 /**
- * A descriptor-driven create FORM that structurally cannot be filled. Each of these is a typo in the
- * deployment's own descriptor with no run-time recovery, and each fails SILENTLY without this check:
- * a duplicate key means the later declaration wins wherever the fields are indexed, an optionless
- * picker renders an empty control (and, if required, makes the subject un-creatable), and a
- * `showWhen` naming no declared field hides its own field forever, so the value can never be
- * collected.
+ * A descriptor-driven create FORM that structurally cannot be filled, plus the one grouping fault
+ * that has no honest rendering. Each of these is a typo in the deployment's own descriptor with no
+ * run-time recovery, and each fails SILENTLY without this check: a duplicate key means the later
+ * declaration wins wherever the fields are indexed, an optionless picker renders an empty control
+ * (and, if required, makes the subject un-creatable), and a `showWhen` naming no declared field
+ * hides its own field forever, so the value can never be collected.
  *
  * Errors rather than warnings, because unlike a `defaultFragmentIds` id (which may legitimately name
  * a tenant-tier fragment invisible at boot) every input here is fully known from the registration.
@@ -1201,6 +1202,19 @@ function descriptorFormProblems(
       )
     }
     problems.push(...defaultOutsideOptions(field, codePrefix, subject))
+  }
+  // A `section` declared in two places, with other fields between them. Presentation rather than
+  // fillability, and an error all the same: the renderer preserves declaration order, so the caption
+  // renders TWICE (reading as a platform fault rather than as the declaration it is), and the only
+  // alternative would be moving a field away from where its author wrote it. Fully knowable from the
+  // registration, so boot is where it can still be fixed.
+  for (const caption of nonContiguousDescriptorSections(fields)) {
+    bad(
+      'field_section_interleaved',
+      `declares section "${caption}" in two places with other fields between them, so its caption ` +
+        `renders twice. Declare a section's fields consecutively (matching on case and spacing, ` +
+        `which the renderer folds).`,
+    )
   }
   return problems
 }

@@ -107,6 +107,17 @@ export const descriptorFieldEntries = {
   key: v.pipe(v.string(), v.minLength(1), v.maxLength(DESCRIPTOR_FIELD_KEY_MAX)),
   /** Human label for the form field (deployment-supplied English). */
   label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  /**
+   * Optional grouping caption, rendered once above the run of consecutively-declared fields that
+   * share it ({@link descriptorFieldSections}). Deployment-supplied English, like every other
+   * caption here.
+   *
+   * PRESENTATION ONLY: it groups nothing else. A section has no effect on validation, on what is
+   * frozen, or on how the answers fold into a prompt, so moving a field between sections can never
+   * change what the platform does with its value. It exists because a form that collects a dozen
+   * fields, each of which changes what the agents do, reads as one undifferentiated column.
+   */
+  section: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(120))),
   /** Optional helper text shown under the field. */
   help: v.optional(v.pipe(v.string(), v.maxLength(300))),
   /** Optional input placeholder. */
@@ -277,6 +288,104 @@ export function isDescriptorFieldVisible(
   values: DescriptorFieldValues,
 ): boolean {
   return !field.showWhen || matchesDescriptorCondition(field.showWhen, values)
+}
+
+/** One run of a descriptor form: the fields to render, and the caption to render above them. */
+export interface DescriptorFieldSection {
+  /** The caption for this run, absent for the fields that declare no section. */
+  section?: string
+  /** The run's VISIBLE fields, in declaration order. Never empty. */
+  fields: DescriptorField[]
+}
+
+/**
+ * The caption a section groups under: its own text folded on CASE and on whitespace runs, so two
+ * spellings of one section ("Placement" / "placement") are ONE run rather than two identical-looking
+ * captions in a row. Whitespace-only is no section at all: the schema bounds a caption at
+ * `minLength(1)`, but a CODE registration is never parsed, so `'  '` reaches here and must read as
+ * "ungrouped" instead of rendering an empty heading.
+ *
+ * The same fold, for the same reason, as the task-type picker's category rows (`taskTypePicker.ts`),
+ * including why it is not slugified: a caption is arbitrary Unicode a deployment writes in its own
+ * language, so reducing it to an id-safe key would fold genuinely distinct captions together.
+ */
+function sectionOf(field: DescriptorField): { key: string; caption: string } | undefined {
+  const caption = field.section?.trim()
+  if (!caption) return undefined
+  return { key: caption.toLowerCase().replace(/\s+/g, ' '), caption }
+}
+
+/**
+ * A field list reduced to the runs a form RENDERS: consecutively-declared fields sharing one
+ * `section`, over the fields currently VISIBLE, in declaration order.
+ *
+ * The grouping rule lives here rather than in the renderer because two surfaces read it: the SPA's
+ * `DescriptorFields.vue`, and the boot check that refuses a declaration this reduction cannot render
+ * honestly ({@link nonContiguousDescriptorSections}).
+ *
+ * Two properties the caller gets from the ORDER of the two steps:
+ *
+ * - **A section whose every field is hidden renders NO caption**, because visibility is applied
+ *   before the runs are cut, so an empty run never exists. A caption over nothing reads as a form
+ *   that failed to load its own controls. It also means a hidden field BETWEEN two fields of one
+ *   section does not split its caption in half.
+ * - **Declaration order is never rearranged.** A field renders where its author declared it, and a
+ *   section declared in two places stays two runs. Merging them would move a field away from where
+ *   it was written, which is why the boot check refuses that declaration rather than this function
+ *   quietly repairing it.
+ */
+export function descriptorFieldSections(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFieldSection[] {
+  const sections: DescriptorFieldSection[] = []
+  let openKey: string | undefined
+  for (const field of fields) {
+    if (!isDescriptorFieldVisible(field, values)) continue
+    const declared = sectionOf(field)
+    const open = sections[sections.length - 1]
+    if (open && declared?.key === openKey) {
+      open.fields.push(field)
+      continue
+    }
+    // The FIRST spelling of a folded caption is the one rendered, because the caption is the
+    // deployment's own words rather than an id.
+    sections.push({ ...(declared ? { section: declared.caption } : {}), fields: [field] })
+    openKey = declared?.key
+  }
+  return sections
+}
+
+/**
+ * The sections a field list declares in more than one RUN, in first-offence order: a section broken
+ * apart by a different section, or by fields declaring none.
+ *
+ * Boot refuses these, because neither available rendering is honest. {@link descriptorFieldSections}
+ * preserves declaration order, so the caption appears TWICE, which reads as a platform fault rather
+ * than as the declaration it is; merging the runs instead would render a field order nobody wrote.
+ * Both are fully knowable from the registration, which is the one place it can still be fixed, and
+ * both are presentation, so there is no run-time recovery to prefer either way.
+ *
+ * Reported by the FIRST-SEEN spelling, and folded through the same key the runs are cut on, so a
+ * case-variant re-declaration is caught rather than passing as a distinct section.
+ */
+export function nonContiguousDescriptorSections(fields: readonly DescriptorField[]): string[] {
+  const firstSpelling = new Map<string, string>()
+  const closed = new Set<string>()
+  const broken = new Map<string, string>()
+  let openKey: string | undefined
+  for (const field of fields) {
+    const declared = sectionOf(field)
+    if (declared?.key === openKey) continue
+    if (openKey !== undefined) closed.add(openKey)
+    if (declared) {
+      const caption = firstSpelling.get(declared.key) ?? declared.caption
+      firstSpelling.set(declared.key, caption)
+      if (closed.has(declared.key)) broken.set(declared.key, caption)
+    }
+    openKey = declared?.key
+  }
+  return [...broken.values()]
 }
 
 /** Whether a filled value matches the field's declared type (structural, pre-semantic check). */

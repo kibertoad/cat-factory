@@ -3,14 +3,17 @@ import * as v from 'valibot'
 import {
   DESCRIPTOR_FIELD_VALUE_MAX,
   descriptorFieldDefaults,
+  descriptorFieldSections,
   descriptorFieldValuesSchema,
   isDescriptorFieldVisible,
+  nonContiguousDescriptorSections,
   renderDescriptorFieldValue,
   sanitizeDescriptorFields,
   validateDescriptorFields,
   withDescriptorFieldDefaults,
   type DescriptorField,
 } from './form-fields.js'
+import { initiativePresetFieldSchema } from './initiative-preset.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
 import { taskTypeFieldsSchema } from './primitives.js'
 
@@ -282,5 +285,132 @@ describe('descriptor defaults', () => {
     const fields = [field({ key: 'entity' }), field({ key: 'notes', type: 'textarea' })]
     expect(withDescriptorFieldDefaults(fields, { entity: 'Order' })).toEqual({ entity: 'Order' })
     expect(withDescriptorFieldDefaults([], {})).toEqual({})
+  })
+})
+
+// `section` groups a long form into captioned runs. Presentation only: nothing below asserts a
+// change to what is validated, frozen or folded into a prompt, because there is none. What IS a rule
+// is which fields a caption spans, and it is stated once here because two readers depend on it: the
+// renderer, and the boot check that refuses a declaration this reduction cannot render honestly.
+describe('descriptor form sections', () => {
+  const keysOf = (fields: readonly DescriptorField[]) => fields.map((f) => f.key)
+
+  it('cuts consecutive runs of one caption, in declaration order', () => {
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'entity' }),
+        field({ key: 'style', section: 'Shape' }),
+        field({ key: 'verb', section: 'Shape' }),
+        field({ key: 'dir', type: 'path', section: 'Placement' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      [undefined, ['entity']],
+      ['Shape', ['style', 'verb']],
+      ['Placement', ['dir']],
+    ])
+  })
+
+  it('renders a form declaring no section as ONE uncaptioned run', () => {
+    // The shape every existing descriptor has: the flat column, unchanged, and reached through the
+    // same call rather than a branch in the renderer.
+    const fields = [field({ key: 'entity' }), field({ key: 'notes', type: 'textarea' })]
+    expect(descriptorFieldSections(fields, {})).toEqual([{ fields }])
+    expect(descriptorFieldSections([], {})).toEqual([])
+  })
+
+  it('drops a section whose every field is hidden, caption included', () => {
+    // A caption over nothing reads as a form that failed to load its own controls. Visibility is
+    // applied BEFORE the runs are cut, so the empty run never exists rather than being emitted.
+    const fields = [
+      field({ key: 'style', type: 'select', options: [{ value: 'http', label: 'HTTP' }] }),
+      field({ key: 'verb', section: 'HTTP', showWhen: { key: 'style', equals: 'http' } }),
+      field({ key: 'path', section: 'HTTP', showWhen: { key: 'style', equals: 'http' } }),
+    ]
+    expect(descriptorFieldSections(fields, {}).map((s) => s.section)).toEqual([undefined])
+    expect(descriptorFieldSections(fields, { style: 'http' }).map((s) => s.section)).toEqual([
+      undefined,
+      'HTTP',
+    ])
+  })
+
+  it('does not let a HIDDEN field between two of a section split its caption in half', () => {
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'verb', section: 'Shape' }),
+        field({ key: 'note', showWhen: { key: 'advanced', equals: true } }),
+        field({ key: 'style', section: 'Shape' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      ['Shape', ['verb', 'style']],
+    ])
+  })
+
+  it('folds two spellings of one caption together, rendering the first', () => {
+    // The same fold the task-type picker's category rows use, for the same reason: two spellings of
+    // one section would otherwise render as near-identical headings sitting beside each other.
+    const sections = descriptorFieldSections(
+      [
+        field({ key: 'a', section: 'API surface' }),
+        field({ key: 'b', section: 'api  Surface' }),
+        // A whitespace-only caption is no section at all: the schema bounds it, but a CODE
+        // registration is never parsed, so it must read as ungrouped rather than render an empty
+        // heading.
+        field({ key: 'c', section: '   ' }),
+      ],
+      {},
+    )
+    expect(sections.map((s) => [s.section, keysOf(s.fields)])).toEqual([
+      ['API surface', ['a', 'b']],
+      [undefined, ['c']],
+    ])
+  })
+
+  it('names a section declared in two places, which has no honest rendering', () => {
+    // Reported to BOOT rather than repaired here: the reduction preserves declaration order, so the
+    // caption renders twice; merging the runs would move a field away from where its author wrote
+    // it. Both are knowable from the registration.
+    expect(
+      nonContiguousDescriptorSections([
+        field({ key: 'a', section: 'Shape' }),
+        field({ key: 'b', section: 'Placement' }),
+        field({ key: 'c', section: 'shape' }),
+      ]),
+    ).toEqual(['Shape'])
+    // Broken apart by an UNSECTIONED field, which is the same fault: two captions, one section.
+    expect(
+      nonContiguousDescriptorSections([
+        field({ key: 'a', section: 'Shape' }),
+        field({ key: 'b' }),
+        field({ key: 'c', section: 'Shape' }),
+      ]),
+    ).toEqual(['Shape'])
+  })
+
+  it('says nothing about a contiguous declaration, however the runs interleave with ungrouped ones', () => {
+    // Ungrouped fields are not a section, so a form may open and close with them freely; only a
+    // NAMED caption has to be declared in one place.
+    expect(
+      nonContiguousDescriptorSections([
+        field({ key: 'a' }),
+        field({ key: 'b', section: 'Shape' }),
+        field({ key: 'c', section: 'Shape' }),
+        field({ key: 'd' }),
+        field({ key: 'e', section: 'Placement' }),
+        field({ key: 'f' }),
+      ]),
+    ).toEqual([])
+    expect(nonContiguousDescriptorSections([])).toEqual([])
+  })
+
+  it('bounds a caption on the wire, and admits one on both declaring surfaces', () => {
+    for (const schema of [taskTypeFieldDescriptorSchema, initiativePresetFieldSchema]) {
+      expect(v.parse(schema, { key: 'k', label: 'K', section: 'Shape' }).section).toBe('Shape')
+      expect(() => v.parse(schema, { key: 'k', label: 'K', section: '' })).toThrow()
+      expect(() => v.parse(schema, { key: 'k', label: 'K', section: 'x'.repeat(121) })).toThrow()
+    }
   })
 })
