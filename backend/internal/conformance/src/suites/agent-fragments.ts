@@ -1,10 +1,6 @@
 import type { Block, Pipeline, WorkspaceSnapshot } from '@cat-factory/kernel'
-import {
-  clearRegisteredPromptFragments,
-  clearRegisteredTaskTypeDefaultFragments,
-  registerPromptFragment,
-  registerTaskTypeDefaultFragments,
-} from '@cat-factory/prompt-fragments'
+import { defaultPromptFragmentRegistry } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -102,7 +98,13 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     // (coder) but not a non-code-aware one (documenter). A task owns its fragment selection
     // (seeded from the service at creation, then editable), so the fold reads the task's own
     // `fragmentIds` — the service's fragments are not re-unioned at run time.
-    registerPromptFragment({
+    // Registered onto an app-owned registry INJECTED into this app, not onto a module global
+    // before it. That is the whole point of the seam: a deployment's standards reach a run because
+    // the composition root was handed the instance they were registered on, so this drives the
+    // real path rather than one that happened to work while every reader resolved one copy of a
+    // package. It also means there is nothing to clean up afterwards.
+    const promptFragmentRegistry = promptFragmentRegistryWithBuiltins()
+    promptFragmentRegistry.register({
       id: 'test.svc-standard',
       version: '1.0.0',
       title: 'Service standard',
@@ -110,8 +112,8 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       summary: 'A registered service standard.',
       body: 'SERVICE-STANDARD-BODY',
     })
-    try {
-      const app = harness.makeApp({ echoFragments: true })
+    {
+      const app = harness.makeApp({ echoFragments: true }, { promptFragmentRegistry })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
 
@@ -145,8 +147,6 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       const documenter = exec.steps.find((s) => s.agentKind === 'documenter')!
       expect(documenter.output).toContain('[frags][/frags]')
       expect(documenter.selectedFragmentIds ?? []).toEqual([])
-    } finally {
-      clearRegisteredPromptFragments()
     }
   })
 
@@ -157,7 +157,8 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     // configuration. Asserts the board seeds it onto the created task's own `fragmentIds`
     // (visible + removable per task) and that the engine then folds it into a code-aware run,
     // identically on D1 and Postgres.
-    registerPromptFragment({
+    const promptFragmentRegistry = promptFragmentRegistryWithBuiltins()
+    promptFragmentRegistry.register({
       id: 'test.review-checklist',
       version: '1.0.0',
       title: 'Review checklist',
@@ -165,9 +166,9 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       summary: 'A registered review checklist.',
       body: 'REVIEW-CHECKLIST-BODY',
     })
-    registerTaskTypeDefaultFragments('review', ['test.review-checklist'])
-    try {
-      const app = harness.makeApp({ echoFragments: true })
+    promptFragmentRegistry.registerTaskTypeDefaults('review', ['test.review-checklist'])
+    {
+      const app = harness.makeApp({ echoFragments: true }, { promptFragmentRegistry })
       const { workspace } = await app.createWorkspace()
       const wsId = workspace.id
 
@@ -202,9 +203,6 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
       const coder = exec.steps.find((s) => s.agentKind === 'coder')!
       expect(coder.output).toContain('[frags]test.review-checklist[/frags]')
       expect(coder.selectedFragmentIds).toEqual(['test.review-checklist'])
-    } finally {
-      clearRegisteredTaskTypeDefaultFragments()
-      clearRegisteredPromptFragments()
     }
   })
 
@@ -273,6 +271,51 @@ function registerFragmentSetTests(harness: ConformanceHarness): void {
     const coder = exec.steps.find((s) => s.agentKind === 'coder')!
     expect(coder.selectedFragmentIds).toEqual(['design.context'])
     expect(coder.output).toContain('[frags]design.context[/frags]')
+  })
+
+  it('resolves a run from the INJECTED registry, not from whatever the process imported', async () => {
+    // The seam's defining property, and the only assertion that can see the bug it fixes. A
+    // deployment that registers onto one instance and a facade built from ANOTHER is exactly the
+    // two-physical-copies failure: everything typechecks, the boot warning is the same one a typo
+    // produces, and every task of the operation folds nothing. Here the app is handed a registry
+    // holding ONLY this fragment, so a reader still resolving a module global (or the shipped
+    // catalog by default) answers differently and the run's folded standards say so.
+    const promptFragmentRegistry = defaultPromptFragmentRegistry()
+    promptFragmentRegistry.register({
+      id: 'test.only-registered',
+      version: '1.0.0',
+      title: 'The only standard',
+      category: 'Test',
+      summary: 'The single fragment this app knows.',
+      body: 'ONLY-REGISTERED-BODY',
+    })
+    const app = harness.makeApp({ echoFragments: true }, { promptFragmentRegistry })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+
+    // The catalog endpoint serves the injected pool and nothing else: no shipped built-in leaks in
+    // from an import side effect.
+    const catalog = await app.call<{ id: string }[]>('GET', '/prompt-fragments')
+    expect(catalog.status).toBe(200)
+    expect(catalog.body.map((fragment) => fragment.id)).toEqual(['test.only-registered'])
+
+    // …and a run folds it, while a built-in id this app was NOT given resolves to nothing rather
+    // than being rescued from the static catalog.
+    await app.call('PATCH', `/workspaces/${wsId}/blocks/task_login`, {
+      fragmentIds: ['test.only-registered', 'node.performance'],
+    })
+    const pipeline = await app.call<Pipeline>('POST', `/workspaces/${wsId}/pipelines`, {
+      name: 'Code',
+      agentKinds: ['coder'],
+    })
+    const start = await app.call('POST', `/workspaces/${wsId}/blocks/task_login/executions`, {
+      pipelineId: pipeline.body.id,
+    })
+    expect(start.status).toBe(201)
+    const exec = (await app.drive(wsId)).find((e) => e.blockId === 'task_login')!
+    const coder = exec.steps.find((s) => s.agentKind === 'coder')!
+    expect(coder.selectedFragmentIds).toEqual(['test.only-registered'])
+    expect(coder.output).toContain('[frags]test.only-registered[/frags]')
   })
 
   // ---- condensed briefs for implementer kinds ---------------------------------------

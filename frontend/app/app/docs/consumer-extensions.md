@@ -4,19 +4,19 @@ A deployment that consumes this layer (`extends: ['@cat-factory/app']`) can cont
 its own **components** (result windows, navigation entries, inspector panels, agent-kind
 palette data) **without forking the layer**. This is the frontend counterpart of the
 backend's public registries (`registerAgentKind`, `registerGate`; see
-[`backend/docs/custom-agents.md`](../../../backend/docs/custom-agents.md)). The governing
+[`backend/docs/custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)). The governing
 principle is the same: **zero host edits for a consumer extension**.
 
 A worked, end-to-end example ships in the template deployment:
-[`deploy/frontend/app/`](../../../deploy/frontend) (the `acme:security` module): the
+[`deploy/frontend/app/`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend/app) (the `acme:security` module): the
 frontend analogue of the backend
-[`@cat-factory/example-custom-agent`](../../../backend/internal/example-custom-agent)
+[`@cat-factory/example-custom-agent`](https://github.com/kibertoad/cat-factory/tree/main/backend/internal/example-custom-agent)
 package. Read this guide alongside it.
 
 > This is the **landed** surface (modular-vue adoption slices 1–5). The larger consumer
 > extension programme (custom task types, generic interactive phases, overlays, consumer
 > notification kinds, stream events, and the hardened public export surface) is tracked in
-> [`docs/initiatives/frontend-extension-mechanism.md`](../../../docs/initiatives/frontend-extension-mechanism.md).
+> [`docs/initiatives/frontend-extension-mechanism.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/frontend-extension-mechanism.md).
 
 ## The one seam: `registerAppModule`
 
@@ -219,8 +219,11 @@ suite can address a row and the caption inside it.
 Together, `fields` + `defaultFragmentIds` + `defaultPipelineId` are what turns a task type from a
 badge into a **reusable operation**: a canned unit of work an org runs repeatedly with per-case
 input, whose collected values reach every agent's prompt. See
-[`backend/docs/reusable-operations.md`](../../../../backend/docs/reusable-operations.md) and the
-`org:introduce-api` worked example in `backend/internal/example-custom-agent`.
+[`backend/docs/reusable-operations.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/reusable-operations.md) and the
+[`org:introduce-api` worked example](https://github.com/kibertoad/cat-factory/tree/main/backend/internal/example-custom-agent).
+Both links are absolute on purpose: this page ships inside the `@cat-factory/app` tarball, so a
+relative path out of it resolves only from a checkout, which is the one place its reader is not.
+(`scripts/check-shipped-doc-links.mjs` fails CI on a shipped doc that grows one.)
 
 The **same type can be delivered from the backend** instead of code-shipped: register it on the
 deployment's app-owned `TaskTypeRegistry` and it arrives in the workspace snapshot's

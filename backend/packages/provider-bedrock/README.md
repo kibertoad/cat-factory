@@ -53,7 +53,7 @@ ambient AWS credential chain; instance role, `~/.aws`, etc.), and optional `BEDR
 this resolver's allow-list AND `ProviderCapabilities.bedrockModels`, which decides whether a
 catalog model's `bedrock` flavour is selectable in the picker. Parsed separately, the picker
 could offer an id this resolver throws on. Details:
-[`model-support.md` §8](../../docs/model-support.md).
+[`model-support.md` §8](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/model-support.md).
 
 ### Cloudflare Worker facade: via `registerModelRegistry`
 
@@ -101,6 +101,6 @@ message instead of a deep AWS SDK error. Omit `supportedModels` to forward any m
 
 ## Related
 
-Part of cat-factory's opt-in **AWS stack** alongside [`@cat-factory/provider-s3`](../provider-s3)
-(blob storage) and [`@cat-factory/eks`](../eks) (runner + environment backends). Each is
+Part of cat-factory's opt-in **AWS stack** alongside [`@cat-factory/provider-s3`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/provider-s3)
+(blob storage) and [`@cat-factory/eks`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/eks) (runner + environment backends). Each is
 independent and registers into its own seam: mix in only what you use.

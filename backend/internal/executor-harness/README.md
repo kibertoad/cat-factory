@@ -1,7 +1,7 @@
 # @cat-factory/executor-harness
 
 The payload that runs **inside** a per-run Cloudflare Container (or a
-[self-hosted runner](../../docs/runner-pool-integration.md)) to perform real
+[self-hosted runner](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md)) to perform real
 repo work with the [Pi coding agent](https://github.com/earendil-works/pi).
 
 It is a thin TypeScript wrapper (a `node:http` server on `:8080`) that the
@@ -33,7 +33,7 @@ replayed `POST` **re-attaches** to the running job rather than starting a
 duplicate (the durable driver's retries/replays are safe). Pi's todo-tool counts
 are surfaced as `progress` while a job runs. The exact request/response shapes
 cat-factory sends are documented in
-[`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md).
+[`docs/runner-pool-integration.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md).
 
 `GET /jobs/{id}` is also the harness's observability channel: `spans`, `followUps`
 and `callMetrics` are **drain-on-read**; each poll returns what accumulated since
@@ -62,7 +62,7 @@ The implementation job (`POST /run`) is the canonical sequence:
    body's `proxyPhasePath` says the backend serves it, which is how a repair round's model spend
    stays distinguishable from the first pass's in telemetry; without that flag the plain path is
    used and the calls are recorded as unattributed
-   (see [token-burn instrumentation](../../../docs/initiatives/token-burn-instrumentation.md)),
+   (see [token-burn instrumentation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/token-burn-instrumentation.md)),
 3. **prepopulate dependencies**, when the job body carries `dependencyInstall`: the
    service's install command is run with `sh -c` in the checkout BEFORE the agent starts, so
    it reads real installed packages instead of inferring a library's capabilities from a
@@ -71,7 +71,7 @@ The implementation job (`POST /run`) is the canonical sequence:
    steps 6 and 7, which start a fresh agent) and the run continues either way. Whatever the
    install materialises is excluded from git first, so no later `git add -A` can sweep a
    dependency tree into the pull request (see
-   [dependency prepopulation](../../../docs/initiatives/agent-dependency-prepopulation.md)),
+   [dependency prepopulation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/agent-dependency-prepopulation.md)),
 4. **resolve the repo's pull-request template**, when this dispatch opens a PR (`src/pr-template.ts`):
   `.github/PULL_REQUEST_TEMPLATE.md` and its root/`docs/`/multi-template-directory variants, or
    GitLab's `.gitlab/merge_request_templates/`, read straight off the checkout (a symlinked template
@@ -85,11 +85,11 @@ The implementation job (`POST /run`) is the canonical sequence:
 6. **validate** the checkout, when the job body carries `validationChecks`: the service's
    configured check commands (install/lint/test/build) run with `sh -c` in the checkout, and
    while they fail and the attempt budget remains the agent is re-run with the captured output
-   as its instruction (see [pre-PR validation](../../../docs/initiatives/pre-pr-validation.md)),
+   as its instruction (see [pre-PR validation](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/pre-pr-validation.md)),
 7. **prove the reproduction**, when the job body carries `reproduction`: the declared check is
    run against the pre-fix tree and the tree the PR will open from, in two freshly-created
    symmetric `git worktree` checkouts, and only red-then-green is reported as proof (see
-   [bugfix reproduction proof](../../docs/adr/0033-bugfix-reproduction-proof.md)). Unlike
+   [bugfix reproduction proof](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0033-bugfix-reproduction-proof.md)). Unlike
    step 6 this NEVER gates the PR: a failed verification is fed back to the agent while budget
    remains, then recorded as `inconclusive`. It runs BEFORE step 6 so validation stays the last
    thing to touch the tree,
@@ -120,7 +120,7 @@ PR. Blueprint **commits onto a branch** (no history reset) and returns the tree.
 A job body may carry `skills[]` (procedural playbooks) and `mcpServers[]` (MCP tool servers): the
 harness MATERIALISES both and decides nothing about them; the backend has already resolved which
 apply and dropped what this harness cannot serve (see
-[`backend/docs/adr/0029-agent-kind-capabilities.md`](../../docs/adr/0029-agent-kind-capabilities.md)).
+[`backend/docs/adr/0029-agent-kind-capabilities.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0029-agent-kind-capabilities.md)).
 
 - **Skills** install natively under `CLAUDE_CONFIG_DIR/skills/<name>/` for a leased-credential
   claude-code run (the CLI discovers and invokes them), and under
@@ -279,7 +279,7 @@ docker.io/<org>/cat-factory-executor:<version>
 Each is tagged with the package `version`, the commit `sha-…`, and `latest`.
 
 **CI** does this automatically:
-[`.github/workflows/docker-publish.yml`](../../../.github/workflows/docker-publish.yml)
+[`.github/workflows/docker-publish.yml`](https://github.com/kibertoad/cat-factory/blob/main/.github/workflows/docker-publish.yml)
 republishes on every push to `main` that touches image content (`src/**`,
 `Dockerfile`, `tsconfig.json`, `package.json`). Docker Hub is gated on the
 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets; without them it publishes
@@ -303,9 +303,9 @@ via env vars (`REGISTRIES`, `GHCR_OWNER`, `DOCKERHUB_ORG`, `TAG`, `PUSH_LATEST`,
 
 A backend deployment references the image from `wrangler.toml`
 (`[[containers]] image = "ghcr.io/<owner>/cat-factory-executor:<version>"`: see
-[`deploy/backend`](../../../deploy/backend)); a self-hosted runner pool pulls the
-same image (see [`docs/runner-pool-integration.md`](../../docs/runner-pool-integration.md)).
+[`deploy/backend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/backend)); a self-hosted runner pool pulls the
+same image (see [`docs/runner-pool-integration.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/runner-pool-integration.md)).
 The worker library's own test/dev `wrangler.toml` still references this
 `Dockerfile` by local path so the acceptance suite can build it. Because the
 version is the image tag, **bump this package via a changeset whenever you change
-image content** (see [`CONTRIBUTING.md`](../../../CONTRIBUTING.md)).
+image content** (see [`CONTRIBUTING.md`](https://github.com/kibertoad/cat-factory/blob/main/CONTRIBUTING.md)).

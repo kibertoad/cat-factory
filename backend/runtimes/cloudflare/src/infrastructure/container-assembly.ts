@@ -553,6 +553,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     stepResolverRegistry,
     initiativePresetRegistry,
     providerRegistry,
+    promptFragmentRegistry,
   } = registries
   // The Bedrock allow-list that gates `bedrock`-flavour selectability, derived from `env` here
   // (like `baseUrlFor` below) because it is one deployment-level read with nothing
@@ -609,6 +610,10 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // The app-owned JUDGE registry (the fourth step-taxonomy bucket); the engine's judge machine
     // reads it, and it is re-exposed on Core for the snapshot's palette projection.
     judgeRegistry,
+    // The app-owned best-practice standards pool (shipped catalog + whatever the deployment
+    // registered on the same instance). `createCore` wraps it in the default `PromptFragmentSource`
+    // every prompt-assembly site and the catalog endpoint read through.
+    promptFragmentRegistry,
     stepResolverRegistry,
     // The app-owned provider registry the gate providers were wired onto above; the engine's gate
     // machine reads the SAME instance through its GateContext.

@@ -5,8 +5,8 @@ API** (`/api/v1`). It lets an MCP host — Claude Desktop, an IDE, an agent fram
 workspace's board, start and watch runs, answer parked decisions, and read a run's telemetry.
 
 It is a **facade**, not a client. Every tool is one call on
-[`@cat-factory/sdk`](../typescript), and the tool table is generated from the same
-[`docs/openapi.json`](../../docs/openapi.json) the four SDK clients are generated from.
+[`@cat-factory/sdk`](https://github.com/kibertoad/cat-factory/tree/main/sdk/typescript), and the tool table is generated from the same
+[`docs/openapi.json`](https://github.com/kibertoad/cat-factory/blob/main/docs/openapi.json) the four SDK clients are generated from.
 
 ## Do you need this package?
 
@@ -14,7 +14,7 @@ There are two ways to reach a cat-factory deployment over MCP, and they serve th
 
 - **Hosted**, `POST /api/v1/mcp` on the deployment itself. Nothing to install: give the host a URL
   and a key. This is the one to reach for if the host speaks HTTP MCP. See
-  [`backend/docs/public-api.md`](../../backend/docs/public-api.md#from-an-mcp-host).
+  [`backend/docs/public-api.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/public-api.md#from-an-mcp-host).
 - **This package**, over stdio. It needs no backend deployment of your own, it is the only path for
   a host that cannot speak HTTP MCP, and it is the only one with per-host tool filters.
 
