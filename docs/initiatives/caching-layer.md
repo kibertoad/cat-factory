@@ -367,7 +367,11 @@ target + wire ALL its invalidation sites + tests" and should be a small PR.
 - A Redis (or any async) **data** tier; cache warming; cross-request memoization of LLM
   calls.
 - The Worker gaining a cross-isolate invalidation bus (Durable-Object-brokered or
-  otherwise): revisit only with evidence of a real staleness problem.
+  otherwise): revisit only with evidence of a real staleness problem. What enabling the
+  isolate-safe pass-throughs would actually take (an isolate-lived cache bag, a pulled
+  generation-counter probe, and the one `layered-loader` behaviour neither of those can
+  supply) is written up in
+  [`docs/proposals/layered-loader-isolate-runtime-support.md`](../proposals/layered-loader-isolate-runtime-support.md).
 - Postgres LISTEN/NOTIFY or NATS as alternative notification transports (the injected
   `notificationPairFactory` seam leaves room; not built now).
 - Row 8's candidates until each is evaluated against real read volume: snapshot caching
