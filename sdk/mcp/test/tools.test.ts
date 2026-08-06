@@ -55,13 +55,36 @@ function nonJsonOperationIds(): string[] {
 // pin the properties a HOST and a MODEL depend on, which no typecheck can state: names are unique
 // and stable-looking, every operation is accounted for, and no schema lies about what it accepts.
 
-/** Every `anyOf` branch list anywhere in a schema tree. */
-function anyOfs(node: unknown): unknown[][] {
-  if (Array.isArray(node)) return node.flatMap(anyOfs)
+/**
+ * Every SCHEMA NODE in a schema tree, reached through the JSON Schema keywords that actually hold
+ * subschemas (`properties` values, `items`, `additionalProperties`, `anyOf` branches).
+ *
+ * Walking every object in the tree instead is the tempting one-liner and it is wrong, because
+ * `properties` is a bag keyed by the API's OWN field names. A field may legitimately be called
+ * `required`, `enum`, `const` or `anyOf` (a descriptor field's `required` flag IS one), and a
+ * blind walk reads that bag as a schema and its member as an assertion this facade made. The
+ * assertions below then fire on a NAME rather than on a shape, which is a guard that fails the
+ * day the API adds an innocuous field and passes the day the emitter regresses on an object no
+ * keyword leads to.
+ */
+function schemaNodes(node: unknown): Record<string, unknown>[] {
   if (typeof node !== 'object' || node === null) return []
   const record = node as Record<string, unknown>
-  const here = Array.isArray(record.anyOf) ? [record.anyOf] : []
-  return [...here, ...Object.values(record).flatMap(anyOfs)]
+  const subschemas = [
+    ...Object.values((record.properties ?? {}) as Record<string, unknown>),
+    ...(Array.isArray(record.anyOf) ? record.anyOf : []),
+    record.items,
+    // `false` is the closed-object marker, not a subschema; a record type's value schema is.
+    typeof record.additionalProperties === 'object' ? record.additionalProperties : undefined,
+  ].filter((child) => child !== undefined)
+  return [record, ...subschemas.flatMap(schemaNodes)]
+}
+
+/** Every `anyOf` branch list at a schema position in the tree. */
+function anyOfs(node: unknown): unknown[][] {
+  return schemaNodes(node)
+    .map((schema) => schema.anyOf)
+    .filter((branches): branches is unknown[] => Array.isArray(branches))
 }
 
 describe('the generated tool table', () => {
@@ -152,10 +175,16 @@ describe('the generated tool table', () => {
     expect(describing.length).toBeGreaterThan(30)
     for (const tool of describing) {
       expect(tool.outputSchema!.type, tool.name).toBe('object')
-      const json = JSON.stringify(tool.outputSchema)
-      expect(json, tool.name).not.toContain('"required"')
-      expect(json, tool.name).not.toContain('"enum"')
-      expect(json, tool.name).not.toContain('"const"')
+      // Asserted per schema NODE, never over the serialized JSON: a `"required"` substring also
+      // matches a FIELD named `required`, which `GET /api/v1/task-types` serves on every
+      // descriptor. Searching the text answers "does this word appear", where the rule is "does
+      // this facade assert anything a newer deployment could invalidate".
+      for (const schema of schemaNodes(tool.outputSchema)) {
+        const where = `${tool.name}: ${JSON.stringify(schema).slice(0, 200)}`
+        expect(schema, where).not.toHaveProperty('required')
+        expect(schema, where).not.toHaveProperty('enum')
+        expect(schema, where).not.toHaveProperty('const')
+      }
       // The only `anyOf` an output schema may carry is the NULLABLE pair, which admits a value the
       // deployment already sends. A union's `anyOf` is the assertion a new variant breaks outright,
       // and this surface adds decision kinds.

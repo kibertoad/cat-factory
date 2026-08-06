@@ -36,6 +36,7 @@ from .models import (
     ListDebugToolCallsOutcome,
     ListDebugToolCallsResponse,
     ListPublicJobsResponse,
+    ListPublicTaskTypesResponse,
     LlmCallOutcome,
     Notification,
     NotificationWebhook,
@@ -399,6 +400,32 @@ class PipelinesResource:
             timeout=timeout,
         )
         return PublicPipelineList.from_dict(raw)
+
+
+class TaskTypesResource:
+    """What a task can be created AS in this workspace (the built-in kinds plus the operations
+    the deployment registered), and the fields each one accepts.
+    """
+
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+
+    def list(self, timeout: float | None = None) -> ListPublicTaskTypesResponse:
+        """List the task types this workspace may create
+        List the task types a task can be created as in the key’s workspace (the built-in
+        ones plus any the deployment registered), each with the fields it accepts. Fill
+        those fields through `fields` on task creation; the descriptors here are what that
+        call validates against, so a caller reads the form rather than guessing it. A type a
+        workspace admin has hidden is absent.
+        `GET /api/v1/task-types` (operation `listPublicTaskTypes`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/task-types",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicTaskTypesResponse.from_dict(raw)
 
 
 class NotificationsResource:
@@ -1614,12 +1641,19 @@ class KeysResource:
 
 
 def build_resources(transport: Transport) -> dict[str, Any]:
-    """Every resource client, keyed by the attribute it is mounted at on the client."""
+    """Every resource client, keyed by the attribute it is mounted at on the client.
+
+    The key is the SNAKE_CASE spelling of the surface table's camelCase group, because it becomes an
+    attribute name: client.task_types, not client.taskTypes. Every group was a single word until
+    one was not, at which point the un-spelled camelCase would have shipped a Python client whose
+    only multi-word resource read like TypeScript.
+    """
     return {
         "jobs": JobsResource(transport),
         "services": ServicesResource(transport),
         "tasks": TasksResource(transport),
         "pipelines": PipelinesResource(transport),
+        "task_types": TaskTypesResource(transport),
         "notifications": NotificationsResource(transport),
         "webhook": WebhookResource(transport),
         "usage": UsageResource(transport),

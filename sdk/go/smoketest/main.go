@@ -118,6 +118,39 @@ func main() {
 		return nil
 	})
 
+	step("taskTypes.list", func() error {
+		result, err := client.TaskTypes.List(ctx)
+		if err != nil {
+			return err
+		}
+		observations["taskTypeCount"] = len(result.TaskTypes)
+		// The `bug` descriptors, which every deployment has: the count plus one field's declared
+		// type, so four SDKs comparing reports catch one of them dropping the nested option list
+		// or decoding an optional `type` differently.
+		fieldCount := 0
+		severityType := ""
+		optionCount := 0
+		for _, taskType := range result.TaskTypes {
+			if taskType.TaskType != "bug" {
+				continue
+			}
+			fieldCount = len(taskType.Fields)
+			for _, field := range taskType.Fields {
+				if field.Key != "severity" {
+					continue
+				}
+				if field.Type != nil {
+					severityType = string(*field.Type)
+				}
+				optionCount = len(field.Options)
+			}
+		}
+		observations["bugFieldCount"] = fieldCount
+		observations["bugSeverityFieldType"] = severityType
+		observations["bugSeverityOptionCount"] = optionCount
+		return nil
+	})
+
 	step("tasks.create", func() error {
 		description := "Created by the cross-SDK smoketest."
 		taskType := "feature"

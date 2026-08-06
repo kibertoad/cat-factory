@@ -2666,6 +2666,13 @@
         "manageAccount": "Gérer les fragments du compte →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Choisissez les opérations réutilisables de ce déploiement proposées sur ce tableau. En masquer une la retire du sélecteur de création de tâche ici et refuse la création de travail associée ; les autres tableaux ne sont pas affectés.",
+      "loading": "Chargement des opérations…",
+      "empty": "Ce déploiement n'enregistre aucune opération réutilisable.",
+      "offer": "Proposer sur ce tableau",
+      "saveFailed": "Impossible de modifier les opérations proposées sur ce tableau"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Où les tickets sont créés",
@@ -3245,6 +3252,7 @@
         "merge": "Politiques de risque",
         "tracker": "Suivi des tickets",
         "fragments": "Bonnes pratiques du service",
+        "operations": "Opérations",
         "metadata": "Métadonnées",
         "members": "Membres"
       },

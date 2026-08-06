@@ -145,7 +145,13 @@ const LEGACY_ALLOWANCES = new Map([
   // the env-config repairer, the two container dispatchers this root wires beside the step
   // executor. Job-token scoping made them one concern rather than two, since each hands a real
   // clone/push credential to a container and so must narrow it to the repo it touches.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1222],
+  // 1222 -> 1211 by extracting `container-workspace-config-deps.ts` (the `selectPerUserDeps`
+  // precedent): the per-workspace configuration LIBRARIES (model presets, consensus groups, prompt
+  // overrides, per-kind generation settings, offered operations, service fragment defaults). Every
+  // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
+  // edited from a settings surface rather than written by the engine, so the next such library
+  // lands there rather than among the run-path repositories.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1211],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

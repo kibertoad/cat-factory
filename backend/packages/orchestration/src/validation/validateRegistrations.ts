@@ -1008,8 +1008,43 @@ function descriptorFormProblems(
         `gates field "${field.key}" on "${field.showWhen.key}", which it does not declare, so the field never shows.`,
       )
     }
+    problems.push(...defaultOutsideOptions(field, codePrefix, subject))
   }
   return problems
+}
+
+/**
+ * A declared DEFAULT that is not one of the field's own options: an error for the same reason the
+ * three above are: fully known from the registration, and silently broken at run time.
+ *
+ * It became reachable when the creation door started folding defaults in
+ * (`withDescriptorFieldDefaults`), which is what makes a default mean the same thing to a form and
+ * to a headless caller. The consequence is that a default outside the picklist is no longer merely
+ * a form that opens on an odd value: it is an answer the validator refuses, so EVERY creation of
+ * the subject fails with "has a value outside its options" naming a value the caller never sent.
+ */
+function defaultOutsideOptions(
+  field: DescriptorField,
+  codePrefix: 'task_type' | 'initiative_preset',
+  subject: string,
+): RegistrationProblem[] {
+  const options = new Set((field.options ?? []).map((option) => option.value))
+  if (options.size === 0) return []
+  const declared =
+    field.type === 'checkbox-group'
+      ? (field.defaultValues ?? [])
+      : field.type === 'select' && field.default !== undefined
+        ? [field.default]
+        : []
+  return declared
+    .filter((value) => !options.has(value))
+    .map((value) => ({
+      severity: 'error' as const,
+      code: `${codePrefix}_field_default_outside_options`,
+      message:
+        `${subject} defaults field "${field.key}" to "${value}", which is not one of its ` +
+        `options, so every creation of it is refused for a value the caller never sent.`,
+    }))
 }
 
 /**

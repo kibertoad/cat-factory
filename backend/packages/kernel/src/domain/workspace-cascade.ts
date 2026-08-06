@@ -96,6 +96,7 @@ export const WORKSPACE_SCOPED_TABLES = [
   'slack_settings',
   'task_connections',
   'task_source_settings',
+  'task_type_suppressions',
   'tasks',
   'test_secrets',
   'tracker_comment_ingests',

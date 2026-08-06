@@ -2666,6 +2666,13 @@
         "manageAccount": "Gestionar los fragmentos de la cuenta →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Elige qué operaciones reutilizables de este despliegue ofrece este tablero. Ocultar una la quita del selector de creación de tareas aquí y rechaza crear trabajo con ella; otros tableros no se ven afectados.",
+      "loading": "Cargando operaciones…",
+      "empty": "Este despliegue no registra ninguna operación reutilizable.",
+      "offer": "Ofrecer en este tablero",
+      "saveFailed": "No se pudieron cambiar las operaciones que ofrece este tablero"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Dónde se registran los tickets",
@@ -3245,6 +3252,7 @@
         "merge": "Políticas de riesgo",
         "tracker": "Gestor de incidencias",
         "fragments": "Buenas prácticas del servicio",
+        "operations": "Operaciones",
         "metadata": "Metadatos",
         "members": "Miembros"
       },

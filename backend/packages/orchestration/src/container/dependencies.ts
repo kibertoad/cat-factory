@@ -174,6 +174,7 @@ import type {
   VcsProviderRegistry,
   WebhookVerifier,
   WorkRunner,
+  TaskTypeSuppressionRepository,
   WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
@@ -1211,6 +1212,14 @@ export interface CoreDependencies {
    * resolves the dispatched kind's ceiling at dispatch.
    */
   workspaceAgentSettingsRepository?: WorkspaceAgentSettingsRepository
+  /**
+   * Stores which deployment-registered custom task types (REUSABLE OPERATIONS) a workspace HIDES
+   * from its create picker (`backend/docs/reusable-operations.md`). Optional and default-off:
+   * absent → the `taskTypeSuppressions` module isn't assembled, the controller 503s, and every
+   * board offers every registered operation, which is today's behaviour. Read on the CREATION path
+   * too: `BoardService` refuses a task of a suppressed type, so no door bypasses the picker.
+   */
+  taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
    * DEFAULT: Cloudflare/Node deploy `mdp_kimi` (Cloudflare-runnable on the bare baseline),

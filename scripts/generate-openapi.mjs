@@ -94,7 +94,14 @@ const API_PREFIX = '/api/v1'
 // VERSION line byte-identically, conflicting only in this comment: the silent failure the note at
 // the top of this block describes. That branch has since merged, so 1.16.0 is main's published
 // number and 1.17.0 is simply the next free one. Re-read against `origin/main` anyway.
-const API_VERSION = '1.17.0'
+// 1.18.0, not 1.17.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new
+// endpoint and a new optional key). THIRD number this one addition has held: written against
+// 1.16.0, moved to 1.17.0 when the multi-repo report `scope` took 1.16.0 on main, and moved again
+// when the `?outcome=` rename above published 1.17.0 on main while this branch was in flight. Both
+// moves were found the same way, and it is the only way that works: by re-reading this line after
+// the merge, never by trusting that the VERSION itself auto-merged clean (it did, twice, to a
+// number main had already used).
+const API_VERSION = '1.18.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
@@ -319,6 +326,12 @@ const OPERATION_DOCS = {
     summary: 'Resolve a parked judge verdict',
     description:
       'Settle a run parked on a judge verdict: proceed anyway, bounce the producing step for rework, or stop the run. Requires a `decide`-scope key.',
+  },
+  listPublicTaskTypes: {
+    tag: 'Task types',
+    summary: 'List the task types this workspace may create',
+    description:
+      'List the task types a task can be created as in the key’s workspace (the built-in ones plus any the deployment registered), each with the fields it accepts. Fill those fields through `fields` on task creation; the descriptors here are what that call validates against, so a caller reads the form rather than guessing it. A type a workspace admin has hidden is absent.',
   },
   listPublicPipelines: {
     tag: 'Pipelines',

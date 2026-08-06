@@ -140,9 +140,17 @@ assembled engine). Grow one of these rather than `container.ts` itself.
   `BoardService.addTask` writes, together because all three are one `TaskTypeRegistry` lookup read
   three times: the best-practice fragment union (service picks ⊕ per-type defaults ⊕ a registered
   REUSABLE OPERATION's standing context), the default-pipeline pin, and the check of the collected
-  `custom` bag against the descriptor. Three cases pass the check through on purpose (a built-in
-  type, an unregistered namespaced one, a `formPanel` descriptor). See
+  `custom` bag against the descriptor, plus the refusal of a type this WORKSPACE suppressed. Three
+  cases pass the field check through on purpose (a built-in type, an unregistered namespaced one, a
+  `formPanel` descriptor), and the descriptor's own DEFAULTS are folded in before it runs, so a
+  `required` field carrying a default is not enforced at one door and ignored at another. The
+  suppression read PROPAGATES its failures where the snapshot's read of the same rows is
+  best-effort: this one decides whether a row is written. See
   `backend/docs/reusable-operations.md`.
+- `taskTypes/TaskTypeSuppressionService.ts`: which registered REUSABLE OPERATIONS a workspace
+  offers, and the admin surface for hiding one. Tombstones, so absence is the default and a newly
+  registered operation reaches every board until somebody hides it. `suppressedTaskTypeIds` is the
+  best-effort helper the board snapshot and the public catalog read it through.
 - `bootstrap/`, `pipelines/`, `board/`, `boardScan/`, `requirements/`,
   `notifications/`, `releaseHealth/`, `review/`, `estimation/`, `kaizen/`, `sandbox/`,
   `recurring/`, `settings/`, …: the other module services. In `review/`, EVERY write to a review

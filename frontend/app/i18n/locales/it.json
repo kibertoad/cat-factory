@@ -353,6 +353,13 @@
         "manageAccount": "Gestisci i frammenti dell'account →"
       }
     },
+    "taskTypeSuppressions": {
+      "intro": "Scegli quali operazioni riutilizzabili di questo deployment vengono offerte su questa board. Nasconderne una la rimuove dal selettore di creazione attività qui e rifiuta la creazione di lavoro con essa; le altre board non sono interessate.",
+      "loading": "Caricamento delle operazioni…",
+      "empty": "Questo deployment non registra operazioni riutilizzabili.",
+      "offer": "Offri su questa board",
+      "saveFailed": "Impossibile modificare le operazioni offerte su questa board"
+    },
     "issueTracker": {
       "filing": {
         "heading": "Dove vengono registrati i ticket",
@@ -932,6 +939,7 @@
         "merge": "Criteri di rischio",
         "tracker": "Tracker degli issue",
         "fragments": "Best practice dei servizi",
+        "operations": "Operazioni",
         "metadata": "Metadati",
         "members": "Membri"
       },
