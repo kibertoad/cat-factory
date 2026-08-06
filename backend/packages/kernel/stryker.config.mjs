@@ -17,5 +17,5 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // anything".
 export default defineMutationConfig({
   mutate: ['src/domain/**/*.ts', 'src/shared/**/*.ts', '!src/**/*.test.ts'],
-  minimumScore: 52,
+  minimumScore: 66,
 })

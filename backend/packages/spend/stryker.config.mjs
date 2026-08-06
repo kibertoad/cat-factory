@@ -10,5 +10,5 @@ import { defineMutationConfig } from '../../../scripts/stryker-base.mjs'
 // constant, so its mutants are static and left unmeasured by `ignoreStatic` (see the base config).
 export default defineMutationConfig({
   mutate: ['src/**/*.ts', '!src/**/*.test.ts', '!src/index.ts'],
-  minimumScore: 52,
+  minimumScore: 89,
 })
