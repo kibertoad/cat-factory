@@ -32,7 +32,11 @@ const { lod } = useSemanticZoom()
 const { isTouch } = useViewport()
 
 const block = computed<Block | undefined>(() => board.getBlock(props.id))
-/** This service frame is mounted on more than one board in the org. */
+/**
+ * This service frame is mounted on more than one board in the org, which is a fact about the
+ * SERVICE that only its own card can state: nothing else on the board says the work lands in a
+ * repo another board also drives.
+ */
 const isShared = computed(() => services.isSharedFrame(props.id))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
@@ -46,18 +50,7 @@ const taskCount = computed(() => allTasks.value.length)
 const hasTasks = computed(
   () => taskCount.value > 0 || modules.value.length > 0 || initiativeBlocks.value.length > 0,
 )
-// Single pass over the tasks for both rollups (vs. one filter each).
-const taskStats = computed(() => {
-  let merged = 0
-  let prReady = 0
-  for (const t of allTasks.value) {
-    if (t.status === 'done') merged++
-    else if (t.status === 'pr_ready') prReady++
-  }
-  return { merged, prReady }
-})
-const mergedTasks = computed(() => taskStats.value.merged)
-const prTasks = computed(() => taskStats.value.prReady)
+const prTasks = computed(() => allTasks.value.filter((t) => t.status === 'pr_ready').length)
 const canvas = computed(() => board.containerSize(props.id))
 
 // Frame status is derived from its tasks — services never reach "done".
@@ -92,13 +85,6 @@ const FRAME_STATUS_HINT_KEYS: Record<BlockStatus, string> = {
 const statusHint = computed(() => t(FRAME_STATUS_HINT_KEYS[frameStatus.value]))
 
 const selected = computed(() => ui.selectedBlockId === props.id)
-// Services are always expanded to their task canvas, at every zoom level: there is no
-// chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
-// transition to snap on. The far-chip and compact-summary branches in the template are
-// kept (gated off) so the prior behaviour is one edit away if we want chips back — and the
-// header carries no collapse control, because with `showExpanded` pinned true it only ever
-// looked like one.
-const showExpanded = computed(() => true)
 
 // Every child whose parked run the frame badge speaks for: its tasks AND its initiative
 // blocks. An initiative is a frame child like a module and runs an ordinary pipeline (its
@@ -146,10 +132,6 @@ function openFirstApproval() {
   if (a) ui.openApprovalDetail(a.instanceId, a.approval.id)
 }
 
-function toggleExpand() {
-  ui.toggleFrame(props.id)
-}
-
 // Expanded frames are not Vue Flow-draggable (so the pane can pan through them),
 // so they're repositioned by grabbing the header instead. The whole header bar is
 // the grab surface — only the action buttons (marked `.nodrag`) opt out, so a press
@@ -166,14 +148,12 @@ function onFrameHandle(e: PointerEvent) {
 const { enter: enterFrame, leave: leaveFrame } = useFrameStacking()
 
 function addTask() {
-  ui.expandFrame(props.id)
   ui.openAddTask(props.id)
 }
 
-// Open the tracker-issue modal scoped to THIS service: the create-in target and the
-// repo-scoped issue search are both pinned to this frame (see TaskImportModal).
+// Open the tracker-issue modal scoped to THIS service: the create-in target and the repo-scoped
+// issue search are narrowed to this frame and its modules (see `useContainerTargets`).
 function createTaskFromIssue() {
-  ui.expandFrame(props.id)
   ui.openTaskImport(null, props.id)
 }
 
@@ -184,12 +164,10 @@ function addRecurring() {
 // Hunt this service's tracker board for a bug worth picking up. Scoped to THIS frame, so
 // an adopted candidate lands here rather than wherever the board's first frame happens to be.
 function huntBugs() {
-  ui.expandFrame(props.id)
   ui.openBugHunt(null, props.id)
 }
 
 function createInitiative() {
-  ui.expandFrame(props.id)
   ui.openCreateInitiative(props.id)
 }
 
@@ -281,119 +259,13 @@ const ITEM_ICON: Record<string, string> = {
       />
     </div>
 
-    <!-- ===================== FAR: glanceable chip ===================== -->
-    <!-- Inert while services are always expanded (showExpanded is always true); the
-         compact branch below is reached via v-else-if and is likewise inert. -->
+    <!-- ===================== The service card: 2D canvas of tasks + modules =====================
+         There is no chip or compact variant: a service is always expanded to its task canvas, at
+         every zoom level, so panning is a fixed layout and zooming has no expand/collapse
+         transition to snap on. The two gated-off branches that used to sit here (a far-zoom chip
+         and a collapsed summary) went with the header's collapse control, since between them they
+         held the only render of the "Shared" badge, which now lives in the header below. -->
     <div
-      v-if="!showExpanded && lod === 'far'"
-      class="flex w-44 items-center gap-2 rounded-xl border-2 px-3 py-3 shadow-lg backdrop-blur"
-      :class="[selected ? 'border-white' : '', pulseClass]"
-      :style="{ borderColor: accent, backgroundColor: accent + '26' }"
-    >
-      <span class="h-3 w-3 shrink-0 rounded-full" :style="{ backgroundColor: accent }" />
-      <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
-      <UIcon
-        v-if="bootstrapping"
-        name="i-lucide-loader-circle"
-        class="ms-auto h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
-        :title="t('board.frame.bootstrapping')"
-      />
-      <UIcon
-        v-else-if="runFailed"
-        name="i-lucide-alert-triangle"
-        class="ms-auto h-3.5 w-3.5 shrink-0 text-rose-400"
-        :title="t('board.frame.runFailed')"
-      />
-      <span v-else-if="hasTasks" class="ms-auto shrink-0 text-[11px] text-slate-300">
-        {{ mergedTasks }}/{{ taskCount }}
-      </span>
-    </div>
-
-    <!-- ===================== COMPACT: summary (collapsed) ===================== -->
-    <div
-      v-else-if="!showExpanded"
-      class="w-56 overflow-hidden rounded-xl border bg-slate-900/90 shadow-xl backdrop-blur"
-      :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
-    >
-      <div class="h-1.5 w-full" :style="{ backgroundColor: accent }" />
-      <!-- bootstrap-in-progress banner -->
-      <div
-        v-if="bootstrapping"
-        class="border-b border-amber-900/50 bg-amber-950/30 px-3 py-2"
-        data-testid="bootstrap-progress"
-      >
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <UIcon
-            name="i-lucide-loader-circle"
-            class="h-3.5 w-3.5 shrink-0 animate-spin text-amber-400"
-          />
-          <span class="text-amber-300">{{ t('board.frame.bootstrapping') }}</span>
-          <span v-if="bootstrapSubtasks" class="ms-auto text-amber-200/80">
-            {{ bootstrapSubtasks.completed }}/{{ bootstrapSubtasks.total }}
-          </span>
-        </div>
-        <div class="mt-1.5 h-1 w-full overflow-hidden rounded bg-amber-900/40">
-          <div
-            class="h-full rounded bg-amber-400 transition-all"
-            :style="{ width: bootstrapPct + '%' }"
-          />
-        </div>
-        <div v-if="run" class="mt-2 flex justify-end">
-          <AgentStopButton :run-id="run.runId" :kind="run.kind" size="xs" variant="ghost" />
-        </div>
-      </div>
-      <!-- failed run: shared failure banner + retry -->
-      <div v-else-if="runFailed && run" class="p-2">
-        <AgentFailureCard :run="run" variant="compact" />
-      </div>
-      <div class="space-y-2 p-3">
-        <div class="flex items-center gap-2">
-          <UIcon
-            :name="typeMeta!.icon"
-            class="h-4 w-4 shrink-0"
-            :style="{ color: typeMeta!.accent }"
-          />
-          <span class="truncate text-sm font-semibold text-white">{{ block.title }}</span>
-          <UBadge
-            v-if="isShared"
-            color="info"
-            variant="subtle"
-            size="sm"
-            class="shrink-0"
-            :title="t('board.frame.sharedTitle')"
-          >
-            {{ t('board.frame.shared') }}
-          </UBadge>
-        </div>
-        <div class="flex items-center justify-between">
-          <UBadge :color="statusMeta.chip as any" variant="subtle" size="sm" :title="statusHint">{{
-            statusLabel
-          }}</UBadge>
-          <span class="text-[11px] text-slate-400">{{
-            t('board.frame.taskCount', { count: taskCount }, taskCount)
-          }}</span>
-        </div>
-        <button
-          type="button"
-          class="nodrag flex w-full items-center gap-1 rounded-md bg-slate-800/60 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800"
-          @click.stop="toggleExpand"
-        >
-          <UIcon name="i-lucide-layers" class="h-3 w-3 text-slate-400" />
-          <span v-if="hasTasks">{{
-            t('board.frame.mergedOfTotal', { merged: mergedTasks, total: taskCount })
-          }}</span>
-          <span v-else>{{ t('board.frame.noTasksYet') }}</span>
-          <span v-if="prTasks" class="text-emerald-400"
-            >· {{ t('board.frame.prCount', { count: prTasks }) }}</span
-          >
-          <UIcon name="i-lucide-chevron-down" class="ms-auto h-3 w-3" />
-        </button>
-      </div>
-    </div>
-
-    <!-- ===================== EXPANDED: 2D canvas of tasks + modules ===================== -->
-    <div
-      v-else
       class="relative overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
       :class="[selected ? 'border-white' : 'border-slate-700', pulseClass]"
     >
@@ -486,7 +358,23 @@ const ITEM_ICON: Record<string, string> = {
                 />
               </div>
               <div>
-                <div class="text-sm font-semibold text-white">{{ block.title }}</div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-sm font-semibold text-white">{{ block.title }}</span>
+                  <!-- Mounted on more than one board in the org. On the title row rather than in
+                       the action strip, because it qualifies the service's NAME: the work lands in
+                       a repo another board also drives. -->
+                  <UBadge
+                    v-if="isShared"
+                    color="info"
+                    variant="subtle"
+                    size="sm"
+                    class="shrink-0"
+                    data-testid="frame-shared"
+                    :title="t('board.frame.sharedTitle')"
+                  >
+                    {{ t('board.frame.shared') }}
+                  </UBadge>
+                </div>
                 <div class="text-[11px] text-slate-400">{{ typeMeta!.label }}</div>
               </div>
             </div>
@@ -499,7 +387,7 @@ const ITEM_ICON: Record<string, string> = {
                 >{{ statusLabel }}</UBadge
               >
               <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
-                   are `board.write` — hidden for a read-only viewer, who keeps the status badge
+                   are `board.write`, hidden for a read-only viewer, who keeps the status badge
                    (the one view-only affordance here). -->
               <template v-if="access.canWriteBoard.value">
                 <UButton

@@ -32,7 +32,7 @@
 // stageable with the import as the backstop, because only the source's own refusal is evidence
 // against a link. An outage that made attaching impossible would be a worse failure than the
 // one the pre-flight fixes.
-import type { DropdownMenuItem } from '@nuxt/ui'
+import { useId } from 'vue'
 import type { DocumentRefReason, DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
 import {
   classifyRefFailure,
@@ -42,7 +42,13 @@ import {
 } from '~/components/documents/ContextDocumentPicker.logic'
 import EmptyState from '~/components/common/EmptyState.vue'
 import RepoContextDocPicker from '~/components/documents/RepoContextDocPicker.vue'
-import { buildSourceChoices, connectionSourceRows, reconcileSource } from '~/utils/sourcePicker'
+import {
+  type AddSourceLabels,
+  buildConnectionSourceChoices,
+  menuIsPickable,
+  reconcileSource,
+  sourceMenuItems,
+} from '~/utils/sourcePicker'
 
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
@@ -59,8 +65,9 @@ const { t } = useI18n()
 const documents = useDocumentsStore()
 const ui = useUiStore()
 // Connecting a source stores a workspace credential and is admin-tier, while attaching what it
-// holds is member-tier — so the menu's "add a source" tier is withheld from a member rather than
-// offering a connect that would 403 (see `connectionSourceRows`).
+// holds is member-tier, so the menu's "add a source" tier is withheld from a member rather than
+// offering a connect that would 403 (see `connectableSources`). The tier also decides which empty
+// state a reader gets, because "connect one" is not advice you can act on without it.
 const { canManageIntegrations } = useWorkspaceAccess()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
@@ -90,34 +97,46 @@ watch(
   },
 )
 
-// Two-tier menu: pick a connected source, or connect one the workspace hasn't got yet. A
-// document source carries no per-workspace enable toggle, so every add entry is a `connect`.
-const sourceMenu = computed<DropdownMenuItem[][]>(() =>
-  buildSourceChoices(
-    connectionSourceRows(documents.sources, {
-      isConnected: documents.isConnected,
-      canConnect: canManageIntegrations.value,
-    }),
-    source.value,
-  ).map((group) =>
-    group.map((choice) =>
-      choice.action === 'select'
-        ? {
-            label: choice.label,
-            icon: choice.icon,
-            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
-            onSelect: () => {
-              source.value = choice.source
-            },
-          }
-        : {
-            label: t('documents.picker.connectSource', { label: choice.label }),
-            icon: 'i-lucide-plug',
-            onSelect: () => addSource(choice.source),
-          },
-    ),
-  ),
+// Two-tier menu: pick a connected source, or connect one the workspace hasn't got yet. A document
+// source carries no per-workspace enable toggle, so `connect` is the ONLY add wording it can need,
+// and `buildConnectionSourceChoices` makes that a fact about the type rather than about this call
+// site: a source that one day gains a toggle fails the typecheck here instead of rendering
+// "Connect X" over something already connected.
+const sourceChoices = computed(() =>
+  buildConnectionSourceChoices(documents.sources, {
+    isConnected: documents.isConnected,
+    canConnect: canManageIntegrations.value,
+    available: documents.available,
+    selected: source.value,
+  }),
 )
+const ADD_LABEL: AddSourceLabels<'connect'> = {
+  connect: (label) => t('documents.picker.connectSource', { label }),
+}
+const sourceMenu = computed(() =>
+  sourceMenuItems(sourceChoices.value, {
+    onSelect: (s) => {
+      source.value = s
+    },
+    onAdd: addSource,
+    addLabel: ADD_LABEL,
+  }),
+)
+
+/**
+ * Whether the selector is a CONTROL or just a name. A member's add tier is withheld, so on the
+ * common deployment (GitHub docs implicitly connected, nothing else) their menu holds one entry
+ * that re-selects what is already selected: a chevron promising a choice that isn't there, which is
+ * the same papercut the always-visible selector was meant to remove. The source is still named,
+ * which was the point.
+ */
+const sourcePickable = computed(() => menuIsPickable(sourceChoices.value))
+
+// The trigger's own content is the source NAME, so the visible "Source" caption is joined to it as
+// the accessible name ("Source Confluence"). Per instance: the add-task form and the inspector can
+// both have a picker mounted, and a hard-coded id would make one claim the other's caption.
+const sourceLabelId = useId()
+const sourceTriggerId = useId()
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 // A repo-backed source swaps the whole free-text search body for the repo→file picker.
 const isRepoSource = computed(() => !!source.value && REPO_SOURCES.has(source.value))
@@ -397,34 +416,54 @@ onMounted(() => {
 
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <!-- Which source is being searched, always visible, plus the sources the user could add
-         from here (each opens the connect modal over the caller's form). -->
+    <!-- Which source is being searched, always visible, plus the sources the user could add from
+         here (each opens the connect modal over the caller's form). Rendered as plain text when
+         there is nothing to decide, which for a member is the usual case. -->
     <div class="flex items-center gap-1.5">
-      <span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span
+        :id="sourceLabelId"
+        class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+      >
         {{ t('documents.picker.sourceLabel') }}
       </span>
-      <UDropdownMenu :items="sourceMenu" :content="{ side: 'bottom', align: 'start' }">
+      <UDropdownMenu
+        v-if="sourcePickable"
+        :items="sourceMenu"
+        :content="{ side: 'bottom', align: 'start' }"
+      >
         <UButton
+          :id="sourceTriggerId"
           color="neutral"
           variant="soft"
           size="xs"
           :icon="icon"
           trailing-icon="i-lucide-chevron-down"
           class="max-w-full"
+          :aria-labelledby="`${sourceLabelId} ${sourceTriggerId}`"
         >
           <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
         </UButton>
       </UDropdownMenu>
+      <span v-else class="flex min-w-0 items-center gap-1 text-xs text-slate-300">
+        <UIcon :name="icon" class="h-3.5 w-3.5 shrink-0" />
+        <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
+      </span>
     </div>
 
-    <!-- No source selected: nothing is connected (or the last one was disconnected while this
-         sat open), so the menu above is the only action left. Say that rather than render a
-         search box that can only fail. -->
+    <!-- No source selected: nothing is connected (or the last one was disconnected while this sat
+         open), so say so rather than render a search box that can only fail. WHICH sentence depends
+         on who is reading: the admin tier is told to connect one, because the menu above is the
+         route; a member has no add tier (see `connectableSources`), so telling them to connect a
+         source would name an action their own menu withholds. -->
     <EmptyState
       v-if="!source"
       compact
       icon="i-lucide-plug"
-      :title="t('documents.picker.needsSource')"
+      :title="
+        canManageIntegrations
+          ? t('documents.picker.needsSource')
+          : t('documents.picker.needsSourceAdmin')
+      "
     />
 
     <!-- Repo-backed source (GitHub / GitLab): pick a repository, then a file. -->
