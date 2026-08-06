@@ -112,6 +112,28 @@ export function isHostPinnedSource(source: DocumentSourceKind): boolean {
 }
 
 /**
+ * Order sources by how much a claim over a URL is WORTH: host-pinned first, registration order
+ * within each pass. Every caller that asks "which source does this text belong to" reads this,
+ * because the answer is only as good as the ordering (see {@link DocumentSourceTraits.hostPinned}):
+ * a blind parser claims a SHAPE, so letting registration order decide points a Figma paste at
+ * Notion.
+ *
+ * ONE function rather than the same two `filter`s at each call site (`makeDocumentUrlResolver`
+ * canonicalising a URL named in prose, `DocumentImportService.claimingSource` naming the claimant
+ * in a refusal). The failure mode of a second copy is precisely the silent mis-attribution the
+ * ordering exists to prevent: refining the rule in one place would leave the other pointing the
+ * same paste at the wrong source.
+ */
+export function orderSourcesByClaimConfidence<T extends { kind: DocumentSourceKind }>(
+  sources: readonly T[],
+): T[] {
+  return [
+    ...sources.filter((s) => isHostPinnedSource(s.kind)),
+    ...sources.filter((s) => !isHostPinnedSource(s.kind)),
+  ]
+}
+
+/**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
  * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`
@@ -284,6 +306,66 @@ export const importDocumentSchema = v.object({
   ref: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
 })
 export type ImportDocumentInput = v.InferOutput<typeof importDocumentSchema>
+
+// ---- Reference resolution (the check that runs before anything is written) --
+
+/** Canonicalise a pasted URL/id into the reference the source would store it under. */
+export const resolveDocumentRefSchema = importDocumentSchema
+export type ResolveDocumentRefInput = v.InferOutput<typeof resolveDocumentRefSchema>
+
+/**
+ * What a pasted URL/id resolves to for one source: the stable key the platform would store the
+ * page under, plus the canonical link to show the person who pasted it.
+ */
+export const resolvedDocumentRefSchema = v.object({
+  source: documentSourceKindSchema,
+  /** The `(source, externalId)` key an import would land on. */
+  externalId: v.string(),
+  /**
+   * The canonical web URL for {@link externalId}, with the title segment and tracking params a
+   * share link carries dropped: the "supported format" the paste is trimmed to.
+   *
+   * Null when the source cannot rebuild a URL from the id alone: a Confluence page id needs the
+   * site base URL and a Linear document id the workspace slug, neither of which the id carries.
+   * That is "there is no link to show you", NOT a weaker reference, so a reader renders the
+   * `externalId` rather than treating the null as a failed resolution.
+   */
+  canonicalUrl: v.nullable(v.string()),
+  /**
+   * The NARROWING the paste carried that the resolved reference does not: the frame/screen the URL
+   * named, which the source could not read as an id. Null when nothing was dropped.
+   *
+   * Its own field because it is the opposite fact from a trim, and a reader with only the canonical
+   * form cannot tell them apart. Dropping a share link's title segment and `?p=`/`&t=` params
+   * REMOVES NOISE and resolves the same page; dropping an unreadable `node-id` WIDENS the reference
+   * from one frame to the whole design file. Both render as "this is not quite what you pasted", so
+   * a surface that states only the trim tells someone who attached one frame nothing about the
+   * agent then reading the entire file.
+   *
+   * The value is the qualifier as pasted (`I2649:14930;2649:14746`), because the person who pasted
+   * it is the only one who can decide whether the whole file is acceptable, and naming what was
+   * dropped is what lets them recognise it. Never GUESSED back onto a supported form: the parser
+   * refused it precisely because nothing knows which frame it meant.
+   */
+  droppedScope: v.nullable(v.string()),
+})
+export type ResolvedDocumentRef = v.InferOutput<typeof resolvedDocumentRefSchema>
+
+/**
+ * Why a pasted reference was refused, carried as `error.details.reason` on the 422 so the SPA
+ * can state it in the reader's own language (the backend does not localize prose).
+ *
+ * Two members rather than one because they ask for DIFFERENT corrections. `unrecognized` means
+ * the text is not a reference this source could ever accept, and the only fix is a different
+ * link. `claimed_by_other_source` means the link is perfectly good and pointed at the wrong
+ * source, which is fixed by switching the picker with the same text still in it. Collapsing
+ * them would tell someone who pasted a valid Figma frame URL that their link is malformed.
+ */
+export const documentRefReasonSchema = v.picklist([
+  'document_ref_unrecognized',
+  'document_ref_claimed_by_other_source',
+])
+export type DocumentRefReason = v.InferOutput<typeof documentRefReasonSchema>
 
 /** Search a source's catalogue by free text (title/content). */
 export const searchDocumentsSchema = v.object({

@@ -68,6 +68,13 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     return githubDocsLogic.parseGitHubDocRef(input)
   }
 
+  // No `canonicalUrl`: an `owner/repo:path` id carries everything a link needs EXCEPT the host, and
+  // the host is a deployment fact rather than a property of this source. GitLab deployments reach
+  // this same source through the VCS adapter, so a `github.com` URL built from the id alone would
+  // name the wrong host for them and the pre-flight would present it as the supported form their
+  // paste was trimmed to (`ResolveRepoOrigin` is where a host is resolved, and it needs a workspace
+  // this pure method does not get). The id itself is the canonical form here; the picker renders it.
+
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,

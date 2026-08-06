@@ -122,6 +122,26 @@ export const useModelsStore = defineStore('models', () => {
     loaded.value = true
   }
 
+  /**
+   * Load the catalog for a board the app has NOT yet validated: the persisted pin at boot,
+   * fetched in parallel with the workspace list rather than after it.
+   *
+   * A pin can name a board that was deleted, or one whose access has since been revoked, and the
+   * gate answers both with a 404 (`workspace.init()` guards the same speculative read of the same
+   * id with `.catch(() => null)`). So a failure here is an expected outcome rather than a fault,
+   * and dropping it is safe in both directions: `loaded` stays false, so this leaves the catalog
+   * RETRYABLE for the next `ensureLoaded` caller, and `useAiReadiness().ready` stays false, so a
+   * catalog that never landed reads as unresolved instead of as a board with no AI configured.
+   */
+  async function prefetchForBoard(workspaceId: string): Promise<void> {
+    try {
+      await ensureLoaded(workspaceId)
+    } catch {
+      // Deliberate: see above. `init()` re-points the board it resolved, which loads the catalog
+      // that counts; anything else retries on the next caller.
+    }
+  }
+
   /** Force a re-fetch of the per-workspace catalog (e.g. after adding an API key). */
   async function refresh(workspaceId: string) {
     models.value = await api.getWorkspaceModels(workspaceId)
@@ -180,6 +200,7 @@ export const useModelsStore = defineStore('models', () => {
     loaded,
     loadedWorkspaceId,
     ensureLoaded,
+    prefetchForBoard,
     refresh,
     byId,
     getModel,

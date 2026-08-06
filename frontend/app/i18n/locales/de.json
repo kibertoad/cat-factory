@@ -2818,7 +2818,8 @@
         "derivedTitleFallback": "Pull Request prüfen",
         "prNotFound": "Pull Request #{number} wurde im Repository dieses Service nicht gefunden. Prüfe die Nummer, oder verknüpfe den Service mit dem Repository, in dem der Pull Request liegt.",
         "prRepoMismatch": "Dieser Pull Request liegt in einem anderen Repository. Dieser Service prüft {repo}; lege die Prüfaufgabe unter dem Service an, der mit dem Repository des Pull Requests verknüpft ist."
-      }
+      },
+      "contextFailed": "Aufgabe nicht erstellt: {count} Anhang konnte nicht gelesen werden | Aufgabe nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
     },
     "recurring": {
       "title": "Eine wiederkehrende Pipeline hinzufügen",
@@ -3004,7 +3005,8 @@
     "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
-    "importsOnAdd": "importiert beim Hinzufügen"
+    "importsOnAdd": "importiert beim Hinzufügen",
+    "unreadable": "Konnte nicht abgerufen werden: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3783,7 +3785,15 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
       "emptySearchable": "Nach Titel suchen oder ein importiertes Dokument auswählen.",
-      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen.",
+      "refChecking": "Referenz wird geprüft…",
+      "refUnrecognized": "Keine {source}-Referenz. Erwartet: {expected}",
+      "refOtherSource": "Das ist ein {claimed}-Link, kein {source}-Link.",
+      "refSwitchSource": "Stattdessen {source} verwenden",
+      "refTrimmed": "Auf die unterstützte Form gekürzt",
+      "refWidened": "Nennt einen Frame, den diese Quelle nicht lesen kann ({scope}); daher wird die gesamte Datei angehängt.",
+      "refAlreadyAttached": "Diese Referenz ist bereits angehängt.",
+      "refCheckFailed": "Referenz konnte nicht geprüft werden: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Repositorys suchen…",
@@ -5040,7 +5050,8 @@
       "failedTitle": "Die Initiative konnte nicht erstellt werden",
       "contextDocsHint": "Hänge eine Anforderung, ein RFC oder ein PRD an, damit die Planungsagenten es beim Abstecken und Entwerfen des Plans lesen.",
       "contextIssuesHint": "Hänge ein Tracker-Issue an, damit die Planungsagenten beim Entwerfen des Plans seine Beschreibung und Kommentare sehen.",
-      "linkFailed": "Initiative erstellt, aber {count} Anhang konnte nicht verknüpft werden | Initiative erstellt, aber {count} Anhänge konnten nicht verknüpft werden"
+      "linkFailed": "Initiative erstellt, aber {count} Anhang konnte nicht verknüpft werden | Initiative erstellt, aber {count} Anhänge konnten nicht verknüpft werden",
+      "contextFailed": "Initiative nicht erstellt: {count} Anhang konnte nicht gelesen werden | Initiative nicht erstellt: {count} Anhänge konnten nicht gelesen werden"
     },
     "status": {
       "planning": "Planung",

@@ -2818,7 +2818,8 @@
         "derivedTitleFallback": "Rivedi la pull request",
         "prNotFound": "La pull request n. {number} non è stata trovata nel repository di questo servizio. Controlla il numero, oppure collega il servizio al repository in cui si trova la pull request.",
         "prRepoMismatch": "Quella pull request si trova in un altro repository. Questo servizio revisiona {repo}, quindi crea l'attività di revisione sotto il servizio collegato al repository della pull request."
-      }
+      },
+      "contextFailed": "Attività non creata: {count} allegato non leggibile | Attività non creata: {count} allegati non leggibili"
     },
     "recurring": {
       "title": "Aggiungi una pipeline ricorrente",
@@ -3004,7 +3005,8 @@
     "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
-    "importsOnAdd": "importa all'aggiunta"
+    "importsOnAdd": "importa all'aggiunta",
+    "unreadable": "Impossibile recuperarlo: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3783,7 +3785,15 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna pagina corrispondente.",
       "emptySearchable": "Cerca per titolo, oppure scegli un documento importato.",
-      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla."
+      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla.",
+      "refChecking": "Verifica del riferimento…",
+      "refUnrecognized": "Non è un riferimento {source}. Formato atteso: {expected}",
+      "refOtherSource": "È un link {claimed}, non un link {source}.",
+      "refSwitchSource": "Usa {source} invece",
+      "refTrimmed": "Ridotto al formato supportato",
+      "refWidened": "Indica un frame che questa origine non può leggere ({scope}), quindi viene allegato l’intero file.",
+      "refAlreadyAttached": "Questo riferimento è già allegato.",
+      "refCheckFailed": "Impossibile verificare il riferimento: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Cerca repository…",
@@ -5040,7 +5050,8 @@
       "failedTitle": "Impossibile creare l'iniziativa",
       "contextDocsHint": "Allega un requisito, una RFC o un PRD così gli agenti di pianificazione lo leggono mentre delimitano e redigono il piano.",
       "contextIssuesHint": "Allega una issue così gli agenti di pianificazione ne vedono descrizione e commenti mentre redigono il piano.",
-      "linkFailed": "Iniziativa creata, ma {count} allegato non è stato collegato | Iniziativa creata, ma {count} allegati non sono stati collegati"
+      "linkFailed": "Iniziativa creata, ma {count} allegato non è stato collegato | Iniziativa creata, ma {count} allegati non sono stati collegati",
+      "contextFailed": "Iniziativa non creata: {count} allegato non leggibile | Iniziativa non creata: {count} allegati non leggibili"
     },
     "status": {
       "planning": "Pianificazione",
