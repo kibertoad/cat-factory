@@ -8,6 +8,7 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import {
   CONTEXT_BUDGET,
   estimateTokens,
+  freshnessHeaderLines,
   originSuffix,
   renderTaskContext,
 } from '@cat-factory/kernel'
@@ -500,9 +501,20 @@ export function renderLinkedContext(
         unseated.push(doc)
         continue
       }
+      // The SAME freshness note the materialised `.cat-context/` file carries, because an inline
+      // kind has no such file and would otherwise receive an unconfirmed body indistinguishable
+      // from a checked one — which is how a judge confidently scores against a design revision the
+      // platform could not reach. Empty (so byte-identical) when there is nothing to state, and
+      // charged to the budget like any other text, so the notice can never cause the overrun the
+      // clamp exists to prevent.
+      const freshness = freshnessHeaderLines(doc.freshness).trimEnd()
       const slice = clampToTokens(doc.body || doc.excerpt, remaining)
-      spent += estimateTokens(slice)
-      lines.push(`### ${doc.title}${originSuffix(doc.url)}`, slice)
+      spent += estimateTokens(slice) + estimateTokens(freshness)
+      lines.push(
+        `### ${doc.title}${originSuffix(doc.url)}`,
+        ...(freshness ? [freshness] : []),
+        slice,
+      )
     }
     if (unseated.length) {
       // The notice is BOUNDED, or it becomes the overrun it exists to report: a task with thirty

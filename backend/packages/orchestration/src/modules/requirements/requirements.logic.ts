@@ -1,11 +1,13 @@
 import type {
   Block,
+  DocumentFreshness,
   OwnServiceContext,
   RequirementConcernLevel,
   RequirementReviewItem,
   ReviewItemCategory,
   ReviewItemSeverity,
 } from '@cat-factory/kernel'
+import { freshnessHeaderLines } from '@cat-factory/kernel'
 import type { RecommendationSource } from '@cat-factory/contracts'
 import { REQUIREMENT_CONCERN_RANK } from '@cat-factory/contracts'
 import { productIsIdentifiedFrom, renderProductContextLines } from '../review/product-context.js'
@@ -25,6 +27,12 @@ export interface ReviewContextDoc {
   title: string
   url: string
   excerpt: string
+  /**
+   * What the dispatch-time refresh concluded about this excerpt's currency, rendered exactly as it
+   * is for every other reader of a linked document. Absent when no refresher is wired, which the
+   * renderer treats as "nothing to state" — the prior behaviour, byte for byte.
+   */
+  freshness?: DocumentFreshness
 }
 
 /** A tracker issue linked to the block as context. */
@@ -132,7 +140,14 @@ export function renderRequirements(ctx: RequirementsContext): string {
     : [...heading, '', '## Description', original || '(no description provided)']
   if (ctx.docs.length) {
     lines.push('', '## Linked requirement / PRD / RFC documents')
-    for (const d of ctx.docs) lines.push('', `### ${d.title} (${d.url})`, d.excerpt)
+    for (const d of ctx.docs) {
+      // The same freshness note every other reader of a linked document gets. This review is the
+      // step a HUMAN signs off on, so an unconfirmed excerpt reaching it unmarked is the worst
+      // version of the omission: the sign-off is recorded against a revision nobody verified, and
+      // the build two steps later runs on a body the reviewer never saw.
+      const freshness = freshnessHeaderLines(d.freshness).trimEnd()
+      lines.push('', `### ${d.title} (${d.url})`, ...(freshness ? [freshness] : []), d.excerpt)
+    }
   }
   if (ctx.tasks.length) {
     lines.push('', '## Linked tracker issues')

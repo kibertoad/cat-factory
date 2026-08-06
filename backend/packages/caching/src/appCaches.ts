@@ -7,6 +7,7 @@ import type {
   DocumentContent,
   GitHubRepo,
   GroupCacheHandle,
+  LinkedDocumentRefreshOutcome,
   Logger,
   ModelPresetCacheValue,
   ResolvedAccountSettings,
@@ -498,7 +499,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.fragmentDocumentBody,
     options,
   )
-  const linkedDocumentVersion = buildGroupCache<{ version: string }>(
+  const linkedDocumentVersion = buildGroupCache<LinkedDocumentRefreshOutcome>(
     'linked-document-version',
     profile.linkedDocumentVersion,
     options,

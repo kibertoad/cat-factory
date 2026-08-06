@@ -81,6 +81,7 @@ import { getFragment, withDesignContextFragment } from '@cat-factory/prompt-frag
 import {
   type DocumentUrlResolver,
   type LinkedContext,
+  type LinkedContextOptions,
   resolveLinkedContext as resolveLinkedContextFor,
 } from './linked-context.js'
 import type { EnvironmentProvisioningService } from '@cat-factory/integrations'
@@ -435,8 +436,8 @@ export class AgentContextBuilder {
     const description = reworked ?? block.description
     // One promise, two consumers: the wave's first entry below, and the fragment fold, which needs to
     // know whether this run carries a DESIGN document without re-resolving the corpus to find out.
-    const { linkedContext, hasDesignContext } = linkedContextWithDesignFlag(() =>
-      this.resolveLinkedContext(workspaceId, block.id, description, { includeLinked: !reworked }),
+    const linked = linkedContextWithDesignFlag(!reworked, (opts) =>
+      this.resolveLinkedContext(workspaceId, block.id, description, opts),
     )
     // The remaining context resolutions are mutually independent — the frame resolvers all read
     // from the shared `serviceFrame`, and the rest read disjoint sources — so fan them out in one
@@ -493,7 +494,7 @@ export class AgentContextBuilder {
       // the fan-out and the shared reads inside it; see `CatalogRunContext.sliceFor`.
       catalogSlice,
     ] = await Promise.all([
-      linkedContext,
+      linked.linkedContext,
       this.resolveEnvironment(workspaceId, block, serviceFrame),
       this.serviceConfigFrom(workspaceId, serviceFrame),
       this.frontendConfigFrom(workspaceId, serviceFrame),
@@ -511,7 +512,7 @@ export class AgentContextBuilder {
       // wave — single-threaded, no other resolver touches the step).
       this.resolveFragments(workspaceId, agentKind, observations, block, serviceFrame, {
         executionId: instance.id,
-        hasDesignContext,
+        hasDesignContext: linked.hasDesignContext,
       }),
       this.resolveDocAuthoringContext(workspaceId, agentKind, block),
       this.resolveSkillsForStep(workspaceId, agentKind, step),
@@ -1402,7 +1403,7 @@ export class AgentContextBuilder {
     workspaceId: string,
     blockId: string,
     description: string,
-    opts: { includeLinked: boolean },
+    opts: LinkedContextOptions,
   ): Promise<LinkedContext> {
     return resolveLinkedContextFor(
       {

@@ -8,7 +8,11 @@ import type {
   RequestRecommendationItem,
   ResolveRunRepoContext,
 } from '@cat-factory/kernel'
-import type { DocumentRepository, TaskRepository } from '@cat-factory/kernel'
+import type {
+  DocumentRepository,
+  LinkedDocumentRefresher,
+  TaskRepository,
+} from '@cat-factory/kernel'
 import type { RequirementReviewRepository } from '@cat-factory/kernel'
 import {
   assertContextDocumentsReadable,
@@ -59,6 +63,12 @@ export interface RequirementReviewServiceDependencies extends IterativeReviewDep
   requirementReviewRepository: RequirementReviewRepository
   /** Linked PRD/RFC documents (optional; only when the documents integration is on). */
   documentRepository?: DocumentRepository
+  /**
+   * Re-confirm those documents against their sources before the round reads them, exactly as every
+   * agent dispatch does. Absent ⇒ no refresh and no freshness note, which is byte-for-byte the
+   * prior behaviour.
+   */
+  documentRefresher?: LinkedDocumentRefresher
   /** Linked tracker issues (optional; only when the task-source integration is on). */
   taskRepository?: TaskRepository
   /**
@@ -100,6 +110,7 @@ export class RequirementReviewService extends IterativeReviewService<
 > {
   protected readonly repository: ReviewRepository<RequirementReview>
   private readonly documentRepository?: DocumentRepository
+  private readonly documentRefresher?: LinkedDocumentRefresher
   private readonly taskRepository?: TaskRepository
   private readonly resolveRunRepoContext?: ResolveRunRepoContext
   private readonly resolveBlockFragments?: (
@@ -116,6 +127,7 @@ export class RequirementReviewService extends IterativeReviewService<
     super(deps)
     this.repository = deps.requirementReviewRepository
     this.documentRepository = deps.documentRepository
+    this.documentRefresher = deps.documentRefresher
     this.taskRepository = deps.taskRepository
     this.resolveRunRepoContext = deps.resolveRunRepoContext
     this.resolveBlockFragments = deps.resolveBlockFragments
@@ -745,14 +757,35 @@ export class RequirementReviewService extends IterativeReviewService<
     // emits for an embed it cannot render — is something a container agent at least opens, and
     // collapses to nothing here, so testing the body and rendering the excerpt would leave exactly
     // this hole open one field narrower.
+    //
+    // It reads through the dispatch-time REFRESHER for the same reason every dispatch does, and it
+    // matters more here than anywhere else: this is the step a human signs off on, so reviewing the
+    // import-time copy would record an approval against a revision nobody built while the coder two
+    // steps later receives the current one. It is also the readability assertion's own consistency:
+    // asserting over the stored projection while the dispatch path asserts over the refreshed one
+    // lets a page emptied since import pass HERE and refuse the run at the first dispatch, two
+    // verdicts about one document that can disagree. Best-effort by the refresher's contract, so an
+    // unreachable source costs the reviewer a stated warning and never the round.
     const attached = this.documentRepository
       ? await this.documentRepository.listByBlock(workspaceId, block.id)
       : []
-    const projected = attached.map((d) => ({ doc: d, excerpt: contextExcerptFor(d) }))
+    const refreshed = this.documentRefresher
+      ? await this.documentRefresher.refresh(workspaceId, attached)
+      : attached.map((record) => ({ record, freshness: undefined }))
+    const projected = refreshed.map(({ record, freshness }) => ({
+      doc: record,
+      excerpt: contextExcerptFor(record),
+      freshness,
+    }))
     assertContextDocumentsReadable(
       projected.filter((p) => !p.excerpt).map((p) => ({ title: p.doc.title, url: p.doc.url })),
     )
-    const docs = projected.map((p) => ({ title: p.doc.title, url: p.doc.url, excerpt: p.excerpt }))
+    const docs = projected.map((p) => ({
+      title: p.doc.title,
+      url: p.doc.url,
+      excerpt: p.excerpt,
+      ...(p.freshness ? { freshness: p.freshness } : {}),
+    }))
     const tasks = this.taskRepository
       ? (await this.taskRepository.listByBlock(workspaceId, block.id)).map((t) => ({
           key: t.externalId,

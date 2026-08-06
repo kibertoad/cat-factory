@@ -50,9 +50,12 @@ export interface EngineCollaboratorsInput {
   notifications: NotificationsModule | undefined
   fragmentLibrary: ReturnType<typeof createFragmentLibraryModule> | undefined
   /**
-   * The document module, for its dispatch-time linked-document refresher: the interviewer resolves
-   * the same linked context the analyst and planner will, so it must re-confirm it the same way or an
-   * initiative gets interviewed against a design revision the build then no longer matches.
+   * The document module, for its dispatch-time linked-document refresher. Both inline readers of a
+   * block's attachments take it, for one reason: an inline step that resolves the same linked
+   * context a later dispatch will must re-confirm it the same way, or it reasons about a revision
+   * the build no longer matches. The initiative INTERVIEWER is one; the REQUIREMENTS REVIEW is the
+   * other, and the more consequential, being the first step of the default pipelines and the one a
+   * human signs off on.
    */
   documents: DocumentsModule | undefined
   boardService: BoardService
@@ -122,7 +125,12 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
   // Built before the execution engine so the special `requirements-review` gate step can
   // drive the inline reviewer + the iterative answer → incorporate → re-review loop.
   const requirements = modules.build('requirements', () =>
-    createRequirementsModule(dependencies, notifications?.service, fragmentLibrary),
+    createRequirementsModule(
+      dependencies,
+      notifications?.service,
+      fragmentLibrary,
+      input.documents?.linkedRefresher,
+    ),
   )
   const docInterview = createDocInterviewService(dependencies)
   const forkChat = createForkChatService(dependencies)

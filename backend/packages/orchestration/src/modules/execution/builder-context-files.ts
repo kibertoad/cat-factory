@@ -6,7 +6,7 @@ import {
   renderPriorReviewContext,
 } from '@cat-factory/agents'
 import type { InjectedContextFile } from '@cat-factory/kernel'
-import type { LinkedContext } from './linked-context.js'
+import type { LinkedContext, LinkedContextOptions } from './linked-context.js'
 
 // ---------------------------------------------------------------------------
 // The BUILDER's own injected-context-file contributors, extracted from `AgentContextBuilder`
@@ -16,30 +16,46 @@ import type { LinkedContext } from './linked-context.js'
 // ---------------------------------------------------------------------------
 
 /**
- * Start the block's linked-context resolution and derive, from that SAME promise, whether the run
+ * Start the block's linked-context resolution and derive, from that SAME resolution, whether the run
  * carries a design document (which is what folds the design-context guidance into the prompt).
  *
  * A pair rather than two calls because the two must not resolve the corpus twice. Linked context and
  * the fragment fold sit in the SAME `Promise.all` wave in `buildContext`, so the flag travels as a
- * promise the fragment resolver awaits: that serialises those two alone, where lifting the corpus
- * resolution out of the wave would cost every dispatch an extra round trip.
+ * promise the fragment resolver awaits — and it settles at the resolution's CHEAP half, off the
+ * `onDocumentsResolved` hook, not off the finished context. That distinction is the whole point: the
+ * finished context is only ready after a live version probe per linked source and a possible
+ * whole-file re-download, and none of that can change which ORIGINS the run carries. Binding the flag
+ * to it would serialise the fragment fold (an LLM call, when a standard needs condensing) behind a
+ * Figma round trip on every dispatch, turning `max(linkedContext, fragments)` into their sum.
  *
- * The flag resolves `false` on rejection and never rethrows. An unreadable or oversized corpus is
- * already the wave's own failure through the linked-context entry itself, and answering it twice
- * would surface a run refusal as a fragment-resolution error naming the wrong thing.
+ * The flag resolves `false` when the corpus never resolves at all, and never rethrows. An unreadable
+ * or oversized corpus is already the wave's own failure through the linked-context entry itself, and
+ * answering it twice would surface a run refusal as a fragment-resolution error naming the wrong
+ * thing.
  */
-export function linkedContextWithDesignFlag(resolve: () => Promise<LinkedContext>): {
+export function linkedContextWithDesignFlag(
+  includeLinked: boolean,
+  resolve: (opts: LinkedContextOptions) => Promise<LinkedContext>,
+): {
   linkedContext: Promise<LinkedContext>
   hasDesignContext: Promise<boolean>
 } {
-  const linkedContext = resolve()
-  return {
-    linkedContext,
-    hasDesignContext: linkedContext.then(
-      (ctx) => ctx.docs.some((doc) => isDesignSource(doc.origin)),
-      () => false,
-    ),
-  }
+  let settle: (hasDesign: boolean) => void = () => {}
+  const hasDesignContext = new Promise<boolean>((resolvePromise) => {
+    settle = resolvePromise
+  })
+  const linkedContext = resolve({
+    includeLinked,
+    onDocumentsResolved: (origins) => settle(origins.some(isDesignSource)),
+  })
+  // A corpus that failed to resolve never reached the hook, so settle the flag on the failure too
+  // (a second `settle` after the hook fired is a no-op, which is what makes this safe as a floor
+  // rather than an override).
+  void linkedContext.then(
+    () => settle(false),
+    () => settle(false),
+  )
+  return { linkedContext, hasDesignContext }
 }
 
 /**

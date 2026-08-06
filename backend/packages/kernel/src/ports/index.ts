@@ -321,6 +321,7 @@ export type {
   DocumentSourceRegistry,
   DocumentContentResolver,
   LinkedDocumentRefresher,
+  LinkedDocumentRefreshOutcome,
   RefreshedDocument,
 } from './document-source.js'
 export type {

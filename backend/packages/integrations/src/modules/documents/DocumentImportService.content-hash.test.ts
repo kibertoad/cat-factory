@@ -16,8 +16,13 @@ import type { DocumentConnectionService } from './DocumentConnectionService.js'
 // while a changed body re-projects. The cross-runtime column mapping is exercised by the
 // repo builds + conformance; this pins the SERVICE behaviour without a live source.
 
-function makeService(body: { value: string }, version = { value: '1' }) {
+function makeService(
+  body: { value: string },
+  version = { value: '1' },
+  over: { workspaceExists?: boolean } = {},
+) {
   let upserts = 0
+  const invalidated: { key: string; group: string }[] = []
   const store = new Map<string, DocumentRecord>()
   const documentRepository: DocumentRepository = {
     async upsert(record) {
@@ -77,7 +82,7 @@ function makeService(body: { value: string }, version = { value: '1' }) {
     requireConnection: async () => ({ credentials: {} }),
   } as unknown as DocumentConnectionService
   const workspaceRepository = {
-    get: async () => ({ id: 'ws_1' }),
+    get: async () => (over.workspaceExists === false ? null : { id: 'ws_1' }),
   } as unknown as WorkspaceRepository
   let now = 1000
   let minted = 0
@@ -89,11 +94,20 @@ function makeService(body: { value: string }, version = { value: '1' }) {
     workspaceRepository,
     clock,
     idGenerator: { next: (prefix) => `${prefix ?? 'id'}_${++minted}` },
+    versionCache: {
+      get: async (_key, _group, load) => load(),
+      invalidate: async (key, group) => {
+        invalidated.push({ key, group })
+      },
+      invalidateGroup: async () => {},
+      invalidateAll: async () => {},
+    },
   })
   return {
     service,
     upserts: () => upserts,
     stored: () => store.get('PAGE-1') ?? null,
+    invalidated: () => invalidated,
     advance: (to: number) => {
       now = to
     },
@@ -167,5 +181,60 @@ describe('DocumentImportService source-version recording', () => {
 
     expect(record.externalId).toBe('PAGE-1')
     expect(record.sourceVersion).toBe('v7')
+  })
+
+  it('records the caller’s probed token when the fetch itself exposes none', async () => {
+    // What makes the dispatch-time ladder converge: a provider whose fetch resolves its version
+    // best-effort (GitHub docs' commit sha degrades to null on a rate-limited request) would
+    // otherwise leave the row holding null, mismatch the probe forever, and re-download the whole
+    // document on every dispatch of every run.
+    const h = makeService({ value: '# PRD' }, { value: '' })
+    const record = await h.service.reimport('ws_1', 'confluence', 'PAGE-1', {
+      fallbackVersion: 'sha-abc',
+    })
+
+    expect(record.sourceVersion).toBe('sha-abc')
+  })
+
+  it('prefers the FETCH’s own version over the fallback', async () => {
+    // The fallback fills a gap; it never overrides what the source actually said about the body
+    // that was stored.
+    const h = makeService({ value: '# PRD' }, { value: 'v9' })
+    const record = await h.service.reimport('ws_1', 'confluence', 'PAGE-1', {
+      fallbackVersion: 'sha-abc',
+    })
+
+    expect(record.sourceVersion).toBe('v9')
+  })
+})
+
+describe('DocumentImportService write guards', () => {
+  it('refuses to write a projection for a workspace that does not exist', async () => {
+    // The class invariant every other write on this service holds. It sits on `reimport`, the
+    // method that WRITES, so no entry point can reach the upsert around it.
+    const h = makeService({ value: '# PRD' }, { value: 'v1' }, { workspaceExists: false })
+
+    await expect(h.service.reimport('ws_gone', 'confluence', 'PAGE-1')).rejects.toThrow()
+    await expect(h.service.import('ws_gone', 'confluence', 'PAGE-1')).rejects.toThrow()
+    expect(h.upserts()).toBe(0)
+  })
+
+  it('drops the document’s cached freshness verdict after a MANUAL import', async () => {
+    // The verdict was reached against the token the row carried before this write. Left in place,
+    // the next dispatch compares a fresh row against a stale answer: either a needless re-download
+    // or a `confirmed` naming the wrong revision.
+    const h = makeService({ value: '# PRD' }, { value: 'v1' })
+    await h.service.import('ws_1', 'confluence', 'PAGE-1')
+
+    expect(h.invalidated()).toEqual([{ key: 'confluence:PAGE-1', group: 'ws_1' }])
+  })
+
+  it('does NOT invalidate from `reimport`, which runs inside that cache’s own loader', async () => {
+    // The refresh calls `reimport` from within the loader that is about to store the fresh entry,
+    // so an invalidation there would race the store it precedes and buy nothing.
+    const h = makeService({ value: '# PRD' }, { value: 'v1' })
+    await h.service.reimport('ws_1', 'confluence', 'PAGE-1')
+
+    expect(h.invalidated()).toEqual([])
   })
 })

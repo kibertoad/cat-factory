@@ -86,11 +86,15 @@ function exhaustiveGap(reason: never): string {
 }
 
 /**
- * The materialised context file's freshness header lines, or NOTHING when there is nothing to state.
+ * A linked document's freshness header lines, or NOTHING when there is nothing to state.
  *
- * Rendered beside `originHeaderLine` (`context-references.ts`) at the top of every `.cat-context/`
- * document, which is why it lives in kernel: the engine decides the verdict and the container's
- * materialiser renders it, and they must not each invent their own wording.
+ * ONE renderer for BOTH surfaces the verdict has to reach, which is why it lives in kernel: the
+ * container's materialiser puts it beside `originHeaderLine` (`context-references.ts`) at the top of
+ * every `.cat-context/` file, and the in-prompt injection an INLINE kind gets instead of a checkout
+ * puts it under the document's heading. The engine decides the verdict; neither renderer invents its
+ * own wording, and neither gets to decide separately whether to state it at all. An inline judge,
+ * estimator or requirements reviewer is exactly as able to score against a stale design as a
+ * container agent is to build from one, and it has no `.cat-context/` file to read the warning from.
  *
  * A confirmed document contributes its revision, so the file records what the run built against. An
  * UNCONFIRMED one contributes a warning naming the gap, because an agent handed a design has no

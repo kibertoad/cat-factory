@@ -138,6 +138,23 @@ export interface DocumentContentResolver {
   probeVersion(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<string>
 }
 
+/**
+ * What one attempt to bring a linked document up to date concluded, in the small shape the
+ * dispatch-time cache (`AppCaches.linkedDocumentVersion`) holds.
+ *
+ * It is the outcome of the WHOLE ladder (probe, and the re-import a moved page triggers), not of
+ * the probe alone, which is what lets one cached entry bound both halves. `unreachable` is why it
+ * is a value rather than a thrown error: a cache loader that throws caches nothing, so a source
+ * outage would re-run the fan-out on every step dispatch for as long as it lasted.
+ */
+export type LinkedDocumentRefreshOutcome =
+  /** The source's current token for this document, as of the attempt. */
+  | { readonly status: 'versioned'; readonly version: string }
+  /** The source answered but exposes no token to compare against. */
+  | { readonly status: 'unversioned' }
+  /** The probe or the re-fetch failed. The run reads the stored body; see the logged cause. */
+  | { readonly status: 'unreachable' }
+
 /** One linked document as a run is about to read it, with what the refresh concluded about it. */
 export interface RefreshedDocument {
   /**

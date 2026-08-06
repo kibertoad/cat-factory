@@ -117,6 +117,40 @@ describe('resolveLinkedContext: dispatch-time freshness', () => {
     expect((error as ValidationError).details?.reason).toBe(CONTEXT_DOCUMENT_UNREADABLE)
   })
 
+  it('reports the corpus ORIGINS before the refresh, not after it', async () => {
+    // The design-context fragment fold needs only the kinds of document a run carries, and those are
+    // settled the moment the corpus read returns. The refresh that follows is a live probe per
+    // source plus a possible whole-file re-download, so reporting the origins after it would put a
+    // Figma round trip in front of the fragment fold on every single dispatch.
+    let refreshStarted = false
+    let originsAt: 'before-refresh' | 'after-refresh' | 'never' = 'never'
+    const refresher: LinkedDocumentRefresher = {
+      refresh: async (_ws, records) => {
+        refreshStarted = true
+        return records.map((record) => ({ record, freshness: { status: 'not-applicable' } }))
+      },
+    }
+
+    await resolveLinkedContext(
+      linkedContextSourcesFrom({
+        documentRepository: documentsRepo([record()]),
+        documentRefresher: refresher,
+      }),
+      'ws1',
+      'task_1',
+      '',
+      {
+        includeLinked: true,
+        onDocumentsResolved: (origins) => {
+          originsAt = refreshStarted ? 'after-refresh' : 'before-refresh'
+          expect(origins).toEqual(['figma'])
+        },
+      },
+    )
+
+    expect(originsAt).toBe('before-refresh')
+  })
+
   it('carries the origin so a reader can tell a design document from prose', async () => {
     const { docs } = await resolveLinkedContext(
       linkedContextSourcesFrom({ documentRepository: documentsRepo([record()]) }),

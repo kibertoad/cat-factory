@@ -150,6 +150,49 @@ describe('AgentContextBuilder: design-context guidance', () => {
     expect(context.block.resolvedFragments?.map((f) => f.id)).toEqual([DESIGN_CONTEXT_FRAGMENT_ID])
   })
 
+  it('resolves the fragments WITHOUT waiting on the freshness refresh', async () => {
+    // The flag needs the document ORIGINS, which are known the moment the corpus read returns. The
+    // refresh that follows is a live probe per source plus a possible whole-file re-download, and
+    // nothing it can answer changes an origin — so binding the flag to the finished context would
+    // serialise the fragment fold (an LLM call, when a standard needs condensing) behind a Figma
+    // round trip on every dispatch, turning two parallel wave entries into their sum.
+    let releaseRefresh = () => {}
+    const refreshBlocked = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    let reachedFragments = () => {}
+    const fragmentsReached = new Promise<void>((resolve) => {
+      reachedFragments = resolve
+    })
+    const s = step()
+    const built = makeBuilder([document()], {
+      documentRefresher: {
+        refresh: async (_ws, records) => {
+          await refreshBlocked
+          return records.map((record) => ({ record, freshness: { status: 'not-applicable' } }))
+        },
+      },
+      fragmentResolver: {
+        resolveBodiesForRun: async (_ws: string, ids: string[]) => {
+          reachedFragments()
+          return ids.map((id) => ({ id, body: `BODY:${id}` }))
+        },
+      },
+    }).buildContext('ws1', instance([s]), s, true, TASK)
+
+    // The assertion IS this await: the refresh is parked and never released until below, so if the
+    // design flag waits on the finished linked context, the fragment fold is never reached and this
+    // hangs to the test timeout. Reaching it proves the two wave entries are a pair, not a chain.
+    await fragmentsReached
+
+    releaseRefresh()
+    const context = await built
+    expect(context.block.resolvedFragments?.map((f) => f.id)).toEqual([
+      'node.best-practices',
+      DESIGN_CONTEXT_FRAGMENT_ID,
+    ])
+  })
+
   it('stays out of a kind that receives no standards at all', async () => {
     // A gate host is neither code-aware nor doc-aware, so it folds nothing — a design document must
     // not become the one thing that starts charging it for standards.

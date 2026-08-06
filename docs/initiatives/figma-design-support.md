@@ -184,23 +184,28 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       bound neither; the component cap ranks by instance count so what survives it is what the
       design leans on, and the token cap sorts by the rendered order first so its "N not listed"
       note points at the tail the reader can see is missing.
-- [x] **Auto-fold `design.context`.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
+- [x] **Auto-fold `design.context`.** ([#1754](https://github.com/kibertoad/cat-factory/pull/1754))
       `withDesignContextFragment` appends the id in `AgentContextBuilder.resolveFragments` whenever
       the run's resolved context carries a design-origin document, so it rides the normal fold and
       inherits its rules for free (a workspace override still wins, the two-tier brief/full verbosity
       still applies, a kind that receives no standards still receives none). Whether a document is
       design-origin comes off `isDesignSource` in CONTRACTS rather than a provider lookup: the SPA has
-      to label a design source too, and the run path reads it where no provider is reachable. Trap the
-      wiring hit: `resolveLinkedContext` and `resolveFragments` are in the SAME `Promise.all` wave, so
-      the flag is threaded as the linked-context PROMISE and awaited inside the fragment resolver
-      (serialising just those two) rather than lifting the corpus resolution out of the wave and
-      costing every dispatch an extra round trip. It resolves `false` on a linked-context rejection,
-      since that rejection is already the wave's own failure and answering it twice would surface a run
-      refusal as a fragment error naming the wrong thing.
+      to label a design source too, and the run path reads it where no provider is reachable. The
+      fragment's retired `appliesTo: { blockTypes: ['frontend'] }` selector is DELETED rather than left
+      beside the presence rule, or the deterministic selector and the management surface would go on
+      driving the old wrong-in-both-directions behaviour. Trap the wiring hit: `resolveLinkedContext`
+      and `resolveFragments` are in the SAME `Promise.all` wave, so the flag settles off the
+      resolution's CHEAP half — the `onDocumentsResolved` hook, which reports the corpus origins the
+      moment the corpus read returns — rather than off the finished context, which is only ready after
+      a live probe per source and a possible whole-file re-download that cannot change an origin.
+      Binding it to the finished context serialised the fragment fold (an LLM call, when a standard
+      needs condensing) behind a Figma round trip on every dispatch. It resolves `false` when the
+      corpus never resolves at all, since that rejection is already the wave's own failure and
+      answering it twice would surface a run refusal as a fragment error naming the wrong thing.
 
 ### Track C: freshness
 
-- [x] **Dispatch-time refresh.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
+- [x] **Dispatch-time refresh.** ([#1754](https://github.com/kibertoad/cat-factory/pull/1754))
       `LinkedDocumentRefreshService` behind the kernel `LinkedDocumentRefresher` port, on the
       linked-context resolution path of every dispatch: probe → compare → re-import only what moved.
       **The comparison needed somewhere to compare TO**, which the plan above missed: the row recorded
@@ -210,19 +215,41 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       on an unchanged body would re-fetch the whole design on every dispatch, forever). `sourceVersion`
       NULL covers three cases that all mean "cannot be proven current" and all self-heal on one
       re-import: an upload, a source with no version, a row predating the column.
-      A new `linkedDocumentVersion` cache entry holds the PROBE, not the body — 60s TTL and NO refresh
-      window, because the load already IS the cheap probe so there is nothing cheaper to re-validate
-      with, and caching the body instead would put a whole-file Figma download on the critical path of
-      any dispatch that missed. Enabled on the isolate-safe profile (an external token, not our own
-      mutable state).
+      A new `linkedDocumentVersion` cache entry holds the OUTCOME of the whole ladder, not the body
+      and not just the probe — 60s TTL and NO refresh window, because the load already IS the check so
+      there is nothing cheaper to re-validate with, and caching the body instead would put a
+      whole-file Figma download on the critical path of any dispatch that missed. Covering the ladder
+      rather than the probe is what bounds the EXPENSIVE half too: the re-import runs inside the
+      loader, so concurrent dispatches of one document dedupe onto a single download and a failure is
+      a cached VALUE rather than a thrown loader (a loader that throws caches nothing, so a source
+      that is down would be re-asked by every dispatch for as long as the outage lasted). Enabled on
+      the isolate-safe profile (an external token, not our own mutable state), and invalidated on
+      every write that can move either side of the comparison: connect/disconnect drops the workspace
+      GROUP, a manual import drops that document's entry.
+      Two things the ladder needs to CONVERGE, both learned the hard way. `reimport` takes the probed
+      token as the version to record when the source's own fetch exposes none (GitHub docs resolve
+      their commit sha best-effort, so a rate-limited fetch stored `null`, mismatched the probe
+      forever, and re-downloaded the document on every dispatch while reporting `unversioned` about a
+      source that plainly versions). And the connection is resolved ONCE per pass for the whole
+      corpus (`resolveConnections`) rather than per document and again inside each probe, with the
+      per-document fan-out bounded, since this runs per step of every run.
       Freshness is a THREE-way verdict rendered by kernel's `freshnessHeaderLines`, not a boolean:
       `confirmed` contributes `Revision: <token>` (so "which revision did this run build against" is
       answerable afterwards), `not-applicable` renders NOTHING (an upload has no source to trail, so a
-      warning would invent a problem), and `unconfirmed` names which of three gaps applies, since
-      "reconnect the source" / "wait out the outage" / "this source has no revision" are three
-      different fixes. Best-effort by port contract (it never throws), and the readability refusal now
-      runs on the REFRESHED records, because a page emptied since import is the case most worth
-      refusing.
+      warning would invent a problem), and `unconfirmed` names which of FOUR gaps applies, since
+      "reconnect the source" / "this deployment cannot read the credentials at all" (mothership mode,
+      where the read fails permanently and by design) / "wait out the outage" / "this source has no
+      revision" are four different fixes. The same renderer serves BOTH surfaces: the materialised
+      `.cat-context/` header and the in-prompt injection an inline kind gets instead of a checkout,
+      because an inline judge or reviewer scoring against a stale design is the same failure as a
+      container agent building from one. Every gap also increments `document.freshness_gap`
+      (dimensioned by reason and source), because each of these repeats per dispatch while it lasts,
+      so the log line says which run and only the rate says whether it is spreading. Best-effort by
+      port contract (it never throws), and the readability refusal now runs on the REFRESHED records,
+      because a page emptied since import is the case most worth refusing — including in the
+      REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs off on,
+      which resolves its attachments through the same refresher for the same reason the initiative
+      interviewer does.
 - [ ] **Staleness on the surface.** The SPA document rows and the task context panel show
       `syncedAt` and a refresh action (member-tier, per Track A); the outcome/report side names
       the design version a run actually built against, so "built from the old rev" is diagnosable
@@ -277,13 +304,13 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 
 ### Track G: hygiene
 
-- [x] **Host-pinned claims win.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
+- [x] **Host-pinned claims win.** ([#1754](https://github.com/kibertoad/cat-factory/pull/1754))
       `makeDocumentUrlResolver` two-passes: host-PINNED parsers first, host-blind second, registration
       order still deciding within each pass (two pinned sources cannot claim one host). The
       classification is `isHostPinnedSource` in contracts, off the same exhaustive traits `Record` as
       `isDesignSource`, so a new source cannot ship unclassified.
 - [x] **Fix the stale tracker pointer** in `contracts/src/documents.ts`
-      ([#1747](https://github.com/kibertoad/cat-factory/pull/1754)) — now cites ADR 0017.
+      ([#1754](https://github.com/kibertoad/cat-factory/pull/1754)) — now cites ADR 0017.
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
       start-from-design flow once Track A lands (live-push assertions per the e2e rules), plus
       unit specs for `stores/documents.ts`, which currently has none.

@@ -1,6 +1,7 @@
 import type {
   AgentRunContext,
   DocumentFreshness,
+  DocumentOrigin,
   DocumentRecord,
   DocumentRepository,
   DocumentSourceKind,
@@ -124,6 +125,20 @@ export interface LinkedContext {
   tasks: NonNullable<AgentRunContext['block']['contextTasks']>
 }
 
+/** What a caller of {@link resolveLinkedContext} steers, beyond the block it is resolving for. */
+export interface LinkedContextOptions {
+  /** Skip the block's ATTACHMENTS (reworked mode folds them into the incorporated doc already). */
+  includeLinked: boolean
+  /**
+   * The corpus's document ORIGINS, reported the moment they are known and BEFORE the dispatch-time
+   * refresh (a live probe per source, and a whole-file download for anything that moved). It exists
+   * because a caller that only needs to know WHAT KIND of documents a run carries (the
+   * design-context fragment fold) would otherwise wait on network work whose answer cannot change
+   * the origins, turning two parallel resolutions into one serial chain.
+   */
+  onDocumentsResolved?: (origins: readonly DocumentOrigin[]) => void
+}
+
 /**
  * Resolve the high-confidence external context for a block: the docs/tasks a human attached to it
  * (only when `includeLinked` — skipped in reworked mode, where the incorporated requirements doc
@@ -145,7 +160,7 @@ export async function resolveLinkedContext(
   workspaceId: string,
   blockId: string,
   description: string,
-  opts: { includeLinked: boolean },
+  opts: LinkedContextOptions,
 ): Promise<LinkedContext> {
   const docs = new Map<string, DocumentRecord>()
   const tasks = new Map<string, TaskRecord>()
@@ -210,11 +225,16 @@ export async function resolveLinkedContext(
   }
   reportUnmatchedUrls(sources.logger, blockId, urlItems)
 
+  const resolvedDocs = [...docs.values()]
+  // The corpus is settled here; everything below is about its CURRENCY, not its membership. Report
+  // the origins now so a caller that only needs the kinds is not held behind a live source probe.
+  opts.onDocumentsResolved?.(resolvedDocs.map((record) => record.source))
+
   // Re-confirm every resolved document against its source BEFORE anything else looks at it, so both
   // the readability refusal below and the body the agent reads are about the CURRENT revision rather
   // than the copy import stored. Best-effort by the refresher's own contract, so this cannot fail the
   // run; with no refresher wired every document comes back unchanged and un-annotated.
-  const refreshed = await refreshDocuments(sources.refresher, workspaceId, [...docs.values()])
+  const refreshed = await refreshDocuments(sources.refresher, workspaceId, resolvedDocs)
 
   // BREAK, never skip: a reference that resolved to a page with nothing in it would otherwise put
   // the agent in front of a `.cat-context/` file holding a title and a URL it cannot open, with
