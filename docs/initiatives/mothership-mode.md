@@ -1246,7 +1246,8 @@ Each PR adds a changeset and updates this checklist.
   parallel boot path selected by `LOCAL_MOTHERSHIP_URL`.
 - **Task types stay NODE-LOCAL, and that is a decision, not a gap.** A `CustomTaskType` gets no
   `/internal/*` read of its own, unlike the foundational-services `builtin` tier, the
-  `BinaryGeneratorSource` and the `PromptFragmentSource` beside it. The descriptor is inseparable from code registered in the SAME
+  `BinaryGeneratorSource` and the `PromptFragmentSource` beside it. The descriptor is inseparable
+  from code registered in the SAME
   org package: its `defaultPipelineId` names a pipeline in that package, that pipeline names custom
   KINDS and VARIANTS (functions, which cannot cross a wire), its `defaultFragmentIds` name fragments
   in the same pool, and its `formPanel` names a component in the deployment's own SPA layer. Serving
