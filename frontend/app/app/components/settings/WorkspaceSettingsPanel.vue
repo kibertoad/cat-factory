@@ -30,8 +30,9 @@ const workspace = useWorkspaceStore()
 const access = useWorkspaceAccess()
 const toast = useToast()
 const slots = useReactiveSlots<AppSlots>()
-// The deployment's registered custom task types (reusable operations), so the Operations tab
-// exists only where there are any to hide.
+// Whether the deployment registers any reusable operation at all, hidden or not, so the
+// Operations tab exists only where there is something for it to manage. Not the OFFERED catalog:
+// hiding the last operation would then take away the only screen that un-hides one.
 const taskTypes = useTaskTypesStore()
 
 // The Metadata tab exists only where the deployment DECLARES custom fields — an unwired
@@ -92,7 +93,7 @@ const tabs = computed(() => [
   },
   // Which of the deployment's reusable operations this board offers. Only where the deployment
   // registers any: on the stock product the tab would name a catalog that does not exist.
-  ...(taskTypes.customTaskTypes.length
+  ...(taskTypes.hasRegisteredOperations
     ? [
         {
           value: 'operations',
@@ -622,7 +623,7 @@ async function save() {
         </template>
 
         <!-- Reusable operations this board offers (only where the deployment registers any) -->
-        <template v-if="taskTypes.customTaskTypes.length" #operations>
+        <template v-if="taskTypes.hasRegisteredOperations" #operations>
           <TaskTypeSuppressionsPanel />
         </template>
 

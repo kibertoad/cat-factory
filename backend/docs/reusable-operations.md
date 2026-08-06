@@ -408,6 +408,11 @@ Two rules bound the surface:
 - **The LIST is its own read** (`GET /workspaces/:ws/task-type-suppressions`, `settings.manage`).
   A suppressed type is by construction absent from the projected catalog, so nothing else could
   offer the way back. The foundational-services suppression model, for the same reason.
+- **The snapshot carries the COMPLEMENT too**, as `suppressedTaskTypes` (ids only), exactly as
+  `retiredPipelines` complements `pipelineCatalogVersions`. Without it the offered catalog is
+  ambiguous in the one direction that traps a user: an admin hiding the LAST operation empties
+  `customTaskTypes`, which reads identically to a deployment that registers none, so the SPA drops
+  the settings tab that is the only way to un-hide one. The tab is gated on the union of the two.
 - **BUILT-IN types are not suppressible.** They carry hardcoded creation affordances (the
   document-frame restriction, the per-type form sections), so hiding one would remove a capability
   with no descriptor stating what was lost. Suppressing an id the deployment does not register is a

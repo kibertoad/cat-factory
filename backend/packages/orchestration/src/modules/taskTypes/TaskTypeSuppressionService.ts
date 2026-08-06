@@ -14,7 +14,6 @@ export interface TaskTypeSuppressionServiceDependencies {
   /** The app-owned registry the deployment registers its operations on. */
   taskTypeRegistry?: TaskTypeRegistry
   clock: Clock
-  logger?: Logger
 }
 
 /** What the settings screen renders: every registered operation, and whether this board hides it. */

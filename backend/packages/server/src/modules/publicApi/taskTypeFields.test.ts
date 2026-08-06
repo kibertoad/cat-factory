@@ -69,14 +69,24 @@ describe('publicTaskTypeCatalog', () => {
     expect(entry.fields.map((f) => f.key)).toEqual(['entity', 'auth'])
   })
 
-  it('never projects formPanel, which names a component no external client can render', () => {
-    const entry = publicTaskTypeCatalog(
-      registryWith({ ...OPERATION, formPanel: 'org:introduce-api-form' }),
-      new Set(),
-    ).find((e) => e.taskType === 'org:introduce-api')!
-    expect(entry).not.toHaveProperty('formPanel')
-    // The declared fields still ship: they are what this API validates, whatever the app renders.
-    expect(entry.fields.map((f) => f.key)).toEqual(['entity', 'auth'])
+  it('never projects formPanel, nor the fields such a type declares but nothing checks', () => {
+    const panelled = registryWith({ ...OPERATION, formPanel: 'org:introduce-api-form' })
+    const projected = publicTaskTypeCatalog(panelled, new Set()).find(
+      (e) => e.taskType === 'org:introduce-api',
+    )!
+    expect(projected).not.toHaveProperty('formPanel')
+    // `fields` on a catalog entry means ONE thing: what creation checks a bag against. A
+    // `formPanel` type's bag is checked by nothing (`resolveTaskTypeFields` carries it through
+    // verbatim, and the internal door's `checkCustomFields` does the same), so projecting its
+    // descriptors would advertise a contract that does not exist. The two halves are asserted
+    // together on purpose: this is the pair that must agree.
+    expect(projected.fields).toEqual([])
+    expect(
+      resolveTaskTypeFields(
+        { title: 't', taskType: 'org:introduce-api', fields: { undeclared: 'x' } },
+        panelled,
+      ),
+    ).toEqual({ custom: { undeclared: 'x' } })
   })
 
   it('serves the built-in kinds even with no registry wired at all', () => {
@@ -145,6 +155,22 @@ describe('resolveTaskTypeFields', () => {
         panelled,
       ),
     ).toEqual({ custom: { whatever: 'x' } })
+  })
+
+  it('refuses a built-in value the DESCRIPTOR admits and the internal schema does not', () => {
+    // `prNumber` is `v.integer()` on `taskTypeFieldsSchema` and a plain `number` descriptor here,
+    // because the descriptor vocabulary has no integer flag. The restatement cannot carry the
+    // rule, so the built-in branch parses through the schema instead of casting to it: before
+    // that, `3.7` passed the public surface and landed on the block as the PR to review.
+    expect(() =>
+      resolveTaskTypeFields(
+        { title: 't', taskType: 'review', fields: { prNumber: 3.7 } },
+        undefined,
+      ),
+    ).toThrow(/prNumber/)
+    expect(
+      resolveTaskTypeFields({ title: 't', taskType: 'review', fields: { prNumber: 4 } }, undefined),
+    ).toEqual({ prNumber: 4 })
   })
 
   it('returns undefined when there is nothing to carry, so no empty bag reaches the row', () => {

@@ -842,7 +842,27 @@ omits), and both of them read the registry through the same projection the snaps
   emitter had the sibling latent bug: group names are camelCase in the surface table and every group
   was a single word until `taskTypes`, so it would have shipped `client.taskTypes` in Python. Both
   are worth remembering as a rule: a NEW resource GROUP (not merely a new operation) touches
-  hand-written code in one SDK and exercises spelling paths in another.
+  hand-written code in one SDK and exercises spelling paths in another. The MCP facade had the
+  same latent bug in a third place, and there it is not cosmetic: the group is half the TOOL NAME
+  a host allow-lists and a model calls, so `taskTypes_list` failed the host-safe naming rule
+  outright. The Python SDK's keyword suffixing was the fourth: `type` on a descriptor field
+  becomes `type_`, which only the first multi-word/reserved-name member ever exercises.
+- **A `pathResolver` serves TWO callers, and only one of them passes real values.** The suppression
+  pair resolved its path param through `encodeURIComponent`, which is right for the client building
+  a URL and wrong for route REGISTRATION, which calls the same resolver with the literal
+  placeholder `:taskType`. The routes registered as `%3AtaskType`, so every hide and every restore
+  404'd while the paramless list beside them answered normally. Nothing failed to compile, and the
+  RBAC suite's own case for those routes read the 404 as the refusal it was checking for, so three
+  conformance tests and one RBAC test agreed the feature worked. Every other contract in the
+  directory interpolates raw; these two were the only `encodeURIComponent` in it, which is the
+  shape of the tell. `routes/path-resolvers.test.ts` now asserts the registered PATTERN of every
+  contract (no percent-encoding, every declared param placed), so the class is covered by existing
+  rather than by remembering.
+- **A conformance test can address a route that does not exist and read the 404 as data.** The
+  public-API test verified its created task through `GET /workspaces/:ws/blocks/:id`, which this
+  API has never had; Hono's plain-text `404 Not Found` then failed the JSON parse rather than any
+  assertion, so the step that proves values LAND on the task was dead from the day it was written.
+  Reading a block back through the workspace snapshot is what the rest of that file already does.
 - **`WorkspaceController.snapshotRegistryProjections` is no longer workspace-independent**, and its
   own doc comment said five times that it was. It now takes an optional workspace id, absent at
   CREATE (a board that does not exist cannot have hidden anything, so the read could only answer

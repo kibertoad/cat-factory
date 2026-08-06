@@ -2,6 +2,7 @@ import {
   BUILTIN_CREATE_TASK_TYPES,
   builtinPublicTaskFields,
   isBuiltinCreateTaskType,
+  parseBuiltinPublicTaskFields,
   sanitizeDescriptorFields,
   validateDescriptorFields,
   withDescriptorFieldDefaults,
@@ -9,7 +10,6 @@ import {
 import type {
   CreatePublicTaskInput,
   DescriptorField,
-  DescriptorFieldValues,
   PublicTaskType,
   TaskTypeFields,
 } from '@cat-factory/contracts'
@@ -63,8 +63,12 @@ export function publicTaskTypeCatalog(
       description: type.presentation.description,
       ...(type.presentation.category ? { category: type.presentation.category } : {}),
       // `formPanel` is deliberately not projected: it names a component in the deployment's own
-      // SPA layer, which no external client can render or act on. Its declared `fields` are.
-      fields: [...(type.fields ?? [])],
+      // SPA layer, which no external client can render or act on. Nor are the `fields` such a type
+      // declares, and that is the same decision rather than an exception to it: a `formPanel`
+      // type's bag is validated by NOTHING (see `descriptorsFor`, and `checkCustomFields` on the
+      // internal door), so listing its descriptors would advertise a check that does not run. On
+      // this entry `fields` is what creation validates against, or empty.
+      fields: type.formPanel ? [] : [...(type.fields ?? [])],
       ...(type.defaultPipelineId ? { defaultPipelineId: type.defaultPipelineId } : {}),
     }))
   return [...builtins, ...custom]
@@ -126,7 +130,18 @@ export function resolveTaskTypeFields(
   }
   const sanitized = sanitizeDescriptorFields(descriptors, filled)
   if (Object.keys(sanitized).length === 0) return undefined
-  return isBuiltinCreateTaskType(taskType)
-    ? (sanitized as TaskTypeFields)
-    : { custom: sanitized as DescriptorFieldValues }
+  if (!isBuiltinCreateTaskType(taskType)) return { custom: sanitized }
+  // A built-in type's values are the internal schema's own TOP-LEVEL keys, so they are parsed by
+  // it rather than asserted to satisfy it. `BUILTIN_PUBLIC_TASK_FIELDS` restates that schema as
+  // descriptors and the descriptor vocabulary is the narrower language (it has no `integer`, no
+  // `trim`), so a cast here is exactly where a rule the restatement cannot carry gets lost: a
+  // `prNumber` of `3.7` passed the descriptor and landed on the block as the PR to review.
+  const parsed = parseBuiltinPublicTaskFields(sanitized)
+  if (!parsed.ok) {
+    throw new ValidationError(
+      `The fields supplied for task type '${taskType}' do not match what it accepts: ${parsed.problems.join(' ')}`,
+      { reason: 'task_type_fields_invalid', problems: parsed.problems },
+    )
+  }
+  return parsed.fields
 }

@@ -1121,7 +1121,6 @@ export function createTaskTypeSuppressionModule(
     workspaceRepository: deps.workspaceRepository,
     taskTypeRegistry: deps.taskTypeRegistry,
     clock: deps.clock,
-    logger: deps.logger,
   })
   return { service }
 }

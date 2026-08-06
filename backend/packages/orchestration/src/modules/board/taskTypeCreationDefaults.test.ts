@@ -260,6 +260,29 @@ describe('taskTypeCreationDefaults', () => {
         defaults.assertNotSuppressed('ws1', 'org:introduce-api'),
       ).resolves.toBeUndefined()
     })
+
+    it('PROPAGATES an unreadable store rather than creating the task anyway', async () => {
+      // The half of the split posture that lives at this door, and the one worth a test: the
+      // snapshot's read of the same rows degrades to \"nothing suppressed\" on purpose
+      // (`TaskTypeSuppressionService.test.ts`), because it renders a picker. This one decides
+      // whether a ROW IS WRITTEN, and it hits the same database the insert on the next line goes
+      // to, so there is no outage to ride out: swallowing here creates the task the workspace
+      // asked not to have and reports nothing.
+      const defaults = createTaskTypeCreationDefaults({
+        taskTypeRegistry: defaultTaskTypeRegistry(),
+        taskTypeSuppressionRepository: {
+          list: async () => {
+            throw new Error('store unreachable')
+          },
+          suppress: async () => {},
+          restore: async () => {},
+        },
+        logger: createRecordingLogger([]),
+      })
+      await expect(defaults.assertNotSuppressed('ws1', 'org:introduce-api')).rejects.toThrow(
+        /store unreachable/,
+      )
+    })
   })
 
   it('resolves the pipeline pin from the registered descriptor', () => {

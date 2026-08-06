@@ -1,6 +1,15 @@
 import * as v from 'valibot'
-import { descriptorFieldSchema, type DescriptorField } from './form-fields.js'
-import { BUILTIN_CREATE_TASK_TYPES, DOC_KINDS } from './primitives.js'
+import {
+  descriptorFieldSchema,
+  type DescriptorField,
+  type DescriptorFieldValues,
+} from './form-fields.js'
+import {
+  BUILTIN_CREATE_TASK_TYPES,
+  DOC_KINDS,
+  taskTypeFieldsSchema,
+  type TaskTypeFields,
+} from './primitives.js'
 
 // ---------------------------------------------------------------------------
 // The PUBLIC task-type surface: what `GET /api/v1/task-types` serves, and the vocabulary
@@ -113,13 +122,47 @@ export function isBuiltinCreateTaskType(taskType: string): boolean {
 }
 
 /**
+ * A built-in type's descriptor-checked values as the internal {@link taskTypeFieldsSchema} shape,
+ * PARSED through that schema rather than asserted to match it.
+ *
+ * The table above restates the schema as descriptors, and a descriptor cannot state every rule a
+ * valibot pipe can. `prNumber` is `v.integer()` in the schema and a plain `number` here, because
+ * the vocabulary has no integer flag: a caller sending `3.7` satisfied the public surface and the
+ * value landed on the block as the pull request to review. `prUrl` likewise loses the schema's
+ * `v.trim()`. Casting was what let that through, so the fix is to stop casting: this parse is what
+ * makes "everything the public surface accepts, the internal schema also accepts" true at RUN TIME
+ * rather than a claim its conformity test samples one value per field.
+ *
+ * A discriminated result, not a throw: contracts states the RULE and cannot see the error
+ * vocabulary that decides how a refusal reaches a caller (the kernel `ValidationError` the public
+ * route raises). A failure is a drift between the two tables rather than an ordinary bad request,
+ * but the value still came from the request, so the caller is told which field and why.
+ */
+export function parseBuiltinPublicTaskFields(
+  values: DescriptorFieldValues,
+): { ok: true; fields: TaskTypeFields } | { ok: false; problems: string[] } {
+  const parsed = v.safeParse(taskTypeFieldsSchema, values)
+  if (parsed.success) return { ok: true, fields: parsed.output }
+  return {
+    ok: false,
+    problems: parsed.issues.map((issue) => {
+      const key = issue.path?.map((segment) => String(segment.key)).join('.')
+      return key ? `${key}: ${issue.message}.` : `${issue.message}.`
+    }),
+  }
+}
+
+/**
  * One entry of `GET /api/v1/task-types`: a type a caller may name in `POST /services/:id/tasks`,
  * with the form it accepts.
  *
  * Deliberately omits `formPanel`. It names a FRONTEND component in the deployment's own SPA layer,
  * which is meaningless to an external client and would advertise an id nothing in this API can act
- * on. A type declaring one still appears here with its declared `fields`, which is the honest
- * answer: those are the values this API validates, whatever the app's own form renders.
+ * on. A type declaring one still appears here, because it IS creatable, but with an EMPTY `fields`
+ * list: its bespoke form owns the whole bag, so neither this API nor the internal create door
+ * validates one key of it. Projecting the descriptors it happens to declare would advertise a
+ * contract nothing enforces, and `fields` on this entry means exactly one thing everywhere
+ * (see {@link PublicTaskType.fields}).
  */
 export const publicTaskTypeSchema = v.object({
   /** The id to pass as `taskType` (`feature`, `bug`, …, or a namespaced `acme:incident`). */
@@ -133,8 +176,17 @@ export const publicTaskTypeSchema = v.object({
   /** The picker grouping caption a custom type declares, when it has one. */
   category: v.optional(v.string()),
   /**
-   * The fields `fields` accepts for this type, in declaration order. Empty means the type takes
-   * title and description only.
+   * The descriptors task creation CHECKS a `fields` bag against for this type, in declaration
+   * order. Exactly that, on every entry: a client that reads this list knows what the create call
+   * will accept, which is the property the one-table design exists to hold.
+   *
+   * EMPTY therefore means "this API validates nothing per-case here", which covers two different
+   * types and neither of them is a lie. A built-in like `feature` takes title and description
+   * only, so there is nothing to send. A custom type with a `formPanel`, or one this process does
+   * not register, accepts an arbitrary bag NOTHING checks (the internal create door does not
+   * either), so there is no list that would describe it. Both answer "do not expect this API to
+   * check what you send"; what a `formPanel` type's own form collects is the deployment's to
+   * document.
    */
   fields: v.array(descriptorFieldSchema),
   /**

@@ -82,10 +82,11 @@ export const usePipelinesStore = defineStore('pipelines', () => {
   const editingId = ref<string | null>(null)
 
   /**
-   * Replace the cached pipelines (and the current built-in catalog versions + retirements) from a
-   * snapshot. `retired` is applied even when EMPTY, unlike `versions`: an absent list means the
-   * facade shipped no retirements, and carrying the previous board's forward would offer a delete
-   * for a pipeline this deployment still ships.
+   * Replace the cached pipelines (and the current built-in catalog versions + names +
+   * retirements) from a snapshot. `retired` is applied even when EMPTY, unlike `versions`: an
+   * absent list means the facade shipped no retirements, and carrying the previous board's forward
+   * would offer a delete for a pipeline this deployment still ships. `names` rides `versions`,
+   * being the other half of one read.
    */
   function hydrate(
     next: Pipeline[],
@@ -94,8 +95,14 @@ export const usePipelinesStore = defineStore('pipelines', () => {
     names?: Record<string, string>,
   ) {
     pipelines.value = next
-    if (versions) catalogVersions.value = versions
-    if (names) catalogNames.value = names
+    // The two catalog maps move TOGETHER, because they are one snapshot read split in two and are
+    // keyed identically by construction. Assigning names on their own truthiness would let a
+    // facade that ships versions and no names leave the previous board's names indexed against
+    // this board's ids, which is the one way the pair can disagree.
+    if (versions) {
+      catalogVersions.value = versions
+      catalogNames.value = names ?? {}
+    }
     retiredPipelines.value = retired ?? []
   }
 

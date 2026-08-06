@@ -102,7 +102,13 @@ def list_task_types() -> None:
     fields = bug.fields if bug else []
     severity = next((f for f in fields if f.key == "severity"), None)
     observations["bugFieldCount"] = len(fields)
-    observations["bugSeverityFieldType"] = str(severity.type) if severity and severity.type else ""
+    # `type_`, not `type`: the emitter suffixes a wire field whose name is a Python keyword, and
+    # this is the first descriptor field to hit that rule here (`NotificationType` and
+    # `PublicServiceType` already read the same way).
+    # `str()`, not `.value`: an UNKNOWN member decodes to a plain string by design, which has no
+    # `.value`, and a `StrEnum` formats as its wire string either way.
+    field_type = severity.type_ if severity else None
+    observations["bugSeverityFieldType"] = str(field_type) if field_type else ""
     observations["bugSeverityOptionCount"] = len(severity.options) if severity and severity.options else 0
 
 

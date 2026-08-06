@@ -14,6 +14,14 @@ import { errorResponses, singleStringParam } from './_shared.js'
 
 const taskTypeParams = singleStringParam('taskType')
 
+// A path param is interpolated RAW, as every sibling contract in this directory does, and the one
+// place that must not be clever about is a `pathResolver`. It serves TWO callers: a client
+// building a URL, and route REGISTRATION, which calls it with the literal placeholder `:taskType`.
+// Percent-encoding there yields `%3AtaskType`, so the route registers as a fixed path that no
+// request can match and every write 404s while the paramless read beside it keeps working.
+// Nothing is lost by dropping it: a task-type id is `isNamespacedId`-validated (`ns:kind`, lower
+// kebab), and `:` is a legal path character.
+
 /**
  * Every registered custom task type with its suppression state, in registration order.
  *
@@ -34,7 +42,7 @@ export const listTaskTypeSuppressionsContract = defineApiContract({
 export const suppressTaskTypeContract = defineApiContract({
   method: 'put',
   requestPathParamsSchema: taskTypeParams,
-  pathResolver: ({ taskType }) => `/task-type-suppressions/${encodeURIComponent(taskType)}`,
+  pathResolver: ({ taskType }) => `/task-type-suppressions/${taskType}`,
   requestBodySchema: ContractNoBody,
   responsesByStatusCode: { 200: taskTypeSuppressionListSchema, ...errorResponses },
 })
@@ -47,6 +55,6 @@ export const suppressTaskTypeContract = defineApiContract({
 export const restoreTaskTypeContract = defineApiContract({
   method: 'delete',
   requestPathParamsSchema: taskTypeParams,
-  pathResolver: ({ taskType }) => `/task-type-suppressions/${encodeURIComponent(taskType)}`,
+  pathResolver: ({ taskType }) => `/task-type-suppressions/${taskType}`,
   responsesByStatusCode: { 200: taskTypeSuppressionListSchema, ...errorResponses },
 })

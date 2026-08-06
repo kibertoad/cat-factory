@@ -239,6 +239,30 @@ function snapshotCustomTaskTypes(
 }
 
 /**
+ * The complement of {@link snapshotCustomTaskTypes}: the registered ids this board HIDES.
+ *
+ * Narrowed to ids the registry still knows, so a tombstone left by a WITHDRAWN registration is
+ * absent here exactly as it is absent from the settings screen: it names an operation with no
+ * label, no description and no fields, and reporting it would have the SPA count a row it can
+ * neither render nor act on.
+ *
+ * Without this the offered catalog is ambiguous in the one direction that traps a user. An admin
+ * hiding the last operation empties `customTaskTypes`, which reads identically to a stock
+ * deployment that registers none, so the SPA drops the settings tab that is the ONLY way to
+ * un-hide one. Absent and empty are different facts here, and this is the field that states which.
+ */
+function snapshotSuppressedTaskTypes(
+  registry: TaskTypeRegistry,
+  suppressed: ReadonlySet<string>,
+): string[] | undefined {
+  const ids = registry
+    .all()
+    .map((type) => type.taskType)
+    .filter((taskType) => suppressed.has(taskType))
+  return ids.length > 0 ? ids : undefined
+}
+
+/**
  * The deployment's GENERATIVE BINARY INTEGRATIONS as the snapshot carries them, for the pipeline
  * builder's binary-output step picker. Static, identical for every workspace and both facades,
  * exactly like {@link snapshotCustomTaskTypes}.
@@ -313,6 +337,7 @@ async function snapshotRegistryProjections(
   customAgentKinds: CustomAgentKind[] | undefined
   agentKindVariants: AgentKindVariant[] | undefined
   customTaskTypes: CustomTaskType[] | undefined
+  suppressedTaskTypes: string[] | undefined
   gateConfigForms: GateConfigForm[] | undefined
   binaryGenerators: RegisteredBinaryGenerator[] | undefined
   /** Set only when the set could not be READ — never alongside `binaryGenerators`. */
@@ -333,6 +358,10 @@ async function snapshotRegistryProjections(
     customAgentKinds: snapshotCustomAgentKinds(container.agentKindRegistry, container),
     agentKindVariants: snapshotAgentKindVariants(container.agentKindRegistry),
     customTaskTypes: snapshotCustomTaskTypes(container.taskTypeRegistry, suppressedTaskTypes),
+    suppressedTaskTypes: snapshotSuppressedTaskTypes(
+      container.taskTypeRegistry,
+      suppressedTaskTypes,
+    ),
     // The per-step parameters each registered gate declares, so the pipeline builder can render a
     // gate's own config form. Read off the SAME registry instance run admission validates against,
     // so what the builder offers is exactly what a run will accept.

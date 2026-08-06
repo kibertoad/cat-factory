@@ -477,6 +477,11 @@ function registerSuppressionTests(harness: ConformanceHarness): void {
     const offered = (snap.body.customTaskTypes ?? []).map((t) => t.taskType)
     expect(offered).toContain(KEPT)
     expect(offered).not.toContain(HIDDEN)
+    // The COMPLEMENT rides the same snapshot, and it is what keeps hiding reversible. The offered
+    // catalog alone cannot tell \"this deployment registers no operations\" from \"this board hid
+    // the ones it has\", so a SPA reading only that drops the settings screen the moment the last
+    // operation is hidden, taking away the only surface that un-hides one.
+    expect(snap.body.suppressedTaskTypes).toEqual([HIDDEN])
 
     // 3. And the SERVER refuses creating one, so the internal API, the public API, an initiative
     //    spawn and a tracker import cannot land what the picker no longer offers.
@@ -505,6 +510,8 @@ function registerSuppressionTests(harness: ConformanceHarness): void {
     expect(restored.status).toBe(200)
     const reoffered = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
     expect((reoffered.body.customTaskTypes ?? []).map((t) => t.taskType)).toContain(HIDDEN)
+    // Absent rather than empty once nothing is hidden, like every other registry projection.
+    expect(reoffered.body.suppressedTaskTypes).toBeUndefined()
     const created = await app.call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
       title: 'Lands now',
       taskType: HIDDEN,
@@ -546,6 +553,16 @@ function registerSuppressionTests(harness: ConformanceHarness): void {
     const untouched = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.id}`)
     expect((untouched.body.customTaskTypes ?? []).map((t) => t.taskType)).toContain(TASK_TYPE)
   })
+}
+
+/** One block from the workspace snapshot, the only read that addresses a block by id here. */
+async function blockById(
+  app: { call: <T>(method: string, path: string) => Promise<{ body: T }> },
+  workspaceId: string,
+  blockId: string,
+): Promise<Block | undefined> {
+  const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+  return snapshot.body.blocks.find((block) => block.id === blockId)
 }
 
 /**
@@ -639,8 +656,11 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
       auth,
     )
     expect(created.status).toBe(201)
-    const block = await app.call<Block>('GET', `/workspaces/${wsId}/blocks/${created.body.taskId}`)
-    expect(block.body.taskTypeFields?.custom).toEqual({
+    // Read back through the workspace SNAPSHOT, as every other assertion in this file does. There
+    // is no `GET /workspaces/:ws/blocks/:id` route; addressing one answered Hono's plain-text 404,
+    // which is not JSON, so this step failed on a parse error rather than on anything it asserts.
+    const block = await blockById(app, wsId, created.body.taskId)
+    expect(block?.taskTypeFields?.custom).toEqual({
       entity: 'Order',
       operations: ['create', 'list'],
       authRequirement: 'service',
@@ -684,9 +704,9 @@ function registerPublicApiTests(harness: ConformanceHarness): void {
       auth,
     )
     expect(bug.status).toBe(201)
-    const bugBlock = await app.call<Block>('GET', `/workspaces/${wsId}/blocks/${bug.body.taskId}`)
-    expect(bugBlock.body.taskTypeFields?.severity).toBe('critical')
-    expect(bugBlock.body.taskTypeFields?.custom).toBeUndefined()
+    const bugBlock = await blockById(app, wsId, bug.body.taskId)
+    expect(bugBlock?.taskTypeFields?.severity).toBe('critical')
+    expect(bugBlock?.taskTypeFields?.custom).toBeUndefined()
     expect(
       (
         await app.call(

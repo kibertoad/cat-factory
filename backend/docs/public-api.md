@@ -506,6 +506,12 @@ what the catalog shows is exactly what creation accepts):
 - A type the deployment does NOT register (a node whose build predates the registration) has no
   descriptor to check against; its values are carried through verbatim, exactly as the app's own
   internal door does.
+- **An EMPTY `fields` list means this API checks nothing per-case for that type**, and it covers two
+  cases. A built-in like `feature` takes title and description only, so there is nothing to send. A
+  type whose deployment gave it a bespoke create form (or one this process does not register)
+  accepts an arbitrary bag that neither this API nor the internal door validates, so no list would
+  describe it; what such a form collects is the deployment's own to document. Either way `fields` on
+  a catalog entry is exactly what creation validates against, never a hint about what it renders.
 
 `GET /api/v1/task-types` lists the built-in kinds plus the operations this deployment registered,
 minus any a workspace admin has hidden on this board: it answers "what may I create **here**", so a

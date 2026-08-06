@@ -242,10 +242,26 @@ export const workspaceSnapshotSchema = v.object({
    * deployment mixed in via its app-owned `TaskTypeRegistry`. The SPA merges these into its
    * task-type catalog so a proprietary work item becomes a first-class create-task choice +
    * card badge instead of the generic fallback — symmetric with {@link customAgentKinds}.
-   * Static (engine-level registry), workspace-independent; attached by the facade, so optional
-   * on the wire and omitted when no custom task type is registered.
+   * Attached by the facade, so optional on the wire and omitted when nothing is offered.
+   *
+   * What this board OFFERS, not what the deployment registers: an operation a workspace admin
+   * hid is absent (`backend/docs/reusable-operations.md`). Its complement is
+   * {@link suppressedTaskTypes}.
    */
   customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
+  /**
+   * The registered task-type ids this board HIDES: the complement of {@link customTaskTypes},
+   * exactly as `retiredPipelines` is the complement of `pipelineCatalogVersions`, and present for
+   * the same reason. A suppressed type is BY CONSTRUCTION absent from the offered catalog, so a
+   * SPA reading only that catalog cannot tell "this deployment registers no operations" from
+   * "this board hid the ones it has", and the second is the state whose settings screen is the
+   * only way back. Hiding the last one would otherwise remove the surface that un-hides it.
+   *
+   * Ids only. The descriptors live in the registry, which the settings screen reads through its
+   * own endpoint; copying presentation here would be a second projection to keep in step for a
+   * list nothing renders as a task type.
+   */
+  suppressedTaskTypes: v.optional(v.array(v.string())),
   /**
    * The per-step parameters each registered GATE declares (`GateRegistry.register(kind, factory,
    * { configFields })`), so the pipeline builder renders a gate's own config form through the

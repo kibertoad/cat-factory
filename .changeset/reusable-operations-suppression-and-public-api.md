@@ -37,7 +37,7 @@ one it omits), and both read the registry through the same projection the board 
   non-suppressed ones with the fields each accepts; `fields` on task creation fills them, landing in
   `taskTypeFields.custom` for a custom type and on the schema-typed top-level keys for a built-in
   one, so existing creation machinery runs unchanged. Additive per ADR 0034: OpenAPI `info.version`
-  → 1.16.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
+  → 1.17.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
   rather than the descriptors-plus-hand-written-OpenAPI-shape the design sketched, so what discovery
   advertises is exactly what creation validates, through the shared `validateDescriptorFields` the
   app's own form runs. Refusal is a 422 with `details.reason: 'task_type_fields_invalid'` carrying
@@ -61,11 +61,15 @@ one it omits), and both read the registry through the same projection the board 
 - **The Go SDK client's accessor list was three groups stale.** `me`, `evidence` and `keys`
   generated services that nothing constructed, so those endpoints were uncallable from Go while
   every drift check passed. All are wired, and `check-sdks.mjs` now fails on a resource group Go's
-  hand-written client never constructs. The Python emitter had the sibling latent bug: group names
-  are camelCase in the surface table and every group was one word until `taskTypes`, so it now
-  snake-cases them (`client.task_types`).
+  hand-written client never constructs. Two emitters had the sibling latent bug: group names are
+  camelCase in the surface table and every group was one word until `taskTypes`, so Python now
+  snake-cases them (`client.task_types`) and so does the MCP facade, whose tool name and group are
+  the strings a HOST allow-lists and a model calls (`task_types_list`, and `task_types` in
+  `CAT_FACTORY_MCP_GROUPS`). A NEW resource group, as opposed to a new operation, is what exercises
+  those paths.
 
 Breaks, all internal and unreleased: `CoreDependencies` and `BoardServiceDependencies` gain an
 optional `taskTypeSuppressionRepository`; `snapshotRegistryProjections` takes an optional workspace
 id (absent at workspace-create, which cannot have hidden anything); `PublicTaskCreationDeps` gains
-`taskTypeRegistry`; the Python SDK's multi-word resource attribute is now snake_case.
+`taskTypeRegistry`; the snapshot gains `suppressedTaskTypes`; the Python SDK's and the MCP
+facade's multi-word resource names are now snake_case.
