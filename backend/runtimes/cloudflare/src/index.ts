@@ -245,9 +245,10 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // cleartext endpoint fails boot rather than a dispatch.
     binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
     // The best-practice standards pool: the SHIPPED catalog plus whatever a deployment registered
-    // onto the same instance. Defaulted to the built-ins HERE, not in `createCore`, because the
-    // engine's default is deliberately empty, so a facade must say it wants the platform's standards,
-    // through the same public seam a deployment registers on.
+    // onto the same instance. Defaulted to the built-ins by the FACADE (here and, for a container
+    // built with no overrides, in `resolveWorkerRegistries`) rather than by `createCore`, because
+    // the engine's default is deliberately empty: a facade has to say it wants the platform's
+    // standards, through the same public seam a deployment registers on.
     promptFragmentRegistry:
       overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins(),
   }

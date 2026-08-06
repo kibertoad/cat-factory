@@ -131,6 +131,16 @@ and opposite facts.
 This is an internal-surface break, so it needs no shim or dual-read path, only a changeset that
 names it.
 
+**Gotcha this one surfaced, for the registries still to migrate.** A registry whose platform
+built-ins install through the public seam has to be defaulted in the facade's CONTAINER BUILDER,
+not only at its boot entry point. On the Worker, `createWorker` resolves the registries once and
+threads them in as overrides, but a cron sweep, a Workflow step and a Durable Object each call
+`buildContainer(env)` with no overrides at all, so an entry-point-only default left exactly the
+re-driven runs nobody watches folding no standards. Empty is not an error anywhere along that
+path: the run simply completes having read a pool the deployment thinks it registered on.
+`resolveWorkerRegistries` is where the gate registry already does this, and
+`test/registry-builtin-defaults.test.ts` pins it for both.
+
 ## S3. A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time {#s3}
 
 **What is wrong.** `registerPromptFragment` accepts a whole `PromptFragment`, `documentRef`
