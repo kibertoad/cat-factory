@@ -1,13 +1,21 @@
 # Initiative: PR verification report
 
-**Status:** phases 1 + 2 landed; slices 11 + 12 open · **Owner:** core · **Started:** 2026-07-26
+**Status:** phases 1 + 2 landed; slice 11 landed; slice 12 BLOCKED on another initiative ·
+**Owner:** core · **Started:** 2026-07-26
 
 > Durable source of truth for a multi-PR initiative. Read it FIRST before picking up the
 > next slice; update the checklist at the end of each PR.
 
-The report itself ships: every slice that produces it has landed. What keeps this tracker alive
-rather than converted to an ADR is slice 11 (peer-PR reports) and slice 12, which cannot start
-until global-search slice 4 lands elsewhere. Convert once both close.
+The report itself ships, and now ships onto every pull request a run opens rather than the
+own-service one alone (slice 11).
+
+**The one thing left is slice 12, and it is not startable here.** It retires the narrow
+`?run=…&view=…` deep-link parser this initiative landed as a down-payment, and it can only run once
+[`global-search-and-deep-links.md`](./global-search-and-deep-links.md) slice 4 ships the general
+parser that replaces it. That initiative has landed ZERO slices, so there is nothing to delete
+against: doing slice 12 now would mean implementing another initiative's pilot inside this one.
+Convert this tracker into an ADR when slice 12 closes; until then it is carrying exactly one open
+item and the reason it cannot move.
 
 ## Goal & rationale
 
@@ -216,24 +224,24 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
 
 ## Prioritized checklist
 
-| #   | Slice                                                                                                                                                                                                    | Status  | PR   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---- |
-| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                                          | 🟩 done | this |
-| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                                                      | 🟩 done | this |
-| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                                                       | 🟩 done | this |
-| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                                                | 🟩 done | this |
-| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                                                     | 🟩 done | this |
-| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                                               | 🟩 done | this |
-| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                                                   | 🟩 done | this |
-| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                                                   | 🟩 done | this |
-| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                                                | 🟩 done | this |
-| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                                          | 🟩 done | this |
-| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                                             | 🟩 done | this |
-| 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](../../backend/docs/adr/0033-bugfix-reproduction-proof.md) | 🟩 done | this |
-| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reports on the own-service PR only)                                                                                      | ⬜ todo |      |
-| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ todo |      |
-| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done | this |
-| 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done | this |
+| #   | Slice                                                                                                                                                                                                    | Status     | PR   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---- |
+| 1   | Contracts schema (`pr-report.ts`) + `parsePrVerificationReport`                                                                                                                                          | 🟩 done    | this |
+| 2   | Kernel: markers + pure `spliceManagedSection`, `PrVerificationReportPublisher` port                                                                                                                      | 🟩 done    | this |
+| 3   | `getPullRequestBody` on the `GitHubClient` + `VcsClient` ports, all 5 implementors                                                                                                                       | 🟩 done    | this |
+| 4   | Orchestration: pure compose/render logic + `PrVerificationReportController` + the `recordStepResult` hook                                                                                                | 🟩 done    | this |
+| 5   | `GitHubPrReportPublisher` + both-facade wiring (Worker ⇄ Node/local)                                                                                                                                     | 🟩 done    | this |
+| 6   | Conformance suite `execution-pr-report.ts` (both runtimes, fake publisher)                                                                                                                               | 🟩 done    | this |
+| 7   | SPA: minimal `?run=…&view=observability` deep-link replay so the emitted link resolves                                                                                                                   | 🟩 done    | this |
+| 8   | Docs sweep: root README capability row, package READMEs/AGENTS.md, CLAUDE.md flow note                                                                                                                   | 🟩 done    | this |
+| 8a  | Review hardening: text boundary (auto-link/table/fence), `redactSecrets` scrub, list caps + `truncations`                                                                                                | 🟩 done    | this |
+| 8b  | Per-workspace `publishPrVerificationReport` opt-out (contracts + D1 ⇄ Drizzle + SPA + 10 locales + conformance)                                                                                          | 🟩 done    | this |
+| 9   | **Phase 2**; harness-captured raw command output (test/build/lint logs captured by the executor-harness rather than summarized by the agent)                                                             | 🟩 done    | this |
+| 10  | **Phase 2**; bugfix reproduction proof: the failing-then-passing test demonstrated across the fix; tracked in [`bugfix-reproduction-proof.md`](../../backend/docs/adr/0033-bugfix-reproduction-proof.md) | 🟩 done    | this |
+| 11  | **Phase 2 follow-up**; per-repo report on a multi-repo task's PEER PRs (phase 1 reported on the own-service PR only)                                                                                     | 🟩 done    | this |
+| 12  | **Phase 2 follow-up**; retire the narrow deep-link replay once global-search slice 4 lands                                                                                                               | ⬜ blocked |      |
+| 13  | **Phase 2**; test environment lifecycle PROOF: dated up/down timeline from the provisioning log, tester-evidence attribution + links, computed verdict, teardown republish                               | 🟩 done    | this |
+| 14  | **Phase 2**; machine reachability: the report names the run's auditable TRAJECTORY and serves itself live over `/api/v1`                                                                                 | 🟩 done    | this |
 
 ### Phase-2 notes (slices 9 + 10, as landed)
 
@@ -265,6 +273,81 @@ The reference implementation is the merge/mergeability provider shape: a kernel 
   reproduction section: its Phase-B notes hold the renderer's non-obvious obligations, above all
   that an ABSENT `final` run is normal for an inconclusive verdict and that the producer's own
   `note` is rendered VERBATIM rather than re-derived from `base.passed`.
+
+### Peer-PR reports (slice 11)
+
+A cross-service run (service-connections phase 3) opens one PR per repo it changed: the task's
+own-service PR plus one per connected involved service. Phase 1 reported onto the own-service PR
+only, so a reviewer sitting on a peer repo's PR saw nothing at all, while the run's own adapter
+carried a comment explaining that copying the own-service report there "would be misleading".
+
+**What made it safe is scoping, not copying.** Each target gets its OWN composed report, and the
+report says which one it is (`scope.role`), because the sections divide cleanly into two kinds:
+
+- **RUN-scoped, reported identically on every PR**: the CI gate (it reduces every repo's checks to
+  ONE verdict that blocks the whole set), the tester, the judges, the environment lifecycle and the
+  merge decision (the merger merges the PRs as a set, peers first). A peer reviewer needs the red
+  check that is blocking them even when it is another repo's.
+- **OWN-SERVICE-only, WITHHELD from a peer's copy**: pre-PR validation (it ran that service's
+  configured check commands), the reproduction proof (it ran against that repo's tree) and the
+  requirement → evidence join (it reads that service's in-repo `spec/`). Copying these would
+  attribute one repo's evidence to another repo's diff, and a green validation block on a peer PR
+  reads as "this repo's checks passed" when this repo's checks were never run.
+
+Traps found building it:
+
+- **Withheld is not absent.** The three withheld sections carry a note that says they were not
+  computed for THIS repo and names the own-service PR, and `scope.role` is what lets a consumer
+  tell that apart from a section absent because its step never ran. A silently empty section reads
+  exactly like a clean one, which is the whole reason this report exists.
+- **The back-pointer must degrade.** A peer PR can exist before the own-service one (the agent
+  pushed the connected service's change first), so `ownPullRequest` is nullable and the note says
+  "has not opened yet" rather than naming a PR that is not there.
+- **The write-avoidance cache is keyed per TARGET, not per run.** Keyed by run alone, the first
+  target's fingerprint suppresses every other target's write on the same settlement and the peers
+  carry a stale report forever. That failure is invisible: the own-service PR looks perfect.
+- **`publish` takes the target it was composed FOR, and the target is SELF-DESCRIBING.** It used to
+  re-resolve "the block's PR" self-containedly, which is right when there is one; with several,
+  re-deciding is how the body written and the report written into it come to disagree about which
+  repo they are about. Carrying the address on the target (repo, PR number, and the `connection` in
+  the neutral `VcsConnectionRef` vocabulary) settles it structurally: the write reads no repository,
+  so "is this still the block's PR?" is not a question `publish` has to answer on every call, and a
+  report composed for one repo cannot land on another's PR because there is no second opinion to
+  disagree with.
+- **The head sha is the one CI field that is genuinely per-PR.** The gate records `headShas` keyed
+  by repo on a multi-repo block; reporting the scalar `headSha` on a peer names a commit that repo
+  has never heard of. The rendered check table also gained a Repo column (only when the checks are
+  repo-tagged, which is exactly the multi-repo case) — without it a cross-service reviewer reads red
+  check names with no way to tell whose repo is broken.
+- **A settlement pays for ONE resolution and ONE read of the run's evidence, whatever N is.** Three
+  places had to hold that line, because the hook fires on every settled step and each of them scales
+  with the number of pull requests if it is written per target:
+  - `resolveTargets` reads the block once (through `allPullRequests`, the same enumeration the CI
+    gate aggregates over), resolves the own target, and joins the recorded peer PRs onto a single
+    `resolveRepoTargets` result.
+  - The controller reads the run-scoped evidence once per settlement (`loadRunScopedInputs`: block,
+    linked issues, `spec/`, provisioning history) and layers the per-PR repo/provider/scope on top
+    with a pure function. None of those answers can differ between two PRs of the same run, which is
+    what makes the split safe as well as cheap; it also gives every copy of one settlement the same
+    `generatedAt`.
+  - `publish` reads nothing at all (see the self-describing target above).
+- **The multi-repo resolver reads the projection through the SAME cache as the singular one.** It did
+  not, which was invisible while its only caller was dispatch and became a full uncached
+  whole-workspace re-list per settlement the moment the report started calling it. Both builders now
+  share one `listProjection` helper (still live on the Worker, whose profile makes that cache
+  pass-through: reading live IS the isolate-safe behaviour there).
+- **A peer with no `number`, or whose repo is not in the resolved checkout set, is SKIPPED.** There
+  is nothing to address the description write with, and writing a report onto a pull request whose
+  identity we cannot confirm is the one failure worse than not writing it.
+- **`GET /api/v1/runs/:runId/report` answers the OWN copy**, on a multi-repo run as much as a
+  single-repo one: it is the complete one, and the endpoint answers about the RUN rather than about
+  one of its pull requests.
+- **A peer report is the first place the report LINKS to something an agent named.** The own-service
+  PR's URL reaches it from the harness's job result, and a link target is its own syntax: an
+  unescaped `)` closes it early and spills the rest into the body. `hostMarkdown` gained
+  `link`/`cellLink` for that half of the boundary (the existing helpers only ever covered link
+  TEXT), and an unusable or non-`http(s)` target renders as plain text rather than as a link the
+  platform never meant to publish.
 
 ### Machine reachability (slice 14)
 

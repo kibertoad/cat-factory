@@ -433,6 +433,10 @@ export type {
   // The engine-maintained PR verification report (composed by orchestration, published
   // through the `PrVerificationReportPublisher` port).
   PrVerificationReport,
+  // Which of a multi-repo run's pull requests a given copy of the report is written onto, and
+  // the own-service PR a peer's copy points back at for the sections it withholds.
+  PrReportScope,
+  PrReportOwnPullRequest,
   PrReportSectionStatus,
   PrReportStep,
   PrReportIssue,

@@ -1,5 +1,114 @@
 # @cat-factory/node-server
 
+## 0.178.0
+
+### Minor Changes
+
+- e7e27ee: Publish the verification report onto a multi-repo run's PEER pull requests, scoped per repo
+
+  A cross-service run opens one pull request per repo it changed; only the own-service one carried a
+  report, so a reviewer on a connected service's PR saw none of the run's evidence. Every pull request
+  now gets one, and each is composed for the pull request it lands on.
+
+  The reports are deliberately not identical. Run-scoped evidence (the CI gate's aggregate verdict, the
+  tester, the judges, the environments, the merge decision) is reported on all of them, because it
+  governs the whole set. The three sections that are statements about the own-service repo (pre-PR
+  validation, the bugfix reproduction proof and the `spec/` requirement join) are withheld from a peer's
+  copy, with a note naming the own-service PR where they live: restating them would attribute one repo's
+  evidence to another repo's diff.
+
+  The report payload gains an optional `scope` (`PR_VERIFICATION_REPORT_VERSION` 7, OpenAPI 1.15.0),
+  which is additive: absent means the own-service PR, exactly as before. `GET /api/v1/runs/:runId/report`
+  keeps answering the complete own-service copy.
+
+  Publishing to N pull requests costs what publishing to one did. `resolveTargets` is the only
+  addressing step a settlement runs, the run-scoped evidence is read once and layered per pull request,
+  and a resolved target carries its own repo and connection so the write reads nothing. The multi-repo
+  repo resolver also reads the workspace's repo projection through the same per-workspace cache as the
+  singular one, which it did not before (harmless while its only caller was dispatch, a full uncached
+  re-list once the report started calling it on every settled step).
+
+  `hostMarkdown` gains `link`/`cellLink`, the boundary for a link TARGET: an unusable or non-`http(s)`
+  URL renders as plain text instead of a link. The existing helpers only ever covered link text, and a
+  peer report links to a pull-request URL the harness reported.
+
+  Internal break: the `PrVerificationReportPublisher` port replaces `resolveTarget` with `resolveTargets`,
+  `publish` takes `(workspaceId, target, section)` (no block id, since it no longer resolves anything),
+  and `PrReportTarget` gains a required `connection`. The `no_pull_request` / `no_repo` skip reasons are
+  gone with the resolution they described: nowhere to publish is an empty `resolveTargets`.
+
+### Patch Changes
+
+- Updated dependencies [e7e27ee]
+  - @cat-factory/contracts@0.250.0
+  - @cat-factory/kernel@0.248.0
+  - @cat-factory/orchestration@0.217.0
+  - @cat-factory/server@0.228.0
+  - @cat-factory/agents@0.114.3
+  - @cat-factory/consensus@0.14.31
+  - @cat-factory/eks@0.1.242
+  - @cat-factory/gates@0.9.10
+  - @cat-factory/gitlab@0.16.2
+  - @cat-factory/integrations@0.134.1
+  - @cat-factory/observability-otel@0.13.7
+  - @cat-factory/prompt-fragments@0.15.76
+  - @cat-factory/spend@0.15.13
+  - @cat-factory/caching@0.15.3
+  - @cat-factory/observability-langfuse@0.10.15
+  - @cat-factory/provider-bedrock@0.7.392
+  - @cat-factory/provider-cloudflare@0.7.393
+  - @cat-factory/provider-s3@0.2.312
+
+## 0.177.3
+
+### Patch Changes
+
+- eee42e9: Stop the parked-review question comment promising answer channels that do not work.
+
+  Both faults are in the one line the whole comment exists to deliver, and both were invisible to the
+  reader who would follow it: the bug REPORTER, who came in through the ticket and has no other
+  surface.
+
+  - **The API path it printed was a 404.** The comment said
+    `POST …/decisions/requirements/items/<id>/reply`; the surface serves `…/findings/:itemId/reply`.
+    The path now comes from the route contract's own `pathResolver`
+    (`replyPublicRunFindingContract` / `replyPublicRunClarityFindingContract`), so the comment and the
+    router cannot disagree again. The assertion that should have caught this had copied the same
+    mistake, so it is now derived from the contract too.
+  - **It offered a ticket reply where one cannot arrive.** The inbound path fails closed without a
+    minted per-connection webhook secret, so a workspace that connected a tracker and imported tickets
+    without ever minting one got a comment telling its reporter to type `@cat-factory answer …` at
+    nothing. `IssueWritebackService` now establishes the fact from `taskConnectionRepository` (once per
+    DISTINCT source across the block's linked issues, so several issues on one tracker cost one read)
+    and the renderer offers only channels that work. Absent or unreadable counts as UNWIRED, because
+    guessing the other way is the failure itself; the drop is logged once per claimed post with the
+    operator's remedy.
+
+  Two smaller corrections in the same area:
+
+  - **A finding id from the OTHER review on the ticket is named as that**, not as a finding that does
+    not exist. One ticket now carries both reviews' question comments, so answering both sets in one
+    comment is the ordinary mistake; `no finding X` told a reporter an id printed on their own ticket
+    was not real, where the true reason has a remedy. A typo still reads as a typo.
+  - **`TrackerWebhookService.resolveReview` drops its single-candidate short-circuit.** The general
+    tie-break chain already answers the one-review case, so the fast path only created a second route
+    that could answer differently from the first.
+
+  Also: `check:openapi` now distinguishes an ABSENT artifact from an unreadable one, since
+  `pnpm gen:openapi` fixes the first and does nothing for the second.
+
+  Breaks (both unreleased): `renderReviewQuestionsComment` takes a required `ReviewQuestionChannels`,
+  and `IssueWritebackServiceDependencies` gains an optional `taskConnectionRepository`. Both facades
+  pass it inside the block they already gate on that repository, so the wiring stays symmetric.
+
+- Updated dependencies [cad3408]
+- Updated dependencies [eee42e9]
+- Updated dependencies [cad3408]
+  - @cat-factory/server@0.227.0
+  - @cat-factory/integrations@0.134.0
+  - @cat-factory/eks@0.1.241
+  - @cat-factory/orchestration@0.216.1
+
 ## 0.177.2
 
 ### Patch Changes

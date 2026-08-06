@@ -98,7 +98,12 @@ export function buildResolveRepoTarget(db: D1Database): ResolveRepoTarget {
  * connected involved-service repo, deduped. Wired from the SAME D1 repos as the singular
  * resolver (the D1 service repo's batched `listByFrameBlocks` resolves the involved frames'
  * repos in one query). Fed to the container executor so the implementer can fan a
- * cross-service change out across sibling checkouts.
+ * cross-service change out across sibling checkouts, and to the PR verification report so it
+ * reaches the peer PRs that fan-out opened.
+ *
+ * No `repoProjectionCache` here either, for the reason given on {@link buildResolveRepoTarget}:
+ * on the Worker the projection cache is pass-through, so reading live IS the isolate-safe
+ * behaviour. The Node facade hands the same handle to BOTH resolvers.
  */
 export function buildResolveRepoTargets(db: D1Database): ResolveRepoTargets {
   return buildSharedResolveRepoTargets({

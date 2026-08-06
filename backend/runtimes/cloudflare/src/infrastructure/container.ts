@@ -52,6 +52,7 @@ import {
 import {
   buildAppRegistry,
   buildResolveRepoTarget,
+  buildResolveRepoTargets,
   buildResolveRunInitiatorToken,
 } from './container-vcs-identity.js'
 // The App registry + repo-target resolvers moved to `container-vcs-identity.ts`; re-exported so
@@ -357,13 +358,16 @@ export function selectMergeLifecycleDeps(
       resolveRepoTarget,
       blockRepository,
     })
-    // Keeps the engine-maintained verification report current on each run's PR. Reads through
+    // Keeps the engine-maintained verification report current on every pull request the run
+    // opened — the own-service one plus each peer repo's on a cross-service task. Reads through
     // the same engine VCS client, so a GitLab-only deployment gets it too (runtime symmetry
     // with the Node facade's `githubGateDeps`).
     deps.prVerificationReportPublisher = new GitHubPrReportPublisher({
       githubClient,
       resolveRepoTarget,
+      resolveRepoTargets: buildResolveRepoTargets(db),
       blockRepository,
+      logger,
     })
   }
   return deps

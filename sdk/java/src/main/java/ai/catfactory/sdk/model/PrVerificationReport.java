@@ -4,6 +4,7 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -19,6 +20,7 @@ import org.jspecify.annotations.Nullable;
  * @param reproduction the {@code reproduction} field.
  * @param requirements the {@code requirements} field.
  * @param run the {@code run} field.
+ * @param scope May be absent entirely.
  * @param tests the {@code tests} field.
  * @param truncations the {@code truncations} field.
  * @param validation the {@code validation} field.
@@ -43,6 +45,9 @@ public record PrVerificationReport(
     @JsonProperty("requirements") PrReportRequirements requirements,
 
     @JsonProperty("run") PrReportRun run,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("scope") @Nullable PrVerificationReportScope scope,
 
     @JsonProperty("tests") PrReportTests tests,
 
@@ -74,6 +79,7 @@ public record PrVerificationReport(
         private @Nullable PrReportReproduction reproduction;
         private @Nullable PrReportRequirements requirements;
         private @Nullable PrReportRun run;
+        private @Nullable PrVerificationReportScope scope;
         private @Nullable PrReportTests tests;
         private @Nullable List<String> truncations;
         private @Nullable PrReportValidation validation;
@@ -133,6 +139,12 @@ public record PrVerificationReport(
             return this;
         }
 
+        /** Set {@code scope}. */
+        public Builder scope(@Nullable PrVerificationReportScope scope) {
+            this.scope = scope;
+            return this;
+        }
+
         /** Set {@code tests}. */
         public Builder tests(@Nullable PrReportTests tests) {
             this.tests = tests;
@@ -159,7 +171,7 @@ public record PrVerificationReport(
 
         /** Build the {@link PrVerificationReport}. */
         public PrVerificationReport build() {
-            return new PrVerificationReport(ci, environments, generatedAt, judges, merge, observability, reproduction, requirements, run, tests, truncations, validation, version);
+            return new PrVerificationReport(ci, environments, generatedAt, judges, merge, observability, reproduction, requirements, run, scope, tests, truncations, validation, version);
         }
     }
 }
