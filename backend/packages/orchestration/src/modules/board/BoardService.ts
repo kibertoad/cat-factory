@@ -67,6 +67,7 @@ import { ReviewFrictionGuard } from './reviewFrictionGuard.js'
 import type { WorkspaceSettingsReader } from './workspaceSettingsReader.js'
 import type { NewServiceFrameDefaults } from './newServiceFrameDefaults.js'
 import { resolveNewServiceFrameDefaults } from './newServiceFrameDefaults.js'
+import { createInternalAnchors } from './internalAnchors.js'
 import { PublicBoardReads } from './publicBoardReads.js'
 import { buildReviewDescription, resolveReviewTaskTarget } from './reviewTaskTarget.js'
 import type { BlockPatchNarrowing } from './blockPatchNarrowing.js'
@@ -245,6 +246,11 @@ export class BoardService {
   /** The external `/api/v1` board surface (see publicBoardReads.ts). */
   private readonly publicReads: PublicBoardReads
   /**
+   * The headless `internal` anchor blocks a public-API run hangs off (see internalAnchors.ts).
+   * Never board state: no event announces one, and every projection filters it out.
+   */
+  private readonly internalAnchors: ReturnType<typeof createInternalAnchors>
+  /**
    * The board's LAYOUT writes — drag a container to a new spot, drag its border to new bounds
    * (see layoutWrites.ts). Both split their write between a frame's per-board mount override and
    * the shared block row, and `resizeBlock` layers the child translation on top of that.
@@ -357,6 +363,11 @@ export class BoardService {
       requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
       addTask: (workspaceId, containerId, input, editor, createdBy) =>
         this.addTask(workspaceId, containerId, input, editor, createdBy),
+    })
+    this.internalAnchors = createInternalAnchors({
+      blockRepository,
+      idGenerator,
+      requireWorkspace: (workspaceId) => this.requireWorkspace(workspaceId),
     })
   }
 
@@ -880,68 +891,31 @@ export class BoardService {
     return block
   }
 
-  /**
-   * Create a HEADLESS internal task — a top-level, `internal: true` block used purely to anchor
-   * a public-API run (an external "initiative breakdown"). It is EXCLUDED from every board
-   * projection (see the snapshot/board reads), so it never renders in the UI; deliberately does
-   * NOT emit a `block-added` event (nothing should flash onto a live board). Returns the block so
-   * the caller can start an execution on it. The engine writes status onto it like any block.
-   */
-  async createInternalTask(
+  // --- Headless internal anchors ---------------------------------------------
+  // Delegated to {@link createInternalAnchors}: the top-level `internal: true` blocks that anchor
+  // a public-API run and render on no board, ever. See that file for why the four belong together.
+
+  /** Public-API: create the anchor block a public-API run hangs off. */
+  createInternalTask(
     workspaceId: string,
     input: { title: string; description: string },
   ): Promise<Block> {
-    await this.requireWorkspace(workspaceId)
-    const block: Block = {
-      id: this.idGenerator.next('task'),
-      title: input.title.trim() || 'Initiative',
-      // `type` is the service/repo CLASSIFICATION (frontend/service/library/…), orthogonal to the
-      // `level` hierarchy; there is no task-specific BlockType. This anchor is a standalone,
-      // never-rendered, repo-less `level:'task'` block, so `type` is irrelevant to it — 'service'
-      // is just the neutral default (a normal task inherits its parent service's type instead).
-      type: 'service',
-      description: input.description ?? '',
-      position: { x: 0, y: 0 },
-      status: 'planned',
-      progress: 0,
-      dependsOn: [],
-      executionId: null,
-      level: 'task',
-      parentId: null,
-      internal: true,
-    }
-    await this.blockRepository.insert(workspaceId, block)
-    return block
+    return this.internalAnchors.createInternalTask(workspaceId, input)
   }
 
-  /**
-   * Fetch a HEADLESS internal anchor block by id, or null when no block with that id exists in
-   * the workspace OR it is not `internal`. The public-API job reads use this to confine an
-   * external key to the runs IT created (an `internal` block) — never an arbitrary board
-   * execution that merely shares the key's workspace. See PublicApiController.
-   */
-  async getInternalTask(workspaceId: string, blockId: string): Promise<Block | null> {
-    const block = await this.blockRepository.get(workspaceId, blockId)
-    return block?.internal ? block : null
+  /** Public-API: an anchor by id, or null when the block is absent or not `internal`. */
+  getInternalTask(workspaceId: string, blockId: string): Promise<Block | null> {
+    return this.internalAnchors.getInternalTask(workspaceId, blockId)
   }
 
-  /**
-   * Delete a HEADLESS internal anchor block. Used by the public API to roll back the anchor when
-   * the run it was created for fails to start, so a failed dispatch never leaves an orphan
-   * `internal` block behind (it renders nowhere and is invisible to the cap, so it would just
-   * accumulate). A headless anchor has no children/service subtree, so a direct delete is enough.
-   */
-  async deleteInternalTask(workspaceId: string, blockId: string): Promise<void> {
-    await this.blockRepository.deleteMany(workspaceId, [blockId])
+  /** Public-API: roll an anchor back when the run it was created for fails to start. */
+  deleteInternalTask(workspaceId: string, blockId: string): Promise<void> {
+    return this.internalAnchors.deleteInternalTask(workspaceId, blockId)
   }
 
-  /**
-   * How many of the workspace's headless internal "initiative" runs are still in flight — the
-   * concurrency backstop the public API checks before starting another, so a single (possibly
-   * leaked) key can't spin up unbounded LLM runs. A SQL `COUNT`, not a load-and-count.
-   */
+  /** Public-API: how many anchored runs are in flight — the concurrency backstop. */
   countActiveInternalTasks(workspaceId: string): Promise<number> {
-    return this.blockRepository.countActiveInternal(workspaceId)
+    return this.internalAnchors.countActiveInternalTasks(workspaceId)
   }
 
   // --- Public-API board reads/writes -----------------------------------------
