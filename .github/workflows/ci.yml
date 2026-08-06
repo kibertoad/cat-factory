@@ -345,6 +345,24 @@ jobs:
             node scripts/check-runner-image-tag.mjs
           fi
 
+      # Guard the version numbers a branch introduces against the npm registry. In practice this
+      # gates the RELEASE PR, the only branch that moves a version field. `changeset publish`
+      # reports "already published on npm" as a warn and exits 0, and it says that about every
+      # package the release did NOT bump, so the one time it means a collision reads exactly like
+      # the two dozen times it is routine: the release goes green having shipped everything else
+      # pinned to a version this repo never built (2026-08-06, @cat-factory/prompt-fragments'
+      # first major landing on a number a 2026-06-17 hand-publish had parked an unbuilt shell on).
+      # Only answerable BEFORE the publish, which is why it reads the branch and not that output.
+      # Needs the full history the checkout above already fetches. No install; one registry
+      # request per re-versioned package, and none at all on a feature PR.
+      - name: Guard release versions
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ -n "$BASE_REF" ]; then
+            node scripts/check-release-versions.mjs --since "origin/${BASE_REF}"
+          fi
+
       # Guard the production deployment config against an unfilled placeholder in a LIVE
       # binding. deploy.yml ships the Worker automatically on merge, and `wrangler deploy`
       # validates every D1 id against the API, so a `REPLACE_WITH_…` that reaches main turns the
