@@ -222,15 +222,26 @@ const LEGACY_ALLOWANCES = new Map([
  * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
  * restating two ADRs that already own every one of them.
  *
+ * Ratcheted 1098 → 1095 by the same move one level up, on the merge-lifecycle entry those bullets
+ * sit in: the threshold-preset bullet was a field list its own preset doc owns, and three siblings
+ * re-narrated their linked ADR before linking it. Every link survived; only the restatement went.
+ *
  * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
  * by name, so its whole length is a context cost paid on every read, and it sits in the tree
  * (contributor setup notes) that regrows most easily. A pointer out of a ratcheted file into an
  * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
  * Same shrink-only contract: if the recipe needs more, the surrounding prose gives up the lines.
+ *
+ * RAISED 78 → 98, deliberately and once: the doc gained the scoped-run section (`test:changed` /
+ * `test:quick`), which is NEW SUBJECT MATTER rather than the recipe growing. 78 was sized when
+ * the doc covered setup and traps only, and the alternative on offer was compressing the Postgres
+ * and strict-env passages that exist precisely because someone lost an afternoon to each. Trading
+ * a hard-won trap for a new section is not the shrink this ratchet is asking for. The contract is
+ * otherwise unchanged, and it now binds a doc whose CLAUDE.md entry is a pointer, not a summary.
  */
 const DOC_ALLOWANCES = new Map([
-  ['CLAUDE.md', 1098],
-  ['docs/internal/running-tests.md', 78],
+  ['CLAUDE.md', 1095],
+  ['docs/internal/running-tests.md', 98],
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */

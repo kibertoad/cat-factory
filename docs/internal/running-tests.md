@@ -1,8 +1,8 @@
 # Running the tests locally
 
 What it costs to get a green suite on a machine that is not a CI runner. Nothing here
-is part of the product: it is the setup, and the two traps that make a working tree
-look broken when the only thing missing is a database.
+is part of the product: it is the setup, the scope worth running per edit, and the two
+traps that make a working tree look broken when the only thing missing is a database.
 
 Kept SHORT and ratcheted (`scripts/check-file-size.mjs`) because `CLAUDE.md` points an
 agent straight here. A pointer is only cheap while the thing it points at is: detail
@@ -21,6 +21,27 @@ as a broken merge.
 Not in `pnpm test:run` at all: Playwright (`backend/internal/e2e`, which needs Postgres
 and a browser) and mutation testing (nightly CI only, see
 [`mutation-testing.md`](./mutation-testing.md)).
+
+## While iterating, run a SCOPE, not the tree
+
+The whole tree is minutes of wall clock and wants a database up, which is the wrong
+price to pay per edit. Two root scripts narrow it:
+
+- **`pnpm test:changed`** — the packages you changed plus everything depending on them
+  (`--filter='...[origin/main]'`). The scope to iterate on. It carries `--env-mode=loose`
+  because a kernel or server edit pulls the two Postgres facades in with it, and strict
+  mode would then drop their `DATABASE_URL` (next section).
+- **`pnpm test:quick`** — every package needing neither Postgres nor `workerd`, the same
+  set CI runs as its `Test units (no DB)` lane. Broad confidence with no infra.
+
+They replace running `pnpm test:run` after every edit, never running it before a PR.
+
+Both cap Turbo at half the cores. Turbo fans out per package and each vitest then spawns
+its own pool, so an unbounded run oversubscribes a small box badly enough to fail
+timing-sensitive tests that pass on their own: leave `--concurrency` on. Both also pass
+`--output-logs=errors-only`, so a green run prints only Turbo's summary while a failing
+package still prints its whole vitest output. Sibling tasks CANCELLED by that failure
+print their bare `[ELIFECYCLE]` line too — see below for which one actually failed.
 
 ## Turbo does not hand `DATABASE_URL` to a task, so exporting it is not enough
 
