@@ -3,7 +3,9 @@ import { renderDesignContext } from './design.logic.js'
 import {
   assertSafeZeplinUrl,
   buildZeplinDesignContext,
+  MAX_SCREENS,
   parseZeplinRef,
+  SCREEN_FETCH_LIMIT,
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
@@ -107,6 +109,37 @@ describe('buildZeplinDesignContext + renderDesignContext', () => {
     expect(md).toContain('### Design tokens')
     expect(md).toContain('- Colors › brand/primary = #ff0000')
     expect(md).toContain('- Spacing › space/sm = 8')
+  })
+
+  it('states the screen cap when the fetch probe came back over it', () => {
+    // The provider asks for SCREEN_FETCH_LIMIT (= MAX_SCREENS + 1) precisely so this is
+    // detectable; asking for exactly MAX_SCREENS makes a full page and a truncated one
+    // identical, which silently drops this note in the only case it exists for.
+    const ctx = buildZeplinDesignContext({
+      externalId: 'proj1',
+      projectName: 'Big',
+      screens: Array.from({ length: SCREEN_FETCH_LIMIT }, (_, i) => ({
+        id: `s${i}`,
+        name: `Screen ${i}`,
+      })),
+      components: [],
+    })
+    // The extra row is a PROBE: it is never rendered.
+    expect(ctx.blocks).toHaveLength(MAX_SCREENS)
+    // And the total is unknown, so the note must not invent one.
+    expect(ctx.notes?.join('\n')).toContain(`more than ${MAX_SCREENS} screens`)
+    expect(ctx.notes?.join('\n')).not.toContain(String(SCREEN_FETCH_LIMIT))
+  })
+
+  it('says nothing about the screen cap when the project fits under it', () => {
+    const ctx = buildZeplinDesignContext({
+      externalId: 'proj1',
+      projectName: 'Small',
+      screens: Array.from({ length: MAX_SCREENS }, (_, i) => ({ id: `s${i}`, name: `S${i}` })),
+      components: [],
+    })
+    expect(ctx.blocks).toHaveLength(MAX_SCREENS)
+    expect(ctx.notes ?? []).toEqual([])
   })
 
   it('uses the project name when no screen is referenced and omits empty sections', () => {

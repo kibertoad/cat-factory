@@ -181,6 +181,17 @@ export interface ZeplinDesignTokens {
  */
 export const MAX_SCREENS = 40
 
+/**
+ * Screens REQUESTED from the API: one more than {@link MAX_SCREENS} is rendered, so that a
+ * project with more screens than we import is DETECTABLE.
+ *
+ * Asking for exactly `MAX_SCREENS` makes the two indistinguishable (a full page and a truncated
+ * one are both 40 rows), which silently drops the cap note for every project the cap actually
+ * bites: the one case it exists for. The extra row is a PROBE and is never rendered, so what
+ * the reader sees is still bounded by `MAX_SCREENS`.
+ */
+export const SCREEN_FETCH_LIMIT = MAX_SCREENS + 1
+
 function screenMeta(screen: ZeplinScreen): string | undefined {
   return dimensionMeta(screen.image?.width, screen.image?.height)
 }
@@ -249,6 +260,8 @@ export interface ZeplinContextInput {
   components: ZeplinComponent[]
   /** The project's design tokens, or null when unavailable. */
   designTokens?: ZeplinDesignTokens | null
+  /** Which of the supplementary reads failed, so their absence isn't read as emptiness. */
+  failedReads?: { components?: boolean; designTokens?: boolean }
 }
 
 /** Assemble the fetched Zeplin pieces into the shared {@link DesignContext}. */
@@ -258,12 +271,33 @@ export function buildZeplinDesignContext(input: ZeplinContextInput): DesignConte
     screenId && input.screens[0]?.name?.trim()
       ? `${input.projectName || projectId} — ${input.screens[0]!.name!.trim()}`
       : input.projectName || projectId
+  const notes: string[] = []
+  if (input.failedReads?.components) {
+    notes.push(
+      'The Zeplin component read failed, so the components section is missing rather than empty.',
+    )
+  }
+  // The fetch asks for SCREEN_FETCH_LIMIT, so more than MAX_SCREENS rows means the cap bit.
+  // It does NOT reveal how many more there are, and stating a total we do not have would be a
+  // guess dressed as a count, so the note says "more than" instead.
+  if (input.screens.length > MAX_SCREENS) {
+    notes.push(
+      `This project has more than ${MAX_SCREENS} screens; the first ${MAX_SCREENS} were ` +
+        `imported. Link a specific screen URL to import one that is not listed here.`,
+    )
+  }
   return {
     title,
     url: zeplinUrlFor(input.externalId),
     blocks: zeplinScreensToBlocks(input.screens),
     components: zeplinComponentsToDesign(input.components),
     tokens: zeplinTokens(input.designTokens),
+    // Zeplin has ONE token source, so an origin is worth rendering only when its read
+    // failed: without it a failed read and a project defining no tokens look identical.
+    tokenOrigin: input.failedReads?.designTokens
+      ? { note: 'No design tokens: the Zeplin design-tokens read failed.' }
+      : undefined,
     references: [],
+    notes,
   }
 }

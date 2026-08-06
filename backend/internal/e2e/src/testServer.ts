@@ -36,7 +36,14 @@ import {
   DrizzleWorkspaceRepository,
   start,
 } from '@cat-factory/node-server'
-import { createE2eGitHubClient, type GitHubSeed, seedGitHubForWorkspace } from './fakeGitHub.ts'
+import {
+  createE2eGitHubClient,
+  type GitHubSeed,
+  listReviewAttemptsFor,
+  makeE2eRunRepoResolver,
+  ownRepoFor,
+  seedGitHubForWorkspace,
+} from './fakeGitHub.ts'
 import { E2eInlineModels } from './fakeInlineModel.ts'
 import { E2eJudgeAssessor, registerE2eJudge } from './fakeJudge.ts'
 import {
@@ -269,6 +276,42 @@ const controlServer = createServer((req, res) => {
       .catch((err) => fail(res, 400, err))
     return
   }
+  // Seed (and return) a repo of the workspace's OWN, so a spec can import it as a service frame
+  // without colliding with another spec: `addServiceFromRepo` dedupes a service by repo ACROSS the
+  // account and mounts the existing frame, which then belongs to another workspace. See
+  // `ownRepoFor`.
+  if (req.method === 'POST' && req.url === '/github-seed-own-repo') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!seedDb) {
+          res.writeHead(503).end('github seed: db not ready')
+          return
+        }
+        const { workspaceId } = JSON.parse(raw) as { workspaceId: string }
+        const repo = ownRepoFor(workspaceId)
+        await seedGitHubForWorkspace(seedDb, workspaceId, {
+          repos: [repo],
+          branches: [{ repoGithubId: repo.githubId, name: repo.defaultBranch, protected: true }],
+        })
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(repo))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Report the PR-review write ATTEMPTS a workspace's runs made (see `listReviewAttemptsFor`).
+  // Read-only: the deep-review spec asserts the at-most-once posting rule on it, which is a fact
+  // about the wire that the window's own report structurally cannot show.
+  if (req.method === 'POST' && req.url === '/github-review-attempts') {
+    void readBody(req)
+      .then((raw) => {
+        const { workspaceId } = JSON.parse(raw) as { workspaceId: string }
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify(listReviewAttemptsFor(githubClient, workspaceId)))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
   // Seed an ACCOUNT-BACKED board and return its ids. Used by the cross-SDK smoketest
   // (`@cat-factory/sdk-smoketest`), which needs to mint public-API keys — an account-scoped
   // feature that is refused for the account-less board an anonymous `POST /workspaces` creates,
@@ -423,6 +466,13 @@ await start({
         commitProjectionRepository: new DrizzleCommitProjectionRepository(db),
         checkRunProjectionRepository: new DrizzleCheckRunProjectionRepository(db),
         webhookVerifier: { verify: async () => true },
+        // The run↔repository seam, WITHOUT the facade's production resolver. See
+        // `makeE2eRunRepoResolver`: the seeded sample board has no repo-linked service frame, and
+        // the production walk THROWS for a block under none (deliberately — a run must never guess
+        // a repository), so wiring it facade-wide fails the poll of every seeded run whose kind
+        // declares repo hooks. This resolver answers only for a repo a spec explicitly seeded as
+        // its own, and is null elsewhere — exactly what an unwired resolver is for those blocks.
+        resolveRunRepoContext: makeE2eRunRepoResolver(db, githubClient),
       },
       // The built-in default model preset points every agent kind at a Cloudflare-served
       // model, so the execution start guard needs that provider marked available to start a

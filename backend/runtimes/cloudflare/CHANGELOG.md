@@ -1,5 +1,15 @@
 # @cat-factory/worker
 
+## 0.161.1
+
+### Patch Changes
+
+- Updated dependencies [6ccc104]
+  - @cat-factory/integrations@0.135.0
+  - @cat-factory/eks@0.1.243
+  - @cat-factory/orchestration@0.217.1
+  - @cat-factory/server@0.228.1
+
 ## 0.161.0
 
 ### Minor Changes

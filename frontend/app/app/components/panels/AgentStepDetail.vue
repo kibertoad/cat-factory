@@ -304,9 +304,13 @@ async function copyOutput() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
+      <!-- `data-agent-kind` names WHICH step this window is scoped to, as the kind rather than as
+           the heading beside it: the heading is a translated display label, so it is the wrong
+           thing to read for anything that needs to know which agent's step is open. -->
       <div
         v-if="open && step && agent"
         data-testid="step-detail"
+        :data-agent-kind="step?.agentKind"
         class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
