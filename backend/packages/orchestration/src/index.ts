@@ -220,6 +220,12 @@ export {
   type WorkspaceAgentSettingsServiceDependencies,
 } from './modules/agentSettings/WorkspaceAgentSettingsService.js'
 export {
+  suppressedTaskTypeIds,
+  TaskTypeSuppressionService,
+  type TaskTypeSuppressionServiceDependencies,
+  type TaskTypeSuppressionView,
+} from './modules/taskTypes/TaskTypeSuppressionService.js'
+export {
   ServiceFragmentDefaultsService,
   type ServiceFragmentDefaultsServiceDependencies,
 } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsService.js'
@@ -316,8 +322,8 @@ export {
 } from './modules/spend/spend-alert.logic.js'
 export {
   cacheHitRate,
-  classifyCall,
-  isWarningFinishReason,
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
   outputHeadroomRatio,
   transportOverheadRatio,
   buildLlmMetricsExport,
@@ -418,6 +424,7 @@ export {
   type ModelPresetsModule,
   type ConsensusGroupsModule,
   type AgentPromptsModule,
+  type TaskTypeSuppressionModule,
   type WorkspaceAgentSettingsModule,
   type ServiceFragmentDefaultsModule,
   type FragmentLibraryModule,

@@ -5,6 +5,7 @@ import {
   descriptorFieldTypeSchema,
   sanitizeDescriptorFields,
   validateDescriptorFields,
+  withDescriptorFieldDefaults,
   type DescriptorFieldShowWhen,
 } from './form-fields.js'
 import {
@@ -202,6 +203,22 @@ export {
   isSafeRepoDirPath,
   renderDescriptorFieldValue as renderInitiativePresetValue,
 } from './form-fields.js'
+
+/**
+ * A filled preset form with the descriptor's own DEFAULTS folded in for the fields the caller left
+ * absent: what a door validates, sanitizes and freezes.
+ *
+ * A create controller applies this BEFORE the two helpers below, so a `required` field carrying a
+ * default is answered by the deployment's declared value rather than refused. The SPA seeds the
+ * same defaults into the form, so this changes nothing for a browser submit and closes the gap for
+ * every other caller (an initiative spawned by an operation, a script, the public API).
+ */
+export function withInitiativePresetDefaults(
+  descriptor: InitiativePresetDescriptor,
+  inputs: InitiativePresetInputs,
+): InitiativePresetInputs {
+  return withDescriptorFieldDefaults(descriptor.fields, inputs)
+}
 
 /**
  * Validate a filled preset form against its descriptor, returning a list of human-readable

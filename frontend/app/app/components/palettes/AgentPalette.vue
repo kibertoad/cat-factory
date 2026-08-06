@@ -86,6 +86,7 @@ function toggle(id: string) {
             type="button"
             class="flex w-full items-center gap-2.5 rounded-lg border border-slate-700 bg-slate-800/60 p-2 text-start transition hover:border-slate-500 hover:bg-slate-800"
             :title="a.description"
+            :data-testid="`palette-agent-${a.kind}`"
             @click="$emit('add', a.kind)"
           >
             <div

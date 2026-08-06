@@ -37,6 +37,7 @@ function scan(
   pipelines: Pipeline[],
   versions: Record<string, number> = {},
   retired: { id: string; replacedBy?: string }[] = [],
+  names: Record<string, string> = {},
 ) {
   const store = usePipelinesStore()
   const retiredIds = new Set(retired.map((r) => r.id))
@@ -46,7 +47,7 @@ function scan(
       ...versions,
     }).filter(([id]) => !retiredIds.has(id)),
   )
-  store.hydrate(pipelines, catalogVersions, retired)
+  store.hydrate(pipelines, catalogVersions, retired, names)
   return usePipelineHealth()
 }
 
@@ -200,6 +201,19 @@ describe('usePipelineHealth', () => {
     // A brand-new built-in is not "invalid" or "outdated" — those only concern STORED pipelines.
     expect(invalid.value).toHaveLength(0)
     expect(outdated.value).toHaveLength(0)
+  })
+
+  it("names an un-adopted catalog entry from the catalog's own name map, not its id", () => {
+    // The case that made the humanised fallback wrong: a deployment's registered pipeline behind a
+    // reusable operation. `pl_org_introduce_api` humanises to "org introduce api", a name that
+    // appears nowhere else in the product, and this advisory is shown on exactly the boards that
+    // predate the operation. With the map, the offer reads as the pipeline actually is.
+    const stored = builtin(['coder', 'reviewer'], { id: 'pl_full', version: 1 })
+    const { newPipelines } = scan([stored], { pl_full: 1, pl_org_introduce_api: 1 }, [], {
+      pl_full: 'Full build',
+      pl_org_introduce_api: 'Introduce API',
+    })
+    expect(newPipelines.value).toEqual([{ id: 'pl_org_introduce_api', name: 'Introduce API' }])
   })
 
   it('reports no new pipelines when every catalog id is already stored', () => {

@@ -395,6 +395,18 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     upsert: { scope: { kind: 'workspace', arg: 0 } },
     remove: { scope: { kind: 'workspace', arg: 0 } },
   },
+  // Which registered reusable operations a workspace HIDES: durable org state, so `remote` like
+  // the two above. `list` is on the BOARD LOAD path (the snapshot filters the projected task-type
+  // catalog through it) AND on the creation path (the refusal), so omitting it would fail every
+  // board load on a mothership-mode node rather than merely dimming a settings screen. The
+  // descriptors themselves stay node-local by design (a task type is inseparable from the code
+  // registered beside it; see `backend/docs/reusable-operations.md`), which is exactly why the
+  // per-workspace CHOICE about them has to travel: the catalog is code and the hide-list is data.
+  taskTypeSuppressionRepository: {
+    list: { scope: { kind: 'workspace', arg: 0 } },
+    suppress: { scope: { kind: 'workspace', arg: 0 } },
+    restore: { scope: { kind: 'workspace', arg: 0 } },
+  },
   // --- Agent-context run-path reads -----------------------------------------------
   // `AgentContextBuilder` resolves a block's LINKED docs/tasks for EVERY container agent step
   // (it builds the agent context on each dispatch), so these reads are on the run path, not just

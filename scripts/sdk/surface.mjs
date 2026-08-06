@@ -40,6 +40,9 @@ const SURFACE = {
   // ---- Pipelines ------------------------------------------------------------------------
   listPublicPipelines: { group: 'pipelines', method: 'list' },
 
+  // ---- Task types: what a task may be created AS, and the form each one accepts -----------
+  listPublicTaskTypes: { group: 'taskTypes', method: 'list' },
+
   // ---- Notifications --------------------------------------------------------------------
   listPublicNotifications: { group: 'notifications', method: 'list' },
   actPublicNotification: { group: 'notifications', method: 'act' },
@@ -192,6 +195,8 @@ export const GROUP_DOCS = {
   services: "The workspace's board services — the frames tasks are created under.",
   tasks: "A board task's whole lifecycle: create, edit, start, stop, retry, watch, delete.",
   pipelines: 'The pipelines a task can be started with, and whether each is headless-startable.',
+  taskTypes:
+    'What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts.',
   notifications: "The workspace's human-actionable inbox: list, act on, or dismiss a run tail.",
   webhook:
     "The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to.",

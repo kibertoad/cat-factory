@@ -164,11 +164,30 @@ export function parseSkillSpecs(value: unknown): SkillSpec[] | undefined {
 }
 
 /**
+ * The optional job-body CAPABILITY fields this image parses, reported on `/health` and on the
+ * `POST /jobs` acceptance so a backend can tell whether the body it just sent will be honoured.
+ *
+ * The gap it closes: an image older than a capability does not fail on it, it ignores the field.
+ * The backend composes the PROMPT, so a dropped `mcpServers` leaves the agent reading that it has
+ * tools it has no client for: a blind run rather than a failed one, and previously invisible to
+ * the backend, which has no way to know what image a self-hosted runner pool pins.
+ *
+ * Kept byte-identical to kernel's `HARNESS_BODY_CAPABILITIES` (the image is built from `src/` plus
+ * typescript alone, so it can carry no runtime dependency on a workspace package) and pinned
+ * against it by `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement
+ * {@link MCP_SERVER_ID_PATTERN} uses.
+ *
+ * A member is added here in the SAME change that teaches the parser the field, never ahead of it:
+ * the whole value of the list is that it is the image's own honest answer.
+ */
+export const HARNESS_BODY_CAPABILITIES: readonly string[] = ['mcpServers', 'skills']
+
+/**
  * A safe MCP server id: it becomes a tool-name fragment AND a TOML table key.
  *
  * Kept byte-identical to kernel's `MCP_SERVER_ID_PATTERN` (the harness image is built from `src/`
  * plus typescript alone, so it can carry no runtime dependency on a workspace package) and pinned
- * against it by `test/agent-capabilities.conformity.test.ts` — the same copy-plus-pin arrangement
+ * against it by `test/agent-capabilities.conformity.test.ts`, the same copy-plus-pin arrangement
  * `src/host-markdown.ts` uses.
  */
 export const MCP_SERVER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/

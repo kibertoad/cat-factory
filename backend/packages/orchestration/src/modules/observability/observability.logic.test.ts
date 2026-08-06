@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { LlmCallMetric } from '@cat-factory/kernel'
 import {
   buildLlmMetricsExport,
-  classifyCall,
   computeStoredPrompt,
   hashPrompt,
-  isWarningFinishReason,
   outputHeadroomRatio,
   reconstructPrompts,
   transportOverheadRatio,
@@ -45,30 +43,6 @@ function metric(overrides: Partial<LlmCallMetric> & Pick<LlmCallMetric, 'id'>): 
     ...overrides,
   }
 }
-
-describe('classifyCall', () => {
-  it('flags a failed call as an error', () => {
-    expect(classifyCall({ ok: false, finishReason: null })).toBe('error')
-    expect(classifyCall({ ok: false, finishReason: 'length' })).toBe('error')
-  })
-  it('flags a truncated or filtered (but ok) call as a warning', () => {
-    expect(classifyCall({ ok: true, finishReason: 'length' })).toBe('warning')
-    expect(classifyCall({ ok: true, finishReason: 'content_filter' })).toBe('warning')
-  })
-  it('treats a normal completion as ok', () => {
-    expect(classifyCall({ ok: true, finishReason: 'stop' })).toBe('ok')
-    expect(classifyCall({ ok: true, finishReason: null })).toBe('ok')
-  })
-})
-
-describe('isWarningFinishReason', () => {
-  it('matches only length / content_filter', () => {
-    expect(isWarningFinishReason('length')).toBe(true)
-    expect(isWarningFinishReason('content_filter')).toBe(true)
-    expect(isWarningFinishReason('stop')).toBe(false)
-    expect(isWarningFinishReason(null)).toBe(false)
-  })
-})
 
 describe('outputHeadroomRatio', () => {
   it('is the peak fraction of the ceiling, capped at 1', () => {

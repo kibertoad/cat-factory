@@ -941,6 +941,7 @@ never remotely invocable (mothership-internal cron).
 | `sharedStackRepository`                  | ✅ done | full library CRUD                                                                                  |
 | `workspaceSettingsRepository`            | ✅ done | get/upsert; `listByWorkspaceIds` sweeper                                                           |
 | `serviceFragmentDefaultsRepository`      | ✅ done | get/set                                                                                            |
+| `taskTypeSuppressionRepository`          | ✅ done | list/suppress/restore (board load + creation refusal)                                              |
 | `trackerSettingsRepository`              | ✅ done | get/put                                                                                            |
 | `pipelineScheduleRepository`             | ◑ part  | schedule mgmt + runNow; `listByService` pending, sweeper reads internal                            |
 | `serviceRepository`                      | ◑ part  | mount + board-composition + run-path reads; CRUD/`getByRepo` pending (GitHub sync)                 |
@@ -1223,3 +1224,20 @@ Each PR adds a changeset and updates this checklist.
   and the core of the Phase 3 merge gate (now MET).
 - **Pre-1.0 = no back-compat.** No shims for the old siloed-Postgres local mode; mothership mode is a
   parallel boot path selected by `LOCAL_MOTHERSHIP_URL`.
+- **Task types stay NODE-LOCAL, and that is a decision, not a gap.** A `CustomTaskType` gets no
+  `/internal/*` read of its own, unlike the foundational-services `builtin` tier and
+  `BinaryGeneratorSource` beside it. The descriptor is inseparable from code registered in the SAME
+  org package: its `defaultPipelineId` names a pipeline in that package, that pipeline names custom
+  KINDS and VARIANTS (functions, which cannot cross a wire), its `defaultFragmentIds` name fragments
+  in the same pool, and its `formPanel` names a component in the deployment's own SPA layer. Serving
+  the descriptor from the mothership while the executable half stayed local would produce a MIXED
+  bundle (a v2 descriptor naming a pipeline the node's v1 package lacks), which boot validation
+  structurally cannot see. The unit of distribution is the org package, exactly as for agent kinds.
+  Consequences, named rather than hidden: a node a build behind offers last build's operations (the
+  lag its agent kinds already have), a stock node in an org deployment offers none, and a run of such
+  a task fails loudly at the existing seams (unknown kind at admission). The dispatch-time parameter
+  fold is built for that drift: it is VALUE-authoritative, so a stale or absent registration costs
+  labels, never data. The per-workspace SUPPRESSION of an operation is the opposite call and is
+  `remote`, because it is pure data with no co-registered code: the catalog is code and the hide-list
+  is a row. Full argument: [`reusable-operations.md`](./reusable-operations.md) (D11);
+  behaviour: [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).

@@ -18,6 +18,7 @@ import { LlmObservabilityService } from '../modules/observability/LlmObservabili
 import { PlatformObservabilityService } from '../modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from '../modules/reports/ReportsService.js'
 import { RunDebugService } from '../modules/debug/RunDebugService.js'
+import { ToolCallObservabilityService } from '../modules/observability/ToolCallObservabilityService.js'
 import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
@@ -151,6 +152,20 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
             repository: dependencies.provisioningLogRepository,
           }),
         }
+      : undefined,
+  )
+  // The tool-call trajectory READ the observability panel drills into. Built from the repository
+  // rather than passed down from the facade like the two sibling sinks, for the reason stated on
+  // `CoreDependencies.agentToolCallRepository`: those are WRITE services carrying a capture gate
+  // and a redaction pass, and a read needs neither. The facades' own recorder instances stay
+  // where the write path builds them; a second stateless reader over the same rows cannot
+  // disagree with them, where a second CAPTURE GATE could.
+  modules.build('toolCallObservability', () =>
+    dependencies.agentToolCallRepository
+      ? new ToolCallObservabilityService({
+          agentToolCallRepository: dependencies.agentToolCallRepository,
+          clock: dependencies.clock,
+        })
       : undefined,
   )
   // The remote debugging reader (`/api/v1/debug/*`). Built UNCONDITIONALLY, unlike every other

@@ -371,10 +371,12 @@ export class WorkspaceService {
     // it mounts that was archived on its home board.
     const archivedFrames = [...localArchivedFrames, ...foreignArchivedFrames]
     // The current built-in catalog versions, so the SPA can flag a workspace's stale
-    // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions).
-    const pipelineCatalogVersions = Object.fromEntries(
-      seedPipelines(this.pipelineRegistry).map((p) => [p.id, p.version ?? 0]),
-    )
+    // built-in copies and offer a reseed (see WorkspaceSnapshot.pipelineCatalogVersions), plus the
+    // companion NAME map, which is the only way the "new built-ins" advisory can name a catalog
+    // entry this board holds no row for. ONE read, so the two maps cannot list different ids.
+    const catalog = seedPipelines(this.pipelineRegistry)
+    const pipelineCatalogVersions = Object.fromEntries(catalog.map((p) => [p.id, p.version ?? 0]))
+    const pipelineCatalogNames = Object.fromEntries(catalog.map((p) => [p.id, p.name]))
     // The complement: built-ins WITHDRAWN from the catalog, so the SPA can offer to remove a stored
     // copy this board was seeded with before the withdrawal. `seedPipelines` already excludes these,
     // so a retired id reaches the SPA through this channel alone — which is what keeps the "new
@@ -400,6 +402,7 @@ export class WorkspaceService {
       pipelines,
       executions,
       pipelineCatalogVersions,
+      pipelineCatalogNames,
       ...(retired.length ? { retiredPipelines: retired } : {}),
       riskPolicyCatalogVersions,
       modelPresetCatalogVersions,

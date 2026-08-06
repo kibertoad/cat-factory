@@ -4,7 +4,7 @@ import type {
   RunnerPoolManifest,
 } from '../domain/types.js'
 import type { SecretResolver } from './environment-provider.js'
-import type { RunnerJobView } from './runner-transport.js'
+import type { RunnerDispatchAck, RunnerJobStopOutcome, RunnerJobView } from './runner-transport.js'
 
 // Port for a self-hosted runner-pool provider: the thing that actually calls an
 // org's pool scheduler API to dispatch/poll/release coding jobs. The worker
@@ -36,12 +36,27 @@ export interface RunnerPoolConnectionTestRequest {
 }
 
 export interface RunnerPoolProvider {
-  /** Start (or re-attach to) the job on the pool. Idempotent per `jobId`. */
-  dispatch(req: RunnerDispatchRequest): Promise<void>
+  /**
+   * Start (or re-attach to) the job on the pool. Idempotent per `jobId`.
+   *
+   * Returns a {@link RunnerDispatchAck} when the manifest MAPS the harness's acceptance body onto
+   * the response (`dispatchCapabilitiesPath`, one line for a pool that proxies `POST /jobs`
+   * line); `void` when it does not, which the dispatch site reads as "could not tell". A pool is
+   * the deployment shape most likely to lag the backend's image, so mapping it is worth a
+   * scheduler author's attention. See `backend/docs/mcp-tool-servers.md`.
+   */
+  dispatch(req: RunnerDispatchRequest): Promise<RunnerDispatchAck | void>
   /** Read the job's current state, mapped onto the canonical view. */
   poll(req: RunnerPollRequest): Promise<RunnerJobView>
-  /** Free the job/runner (only when the manifest declares a `release` template). */
-  release(req: RunnerPollRequest): Promise<void>
+  /**
+   * Free the job/runner through the manifest's `release` template, and say whether there WAS one.
+   *
+   * The outcome is returned rather than swallowed because this doubles as the pool's only way to
+   * cancel a job, and a manifest with no `release` template cancels nothing at all. At best it is
+   * `requested`: the scheduler accepted the call, and no part of this backend can see far enough
+   * into the pool to confirm the runner actually stopped.
+   */
+  release(req: RunnerPollRequest): Promise<RunnerJobStopOutcome>
   /** Declare the config fields this pool provider expects (see EnvironmentProvider). */
   describeConfig?(manifest?: RunnerPoolManifest): ProviderConfigField[]
   /**

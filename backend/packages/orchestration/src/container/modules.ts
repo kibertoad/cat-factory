@@ -83,6 +83,7 @@ import { PreviewService } from '../modules/preview/PreviewService.js'
 import { IncidentEnrichmentService } from '../modules/incidentEnrichment/IncidentEnrichmentService.js'
 import { AgentPromptService } from '../modules/agentPrompts/AgentPromptService.js'
 import { WorkspaceAgentSettingsService } from '../modules/agentSettings/WorkspaceAgentSettingsService.js'
+import { TaskTypeSuppressionService } from '../modules/taskTypes/TaskTypeSuppressionService.js'
 import { ModelPresetService } from '../modules/modelPresets/ModelPresetService.js'
 import { inlineModelResolutionDeps } from './inline-model-deps.js'
 import { ConsensusGroupService } from '../modules/consensusGroups/ConsensusGroupService.js'
@@ -124,6 +125,7 @@ import type {
   SlackModule,
   TrackerModule,
   TrackerWebhookModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './module-shapes.js'
@@ -1121,6 +1123,24 @@ export function createWorkspaceAgentSettingsModule(
   const service = new WorkspaceAgentSettingsService({
     workspaceAgentSettingsRepository,
     workspaceRepository: deps.workspaceRepository,
+    clock: deps.clock,
+  })
+  return { service }
+}
+
+/**
+ * Assemble the per-workspace operation-suppression module when its repository is present.
+ * Absent ⇒ the controller 503s and every board offers every registered operation.
+ */
+export function createTaskTypeSuppressionModule(
+  deps: CoreDependencies,
+): TaskTypeSuppressionModule | undefined {
+  const { taskTypeSuppressionRepository } = deps
+  if (!taskTypeSuppressionRepository) return undefined
+  const service = new TaskTypeSuppressionService({
+    taskTypeSuppressionRepository,
+    workspaceRepository: deps.workspaceRepository,
+    taskTypeRegistry: deps.taskTypeRegistry,
     clock: deps.clock,
   })
   return { service }

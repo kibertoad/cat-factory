@@ -1,8 +1,11 @@
 import {
+  type BlindJobStopOutcome,
+  type HarnessCapabilitySupport,
   type LogFields,
   type Logger,
   type OperationalMetrics,
   describeError,
+  describeHarnessBodyCapability,
   noopLogger,
   noopOperationalMetrics,
 } from '@cat-factory/kernel'
@@ -51,6 +54,26 @@ export interface ContainerJobLog {
   progress(fields?: LogFields): void
   /** The job reached a terminal state — `info` when it produced work, `warn` when it did not. */
   settled(outcome: 'done' | 'failed', fields?: LogFields): void
+  /**
+   * The job body carried a capability and the harness's handshake did not confirm it. Reports
+   * BOTH non-`supported` answers, because they are different facts needing different reactions
+   * and only this seam sees either: `unsupported` is a run about to be refused (a runner image
+   * behind the backend), `unknown` is the deployment's own blind spot (an image or a pool control
+   * plane that reports nothing, so a blind run cannot be ruled out).
+   *
+   * A no-op on `supported`, so every dispatch site can call it unconditionally.
+   */
+  capabilityGap(support: HarnessCapabilitySupport): void
+  /**
+   * What became of the blind job the refusal tried to stop. The refusal message already tells the
+   * run's reader; this is for the OPERATOR, who has the different question: how often does this
+   * deployment fail a run and leave the agent running anyway.
+   *
+   * Only a `stopped` outcome is silent. The other three each mean an agent may still be working
+   * against a repository with nobody watching, which is a standing property of the deployment's
+   * runner backend rather than a fact about one run, so each is counted under its own dimension.
+   */
+  blindJobStopped(outcome: BlindJobStopOutcome): void
 }
 
 /**
@@ -71,6 +94,40 @@ function countFailure(
   kind: unknown,
 ): void {
   metrics.increment(counter, typeof kind === 'string' ? { kind } : {})
+}
+
+/**
+ * Report one capability-handshake answer: a line naming the run, and a counter per CAPABILITY so
+ * a standing rate is readable per signal. Both are needed and neither substitutes: the line says
+ * which run lost its tools, the counter says how much of the fleet is behind.
+ *
+ * `capability` is the dimension because it is a closed union; the workspace/run/job ids that
+ * would be the interesting split are unbounded and stay on the line, per the metrics rule.
+ */
+function reportCapabilityGap(
+  logger: Logger,
+  metrics: OperationalMetrics,
+  support: HarnessCapabilitySupport,
+): void {
+  if (support.kind === 'supported') return
+  const capabilities = support.kind === 'unsupported' ? support.missing : support.required
+  const described = capabilities.map(describeHarnessBodyCapability)
+  if (support.kind === 'unsupported') {
+    logger.warn('container job refused: runner image cannot serve a declared capability', {
+      capabilities,
+      described,
+    })
+  } else {
+    logger.warn('container job dispatched without a capability handshake', {
+      capabilities,
+      described,
+    })
+  }
+  const counter =
+    support.kind === 'unsupported'
+      ? 'container.capability_unsupported'
+      : 'container.capability_unknown'
+  for (const capability of capabilities) metrics.increment(counter, { capability })
 }
 
 /**
@@ -110,6 +167,17 @@ export function containerJobLog(
       // signal this counter exists for: containers dying under the run. The dimension is the
       // EVICTION cause, named explicitly so a later `kind` field on this line cannot displace it.
       if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
+    },
+    capabilityGap: (support) => reportCapabilityGap(logger, metrics, support),
+    blindJobStopped: (outcome) => {
+      if (outcome === 'stopped') return
+      logger.warn('refused container job may still be running: the backend could not stop it', {
+        outcome,
+      })
+      // The dimension is the OUTCOME, a closed union of three, because the three need different
+      // operator actions: `unsupported` is a runner backend to give a cancel path, `requested` is
+      // a pool to go and verify, `failed` is a fault to investigate.
+      metrics.increment('container.blind_job_not_stopped', { outcome })
     },
   }
 }

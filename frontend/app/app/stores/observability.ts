@@ -7,6 +7,7 @@ import type {
   LlmCallMetric,
 } from '~/types/execution'
 import { useWorkspaceStore } from '~/stores/workspace'
+import { createToolCallSinkState } from '~/stores/observability/toolCalls'
 
 /**
  * LLM observability state: the full per-call model activity for a run (prompts,
@@ -21,6 +22,17 @@ import { useWorkspaceStore } from '~/stores/workspace'
 export const useObservabilityStore = defineStore('observability', () => {
   const api = useApi()
   const workspace = useWorkspaceStore()
+
+  /**
+   * The TOOL-CALL sink, extracted whole: two reads at two different bounds, plus the rule that
+   * keeps them apart (see `observability/toolCalls.ts`). The store owns the workspace binding and
+   * nothing else about it.
+   */
+  const toolCalls = createToolCallSinkState({
+    ready: () => !!workspace.workspaceId,
+    fetchTrajectory: (executionId) => api.getToolCalls(workspace.requireId(), executionId),
+    fetchFailures: (executionId) => api.getToolCallFailures(workspace.requireId(), executionId),
+  })
 
   /** Per-execution-id call list (newest first). */
   const callsByExecution = ref<Record<string, LlmCallMetric[]>>({})
@@ -223,5 +235,6 @@ export const useObservabilityStore = defineStore('observability', () => {
     searchQueriesFor,
     isSearchQueriesLoading,
     loadSearchQueries,
+    ...toolCalls,
   }
 })

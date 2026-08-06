@@ -184,3 +184,87 @@ describe('KubernetesRunnerTransport.testConnection', () => {
     expect(result.message).toMatch(/401/)
   })
 })
+
+describe('KubernetesRunnerTransport and the harness capability handshake', () => {
+  /** Route a ready pod plus a harness acceptance carrying `capabilities`. */
+  const readyPodServing = (acceptance: unknown): Route => {
+    return (method, url) => {
+      if (method === 'POST' && url.endsWith('/pods')) return new Response('{}', { status: 201 })
+      if (method === 'GET' && url.includes('/pods/cf-run-1') && !url.includes('/proxy')) {
+        return runningReadyPod()
+      }
+      if (method === 'POST' && url.includes('/proxy/jobs')) {
+        return new Response(JSON.stringify(acceptance), { status: 202 })
+      }
+      return undefined
+    }
+  }
+
+  it('forwards the ack, because it POSTs to the harness itself', async () => {
+    // Unlike a manifest-driven pool, this transport talks to the harness through the apiserver
+    // pod-proxy, so the acceptance body it reads IS the handshake. Dropping it would leave every
+    // k8s/EKS deployment permanently `unknown`: warned on each capability dispatch against an
+    // image that is current, and unable to ever refuse a genuinely blind one.
+    stubFetch(readyPodServing({ jobId: ref.jobId, state: 'running', capabilities: ['mcpServers'] }))
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    expect(await transport.dispatch(ref, { mode: 'coding' }, 'agent')).toEqual({
+      capabilities: ['mcpServers'],
+    })
+  })
+
+  it('reports no handshake for an image that sent none, never an empty one', async () => {
+    // `undefined` and `[]` are opposite verdicts downstream: the first proceeds with a warning,
+    // the second REFUSES the run. An older image reports nothing and must get the first.
+    stubFetch(readyPodServing({ jobId: ref.jobId, state: 'running' }))
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    expect(await transport.dispatch(ref, { mode: 'coding' }, 'agent')).toBeUndefined()
+  })
+
+  it('stops one job at the harness, and confirms it', async () => {
+    const { calls } = stubFetch((method, url) => {
+      if (method === 'DELETE' && url.includes(`/proxy/jobs/${ref.jobId}`)) {
+        return new Response(JSON.stringify({ jobId: ref.jobId, state: 'failed' }), { status: 200 })
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    expect(await transport.stopJob(ref)).toBe('stopped')
+    // The graceful path only: the pod is NOT deleted when the harness confirmed the abort, so the
+    // run's remaining steps keep their warm pod.
+    expect(calls.some((c) => c.method === 'DELETE' && !c.url.includes('/proxy'))).toBe(false)
+  })
+
+  it('escalates to deleting the pod when the harness cannot confirm the abort', async () => {
+    // Confirming beats preserving the pod here: the only caller has already failed the run, and
+    // the alternative is telling a human the agent is stopped when it may not be. A bare Pod is
+    // not garbage-collected either, so giving up would leak it as well as the agent.
+    const { calls } = stubFetch((method, url) => {
+      if (method === 'DELETE' && url.includes('/proxy/jobs')) {
+        return new Response('no such route', { status: 404 })
+      }
+      if (method === 'DELETE' && url.includes('/pods/cf-run-1')) {
+        return new Response('{}', { status: 200 })
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    expect(await transport.stopJob(ref)).toBe('stopped')
+    expect(calls.some((c) => c.method === 'DELETE' && !c.url.includes('/proxy'))).toBe(true)
+  })
+
+  it('escalates when the harness answers but the job is STILL running', async () => {
+    // A signalled abort is not a stopped agent; the whole point of waiting is to tell them apart.
+    const { calls } = stubFetch((method, url) => {
+      if (method === 'DELETE' && url.includes('/proxy/jobs')) {
+        return new Response(JSON.stringify({ jobId: ref.jobId, state: 'running' }), { status: 200 })
+      }
+      if (method === 'DELETE' && url.includes('/pods/cf-run-1')) {
+        return new Response('{}', { status: 200 })
+      }
+      return undefined
+    })
+    const transport = new KubernetesRunnerTransport(config, resolveSecret)
+    expect(await transport.stopJob(ref)).toBe('stopped')
+    expect(calls.some((c) => c.method === 'DELETE' && !c.url.includes('/proxy'))).toBe(true)
+  })
+})

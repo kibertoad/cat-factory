@@ -1322,6 +1322,40 @@ describe('custom task types (reusable operations)', () => {
     })
     expect(duplicate[0]?.code).toBe('task_type_field_duplicate')
 
+    // A DEFAULT outside the field's own options. Latent while defaults were seeded only by the
+    // form (an odd opening value); an ERROR now that the creation door applies them, because every
+    // creation of the type is refused for a value the caller never sent.
+    const strayDefault = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [
+        {
+          key: 'style',
+          label: 'Style',
+          type: 'select',
+          default: 'rpc',
+          options: [{ value: 'action', label: 'Action' }],
+        },
+      ],
+    })
+    expect(strayDefault[0]?.severity).toBe('error')
+    expect(strayDefault[0]?.code).toBe('task_type_field_default_outside_options')
+
+    const strayGroupDefault = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [
+        {
+          key: 'ops',
+          label: 'Operations',
+          type: 'checkbox-group',
+          defaultValues: ['create', 'purge'],
+          options: [{ value: 'create', label: 'Create' }],
+        },
+      ],
+    })
+    expect(strayGroupDefault[0]?.code).toBe('task_type_field_default_outside_options')
+
     // A well-formed form, including a condition on a field it does declare, is silent.
     expect(
       problemsFor({
@@ -1332,6 +1366,7 @@ describe('custom task types (reusable operations)', () => {
             key: 'style',
             label: 'Style',
             type: 'select',
+            default: 'action',
             options: [{ value: 'action', label: 'Action' }],
           },
           {

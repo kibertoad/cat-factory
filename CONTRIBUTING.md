@@ -69,6 +69,13 @@ command you need for a PR runs it. To measure a branch, dispatch that workflow o
 Which packages are covered, how to add one, and how to read a surviving mutant:
 [`docs/internal/mutation-testing.md`](./docs/internal/mutation-testing.md).
 
+**The Node and Local facade suites need a real Postgres, and Turbo will not pass
+`DATABASE_URL` through to them.** Without a server they fail with `DATABASE_URL is
+required to run the local conformance tests` while every other task passes, and
+exporting the variable is not enough on its own. The setup, both traps, and how to
+start a cluster where no Docker daemon is running:
+[`docs/internal/running-tests.md`](./docs/internal/running-tests.md).
+
 ## Changesets (REQUIRED)
 
 Releases are managed with [changesets](https://github.com/changesets/changesets).

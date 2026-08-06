@@ -116,6 +116,7 @@ export type {
   LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcome,
   LlmCallOutcomeFilter,
   LlmCallPageQuery,
   LlmCallRollupTotals,
@@ -177,6 +178,7 @@ export type {
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
+  ToolCallOutcome,
 } from './agent-tool-calls.js'
 export type {
   LlmGenerationEvent,
@@ -514,12 +516,14 @@ export { NoopEnvironmentTestRunner } from './environment-test.js'
 export type {
   ContainerEvictionKind,
   HarnessCallMetric,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobContainer,
   RunnerJobProgress,
   RunnerJobRef,
   RunnerJobResult,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerReproductionPhase,
   RunnerReproductionReport,
@@ -724,6 +728,7 @@ export type {
 export type { ModelPresetRepository } from './model-preset-repositories.js'
 export type { AgentPromptRepository } from './agent-prompt-repositories.js'
 export type { WorkspaceAgentSettingsRepository } from './agent-settings-repositories.js'
+export type { TaskTypeSuppressionRepository } from './task-type-repositories.js'
 export type { ServiceFragmentDefaultsRepository } from './service-fragment-default-repositories.js'
 export type { DueSchedule, PipelineScheduleRepository } from './recurring-repositories.js'
 export type { TrackerSettingsRepository } from './tracker-settings-repositories.js'

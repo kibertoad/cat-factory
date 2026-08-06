@@ -521,6 +521,7 @@ async function clone(p: Pipeline) {
             :placeholder="t('pipeline.builder.namePlaceholder')"
             size="sm"
             class="mb-2"
+            data-testid="pipeline-builder-name"
           />
 
           <!-- Purpose: the pipeline's use-case classifier. Drives which task pickers offer it (a
@@ -621,6 +622,9 @@ async function clone(p: Pipeline) {
               :key="unit.index"
               class="flex flex-col gap-2 rounded-lg border border-slate-700 bg-slate-800/60 p-2"
               :class="{ 'opacity-50': pipelines.draftEnabled[unit.index] === false }"
+              data-testid="pipeline-draft-step"
+              :data-agent-kind="unit.kind"
+              :data-gated="pipelines.draftGates[unit.index] === true"
             >
               <div class="flex items-center gap-1.5">
                 <span class="w-4 shrink-0 text-center text-[10px] text-slate-500">{{
@@ -686,6 +690,7 @@ async function clone(p: Pipeline) {
                         ? t('pipeline.builder.approvalRemoveTooltip')
                         : t('pipeline.builder.approvalAddTooltip')
                     "
+                    data-testid="pipeline-step-gate"
                     @click="pipelines.toggleDraftGate(unit.index)"
                   />
                   <!-- Consensus: run this step through the multi-model mechanism (eligible

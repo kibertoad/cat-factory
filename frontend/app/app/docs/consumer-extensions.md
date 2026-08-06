@@ -206,7 +206,13 @@ stray `API delivery` / `API Delivery` pair does not split a category in half.
 
 Your own strings (labels, category captions, descriptions) are rendered verbatim and never enter a
 locale catalog; only the platform's own chrome around them is i18n, which is why the "Other" heading
-is the one caption you do not supply. Each row carries `data-testid="task-type-row"` plus
+is the one caption you do not supply.
+
+**A workspace admin can HIDE any registered type from that board** (Workspace settings → Operations).
+Only backend-REGISTERED types are hideable: a type your frontend module ships as a code
+contribution has no backend row to suppress, so it is offered on every board. If your catalog is
+large enough that teams will want to trim it, register the types on the backend rather than
+contributing them here. Each row carries `data-testid="task-type-row"` plus
 `data-task-type-row="<id>"`, and each choice `data-testid="task-type-<taskType>"`, so your own e2e
 suite can address a row and the caption inside it.
 

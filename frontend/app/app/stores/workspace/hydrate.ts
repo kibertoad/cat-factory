@@ -71,6 +71,7 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
     snapshot.pipelines,
     snapshot.pipelineCatalogVersions,
     snapshot.retiredPipelines,
+    snapshot.pipelineCatalogNames,
   )
   useExecutionStore().hydrate(snapshot.executions, snapshot.workspace.id)
   useAgentRunsStore().hydrate(snapshot.bootstrapJobs ?? [], snapshot.workspace.id)
@@ -114,6 +115,10 @@ export function applySnapshotToStores(snapshot: WorkspaceSnapshot, boardSince?: 
     snapshot.binaryGeneratorsUnavailable === true,
   )
   useTaskTypesStore().hydrateCapabilities(capabilities)
+  // The complement of the offered catalog above: the registered operations this board HIDES. Both
+  // halves come from the one snapshot, so the settings screen can exist for a board that hid
+  // every one of them (the state whose only way back is that screen).
+  useTaskTypesStore().hydrateSuppressed(snapshot.suppressedTaskTypes ?? [])
   // The per-step parameters each registered gate declares, so a gated step's config form in the
   // builder comes from the gate's own registration rather than a form hard-coded per gate.
   usePipelinesStore().hydrateGateConfigForms(snapshot.gateConfigForms ?? [])

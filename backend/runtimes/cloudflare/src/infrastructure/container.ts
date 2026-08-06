@@ -118,7 +118,6 @@ import { D1RequirementReviewRepository } from './repositories/D1RequirementRevie
 import { D1DocInterviewRepository } from './repositories/D1DocInterviewRepository'
 import { D1KaizenGradingRepository } from './repositories/D1KaizenGradingRepository'
 import { D1KaizenVerifiedComboRepository } from './repositories/D1KaizenVerifiedComboRepository'
-import { D1ConsensusGroupRepository } from './repositories/D1ConsensusGroupRepository'
 import { D1ClarityReviewRepository } from './repositories/D1ClarityReviewRepository'
 import { D1BrainstormSessionRepository } from './repositories/D1BrainstormSessionRepository'
 import { D1NotificationRepository } from './repositories/D1NotificationRepository'
@@ -135,15 +134,12 @@ import {
 } from './repositories/D1SandboxRepositories'
 import { D1WorkspaceSettingsRepository } from './repositories/D1WorkspaceSettingsRepository'
 import { selectPerUserDeps } from './container-per-user-deps'
+import { selectWorkspaceConfigDeps } from './container-workspace-config-deps'
 import { D1ObservabilityConnectionRepository } from './repositories/D1ObservabilityConnectionRepository'
 import { D1PackageRegistryConnectionRepository } from './repositories/D1PackageRegistryConnectionRepository'
 
 import { D1IncidentEnrichmentConnectionRepository } from './repositories/D1IncidentEnrichmentConnectionRepository'
 import { D1ReleaseHealthConfigRepository } from './repositories/D1ReleaseHealthConfigRepository'
-import { D1AgentPromptRepository } from './repositories/D1AgentPromptRepository'
-import { D1WorkspaceAgentSettingsRepository } from './repositories/D1WorkspaceAgentSettingsRepository'
-import { D1ModelPresetRepository } from './repositories/D1ModelPresetRepository'
-import { D1ServiceFragmentDefaultsRepository } from './repositories/D1ServiceFragmentDefaultsRepository'
 // The built-in polling-gate suite (ci / conflicts / post-release-health + on-call). The facade
 // builds an app-owned `GateRegistry` pre-loaded with the suite via `gateRegistryWithBuiltins()`,
 // then wires each gate's provider below.
@@ -289,14 +285,7 @@ export function selectMergeLifecycleDeps(
     sharedStackRepository: new D1SharedStackRepository({ db }),
     workspaceSettingsRepository: new D1WorkspaceSettingsRepository({ db }),
     ...selectPerUserDeps(db),
-    modelPresetRepository: new D1ModelPresetRepository({ db }),
-    // The consensus-GROUP library: the estimate-gated panels a pipeline step escalates to.
-    // Always wired (no secret material) — the panels only run when the optional consensus
-    // executor is enabled, but the library is editable and snapshot-visible regardless.
-    consensusGroupRepository: new D1ConsensusGroupRepository({ db }),
-    agentPromptRepository: new D1AgentPromptRepository({ db }),
-    workspaceAgentSettingsRepository: new D1WorkspaceAgentSettingsRepository({ db }),
-    serviceFragmentDefaultsRepository: new D1ServiceFragmentDefaultsRepository({ db }),
+    ...selectWorkspaceConfigDeps(db),
     initiativeRepository: new D1InitiativeRepository({ db }),
   }
   // Compose the delivery channels: in-app push (when the events binding is present), Slack (when

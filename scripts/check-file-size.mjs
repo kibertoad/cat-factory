@@ -145,7 +145,13 @@ const LEGACY_ALLOWANCES = new Map([
   // the env-config repairer, the two container dispatchers this root wires beside the step
   // executor. Job-token scoping made them one concern rather than two, since each hands a real
   // clone/push credential to a container and so must narrow it to the repo it touches.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1222],
+  // 1222 -> 1211 by extracting `container-workspace-config-deps.ts` (the `selectPerUserDeps`
+  // precedent): the per-workspace configuration LIBRARIES (model presets, consensus groups, prompt
+  // overrides, per-kind generation settings, offered operations, service fragment defaults). Every
+  // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
+  // edited from a settings surface rather than written by the engine, so the next such library
+  // lands there rather than among the run-path repositories.
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1211],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)
@@ -221,8 +227,17 @@ const LEGACY_ALLOWANCES = new Map([
  * Ratcheted 1100 → 1098 by condensing the role-scoped merge-policy entry back to the charter's
  * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
  * restating two ADRs that already own every one of them.
+ *
+ * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
+ * by name, so its whole length is a context cost paid on every read, and it sits in the tree
+ * (contributor setup notes) that regrows most easily. A pointer out of a ratcheted file into an
+ * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
+ * Same shrink-only contract: if the recipe needs more, the surrounding prose gives up the lines.
  */
-const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1098]])
+const DOC_ALLOWANCES = new Map([
+  ['CLAUDE.md', 1098],
+  ['docs/internal/running-tests.md', 78],
+])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and

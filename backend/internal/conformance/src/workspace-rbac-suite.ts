@@ -355,6 +355,9 @@ function registerRbacMemberManagementTests(
       // permission and NOT to the sandbox controller's `integrations.manage` — otherwise the
       // sandbox would be a way around the gate that guards editing a prompt directly.
       { perm: 'settings.manage', method: 'POST', path: w('/agent-prompts/coder/promote') },
+      // Hiding a reusable operation changes what every member of the board can create, which is
+      // board configuration on the same footing as the prompt overrides above.
+      { perm: 'settings.manage', method: 'DELETE', path: w('/task-type-suppressions/none%3Aop') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/risk-policies/none') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/observability/connection') },
       { perm: 'settings.manage', method: 'DELETE', path: w('/incident-enrichment') },

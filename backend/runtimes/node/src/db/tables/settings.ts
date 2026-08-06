@@ -70,6 +70,25 @@ export const workspaceAgentSettings = pgTable(
   (t) => [primaryKey({ columns: [t.workspace_id, t.agent_kind] })],
 )
 
+// Per-workspace suppression of a deployment-registered custom task type: a REUSABLE OPERATION a
+// workspace admin has hidden from that board's create picker (mirror of D1 migration 0083; see
+// `backend/docs/reusable-operations.md`).
+//
+// A TOMBSTONE table: the ROW is the suppression, and restoring hard-deletes it. That is why there
+// is no `suppressed` boolean and no seeding. Absence is the default, so a newly registered
+// operation is offered on every board until somebody hides it, the only direction that cannot
+// silently withhold a capability. The composite primary key serves the settings/snapshot prefix
+// scan and the creation-time point check alike, so there is no secondary index.
+export const taskTypeSuppressions = pgTable(
+  'task_type_suppressions',
+  {
+    workspace_id: text('workspace_id').notNull(),
+    task_type: text('task_type').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspace_id, t.task_type] })],
+)
+
 // Per-workspace runtime settings (mirror of D1 migration 0004's `workspace_settings`):
 // the human-wait escalation threshold + the per-service running-task limit policy. One
 // row per workspace; the service lazily seeds DEFAULT_WORKSPACE_SETTINGS on first read.

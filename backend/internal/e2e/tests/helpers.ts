@@ -72,6 +72,20 @@ export async function setFakeProfile(
 export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as const
 
 /**
+ * The pull request the faked GitHub integration serves, and the one a `review` task points at
+ * (source of truth: `src/fakeGitHub.ts`, `E2E_REVIEWED_PR`). A task carries the NUMBER; the URL is
+ * the provider's to give, and creation canonicalises the stored reference to it.
+ *
+ * Its diff touches `src/auth.ts` lines 10-13 and `src/session.ts` line 21 on the head side, so a
+ * finding anchored in either range is posted as an INLINE comment rather than folded into the
+ * summary. `src/session.ts:21` is the anchor the fake refuses ONCE (the partial-post path).
+ */
+export const GITHUB_REVIEWED_PR = { number: 42 } as const
+
+/** The anchor whose first post attempt the fake refuses (source: `E2E_TRANSIENT_REVIEW_POST_FAILURE`). */
+export const GITHUB_TRANSIENT_POST_FAILURE = { path: 'src/session.ts', line: 21 } as const
+
+/**
  * Make `workspaceId` a GitHub-connected workspace with the seeded repo + branches (see
  * `src/fakeGitHub.ts`), by writing the installation + projection rows over the control channel.
  * Call BEFORE opening the board so the SPA loads the connected state. The GitHub App is faked
@@ -80,6 +94,54 @@ export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as 
 export async function seedGitHub(request: APIRequestContext, workspaceId: string): Promise<void> {
   const res = await request.post(`${CONTROL_URL}/github-seed`, { data: { workspaceId } })
   if (!res.ok()) throw new Error(`github-seed control ${res.status()}: ${await res.text()}`)
+}
+
+/**
+ * Seed a repo that belongs to THIS workspace alone, and return it.
+ *
+ * Use this (not {@link GITHUB_REPO}) when a spec needs a repo-LINKED service frame. A `Service` is
+ * ACCOUNT-owned, so importing the shared repo dedupes across every board in the account and MOUNTS
+ * the frame that another spec's workspace already owns — a frame this workspace cannot start runs
+ * under. Seeding an own repo removes the collision at its source (source of truth for the
+ * derivation: `src/fakeGitHub.ts` — `ownRepoFor`).
+ */
+export async function seedOwnRepo(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<{ githubId: number; owner: string; name: string; defaultBranch: string }> {
+  const res = await request.post(`${CONTROL_URL}/github-seed-own-repo`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-seed-own-repo control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as {
+    githubId: number
+    owner: string
+    name: string
+    defaultBranch: string
+  }
+}
+
+/** One PR-review write the engine attempted, as the control channel reports it. */
+export interface ReviewAttempt {
+  number: number
+  comments: { path: string; line: number }[]
+  hasBody: boolean
+}
+
+/**
+ * The PR-review writes a workspace's runs ATTEMPTED, oldest first.
+ *
+ * The only view of what the engine actually sent. The window's post report is derived from the
+ * outcomes the provider returned, so it reads identically whether a retry re-sent a comment that
+ * had already landed or skipped it: at-most-once posting is only observable here.
+ */
+export async function readReviewAttempts(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<ReviewAttempt[]> {
+  const res = await request.post(`${CONTROL_URL}/github-review-attempts`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-review-attempts control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as ReviewAttempt[]
 }
 
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
@@ -171,6 +233,18 @@ interface Block {
 interface Pipeline {
   id: string
 }
+/**
+ * A pipeline as the workspace snapshot carries it, with the two fields that say what the engine
+ * will actually DO with it: the ordered step kinds and the parallel per-step human-gate flags.
+ * Read back by {@link findPipelineByName} so a spec that authored a pipeline in the BUILDER can
+ * assert the persisted wire shape matches what was drawn.
+ */
+export interface PipelineShape {
+  id: string
+  name: string
+  agentKinds: string[]
+  gates?: boolean[]
+}
 // The full board read; only the fields the specs touch are typed.
 export interface WorkspaceSnapshot {
   workspace: Workspace
@@ -205,9 +279,17 @@ async function json<T>(res: {
  */
 export async function createSeededWorkspace(
   request: APIRequestContext,
+  /**
+   * The board's name. Worth setting when a spec drives the board SWITCHER, whose rows are labelled
+   * by name: the sample architecture uses fixed block ids, so two seeded boards are otherwise
+   * indistinguishable on screen.
+   */
+  name?: string,
 ): Promise<WorkspaceSnapshot> {
   const snapshot = await json<WorkspaceSnapshot>(
-    await request.post(`${BACKEND_URL}/workspaces`, { data: { seed: true } }),
+    await request.post(`${BACKEND_URL}/workspaces`, {
+      data: { seed: true, ...(name ? { name } : {}) },
+    }),
   )
   await seedGitHub(request, snapshot.workspace.id)
   // Record a default test-environment provisioning mechanism, so `DefaultTestEnvBanner` — an
@@ -238,6 +320,25 @@ export async function createSimplePipeline(
       data: { name: 'E2E pipeline', agentKinds, ...(gates ? { gates } : {}) },
     }),
   )
+}
+
+/**
+ * Find a workspace pipeline by NAME off the board snapshot, or null.
+ *
+ * By name rather than by id because the caller is a spec that created the pipeline through the
+ * SPA (the builder), where the id is minted backend-side and never shown: the name is the only
+ * handle the test typed. Returns the persisted shape, so the spec can assert that what was drawn
+ * in the builder is what the engine will run.
+ */
+export async function findPipelineByName(
+  request: APIRequestContext,
+  workspaceId: string,
+  name: string,
+): Promise<PipelineShape | null> {
+  const snapshot = await json<{ pipelines?: PipelineShape[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.pipelines ?? []).find((p) => p.name === name) ?? null
 }
 
 /** An initiative as the create endpoint returns it (only the fields the specs read). */
@@ -658,6 +759,24 @@ export async function openBoard(page: Page): Promise<void> {
   await expect(page.getByTestId('workspace-stream')).toHaveAttribute('data-connected', 'true', {
     timeout: LIVE_TIMEOUT,
   })
+}
+
+/**
+ * Put the browser on `workspaceId` through the sidebar board switcher, and confirm it landed.
+ *
+ * Idempotent, so a spec can use it to ESTABLISH which board it is on rather than inherit whichever
+ * board a cold load resolved to. That resolution is a product decision (the persisted choice, else
+ * the first of a newest-first list), not a suite guarantee, so a spec whose meaning depends on
+ * being on a particular board names it instead of relying on the order it seeded them in.
+ */
+export async function switchBoard(page: Page, workspaceId: string): Promise<void> {
+  const switcher = page.getByTestId('board-switcher')
+  await expect(switcher).toBeVisible({ timeout: BOOT_TIMEOUT })
+  if ((await switcher.getAttribute('data-board-id')) !== workspaceId) {
+    await switcher.click()
+    await page.getByTestId(`board-option-${workspaceId}`).click()
+  }
+  await expect(switcher).toHaveAttribute('data-board-id', workspaceId, { timeout: BOOT_TIMEOUT })
 }
 
 /** Locate a task card by its block id (the card root carries `data-block-id`). */

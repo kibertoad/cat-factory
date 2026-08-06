@@ -11,6 +11,7 @@ import {
   createPreviewModule,
   createIncidentEnrichmentModule,
   createAgentPromptsModule,
+  createTaskTypeSuppressionModule,
   createWorkspaceAgentSettingsModule,
   createModelPresetsModule,
   createConsensusGroupsModule,
@@ -62,6 +63,7 @@ import { SpendService, DEFAULT_SPEND_PRICING } from '@cat-factory/spend'
 import { LlmObservabilityService } from './modules/observability/LlmObservabilityService.js'
 import { AgentContextObservabilityService } from './modules/observability/AgentContextObservabilityService.js'
 import { SearchQueryObservabilityService } from './modules/observability/SearchQueryObservabilityService.js'
+import { ToolCallObservabilityService } from './modules/observability/ToolCallObservabilityService.js'
 import { PlatformObservabilityService } from './modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from './modules/reports/ReportsService.js'
 import { RunDebugService } from './modules/debug/RunDebugService.js'
@@ -246,6 +248,7 @@ import type {
   TrackerWebhookModule,
   TutorialProgressModule,
   UserSettingsModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -276,6 +279,7 @@ export type {
   TrackerWebhookModule,
   TutorialProgressModule,
   UserSettingsModule,
+  TaskTypeSuppressionModule,
   WorkspaceAgentSettingsModule,
   WorkspaceSettingsModule,
 } from './container/module-shapes.js'
@@ -432,6 +436,11 @@ export interface OptionalCoreModules {
   /** Present only when the agent-search-query repository is wired (see CoreDependencies). */
   searchQueryObservability?: SearchQueryObservabilityService
   /**
+   * The tool-call trajectory READ (the panel's drill-down). Present only when the tool-call
+   * repository is wired; the facades keep their own recorder instance on the write path.
+   */
+  toolCallObservability?: ToolCallObservabilityService
+  /**
    * The remote debugging reader (`/api/v1/debug/*`). Always built — its run index and overview
    * work off the execution store alone, and each telemetry sink it reads is independently
    * optional, so an unwired sink degrades to an empty page rather than to a missing surface.
@@ -516,6 +525,11 @@ export interface OptionalCoreModules {
   /** Present only when the agent-prompt-override repository is wired (see CoreDependencies). */
   agentPrompts?: AgentPromptsModule
   workspaceAgentSettings?: WorkspaceAgentSettingsModule
+  /**
+   * Present only when the task-type suppression repository is wired (see CoreDependencies).
+   * Absent ⇒ every board offers every registered operation.
+   */
+  taskTypeSuppressions?: TaskTypeSuppressionModule
   /** Present only when the service-fragment-defaults repository is wired (see CoreDependencies). */
   serviceFragmentDefaults?: ServiceFragmentDefaultsModule
   /** Present only when the prompt-fragment library is configured (see CoreDependencies). */
@@ -567,6 +581,7 @@ function registerStandaloneModules(modules: ModuleRegistry, dependencies: CoreDe
   modules.build('consensusGroups', () => createConsensusGroupsModule(dependencies))
   modules.build('agentPrompts', () => createAgentPromptsModule(dependencies))
   modules.build('workspaceAgentSettings', () => createWorkspaceAgentSettingsModule(dependencies))
+  modules.build('taskTypeSuppressions', () => createTaskTypeSuppressionModule(dependencies))
   modules.build('serviceFragmentDefaults', () => createServiceFragmentDefaultsModule(dependencies))
 }
 

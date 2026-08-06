@@ -372,6 +372,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Per-agent-kind generation settings (the output-token ceiling). Read by the settings
     // controller AND on the run path (per-dispatch ceiling resolution).
     workspaceAgentSettingsRepository: repos.workspaceAgentSettingsRepository,
+    // Which registered reusable operations this board HIDES. Read by the settings controller, by
+    // the board snapshot's catalog projection, and on the CREATION path (the refusal that keeps
+    // every non-picker door in step with the picker).
+    taskTypeSuppressionRepository: repos.taskTypeSuppressionRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
     // Claude). Applied only at first seed, so a user's later manual default choice wins.
