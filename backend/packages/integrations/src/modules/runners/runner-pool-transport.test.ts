@@ -57,7 +57,7 @@ describe('RunnerPoolTransport', () => {
       },
       release: (req) => {
         calls.release.push(req)
-        return Promise.resolve()
+        return Promise.resolve('requested' as const)
       },
     }
     return { provider, calls }
@@ -108,7 +108,7 @@ describe('RunnerPoolTransport', () => {
     const provider: RunnerPoolProvider = {
       dispatch: () => Promise.reject(new RunnerPoolApiError(502, 'Runner pool post → 502: down')),
       poll: () => Promise.resolve({ state: 'running' as const }),
-      release: () => Promise.resolve(),
+      release: () => Promise.resolve('requested' as const),
     }
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
     const err = await transport
@@ -123,7 +123,7 @@ describe('RunnerPoolTransport', () => {
     const provider: RunnerPoolProvider = {
       dispatch: () => Promise.reject(new Error('network unreachable')),
       poll: () => Promise.resolve({ state: 'running' as const }),
-      release: () => Promise.resolve(),
+      release: () => Promise.resolve('requested' as const),
     }
     const transport = new RunnerPoolTransport(provider, manifest, () => 't')
     const err = await transport
@@ -673,5 +673,75 @@ describe('HttpRunnerPoolProvider — failure, eviction and result mapping', () =
     expect(new RunnerPoolApiError(500, "Missing secret 'API_TOKEN'").message).toContain(
       'Settings → Self-hosted runner pool',
     )
+  })
+})
+
+describe('HttpRunnerPoolProvider and the harness capability handshake', () => {
+  /** The manifest a pool that PROXIES `POST /jobs` verbatim would author: one mapped path. */
+  const mapped: RunnerPoolManifest = {
+    ...manifest,
+    response: { ...manifest.response, dispatchCapabilitiesPath: 'capabilities' },
+  }
+
+  const dispatch = (m: RunnerPoolManifest) =>
+    new HttpRunnerPoolProvider().dispatch({
+      manifest: m,
+      jobId: 'job-7',
+      spec: {},
+      resolveSecret: () => 'secret-token',
+    })
+
+  it('reads the handshake when the manifest says where it is', async () => {
+    capture('/api/jobs', 'POST', { id: 'job-7', capabilities: ['mcpServers', 'skills'] }, 202)
+    expect(await dispatch(mapped)).toEqual({ capabilities: ['mcpServers', 'skills'] })
+  })
+
+  it('reads a NESTED path, since a scheduler wraps the harness body where it likes', async () => {
+    capture('/api/jobs', 'POST', { runner: { ack: { capabilities: ['skills'] } } }, 202)
+    expect(
+      await dispatch({
+        ...manifest,
+        response: { ...manifest.response, dispatchCapabilitiesPath: 'runner.ack.capabilities' },
+      }),
+    ).toEqual({ capabilities: ['skills'] })
+  })
+
+  it("IGNORES a scheduler's own `capabilities` when the manifest maps nothing", async () => {
+    // The regression this mapping exists for. `capabilities` is an ordinary word for a scheduler
+    // to use about its own runners, and reading one of those as the harness\'s answer narrows to
+    // an EMPTY list, which downstream is `unsupported`: a hard refusal of every capability
+    // dispatch against a perfectly current image. Unmapped must mean "could not tell".
+    capture('/api/jobs', 'POST', { id: 'job-7', capabilities: ['gpu', 'docker'] }, 202)
+    expect(await dispatch(manifest)).toBeUndefined()
+  })
+
+  it('answers undefined when the mapped path holds nothing usable', async () => {
+    // A pool that mapped the path against a scheduler that later changed shape must degrade to
+    // "could not tell", never to an empty list.
+    capture('/api/jobs', 'POST', { id: 'job-7' }, 202)
+    expect(await dispatch(mapped)).toBeUndefined()
+  })
+})
+
+describe('HttpRunnerPoolProvider.release reports whether it cancelled anything', () => {
+  it('is `requested` when the manifest declares a release template', async () => {
+    // The strongest honest answer: the scheduler took the call, and nothing this side of the
+    // pool\'s control plane can see whether the runner obeyed.
+    const seen = capture('/api/jobs/job-7', 'DELETE', {}, 200)
+    const provider = new HttpRunnerPoolProvider()
+    expect(await provider.release({ manifest, jobId: 'job-7', resolveSecret: () => 't' })).toBe(
+      'requested',
+    )
+    expect(seen).toHaveLength(1)
+  })
+
+  it('is `unsupported` when it declares none, rather than a silent success', async () => {
+    // This same call is the pool\'s only CANCEL. A void return here read as a stopped job, which
+    // is how a refused blind run kept working against the repository with nobody told.
+    const { release: _release, ...noRelease } = manifest
+    const provider = new HttpRunnerPoolProvider()
+    expect(
+      await provider.release({ manifest: noRelease, jobId: 'job-7', resolveSecret: () => 't' }),
+    ).toBe('unsupported')
   })
 })

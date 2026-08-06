@@ -2,6 +2,8 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import type {
+  RunnerDispatchAck,
+  RunnerJobStopOutcome,
   RunnerDispatchKind,
   RunnerJobRef,
   RunnerJobView,
@@ -16,6 +18,7 @@ import {
   type HarnessEndpoint,
   pollHarnessJob,
   postHarnessJob,
+  stopHarnessJob,
   waitForHarnessHealth,
 } from './harnessHttp.js'
 
@@ -149,11 +152,11 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const proc = await this.ensureProcess()
     // The harness keys jobs by the per-step `ref.jobId` in the body; a re-dispatch
     // (durable-driver replay) re-POSTs, which the JobRegistry treats as a re-attach.
-    await postHarnessJob({
+    return postHarnessJob({
       fetchImpl: this.fetchImpl,
       endpoint: endpointFor(proc.port),
       secret: this.sharedSecret,
@@ -185,6 +188,30 @@ export class LocalProcessRunnerTransport implements RunnerTransport {
    */
   async release(): Promise<void> {
     // intentionally a no-op
+  }
+
+  /**
+   * Stop ONE job at the harness. This is where the split from {@link release} pays: release is a
+   * no-op here (the host process outlives every job and serves every concurrent one), so a caller
+   * that had only release had no way at all to stop a job on the native leg, and this leg runs
+   * the agent UNSANDBOXED on the developer's own machine, where a run nobody wanted keeps editing
+   * a real checkout.
+   *
+   * A dead process is a stopped job; anything else is the harness's own answer, which throws when
+   * it could not confirm the abort.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const proc = this.proc
+    if (!proc || proc.exited) return 'stopped'
+    await stopHarnessJob({
+      fetchImpl: this.fetchImpl,
+      endpoint: endpointFor(proc.port),
+      jobId: ref.jobId,
+      secret: this.sharedSecret,
+      timeoutMs: this.requestTimeoutMs,
+      label: 'Native harness',
+    })
+    return 'stopped'
   }
 
   /**

@@ -75,18 +75,27 @@ const API_PREFIX = '/api/v1'
 // more, which is the point of the note at the top of this block: on a repo landing this many
 // additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
 // someone else already published. Re-read it against `origin/main` every time.
-// 1.17.0, not 1.16.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new
-// endpoint and a new optional key). Written against 1.16.0 and moved when the multi-repo report
-// `scope` below took that number on main while this branch was in flight. Same story as every
-// entry here, and caught the same way: by re-reading this line after the merge, not by trusting
-// that the VERSION itself auto-merged clean (it did, to the wrong number).
 // 1.16.0, not 1.15.0: the run report gains an optional `scope`, naming WHICH of a multi-repo run's
 // pull requests a given copy is written onto. Additive: a consumer written against 1.15 reads every
 // field it knows, and an absent `scope` means what it always meant (the own-service PR). FIFTH
 // number this one addition has held (1.12 → 1.13 → 1.14 → 1.15 → 1.16), and 1.15 was taken by the
 // `/me` endpoint landing on main while this branch was in flight, caught by re-reading this line
 // after the merge rather than by trusting a clean auto-merge of the VERSION itself.
-const API_VERSION = '1.17.0'
+// 1.17.0, not 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by
+// `?outcome=ok|error`, the same param name and vocabulary the llm-call list already uses. This is
+// a MINOR for a change that is technically breaking, taken deliberately: `?ok=` existed for one
+// release, has no known consumer, and the two drill-downs answering the same question under two
+// spellings is the wart the change exists to remove. A picklist also lets the set gain a member (a
+// timeout, a refusal) where `true|false` could only be retyped. If an adopter turns up before this
+// lands, the honest shape is `?ok=` served beside `?outcome=` for a release, not a rename.
+// 1.18.0, not 1.17.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new
+// endpoint and a new optional key). THIRD number this one addition has held: written against
+// 1.16.0, moved to 1.17.0 when the multi-repo report `scope` took 1.16.0 on main, and moved again
+// when the `?outcome=` rename above published 1.17.0 on main while this branch was in flight. Both
+// moves were found the same way, and it is the only way that works: by re-reading this line after
+// the merge, never by trusting that the VERSION itself auto-merged clean (it did, twice, to a
+// number main had already used).
+const API_VERSION = '1.18.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a
