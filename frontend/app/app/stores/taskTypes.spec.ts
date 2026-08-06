@@ -86,6 +86,35 @@ describe('taskTypes store — custom task-type catalog (extension slice B)', () 
     expect(isKnownTaskType('acme:ws1')).toBe(false)
   })
 
+  it('still reports registered operations when the board has hidden every one of them', () => {
+    // The regression this exists for: the workspace-settings Operations tab was gated on the
+    // OFFERED catalog, which suppression empties. Hiding the last operation therefore removed the
+    // only screen that un-hides one, and nothing failed: the tab simply was not there.
+    const store = useTaskTypesStore()
+    expect(store.hasRegisteredOperations).toBe(false)
+
+    hydrate(store, [backendType('acme:kept'), backendType('acme:hidden')])
+    store.hydrateSuppressed([])
+    expect(store.hasRegisteredOperations).toBe(true)
+
+    // Every registered operation hidden: the offered catalog is empty and the screen must remain.
+    hydrate(store, [])
+    store.hydrateSuppressed(['acme:kept', 'acme:hidden'])
+    expect(store.customTaskTypes).toEqual([])
+    expect(store.hasRegisteredOperations).toBe(true)
+  })
+
+  it('drops the previous board’s suppressions on re-hydrate (per-workspace state)', () => {
+    // Assigned unconditionally rather than on truthiness: carrying a hidden list forward would
+    // leave the Operations tab standing on a board that registers nothing.
+    const store = useTaskTypesStore()
+    hydrate(store, [])
+    store.hydrateSuppressed(['acme:ws1'])
+    expect(store.hasRegisteredOperations).toBe(true)
+    store.hydrateSuppressed([])
+    expect(store.hasRegisteredOperations).toBe(false)
+  })
+
   it('get() returns the full registration (for the create-form field descriptors)', () => {
     const store = useTaskTypesStore()
     hydrate(store, [

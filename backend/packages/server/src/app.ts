@@ -45,6 +45,7 @@ import { previewController } from './modules/preview/PreviewController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { agentPromptController } from './modules/agentPrompts/AgentPromptController.js'
 import { workspaceAgentSettingsController } from './modules/agentSettings/WorkspaceAgentSettingsController.js'
+import { taskTypeSuppressionController } from './modules/taskTypes/TaskTypeSuppressionController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
@@ -380,6 +381,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
     name: 'workspaceAgentSettings',
     mount: WORKSPACE_MOUNT,
     build: () => workspaceAgentSettingsController(),
+  },
+  {
+    name: 'taskTypeSuppression',
+    mount: WORKSPACE_MOUNT,
+    build: () => taskTypeSuppressionController(),
   },
   {
     name: 'serviceFragmentDefaults',

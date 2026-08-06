@@ -18,6 +18,7 @@ public abstract class Resources {
     private final ServicesClient services;
     private final TasksClient tasks;
     private final PipelinesClient pipelines;
+    private final TaskTypesClient taskTypes;
     private final NotificationsClient notifications;
     private final WebhookClient webhook;
     private final UsageClient usage;
@@ -32,6 +33,7 @@ public abstract class Resources {
         this.services = new ServicesClient(transport);
         this.tasks = new TasksClient(transport);
         this.pipelines = new PipelinesClient(transport);
+        this.taskTypes = new TaskTypesClient(transport);
         this.notifications = new NotificationsClient(transport);
         this.webhook = new WebhookClient(transport);
         this.usage = new UsageClient(transport);
@@ -60,6 +62,11 @@ public abstract class Resources {
     /** The pipelines a task can be started with, and whether each is headless-startable. */
     public PipelinesClient pipelines() {
         return pipelines;
+    }
+
+    /** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
+    public TaskTypesClient taskTypes() {
+        return taskTypes;
     }
 
     /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */

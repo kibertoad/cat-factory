@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { HARNESS_BODY_CAPABILITIES } from './agent-capabilities.js'
 import { parseAgentJob, parseInlineJob } from './job.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
@@ -122,6 +123,7 @@ const server = createServer((req, res) => {
       return send(res, 200, {
         status: 'ok',
         ...(HARNESS_VERSION ? { version: HARNESS_VERSION } : {}),
+        capabilities: HARNESS_BODY_CAPABILITIES,
       })
     }
     // All non-health endpoints are gated by the optional shared secret.
@@ -136,6 +138,27 @@ const server = createServer((req, res) => {
         const view = registry.get(id)
         if (view) return send(res, 200, view)
       }
+      return send(res, 404, { error: 'job not found' })
+    }
+    // Stop one job: DELETE /jobs/{id}. The counterpart of the capability handshake below. A
+    // backend that reads the acceptance and decides the body cannot be honoured has, by then,
+    // already started an agent, and the only thing that keeps it from running to completion (and
+    // opening a pull request for a step the engine has failed) is being told to stop.
+    //
+    // Scoped to ONE job on purpose: a pooled container serves other runs, so the shutdown-time
+    // `abortAll` is not an alternative. The response reports the state the job actually REACHED
+    // (the registry waits for it to settle), never merely that the signal was sent, because the
+    // caller turns this into a statement to a human about whether anything is still running.
+    if (req.method === 'DELETE' && req.url?.startsWith('/jobs/')) {
+      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
+      // `abort` (not `get`) is the existence probe: `get` DRAINS the job's span / follow-up /
+      // call-metric buffers, so probing with it would swallow telemetry the backend never polled.
+      for (const { registry } of Object.values(KINDS)) {
+        const state = await registry.abort(id, 'stopped by the backend')
+        if (state) return send(res, 200, { jobId: id, state })
+      }
+      // No such job here. A 404 is NOT "already stopped": it is also what a caller addressing the
+      // wrong runner sees, so it must stay distinguishable from the 200 above.
       return send(res, 404, { error: 'job not found' })
     }
     // Start (or re-attach to) a job: POST /jobs with the kind in the body. The body's
@@ -155,7 +178,16 @@ const server = createServer((req, res) => {
         }
         const job = entry.parse(raw)
         const view = entry.registry.start(job.jobId, job as never)
-        return send(res, 202, { jobId: view.id, state: view.state })
+        // The capability handshake rides the ACCEPTANCE, not the poll view. The dispatch site
+        // is the only place the body it just sent is still in scope, and it is the last moment
+        // a blind run can be refused before the agent starts working from a prompt the body
+        // cannot back up. It is also a static fact about the IMAGE, so repeating it on every
+        // poll of a job that may run for an hour would be noise.
+        return send(res, 202, {
+          jobId: view.id,
+          state: view.state,
+          capabilities: HARNESS_BODY_CAPABILITIES,
+        })
       } catch (error) {
         // Parse failures (incl. host-allowlist rejection) are client errors → 400.
         const message = redactSecrets(error instanceof Error ? error.message : String(error))

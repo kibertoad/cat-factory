@@ -38,7 +38,7 @@ import (
 )
 
 // Version is the SDK version, stamped into User-Agent. Kept in step by `pnpm check:sdk`.
-const Version = "0.15.0"
+const Version = "0.16.0"
 
 // Options configures a Client.
 type Options struct {
@@ -82,6 +82,8 @@ type Client struct {
 	Tasks *TasksService
 	// The pipelines a task can be started with.
 	Pipelines *PipelinesService
+	// What a task can be created AS here, and the fields each type accepts.
+	TaskTypes *TaskTypesService
 	// The workspace's human-actionable inbox.
 	Notifications *NotificationsService
 	// The workspace's one outbound endpoint for pushed notifications, run events and alerts.
@@ -92,6 +94,12 @@ type Client struct {
 	Decisions *DecisionsService
 	// A run's recorded telemetry, for diagnosing one that went wrong.
 	Debug *DebugService
+	// What the calling key is and what it may do.
+	Me *MeService
+	// What a run proved: its verification report and captured artifacts.
+	Evidence *EvidenceService
+	// The workspace's own API keys.
+	Keys *KeysService
 }
 
 // New builds a Client, or returns an error when the required options are missing.
@@ -137,11 +145,15 @@ func New(options Options) (*Client, error) {
 	client.Services = &ServicesService{client: client}
 	client.Tasks = &TasksService{client: client}
 	client.Pipelines = &PipelinesService{client: client}
+	client.TaskTypes = &TaskTypesService{client: client}
 	client.Notifications = &NotificationsService{client: client}
 	client.Webhook = &WebhookService{client: client}
 	client.Usage = &UsageService{client: client}
 	client.Decisions = &DecisionsService{client: client}
 	client.Debug = &DebugService{client: client}
+	client.Me = &MeService{client: client}
+	client.Evidence = &EvidenceService{client: client}
+	client.Keys = &KeysService{client: client}
 	return client, nil
 }
 

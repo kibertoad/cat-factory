@@ -111,7 +111,7 @@ workspace is a `404`, indistinguishable from one that never existed.
 | `GET /api/v1/debug/runs/:runId/agent-context`  | Captured dispatches, **sizes only**. `?stepIndex=`, `?limit=`, `?cursor=`                                                  |
 | `GET /api/v1/debug/agent-context/:snapshotId`  | One dispatch's prompts, fragments, injected files. `?bodyChars=`, `?bodyOffset=`                                           |
 | `GET /api/v1/debug/runs/:runId/search-queries` | Web searches the run's agents performed                                                                                    |
-| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?ok=`, `?limit=`, `?cursor=`                     |
+| `GET /api/v1/debug/runs/:runId/tool-calls`     | Tool calls the run's agents made, bodies included. `?order=`, `?jobId=`, `?outcome=`, `?limit=`, `?cursor=`                |
 | `GET /api/v1/debug/runs/:runId/logs`           | The run's provisioning event log                                                                                           |
 
 The tool-call list is the one that returns its rows WHOLE, bodies and all, and it can do so under
@@ -132,8 +132,8 @@ dispatches by agent-kind spelling and its re-runs `-10` before `-2`. The server 
 each call actually STARTED, with `seq` separating the calls that share a millisecond.
 
 Both orders take `?jobId=` to narrow to ONE dispatch, which is how "what did the third ci-fixer
-round actually do, in order" is asked, and `?ok=true|false` to narrow to the calls that worked or
-the ones that did not. `?ok=false` is the drill-down behind the overview's tool-call failure
+round actually do, in order" is asked, and `?outcome=ok|error` to narrow to the calls that worked
+or the ones that did not. `?outcome=error` is the drill-down behind the overview's tool-call failure
 counts, and it is applied in SQL like every other narrowing here: a caller filtering a page
 itself has already paid for the rows it discards and has spent the page's `limit` on them, so on
 a run whose failures sit behind a hundred successful calls it returns none of them. Pairing it
@@ -182,14 +182,14 @@ The failure classes and where each one's evidence lives:
   between an agent re-running something that cannot work and one meeting the occasional failing
   command. It considers EVERY cell rather than the run's most-failed one, or a fixer wedged
   5-for-5 on `apply_patch` goes unreported behind a coder's 6 failures across 100 healthy `bash`
-  calls. Drill in with `/tool-calls?ok=false`, and add `&order=trajectory` to see the loop in the
+  calls. Drill in with `/tool-calls?outcome=error`, and add `&order=trajectory` to see the loop in the
   order it ran.
 - **`failure_outside_model_calls`: the run died while every MODEL call looks healthy.** The signal
   is computed off the LLM sink alone, where each call still reports `ok` with a clean finish
   reason, so it fires on a failure the model side cannot explain: tool execution inside the
   container, or the engine. Its message reads the trajectory sink and says which of THREE cases
   this is, because they need different next steps: failing tool calls exist (start at
-  `/tool-calls?ok=false`, `?jobId=` to narrow to the dispatch that died, where each failure is a
+  `/tool-calls?outcome=error`, `?jobId=` to narrow to the dispatch that died, where each failure is a
   row with the tool's own error text in `result`); a recorded loop in which nothing failed (so
   what is left is the engine); or no trajectory at all, either because the sink is unwired or
   because this run captured none, which is unrecorded rather than uneventful. One gap stays

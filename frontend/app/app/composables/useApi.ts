@@ -4,6 +4,7 @@ import type { ApiContext } from './api/context'
 import { accountsApi } from './api/accounts'
 import { agentPromptsApi } from './api/agentPrompts'
 import { agentSettingsApi } from './api/agentSettings'
+import { taskTypeSuppressionsApi } from './api/taskTypeSuppressions'
 import { platformObservabilityApi } from './api/platformObservability'
 import { reportsApi } from './api/reports'
 import { authApi } from './api/auth'
@@ -144,6 +145,7 @@ export function useApi() {
     ...presetsApi(ctx),
     ...agentPromptsApi(ctx),
     ...agentSettingsApi(ctx),
+    ...taskTypeSuppressionsApi(ctx),
     ...preflightsApi(ctx),
     ...publicApiKeysApi(ctx),
     ...sharedStacksApi(ctx),

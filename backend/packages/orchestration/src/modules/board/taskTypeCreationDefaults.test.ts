@@ -13,7 +13,10 @@ import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 describe('taskTypeCreationDefaults', () => {
   afterEach(() => clearRegisteredTaskTypeDefaultFragments())
 
-  function build(register?: Parameters<ReturnType<typeof defaultTaskTypeRegistry>['register']>[0]) {
+  function build(
+    register?: Parameters<ReturnType<typeof defaultTaskTypeRegistry>['register']>[0],
+    suppressed: string[] = [],
+  ) {
     const lines: RecordedLogLine[] = []
     const taskTypeRegistry = defaultTaskTypeRegistry()
     if (register) taskTypeRegistry.register(register)
@@ -21,6 +24,11 @@ describe('taskTypeCreationDefaults', () => {
       lines,
       defaults: createTaskTypeCreationDefaults({
         taskTypeRegistry,
+        taskTypeSuppressionRepository: {
+          list: async () => suppressed,
+          suppress: async () => {},
+          restore: async () => {},
+        },
         logger: createRecordingLogger(lines),
       }),
     }
@@ -177,6 +185,103 @@ describe('taskTypeCreationDefaults', () => {
         unregistered.validatedFields('org:unknown-op', { custom: { anything: 'goes' } }),
       ).toEqual({ custom: { anything: 'goes' } })
       expect(defaults.validatedFields('feature', undefined)).toBeUndefined()
+    })
+  })
+
+  describe('descriptor defaults at the creation door', () => {
+    const WITH_DEFAULT = {
+      ...OPERATION,
+      fields: [
+        { key: 'entity', label: 'Entity', type: 'text' as const, required: true },
+        {
+          key: 'auth',
+          label: 'Auth',
+          type: 'select' as const,
+          required: true,
+          default: 'service',
+          options: [
+            { value: 'service', label: 'Service token' },
+            { value: 'user', label: 'User token' },
+          ],
+        },
+      ],
+    }
+
+    it('answers a required-and-defaulted field the caller omitted', () => {
+      // The gap this closed: the SPA seeded `auth` before submitting, so only a headless caller
+      // ever saw the refusal, for a value the deployment had already declared.
+      const { defaults } = build(WITH_DEFAULT)
+      expect(
+        defaults.validatedFields('org:introduce-api', { custom: { entity: 'Order' } }),
+      ).toEqual({ custom: { entity: 'Order', auth: 'service' } })
+    })
+
+    it('never overrides a value the caller did send', () => {
+      const { defaults } = build(WITH_DEFAULT)
+      expect(
+        defaults.validatedFields('org:introduce-api', {
+          custom: { entity: 'Order', auth: 'user' },
+        }),
+      ).toEqual({ custom: { entity: 'Order', auth: 'user' } })
+    })
+
+    it('still refuses a required field that has NO default', () => {
+      const { defaults } = build(WITH_DEFAULT)
+      expect(() =>
+        defaults.validatedFields('org:introduce-api', { custom: { auth: 'user' } }),
+      ).toThrow(/entity/)
+    })
+  })
+
+  describe('suppression', () => {
+    it('refuses a task of an operation this workspace hid', async () => {
+      const { defaults } = build(OPERATION, ['org:introduce-api'])
+      await expect(defaults.assertNotSuppressed('ws1', 'org:introduce-api')).rejects.toThrow(
+        /not offered on this board/,
+      )
+    })
+
+    it('allows an operation this workspace did not hide, and every built-in type', async () => {
+      const { defaults } = build(OPERATION, ['org:other-op'])
+      await expect(
+        defaults.assertNotSuppressed('ws1', 'org:introduce-api'),
+      ).resolves.toBeUndefined()
+      // A built-in short-circuits without a query at all: built-ins are not suppressible, so every
+      // ordinary `feature` creation would otherwise pay a read to learn nothing.
+      await expect(defaults.assertNotSuppressed('ws1', 'feature')).resolves.toBeUndefined()
+    })
+
+    it('passes everything through when no suppression store is wired', async () => {
+      const defaults = createTaskTypeCreationDefaults({
+        taskTypeRegistry: defaultTaskTypeRegistry(),
+        logger: createRecordingLogger([]),
+      })
+      await expect(
+        defaults.assertNotSuppressed('ws1', 'org:introduce-api'),
+      ).resolves.toBeUndefined()
+    })
+
+    it('PROPAGATES an unreadable store rather than creating the task anyway', async () => {
+      // The half of the split posture that lives at this door, and the one worth a test: the
+      // snapshot's read of the same rows degrades to \"nothing suppressed\" on purpose
+      // (`TaskTypeSuppressionService.test.ts`), because it renders a picker. This one decides
+      // whether a ROW IS WRITTEN, and it hits the same database the insert on the next line goes
+      // to, so there is no outage to ride out: swallowing here creates the task the workspace
+      // asked not to have and reports nothing.
+      const defaults = createTaskTypeCreationDefaults({
+        taskTypeRegistry: defaultTaskTypeRegistry(),
+        taskTypeSuppressionRepository: {
+          list: async () => {
+            throw new Error('store unreachable')
+          },
+          suppress: async () => {},
+          restore: async () => {},
+        },
+        logger: createRecordingLogger([]),
+      })
+      await expect(defaults.assertNotSuppressed('ws1', 'org:introduce-api')).rejects.toThrow(
+        /store unreachable/,
+      )
     })
   })
 

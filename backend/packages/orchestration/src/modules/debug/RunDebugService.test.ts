@@ -204,6 +204,10 @@ describe('RunDebugService with unwired sinks', () => {
       llmCalls: { available: false, count: 0 },
       agentContext: { available: false, count: 0 },
       searchQueries: { available: false, count: 0 },
+      // The tool-call sink carries no failure count of its own: it lives on the `toolCalls`
+      // rollup, folded from the same aggregate this `count` comes from. So an unwired sink says
+      // `available: false` here and reports a null failure RATE there, and neither reads as a
+      // run whose every tool call worked.
       toolCalls: { available: false, count: 0 },
       provisioningLog: { available: false, count: 0 },
     })

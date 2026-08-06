@@ -30,6 +30,7 @@ import type {
   ServiceRepository,
   TaskRepository,
   TaskTypeRegistry,
+  TaskTypeSuppressionRepository,
   WorkspaceMount,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -148,6 +149,13 @@ export interface BoardServiceDependencies {
    */
   taskTypeRegistry?: TaskTypeRegistry
   /**
+   * Which registered custom task types the ACTING workspace hides (a reusable operation an admin
+   * suppressed; `backend/docs/reusable-operations.md`). Wired ⇒ creating a task of a suppressed
+   * type is refused server-side, so no door bypasses the picker the suppression removed it from.
+   * Absent (tests / an unwired facade) ⇒ nothing is suppressed, today's behaviour.
+   */
+  taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
+  /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
    *    (`backend/docs/review-debt-friction.md`) — with this AND
@@ -263,6 +271,7 @@ export class BoardService {
     taskRepository,
     executionEventPublisher,
     taskTypeRegistry,
+    taskTypeSuppressionRepository,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -298,6 +307,7 @@ export class BoardService {
     })
     this.taskTypeDefaults = createTaskTypeCreationDefaults({
       taskTypeRegistry,
+      taskTypeSuppressionRepository,
       logger: this.log,
     })
     this.riskPolicySelection = createRiskPolicySelectionGuard({ riskPolicyRepository })
@@ -740,6 +750,11 @@ export class BoardService {
     const service = serviceOf(blocks, container)
     const taskType = input.taskType ?? 'feature'
     this.assertTaskTypeAllowed(service, taskType)
+    // A reusable operation a workspace admin HID is refused here, not only kept out of the picker:
+    // the internal API, the public API, an initiative spawn and a tracker import all reach this
+    // method without ever seeing one. Runs in the ACTING workspace's context, like the friction
+    // guard above, and before any side effect.
+    await this.taskTypeDefaults.assertNotSuppressed(workspaceId, taskType)
     const block: Block = {
       id: this.idGenerator.next('task'),
       title: input.title.trim(),

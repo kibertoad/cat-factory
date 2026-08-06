@@ -1,7 +1,9 @@
 import type {
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -34,6 +36,10 @@ export class RunnerJobClient {
    * Start (or idempotently re-attach to) job `ref` for `workspaceId`. `kind`
    * selects the harness endpoint; the Cloudflare backend serves every kind, a
    * self-hosted pool only `run` (and throws a clear "unsupported" for the rest).
+   *
+   * Forwards the harness's {@link RunnerDispatchAck} through verbatim (undefined where the
+   * backend could not see it), because the capability handshake it carries can only be acted on
+   * by the caller that built the body.
    */
   async dispatch(
     workspaceId: string | undefined,
@@ -41,9 +47,9 @@ export class RunnerJobClient {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const transport = await this.resolveTransport(workspaceId)
-    await transport.dispatch(ref, spec, kind, options)
+    return (await transport.dispatch(ref, spec, kind, options)) ?? undefined
   }
 
   /** Poll the job's current state from the same backend it dispatched to. */
@@ -66,5 +72,19 @@ export class RunnerJobClient {
   async release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
     await transport.release?.(ref)
+  }
+
+  /**
+   * Stop the single in-flight job `ref.jobId` on the backend it dispatched to, and report what
+   * that achieved (see {@link RunnerJobStopOutcome}).
+   *
+   * A transport with no `stopJob` answers `unsupported` rather than resolving quietly, because
+   * the caller (the capability refusal) turns this into a statement to a human about whether an
+   * agent is still working against their repository. Silence would be read as a stop.
+   */
+  async stopJob(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const transport = await this.resolveTransport(workspaceId)
+    if (!transport.stopJob) return 'unsupported'
+    return transport.stopJob(ref)
   }
 }

@@ -7,12 +7,14 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code CreatePublicTask} wire model.
  * @param description May be absent entirely. Length 0..2000.
  * @param documents May be absent entirely.
+ * @param fields May be absent entirely.
  * @param taskType May be absent entirely.
  * @param ticket May be absent entirely.
  * @param title Length 1..200.
@@ -24,6 +26,9 @@ public record CreatePublicTask(
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("documents") @Nullable List<PublicTaskDocument> documents,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("fields") @Nullable Map<String, CreatePublicTaskFieldsValue> fields,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("taskType") @Nullable String taskType,
@@ -49,6 +54,7 @@ public record CreatePublicTask(
     public static final class Builder {
         private @Nullable String description;
         private @Nullable List<PublicTaskDocument> documents;
+        private @Nullable Map<String, CreatePublicTaskFieldsValue> fields;
         private @Nullable String taskType;
         private @Nullable PublicTaskTicket ticket;
         private @Nullable String title;
@@ -62,6 +68,12 @@ public record CreatePublicTask(
         /** Set {@code documents}. */
         public Builder documents(@Nullable List<PublicTaskDocument> documents) {
             this.documents = documents;
+            return this;
+        }
+
+        /** Set {@code fields}. */
+        public Builder fields(@Nullable Map<String, CreatePublicTaskFieldsValue> fields) {
+            this.fields = fields;
             return this;
         }
 
@@ -85,7 +97,7 @@ public record CreatePublicTask(
 
         /** Build the {@link CreatePublicTask}. */
         public CreatePublicTask build() {
-            return new CreatePublicTask(description, documents, taskType, ticket, title);
+            return new CreatePublicTask(description, documents, fields, taskType, ticket, title);
         }
     }
 }

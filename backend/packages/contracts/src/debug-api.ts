@@ -4,9 +4,12 @@ import { runDiagnosticsSchema } from './run-provenance.js'
 import {
   agentSearchQuerySchema,
   agentToolCallSchema,
+  llmCallOutcomeSchema,
   llmExportInsightSchema,
   llmExportTotalsSchema,
   llmPhaseInsightSchema,
+  toolCallOutcomeSchema,
+  type LlmCallOutcome,
 } from './observability.js'
 import { provisioningLogEntrySchema } from './provisioning-logs.js'
 
@@ -309,6 +312,12 @@ export const debugSinkStatusSchema = v.object({
 })
 export type DebugSinkStatus = v.InferOutput<typeof debugSinkStatusSchema>
 
+// How many of the run's tool calls FAILED is deliberately NOT a field here. It is one number the
+// other four sinks have no analogue for, and it lives on the `toolCalls` rollup beside the
+// breakdown it is folded from (`totals.failures`), because that rollup and the sink's `count` come
+// out of ONE aggregate pass. A second copy on the sink status could only ever be a second read of
+// the same rows, which is how a `failed` above its own `count` gets published.
+
 /** Severity of a derived diagnostic signal. */
 export const debugSignalSeveritySchema = v.picklist(['info', 'warning', 'error'])
 export type DebugSignalSeverity = v.InferOutput<typeof debugSignalSeveritySchema>
@@ -448,9 +457,16 @@ export type DebugRunOverview = v.InferOutput<typeof debugRunOverviewSchema>
 // 3./4. LLM calls — `GET /api/v1/debug/runs/:runId/llm-calls`, `GET /api/v1/debug/llm-calls/:callId`
 // ---------------------------------------------------------------------------
 
-/** Classification of a recorded call, precomputed so a caller need not re-derive it. */
-export const debugCallOutcomeSchema = v.picklist(['ok', 'warning', 'error'])
-export type DebugCallOutcome = v.InferOutput<typeof debugCallOutcomeSchema>
+/**
+ * Classification of a recorded call, precomputed so a caller need not re-derive it.
+ *
+ * THE SAME picklist the panel badges and both filters narrow by ({@link llmCallOutcomeSchema}),
+ * aliased rather than restated: two declarations of one closed vocabulary is a member added to
+ * one and missing from the other, and on this surface that reads as a debug client being told a
+ * whole class of call does not exist.
+ */
+export const debugCallOutcomeSchema = llmCallOutcomeSchema
+export type DebugCallOutcome = LlmCallOutcome
 
 /** Chronological direction a call page walks in. */
 export const debugCallOrderSchema = v.picklist(['newest', 'oldest'])
@@ -785,26 +801,11 @@ export const toolCallOrderSchema = v.picklist(['recent', 'trajectory'])
 export type ToolCallOrder = v.InferOutput<typeof toolCallOrderSchema>
 
 /**
- * Whether to narrow a tool-call page to the calls that FAILED or the ones that worked.
- *
- * A string enum rather than a wire boolean, because it is a query parameter: `?ok=false`
- * arrives as text either way, and the enum says so in the spec instead of declaring a type the
- * transport cannot carry.
- *
- * Applied in SQL, like every other narrowing here. A caller filtering a page itself has already
- * paid for the rows it throws away and has spent the page's `limit` on them, which on this list
- * is worse than elsewhere: the failures it asked for fall off the end of a page filled with the
- * calls that worked.
- */
-export const toolCallOkFilterSchema = v.picklist(['true', 'false'])
-export type ToolCallOkFilter = v.InferOutput<typeof toolCallOkFilterSchema>
-
-/**
  * Query params for the tool-call trajectory list. It takes the small-row page params plus three
  * of its own: the {@link toolCallOrderSchema order}; a dispatch filter, because a run's step
  * can dispatch more than once (a re-run, a gate's fixer rounds, a Ralph iteration) and "what did
  * the third ci-fixer round actually do" is a different question from "what did this run do"; and
- * the {@link toolCallOkFilterSchema outcome} filter, which is how the overview's failure counts
+ * the {@link toolCallOutcomeSchema outcome} filter, which is how the overview's failure counts
  * are turned into the rows behind them.
  */
 export const listDebugToolCallsQuerySchema = v.object({
@@ -812,7 +813,23 @@ export const listDebugToolCallsQuerySchema = v.object({
   cursor: v.optional(cursorSchema),
   jobId: v.optional(v.string()),
   order: v.optional(toolCallOrderSchema),
-  ok: v.optional(toolCallOkFilterSchema),
+  /**
+   * Narrow to the calls that FAILED (`error`) or the ones that did not (`ok`), applied in SQL
+   * like every other narrowing here: a filter applied after the read has already paid for the
+   * rows it discards, and spends the page's `limit` on them, which on this sink is the difference
+   * between one request and paging a thousand-call trajectory to find the four rows that matter.
+   *
+   * It composes with both orders. `order=trajectory&outcome=error` is the failing calls in the
+   * sequence the agent made them, which is how a stuck edit loop (the same tool failing the same
+   * way, round after round) is told apart from one tool that failed once and was worked around.
+   *
+   * THE SAME param name and vocabulary as the llm-call list's `outcome`, deliberately: the two
+   * drill-downs answer the same question about different sinks, and a reader who learned one
+   * should not have to discover that the other spells it `ok=false`. A picklist rather than a
+   * wire boolean for the reason a query param always is text, and so the set can gain a member
+   * (a timeout, a refusal) without retyping a published field.
+   */
+  outcome: v.optional(toolCallOutcomeSchema),
 })
 export type ListDebugToolCallsQuery = v.InferOutput<typeof listDebugToolCallsQuerySchema>
 

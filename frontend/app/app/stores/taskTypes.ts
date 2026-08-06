@@ -28,6 +28,11 @@ export const useTaskTypesStore = defineStore('taskTypes', () => {
   // The active per-workspace capability manifest (shared with the agents store), or null before
   // the first hydrate. This store reads only its own `taskTypes` slot off it.
   const capabilitiesManifest = ref<RemoteModuleManifest<AppSlots> | null>(null)
+  // The BACKEND-registered ids this board HIDES (`snapshot.suppressedTaskTypes`). Not part of the
+  // catalog above by construction (a suppressed type must not be creatable), but the board did
+  // decide about it, and that decision is the difference between a deployment with no operations
+  // and one whose operations are all hidden. See {@link hasRegisteredOperations}.
+  const suppressedTaskTypes = ref<string[]>([])
 
   /**
    * The merged CUSTOM task types (consumer-slot → backend-manifest), de-duplicated and never
@@ -46,6 +51,23 @@ export const useTaskTypesStore = defineStore('taskTypes', () => {
     for (const t of capabilitiesManifest.value?.slots?.taskTypes ?? []) add(t)
     return out
   })
+
+  /**
+   * Whether this deployment registers any REUSABLE OPERATION on the backend, hidden or not: what
+   * decides whether the workspace-settings Operations tab exists.
+   *
+   * Deliberately NOT `customTaskTypes.length`. That list is what the board OFFERS, so hiding the
+   * last operation empties it and the tab that un-hides one would disappear with it, leaving no
+   * way back short of an API call. The suppressed ids are the other half of the same catalog.
+   *
+   * Consumer CODE-shipped types are excluded on purpose: they have no backend row to suppress, so
+   * a deployment that ships only those has nothing for that screen to manage.
+   */
+  const hasRegisteredOperations = computed<boolean>(
+    () =>
+      (capabilitiesManifest.value?.slots?.taskTypes ?? []).length > 0 ||
+      suppressedTaskTypes.value.length > 0,
+  )
 
   /** The custom types indexed by id, for a per-type lookup (e.g. the create-form field descriptors). */
   const byTaskType = computed<Record<string, CustomTaskType>>(() =>
@@ -84,5 +106,22 @@ export const useTaskTypesStore = defineStore('taskTypes', () => {
     capabilitiesManifest.value = manifest
   }
 
-  return { customTaskTypes, get, registerConsumerTaskTypes, hydrateCapabilities }
+  /**
+   * The suppressed-id half of the same snapshot read. Assigned unconditionally (an absent field is
+   * an empty list): this is per-WORKSPACE state, so carrying the previous board's answer forward
+   * would leave the Operations tab standing on a board that hid nothing.
+   */
+  function hydrateSuppressed(ids: readonly string[]) {
+    suppressedTaskTypes.value = [...ids]
+  }
+
+  return {
+    customTaskTypes,
+    suppressedTaskTypes,
+    hasRegisteredOperations,
+    get,
+    registerConsumerTaskTypes,
+    hydrateCapabilities,
+    hydrateSuppressed,
+  }
 })

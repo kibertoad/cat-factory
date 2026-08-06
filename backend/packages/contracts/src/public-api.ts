@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { documentSourceKindSchema } from './documents.js'
+import { descriptorFieldValuesSchema } from './form-fields.js'
 import { notificationSchema } from './notifications.js'
 import { blockTypeSchema, createTaskTypeSchema, taskTypeSchema } from './primitives.js'
 import { publicApiScopeSchema } from './public-api-keys.js'
@@ -349,6 +350,27 @@ export const createPublicTaskSchema = v.object({
    * known here. Overflowing it refuses the run's first dispatch and names what did not fit.
    */
   documents: v.optional(v.pipe(v.array(publicTaskDocumentSchema), v.maxLength(MAX_TASK_DOCUMENTS))),
+  /**
+   * The per-case values for the chosen `taskType`'s form, keyed by field. Omitted ⇒ an unfilled
+   * task, exactly as before.
+   *
+   * This is what makes a REUSABLE OPERATION invocable headlessly
+   * (`backend/docs/reusable-operations.md`): a deployment's `acme:introduce-api` was creatable over
+   * this API from the day custom types existed, but not one of its declared fields was fillable, so
+   * every run started with the brief its form exists to collect left blank.
+   *
+   * `GET /api/v1/task-types` serves the descriptors this is checked against (for a registered
+   * custom type the ones the deployment declared, for a built-in type the fields listed in
+   * `BUILTIN_PUBLIC_TASK_FIELDS`), so a caller can read what to send rather than guess. The check
+   * is the SAME shared rule the app's own create form and the internal API run: unknown keys,
+   * wrong types, values outside a picklist and unanswered required fields are each a `422` with
+   * `details.reason: 'task_type_fields_invalid'` and a `problems` list naming every one of them.
+   *
+   * Values are JSON-native (string, number, boolean, or a string array for a multi-select), and a
+   * field the descriptor gives a DEFAULT is filled from it when omitted, so a caller restates only
+   * what it actually decides.
+   */
+  fields: v.optional(descriptorFieldValuesSchema),
 })
 export type CreatePublicTaskInput = v.InferOutput<typeof createPublicTaskSchema>
 

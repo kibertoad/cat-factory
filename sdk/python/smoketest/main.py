@@ -92,6 +92,26 @@ def list_pipelines() -> None:
     state["pipeline_id"] = startable[0].pipeline_id if startable else ""
 
 
+def list_task_types() -> None:
+    result = client.task_types.list()
+    observations["taskTypeCount"] = len(result.task_types)
+    # The `bug` descriptors, which every deployment has: the count plus one field's declared type,
+    # so four SDKs comparing reports catch one of them dropping the nested option list or decoding
+    # an optional `type` differently.
+    bug = next((t for t in result.task_types if t.task_type == "bug"), None)
+    fields = bug.fields if bug else []
+    severity = next((f for f in fields if f.key == "severity"), None)
+    observations["bugFieldCount"] = len(fields)
+    # `type_`, not `type`: the emitter suffixes a wire field whose name is a Python keyword, and
+    # this is the first descriptor field to hit that rule here (`NotificationType` and
+    # `PublicServiceType` already read the same way).
+    # `str()`, not `.value`: an UNKNOWN member decodes to a plain string by design, which has no
+    # `.value`, and a `StrEnum` formats as its wire string either way.
+    field_type = severity.type_ if severity else None
+    observations["bugSeverityFieldType"] = str(field_type) if field_type else ""
+    observations["bugSeverityOptionCount"] = len(severity.options) if severity and severity.options else 0
+
+
 def create_task() -> None:
     task = client.tasks.create(
         state["service_id"],
@@ -262,6 +282,7 @@ def delete_task() -> None:
 
 step("services.list", list_services)
 step("pipelines.list", list_pipelines)
+step("taskTypes.list", list_task_types)
 step("tasks.create", create_task)
 step("tasks.update", update_task)
 step("tasks.get", get_task)

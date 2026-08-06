@@ -1,5 +1,166 @@
 # @cat-factory/app
 
+## 0.234.0
+
+### Minor Changes
+
+- 4c071ec: Close the last committed gaps in reusable operations: hide one per board, invoke one headlessly.
+
+  Five changes, landed together because the last two turned out to depend on each other: the public
+  task-type catalog has to honour suppression (a type it lists and creation then refuses is worse than
+  one it omits), and both read the registry through the same projection the board snapshot does.
+
+  - **Per-workspace suppression.** An org registers its operations process-wide, so twenty of them
+    flood the picker of a team that runs three. A workspace admin (`settings.manage`) now hides the
+    ones that board does not use. Tombstones in a new `task_type_suppressions` table (D1 ⇄ Drizzle,
+    with conformance), so ABSENCE is the default and a newly registered operation reaches every board
+    until somebody hides it: the only direction whose silent failure is a surplus rather than a
+    withheld capability. Three readers, and their failure postures differ on purpose: the board
+    snapshot and the public catalog are best-effort (a picker must not take a board load down over a
+    cosmetic preference), while `BoardService.addTask` PROPAGATES, because it decides whether a row is
+    written and hits the same database as the insert. The creation refusal is what makes the hiding
+    real: the internal API, the public API, an initiative spawn and a tracker import all reach
+    `addTask` without ever seeing a picker. Built-in types stay unsuppressible (they carry hardcoded
+    creation affordances). Mothership bucket: `remote`, because the catalog is code and the hide-list
+    is data.
+
+  - **Public API: discover a form, then fill it.** `/api/v1` could always NAME a task type and fill
+    none of it, so a headless caller filed an operation and every agent in the run worked from a blank
+    form. `GET /api/v1/task-types` (`read`) serves the built-in types plus this workspace's registered,
+    non-suppressed ones with the fields each accepts; `fields` on task creation fills them, landing in
+    `taskTypeFields.custom` for a custom type and on the schema-typed top-level keys for a built-in
+    one, so existing creation machinery runs unchanged. Additive per ADR 0034: OpenAPI `info.version`
+    → 1.18.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
+    rather than the descriptors-plus-hand-written-OpenAPI-shape the design sketched, so what discovery
+    advertises is exactly what creation validates, through the shared `validateDescriptorFields` the
+    app's own form runs. Refusal is a 422 with `details.reason: 'task_type_fields_invalid'` carrying
+    every problem at once.
+
+  - **Descriptor defaults apply at the door, not in the form.** `withDescriptorFieldDefaults` runs
+    server-side at both descriptor doors (a custom type's creation bag and an initiative preset's
+    inputs) before validate + sanitize. A field that is both `required` and defaulted was accepted
+    from the SPA (which had already seeded it) and refused for every other caller, which had no way
+    to know it must restate a value the deployment already declared. The SPA now seeds from the same
+    shared helper rather than its own copy. Consequence worth naming: because defaults are
+    authoritative, a `select` default outside its own options is now a boot ERROR
+    (`task_type_field_default_outside_options`) instead of a form that merely opened oddly.
+
+  - **The new-pipeline advisory names a pipeline instead of humanising its id.** `pipelineCatalogNames`
+    rides beside `pipelineCatalogVersions`, built from the same `seedPipelines()` read so the two
+    cannot list different ids. Humanising was fine for shipped built-ins and wrong the moment a
+    deployment registered its own: `pl_org_introduce_api` was offered as "org introduce api", on
+    exactly the boards that predate an operation and therefore see this advisory.
+
+  - **The Go SDK client's accessor list was three groups stale.** `me`, `evidence` and `keys`
+    generated services that nothing constructed, so those endpoints were uncallable from Go while
+    every drift check passed. All are wired, and `check-sdks.mjs` now fails on a resource group Go's
+    hand-written client never constructs. Two emitters had the sibling latent bug: group names are
+    camelCase in the surface table and every group was one word until `taskTypes`, so Python now
+    snake-cases them (`client.task_types`) and so does the MCP facade, whose tool name and group are
+    the strings a HOST allow-lists and a model calls (`task_types_list`, and `task_types` in
+    `CAT_FACTORY_MCP_GROUPS`). A NEW resource group, as opposed to a new operation, is what exercises
+    those paths.
+
+  Breaks, all internal and unreleased: `CoreDependencies` and `BoardServiceDependencies` gain an
+  optional `taskTypeSuppressionRepository`; `snapshotRegistryProjections` takes an optional workspace
+  id (absent at workspace-create, which cannot have hidden anything); `PublicTaskCreationDeps` gains
+  `taskTypeRegistry`; the snapshot gains `suppressedTaskTypes`; the Python SDK's and the MCP
+  facade's multi-word resource names are now snake_case.
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+
+## 0.233.0
+
+### Minor Changes
+
+- 3fbc87e: Failing-call-first debugging: pin what broke, and let both drill-downs narrow to it
+
+  The observability panel already held everything needed to diagnose a run, and asked an operator to
+  find it by scrolling. Worse, one whole failure class had nowhere to be found from: a tool that
+  errors executes INSIDE the container, so the model call that requested it still records `ok` with a
+  clean finish reason. Every LLM number on the panel, and every rollup on the debug overview, reads
+  healthy right up to the moment the run dies. The remote-debugging doc named this as a known
+  limitation ("tool-execution errors are rows, but no rollup counts them"); this closes it on both
+  surfaces.
+
+  **The panel opens with the failure.** A pinned section above the lists carries the run's structured
+  `failure` record (kind, message, hint, the step it died on) beside the last model call that failed
+  and the last tool call that failed, each with a count of the earlier ones and a jump into the list.
+  It appears whenever there is something to pin rather than only on `status === 'failed'`: a run still
+  in flight whose calls are already erroring is exactly the one worth interrupting.
+
+  The two evidence rows are shown in a fixed order and are deliberately NOT ranked against each other.
+  They come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
+  `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
+  wrong ordering is worse than none in a section whose whole job is to be believed.
+
+  **When nothing failing can be pinned, it says which of four things that means.** A sink's read
+  FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+  failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+  before any agent work); or one answered with rows and the other did not. A single "no failures
+  found" would render a clean bill of health over a run that died with no telemetry at all, which is
+  the same false picture in the opposite direction. A read still in flight is none of the four: the
+  section withholds every verdict until both sinks have answered.
+
+  **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
+  with live counts, split that way because a failed call and a truncated one need different fixes
+  (transport, proxy or spend-gate trouble versus an output-limit conversation). The tool-call
+  trajectory is a new panel view with `All / Failed / OK`, keeping trajectory order under every
+  filter: reading the failures in sequence is what tells one tool that failed and was worked around
+  from an edit loop stuck repeating the same failing call.
+
+  On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+  `?outcome=ok|error`, composing with both orders and with `?jobId=`.
+  `failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+  it unconditionally.
+
+  **That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+  change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+  two drill-downs answering the same question under two spellings is the wart this change exists to
+  remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+  the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+  refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+  have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+  The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+  onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+  could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+  published.
+
+  The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
+  than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
+  the read would report no failures on any run whose failures came after its opening moves. Internal
+  break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+  folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+  own.
+
+  **The panel obeys the same prefix rule the stores do.** It reads the sink through two
+  workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+  run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+  SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+  every captured argument and result the run produced. Folding them into one read would either make
+  the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+  the run's name, and the second is the same false all-clear from the other direction. The trajectory
+  now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+  everything the run did.
+
+  **One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+  vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+  existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+  `debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+  one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+  Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+  as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+
 ## 0.232.2
 
 ### Patch Changes

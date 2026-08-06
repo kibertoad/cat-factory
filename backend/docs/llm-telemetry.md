@@ -180,6 +180,43 @@ the backend drains a window's worth on its existing job poll and sends it to two
 - **The gate is applied ONCE, at the drain** (`toolTrajectory.ts`), not in either destination:
   the store and the external trace sinks receive the same already-gated batch. Reading it per
   destination is how a body withheld from the store gets shipped to Langfuse anyway.
+- **A FAILING tool call is the one failure class no other sink can see.** The tool executes inside
+  the container, so the model call that requested it still records `ok` with a clean finish reason
+  and every `llm_call_metrics` rollup reads healthy on a run whose edit loop is wedged. Both reads
+  therefore narrow on it in SQL (`ok?: boolean` on the port, `?outcome=ok|error` on the debug list,
+  which is the same param name and vocabulary the llm-call list uses), and `summarizeByExecution`
+  returns the `(agentKind, tool)` cells from ONE aggregate pass, which the overview folds into
+  `toolCalls.totals` and derives a `tool_calls_failed` signal from. The count lives THERE and not
+  on `sinks.toolCalls` as well: a second copy could only be a second read of the same rows, which
+  is how a `failed` above its own `count` gets published. Narrowing in SQL rather than after the
+  read is what makes it correct on a long run: the
+  trajectory read is bounded to a PREFIX, so a post-filter would report no failures on any run
+  whose failures came after its opening moves.
+
+The SPA reads this sink through TWO workspace-scoped routes, at two different bounds, and the
+split is load-bearing rather than an optimisation:
+
+- `GET /workspaces/:ws/executions/:id/tool-call-failures` is the panel's HEADLINE, made on open.
+  It answers `{ total, failed, failures, failuresTruncated }`: the counts are the store's one
+  aggregate pass over the whole run, and the rows are the failing calls, narrowed in SQL and
+  bounded separately from the trajectory. Every number the pinned "what failed" section prints
+  comes from here.
+- `GET /workspaces/:ws/executions/:id/tool-calls` is the BROWSE read, made when the trajectory is
+  actually opened. Oldest-first, bounded, and carrying every captured argument and result, which
+  is why it is not on the panel's critical path.
+
+The reason they are separate is the prefix. The trajectory's bound takes the oldest end, so a
+long run's rows are its opening moves; counting failures off them would report zero on exactly
+the runs whose failures came later. That is the same mistake a post-read filter makes in the
+store, one layer up, and it fails the same way: silently, with a confident all-clear. So the
+trajectory reports `truncated` rather than presenting a prefix as a run, and the panel's counts
+never come from it.
+
+The panel holds four statements apart, not one: a failing call was found; both sinks answered and
+nothing failed; a sink answered with nothing recorded; and a sink DID NOT ANSWER (its read
+failed). The last outranks the rest, because each of the others is a claim about the run and that
+one is the case where there is no standing to make one. Rendering any of them alike puts a clean
+bill of health over a run that died.
 
 On the trace side the bodies ride span EVENTS (`gen_ai.tool.arguments` / `gen_ai.tool.result`)
 rather than attributes, like a generation's prompt and for the same reason: they are payloads,

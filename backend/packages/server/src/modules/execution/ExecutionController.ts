@@ -5,6 +5,8 @@ import {
   getExecutionAgentContextContract,
   getExecutionLlmMetricsContract,
   getExecutionSearchQueriesContract,
+  getExecutionToolCallFailuresContract,
+  getExecutionToolCallsContract,
   getSpendStatusContract,
   getWorkspaceUsageContract,
   mergeBlockContract,
@@ -287,6 +289,39 @@ function registerExecutionTelemetryRoutes(app: Hono<AppEnv>): void {
       ? await observability.listByExecution(param(c, 'workspaceId'), executionId)
       : []
     return c.json({ executionId, searchQueries }, 200)
+  })
+
+  // The tool-call TRAJECTORY: every tool each container agent invoked, oldest first, in the
+  // order it invoked them. The half of "what happened" no model call answers: a tool-execution
+  // failure leaves the model call that requested it reporting `ok`, so the panel's LLM rollups
+  // see a healthy run right up to the moment it dies.
+  //
+  // This is the BROWSE read, and the expensive one — every captured argument and result the run
+  // produced. The panel loads it when an operator opens the trajectory, not when the panel
+  // opens; what it needs up front is the failure read below.
+  buildHonoRoute(app, getExecutionToolCallsContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').toolCallObservability
+    // An unwired sink is an empty prefix that is NOT truncated: there is nothing past it. That
+    // is a different claim from the trajectory itself, which says so via `available` on the
+    // debug overview; here the panel's own sink states carry it (see `RunFailureEvidence`).
+    const trajectory = observability
+      ? await observability.listForRun(param(c, 'workspaceId'), executionId)
+      : { toolCalls: [], truncated: false }
+    return c.json({ executionId, ...trajectory }, 200)
+  })
+
+  // The run's FAILING tool calls plus the exact counts behind them — the panel's headline, and
+  // the read it makes on open. Cheap by construction: two indexed aggregates and a handful of
+  // rows, never the trajectory's bodies, so the one answer an operator opens the panel for does
+  // not queue behind megabytes of arguments they may never scroll.
+  buildHonoRoute(app, getExecutionToolCallFailuresContract, async (c) => {
+    const executionId = c.req.valid('param').executionId
+    const observability = c.get('container').toolCallObservability
+    const failures = observability
+      ? await observability.failuresForRun(param(c, 'workspaceId'), executionId)
+      : { total: 0, failed: 0, failures: [], failuresTruncated: false }
+    return c.json({ executionId, ...failures }, 200)
   })
 
   // LLM-friendly export of a run's model activity: a self-describing JSON bundle

@@ -1,14 +1,17 @@
 import {
+  HARNESS_BODY_CAPABILITIES as KERNEL_BODY_CAPABILITIES,
   MCP_SERVER_ID_PATTERN,
   MCP_TOOL_NAME_PATTERN,
   isAllowedMcpHttpUrl,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import {
+  HARNESS_BODY_CAPABILITIES,
   MCP_SERVER_ID_PATTERN as HARNESS_MCP_SERVER_ID_PATTERN,
   MCP_TOOL_NAME_PATTERN as HARNESS_MCP_TOOL_NAME_PATTERN,
   isAllowedMcpHttpUrl as harnessIsAllowedMcpHttpUrl,
 } from '../src/agent-capabilities.js'
+import { parseAgentJob } from '../src/job.js'
 
 // The tool-server id pattern, the tool-name pattern and the HTTP-transport rule exist TWICE: once
 // in kernel (where the backend refuses a bad registration at boot) and once here (where the harness
@@ -90,5 +93,42 @@ describe('harness HTTP transport rule conforms to kernel', () => {
   it('refuses every non-http(s) scheme', () => {
     expect(harnessIsAllowedMcpHttpUrl('ws://mcp.example.com/sse')).toBe(false)
     expect(harnessIsAllowedMcpHttpUrl('file:///etc/passwd')).toBe(false)
+  })
+})
+
+describe('harness body-capability list conforms to kernel', () => {
+  it('names exactly the capabilities kernel checks a dispatch against', () => {
+    // Order-insensitive: the harness reports a list, the backend does set membership over it.
+    expect([...HARNESS_BODY_CAPABILITIES].sort()).toEqual([...KERNEL_BODY_CAPABILITIES].sort())
+  })
+
+  it('names only fields this image actually parses', () => {
+    // The property the list exists for. A member added ahead of the parser would make the
+    // handshake assert something false (precisely the blind run it was built to prevent), and
+    // no equality check against kernel can see that, since both sides would agree and both be
+    // wrong. So drive the real parser with a body carrying every declared capability and assert
+    // each one survives onto the parsed job.
+    const job = parseAgentJob({
+      jobId: 'job-1',
+      mode: 'coding',
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      model: 'anthropic:claude',
+      harness: 'claude-code',
+      subscriptionToken: 'tok',
+      ghToken: 'gh',
+      branch: 'main',
+      repo: {
+        owner: 'o',
+        name: 'r',
+        cloneUrl: 'https://github.com/o/r.git',
+        baseBranch: 'main',
+      },
+      mcpServers: [{ id: 'docs', transport: 'http', url: 'https://mcp.example.com/mcp' }],
+      skills: [{ name: 'triage', description: 'd', instructions: 'do the thing' }],
+    })
+    for (const capability of HARNESS_BODY_CAPABILITIES) {
+      expect((job as unknown as Record<string, unknown>)[capability]).toBeDefined()
+    }
   })
 })

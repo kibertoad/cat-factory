@@ -411,6 +411,16 @@ jobs:
       - name: Guard gate-approval raises
         run: node scripts/check-gate-approval-raise.mjs
 
+      # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
+      # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
+      # the script as "the same set CI runs", which is the only evidence that set really needs no
+      # Postgres and no `workerd`. Add a fourth database-backed facade and whichever list is updated
+      # second silently changes what the other means: the script either starts demanding a database
+      # it says it does not need, or quietly stops covering a package CI covers, which is worse
+      # because it reports green. Its fixtures run in the `node --test` step above. Pure node.
+      - name: Guard test-lane parity
+        run: node scripts/check-test-lane-parity.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

@@ -49,7 +49,14 @@ top-level files are the domain contracts.
   (`initiative-preset.ts`) and a reusable operation's per-case brief on a custom task type
   (`task-types.ts`). Each surface declares only which input types it admits (a task type excludes
   `password` by construction). Lives here because the SPA's submit button and the server's create
-  check must agree about every one of those rules.
+  check must agree about every one of those rules, including DEFAULT seeding
+  (`withDescriptorFieldDefaults`), which moved here from the SPA so a defaulted `required` field is
+  not accepted from a form and refused from a script.
+- `public-task-types.ts`: what `GET /api/v1/task-types` serves and what `createPublicTaskSchema.fields`
+  is validated against: ONE table for both directions, so what discovery advertises is exactly what
+  creation accepts. `BUILTIN_PUBLIC_TASK_FIELDS` states the built-in types' fields as descriptors
+  (they have no registration to read them off); it is a deliberate SUBSET of `taskTypeFieldsSchema`,
+  and widening it is additive.
 - `agent-failure-kinds.ts`: the closed run FAILURE-KIND vocabulary plus `isAgentFailureKind`,
   the predicate for a string that may name a RETIRED member. A leaf module (valibot only) so
   every layer that must agree about the set can import it: the operator dashboard's breakdown,

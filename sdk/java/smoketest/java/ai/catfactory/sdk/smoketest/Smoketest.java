@@ -27,6 +27,7 @@ import ai.catfactory.sdk.EventStream;
 import ai.catfactory.sdk.StreamEvent;
 import ai.catfactory.sdk.Transport;
 import ai.catfactory.sdk.model.CreatePublicTask;
+import ai.catfactory.sdk.model.ListPublicTaskTypesResponseTaskTypeField;
 import ai.catfactory.sdk.model.NotificationWebhook;
 import ai.catfactory.sdk.model.NotificationWebhookAlertEvent;
 import ai.catfactory.sdk.model.NotificationWebhookRunEvent;
@@ -127,6 +128,30 @@ public final class Smoketest {
                             .map(PublicPipeline::pipelineId)
                             .findFirst()
                             .orElse("");
+        });
+
+        step("taskTypes.list", () -> {
+            var result = client.taskTypes().list();
+            observations.put("taskTypeCount", result.taskTypes().size());
+            // The `bug` descriptors, which every deployment has: the count plus one field's
+            // declared type, so four SDKs comparing reports catch one of them dropping the nested
+            // option list or decoding an optional `type` differently.
+            var bug =
+                    result.taskTypes().stream()
+                            .filter(t -> "bug".equals(t.taskType()))
+                            .findFirst()
+                            .orElse(null);
+            var fields =
+                    bug == null || bug.fields() == null ? List.<ListPublicTaskTypesResponseTaskTypeField>of() : bug.fields();
+            var severity =
+                    fields.stream().filter(f -> "severity".equals(f.key())).findFirst().orElse(null);
+            observations.put("bugFieldCount", fields.size());
+            observations.put(
+                    "bugSeverityFieldType",
+                    severity == null || severity.type() == null ? "" : severity.type().wireValue());
+            observations.put(
+                    "bugSeverityOptionCount",
+                    severity == null || severity.options() == null ? 0 : severity.options().size());
         });
 
         step("tasks.create", () -> {

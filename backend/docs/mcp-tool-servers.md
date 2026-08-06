@@ -121,6 +121,75 @@ survivors are not a prefix of the declaration. And the drop list itself has no b
 `maxStatedUnavailable` the prompt folds the remainder into a count instead of one line each, while
 the run context keeps them all.
 
+## Does the runner image serve them at all (the capability handshake)
+
+A runner image older than the `mcpServers` field does not REJECT it, it ignores it. The prompt
+this backend composed has already told the agent it has the tools, so the run is misinformed
+rather than merely unequipped: a blind run, not a failed one. It is the failure an adopting
+deployment is likeliest to hit, because self-hosted runner pools lag the backend by design.
+
+So the harness reports the body-capability field names it parses, on `GET /health` and on the
+`POST /jobs` ACCEPTANCE. The acceptance is the load-bearing one: the dispatch site is the only
+place the body it just sent is still in scope, and the last moment before the agent starts.
+
+There are THREE answers, not two, and which one a dispatch got decides what happens:
+
+| Answer                     | What it means                                                    | What the dispatch does                                                               |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Named the capability       | The image parses the field                                       | Nothing. The run proceeds.                                                           |
+| Reported a list WITHOUT it | The image said it cannot serve it                                | REFUSED: the started job is STOPPED and the step fails as a `preflight` fault.       |
+| Reported no list at all    | An image older than the handshake, or a pool that did not map it | Proceeds, and the blind spot is logged and counted (`container.capability_unknown`). |
+
+The third row is why this is not a boolean. Every image between "tool servers landed" and "the
+handshake landed" serves them perfectly and reports nothing, so treating silence as a refusal
+would take those runs out on no evidence at all.
+
+### Refusing means STOPPING the job, and saying whether that worked
+
+The harness begins work on ACCEPTANCE, so a refusal that only fails the step leaves a full agent
+pass running against the repository, free to push a branch and open a pull request for a step the
+engine has already failed. The refusal therefore stops it, through the transport port's `stopJob`
+(`DELETE /jobs/{id}` on the harness) and never through `release`, which is a reclaim and means
+something different on every backend: on a per-run container it happens to kill the job, on a
+pooled one it hands the container BACK with the agent still working in it, and on a pool with no
+`release` template it does nothing at all.
+
+Not every backend can prove the job died, so the outcome is REPORTED rather than assumed, and the
+failure message says which:
+
+| Outcome       | Where it comes from                                                                                    | What the message says    |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------ |
+| `stopped`     | Cloudflare / local / Kubernetes: the harness confirmed the job settled, or the container was destroyed | Nothing is still running |
+| `requested`   | A self-hosted pool: its `release` template was called and accepted                                     | Check the pool           |
+| `unsupported` | A pool with no `release` template, or a transport with no stop at all                                  | Stop it on the runner    |
+| `failed`      | The stop was attempted and errored                                                                     | Stop it on the runner    |
+
+A container-owning backend always reaches `stopped`, because a graceful abort that fails ESCALATES
+to destroying the container. That escalation is right only here: the run is being failed anyway, so
+there is no sibling step left to protect, and on the local warm pool it is also what keeps a member
+whose job could not be aborted off the idle list (a busy member still answers `/health`, so
+re-pooling it would hand the next run a container with a live agent and a live checkout in it).
+
+Anything other than `stopped` also increments `container.blind_job_not_stopped`, dimensioned by the
+outcome, because each one is a different operator fix.
+
+**For a self-hosted pool, map the acceptance body and declare a `release` template.** Two lines,
+each buying a different half:
+
+- `response.dispatchCapabilitiesPath: "capabilities"` for a pool that proxies `POST /jobs`
+  verbatim. Without it the dispatch lands in the third row above. It is deliberately not read by
+  name: `capabilities` is an ordinary word for a scheduler to use about its own runners
+  (`["gpu","docker"]`), and reading one of those as the harness's answer would narrow to an empty
+  list and hard-refuse every capability dispatch against a perfectly current image.
+- A `release` template, so a refused run can be cancelled at all. Without one the pool reports
+  `unsupported` and the blind agent runs to completion.
+
+The refused case names the capability, the fix and whose fix it is, and it is a configuration
+fault rather than a container failure: an operator updates the pool, or removes the capability
+from the agent kind. The counters are `container.capability_unsupported` and
+`container.capability_unknown`, both dimensioned by the capability alone; the run and workspace ids
+ride the log line, since a metric dimension has to be bounded.
+
 ## What the agent may call (`allowedTools`)
 
 - **Each entry is a single tool NAME.** The harness joins the whole list into one `--allowedTools`
@@ -425,17 +494,18 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   cannot be connected. Registering a client at runtime would be deployment state with no home in a
   composition-root registration and no operator-visible identity at the vendor, which is why it is
   deferred rather than absent by accident.
-- **Runner-pool images must be current, or the run is BLIND** (slice 5 carries the handshake that
-  closes this). A self-hosted runner image older than the backend parses the job body without the
-  `mcpServers` field and runs with the prompt still promising the tools; nothing states the gap.
-  Until the handshake lands, keeping pool images at the pinned tag is an adopter obligation, not a
-  nicety.
+- **A runner pool that maps no `dispatchCapabilitiesPath` gets no capability handshake** (see
+  above). Its dispatches are then counted as UNVERIFIABLE rather than confirmed, which is honest
+  but is not the same as safe: keeping pool images at the pinned tag remains an adopter obligation.
+- **A runner pool cannot PROVE it stopped a refused job**, and one with no `release` template
+  cannot stop it at all. Both are stated on the failure rather than hidden, but on that backend a
+  refused blind run really can keep working against the repository until someone kills it.
 - **No per-workspace or per-step server selection** (slice 6). A registered server applies to
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
   slice.
-- **What a run actually reached is not yet recorded on a typed surface** (slice 5). Today the
-  evidence is the prompt's tool-server section and the agent-context snapshot.
+- **What a run actually reached is not yet recorded on a typed surface** (slice 5's remaining
+  half). Today the evidence is the prompt's tool-server section and the agent-context snapshot.
 - **Pi has no MCP client** (standing non-goal, ADR 0029). A deployment whose model provisioning
   resolves to Pi runs gets no tool servers there, stated per run as `harness_unsupported`.
 - **`http` means streamable HTTP.** The legacy HTTP+SSE transport is deliberately not a vocabulary

@@ -226,8 +226,8 @@ type DebugListToolCallsQuery struct {
 	JobID *string
 	// Order zero value means "not sent".
 	Order *ListDebugToolCallsOrder
-	// Ok zero value means "not sent".
-	Ok *ListDebugToolCallsOk
+	// Outcome zero value means "not sent".
+	Outcome *ListDebugToolCallsOutcome
 }
 
 func (q *DebugListToolCallsQuery) values() map[string]string {
@@ -247,8 +247,8 @@ func (q *DebugListToolCallsQuery) values() map[string]string {
 	if q.Order != nil {
 		out["order"] = fmt.Sprintf("%v", *q.Order)
 	}
-	if q.Ok != nil {
-		out["ok"] = fmt.Sprintf("%v", *q.Ok)
+	if q.Outcome != nil {
+		out["outcome"] = fmt.Sprintf("%v", *q.Outcome)
 	}
 	return out
 }
@@ -706,6 +706,30 @@ func (s *PipelinesService) List(ctx context.Context) (*PublicPipelineList, error
 		Path:   "/api/v1/pipelines",
 	}
 	var out PublicPipelineList
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TaskTypesService what a task can be created AS in this workspace (the built-in kinds plus the operations the
+// deployment registered), and the fields each one accepts.
+type TaskTypesService struct {
+	client *Client
+}
+
+// List list the task types this workspace may create
+// List the task types a task can be created as in the key’s workspace (the built-in ones plus any
+// the deployment registered), each with the fields it accepts. Fill those fields through `fields`
+// on task creation; the descriptors here are what that call validates against, so a caller reads
+// the form rather than guessing it. A type a workspace admin has hidden is absent.
+// GET /api/v1/task-types (operation listPublicTaskTypes).
+func (s *TaskTypesService) List(ctx context.Context) (*ListPublicTaskTypesResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   "/api/v1/task-types",
+	}
+	var out ListPublicTaskTypesResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

@@ -224,6 +224,8 @@ export function defineTaskTypeConformance(harness: ConformanceHarness): void {
     })
 
     registerOperationPipelineTests(harness)
+    registerSuppressionTests(harness)
+    registerPublicApiTests(harness)
 
     it('folds nothing for a built-in task type, so its prompt is unchanged', async () => {
       // The regression bar for the fold: a run that collected no parameters must carry none.
@@ -422,5 +424,313 @@ function registerOperationPipelineTests(harness: ConformanceHarness): void {
       pipelineId: 'pl_conf_never_registered',
     })
     expect(bogus.status).toBe(404)
+  })
+}
+
+/**
+ * D12: a workspace admin HIDES a registered operation from that board. An org registers its
+ * operations process-wide, so twenty of them flood a team that runs three; suppression is the
+ * per-workspace answer, and it is the only piece of this feature that is DATA rather than code
+ * (the descriptors themselves stay node-local by design).
+ *
+ * Crosses persistence on both runtimes (a tombstone row keyed `(workspace, taskType)`) AND both
+ * doors that read it: the snapshot projection the picker is drawn from, and the creation refusal
+ * that keeps every non-picker door in step with it.
+ */
+function registerSuppressionTests(harness: ConformanceHarness): void {
+  it('hides a registered operation from one board, refuses creating it, and restores it', async () => {
+    const HIDDEN = 'conf:hidden-op'
+    const KEPT = 'conf:kept-op'
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    for (const [taskType, label] of [
+      [HIDDEN, 'Hidden op'],
+      [KEPT, 'Kept op'],
+    ]) {
+      taskTypeRegistry.register({
+        taskType: taskType!,
+        presentation: {
+          label: label!,
+          icon: 'i-lucide-plug',
+          color: '#0ea5e9',
+          description: 'A registered operation.',
+        },
+      })
+    }
+    const app = harness.makeApp(undefined, { taskTypeRegistry })
+    const { workspace } = await app.createWorkspace()
+    const wsId = workspace.id
+    const suppressions = `/workspaces/${wsId}/task-type-suppressions`
+
+    // 1. Nothing is suppressed by default: a newly registered operation is offered on every board
+    //    until somebody hides it, which is the only direction that cannot silently withhold one.
+    const listed = await app.call<{
+      taskTypes: { taskType: { taskType: string }; suppressed: boolean }[]
+    }>('GET', suppressions)
+    expect(listed.status).toBe(200)
+    expect(listed.body.taskTypes.map((row) => row.taskType.taskType).sort()).toEqual([HIDDEN, KEPT])
+    expect(listed.body.taskTypes.every((row) => !row.suppressed)).toBe(true)
+
+    // 2. Hiding one drops it from the snapshot catalog the picker renders, and ONLY it.
+    const hidden = await app.call('PUT', `${suppressions}/${encodeURIComponent(HIDDEN)}`)
+    expect(hidden.status).toBe(200)
+    const snap = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    const offered = (snap.body.customTaskTypes ?? []).map((t) => t.taskType)
+    expect(offered).toContain(KEPT)
+    expect(offered).not.toContain(HIDDEN)
+    // The COMPLEMENT rides the same snapshot, and it is what keeps hiding reversible. The offered
+    // catalog alone cannot tell \"this deployment registers no operations\" from \"this board hid
+    // the ones it has\", so a SPA reading only that drops the settings screen the moment the last
+    // operation is hidden, taking away the only surface that un-hides one.
+    expect(snap.body.suppressedTaskTypes).toEqual([HIDDEN])
+
+    // 3. And the SERVER refuses creating one, so the internal API, the public API, an initiative
+    //    spawn and a tracker import cannot land what the picker no longer offers.
+    const refused = await app.call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Should not land',
+      taskType: HIDDEN,
+    })
+    expect(refused.status).toBe(422)
+    const allowed = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Still fine',
+      taskType: KEPT,
+    })
+    expect(allowed.status).toBe(201)
+
+    // 4. The suppression LIST is its own read precisely because a hidden id is by construction
+    //    absent from the catalog above: nothing else could offer the way back.
+    const withHidden = await app.call<{
+      taskTypes: { taskType: { taskType: string }; suppressed: boolean }[]
+    }>('GET', suppressions)
+    expect(withHidden.body.taskTypes.find((r) => r.taskType.taskType === HIDDEN)?.suppressed).toBe(
+      true,
+    )
+
+    // 5. Restoring hard-deletes the tombstone: the operation is offered and creatable again.
+    const restored = await app.call('DELETE', `${suppressions}/${encodeURIComponent(HIDDEN)}`)
+    expect(restored.status).toBe(200)
+    const reoffered = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)
+    expect((reoffered.body.customTaskTypes ?? []).map((t) => t.taskType)).toContain(HIDDEN)
+    // Absent rather than empty once nothing is hidden, like every other registry projection.
+    expect(reoffered.body.suppressedTaskTypes).toBeUndefined()
+    const created = await app.call('POST', `/workspaces/${wsId}/blocks/blk_auth/tasks`, {
+      title: 'Lands now',
+      taskType: HIDDEN,
+    })
+    expect(created.status).toBe(201)
+
+    // 6. Suppressing twice is a no-op rather than a duplicate-key failure, and an id the
+    //    deployment does not register is a 404: a typo must not leave a tombstone that hides
+    //    nothing and appears on no screen (the settings list renders the registry, not the store).
+    expect((await app.call('PUT', `${suppressions}/${encodeURIComponent(KEPT)}`)).status).toBe(200)
+    expect((await app.call('PUT', `${suppressions}/${encodeURIComponent(KEPT)}`)).status).toBe(200)
+    expect((await app.call('PUT', `${suppressions}/conf%3Anever-registered`)).status).toBe(404)
+  })
+
+  it('scopes a suppression to the board that made it', async () => {
+    // The whole point of the per-workspace row: one team hiding an operation must not take it away
+    // from the next board in the same deployment, which reads the same process-wide registry.
+    const TASK_TYPE = 'conf:scoped-op'
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      taskType: TASK_TYPE,
+      presentation: {
+        label: 'Scoped op',
+        icon: 'i-lucide-plug',
+        color: '#0ea5e9',
+        description: 'A registered operation.',
+      },
+    })
+    const app = harness.makeApp(undefined, { taskTypeRegistry })
+    const hiding = (await app.createWorkspace()).workspace
+    const other = (await app.createWorkspace()).workspace
+    await app.call(
+      'PUT',
+      `/workspaces/${hiding.id}/task-type-suppressions/${encodeURIComponent(TASK_TYPE)}`,
+    )
+
+    const hidden = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${hiding.id}`)
+    expect((hidden.body.customTaskTypes ?? []).map((t) => t.taskType)).not.toContain(TASK_TYPE)
+    const untouched = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${other.id}`)
+    expect((untouched.body.customTaskTypes ?? []).map((t) => t.taskType)).toContain(TASK_TYPE)
+  })
+}
+
+/** One block from the workspace snapshot, the only read that addresses a block by id here. */
+async function blockById(
+  app: { call: <T>(method: string, path: string) => Promise<{ body: T }> },
+  workspaceId: string,
+  blockId: string,
+): Promise<Block | undefined> {
+  const snapshot = await app.call<WorkspaceSnapshot>('GET', `/workspaces/${workspaceId}`)
+  return snapshot.body.blocks.find((block) => block.id === blockId)
+}
+
+/**
+ * D9: the public API can DISCOVER a task type's form and FILL it. A headless caller could always
+ * name a registered operation and never fill one of its fields, so every run it filed started with
+ * the per-case brief the form exists to collect left blank.
+ *
+ * Driven end to end over a real key because the two halves have to agree: what discovery advertises
+ * is what creation validates against, and the second is what proves the first is not a separate
+ * hand-written shape.
+ */
+function registerPublicApiTests(harness: ConformanceHarness): void {
+  it('discovers a registered operation’s form over /api/v1 and fills it on create', async () => {
+    const TASK_TYPE = 'conf:public-op'
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      taskType: TASK_TYPE,
+      presentation: {
+        label: 'Public op',
+        icon: 'i-lucide-plug',
+        color: '#0ea5e9',
+        description: 'Expose functionality over HTTP.',
+        category: 'API delivery',
+      },
+      fields: [
+        { key: 'entity', label: 'Entity', type: 'text', required: true },
+        {
+          key: 'operations',
+          label: 'Operations',
+          type: 'checkbox-group',
+          options: [
+            { value: 'create', label: 'Create' },
+            { value: 'list', label: 'List' },
+          ],
+        },
+        {
+          key: 'authRequirement',
+          label: 'Auth requirement',
+          type: 'select',
+          default: 'service',
+          required: true,
+          options: [{ value: 'service', label: 'Service-to-service token' }],
+        },
+      ],
+    })
+    const app = harness.makeApp(undefined, { taskTypeRegistry })
+    const { workspace } = await app.createOrgWorkspace({ seed: true })
+    const wsId = workspace.id
+    const key = await app.call<{ secret: string }>('POST', `/workspaces/${wsId}/public-api-keys`, {
+      label: 'external',
+    })
+    const auth = { authorization: `Bearer ${key.body.secret}` }
+
+    // 1. Discovery serves the built-in kinds AND the registered operation, each with the form it
+    //    accepts, which are the descriptors creation is about to be checked against.
+    const catalog = await app.call<{
+      taskTypes: {
+        taskType: string
+        builtin: boolean
+        label: string
+        category?: string
+        fields: { key: string; type?: string; options?: { value: string }[] }[]
+      }[]
+    }>('GET', '/api/v1/task-types', undefined, auth)
+    expect(catalog.status).toBe(200)
+    const byId = new Map(catalog.body.taskTypes.map((t) => [t.taskType, t]))
+    expect(byId.get('bug')?.builtin).toBe(true)
+    expect(byId.get('bug')?.fields.map((f) => f.key)).toContain('severity')
+    const op = byId.get(TASK_TYPE)
+    expect(op?.builtin).toBe(false)
+    expect(op?.category).toBe('API delivery')
+    expect(op?.fields.map((f) => f.key)).toEqual(['entity', 'operations', 'authRequirement'])
+
+    const frame = await app.call<{ id: string }>('POST', `/workspaces/${wsId}/blocks`, {
+      type: 'service',
+      position: { x: 400, y: 400 },
+    })
+    const tasks = `/api/v1/services/${frame.body.id}/tasks`
+
+    // 2. Filling them lands the values on the task. `authRequirement` is required AND defaulted, so
+    //    omitting it is answered by the descriptor rather than refused: the rule that had the SPA
+    //    accepting what a headless caller could not.
+    const created = await app.call<{ taskId: string }>(
+      'POST',
+      tasks,
+      {
+        title: 'Expose orders',
+        taskType: TASK_TYPE,
+        fields: { entity: 'Order', operations: ['create', 'list'] },
+      },
+      auth,
+    )
+    expect(created.status).toBe(201)
+    // Read back through the workspace SNAPSHOT, as every other assertion in this file does. There
+    // is no `GET /workspaces/:ws/blocks/:id` route; addressing one answered Hono's plain-text 404,
+    // which is not JSON, so this step failed on a parse error rather than on anything it asserts.
+    const block = await blockById(app, wsId, created.body.taskId)
+    expect(block?.taskTypeFields?.custom).toEqual({
+      entity: 'Order',
+      operations: ['create', 'list'],
+      authRequirement: 'service',
+    })
+
+    // 3. The descriptor is the contract here too: a missing required field with no default, an
+    //    option outside the declared set and an undeclared key are each a 422 naming the reason.
+    const missing = await app.call<{ error: { details?: { reason?: string } } }>(
+      'POST',
+      tasks,
+      { title: 'No entity', taskType: TASK_TYPE, fields: { operations: ['create'] } },
+      auth,
+    )
+    expect(missing.status).toBe(422)
+    expect(missing.body.error.details?.reason).toBe('task_type_fields_invalid')
+    const badOption = await app.call(
+      'POST',
+      tasks,
+      { title: 'Bad op', taskType: TASK_TYPE, fields: { entity: 'Order', operations: ['purge'] } },
+      auth,
+    )
+    expect(badOption.status).toBe(422)
+    const unknownKey = await app.call(
+      'POST',
+      tasks,
+      { title: 'Unknown', taskType: TASK_TYPE, fields: { entity: 'Order', bogus: 'x' } },
+      auth,
+    )
+    expect(unknownKey.status).toBe(422)
+
+    // 4. A BUILT-IN type's fields map onto the schema-typed TOP-LEVEL keys instead, so the existing
+    //    creation machinery keeps working unchanged, which is the asymmetry the mapper exists for.
+    const bug = await app.call<{ taskId: string }>(
+      'POST',
+      tasks,
+      {
+        title: 'Checkout 500s',
+        taskType: 'bug',
+        fields: { severity: 'critical', stepsToReproduce: 'Place an order, watch it 500.' },
+      },
+      auth,
+    )
+    expect(bug.status).toBe(201)
+    const bugBlock = await blockById(app, wsId, bug.body.taskId)
+    expect(bugBlock?.taskTypeFields?.severity).toBe('critical')
+    expect(bugBlock?.taskTypeFields?.custom).toBeUndefined()
+    expect(
+      (
+        await app.call(
+          'POST',
+          tasks,
+          { title: 'Bad severity', taskType: 'bug', fields: { severity: 'apocalyptic' } },
+          auth,
+        )
+      ).status,
+    ).toBe(422)
+
+    // 5. A SUPPRESSED operation is absent from discovery, because this endpoint answers "what may I
+    //    create here": listing one whose creation is then refused would mislead the very client
+    //    that read it.
+    await app.call(
+      'PUT',
+      `/workspaces/${wsId}/task-type-suppressions/${encodeURIComponent(TASK_TYPE)}`,
+    )
+    const afterHide = await app.call<{ taskTypes: { taskType: string }[] }>(
+      'GET',
+      '/api/v1/task-types',
+      undefined,
+      auth,
+    )
+    expect(afterHide.body.taskTypes.map((t) => t.taskType)).not.toContain(TASK_TYPE)
   })
 }

@@ -242,10 +242,26 @@ export const workspaceSnapshotSchema = v.object({
    * deployment mixed in via its app-owned `TaskTypeRegistry`. The SPA merges these into its
    * task-type catalog so a proprietary work item becomes a first-class create-task choice +
    * card badge instead of the generic fallback — symmetric with {@link customAgentKinds}.
-   * Static (engine-level registry), workspace-independent; attached by the facade, so optional
-   * on the wire and omitted when no custom task type is registered.
+   * Attached by the facade, so optional on the wire and omitted when nothing is offered.
+   *
+   * What this board OFFERS, not what the deployment registers: an operation a workspace admin
+   * hid is absent (`backend/docs/reusable-operations.md`). Its complement is
+   * {@link suppressedTaskTypes}.
    */
   customTaskTypes: v.optional(v.array(customTaskTypeSchema)),
+  /**
+   * The registered task-type ids this board HIDES: the complement of {@link customTaskTypes},
+   * exactly as `retiredPipelines` is the complement of `pipelineCatalogVersions`, and present for
+   * the same reason. A suppressed type is BY CONSTRUCTION absent from the offered catalog, so a
+   * SPA reading only that catalog cannot tell "this deployment registers no operations" from
+   * "this board hid the ones it has", and the second is the state whose settings screen is the
+   * only way back. Hiding the last one would otherwise remove the surface that un-hides it.
+   *
+   * Ids only. The descriptors live in the registry, which the settings screen reads through its
+   * own endpoint; copying presentation here would be a second projection to keep in step for a
+   * list nothing renders as a task type.
+   */
+  suppressedTaskTypes: v.optional(v.array(v.string())),
   /**
    * The per-step parameters each registered GATE declares (`GateRegistry.register(kind, factory,
    * { configFields })`), so the pipeline builder renders a gate's own config form through the
@@ -298,6 +314,22 @@ export const workspaceSnapshotSchema = v.object({
    * runtimes), but optional on the wire for forward-compatibility.
    */
   pipelineCatalogVersions: v.optional(v.record(v.string(), v.number())),
+  /**
+   * The catalog's own NAME for each id in `pipelineCatalogVersions`: the companion map, built from
+   * the same `seedPipelines()` read.
+   *
+   * It exists for the one moment a catalog id has no stored row to read a name off: the "new
+   * built-ins available" advisory. Without it the SPA humanised the id, which is passable for a
+   * shipped built-in (`pl_review` → "review") and wrong for the case that made this reachable, a
+   * deployment's own registered pipeline behind a reusable operation: `pl_org_introduce_api`
+   * rendered as "org introduce api", offering the operation's pipeline under a name that appears
+   * nowhere else in the product.
+   *
+   * A separate map rather than widening the versions record, because that record is a
+   * `Record<string, number>` the SPA compares numerically; the ids are identical by construction
+   * (one source, one pass), so a reader indexes either by the other's key.
+   */
+  pipelineCatalogNames: v.optional(v.record(v.string(), v.string())),
   /**
    * Built-in pipelines WITHDRAWN from the catalog (`retiredPipelines()`) — the complement of
    * `pipelineCatalogVersions`, and the only signal that a stored built-in is no longer relevant.

@@ -70,6 +70,19 @@ await step('pipelines.list', async () => {
   pipelineId = startable[0]?.pipelineId ?? ''
 })
 
+await step('taskTypes.list', async () => {
+  const result = await client.taskTypes.list()
+  observations.taskTypeCount = result.taskTypes.length
+  // The `bug` descriptors, which every deployment has: the count plus one field's declared type,
+  // so four SDKs comparing reports catch one of them dropping the nested option list or decoding
+  // an optional `type` differently.
+  const bug = result.taskTypes.find((t) => t.taskType === 'bug')
+  observations.bugFieldCount = bug?.fields.length ?? 0
+  observations.bugSeverityFieldType = bug?.fields.find((f) => f.key === 'severity')?.type ?? ''
+  observations.bugSeverityOptionCount =
+    bug?.fields.find((f) => f.key === 'severity')?.options?.length ?? 0
+})
+
 await step('tasks.create', async () => {
   const task = await client.tasks.create(serviceId, {
     title: 'SDK smoketest task',
