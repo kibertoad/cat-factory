@@ -1,5 +1,98 @@
 # @cat-factory/orchestration
 
+## 0.222.0
+
+### Minor Changes
+
+- ee6ce7c: Patch the board from a `board` event instead of re-fetching the whole snapshot
+
+  Every `board` event collapsed to one thing in the SPA: a debounced full `workspace.refresh()`,
+  which is a REPLACE-style rehydrate of ~20 stores. The backend already knew which block changed
+  and threw the id away at the publisher, so a spawned task cost the same as a service being
+  deleted. An initiative loop firing one `block-added` per spawned item put every open board into a
+  snapshot fetch every ~300ms debounce window, and a board mounting the shared service paid it too.
+
+  A `board` event now carries the changed block when the change is FULLY DESCRIBED by that one
+  block (a spawned task, a module materialising, a field edit, a move, a dependency toggle, an epic
+  assignment, a cancel), and the SPA upserts it through the same path an `execution` event's block
+  takes. That path is the one with the monotonic live-upsert stamp on it, so a targeted board
+  upsert is protected from a slower snapshot resolving on top of it exactly as run transitions
+  already were.
+
+  The change that is NOT fully described by one block keeps the full refresh, and that half is the
+  point rather than a leftover: a removal cascades over descendants and prunes edges on blocks the
+  event never names, a reparent moves a subtree between parents, a resize shifts children, a
+  blueprint reconcile rewrites a whole service. A payload there would state part of the change and
+  read as all of it.
+
+  Two blocks are never carried, on any reason or event. A service FRAME, because one payload is
+  published for every board that mounts the affected service and a frame's position and size live on
+  the per-workspace mount rather than on the shared row, so whichever mount a publisher projected
+  through would be wrong on every other board and would jump the frame to coordinates none of them
+  shows it at. And a headless `internal` anchor block (a public-API run's own "task"), which the
+  snapshot read filters out of every board and which would otherwise render as a card carrying the
+  external caller's brief that no later read can remove. Both are refused once at the wire, by
+  kernel's `deliverableBoardBlock`, which every block-carrying event on both facades is assembled
+  through (`boardWireEvent` / `bootstrapWireEvent`) rather than trusted to each emit site.
+
+  That makes the `bootstrap` event's frame payload a withheld one too, so a repo bootstrap now
+  announces its frame's transitions (materialised, ready, blocked) as coarse `board` events beside
+  the job. The live "bootstrapping…" progress still rides the job with no refresh at all; what
+  stops is a poll tick pushing frame coordinates that are stale the moment anyone drags the card.
+
+  Internal breaks, all pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
+  `BoardChange` value instead of four positional arguments; the `board` wire event gained `block`;
+  and the `bootstrap` wire event's `block` is now always null. A client on the old shape sees
+  `block` as absent and refreshes, which is the behaviour it already had.
+
+### Patch Changes
+
+- 184d263: Spec Writer, Blueprinter and Deployer are addable in the pipeline builder again
+
+  The catalog collapse dropped the requirements review, the spec increment, the map refresh and the
+  rest of the optional phases out of every build preset on one stated condition: that each remained
+  available in the builder as an opt-in step. For `spec-writer`, `blueprints` and `deployer` that
+  condition was never met, so the collapse did not move those steps out of the presets, it removed
+  them from the product.
+
+  A step reaches the palette through two independent gates and each of the three failed at least one.
+  A registered kind is offered only when it declares `presentation` (the filter
+  `snapshotCustomAgentKinds` applies), and `spec-writer` / `blueprints` deliberately declared none,
+  recorded in code as "pipeline-internal, not palette kinds". Separately, the SPA's
+  `SYSTEM_AGENT_META` shadows the backend catalog: an entry there DROPS the registry's copy, so all
+  three were suppressed on the client too. Both halves are fixed, the two kinds now declaring their
+  presentation next to the definition rather than the SPA restating it uninvited.
+
+  `spec-writer` also took a second kind down with it. A companion is never placed directly, it is a
+  toggle rendered on its producer step, so with no placeable Spec Writer the Spec Reviewer had
+  nowhere to attach and the whole spec pair was unreachable.
+
+  `deployer` was the sharpest case, because the engine already refuses runs over its absence:
+  `assertDeployerBeforeConsumer` rejects a chain that reaches a tester, human-test or playwright step
+  with no Deployer in front of it on a kubernetes / custom / compose service. The SPA's own copy for
+  that refusal says "Add a Deployer step to the pipeline", which nobody could do. The backend message
+  said to reseed the pipeline instead, which was the honest advice while adding one was impossible and
+  is now the second-best of two, so it leads with the builder.
+
+  Reviewing: `deployer` is a bare engine step with no registered kind, so it is modelled statically in
+  the SPA catalog like `disposer`; the other two are registered kinds and are ALSO mirrored statically,
+  for the reason `pr-reviewer` already is, so a `pl_bugfix` timeline names its steps before the
+  workspace manifest hydrates. That mirroring is the drift risk worth a look. The rest of the palette
+  is untouched: no preset changed, so no reseed advisory fires and no existing pipeline runs
+  differently.
+
+- Updated dependencies [184d263]
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/agents@0.116.0
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+  - @cat-factory/sandbox@0.11.78
+  - @cat-factory/caching@0.16.2
+  - @cat-factory/integrations@0.137.2
+  - @cat-factory/prompt-fragments@1.0.1
+  - @cat-factory/spend@0.15.19
+  - @cat-factory/workspaces@0.23.4
+
 ## 0.221.0
 
 ### Minor Changes

@@ -4,6 +4,8 @@ import {
   AGENT_ARCHETYPES,
   AGENT_BY_KIND,
   BLOCK_TYPE_META,
+  COMPANION_FOR_PRODUCER,
+  MODEL_CONFIGURABLE_SYSTEM_KINDS,
   STATUS_META,
   SYSTEM_AGENT_META,
   agentKindMeta,
@@ -20,9 +22,12 @@ const AGENT_KINDS: AgentKind[] = [
   'pr-reviewer',
   'spike',
   'task-estimator',
+  'spec-writer',
+  'blueprints',
   'architect',
   'researcher',
   'coder',
+  'deployer',
   'tester-api',
   'tester-ui',
   'reviewer',
@@ -80,6 +85,38 @@ describe('catalog', () => {
     expect(basic).toEqual(expect.arrayContaining(['architect', 'coder', 'tester-api']))
   })
 
+  it('never shadows a companion producer as a system kind', () => {
+    // A companion is never placed directly: the builder renders it as a toggle on its producer
+    // step, so a producer that cannot be placed takes its companion out of the builder with it.
+    // A producer reaches the palette either statically (AGENT_ARCHETYPES) or from the backend
+    // registry — and an entry in SYSTEM_AGENT_META DROPS the registry's copy (see the agents
+    // store's `customArchetypes`), which is how `spec-writer` and its `spec-companion` both
+    // became unreachable. The shadow is the half this file owns, so it is the half asserted.
+    for (const producer of Object.keys(COMPANION_FOR_PRODUCER)) {
+      expect(
+        producer in SYSTEM_AGENT_META,
+        `${producer} has a companion but is shadowed as a system kind, so neither can be placed`,
+      ).toBe(false)
+    }
+  })
+
+  it('resolves every kind the Model Defaults panel lists beside the palette', () => {
+    // The list is spelled as kind strings indexed into SYSTEM_AGENT_META through a non-null
+    // assertion, so a kind that MOVES to the palette (or is renamed) leaves an `undefined` in
+    // the array rather than a type error, and the panel renders a blank row it cannot pin a
+    // model on. Assert the relation the assertion claims.
+    for (const entry of MODEL_CONFIGURABLE_SYSTEM_KINDS) {
+      expect(entry, 'MODEL_CONFIGURABLE_SYSTEM_KINDS names a kind with no metadata').toBeDefined()
+      expect(entry.kind).toEqual(expect.any(String))
+    }
+    // And nothing is offered twice: a palette archetype is already listed by the panel, so a
+    // kind appearing in both would render a duplicate row.
+    const palette = new Set(AGENT_ARCHETYPES.map((a) => a.kind))
+    for (const entry of MODEL_CONFIGURABLE_SYSTEM_KINDS) {
+      expect(palette.has(entry.kind), `${entry.kind} is listed twice in Model Defaults`).toBe(false)
+    }
+  })
+
   it('resolves usable metadata for every kind via agentKindMeta', () => {
     // Palette archetypes resolve to their own entry.
     for (const a of AGENT_ARCHETYPES) {
@@ -88,8 +125,6 @@ describe('catalog', () => {
     // Engine system kinds (present in seeded pipelines but not the palette) resolve
     // to their system metadata rather than blowing up an undefined access.
     for (const kind of [
-      'spec-writer',
-      'blueprints',
       'conflicts',
       'conflict-resolver',
       'ci',

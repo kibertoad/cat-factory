@@ -22,7 +22,14 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // restate the read-only guardrail or the final-answer directive — the single source of truth
 // for both is the surface. Post-ops stay in the engine's built-in map (their commit
 // branch is resolved specially — see `RunDispatcher.builtInRepoOpBranch`), so these definitions
-// carry no `postOps` and no `presentation` (they are pipeline-internal, not palette kinds).
+// carry no `postOps`.
+//
+// They DO carry `presentation`, which is what puts them in the builder's palette. Neither is
+// seeded into a build preset any more (the catalog collapse left the spec increment to
+// `pl_bugfix` / `pl_spec` and the map refresh to `pl_blueprint`), and both collapse docs promise
+// them as opt-in builder steps, so the builder is the only place a delivery pipeline can pick
+// either back up. Without `presentation` the registry projection drops them and that promise is
+// unhonourable — which is also what left `spec-companion` with no producer to hang its toggle on.
 // ---------------------------------------------------------------------------
 
 /** The agent kind of the container agent that maps a repository into the canonical
@@ -222,6 +229,14 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       clone: { branch: 'pr' },
       output: { kind: 'structured', shapeHint: BLUEPRINT_SHAPE_HINT },
     },
+    presentation: {
+      label: 'Blueprinter',
+      icon: 'i-lucide-map',
+      color: '#22d3ee',
+      description: 'Maps the repository into the service → modules blueprint.',
+      category: 'design',
+      tier: 'intermediate',
+    },
   },
   // The spec-writer runs as a read-only structured explore on the per-block WORK branch (clone
   // `work` — the deterministic `cat-factory/<blockId>` the coder resumes, created from base when
@@ -237,6 +252,15 @@ export const SPEC_BLUEPRINT_AGENT_KINDS: AgentKindDefinition[] = [
       surface: 'container-explore',
       clone: { branch: 'work' },
       output: { kind: 'structured', shapeHint: SPEC_SHAPE_HINT, failOnUnusableFinal: true },
+    },
+    presentation: {
+      label: 'Spec Writer',
+      icon: 'i-lucide-clipboard-list',
+      color: '#c084fc',
+      description:
+        "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
+      category: 'design',
+      tier: 'intermediate',
     },
   },
 ]
