@@ -221,8 +221,17 @@ const LEGACY_ALLOWANCES = new Map([
  * Ratcheted 1100 → 1098 by condensing the role-scoped merge-policy entry back to the charter's
  * shape (what the flow is, the deadliest trap, the link). It had grown to a five-trap paragraph
  * restating two ADRs that already own every one of them.
+ *
+ * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
+ * by name, so its whole length is a context cost paid on every read, and it sits in the tree
+ * (contributor setup notes) that regrows most easily. A pointer out of a ratcheted file into an
+ * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
+ * Same shrink-only contract: if the recipe needs more, the surrounding prose gives up the lines.
  */
-const DOC_ALLOWANCES = new Map([['CLAUDE.md', 1098]])
+const DOC_ALLOWANCES = new Map([
+  ['CLAUDE.md', 1098],
+  ['docs/internal/running-tests.md', 78],
+])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */
 // `sdk/**` is deliberately ABSENT. The ratchet is a split trigger for hand-written cohesion, and

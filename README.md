@@ -609,6 +609,8 @@ a deployment or an integration needs none of it.
   commands, and the changeset every PR needs.
 - [`docs/internal/`](./docs/internal): the contributor-only docs, indexed in
   [`docs/README.md`](./docs/README.md).
+  - [Running the tests](./docs/internal/running-tests.md): the Postgres the two
+    facade suites need, and the traps that make a tree look broken without one.
   - [Releases](./docs/internal/releases.md): changesets, the runner-image rollout
     recipe, and the checklist for a newly published package.
   - [Mutation testing](./docs/internal/mutation-testing.md): the nightly Stryker
@@ -628,4 +630,5 @@ a deployment or an integration needs none of it.
 
 Tests: `pnpm test:run` from the root runs every suite. The two that are not in it
 are Playwright (`backend/internal/e2e`, which needs Postgres and a browser) and
-mutation testing (nightly CI only).
+mutation testing (nightly CI only). The Node and Local facade suites need a
+Postgres of their own: [Running the tests](./docs/internal/running-tests.md).

@@ -154,7 +154,7 @@ messages, code comments, UI copy.
   Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
   for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
-  vitest summary is a task a sibling CANCELLED. Recipe: [`CONTRIBUTING.md`](./CONTRIBUTING.md#running-the-suites).
+  vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
   Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's

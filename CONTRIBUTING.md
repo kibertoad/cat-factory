@@ -69,64 +69,12 @@ command you need for a PR runs it. To measure a branch, dispatch that workflow o
 Which packages are covered, how to add one, and how to read a surviving mutant:
 [`docs/internal/mutation-testing.md`](./docs/internal/mutation-testing.md).
 
-## Running the suites
-
-`pnpm test:run` from the root covers every package, and most of it needs no setup at
-all. Two suites are the exception: the Node and Local facades test against a real
-Postgres, and with no server reachable they fail with `DATABASE_URL is required to run
-the local conformance tests` while every other task passes. Read that as "no database
-here", not as a broken merge.
-
-**Turbo does not hand `DATABASE_URL` to a task, so exporting it is not enough.**
-`turbo.json` declares no `env` or `globalPassThroughEnv` for `test:run`, and Turbo's
-default strict env mode filters out everything undeclared: the root `pnpm test:run`
-reports the variable as missing however your shell is set. CI never hits this because
-it does not run those two suites through Turbo at all (`pnpm --filter
-@cat-factory/node-server exec vitest run`). Locally, either do the same or pass
-`--env-mode=loose`:
-
-```sh
-export DATABASE_URL=postgres://postgres@127.0.0.1:5433/postgres
-pnpm exec turbo run test:run --env-mode=loose \
-  --filter=@cat-factory/node-server --filter=@cat-factory/local-server
-```
-
-**A failing task cancels its siblings, and a cancelled task looks like a failing one.**
-Turbo stops the run when one task fails, so the others end with a bare
-`[ELIFECYCLE] Command failed.` and no vitest summary above it. Only the package named
-on Turbo's own `Failed:` line actually failed. Re-run anything else filtered and on its
-own before diagnosing it.
-
-Generation needs its inputs built first: `pnpm gen:openapi` reads
-`backend/packages/contracts/dist`, so on a fresh checkout it dies with
-`ERR_MODULE_NOT_FOUND` until `pnpm exec turbo run build --filter=@cat-factory/contracts`
-(or a plain `pnpm build`) has run.
-
-### A Postgres for those two suites
-
-CI starts one in Docker via [`.github/scripts/start-postgres.sh`](./.github/scripts/start-postgres.sh),
-which is the first thing to reach for. Where no Docker daemon is running (a Claude Code
-web container is one such place), start a local cluster from the `postgres` package
-instead:
-
-```sh
-export PGDATA=/var/tmp/cat-factory-pg
-mkdir -p "$PGDATA" && chown postgres "$PGDATA"
-su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $PGDATA -U postgres --auth=trust"
-su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PGDATA -l $PGDATA/server.log \
-  -o '-p 5433 -k /tmp' -w start"
-```
-
-Three things bite here. `-l` is not optional: without it the server inherits the
-starting shell's stdout and holds it open, so `pg_ctl -w start` never returns and an
-agent's own command times out with the server actually running. `initdb` and `pg_ctl`
-refuse to run as root, so they run as the `postgres` user, which then has to be able to
-traverse **every** directory above `$PGDATA`: a cluster inside a private per-session
-scratch directory fails with `could not access directory ... Permission denied` until
-each parent is `chmod o+x`, which is why the example puts it under `/var/tmp`. And the
-harnesses create a database per vitest worker off the `postgres` maintenance database,
-so `DATABASE_URL` has to name a superuser and must never point at a database you care
-about.
+**The Node and Local facade suites need a real Postgres, and Turbo will not pass
+`DATABASE_URL` through to them.** Without a server they fail with `DATABASE_URL is
+required to run the local conformance tests` while every other task passes, and
+exporting the variable is not enough on its own. The setup, both traps, and how to
+start a cluster where no Docker daemon is running:
+[`docs/internal/running-tests.md`](./docs/internal/running-tests.md).
 
 ## Changesets (REQUIRED)
 
