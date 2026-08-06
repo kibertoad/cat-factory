@@ -90,7 +90,7 @@ describe('ZeplinProvider.probeVersion', () => {
     expect(seen[0]?.endsWith('/projects/p1')).toBe(true)
   })
 
-  it('drops an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
+  it('states an unreadable SUPPLEMENTARY section (tokens) instead of failing the import', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url: string) => {
@@ -104,7 +104,10 @@ describe('ZeplinProvider.probeVersion', () => {
     const doc = await new ZeplinProvider().fetchDocument(TOKEN, 'p1', 'ws_1')
     expect(doc.title).toBe('Acme')
     expect(doc.body).toContain('### Components')
-    expect(doc.body).not.toContain('### Design tokens')
+    // The import survives, and the failed read is NAMED: a dropped section and a project
+    // that defines no tokens are the same absence and opposite facts.
+    expect(doc.body).toContain('the Zeplin design-tokens read failed')
+    expect(doc.body).not.toMatch(/^- .+ = /m)
   })
 
   it('fails the import when the PRIMARY screens read fails (not a silent empty success)', async () => {

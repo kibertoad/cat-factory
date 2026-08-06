@@ -8,7 +8,7 @@ import {
 import { renderDesignContext } from './design.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 import {
-  MAX_SCREENS,
+  SCREEN_FETCH_LIMIT,
   ZEPLIN_API_HOST,
   ZEPLIN_DESCRIPTOR,
   buildZeplinDesignContext,
@@ -105,8 +105,9 @@ export class ZeplinProvider implements DocumentSourceProvider {
       externalId,
       projectName: project.name ?? projectId,
       screens,
-      components: unwrapArray<ZeplinComponent>(components, 'components'),
-      designTokens,
+      components: unwrapArray<ZeplinComponent>(components.value, 'components'),
+      designTokens: designTokens.value,
+      failedReads: { components: components.failed, designTokens: designTokens.failed },
     })
 
     const body = renderDesignContext(context)
@@ -165,16 +166,23 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
     const listed = await this.get<unknown>(
       credentials,
-      `/projects/${encodeURIComponent(projectId)}/screens?limit=${MAX_SCREENS}`,
+      `/projects/${encodeURIComponent(projectId)}/screens?limit=${SCREEN_FETCH_LIMIT}`,
     )
     return unwrapArray<ZeplinScreen>(listed, 'screens')
   }
 
-  private async bestEffort<T>(fn: () => Promise<T>): Promise<T | null> {
+  /**
+   * A supplementary read that may not fail the import. It reports WHETHER it failed, because
+   * a dropped read and a project that simply has no components/tokens render identically as
+   * an absent section, and only the caller can state which one happened.
+   */
+  private async bestEffort<T>(fn: () => Promise<T>): Promise<{ value: T | null; failed: boolean }> {
     try {
-      return await fn()
+      return { value: await fn(), failed: false }
     } catch {
-      return null
+      // silent-catch-ok: the failure is REPORTED through the returned flag, which the
+      // rendered body states as a note rather than passing off as an empty section.
+      return { value: null, failed: true }
     }
   }
 

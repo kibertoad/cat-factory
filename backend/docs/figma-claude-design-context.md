@@ -44,11 +44,46 @@ the `.cat-context/` materialization. The only per-source code is `normalizeConne
 model** before rendering:
 
 - `documents/design.logic.ts`: `DesignContext` (`blocks` = frames/screens, `components`, `tokens`,
-  `references`) + `renderDesignContext`, which emits `## <block>` sections, a global `### Components`,
-  `### Design tokens`, and optional `### References`. Each provider only maps its own API into this
-  shape; the renderer is shared, so the output isn't Figma-shaped.
+  `tokenOrigin`, `references`, `notes`) + `renderDesignContext`, which emits the coverage `### Notes`
+  first, then `## <block>` sections, a global `### Components`, `### Design tokens` and optional
+  `### References`. Each provider only maps its own API into this shape; the renderer is shared, so
+  the output isn't Figma-shaped.
+  - **`notes` lead the body** because each one qualifies what follows (frames an import cap dropped,
+    a subtree read that failed), and a body that gets truncated loses its tail.
+  - **`tokenOrigin` names which token path produced the section.** A source with more than one
+    (Figma: variables, else published styles) must say which, and a plan gate, a failed read and a
+    design that defines no tokens are three facts a bare omission collapses into one.
+  - **`capped` + `sortDesignTokens` are how a source bounds a list honestly.** `capped` returns the
+    dropped count so the caller must state it, and a source that caps must sort by the RENDERED
+    order first (`sortDesignTokens`) or its "N not listed" note points at the wrong tail: a reader
+    who assumes a cap is a plain prefix of what they see would conclude the rest was never
+    considered.
 - `documents/http.ts`: the shared host-pinned fetch + SSRF guard + capped read every fixed-host
   provider reuses (`createHostPinnedFetch` / `assertHostPinned` / `readCappedText`).
+
+### One cap, one note: the caps are not interchangeable
+
+A single "was truncated" flag was the original bug here, in both directions. Each cap gets its OWN
+note because each asks the reader for something different, and one of them must not stop the walk:
+
+| Cap                | Blast radius                      | The walk         | What the reader does      |
+| ------------------ | --------------------------------- | ---------------- | ------------------------- |
+| Tree depth         | one BRANCH                        | carries on       | link that sub-frame's URL |
+| Per-frame nodes    | the rest of that frame            | stops that frame | the frame is too big      |
+| Import-wide nodes  | that frame and every one after    | stops everything | import fewer frames       |
+| Per-frame text     | the rest of that frame's text     | stops that frame | the frame is too wordy    |
+| Import-wide text   | that frame's text and all after   | stops everything | import fewer frames       |
+| Components, tokens | the design SYSTEM, not the frames | n/a              | open the library file     |
+
+Two traps this shape exists to prevent:
+
+- **A depth cut is LOCAL.** Treating it as exhaustion (propagating it up and breaking the sibling
+  loop) meant one branch nested past the cap dropped every later sibling of every ancestor, so a
+  frame whose first branch was deep rendered as that branch alone. Auto-layout nests past six
+  levels routinely, so this hit ordinary frames.
+- **An empty section is DROPPED by the renderer**, so a frame whose text the import budget refused
+  was byte-for-byte a frame that contains no text. Every text cut therefore leaves a
+  `(text truncated)` line IN the section, not only a note.
 
 One **best-practice prompt fragment** serves all design sources: `design.context`
 (`prompt-fragments/src/collections/design.ts`, category `Design`, `appliesTo: {blockTypes:
@@ -59,10 +94,36 @@ the materialised structure, matches `### Components` to existing repo components
 ## Figma
 
 - **Auth:** a per-workspace Figma PAT (`X-Figma-Token`), sealed like Notion/Confluence.
-- **Fetch:** `GET /v1/files/:key/nodes` (frame subtree) or `/v1/files/:key` (whole file) → layout
-  tree + text + components; `GET /v1/files/:key/variables/local` → design tokens (Enterprise-gated;
-  dropped on 403/404, never fails the import); `GET /v1/images/:key` → a best-effort short-lived
-  rendered-preview URL on a `### References` line (no download: a non-multimodal agent ignores it).
+- **Fetch (node link):** `GET /v1/files/:key/nodes` returns the referenced frame's subtree, bounded
+  by the same `depth=` the whole-file path uses.
+- **Fetch (whole file):** `GET /v1/files/:key?depth=2` is an OUTLINE read (pages plus their
+  top-level frames, no grandchildren), so the content comes from chunked `/nodes` reads of the
+  first `MAX_FILE_FRAMES` of those frames. **A bigger `depth=` cannot replace this**: the file
+  endpoint jumps from "no children" to "the entire document", which blows the response cap on any
+  real file. A frame whose chunk fails still renders from the outline, and both the frame cap and
+  the failed reads are named in `### Notes`, the failures WITH their HTTP status, because a 403
+  (token scope), a 429 (rate limit) and a 502 (oversize response) need three different fixes.
+  Frames are flattened across pages, so the cap note names the per-page counts: a frame count alone
+  cannot say whether the cap stopped mid-page or dropped a whole page of the design.
+- **The requested `depth=` is DERIVED from `MAX_TREE_DEPTH`**, not a literal, so the fetch and the
+  renderer cannot drift. Figma counts `depth=1` as the requested node alone, so the renderer's depth
+  `d` needs `d + 2`, and ONE MORE level is requested on top: without it a node at the cap cannot see
+  whether it has children, and a tree the FETCH truncated arrives identical to a complete one.
+- **Layout fidelity:** each node's line carries its styling in brackets, the facts an agent would
+  otherwise invent: `[fill #3366ff; Inter 16/600 lh 24; radius 8; auto-layout vertical gap 12
+padding 16/24]`. Bounded by the same depth/node caps as the tree.
+- **Tokens:** `GET /v1/files/:key/variables/local` when the plan serves it; a **403/404 is the
+  Enterprise plan gate**, and the fallback is the file's **published styles** (the `styles` map
+  joined to the fills/text styles of the nodes referencing them), which every plan serves. The two
+  are never merged: `tokenOrigin` states which one produced the section, and states the gate itself
+  when neither produced anything.
+- **Components:** each instance contributes its component-set name plus the variants and properties
+  the design actually uses (`variants: Size=Large | Size=Small; props: Icon=true, Label`), which is
+  the signal "reuse the existing component" needs to match against repo code. The component cap
+  ranks by INSTANCE COUNT, computed from what was observed, so what survives it is what the design
+  leans on; dropping the most-used component is the one outcome that would make the section useless.
+- **Preview:** `GET /v1/images/:key` → a best-effort short-lived rendered-preview URL on a
+  `### References` line (no download: a non-multimodal agent ignores it).
 - **Ref/auto-match:** `parseFigmaRef` canonicalises a `figma.com` share URL (dash node-ids, title
   segments, `&t=` params) to the stable `<fileKey>[:<nodeId>]` external id, matched by the
   `documentUrlResolver` seam regardless of URL-string differences.
@@ -75,8 +136,14 @@ current API when touched: treat them as the intended shape, not a frozen contrac
 - **Auth:** a per-workspace Zeplin PAT (`Authorization: Bearer`), sealed like Figma.
 - **Fetch:** `GET /v1/projects/:id` (name), `/projects/:id/screens` (→ blocks), `/projects/:id/
 components` (→ grouped components), `/projects/:id/design_tokens` (→ colours/typography/spacing).
-  The screens/components/tokens reads are best-effort (a single failing section is dropped, not
-  fatal), exactly like Figma's variables.
+  The components/tokens reads are best-effort (a single failing section is dropped, not fatal),
+  exactly like Figma's variables, and the drop is NAMED in `### Notes` / `tokenOrigin` rather than
+  left to read as a project that has none.
+- **The screens read asks for `SCREEN_FETCH_LIMIT` (= `MAX_SCREENS + 1`)**, so that a project with
+  more screens than we import is DETECTABLE. Requesting exactly `MAX_SCREENS` makes a full page and
+  a truncated one identical, which silently drops the cap note in the one case it exists for. The
+  extra row is a probe and is never rendered, and because the total is unknown the note says "more
+  than N" rather than inventing a count.
 - **Why Zeplin (and not just Figma):** Zeplin is the design→dev **handoff** tool, so its content
   model is _screens + a design system_, NOT Figma's node tree. Having a second provider with a
   genuinely different model is what proves the `DesignContext` abstraction isn't Figma-shaped. It

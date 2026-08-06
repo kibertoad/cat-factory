@@ -1,10 +1,13 @@
 import type { DocumentSourceDescriptor } from '@cat-factory/kernel'
 import {
+  capped,
   dimensionMeta,
+  sortDesignTokens,
   type DesignBlock,
   type DesignComponent,
   type DesignContext,
   type DesignToken,
+  type DesignTokenOrigin,
 } from './design.logic.js'
 import { assertHostPinned } from './http.js'
 
@@ -129,7 +132,28 @@ export function figmaUrlFor(externalId: string): string {
 
 // ---- Node tree → DesignContext --------------------------------------------
 
-/** The subset of a Figma node we read for the layout/text/component rendering. */
+/** A Figma paint (a fill or a stroke). Only a SOLID paint carries a colour we can name. */
+export interface FigmaPaint {
+  type?: string
+  visible?: boolean
+  opacity?: number
+  color?: { r?: number; g?: number; b?: number; a?: number } | null
+}
+
+/** The `style` block Figma puts on a TEXT node: the typography facts we render. */
+export interface FigmaTypeStyle {
+  fontFamily?: string
+  fontWeight?: number
+  fontSize?: number
+  lineHeightPx?: number
+}
+
+/** A component instance's property assignments (`{ 'Size#1:0': { value, type } }`). */
+export interface FigmaComponentProperties {
+  [name: string]: { value?: unknown; type?: string } | undefined
+}
+
+/** The subset of a Figma node we read for the layout/text/component/styling rendering. */
 export interface FigmaNode {
   id?: string
   name?: string
@@ -138,60 +162,294 @@ export interface FigmaNode {
   componentId?: string
   absoluteBoundingBox?: { width?: number; height?: number } | null
   children?: FigmaNode[]
+  fills?: FigmaPaint[]
+  strokes?: FigmaPaint[]
+  style?: FigmaTypeStyle
+  cornerRadius?: number
+  rectangleCornerRadii?: number[]
+  layoutMode?: string
+  itemSpacing?: number
+  paddingTop?: number
+  paddingRight?: number
+  paddingBottom?: number
+  paddingLeft?: number
+  /** Published-style ids by role (`fill`, `text`, `stroke`, `effect`, `grid`). */
+  styles?: Record<string, string | undefined>
+  componentProperties?: FigmaComponentProperties
 }
 
 /** A `componentId → { name }` map (Figma returns it alongside the node tree). */
 export interface FigmaComponentMap {
-  [id: string]: { name?: string } | undefined
+  [id: string]: { name?: string; description?: string; componentSetId?: string } | undefined
 }
 
-const MAX_TREE_DEPTH = 6
-const MAX_TREE_NODES = 400
+/** A `componentSetId → { name }` map: the identity a variant's own name does not carry. */
+export interface FigmaComponentSetMap {
+  [id: string]: { name?: string; description?: string } | undefined
+}
+
+/** The file/nodes response `styles` map: a published style id → its metadata. */
+export interface FigmaStyleMap {
+  [id: string]: { name?: string; styleType?: string; description?: string } | undefined
+}
+
+// Every cap below is sized against the ~256 KB linked-context corpus budget
+// (`context_documents_over_budget`), which is what decides whether this document reaches the
+// agent at all. Worst case, roughly: layout 1,500 lines × ~60 B ≈ 90 KB, text 600 × ~50 B
+// ≈ 30 KB, tokens 250 × ~50 B ≈ 13 KB, components 150 × ~80 B ≈ 12 KB, so a maximal import
+// lands near 145 KB and leaves headroom for the rest of the corpus. RAISING ONE MEANS
+// REDOING THAT ARITHMETIC, not just picking a bigger number.
+
+/**
+ * Levels of descendants rendered below a frame's own children. Exported because the provider
+ * derives the API `depth=` it requests from it: the two must not drift, or the tree is cut by
+ * the fetch at a depth the renderer never states.
+ */
+export const MAX_TREE_DEPTH = 6
+/** Nodes rendered for one frame. */
+const MAX_FRAME_NODES = 400
+/** Nodes rendered across the WHOLE import: a whole-file import fans out over many frames. */
+const MAX_IMPORT_NODES = 1500
+/** Text lines collected for one frame, and across the whole import. */
+const MAX_FRAME_TEXT = 200
+const MAX_IMPORT_TEXT = 600
+/** Top-level frames a whole-file import fetches as subtrees. */
+export const MAX_FILE_FRAMES = 12
+/** Distinct variants listed on one component's note before the rest are summarised away. */
+const MAX_VARIANTS_PER_COMPONENT = 6
+/** Components listed, ranked by how often the design instantiates them. */
+const MAX_COMPONENTS = 150
+/** Token lines listed, whichever source produced them. */
+const MAX_TOKENS = 250
+
+/** Page children worth fetching as a frame subtree; a stray vector or sticky is not one. */
+const FRAME_TYPES = new Set(['FRAME', 'COMPONENT', 'COMPONENT_SET', 'SECTION', 'GROUP'])
 
 function dimensionLabel(node: FigmaNode): string {
   return dimensionMeta(node.absoluteBoundingBox?.width, node.absoluteBoundingBox?.height) ?? ''
 }
 
+function round(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+// ---- Styling facts ---------------------------------------------------------
+
+/** Figma's 0–1 colour channels → `#rrggbb`, with an alpha qualifier below full opacity. */
+export function figmaColorHex(
+  color: { r?: number; g?: number; b?: number; a?: number } | null | undefined,
+  paintOpacity?: number,
+): string | null {
+  if (!color) return null
+  const to2 = (n: number | undefined) =>
+    Math.max(0, Math.min(255, Math.round((n ?? 0) * 255)))
+      .toString(16)
+      .padStart(2, '0')
+  const hex = `#${to2(color.r)}${to2(color.g)}${to2(color.b)}`
+  const alpha = (color.a ?? 1) * (paintOpacity ?? 1)
+  return alpha < 1 ? `${hex} (a=${alpha.toFixed(2)})` : hex
+}
+
+/** The first visible SOLID paint's hex, or null when the node has none we can name. */
+function firstSolidHex(paints: FigmaPaint[] | undefined): string | null {
+  for (const paint of paints ?? []) {
+    if (paint.visible === false || paint.type !== 'SOLID') continue
+    const hex = figmaColorHex(paint.color, paint.opacity)
+    if (hex) return hex
+  }
+  return null
+}
+
+/** `Inter 16/600 lh 24`: the typography an implementer would otherwise have to guess. */
+function typographyLabel(style: FigmaTypeStyle | undefined): string | null {
+  if (!style) return null
+  const parts: string[] = []
+  if (style.fontFamily?.trim()) parts.push(style.fontFamily.trim())
+  if (style.fontSize != null) {
+    parts.push(
+      style.fontWeight != null
+        ? `${round(style.fontSize)}/${style.fontWeight}`
+        : `${round(style.fontSize)}px`,
+    )
+  } else if (style.fontWeight != null) {
+    parts.push(`w${style.fontWeight}`)
+  }
+  if (style.lineHeightPx != null) parts.push(`lh ${round(style.lineHeightPx)}`)
+  return parts.length ? parts.join(' ') : null
+}
+
+/** `padding 16` when uniform, else the CSS-ordered `padding 16/24/16/24` (top right bottom left). */
+function paddingLabel(node: FigmaNode): string | null {
+  const sides = [node.paddingTop, node.paddingRight, node.paddingBottom, node.paddingLeft]
+  if (sides.every((s) => s == null)) return null
+  const values = sides.map((s) => round(s ?? 0))
+  if (values.every((v) => v === values[0])) {
+    return values[0] === 0 ? null : `padding ${values[0]}`
+  }
+  return `padding ${values.join('/')}`
+}
+
+function cornerRadiusLabel(node: FigmaNode): string | null {
+  const corners = node.rectangleCornerRadii
+  if (corners?.length === 4 && corners.some((c) => c !== corners[0])) {
+    return `radius ${corners.map((c) => round(c)).join('/')}`
+  }
+  const radius = node.cornerRadius ?? corners?.[0]
+  return radius ? `radius ${round(radius)}` : null
+}
+
+function autoLayoutLabel(node: FigmaNode): string | null {
+  const mode = node.layoutMode
+  if (!mode || mode === 'NONE') return null
+  const parts = [`auto-layout ${mode.toLowerCase()}`]
+  if (node.itemSpacing) parts.push(`gap ${round(node.itemSpacing)}`)
+  const padding = paddingLabel(node)
+  if (padding) parts.push(padding)
+  return parts.join(' ')
+}
+
 /**
- * Render a node and its descendants as an indented bullet tree (name + type +
- * size), bounded in depth and total nodes so a huge frame can't blow up the
- * context file. Mutates `counter` to enforce the global node cap.
+ * The styling clause appended to a node's layout line. Everything here is a fact the agent
+ * would otherwise invent: the colour, the type ramp, the radius, and the auto-layout that
+ * decides whether the implementation is a flex row or a stack.
  */
-function renderLayout(
-  node: FigmaNode,
-  depth: number,
-  counter: { n: number },
-  lines: string[],
-): void {
-  if (depth > MAX_TREE_DEPTH || counter.n >= MAX_TREE_NODES) return
-  counter.n++
+export function figmaStylingFacts(node: FigmaNode): string[] {
+  const facts: string[] = []
+  const fill = firstSolidHex(node.fills)
+  if (fill) facts.push(`fill ${fill}`)
+  const stroke = firstSolidHex(node.strokes)
+  if (stroke) facts.push(`stroke ${stroke}`)
+  const typography = typographyLabel(node.style)
+  if (typography) facts.push(typography)
+  const radius = cornerRadiusLabel(node)
+  if (radius) facts.push(radius)
+  const layout = autoLayoutLabel(node)
+  if (layout) facts.push(layout)
+  return facts
+}
+
+// ---- Layout + text rendering ----------------------------------------------
+
+/** What one import may still spend, shared across every frame it renders. */
+interface ImportBudget {
+  nodes: number
+  text: number
+}
+
+/**
+ * Which cap cut a walk short. They are NOT interchangeable, and conflating them is what made
+ * one deep branch cost a frame's every remaining sibling:
+ *
+ * - `depth` is LOCAL to a branch. The tree continues below what we render, and the branch
+ *   beside it is unaffected, so the walk states the cut and CARRIES ON.
+ * - `frame-nodes` / `import-nodes` are EXHAUSTION. Nothing further can render, in this frame
+ *   or (for the import budget) in any frame after it, so the walk stops.
+ *
+ * They also want different reactions from the reader: a depth cut means link the sub-frame,
+ * a frame cap means the frame is too big to import whole, and an import cap means the import
+ * itself is over budget and should name fewer frames.
+ */
+type LayoutCut = 'depth' | 'frame-nodes' | 'import-nodes'
+
+/** Every cap `figmaBlocks` counts frames against, layout and text alike. */
+type FrameCut = LayoutCut | 'frame-text' | 'import-text'
+
+/** The mutable state of one frame's layout walk: what it may still spend, and what cut it. */
+interface LayoutWalk {
+  /** Nodes this FRAME may still render. */
+  frameNodes: number
+  /** Nodes the whole IMPORT may still render, shared across frames. */
+  budget: ImportBudget
+  /** Every cap that actually bit, for the coverage notes. */
+  cuts: Set<LayoutCut>
+}
+
+/**
+ * Render a node and its descendants as an indented bullet tree (name, type, size, styling),
+ * bounded in depth and in nodes so a huge frame can't blow up the context file.
+ *
+ * Returns false only on EXHAUSTION (see {@link LayoutCut}), which the caller must propagate:
+ * a `true` return means siblings may still render, even when this branch was cut by depth.
+ * The `(truncated)` marker is pushed by the exhaustion guard itself, at the depth the walk
+ * actually ran out, so unwinding ancestors add nothing and one cut leaves ONE marker.
+ */
+function renderLayout(node: FigmaNode, depth: number, walk: LayoutWalk, lines: string[]): boolean {
   const indent = '  '.repeat(depth)
+  if (walk.budget.nodes <= 0) {
+    walk.cuts.add('import-nodes')
+    lines.push(`${indent}- … (truncated)`)
+    return false
+  }
+  if (walk.frameNodes <= 0) {
+    walk.cuts.add('frame-nodes')
+    lines.push(`${indent}- … (truncated)`)
+    return false
+  }
+  walk.frameNodes--
+  walk.budget.nodes--
   const name = node.name?.trim() || '(unnamed)'
   const type = node.type ? ` _${node.type}_` : ''
-  lines.push(`${indent}- ${name}${type}${dimensionLabel(node)}`)
+  const facts = figmaStylingFacts(node)
+  const styling = facts.length ? ` [${facts.join('; ')}]` : ''
+  lines.push(`${indent}- ${name}${type}${dimensionLabel(node)}${styling}`)
+
+  const children = node.children ?? []
+  if (!children.length) return true
+  if (depth >= MAX_TREE_DEPTH) {
+    // The design continues below what we render. Naming the count is what separates "the cap
+    // stopped here" from "this node is a leaf", which an omitted line renders identically.
+    walk.cuts.add('depth')
+    const label = children.length === 1 ? 'node' : 'nodes'
+    lines.push(`${indent}  - … (${children.length} deeper ${label} not shown)`)
+    return true
+  }
+  for (const child of children) {
+    if (!renderLayout(child, depth + 1, walk, lines)) return false
+  }
+  return true
+}
+
+/** The mutable state of one frame's text walk: what it may still spend, and what cut it. */
+interface TextWalk {
+  /** Text lines this FRAME may still collect. */
+  frameLines: number
+  /** Text lines the whole IMPORT may still collect, shared across frames. */
+  budget: ImportBudget
+  /** Which cap stopped the collection, if one did. */
+  cut?: 'frame-text' | 'import-text'
+}
+
+/**
+ * Collect every TEXT node's `characters`, in document order, bounded per frame and import.
+ * Returns false when a cap stopped it, because an empty `Text content` section is DROPPED by
+ * the renderer: without this the frames whose text the import budget refused read exactly
+ * like frames that contain no text.
+ */
+function collectText(node: FigmaNode, walk: TextWalk, out: string[]): boolean {
+  if (walk.budget.text <= 0) {
+    walk.cut = 'import-text'
+    return false
+  }
+  if (walk.frameLines <= 0) {
+    walk.cut = 'frame-text'
+    return false
+  }
+  if (node.type === 'TEXT' && node.characters?.trim()) {
+    out.push(node.characters.trim())
+    walk.frameLines--
+    walk.budget.text--
+  }
   for (const child of node.children ?? []) {
-    if (counter.n >= MAX_TREE_NODES) {
-      lines.push(`${indent}  - … (truncated)`)
-      break
-    }
-    renderLayout(child, depth + 1, counter, lines)
+    if (!collectText(child, walk, out)) return false
   }
+  return true
 }
 
-/** Collect every TEXT node's `characters`, in document order, bounded. */
-function collectText(node: FigmaNode, out: string[]): void {
-  if (out.length >= MAX_TREE_NODES) return
-  if (node.type === 'TEXT' && node.characters?.trim()) out.push(node.characters.trim())
-  for (const child of node.children ?? []) collectText(child, out)
-}
-
-/** Collect the distinct design-system components a node tree instantiates. */
-function collectComponents(node: FigmaNode, components: FigmaComponentMap, out: Set<string>): void {
-  if (node.type === 'INSTANCE') {
-    const name = (node.componentId && components[node.componentId]?.name) || node.name?.trim()
-    if (name) out.add(name)
-  }
-  for (const child of node.children ?? []) collectComponents(child, components, out)
+/** The blocks a set of frames renders to, plus the caps that cut them. */
+export interface FigmaBlocksResult {
+  blocks: DesignBlock[]
+  /** Coverage notes for the caps that actually bit; empty when nothing was dropped. */
+  notes: string[]
 }
 
 /**
@@ -200,36 +458,231 @@ function collectComponents(node: FigmaNode, components: FigmaComponentMap, out: 
  * design-system components are collected separately ({@link figmaComponents}) into the
  * shared global `### Components` section rather than per-frame.
  */
-export function figmaBlocks(roots: FigmaNode[]): DesignBlock[] {
-  return roots.map((root) => {
-    const layout: string[] = []
-    // One counter shared across every top-level child so MAX_TREE_NODES bounds the whole
-    // frame, not each subtree — a wide frame can't blow past the cap one branch at a time.
-    const counter = { n: 0 }
-    for (const child of root.children ?? []) renderLayout(child, 0, counter, layout)
+export function figmaBlocks(roots: FigmaNode[]): FigmaBlocksResult {
+  // One budget for the whole import: a whole-file import renders many frames, so a
+  // per-frame cap alone bounds nothing about the size of the context file it produces.
+  const budget: ImportBudget = { nodes: MAX_IMPORT_NODES, text: MAX_IMPORT_TEXT }
+  // Frames counted per CAP, not one "was cut" tally: each cap is a different fact about the
+  // import and asks a different thing of the reader.
+  const cutFrames = new Map<FrameCut, number>()
+  const count = (cut: FrameCut) => cutFrames.set(cut, (cutFrames.get(cut) ?? 0) + 1)
 
+  const blocks = roots.map((root) => {
+    // One frame counter shared across every top-level child, so the per-frame cap bounds the
+    // whole frame rather than each subtree: a wide frame can't pass it one branch at a time.
+    const walk: LayoutWalk = { frameNodes: MAX_FRAME_NODES, budget, cuts: new Set() }
+    const layout: string[] = []
+    for (const child of root.children ?? []) {
+      if (!renderLayout(child, 0, walk, layout)) break
+    }
+    for (const cut of walk.cuts) count(cut)
+
+    const textWalk: TextWalk = { frameLines: MAX_FRAME_TEXT, budget }
     const text: string[] = []
-    collectText(root, text)
+    collectText(root, textWalk, text)
+    const lines = text.map((t) => `- ${t.replace(/\s+/g, ' ')}`)
+    if (textWalk.cut) {
+      count(textWalk.cut)
+      // Keeps the section non-empty, so a refused budget can never render as "no text here".
+      lines.push('- … (text truncated)')
+    }
 
     return {
       title: root.name?.trim() || '(unnamed frame)',
       meta: dimensionLabel(root),
       sections: [
         { heading: 'Layout', lines: layout },
-        { heading: 'Text content', lines: text.map((t) => `- ${t.replace(/\s+/g, ' ')}`) },
+        { heading: 'Text content', lines },
       ],
     }
   })
+
+  return { blocks, notes: capNotes(cutFrames, roots.length) }
 }
 
-/** Collect the distinct design-system components instantiated across the frames. */
+/** One note per cap that bit, each naming what the reader must do about that particular cap. */
+function capNotes(cutFrames: Map<FrameCut, number>, total: number): string[] {
+  const notes: string[] = []
+  const of = (n: number) => `${n} of ${total} frames`
+  const depth = cutFrames.get('depth')
+  if (depth) {
+    notes.push(
+      `Layout is rendered ${MAX_TREE_DEPTH} levels deep below each frame's own children; in ` +
+        `${of(depth)} a branch continues past that and ends at a "(N deeper nodes not shown)" ` +
+        `marker. Link that sub-frame's own URL to import it at full depth.`,
+    )
+  }
+  const frameNodes = cutFrames.get('frame-nodes')
+  if (frameNodes) {
+    notes.push(
+      `Layout is capped at ${MAX_FRAME_NODES} nodes per frame; ${of(frameNodes)} hit that cap ` +
+        `and stop at a "(truncated)" marker, so their later siblings are absent entirely.`,
+    )
+  }
+  const importNodes = cutFrames.get('import-nodes')
+  if (importNodes) {
+    notes.push(
+      `The import-wide budget of ${MAX_IMPORT_NODES} layout nodes was spent; ${of(importNodes)} ` +
+        `are missing part or all of their layout. Link individual frame URLs to import fewer ` +
+        `frames at full fidelity.`,
+    )
+  }
+  const frameText = cutFrames.get('frame-text')
+  if (frameText) {
+    notes.push(
+      `Text content is capped at ${MAX_FRAME_TEXT} lines per frame; ${of(frameText)} stop at a ` +
+        `"(text truncated)" marker.`,
+    )
+  }
+  const importText = cutFrames.get('import-text')
+  if (importText) {
+    notes.push(
+      `The import-wide budget of ${MAX_IMPORT_TEXT} text lines was spent; ${of(importText)} are ` +
+        `missing part or all of their text. Link individual frame URLs to import fewer frames ` +
+        `at full fidelity.`,
+    )
+  }
+  return notes
+}
+
+/**
+ * The top-level frames of a whole file, in document order: the page children a
+ * {@link figmaBlocks} block is rendered from. The whole-file file read is shallow (it
+ * returns these with no grandchildren), so the caller fetches their subtrees separately.
+ */
+export function figmaTopLevelFrames(document: FigmaNode | undefined): FigmaNode[] {
+  const frames: FigmaNode[] = []
+  for (const page of document?.children ?? []) {
+    for (const child of page.children ?? []) {
+      if (child.id && (!child.type || FRAME_TYPES.has(child.type))) frames.push(child)
+    }
+  }
+  return frames
+}
+
+/**
+ * How many importable frames each page contributes, in the same document order
+ * {@link figmaTopLevelFrames} flattens. The frame cap counts frames, so on its own it cannot
+ * say whether it stopped mid-page or dropped a whole page of the design: this is what lets the
+ * cap note name the pages, which is the difference between "some frames are missing" and "you
+ * imported none of page 2".
+ */
+export function figmaPageSummary(
+  document: FigmaNode | undefined,
+): { name: string; frames: number }[] {
+  const pages: { name: string; frames: number }[] = []
+  for (const [index, page] of (document?.children ?? []).entries()) {
+    const frames = (page.children ?? []).filter(
+      (child) => child.id && (!child.type || FRAME_TYPES.has(child.type)),
+    ).length
+    if (frames) pages.push({ name: page.name?.trim() || `Page ${index + 1}`, frames })
+  }
+  return pages
+}
+
+// ---- Components ------------------------------------------------------------
+
+/** Strip Figma's `#1:0` disambiguation suffix off a component-property name. */
+function cleanPropertyName(raw: string): string {
+  return raw.split('#')[0]!.trim()
+}
+
+function renderPropertyValue(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() || null
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return null
+}
+
+/** What one component instance says about itself: its variant, and the props it was given. */
+interface ComponentUsage {
+  variants: Set<string>
+  props: Set<string>
+  description?: string
+  /**
+   * Instances seen. Not rendered: it exists so the component cap keeps the components the
+   * design leans on rather than an arbitrary slice, a ranking COMPUTED from observed instances
+   * rather than read off anyone's judgement.
+   */
+  instances: number
+}
+
+function readInstanceProperties(
+  props: FigmaComponentProperties | undefined,
+  usage: ComponentUsage,
+): void {
+  for (const [rawName, entry] of Object.entries(props ?? {})) {
+    const name = cleanPropertyName(rawName)
+    if (!name) continue
+    const value = renderPropertyValue(entry?.value)
+    if (entry?.type === 'VARIANT') {
+      if (value) usage.variants.add(`${name}=${value}`)
+    } else {
+      usage.props.add(value != null && entry?.type === 'BOOLEAN' ? `${name}=${value}` : name)
+    }
+  }
+}
+
+function collectComponents(
+  node: FigmaNode,
+  components: FigmaComponentMap,
+  sets: FigmaComponentSetMap,
+  out: Map<string, ComponentUsage>,
+): void {
+  if (node.type === 'INSTANCE') {
+    const definition = node.componentId ? components[node.componentId] : undefined
+    const set = definition?.componentSetId ? sets[definition.componentSetId] : undefined
+    // A variant's own component name IS its property assignment ("Size=Large, Type=Primary"),
+    // so it identifies the component only through its SET. Without a set, the component name
+    // is the identity and there is no variant to report.
+    const name = (set?.name || definition?.name || node.name)?.trim()
+    if (name) {
+      const usage = out.get(name) ?? {
+        variants: new Set<string>(),
+        props: new Set<string>(),
+        instances: 0,
+      }
+      usage.instances++
+      if (set?.name && definition?.name?.includes('=')) usage.variants.add(definition.name.trim())
+      readInstanceProperties(node.componentProperties, usage)
+      usage.description ??= (definition?.description || set?.description)?.trim().split('\n')[0]
+      out.set(name, usage)
+    }
+  }
+  for (const child of node.children ?? []) collectComponents(child, components, sets, out)
+}
+
+function usageNote(usage: ComponentUsage): string | undefined {
+  const parts: string[] = []
+  const variants = capped([...usage.variants].sort(), MAX_VARIANTS_PER_COMPONENT)
+  if (variants.items.length) {
+    const shown = variants.items.join(' | ')
+    parts.push(`variants: ${shown}${variants.dropped ? ` (+${variants.dropped} more)` : ''}`)
+  }
+  const props = [...usage.props].sort()
+  if (props.length) parts.push(`props: ${props.join(', ')}`)
+  if (usage.description) parts.push(usage.description)
+  return parts.length ? parts.join('; ') : undefined
+}
+
+/**
+ * Collect the distinct design-system components instantiated across the frames, each with
+ * the variants and properties the design actually uses. That signal is what lets an agent
+ * match "reuse the existing component" against a repo component rather than a bare name.
+ *
+ * Ordered by instance count (ties by name, so the result is deterministic) because that order
+ * is what the component cap slices: the components the design leans on survive it. The
+ * renderer sorts alphabetically for display, so the order here is a RANKING, not a layout.
+ */
 export function figmaComponents(
   roots: FigmaNode[],
   components: FigmaComponentMap = {},
+  componentSets: FigmaComponentSetMap = {},
 ): DesignComponent[] {
-  const names = new Set<string>()
-  for (const root of roots) collectComponents(root, components, names)
-  return [...names].map((name) => ({ name }))
+  const usages = new Map<string, ComponentUsage>()
+  for (const root of roots) collectComponents(root, components, componentSets, usages)
+  return [...usages]
+    .sort(([aName, a], [bName, b]) => b.instances - a.instances || aName.localeCompare(bName))
+    .map(([name, usage]) => ({ name, note: usageNote(usage) }))
 }
 
 // ---- Variables → DesignToken[] --------------------------------------------
@@ -299,6 +752,90 @@ export function figmaTokens(meta: FigmaVariablesMeta | undefined | null): Design
   return tokens
 }
 
+// ---- Published styles → DesignToken[] --------------------------------------
+
+/** How a published style's role maps to the token collection it belongs in. */
+const STYLE_COLLECTIONS: Record<string, string> = {
+  fill: 'Colors',
+  fills: 'Colors',
+  stroke: 'Strokes',
+  strokes: 'Strokes',
+  text: 'Typography',
+}
+
+/** The value a styled node carries for the given role, or null when we can't name one. */
+function styledValue(node: FigmaNode, role: string): string | null {
+  if (role === 'fill' || role === 'fills') return firstSolidHex(node.fills)
+  if (role === 'stroke' || role === 'strokes') return firstSolidHex(node.strokes)
+  if (role === 'text') return typographyLabel(node.style)
+  return null
+}
+
+function collectStyleTokens(
+  node: FigmaNode,
+  styles: FigmaStyleMap,
+  out: Map<string, DesignToken>,
+): void {
+  for (const [role, styleId] of Object.entries(node.styles ?? {})) {
+    const collection = STYLE_COLLECTIONS[role]
+    const name = styleId ? styles[styleId]?.name?.trim() : undefined
+    if (!collection || !name) continue
+    const value = styledValue(node, role)
+    // A style with no resolvable value is a name and nothing else, which teaches an
+    // implementer nothing they can apply. Skip it rather than emit `name = ?`.
+    if (!value) continue
+    const key = `${collection}:${name}`
+    if (!out.has(key)) out.set(key, { collection, name, value })
+  }
+  for (const child of node.children ?? []) collectStyleTokens(child, styles, out)
+}
+
+/**
+ * Derive tokens from the file's PUBLISHED STYLES, the token source every Figma plan
+ * serves: the `styles` map names each published style and the nodes referencing one carry
+ * the concrete value, so the join produces `name = value` without the Enterprise-gated
+ * variables API. Deliberately NOT merged with {@link figmaTokens}: the two are different
+ * sources with different coverage, and a merged section could not say which one it came
+ * from.
+ */
+export function figmaStyleTokens(roots: FigmaNode[], styles: FigmaStyleMap = {}): DesignToken[] {
+  const tokens = new Map<string, DesignToken>()
+  for (const root of roots) collectStyleTokens(root, styles, tokens)
+  return [...tokens.values()]
+}
+
+/** Whether the Enterprise-gated variables read succeeded, was plan-gated, or failed. */
+export type FigmaVariablesStatus = 'ok' | 'gated' | 'failed'
+
+/**
+ * State which token path produced the section. A 403 from the variables API is a PLAN
+ * GATE, not an error, and neither of those reads the same as a design that simply defines
+ * no tokens, so the three cases must not collapse into one silent omission.
+ */
+export function figmaTokenOrigin(input: {
+  status: FigmaVariablesStatus
+  variableTokens: number
+  styleTokens: number
+}): DesignTokenOrigin | undefined {
+  if (input.variableTokens > 0) return { label: 'Figma variables' }
+  const missing =
+    input.status === 'gated'
+      ? 'the Figma variables API is not available on this plan'
+      : input.status === 'failed'
+        ? 'the Figma variables read failed'
+        : null
+  if (input.styleTokens > 0) {
+    return {
+      label: 'published styles',
+      note: missing ? `Variable-defined tokens are absent: ${missing}.` : undefined,
+    }
+  }
+  if (!missing) return undefined
+  return {
+    note: `No design tokens: ${missing}, and this design's published styles resolved to no value.`,
+  }
+}
+
 // ---- Assemble the DesignContext -------------------------------------------
 
 export interface FigmaContextInput {
@@ -312,10 +849,18 @@ export interface FigmaContextInput {
   roots: FigmaNode[]
   /** The `componentId → { name }` map returned alongside the nodes. */
   components: FigmaComponentMap
+  /** The `componentSetId → { name }` map: a variant's real identity. */
+  componentSets?: FigmaComponentSetMap
+  /** The file's published styles, the plan-independent token source. */
+  styles?: FigmaStyleMap
   /** Local-variables payload, or null when the plan doesn't expose it. */
   variablesMeta?: FigmaVariablesMeta | null
+  /** Whether the variables read succeeded, was plan-gated, or failed. */
+  variablesStatus?: FigmaVariablesStatus
   /** Best-effort short-lived rendered-preview URL, or null. */
   previewUrl?: string | null
+  /** Coverage caveats the fetch itself produced (dropped frames, a failed subtree read). */
+  fetchNotes?: string[]
 }
 
 /** Assemble the fetched Figma pieces into the shared {@link DesignContext}. */
@@ -324,12 +869,48 @@ export function buildFigmaDesignContext(input: FigmaContextInput): DesignContext
   const title = input.nodeId
     ? `${input.fileName || fileKey} — ${input.roots[0]?.name?.trim() || input.nodeId}`
     : input.fileName || fileKey
+  const { blocks, notes } = figmaBlocks(input.roots)
+  const variableTokens = figmaTokens(input.variablesMeta)
+  const styleTokens = figmaStyleTokens(input.roots, input.styles)
+
+  // Components and tokens are bounded too: both grow with the DESIGN SYSTEM rather than with
+  // the frames imported, so the layout/text budgets above say nothing about them, and a
+  // library file can carry hundreds of published styles.
+  const components = capped(
+    figmaComponents(input.roots, input.components, input.componentSets),
+    MAX_COMPONENTS,
+  )
+  const tokens = capped(
+    sortDesignTokens(variableTokens.length ? variableTokens : styleTokens),
+    MAX_TOKENS,
+  )
+  const capNotes: string[] = []
+  if (components.dropped) {
+    capNotes.push(
+      `${components.dropped} of ${components.dropped + components.items.length} components are ` +
+        `not listed: the ${MAX_COMPONENTS} instantiated most often were kept (the list itself is ` +
+        `alphabetical).`,
+    )
+  }
+  if (tokens.dropped) {
+    capNotes.push(
+      `${tokens.dropped} of ${tokens.dropped + tokens.items.length} design tokens are not ` +
+        `listed; the list is capped at ${MAX_TOKENS} and is otherwise in full.`,
+    )
+  }
+
   return {
     title,
     url: figmaUrlFor(input.externalId),
-    blocks: figmaBlocks(input.roots),
-    components: figmaComponents(input.roots, input.components),
-    tokens: figmaTokens(input.variablesMeta),
+    blocks,
+    components: components.items,
+    tokens: tokens.items,
+    tokenOrigin: figmaTokenOrigin({
+      status: input.variablesStatus ?? 'ok',
+      variableTokens: variableTokens.length,
+      styleTokens: styleTokens.length,
+    }),
     references: input.previewUrl ? [{ label: 'Rendered preview', url: input.previewUrl }] : [],
+    notes: [...(input.fetchNotes ?? []), ...notes, ...capNotes],
   }
 }
