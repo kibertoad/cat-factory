@@ -14,6 +14,7 @@ import type {
   AppCaches,
   DocumentContentResolver,
   FoundationalBuiltinSource,
+  PromptFragmentSource,
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from './container.js'
 import { FragmentTitleService } from './modules/fragmentLibrary/FragmentTitleService.js'
@@ -157,6 +158,12 @@ export function createFragmentLibraryModule(
   deps: CoreDependencies,
   documentContentResolver: DocumentContentResolver | undefined,
   caches: AppCaches,
+  /**
+   * Where the deployment-registered pool is read from: the RESOLVED source (this process's own
+   * registry, or the mothership's), passed in rather than re-derived off `deps` so this module and
+   * the engine can never resolve two different ones.
+   */
+  promptFragmentSource: PromptFragmentSource,
 ): FragmentLibraryModule | undefined {
   const { promptFragmentRepository } = deps
   if (!promptFragmentRepository) return undefined
@@ -188,8 +195,13 @@ export function createFragmentLibraryModule(
     promptFragmentRepository,
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
+    logger: deps.logger,
+    operationalMetrics: deps.operationalMetrics,
     selector: deps.fragmentSelector,
     briefService,
+    // The deployment-registered pool, read through the app-owned SOURCE so a mothership-mode node
+    // merges the MOTHERSHIP's standards under the tenant tiers rather than its own build's.
+    promptFragmentSource,
     // An explicitly-injected resolver (tests/conformance) wins; otherwise use the
     // one the document-source module built from this deployment's providers.
     documentContentResolver: deps.documentContentResolver ?? documentContentResolver,

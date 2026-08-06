@@ -3,8 +3,8 @@
 The bootstrap CLI for [cat-factory](https://github.com/kibertoad/cat-factory), the Agent
 Architecture Board. One command scaffolds a **local-mode deployment** you can run on your own
 machine: a Node/local backend (`@cat-factory/local-server`) and the frontend SPA
-(`@cat-factory/app`), mirroring the [`deploy/local`](../../../deploy/local) and
-[`deploy/frontend`](../../../deploy/frontend) example deployments in this repo, but depending on
+(`@cat-factory/app`), mirroring the [`deploy/local`](https://github.com/kibertoad/cat-factory/tree/main/deploy/local) and
+[`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend) example deployments in this repo, but depending on
 the **published** libraries, so the generated project stands alone outside the monorepo.
 
 It does the fiddly setup for you:
@@ -38,7 +38,7 @@ It does the fiddly setup for you:
   described above.
 - **`cat-factory env`**: generates **only** a ready-to-run local-mode `.env` in the current
   directory (or `--dir`), using the same secret generation, PAT flow, and pool-vs-native choice.
-  Use it when the deployment already exists (e.g. inside [`deploy/local`](../../../deploy/local),
+  Use it when the deployment already exists (e.g. inside [`deploy/local`](https://github.com/kibertoad/cat-factory/tree/main/deploy/local),
   or an already-scaffolded project) and you just need a fresh, complete `.env`. It refuses to
   overwrite an existing `.env` unless you pass `--force`, and (like `init`) it creates or merges
   the target dir's `.gitignore` so the secret `.env` can never be committed. A model-provider key
@@ -207,7 +207,7 @@ selectable, so no pipeline can start. The quickest is Cloudflare Workers AI over
 UI, whichever you prefer.
 
 The generated `README.md` repeats these steps with your chosen values, and links to the full
-[local-mode docs](../../../deploy/local/README.md) (container-runtime matrix, repo linking, the
+[local-mode docs](https://github.com/kibertoad/cat-factory/blob/main/deploy/local/README.md) (container-runtime matrix, repo linking, the
 Tester's Docker-in-Docker / ephemeral environments, the warm container pool, etc.).
 
 ## Security notes

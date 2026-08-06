@@ -9,11 +9,10 @@ import type {
   PromptFragmentRepository,
   WorkspaceRepository,
 } from '@cat-factory/kernel'
-import {
-  clearRegisteredPromptFragments,
-  registerPromptFragment,
-} from '@cat-factory/prompt-fragments'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { registryPromptFragmentSource } from '@cat-factory/kernel'
+import type { PromptFragmentRegistry } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { FragmentLibraryService } from './FragmentLibraryService.js'
 
 // Unit coverage for the document-backed ("living") fragment path: createFromDocument
@@ -370,17 +369,21 @@ describe('FragmentLibraryService — document-backed fragments', () => {
 describe('FragmentLibraryService — built-in tier, suppression and registered fragments', () => {
   let repo: FakeFragmentRepo
   let svc: FragmentLibraryService
+  let registry: PromptFragmentRegistry
 
   beforeEach(() => {
     repo = new FakeFragmentRepo()
+    // A FRESH registry per test, carrying the shipped catalog. What was a module global cleared in
+    // an `afterEach` is now an instance that cannot outlive its test, so a registration leaking
+    // into a sibling is not a thing that can happen.
+    registry = promptFragmentRegistryWithBuiltins()
     svc = new FragmentLibraryService({
       promptFragmentRepository: repo,
       workspaceRepository: workspaces,
       clock: fakeClock(),
+      promptFragmentSource: registryPromptFragmentSource(registry),
     })
   })
-
-  afterEach(() => clearRegisteredPromptFragments())
 
   it('drops a tier-tombstoned built-in from a run resolution (suppression sticks)', async () => {
     // Pinned before the workspace suppressed it — the stale selection must NOT
@@ -395,7 +398,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('serves a deployment-registered OVERRIDE of a built-in id to runs and the catalog', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'node.performance',
       version: '2.0.0',
       title: 'Our perf rules',
@@ -415,7 +418,7 @@ describe('FragmentLibraryService — built-in tier, suppression and registered f
   })
 
   it('folds a registered EXTRA fragment into the catalog, tier-shadowable and tombstonable', async () => {
-    registerPromptFragment({
+    registry.register({
       id: 'org.review-standard',
       version: '1.0.0',
       title: 'Org review standard',

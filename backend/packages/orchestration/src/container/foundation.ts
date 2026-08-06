@@ -47,6 +47,8 @@ export interface CoreFoundationParams {
   executionEventPublisher: CoreRuntime['executionEventPublisher']
   taskTypeRegistry: CoreRuntime['taskTypeRegistry']
   pipelineRegistry: CoreRuntime['pipelineRegistry']
+  /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
+  promptFragments: CoreRuntime['promptFragments']
   /** Late-bound spend-service accessor (built after the foundation) for the account-budget cache. */
   getSpendService: () => SpendService | undefined
   /**
@@ -83,6 +85,7 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     executionEventPublisher,
     taskTypeRegistry,
     pipelineRegistry,
+    promptFragments,
     getSpendService,
     getEnvironmentHandlerSeeder,
     getSharedStackSeeder,
@@ -110,6 +113,9 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     // deployment-registered default pipeline (the raw `dependencies.taskTypeRegistry` may be
     // undefined; this is the same instance re-exposed on `Core` for the snapshot projection).
     taskTypeRegistry,
+    // Where a new task's per-type default fragment ids come from: the RESOLVED source, so a
+    // mothership-mode node seeds from the mothership's registered sets rather than its own build's.
+    promptFragmentSource: promptFragments,
     // The acting workspace's runtime settings, feeding two collaborators: the opt-in review-debt
     // friction guard on task creation (paired with the open-notification reader below), and the
     // default test-environment provisioning stamped onto a new service frame. Optional seam —

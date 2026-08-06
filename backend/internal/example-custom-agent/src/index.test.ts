@@ -6,12 +6,13 @@ import type {
   GateStepState,
   JudgeRegistry,
   PipelineRegistry,
+  PromptFragmentRegistry,
   ProviderRegistry,
   RepoFiles,
   StepResolverRegistry,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
-import { universalFragments } from '@cat-factory/prompt-fragments'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import {
   InitiativePresetRegistry,
   defaultGateRegistry,
@@ -67,6 +68,7 @@ let providerRegistry: ProviderRegistry
 let pipelineRegistry: PipelineRegistry
 let judgeRegistry: JudgeRegistry
 let taskTypeRegistry: TaskTypeRegistry
+let promptFragmentRegistry: PromptFragmentRegistry
 beforeEach(() => {
   registry = defaultAgentKindRegistry()
   initiativePresetRegistry = new InitiativePresetRegistry()
@@ -76,6 +78,9 @@ beforeEach(() => {
   pipelineRegistry = defaultPipelineRegistry()
   judgeRegistry = defaultJudgeRegistry()
   taskTypeRegistry = defaultTaskTypeRegistry()
+  // The shipped catalog, so the example's own standards JOIN it rather than replace it, which is
+  // what a real composition root does and what the assertions below then read back.
+  promptFragmentRegistry = promptFragmentRegistryWithBuiltins()
   registerExampleCustomAgents({
     agentKindRegistry: registry,
     initiativePresetRegistry,
@@ -83,6 +88,7 @@ beforeEach(() => {
     stepResolverRegistry,
     pipelineRegistry,
     judgeRegistry,
+    promptFragmentRegistry,
     taskTypeRegistry,
   })
 })
@@ -661,11 +667,11 @@ describe('the org:introduce-api reusable operation', () => {
     })
   })
 
-  it('registers its standing-context fragments into the universal pool, each with a brief', () => {
+  it('registers its standing-context fragments onto the INJECTED pool, each with a brief', () => {
     // The brief is what an implementer kind folds on every turn of its loop; without one the
     // full body is re-sent per turn, which is the cost the two-tier fold exists to avoid.
     for (const id of INTRODUCE_API_FRAGMENT_IDS) {
-      const fragment = universalFragments().find((f) => f.id === id)
+      const fragment = promptFragmentRegistry.get(id)
       expect(fragment?.brief?.length).toBeGreaterThan(0)
       expect(fragment?.brief?.length).toBeLessThan(fragment!.body.length)
     }

@@ -151,7 +151,7 @@ const LEGACY_ALLOWANCES = new Map([
   // one is workspace-keyed, secret-free, `workspace`-scoped on the persistence allow-list, and
   // edited from a settings surface rather than written by the engine, so the next such library
   // lands there rather than among the run-path repositories.
-  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1211],
+  ['backend/runtimes/cloudflare/src/infrastructure/container.ts', 1192],
   // Wide-but-flat declaration files (schemas / wire contracts), not control flow.
   // (`entities.ts` was split — the run/execution runtime-state shapes moved to `execution.ts`,
   // both now under DEFAULT_MAX_LINES — so it no longer needs a ratcheted allowance.)

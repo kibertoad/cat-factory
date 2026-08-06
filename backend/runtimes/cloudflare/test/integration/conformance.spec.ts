@@ -95,6 +95,9 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
     ...onlyTruthy({
       resolveRunRepoContext: o.resolveRunRepoContext,
       resolveBinaryArtifactStore: o.resolveBinaryArtifactStore,
+      // The app-owned standards pool the suite registered its own fragments onto, resolved by
+      // reference like every other registry here.
+      promptFragmentRegistry: o.promptFragmentRegistry,
       environmentProvider: o.environmentProvider,
       resolveRepoFilesForCoords: o.resolveRepoFilesForCoords,
       detectionConventions: o.detectionConventions,

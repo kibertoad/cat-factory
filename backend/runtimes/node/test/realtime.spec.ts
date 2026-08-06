@@ -84,6 +84,39 @@ describe('Node real-time WebSocket transport', () => {
     expect(event.instance.id).toBe('ex_1')
   })
 
+  it('withholds a service frame from the board event it puts on the wire', async () => {
+    // The rule itself is kernel's (`deliverableBoardBlock`); what this pins is that the FACADE
+    // actually assembles through it, which no kernel unit test can see. A frame's position and
+    // size are a per-board mount override, so the one payload published for every board mounting
+    // the service would be wrong on all but one of them: the client is told the board changed and
+    // re-reads its own projection instead. The fan-out subject stays off the wire entirely: it is
+    // how the backend chose the recipients, already spent by the time the frame is serialised.
+    const { port, publisher } = await startHarness(authConfig({}))
+    const client = open(port, '/workspaces/ws_a/events')
+    await new Promise<void>((resolve, reject) => {
+      client.once('open', resolve)
+      client.once('error', reject)
+    })
+
+    const received = new Promise<string>((resolve) =>
+      client.once('message', (d) => resolve(String(d))),
+    )
+    const frame = { id: 'blk_frame', level: 'frame', title: 'web' } as never
+    const pump = setInterval(
+      () => void publisher.boardChanged('ws_a', { reason: 'block-updated', block: frame }),
+      15,
+    )
+    const raw = await received
+    clearInterval(pump)
+    client.close()
+
+    const event = JSON.parse(raw)
+    expect(event.type).toBe('board')
+    expect(event.reason).toBe('block-updated')
+    expect(event.block).toBeNull()
+    expect(event).not.toHaveProperty('blockId')
+  })
+
   it('does not deliver another workspace’s events (per-workspace isolation)', async () => {
     const { port, publisher } = await startHarness(authConfig({}))
     const client = open(port, '/workspaces/ws_a/events')
@@ -97,7 +130,7 @@ describe('Node real-time WebSocket transport', () => {
       got = true
     })
     // Publish only to a different workspace for a window; the ws_a socket must stay silent.
-    const pump = setInterval(() => void publisher.boardChanged('ws_b', 'noise'), 15)
+    const pump = setInterval(() => void publisher.boardChanged('ws_b', { reason: 'noise' }), 15)
     await new Promise((r) => setTimeout(r, 120))
     clearInterval(pump)
     client.close()
@@ -129,7 +162,12 @@ describe('Node real-time WebSocket transport', () => {
     const otherReceived = new Promise<void>((resolve) => other.once('message', () => resolve()))
 
     const pump = setInterval(
-      () => void publisher.boardChanged('ws_a', 'block-moved', 'blk_1', 'cid-origin'),
+      () =>
+        void publisher.boardChanged('ws_a', {
+          reason: 'block-moved',
+          blockId: 'blk_1',
+          originConnectionId: 'cid-origin',
+        }),
       15,
     )
     await otherReceived

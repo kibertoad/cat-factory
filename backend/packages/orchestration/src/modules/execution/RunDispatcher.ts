@@ -1470,10 +1470,12 @@ export class RunDispatcher {
     }
     const frameId = await this.contextBuilder.resolveServiceFrameId(workspaceId, blockId)
     await this.blueprintReconciler.reconcileBlueprint(workspaceId, frameId, service)
-    // The reconcile may have created/updated module + task blocks that aren't
-    // individually pushed; nudge clients to refresh the board so they appear. Name the service
-    // frame so the refresh fans out to every board mounting this shared service.
-    await this.events.boardChanged(workspaceId, 'blueprint-reconciled', frameId)
+    // A whole subtree changed, not one block, so this stays a refresh. Name the service frame so
+    // it fans out to every board mounting this shared service.
+    await this.events.boardChanged(workspaceId, {
+      reason: 'blueprint-reconciled',
+      blockId: frameId,
+    })
   }
 
   /**
@@ -1490,7 +1492,7 @@ export class RunDispatcher {
       // committed); skip the refresh.
       return
     }
-    // Nudge clients to refresh so they can re-read the service's spec files.
-    await this.events.boardChanged(workspaceId, 'requirements-updated')
+    // Refresh so clients re-read the spec files. What changed is in the repo, not on a block.
+    await this.events.boardChanged(workspaceId, { reason: 'requirements-updated' })
   }
 }

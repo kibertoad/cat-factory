@@ -238,25 +238,45 @@ export function withDescriptorFieldDefaults(
   return merged
 }
 
+/**
+ * Evaluate ONE {@link DescriptorFieldShowWhen} against a filled bag.
+ *
+ * The single evaluator for the whole vocabulary, extracted from {@link isDescriptorFieldVisible}
+ * when a second consumer appeared (a registered task type selecting extra standing-context
+ * fragments from the answers just collected). It carries the two non-obvious rules a re-implementation
+ * would get wrong: an absent value reads as `false` against a BOOLEAN condition, and a condition with
+ * neither predicate is malformed and reads as `true`.
+ *
+ * `true` for a malformed condition is the right default HERE, where the caller is asking "does this
+ * gate hold", because the alternative silently removes a field from a form. A caller for whom the
+ * safe default is the other way round says so at its own site rather than by re-deriving the rule.
+ */
+export function matchesDescriptorCondition(
+  condition: DescriptorFieldShowWhen,
+  values: DescriptorFieldValues,
+): boolean {
+  const value = values[condition.key]
+  if (condition.equals !== undefined) {
+    // An unchecked checkbox is ABSENT from the values (an off box stays unset: see the form
+    // renderer's drop-when-empty rule), so an absent value reads as `false` when the condition
+    // compares against a boolean. Without this, `equals: false` would never match at initial
+    // render (only after a toggle on then off), hiding a field that should be shown.
+    const actual = value === undefined && typeof condition.equals === 'boolean' ? false : value
+    return actual === condition.equals
+  }
+  if (condition.includes !== undefined) {
+    return Array.isArray(value) && value.includes(condition.includes)
+  }
+  // A condition with neither predicate is malformed; treat as satisfied (see the doc comment).
+  return true
+}
+
 /** Whether a field is visible given the current values (its `showWhen` condition). */
 export function isDescriptorFieldVisible(
   field: DescriptorField,
   values: DescriptorFieldValues,
 ): boolean {
-  const cond = field.showWhen
-  if (!cond) return true
-  const value = values[cond.key]
-  if (cond.equals !== undefined) {
-    // An unchecked checkbox is ABSENT from the values (an off box stays unset: see the form
-    // renderer's drop-when-empty rule), so an absent value reads as `false` when the condition
-    // compares against a boolean. Without this, `equals: false` would never match at initial
-    // render (only after a toggle on then off), hiding a field that should be shown.
-    const actual = value === undefined && typeof cond.equals === 'boolean' ? false : value
-    return actual === cond.equals
-  }
-  if (cond.includes !== undefined) return Array.isArray(value) && value.includes(cond.includes)
-  // A `showWhen` with neither predicate is a malformed condition; treat as always visible.
-  return true
+  return !field.showWhen || matchesDescriptorCondition(field.showWhen, values)
 }
 
 /** Whether a filled value matches the field's declared type (structural, pre-semantic check). */
