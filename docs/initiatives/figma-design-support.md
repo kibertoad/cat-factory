@@ -184,7 +184,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       bound neither; the component cap ranks by instance count so what survives it is what the
       design leans on, and the token cap sorts by the rendered order first so its "N not listed"
       note points at the tail the reader can see is missing.
-- [x] **Auto-fold `design.context`.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1747))
+- [x] **Auto-fold `design.context`.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
       `withDesignContextFragment` appends the id in `AgentContextBuilder.resolveFragments` whenever
       the run's resolved context carries a design-origin document, so it rides the normal fold and
       inherits its rules for free (a workspace override still wins, the two-tier brief/full verbosity
@@ -200,7 +200,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
 
 ### Track C: freshness
 
-- [x] **Dispatch-time refresh.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1747))
+- [x] **Dispatch-time refresh.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
       `LinkedDocumentRefreshService` behind the kernel `LinkedDocumentRefresher` port, on the
       linked-context resolution path of every dispatch: probe → compare → re-import only what moved.
       **The comparison needed somewhere to compare TO**, which the plan above missed: the row recorded
@@ -277,13 +277,13 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
 
 ### Track G: hygiene
 
-- [x] **Host-pinned claims win.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1747))
+- [x] **Host-pinned claims win.** ([#1747](https://github.com/kibertoad/cat-factory/pull/1754))
       `makeDocumentUrlResolver` two-passes: host-PINNED parsers first, host-blind second, registration
       order still deciding within each pass (two pinned sources cannot claim one host). The
       classification is `isHostPinnedSource` in contracts, off the same exhaustive traits `Record` as
       `isDesignSource`, so a new source cannot ship unclassified.
 - [x] **Fix the stale tracker pointer** in `contracts/src/documents.ts`
-      ([#1747](https://github.com/kibertoad/cat-factory/pull/1747)) — now cites ADR 0017.
+      ([#1747](https://github.com/kibertoad/cat-factory/pull/1754)) — now cites ADR 0017.
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
       start-from-design flow once Track A lands (live-push assertions per the e2e rules), plus
       unit specs for `stores/documents.ts`, which currently has none.
