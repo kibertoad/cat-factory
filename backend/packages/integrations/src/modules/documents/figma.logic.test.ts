@@ -6,6 +6,7 @@ import {
   buildFigmaDesignContext,
   figmaBlocks,
   figmaComponents,
+  figmaDroppedNodeId,
   figmaPageSummary,
   figmaStyleTokens,
   figmaStylingFacts,
@@ -75,6 +76,30 @@ describe('normalizeFigmaNodeId', () => {
   it('rejects non-simple ids', () => {
     expect(normalizeFigmaNodeId('I12:3;45:6')).toBeNull()
     expect(normalizeFigmaNodeId('')).toBeNull()
+  })
+})
+
+describe('figmaDroppedNodeId', () => {
+  // `parseFigmaRef` falling back to the whole file is right (nothing knows which frame a complex
+  // instance id meant), but it turns "this frame" into "the entire design" with nothing in the
+  // resolved id to show it. This is the only thing that can say so, so the pre-flight can.
+  it('names the unreadable node qualifier the ref fell back from, as pasted', () => {
+    const url = 'https://www.figma.com/design/K/Title?node-id=I2649:14930;2649:14746'
+    expect(figmaDroppedNodeId(url, parseFigmaRef(url)!)).toBe('I2649:14930;2649:14746')
+    // The dash form Figma's share button emits, and the bare `key:node` form, both count.
+    const dashed = 'https://www.figma.com/design/K/Title?node-id=I12-3;45-6'
+    expect(figmaDroppedNodeId(dashed, parseFigmaRef(dashed)!)).toBe('I12-3;45-6')
+    expect(figmaDroppedNodeId('K:I12:3;45:6', 'K')).toBe('I12:3;45:6')
+  })
+
+  it('reports nothing when the frame survived, or when no frame was named', () => {
+    // A whole-file link is what the person asked for, and must not be flagged as a loss: an
+    // over-eager warning here would train people to ignore the one that matters.
+    const withNode = 'https://www.figma.com/design/K/Title?node-id=1234-5678&t=xy'
+    expect(figmaDroppedNodeId(withNode, parseFigmaRef(withNode)!)).toBeNull()
+    const wholeFile = 'https://www.figma.com/design/K/Title'
+    expect(figmaDroppedNodeId(wholeFile, parseFigmaRef(wholeFile)!)).toBeNull()
+    expect(figmaDroppedNodeId('K', 'K')).toBeNull()
   })
 })
 

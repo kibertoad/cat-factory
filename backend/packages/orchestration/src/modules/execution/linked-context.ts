@@ -17,7 +17,7 @@ import {
   hasReadableContent,
   redactSecrets,
 } from '@cat-factory/kernel'
-import { isHostPinnedSource } from '@cat-factory/contracts'
+import { orderSourcesByClaimConfidence } from '@cat-factory/contracts'
 import { extractReferences } from '@cat-factory/integrations'
 
 /**
@@ -66,25 +66,24 @@ export interface LinkedContextSources {
  * link pasted into prose auto-matches its imported page even when it carries a title segment or
  * tracking params the stored canonical url omits. No providers ⇒ undefined (url-string match only).
  *
- * TWO PASSES, host-PINNED providers first. The providers' `parseRef` implementations differ in what
- * a claim over a URL is worth: a pinned one (Figma, Zeplin, GitHub, Linear) refuses anything off its
- * own host, so a claim is near-proof, while a blind one claims a SHAPE — `parseNotionRef` takes any
- * UUID-shaped run anywhere in the string, `parseConfluenceRef` any `/pages/<digits>` segment. First
- * claimer used to win in registration order, so a deployment that registered Notion ahead of Figma
- * had Notion silently claim a Figma URL whose file key happened to carry a UUID-shaped run, and the
- * point lookup then resolved against the wrong source's key space and found nothing: a linked design
- * that reached the agent as no context at all, with only the "nothing is imported" info line to say
- * so. Ordering by confidence rather than by registration is what makes a pinned claim unstealable;
- * within each pass, registration order still decides (two pinned sources cannot claim one host).
+ * TWO PASSES, host-PINNED providers first, through the shared `orderSourcesByClaimConfidence` (the
+ * refusal path that names a claimant reads the same function, so the confidence rule has one home).
+ * The providers' `parseRef` implementations differ in what a claim over a URL is worth: a pinned one
+ * (Figma, Zeplin, GitHub, Linear) refuses anything off its own host, so a claim is near-proof, while
+ * a blind one claims a SHAPE — `parseNotionRef` takes any UUID-shaped run anywhere in the string,
+ * `parseConfluenceRef` any `/pages/<digits>` segment. First claimer used to win in registration
+ * order, so a deployment that registered Notion ahead of Figma had Notion silently claim a Figma URL
+ * whose file key happened to carry a UUID-shaped run, and the point lookup then resolved against the
+ * wrong source's key space and found nothing: a linked design that reached the agent as no context at
+ * all, with only the "nothing is imported" info line to say so. Ordering by confidence rather than by
+ * registration is what makes a pinned claim unstealable; within each pass, registration order still
+ * decides (two pinned sources cannot claim one host).
  */
 export function makeDocumentUrlResolver(
   providers: readonly { kind: DocumentSourceKind; parseRef: (url: string) => string | null }[] = [],
 ): DocumentUrlResolver | undefined {
   if (!providers.length) return undefined
-  const ordered = [
-    ...providers.filter((p) => isHostPinnedSource(p.kind)),
-    ...providers.filter((p) => !isHostPinnedSource(p.kind)),
-  ]
+  const ordered = orderSourcesByClaimConfidence(providers)
   return (url: string) => {
     for (const provider of ordered) {
       const externalId = provider.parseRef(url)

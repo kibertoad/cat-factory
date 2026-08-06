@@ -571,6 +571,71 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
       expect(explicit(afterDelete.body.connections)).toEqual([])
     })
 
+    it('canonicalises a pasted ref before anything is written, and names a wrong-source paste', async () => {
+      const { call, createWorkspace } = harness.makeApp()
+      const { workspace } = await createWorkspace()
+      const base = `/workspaces/${workspace.id}/document-sources`
+
+      // The link a designer actually copies out of Figma: a title segment plus the `?p=` / `&t=`
+      // params the share button appends, on top of the frame's node id. Resolving it needs NO
+      // connection and NO upstream call, which is exactly what lets an attach surface run this
+      // before the task is saved rather than discovering the verdict through a failed import.
+      const pasted =
+        'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/Project-Redwood--Autopilot-AI-' +
+        '?node-id=5765-57229&p=f&t=J1SrKp6sgJm9CIeQ-0'
+      const resolved = await call<{
+        source: string
+        externalId: string
+        canonicalUrl: string | null
+        droppedScope: string | null
+      }>('POST', `${base}/figma/resolve-ref`, { ref: pasted })
+      expect(resolved.status).toBe(200)
+      expect(resolved.body).toEqual({
+        source: 'figma',
+        externalId: '6k0gqOC6ppDMAziCmZ2Gv9:5765:57229',
+        canonicalUrl: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9?node-id=5765-57229',
+        droppedScope: null,
+      })
+
+      // A node id the parser cannot read (Figma's own Copy link emits one for any component
+      // instance) resolves to the whole FILE. That is a valid reference with a valid canonical URL,
+      // so the widening is invisible unless the answer names what it dropped: an attach surface
+      // showing only "trimmed to the supported form" would tell someone who linked one frame
+      // nothing about the agent then reading the entire design.
+      const widened = await call<{ externalId: string; droppedScope: string | null }>(
+        'POST',
+        `${base}/figma/resolve-ref`,
+        { ref: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/R?node-id=I2649:14930;2649:1' },
+      )
+      expect(widened.status).toBe(200)
+      expect(widened.body.externalId).toBe('6k0gqOC6ppDMAziCmZ2Gv9')
+      expect(widened.body.droppedScope).toBe('I2649:14930;2649:1')
+
+      // The SAME link aimed at the wrong source is a redirectable paste, not a malformed one, and
+      // the reason says so: the correction is switching sources with the text unchanged. A single
+      // "unrecognized" would tell someone their perfectly good design link is broken.
+      const wrongSource = await call<{ error: { details?: Record<string, unknown> } }>(
+        'POST',
+        `${base}/notion/resolve-ref`,
+        { ref: pasted },
+      )
+      expect(wrongSource.status).toBe(422)
+      expect(wrongSource.body.error.details?.reason).toBe('document_ref_claimed_by_other_source')
+      expect(wrongSource.body.error.details?.claimedBy).toBe('figma')
+
+      // Text no configured source recognises is the other refusal, and it carries the format this
+      // source DOES accept, so the correction is stated rather than left to be guessed.
+      const junk = await call<{ error: { details?: Record<string, unknown> } }>(
+        'POST',
+        `${base}/figma/resolve-ref`,
+        { ref: 'https://example.com/not-a-design' },
+      )
+      expect(junk.status).toBe(422)
+      expect(junk.body.error.details?.reason).toBe('document_ref_unrecognized')
+      expect(junk.body.error.details?.claimedBy).toBeUndefined()
+      expect(junk.body.error.details?.expected).toBeTruthy()
+    })
+
     it('wires Linear as a document source on every facade (connect, list, disconnect)', async () => {
       const { call, createWorkspace } = harness.makeApp()
       const { workspace } = await createWorkspace()

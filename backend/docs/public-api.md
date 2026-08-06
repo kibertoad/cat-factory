@@ -606,12 +606,20 @@ POST /api/v1/services/svc_api/tasks
 
 At most 10 documents per create, in the order agents should read them.
 
-Four refusals matter:
+Five refusals matter:
 
 - **Everything is resolved before the task is created.** An unconfigured source, a ref the provider
   cannot parse, a page it will not serve, or an upload with no readable text refuses the whole
   request and leaves the board untouched. The other order hands you a `201` for a task you believe
   carries its spec, running on its title alone.
+- **A ref refusal (`422`) names WHICH correction it needs**, as `details.reason`, because the two
+  cases call for opposite fixes and a retry policy has to tell them apart.
+  `document_ref_unrecognized` means no reference of this shape will ever work for that source, and
+  `details.expected` carries the format that would, so retrying the same text is pointless.
+  `document_ref_claimed_by_other_source` means the link is perfectly good and aimed at the wrong
+  source, with `details.claimedBy` naming the one that claims it: retry the SAME `ref` under that
+  `source`. Both also carry `details.source` (the source you asked). Added in surface version
+  `1.19.0`; a client written before it sees the same status and message as always.
 - **An upload with no readable text is refused** (`422`) rather than stored. A body that renders to
   nothing would reach the agent as an empty attachment, so it is caught while you still hold the
   bytes and can fix them, rather than costing you the first step of a run.

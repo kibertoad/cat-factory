@@ -17,6 +17,8 @@ export type {
   DocumentConnection,
   SourceDocument,
   DocumentSearchResult,
+  DocumentRefReason,
+  ResolvedDocumentRef,
   PlanTask,
   PlanModule,
   PlanFrame,
