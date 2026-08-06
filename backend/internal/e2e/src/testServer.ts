@@ -52,7 +52,18 @@ import {
   type FakeProfile,
   FakeProfileRegistry,
 } from './fakeProfile.ts'
+// The app's own process logger, the one the container logs through: the harness composes this layer
+// (`createApp` below is its app factory), so its realtime tee reports on the same destination rather
+// than printing beside it.
+import { logger } from '@cat-factory/server'
 import { fanOutRealtime, serveAuthBackend } from './authBackend.ts'
+import {
+  AUTH_BACKEND_PORT,
+  AUTH_FRONTEND_URL,
+  BACKEND_PORT,
+  CONTROL_PORT,
+  FRONTEND_URL,
+} from './ports.ts'
 import { seedPasswordUser, seedTeamScenario, type TeamScenarioRequest } from './seedTeam.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
@@ -204,15 +215,10 @@ async function seedRbacScenario(
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
 // shared Hono app or its CORS/auth). A spec `POST`s `{ workspaceId, profile }` from Node
 // (Playwright's request context — not the browser), keyed to its own freshly-seeded
-// workspace, BEFORE it starts the run. Listens on `PORT + 1` (or `E2E_CONTROL_PORT`) — the
-// SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
-// loopback: it's reached only from the local Playwright process, never publicly.
-const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
-// The AUTH-ENABLED HTTP surface (see `authBackend.ts`) and the SPA origin that talks to it. Both
-// derive from the primary ports the same way the control channel does, so overriding `PORT` /
-// `E2E_FRONTEND_PORT` moves every end consistently.
-const authPort = Number(process.env.E2E_AUTH_PORT ?? Number(process.env.PORT ?? '8787') + 2)
-const authFrontendOrigin = `http://localhost:${process.env.E2E_AUTH_FRONTEND_PORT ?? '3001'}`
+// workspace, BEFORE it starts the run. Its port comes from `ports.ts`, the SAME module the
+// `setFakeProfile` helper reads, so PORT drives both ends. Bound to loopback: it's reached
+// only from the local Playwright process, never publicly.
+//
 // The hub the auth surface registers its WebSocket subscribers on. Created out here so the
 // container build can tee engine events into it (`fanOutRealtime`) before the listener exists.
 const authHub = new NodeRealtimeHub()
@@ -390,10 +396,10 @@ const controlServer = createServer((req, res) => {
 // the process down opaquely — every profile-dependent spec would otherwise silently run on
 // base behaviour.
 controlServer.on('error', (err) => {
-  console.error(`[e2e] fake-profile control channel failed to bind on ${controlPort}:`, err)
+  console.error(`[e2e] fake-profile control channel failed to bind on ${CONTROL_PORT}:`, err)
   process.exit(1)
 })
-controlServer.listen(controlPort, '127.0.0.1')
+controlServer.listen(CONTROL_PORT, '127.0.0.1')
 
 // A non-secret, fixed encryption key (32 zero bytes, base64). The always-on task-source
 // integration makes config load require ENCRYPTION_KEY; a fixed value keeps any encrypted
@@ -433,15 +439,12 @@ const env: NodeJS.ProcessEnv = {
   // verdict comes from the per-workspace fake ReleaseHealthProvider (E2eGateProviders), not a real
   // Datadog call — this only unlocks the pipeline-authoring gate + the connection seam.
   OBSERVABILITY_ENABLED: process.env.OBSERVABILITY_ENABLED ?? 'true',
-  PORT: process.env.PORT ?? '8787',
+  PORT: String(BACKEND_PORT),
   // The SPA is served from a different origin (the Nuxt dev server), so the browser's
   // cross-origin REST calls need this allow-listed. The WebSocket upgrade is authorised
-  // by ticket, not CORS. Playwright passes the SPA's exact origin (derived from
-  // E2E_FRONTEND_PORT); the fallback below derives the same default so a standalone
-  // `pnpm serve` stays consistent with the frontend's port.
-  CORS_ALLOWED_ORIGINS:
-    process.env.CORS_ALLOWED_ORIGINS ??
-    `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`,
+  // by ticket, not CORS. Playwright passes the SPA's exact origin; the fallback is the
+  // same `ports.ts` derivation, so a standalone `pnpm serve` stays consistent with it.
+  CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS ?? FRONTEND_URL,
 }
 
 if (!env.DATABASE_URL) {
@@ -464,13 +467,21 @@ await start({
     const db = opts.db
     if (!db) throw new Error('[e2e] expected start() to supply a Drizzle db')
     seedDb = db
+    // The same kind of invariant as `db` above, and for the same reason: this is the one place the
+    // auth surface's WebSocket listener can be joined to the engine, so a missing sink has to fail
+    // the boot rather than skip the tee. Absent, the auth stack is deaf and every spec on it hangs
+    // waiting for a live update, naming nothing.
+    const realtimeSink = opts.realtimeSink
+    if (!realtimeSink) throw new Error('[e2e] expected start() to supply a realtimeSink')
     const container = buildNodeContainer({
       ...opts,
       // Tee engine events into the auth surface's own WebSocket hub as well as the primary
       // listener's. `start()` keeps its hub to itself (only the wrapping sink reaches the
       // container), so this is the one place the second listener can be joined to the same engine,
-      // and it must be, or a board opened on the auth stack paints once and then goes deaf.
-      ...(opts.realtimeSink ? { realtimeSink: fanOutRealtime(opts.realtimeSink, authHub) } : {}),
+      // and it must be, or a board opened on the auth stack paints once and then goes deaf. A
+      // dropped delivery is reported through the same process logger the container itself logs on,
+      // since a deaf auth stack is otherwise indistinguishable in the browser from a quiet run.
+      realtimeSink: fanOutRealtime(realtimeSink, authHub, logger),
       overrides: {
         agentExecutor,
         repoBootstrapper,
@@ -529,8 +540,8 @@ await start({
       container,
       hub: authHub,
       env,
-      port: authPort,
-      corsOrigin: authFrontendOrigin,
+      port: AUTH_BACKEND_PORT,
+      corsOrigin: AUTH_FRONTEND_URL,
     })
     return container
   },

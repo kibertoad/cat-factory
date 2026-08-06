@@ -14,7 +14,7 @@ import {
   useAdvancedInterfaceMode,
   type SeededPrincipal,
 } from './helpers'
-import type { Browser, Locator, Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 // A HUMAN CHECKPOINT WITH A POLICY: two named approvers, both required.
 //
@@ -84,16 +84,21 @@ test.describe('quorum + named-approver gate', () => {
    *
    * One session per person is the whole method here: what the policy admits is a property of the
    * VIEWER, so each of these has to be a real signed-in browser rather than the same one re-pinned.
+   *
+   * The session comes from the `newSession` fixture, so an exception thrown while rendering the gate
+   * rail fails the test rather than leaving the assertions to settle from the store (these are the
+   * only pages these specs observe, and a hand-rolled context is outside the `pageErrors` guard).
+   * Closed here as soon as the person is done with it, and again by the fixture's teardown if a body
+   * throws first.
    */
   async function inSessionAs(
-    browser: Browser,
+    newSession: () => Promise<Page>,
     scenario: { workspaceId: string; accountId: string },
     principal: SeededPrincipal,
     body: (rail: Locator, card: Locator) => Promise<void>,
   ): Promise<void> {
-    const context = await browser.newContext()
+    const page = await newSession()
     try {
-      const page = await context.newPage()
       await pinAuthedWorkspace(
         page,
         scenario.workspaceId,
@@ -107,14 +112,14 @@ test.describe('quorum + named-approver gate', () => {
       await openAttention(card, rail)
       await body(rail, card)
     } finally {
-      await context.close()
+      await page.context().close()
     }
   }
 
   test('two named approvers are required: an unnamed member is refused, one approval is not enough', async ({
     page,
     request,
-    browser,
+    newSession,
   }) => {
     const tag = Math.random().toString(36).slice(2, 8)
     const scenario = await seedTeamScenario(request, {
@@ -176,7 +181,7 @@ test.describe('quorum + named-approver gate', () => {
     // 4) CAROL, a member who is not a named approver. She can open the parked step, and the rail
     // states the refusal and disables the approve control rather than offering a button the server
     // answers 403.
-    await inSessionAs(browser, scenario, carol, async (rail) => {
+    await inSessionAs(newSession, scenario, carol, async (rail) => {
       await expect(rail.getByTestId('gate-not-approver')).toBeVisible({ timeout: LIVE_TIMEOUT })
       await expect(rail.getByTestId('step-approve')).toBeDisabled()
     })
@@ -184,7 +189,7 @@ test.describe('quorum + named-approver gate', () => {
     // 5) ALICE, the first named approver. Her approval is RECORDED but does not release the run:
     // the quorum progress is the surface that says so, and the card staying parked is the engine
     // agreeing. This is the assertion a quorum that miscounts fails.
-    await inSessionAs(browser, scenario, alice, async (rail, card) => {
+    await inSessionAs(newSession, scenario, alice, async (rail, card) => {
       await expect(rail.getByTestId('gate-quorum')).toContainText('0', { timeout: LIVE_TIMEOUT })
       await expect(rail.getByTestId('step-approve')).toBeEnabled()
       await rail.getByTestId('step-approve').click()
@@ -197,7 +202,7 @@ test.describe('quorum + named-approver gate', () => {
 
     // 6) BOB, the second named approver. His approval meets the quorum, the gate clears, and the
     // rest of the chain carries the run to a terminal state, live in the AUTHOR's still-open board.
-    await inSessionAs(browser, scenario, bob, async (rail) => {
+    await inSessionAs(newSession, scenario, bob, async (rail) => {
       await rail.getByTestId('step-approve').click()
     })
     await expect

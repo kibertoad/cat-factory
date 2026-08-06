@@ -27,6 +27,7 @@ import {
   serveAppWithRealtime,
   type buildNodeContainer,
 } from '@cat-factory/node-server'
+import { type Logger } from '@cat-factory/server'
 
 type Container = ReturnType<typeof buildNodeContainer>
 
@@ -36,15 +37,27 @@ type Container = ReturnType<typeof buildNodeContainer>
  * `broadcast` is a best-effort fan-out on both facades, so one sink throwing must not cost the
  * other its delivery: a dropped event is a board frozen at a stale status, and the two listeners
  * are independent transports rather than two steps of one.
+ *
+ * The `logger` is REQUIRED rather than defaulted, because the swallow is the whole risk here: a
+ * dropped delivery shows up in the browser as a board that painted once and then never moved, so
+ * this one `warn` is the only thing that names the cause. It is the kernel `Logger` port (the
+ * process logger the container itself logs through), not a `console` call beside it.
  */
-export function fanOutRealtime(primary: LocalEventSink, secondary: LocalEventSink): LocalEventSink {
+export function fanOutRealtime(
+  primary: LocalEventSink,
+  secondary: LocalEventSink,
+  logger: Logger,
+): LocalEventSink {
   return {
     broadcast(workspaceId, payload, originConnectionId) {
       for (const sink of [primary, secondary]) {
         try {
           sink.broadcast(workspaceId, payload, originConnectionId)
         } catch (error) {
-          console.error('[e2e] realtime fan-out sink failed', error)
+          logger.warn('e2e realtime fan-out sink failed', {
+            workspaceId,
+            error: error instanceof Error ? error.message : String(error),
+          })
         }
       }
     },
@@ -59,6 +72,13 @@ export function fanOutRealtime(primary: LocalEventSink, secondary: LocalEventSin
  * is precisely the "render the board anonymously" opt-in these specs exist to stop honouring.
  * `openSignup` stays as configured: the spec signs IN as a seeded user, and leaving hosted signup
  * invite-gated keeps this surface a faithful deployment rather than a convenience.
+ *
+ * `devOpen` goes off with it, and that is not redundancy. Nothing admits an anonymous caller here
+ * only because `requireAuth` and `authorizeWsUpgrade` both happen to test `enabled` BEFORE the
+ * `devOpen` short-circuit; reverse either branch order, or add a third reader that checks the
+ * short-circuit first, and this "auth-enabled" surface serves every route to an anonymous caller
+ * while the sign-in spec (which asserts what the SPA RENDERS, not what the API refuses) stays green.
+ * A flag whose value is load-bearing only through statement order is not a configuration.
  */
 export function authEnabledContainer(container: Container): Container {
   return {
@@ -70,6 +90,7 @@ export function authEnabledContainer(container: Container): Container {
         enabled: true,
         passwordEnabled: true,
         testingNoAuth: false,
+        devOpen: false,
       },
     },
   }
