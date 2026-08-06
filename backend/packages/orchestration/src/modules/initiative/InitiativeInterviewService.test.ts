@@ -287,6 +287,7 @@ describe('InitiativeInterviewService — preset interviewer steering (T5)', () =
 const PRD = {
   title: 'Auth migration PRD',
   url: 'https://example.test/prd',
+  origin: 'confluence' as const,
   excerpt: 'Move every service onto the new auth model.',
   summary: 'Move every service onto the new auth model.',
   body: 'Sessions must stay valid across the cutover; no forced re-login.',

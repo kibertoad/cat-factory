@@ -745,6 +745,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'pipeline.adopted': 'cat_factory.platform.pipelines_adopted',
   'dispatch.token_scope_widened': 'cat_factory.platform.dispatch_token_scope_widened',
   'fragments.dropped_from_run': 'cat_factory.platform.fragments_dropped_from_run',
+  'document.freshness_gap': 'cat_factory.platform.document_freshness_gaps',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -789,6 +790,9 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   // is five times as short of its standards as one pinning a single typo, and the unit is what
   // keeps those apart on a dashboard.
   'fragments.dropped_from_run': '{fragment}',
+  // One DOCUMENT left unconfirmed on one dispatch: a task with six attachments contributes six
+  // per step, which is what makes the rate read as "how much stale context is being served".
+  'document.freshness_gap': '{document}',
 }
 
 /**

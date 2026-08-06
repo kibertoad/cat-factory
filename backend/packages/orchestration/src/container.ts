@@ -32,7 +32,7 @@ import type { ExecutionEventPublisher } from '@cat-factory/kernel'
 
 import type { WebhookVerifier } from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
-import type { DocumentContentResolver } from '@cat-factory/kernel'
+import type { DocumentContentResolver, LinkedDocumentRefresher } from '@cat-factory/kernel'
 
 import type {} from '@cat-factory/kernel'
 import type {} from '@cat-factory/kernel'
@@ -149,6 +149,13 @@ export interface DocumentsModule {
   linkService: DocumentLinkService
   /** Live read seam for document-backed prompt fragments (re-resolved at run time). */
   contentResolver: DocumentContentResolver
+  /**
+   * Dispatch-time freshness for a run's LINKED documents: probe each one's source version through the
+   * app cache and re-import the ones that moved, so an agent builds against the current design rather
+   * than the copy import stored. The engine's counterpart to `contentResolver` — that one serves a
+   * fragment's own cached body, this one refreshes the shared projection every reader sees.
+   */
+  linkedRefresher: LinkedDocumentRefresher
 }
 
 /** The task-source integration's services, present only when configured. */
@@ -752,6 +759,7 @@ export function createCore(injected: CoreDependencies): Core {
     executionEventPublisher,
     notifications,
     fragmentLibrary,
+    documents: platform.documents,
     boardService,
     spend: spendService,
   })

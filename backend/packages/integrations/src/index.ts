@@ -40,6 +40,10 @@ export {
   type UploadedDocument,
 } from './modules/documents/DocumentImportService.js'
 export {
+  LinkedDocumentRefreshService,
+  type LinkedDocumentRefreshServiceDependencies,
+} from './modules/documents/LinkedDocumentRefreshService.js'
+export {
   DocumentPlannerService,
   type DocumentPlannerServiceDependencies,
 } from './modules/documents/DocumentPlannerService.js'

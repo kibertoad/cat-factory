@@ -18,6 +18,7 @@ const registry = defaultAgentKindRegistry()
 const DOC = {
   title: 'Auth migration PRD',
   url: 'https://example.test/prd',
+  origin: 'confluence' as const,
   excerpt: 'Move every service onto the new auth model.',
   summary: 'Move every service onto the new auth model.',
   body: 'The full PRD body: sessions must stay valid across the cutover.',

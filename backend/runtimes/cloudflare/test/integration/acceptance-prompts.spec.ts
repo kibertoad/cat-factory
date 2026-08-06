@@ -128,6 +128,7 @@ describe('acceptance-testing agent prompts', () => {
               {
                 title: 'Auth PRD',
                 url: 'https://example.test/prd',
+                origin: 'confluence' as const,
                 excerpt: 'Users sign in with email + password.',
                 summary: 'Users sign in with email + password.',
                 body: 'Users sign in with email + password.',

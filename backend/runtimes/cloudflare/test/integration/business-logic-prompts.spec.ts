@@ -150,6 +150,7 @@ describe('business-logic agent prompts', () => {
               {
                 title: 'Auth PRD',
                 url: 'https://example.test/prd',
+                origin: 'confluence' as const,
                 excerpt: 'Sessions expire after 30 minutes of inactivity.',
                 summary: 'Sessions expire after 30 minutes of inactivity.',
                 body: 'Sessions expire after 30 minutes of inactivity.',

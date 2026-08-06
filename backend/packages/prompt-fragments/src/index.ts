@@ -40,6 +40,10 @@ export { BUILTIN_TASK_TYPE_DEFAULTS } from './task-type-defaults.js'
 // (T8's descriptor `defaultFragmentIds`) + `migrationFragmentIdsFor` (T7's `seedMigrationPlan`,
 // which stamps the per-agent-kind subset that respects each fragment's `appliesTo`).
 export { MIGRATION_FRAGMENT_IDS, migrationFragmentIdsFor } from './collections/migration.js'
+// The design-context fragment's id + the engine's presence rule for folding it: a run whose resolved
+// context carries a design-origin document reads the guidance automatically, rather than depending on
+// a human having ticked it in a picker basic mode does not show.
+export { DESIGN_CONTEXT_FRAGMENT_ID, withDesignContextFragment } from './collections/design.js'
 
 /** Fragments keyed by id for O(1) lookup during prompt composition. */
 export const FRAGMENTS_BY_ID: ReadonlyMap<string, PromptFragment> = new Map(

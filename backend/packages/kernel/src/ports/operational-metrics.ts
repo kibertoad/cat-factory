@@ -151,6 +151,20 @@ export type OperationalCounter =
    * its own standards. The ids and the workspace ride the log line at the increment site.
    */
   | 'fragments.dropped_from_run'
+  /**
+   * A linked context document could NOT be confirmed against its source at dispatch, so the run
+   * read the copy stored at import time. Dimensioned by `reason` (the `DocumentFreshnessGap`
+   * union) and `source` (the `DocumentSourceKind` union), both closed, so the cardinality is the
+   * product of two small vocabularies.
+   *
+   * Counted because the log line structurally cannot answer the operator's question. Every one of
+   * these conditions is per-DISPATCH and most of them are PERMANENT while they last (a revoked
+   * credential, a mothership node that cannot read the connection at all, a source returning 403),
+   * so the individual line repeats with no remedy anyone intends to apply and gets tuned out. Only
+   * a rate says whether agents across the deployment are being handed stale designs more than they
+   * were, and the `reason` split is what separates the three different fixes.
+   */
+  | 'document.freshness_gap'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns
