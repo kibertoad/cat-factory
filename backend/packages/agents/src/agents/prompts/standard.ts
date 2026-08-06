@@ -503,7 +503,7 @@ export function renderLinkedContext(
       }
       // The SAME freshness note the materialised `.cat-context/` file carries, because an inline
       // kind has no such file and would otherwise receive an unconfirmed body indistinguishable
-      // from a checked one — which is how a judge confidently scores against a design revision the
+      // from a checked one, which is how a judge confidently scores against a design revision the
       // platform could not reach. Empty (so byte-identical) when there is nothing to state, and
       // charged to the budget like any other text, so the notice can never cause the overrun the
       // clamp exists to prevent.

@@ -110,7 +110,7 @@ describe('RequirementReviewService: attached documents', () => {
     // against a revision nobody built, while the coder two steps later receives the current one.
     // Asserted through the readability refusal because that is the one verdict observable without
     // a reviewer model: a page emptied since import must break the round HERE, exactly as it does
-    // at the first dispatch — two readability verdicts about one document that could otherwise
+    // at the first dispatch: two readability verdicts about one document that could otherwise
     // disagree.
     const error = await makeService(
       [attached({ body: '# Widgets\n\nList widgets.' })],

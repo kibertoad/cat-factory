@@ -142,12 +142,12 @@ export interface AppCaches {
   fragmentDocumentBody: GroupCacheHandle<DocumentContent>
   /**
    * The OUTCOME of the last attempt to bring a linked context document up to date, grouped by
-   * workspace and keyed by `<source>:<externalId>` — what the dispatch-time refresh
+   * workspace and keyed by `<source>:<externalId>`: what the dispatch-time refresh
    * ({@link LinkedDocumentRefresher}) concluded when it last asked the source about this page.
    *
    * The sibling of `fragmentDocumentBody`, and deliberately NOT the same entry: this one caches a
    * VERDICT, not the body. Linked context is re-resolved on every STEP dispatch, so what has to be
-   * collapsed is the repeated round trip to the source — a whole-file Figma import fans out into
+   * collapsed is the repeated round trip to the source: a whole-file Figma import fans out into
    * chunked per-frame node reads, and caching the body would put that download on the critical path
    * of any dispatch that missed. Caching the small verdict instead means an unchanged design costs
    * one `?depth=1` read per TTL window and a changed one pays the download exactly once.
@@ -155,7 +155,7 @@ export interface AppCaches {
    * The entry covers the WHOLE ladder rather than the probe alone, which is what makes that claim
    * true of the expensive half too: the re-import runs inside the loader, so concurrent dispatches
    * of the same document dedupe onto one download, and an `unreachable` outcome (a 403, a rate
-   * limit, an outage) is a cached VALUE rather than a thrown loader — without which a source that
+   * limit, an outage) is a cached VALUE rather than a thrown loader, without which a source that
    * is down re-runs the entire fan-out on every dispatch for as long as it stays down.
    *
    * Hence no refresh window: the load IS the check, so there is nothing cheaper to re-validate it

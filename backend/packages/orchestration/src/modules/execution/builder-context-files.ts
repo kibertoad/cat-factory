@@ -21,7 +21,7 @@ import type { LinkedContext, LinkedContextOptions } from './linked-context.js'
  *
  * A pair rather than two calls because the two must not resolve the corpus twice. Linked context and
  * the fragment fold sit in the SAME `Promise.all` wave in `buildContext`, so the flag travels as a
- * promise the fragment resolver awaits — and it settles at the resolution's CHEAP half, off the
+ * promise the fragment resolver awaits, and it settles at the resolution's CHEAP half, off the
  * `onDocumentsResolved` hook, not off the finished context. That distinction is the whole point: the
  * finished context is only ready after a live version probe per linked source and a possible
  * whole-file re-download, and none of that can change which ORIGINS the run carries. Binding the flag

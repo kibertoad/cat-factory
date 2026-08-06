@@ -30,7 +30,7 @@ export interface ReviewContextDoc {
   /**
    * What the dispatch-time refresh concluded about this excerpt's currency, rendered exactly as it
    * is for every other reader of a linked document. Absent when no refresher is wired, which the
-   * renderer treats as "nothing to state" — the prior behaviour, byte for byte.
+   * renderer treats as "nothing to state", which is the prior behaviour, byte for byte.
    */
   freshness?: DocumentFreshness
 }

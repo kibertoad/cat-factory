@@ -195,8 +195,8 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       beside the presence rule, or the deterministic selector and the management surface would go on
       driving the old wrong-in-both-directions behaviour. Trap the wiring hit: `resolveLinkedContext`
       and `resolveFragments` are in the SAME `Promise.all` wave, so the flag settles off the
-      resolution's CHEAP half — the `onDocumentsResolved` hook, which reports the corpus origins the
-      moment the corpus read returns — rather than off the finished context, which is only ready after
+      resolution's CHEAP half (the `onDocumentsResolved` hook, which reports the corpus origins the
+      moment the corpus read returns) rather than off the finished context, which is only ready after
       a live probe per source and a possible whole-file re-download that cannot change an origin.
       Binding it to the finished context serialised the fragment fold (an LLM call, when a standard
       needs condensing) behind a Figma round trip on every dispatch. It resolves `false` when the
@@ -216,7 +216,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       NULL covers three cases that all mean "cannot be proven current" and all self-heal on one
       re-import: an upload, a source with no version, a row predating the column.
       A new `linkedDocumentVersion` cache entry holds the OUTCOME of the whole ladder, not the body
-      and not just the probe — 60s TTL and NO refresh window, because the load already IS the check so
+      and not just the probe. 60s TTL and NO refresh window, because the load already IS the check so
       there is nothing cheaper to re-validate with, and caching the body instead would put a
       whole-file Figma download on the critical path of any dispatch that missed. Covering the ladder
       rather than the probe is what bounds the EXPENSIVE half too: the re-import runs inside the
@@ -246,7 +246,7 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       (dimensioned by reason and source), because each of these repeats per dispatch while it lasts,
       so the log line says which run and only the rate says whether it is spreading. Best-effort by
       port contract (it never throws), and the readability refusal now runs on the REFRESHED records,
-      because a page emptied since import is the case most worth refusing — including in the
+      because a page emptied since import is the case most worth refusing, including in the
       REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs off on,
       which resolves its attachments through the same refresher for the same reason the initiative
       interviewer does.
@@ -310,7 +310,7 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       classification is `isHostPinnedSource` in contracts, off the same exhaustive traits `Record` as
       `isDesignSource`, so a new source cannot ship unclassified.
 - [x] **Fix the stale tracker pointer** in `contracts/src/documents.ts`
-      ([#1754](https://github.com/kibertoad/cat-factory/pull/1754)) — now cites ADR 0017.
+      ([#1754](https://github.com/kibertoad/cat-factory/pull/1754)): now cites ADR 0017.
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
       start-from-design flow once Track A lands (live-push assertions per the e2e rules), plus
       unit specs for `stores/documents.ts`, which currently has none.

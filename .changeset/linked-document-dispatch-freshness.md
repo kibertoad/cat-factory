@@ -26,7 +26,7 @@ actually moved. That comparison needed something to compare to, which the row di
 `documents.source_version` is new. It is part of the idempotent-reimport comparison even though no
 agent reads it: a Figma file version bumps on any edit anywhere in the file, so leaving a stale token
 on an unchanged body would re-download the whole design on every dispatch, forever. NULL covers three
-cases that all mean "cannot be proven current" and all self-heal on one re-import — an upload, a
+cases that all mean "cannot be proven current" and all self-heal on one re-import: an upload, a
 source exposing no version, a row predating the column.
 
 Three things bound the cost, each a different half of it. The new short-TTL `linkedDocumentVersion`
@@ -59,15 +59,16 @@ to compare" and "this deployment cannot read the credential" are four different 
 "unknown" sends the reader at the wrong one. The last of those is mothership mode, not a defensive
 branch: a node with no main database cannot read a connection sealed with the mothership's key, so the
 read fails permanently and by design, and calling that an outage would send an operator hunting a
-Figma incident that does not exist. One renderer serves both surfaces a document reaches — the
+Figma incident that does not exist. One renderer serves both surfaces a document reaches (the
 materialised `.cat-context/` file and the in-prompt injection an INLINE kind gets instead of a
-checkout — because a judge or reviewer scoring against a stale design is the same failure as a
+checkout), because a judge or reviewer scoring against a stale design is the same failure as a
 container agent building from one, and an omitted note reads exactly like a copy that was checked.
 Every gap also increments the new `document.freshness_gap` counter, dimensioned by reason and source:
 each of these conditions repeats per dispatch while it lasts, so the log line answers "what happened
-to this run" and only a rate answers "is this spreading". The refresh never throws — a source outage
-costs the run a stale body and a stated warning, never the run — and the readability refusal now runs
-on the refreshed records, since a page emptied since import is the case most worth refusing. That
+to this run" and only a rate answers "is this spreading". The refresh still never throws, so a source
+outage costs the run a stale body and a stated warning rather than the run, and the readability
+refusal now runs on the refreshed records, since a page emptied since import is the case most worth
+refusing. That
 includes the REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs
 off on, which resolves its attachments through the same refresher rather than reviewing the
 import-time copy while the coder two steps later builds from the current one. A deployment with no
@@ -81,7 +82,7 @@ and starts a run, executed with a design context file on disk and no instruction
 The engine now folds it whenever the run's resolved context carries a design-origin document. The
 trigger is the document rather than the block type, which the retired selector got wrong in both
 directions (it missed a design linked to an unlabelled task and fired on a frontend task with no
-design), and that selector is DELETED rather than left beside the new rule — the deterministic
+design), and that selector is DELETED rather than left beside the new rule: the deterministic
 selector and the management surface still read it, so leaving it would keep labelling the fragment
 frontend-only while the engine folded it for anything carrying a design. It rides the normal fold, so
 a workspace override still wins and the two-tier brief/full verbosity still applies. The flag settles

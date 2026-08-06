@@ -35,8 +35,8 @@ import { probeCacheKey } from './documents.logic.js'
 //
 //   1. the CHEAP probe (`probeVersion`: Figma's `?depth=1`, Confluence's version field) decides
 //      whether anything needs downloading at all, by comparing against the token the stored row was
-//      imported at (`DocumentRecord.sourceVersion`) — which is why the row records its version:
-//      without it, "unchanged" is unprovable and every dispatch pays the download;
+//      imported at (`DocumentRecord.sourceVersion`), which is why the row records its version at
+//      all: without it, "unchanged" is unprovable and every dispatch pays the download;
 //   2. the app cache holds the OUTCOME of that whole ladder, re-import included, so a burst of step
 //      dispatches costs ONE round trip to the source per document, concurrent dispatches of the
 //      same document dedupe onto one download, and a source that is DOWN is remembered as down
@@ -85,8 +85,8 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
   /**
    * Confirm every document, returning one verdict per input in the same order.
    *
-   * The per-document work is inherently per-document — each is a different external page on a
-   * different host, and no provider offers a batch — so it fans out, but BOUNDED: a task may attach
+   * The per-document work is inherently per-document (each is a different external page on a
+   * different host, and no provider offers a batch), so it fans out, but BOUNDED: a task may attach
    * up to the corpus budget's worth of Figma frames, and an unbounded fan-out turns one dispatch
    * into that many concurrent whole-file imports, which is how a rate limit gets sustained for a
    * whole run rather than ridden out.
@@ -133,7 +133,7 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
       )
     } catch (error) {
       // INFO, not `warn`. In mothership mode this fails permanently and BY DESIGN, on every
-      // dispatch of every run, with no remedy anyone intends to apply — a warning that repeats
+      // dispatch of every run, with no remedy anyone intends to apply, and a warning that repeats
       // forever is how a channel gets tuned out (the same call `reportUnmatchedUrls` makes one
       // layer up). The `document.freshness_gap` counter, incremented per affected document below,
       // is what answers whether this is rising.
@@ -216,7 +216,7 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
         record.externalId,
         workspaceId,
       )
-      // The source answered but has no version to compare. Not an error and not fixable — but the
+      // The source answered but has no version to compare. Not an error and not fixable, but the
       // copy still cannot be called confirmed, and claiming otherwise is the one lie this feature
       // must not tell (see `DocumentFreshnessGap`).
       if (!probed) return { status: 'unversioned' }
@@ -235,8 +235,8 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
       // The version of the body ACTUALLY STORED, read off the written row rather than reusing the
       // probed token: the fetch that followed the probe can legitimately land a newer revision than
       // the probe saw, and stating the probe's token would name a revision the agent is not reading.
-      // `?? probed` is total rather than defensive — `fallbackVersion` guarantees the row carries a
-      // token — and it is what keeps this from re-downloading the same document forever.
+      // `?? probed` is total rather than defensive (`fallbackVersion` guarantees the row carries a
+      // token), and it is what keeps this from re-downloading the same document forever.
       return { status: 'versioned', version: reimported.sourceVersion ?? probed }
     })
 
@@ -250,7 +250,7 @@ export class LinkedDocumentRefreshService implements LinkedDocumentRefresher {
       }
     }
     // It does not, so the current body is not the one in hand: either this call just re-imported it,
-    // or a concurrent dispatch did and this call deduped onto its cached outcome — in which case the
+    // or a concurrent dispatch did and this call deduped onto its cached outcome, in which case the
     // row moved AFTER our corpus read. Re-read it rather than labelling a stale body with a fresh
     // revision, which is the exact lie the whole feature exists to prevent.
     const current =

@@ -168,7 +168,7 @@ describe('DocumentConnectionService batch resolution', () => {
   it('answers null for a source the workspace is not connected to, rather than throwing', async () => {
     // The non-throwing twin exists because a caller that must tell "no connection" from "the read
     // itself failed" cannot do it through a thrown ConflictError without catching every transport
-    // fault as the same fact — two gaps that need two different fixes.
+    // fault as the same fact: two gaps that need two different fixes.
     const service = makeService({ githubInstalled: false })
 
     const resolved = await service.resolveConnections('ws_1', ['confluence'])

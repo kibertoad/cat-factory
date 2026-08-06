@@ -64,8 +64,8 @@ export const designFragments: PromptFragment[] = [
     brief:
       'Design context: build UI from the `.cat-context/` design — follow each block’s `### Layout` for structure; reuse an existing repo component before creating one from the `### Components` inventory; honour `### Design tokens` via the project’s theme system instead of ad-hoc values; `### Text content` is copy, not markup; `### References` URLs are reference-only.',
     // No `appliesTo`. The selector this fragment used to carry (`blockTypes: ['frontend']`) was
-    // wrong in both directions — it missed a design linked to an unlabelled task and fired on a
-    // frontend task with no design — and {@link withDesignContextFragment} replaced it. Leaving it
+    // wrong in both directions (it missed a design linked to an unlabelled task and fired on a
+    // frontend task with no design), and {@link withDesignContextFragment} replaced it. Leaving it
     // beside the presence rule would keep the old behaviour alive wherever `appliesTo` is still
     // read (the deterministic selector, the catalog gate, the management surface, which would go on
     // labelling this frontend-only while the engine folds it for any block type carrying a design).

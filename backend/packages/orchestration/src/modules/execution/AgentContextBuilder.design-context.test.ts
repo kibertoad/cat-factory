@@ -153,7 +153,7 @@ describe('AgentContextBuilder: design-context guidance', () => {
   it('resolves the fragments WITHOUT waiting on the freshness refresh', async () => {
     // The flag needs the document ORIGINS, which are known the moment the corpus read returns. The
     // refresh that follows is a live probe per source plus a possible whole-file re-download, and
-    // nothing it can answer changes an origin — so binding the flag to the finished context would
+    // nothing it can answer changes an origin, so binding the flag to the finished context would
     // serialise the fragment fold (an LLM call, when a standard needs condensing) behind a Figma
     // round trip on every dispatch, turning two parallel wave entries into their sum.
     let releaseRefresh = () => {}

@@ -293,7 +293,7 @@ describe('LinkedDocumentRefreshService', () => {
 
   it('REMEMBERS an unreachable source instead of re-asking it on every dispatch', async () => {
     // Without this, a 429 during one dispatch is re-attempted (probe AND whole-file import) by the
-    // next step's dispatch, and the next, sustaining the rate limit for the whole run — which is
+    // next step's dispatch, and the next, sustaining the rate limit for the whole run, which is
     // the opposite of what a cache in front of the ladder is for.
     probeVersion.mockRejectedValue(new Error('figma 429'))
     const svc = service({ versionCache: memoCache() })
