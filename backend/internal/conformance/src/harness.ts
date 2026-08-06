@@ -28,6 +28,7 @@ import type {
   LlmCallActivity,
   NotificationRepository,
   PipelineRegistry,
+  PromptFragmentRegistry,
   PrVerificationReportPublisher,
   RequirementReviewRepository,
   ResolveBinaryArtifactStore,
@@ -459,6 +460,18 @@ export interface ConformanceHarness {
 
 export interface ConformanceAppOptions {
   cloudflareModelsEnabled?: boolean
+  /**
+   * The app-owned prompt-fragment registry this app resolves its standards from: the seam a
+   * DEPLOYMENT registers on. The suite passes a fresh `promptFragmentRegistryWithBuiltins()` with
+   * its own fragments already registered, so the "a deployment ships an org standard" flow is
+   * driven through the real injection path on EVERY runtime.
+   *
+   * It has to be a per-app option rather than a module-global registration made before
+   * `makeApp()`: that global is exactly what this seam replaced, and a suite still reaching for
+   * one would be asserting the failure mode rather than the fix. Absent → the facade's own
+   * default (the shipped catalog).
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
   /**
    * Inject the engine's run-repo resolver so the suite can assert a registered custom
    * kind's pre/post-op hooks run + commit via a checkout-free {@link RepoFiles} — on EVERY

@@ -23,8 +23,12 @@ Default to the well-factored design, not the fastest thing that passes.
   magic constant standing in for a real fix.
 - **Respect the existing seams.** Extend through the app-owned registries (`AgentKindRegistry`,
   `GateRegistry`, `JudgeRegistry`, `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`,
-  `StepResolverRegistry`, `FoundationalServiceRegistry`), the kernel ports, and the runtime
-  `gateways`. Copy the nearest good citizen instead of inventing a one-off.
+  `StepResolverRegistry`, `FoundationalServiceRegistry`, `PromptFragmentRegistry`), the kernel
+  ports, and the runtime `gateways`. Copy the nearest good citizen, never a one-off. **Injected BY
+  REFERENCE, never a module global** (a `workspace:*` dep publishes as an EXACT version, so a
+  consumer floating the range gets two copies and the registration lands in the one nothing reads),
+  and an option on BOTH `start()` and `startLocal()`, asserted at those ENTRY POINTS rather than at
+  the container builder (`runtimes/node/test/registry-seams.spec.ts` + its local sibling).
 - **No shortcuts that create debt.** Don't hard-code what should be configured, widen a type to `any` to
   dodge a modelling problem, or leave a half-wired feature behind a TODO. If the clean solution needs a
   new port/method/table, add it (mirrored across runtimes).
@@ -580,6 +584,8 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
   RESERVED, so it can never be named as a capability credential.
 - `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
+- `node scripts/check-shipped-doc-links.mjs`: a markdown file shipped in a published tarball may not
+  link OUT of its package (dead for the consumer who installed it); use an absolute repo URL.
 - `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
 - `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
@@ -852,35 +858,29 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
 [ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS committing a
-  targeted subset via the `RepoFiles` port; a per-run, checkout-free HTTP facade, so runtime-symmetric) →
-  `agent` → `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing). Registration
-  is by reference on the app-owned registries; unwired means the hooks skip.
+  targeted subset via the `RepoFiles` port, a per-run checkout-free HTTP facade) → `agent` →
+  `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing). Unwired means
+  the hooks skip.
 - **Capabilities are `skills` and `toolServers`**, registered on the SAME `AgentKindRegistry` and
   attachable to a built-in kind via `assignSkills` / `assignToolServers`. **Skills resolve in the
   ENGINE**; **tool servers resolve in the container EXECUTOR**, because what is servable depends on the
   resolved harness and the facade-wired credential resolver.
 - **A capability credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
-  port; the VALUE rides the job body only, and its primary home is the per-workspace
-  capability-credential store composed in FRONT of the env resolver PER KEY. **A credential has TWO
-  names and only one of them is a boundary**: the LOOKUP key may never be a variable the platform reads
-  (`isReservedPlatformEnvKey`, refused at declaration AND at dispatch AND at the call site), while
-  `envName` carries only the narrower `isToolchainEnvName` rule, because vendors' own SDKs fix what they
-  look for. `{ allowKeys }` is the deployment-set bound for everything else, registered PROCESS-WIDE on
-  the Worker (`registerToolSecretPolicy`). The chain is a REQUIRED dependency of both executor builders,
-  and the fallback description is a tri-state read off what was COMPOSED, never asserted. Full model:
-  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
-- **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
-  carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
+  port; the VALUE rides the job body only. Deadliest trap: **a credential has TWO names and only one
+  of them is a boundary** (the LOOKUP key may never be a variable the platform reads; `envName`
+  carries only the narrower toolchain rule, because vendors' SDKs fix what they look for). Full
+  model: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+- **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must
+  ALWAYS carry the CLI's built-in tool names too (it is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
-- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no MCP
-  client; an ambient Codex run has no per-run config home; a required secret didn't resolve), so it plans
-  around the gap instead of discovering it mid-run.
-- **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the checkout.
-  Changing what it writes means an image bump.
-- **A deployment's own TASK TYPES ride the same kind of seam**, and one bundling a per-case form, its
+- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no
+  MCP client; an ambient Codex run has no per-run config home; a required secret didn't resolve).
+- **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the
+  checkout. Changing what it writes means an image bump.
+- **A deployment's own TASK TYPES ride the same kind of seam**; one bundling a per-case form, its
   standing context and its own canned pipeline is a REUSABLE OPERATION: [`reusable-operations.md`](./backend/docs/reusable-operations.md).
-- **NOT yet done**: the built-in agents aren't migrated to this model; their rendering still lives in the
-  harness. Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
+- **NOT yet done**: the built-in agents aren't migrated; their rendering still lives in the harness.
+  Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
 
 ## Per-workspace agent prompt overrides
 

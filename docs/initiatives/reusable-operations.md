@@ -165,6 +165,14 @@ The module-global `registerTaskTypeDefaultFragments` stays, scoped to its remain
 legitimate use (attaching defaults to BUILT-IN types, which have no descriptor); the
 developer doc stops recommending it for custom types.
 
+> **Superseded (#1755).** Both module globals are gone. The built-in-type default set is now
+> `PromptFragmentRegistry.registerTaskTypeDefaults()` on the app-owned registry, injected by
+> reference like every other seam, because a module global is correct only while every reader
+> resolves the same physical copy of the package and a consumer floating a `workspace:*` range
+> gets two. Wherever this tracker says `registerPromptFragments` / `registerTaskTypeDefaultFragments`,
+> read `promptFragmentRegistry.registerAll()` / `.registerTaskTypeDefaults()`. Authority:
+> [`prompt-fragments/README.md`](../../backend/packages/prompt-fragments/README.md).
+
 Deliberately NOT added: `promptAdditions` (D5), `detect` (D6), human-review knobs (an
 operation OWNS its registered pipeline, so approval pauses are that pipeline's own `gates`
 array; `gatesOverride` on `ExecutionService.start` stays the initiative-preset seam).

@@ -31,6 +31,7 @@ import type {
   TaskRepository,
   TaskTypeRegistry,
   TaskTypeSuppressionRepository,
+  PromptFragmentSource,
   WorkspaceMount,
   WorkspaceMountRepository,
   WorkspaceRepository,
@@ -156,6 +157,12 @@ export interface BoardServiceDependencies {
    */
   taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
   /**
+   * Where a new task's per-TASK-TYPE default fragment ids are read from: the app-owned source (this
+   * deployment's registry, or the mothership's on a mothership-mode node). Absent ⇒ a new task
+   * carries only its explicit/service picks and a registered type's own standing context.
+   */
+  promptFragmentSource?: PromptFragmentSource
+  /**
    * The acting workspace's runtime settings, read by two collaborators:
    *  - the opt-in review-debt friction guard on task creation
    *    (`backend/docs/review-debt-friction.md`) — with this AND
@@ -272,6 +279,7 @@ export class BoardService {
     executionEventPublisher,
     taskTypeRegistry,
     taskTypeSuppressionRepository,
+    promptFragmentSource,
     workspaceSettings,
     reviewFrictionNotifications,
     resolveRunRepoContext,
@@ -307,6 +315,7 @@ export class BoardService {
     })
     this.taskTypeDefaults = createTaskTypeCreationDefaults({
       taskTypeRegistry,
+      promptFragmentSource,
       taskTypeSuppressionRepository,
       logger: this.log,
     })
@@ -794,13 +803,21 @@ export class BoardService {
     // `pr-reviewer` knows WHICH PR to review from its prompt.
     block.description = buildReviewDescription(taskType, block.taskTypeFields, block.description)
     // The best-practice fragments the task OWNS from creation: the create form's picks or the
-    // service's standing standards, unioned with the type's defaults and a registered operation's
-    // standing context. Derived by `taskTypeCreationDefaults.ts`, which owns the precedence rules
-    // and STATES a custom type this process does not register.
-    const fragmentIds = this.taskTypeDefaults.fragmentIdsFor({
+    // service's standing standards, unioned with the type's defaults, a registered operation's
+    // standing context, and whichever of its CONDITIONAL entries hold against the values collected
+    // above. Derived by `taskTypeCreationDefaults.ts`, which owns the precedence rules and STATES a
+    // custom type this process does not register.
+    //
+    // `block.taskTypeFields` and not `input.taskTypeFields`: the fields have been validated and
+    // SANITIZED by now, so a value for a field hidden by its own `showWhen` is already gone, and a
+    // conditional rule keyed on one must reduce to false to match what the row actually freezes.
+    const fragmentIds = await this.taskTypeDefaults.fragmentIdsFor({
       taskType,
       explicit: input.fragmentIds,
       serviceFragmentIds: service?.serviceFragmentIds,
+      // `?? undefined` because the row spells "no per-case values" as null while the reduction
+      // takes an absent bag. Both mean the same thing to it: no conditional entry holds.
+      fields: block.taskTypeFields ?? undefined,
     })
     if (fragmentIds.length) {
       block.fragmentIds = fragmentIds

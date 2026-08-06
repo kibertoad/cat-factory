@@ -3,10 +3,10 @@
 The user-facing app, packaged as a **reusable Nuxt 4 layer**: a single-page app
 that runs entirely in the browser and renders the architecture board, drives agent
 pipelines, and reflects live execution. A deployment consumes it via
-`extends: ['@cat-factory/app']` (see [`deploy/frontend`](../../deploy/frontend)).
-It talks to the [backend Worker](../../backend/README.md) over REST and a single
+`extends: ['@cat-factory/app']` (see [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend)).
+It talks to the [backend Worker](https://github.com/kibertoad/cat-factory/blob/main/backend/README.md) over REST and a single
 WebSocket, sharing wire types from
-[`@cat-factory/contracts`](../../backend/packages/contracts).
+[`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts).
 
 The SPA source lives under `app/` (the Nuxt srcDir).
 
@@ -364,7 +364,7 @@ is SUPPRESSED rather than unmounted, because it holds the running tour's resolve
 remount would re-resolve it against gates that may have flipped since the tour started.
 
 The decisions behind this surface, and why each alternative was rejected, are recorded in
-[ADR 0036](../../backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
+[ADR 0036](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
 the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
@@ -583,7 +583,7 @@ event left to restore it.
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. This
 layer ships the base `en` locale, and a downstream deployment overrides by dropping its own files
 (the per-layer deep-merge is the override seam, consumer wins key by key). Migration status:
-[`docs/internal/localization.md`](../../docs/internal/localization.md).
+[`docs/internal/localization.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/localization.md).
 
 - `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
 - `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the plural
@@ -688,7 +688,7 @@ auto-imported
 (`ResultWindowShell`, the `StepRunMeta` run-metadata block, `useResultView`, …), and the
 namespacing / degradation rules are in
 [`app/docs/consumer-extensions.md`](./app/docs/consumer-extensions.md); a full worked
-example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security` module).
+example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend) (the `acme:security` module).
 
 ## Key UI surfaces
 
@@ -795,5 +795,5 @@ pnpm lint         # oxlint + oxfmt --check
 ```
 
 > Building/deploying the static site is covered in the deployment docs: see the
-> [top-level README → Deployment](../../README.md#deployment) and
-> [`deploy/frontend/README.md`](../../deploy/frontend/README.md).
+> [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and
+> [`deploy/frontend/README.md`](https://github.com/kibertoad/cat-factory/blob/main/deploy/frontend/README.md).

@@ -411,6 +411,15 @@ jobs:
       - name: Guard gate-approval raises
         run: node scripts/check-gate-approval-raise.mjs
 
+      # Requires every markdown file that SHIPS in a published tarball to link inside its own
+      # package. An escaping relative link resolves perfectly from a checkout and is dead for the
+      # consumer who installed the package, so it is invisible to everyone able to fix it: an org
+      # building against the published packages could not read the reusable-operations reference
+      # its own `@cat-factory/app` doc pointed at. Its fixtures run in the `node --test` step
+      # above. Pure node, no install.
+      - name: Guard shipped documentation links
+        run: node scripts/check-shipped-doc-links.mjs
+
       # Requires `pnpm test:quick` to exclude exactly the packages the `test-units` lane below
       # excludes. The two deny-lists are the same fact written twice, and `running-tests.md` sells
       # the script as "the same set CI runs", which is the only evidence that set really needs no

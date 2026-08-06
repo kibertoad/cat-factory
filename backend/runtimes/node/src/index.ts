@@ -11,6 +11,10 @@ export {
   serveMisconfigured,
   start,
   type CreateServerOptions,
+  // The boot entry point's options as a named type: a deployment types its own wrapper against it,
+  // and the local facade's seam guard derives what IT must expose from it rather than keeping a
+  // second copy of the list.
+  type StartOptions,
 } from './server.js'
 // Process-level failure guards (unhandled rejection / uncaught exception), shared with the
 // local facade so both Node-hosted deployments crash-report the same way.

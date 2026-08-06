@@ -111,6 +111,8 @@ import type {
   JudgeRegistry,
   InitiativePresetRegistry,
   PipelineRegistry,
+  PromptFragmentRegistry,
+  PromptFragmentSource,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
 
@@ -358,6 +360,20 @@ export interface CoreSpine {
    */
   binaryGenerators: BinaryGeneratorSource
   /**
+   * The app-owned prompt-fragment registry the engine resolved (the facade's injected instance,
+   * else the empty default). Re-exposed for the same reason its neighbours are: the facade passes
+   * this instance to `validateRegistrations` at boot, and `/internal/prompt-fragments` serves it
+   * when this process is a mothership.
+   */
+  promptFragmentRegistry: PromptFragmentRegistry
+  /**
+   * Where a RUN's best-practice standards are READ from: this process's own registry above,
+   * unless a mothership-mode node injected the remote source. Re-exposed because the HTTP layer
+   * needs the SAME answer: the fragment picker and the library management surface are fed from
+   * this, and offering ids from a different set than a run folds is the drift the seam removes.
+   */
+  promptFragments: PromptFragmentSource
+  /**
    * The app-owned initiative-preset registry the engine resolved (the facade's injected instance,
    * else the built-ins-only default). Re-exposed so the HTTP layer's workspace-snapshot descriptors
    * + the preset probe read the SAME instance the initiative services use.
@@ -595,6 +611,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    promptFragmentRegistry,
+    promptFragments,
     binaryGenerators,
     foundationalBuiltins,
     initiativePresetRegistry,
@@ -639,6 +657,7 @@ export function createCore(injected: CoreDependencies): Core {
       executionEventPublisher,
       taskTypeRegistry,
       pipelineRegistry,
+      promptFragments,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,
@@ -706,6 +725,7 @@ export function createCore(injected: CoreDependencies): Core {
     executionEventPublisher,
     boardService,
     foundationalBuiltins,
+    promptFragments,
   })
   const { environments, environmentHandlerSeeder, sharedStackSeeder, fragmentLibrary } = platform
   environmentHandlerSeederRef = environmentHandlerSeeder
@@ -804,6 +824,8 @@ export function createCore(injected: CoreDependencies): Core {
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    promptFragmentRegistry,
+    promptFragments,
     binaryGenerators,
     initiativePresetRegistry,
     executionEventPublisher,

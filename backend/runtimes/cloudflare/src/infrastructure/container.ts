@@ -1062,19 +1062,12 @@ export function buildContainer(
   // boot-time `validateRegistrationsOnce` / the ServerContainer snapshot projection. The GitLab
   // VCS provider + the gate providers are wired onto `vcsRegistry` / `providerRegistry` below when
   // configured (fresh-per-build, so no module-global reset is needed).
-  const {
-    environmentBackendRegistry,
-    runnerBackendRegistry,
-    customManifestTypeRegistry,
-    userSecretKindRegistry,
-    agentKindRegistry,
-    gateRegistry,
-    judgeRegistry,
-    stepResolverRegistry,
-    initiativePresetRegistry,
-    vcsRegistry,
-    providerRegistry,
-  } = resolveWorkerRegistries(overrides)
+  //
+  // Kept as the resolved BUNDLE and forwarded whole, with only the three this function body wires
+  // named individually. Re-listing all twelve on the way out is the one shape that can silently be
+  // short by one, which is how a registry reaches the assembly on Node and misses it here.
+  const registries = resolveWorkerRegistries(overrides)
+  const { runnerBackendRegistry, userSecretKindRegistry, vcsRegistry } = registries
 
   // Binary-artifact storage (UI screenshots + reference design images) for the
   // visual-confirmation gate. The backend is configured PER ACCOUNT in the UI: an account can
@@ -1191,19 +1184,7 @@ export function buildContainer(
     // The composed capability-credential chain (above): the resolver the container executor asks,
     // and the description the credential checklist renders.
     toolSecretChain,
-    registries: {
-      environmentBackendRegistry,
-      runnerBackendRegistry,
-      customManifestTypeRegistry,
-      userSecretKindRegistry,
-      agentKindRegistry,
-      gateRegistry,
-      judgeRegistry,
-      stepResolverRegistry,
-      initiativePresetRegistry,
-      vcsRegistry,
-      providerRegistry,
-    },
+    registries,
     provisioningLogRepository,
     resolveTransport,
   })

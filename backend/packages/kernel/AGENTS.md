@@ -61,6 +61,16 @@ else imports its **ports** and domain types from here.
   the seam's one DATA half (`ports/task-type-repositories.ts`, tombstones), which is also why it is
   the only part of this feature that goes `remote` in mothership mode.
   See `backend/docs/reusable-operations.md`.
+- `domain/prompt-fragment-registry.ts` + `ports/prompt-fragments.ts`: the app-owned
+  `PromptFragmentRegistry` (a deployment's best-practice standards and the per-task-type default
+  SETS that select them) and the `PromptFragmentSource` that decides where the pool is READ from.
+  `defaultPromptFragmentRegistry()` is EMPTY; the shipped catalog installs onto one through the
+  same public methods a deployment uses (`@cat-factory/prompt-fragments`'
+  `promptFragmentRegistryWithBuiltins()`), the `defaultGateRegistry()` ⇄ `@cat-factory/gates` shape.
+  It replaced two MODULE GLOBALS whose correctness depended on every reader resolving the same
+  physical copy of that package, which a published dependency graph does not guarantee. The source
+  is the third `/internal/*` read of the mothership family beside `FoundationalBuiltinSource` and
+  `BinaryGeneratorSource`, and it THROWS rather than answering an empty pool for the reason they do.
 - `domain/llm-phase.ts`: `normalizeCallPhase` + `UNATTRIBUTED_CALL_PHASE`, the boundary for the
   **phase axis** on `llm_call_metrics` (which slice of a run spent a model call). The label is
   free-form and comes from producers the platform does not fully author (a proxy request path, a

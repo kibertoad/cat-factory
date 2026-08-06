@@ -1,6 +1,6 @@
 # Initiative: close the deployment extension-seam gaps a consumer build hit
 
-**Status:** tracker landed, no code yet · **Owner:** core · **Started:** 2026-08-05
+**Status:** slices 1-9 landed (every High + Medium item); S7 (Low) and S3b (its own tracker) open · **Owner:** core · **Started:** 2026-08-05
 
 > Provenance: an org package outside this repo built a proprietary reusable operation ("expose
 > public API") against the PUBLISHED `@cat-factory/*` packages and reported nine gaps. This
@@ -43,13 +43,13 @@ report too:
 
 | #         | Gap                                                                                       | Severity | Their ask                        | Disposition                                 |
 | --------- | ----------------------------------------------------------------------------------------- | -------- | -------------------------------- | ------------------------------------------- |
-| [S1](#s1) | The boot entry points expose an arbitrary SUBSET of the app-owned seams (G3 + G4)         | High     | forward `pipelineRegistry`       | Accept the bug, widen the fix               |
-| [S2](#s2) | The fragment pool is a module global in a package no facade re-exports (G2)               | High     | add a registry option            | Accept, plus the mothership source          |
-| [S3](#s3) | A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time (G1) | High     | honour it at `builtin`           | Accept the bug, REJECT the remedy           |
-| [S4](#s4) | The canonical operations doc and worked example are unreachable from an install (G7)      | Medium   | publish them                     | Accept, land first                          |
-| [S5](#s5) | An unresolvable standing-context id is dropped silently on EVERY run (G6)                 | Medium   | split the descriptor field       | Accept the defect, REJECT the field split   |
-| [S6](#s6) | An operation's standing context cannot depend on the answers just collected (G9)          | Medium   | conditional `defaultFragmentIds` | Accept, refine the condition shape          |
-| [S7](#s7) | Descriptor forms have no grouping, so a 13-field operation reads as one column (G8)       | Low      | `section?: string`               | Accept                                      |
+| [S1](#s1) | The boot entry points expose an arbitrary SUBSET of the app-owned seams (G3 + G4)         | High     | forward `pipelineRegistry`       | ✅ Landed: options + entry-point guard      |
+| [S2](#s2) | The fragment pool is a module global in a package no facade re-exports (G2)               | High     | add a registry option            | ✅ Landed: registry + `/internal` source    |
+| [S3](#s3) | A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time (G1) | High     | honour it at `builtin`           | ✅ Landed: boot ERROR; remedy still refused |
+| [S4](#s4) | The canonical operations doc and worked example are unreachable from an install (G7)      | Medium   | publish them                     | ✅ Landed: absolute URLs + a CI guard       |
+| [S5](#s5) | An unresolvable standing-context id is dropped silently on EVERY run (G6)                 | Medium   | split the descriptor field       | ✅ Landed: run-level report, no field split |
+| [S6](#s6) | An operation's standing context cannot depend on the answers just collected (G9)          | Medium   | conditional `defaultFragmentIds` | ✅ Landed: `conditionalFragmentIds`         |
+| [S7](#s7) | Descriptor forms have no grouping, so a 13-field operation reads as one column (G8)       | Low      | `section?: string`               | ⬜ Open (Low)                               |
 | [S8](#s8) | `CustomTaskType` and the pipeline ids are unreachable from either facade (G5)             | -        | re-export from the facades       | **Stale**: landed in #1654 (kernel 0.246.0) |
 
 ## S1. The boot entry points expose an arbitrary subset of the app-owned seams {#s1}
@@ -130,6 +130,16 @@ and opposite facts.
 
 This is an internal-surface break, so it needs no shim or dual-read path, only a changeset that
 names it.
+
+**Gotcha this one surfaced, for the registries still to migrate.** A registry whose platform
+built-ins install through the public seam has to be defaulted in the facade's CONTAINER BUILDER,
+not only at its boot entry point. On the Worker, `createWorker` resolves the registries once and
+threads them in as overrides, but a cron sweep, a Workflow step and a Durable Object each call
+`buildContainer(env)` with no overrides at all, so an entry-point-only default left exactly the
+re-driven runs nobody watches folding no standards. Empty is not an error anywhere along that
+path: the run simply completes having read a pool the deployment thinks it registered on.
+`resolveWorkerRegistries` is where the gate registry already does this, and
+`test/registry-builtin-defaults.test.ts` pins it for both.
 
 ## S3. A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time {#s3}
 
@@ -253,19 +263,61 @@ convenience only. No action beyond one line in the reference doc naming kernel a
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                    | Scope  | Depends on | Status  | PR  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
-| 0   | This tracker                                                                                                                                                           | DOCS   | -          | ✅ done |     |
-| 1   | **S4**: publish the reference doc + the example (or drop the citation); CI link check for docs shipped in a tarball; correct the `start({ pipelineRegistry })` snippet | DOCS   | -          | ⬜ todo |     |
-| 2   | **S1a**: extend the seam guard to `start()` / `startLocal()` option types; route class for the facade-internal sources                                                 | SYSTEM | -          | ⬜ todo |     |
-| 3   | **S1b**: add the missing options the guard now demands; derive `validateRegistrations`' argument from the container; mothership call site becomes total                | SYSTEM | 2          | ⬜ todo |     |
-| 4   | **S1c**: `pipelineRegistry` in mothership mode: `PipelineSource` read or the documented boot warn, decided and asserted                                                | SYSTEM | 3          | ⬜ todo |     |
-| 5   | **S3a**: refuse a `builtin`-tier `documentRef` at boot, naming the supported paths; assert it                                                                          | SYSTEM | -          | ⬜ todo |     |
-| 6   | **S2**: `PromptFragmentRegistry` + `PromptFragmentSource`; absorb `registerTaskTypeDefaultFragments`; `SEAM_ROUTES` entries; conformance both runtimes                 | SYSTEM | 2          | ⬜ todo |     |
-| 7   | **S5**: `Logger` into `FragmentLibraryService`; the run records the standing-context ids it dropped                                                                    | SYSTEM | -          | ⬜ todo |     |
-| 8   | **S6**: conditional `defaultFragmentIds` over `DescriptorFieldShowWhen`; one shared evaluator; boot validation                                                         | SYSTEM | -          | ⬜ todo |     |
-| 9   | **S7**: `section?: string` + the caption; hidden-section and ordering rules                                                                                            | BOTH   | -          | ⬜ todo |     |
-| 10  | **S3b**: deployment-scoped document source (its own tracker, opened by this slice or explicitly declined)                                                              | SYSTEM | 5          | ⬜ todo |     |
+| #   | Slice                                                                                                                                                                  | Scope  | Depends on | Status  | PR    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | ----- |
+| 0   | This tracker                                                                                                                                                           | DOCS   | -          | ✅ done |       |
+| 1   | **S4**: publish the reference doc + the example (or drop the citation); CI link check for docs shipped in a tarball; correct the `start({ pipelineRegistry })` snippet | DOCS   | -          | ✅ done | #1755 |
+| 2   | **S1a**: extend the seam guard to `start()` / `startLocal()` option types; route class for the facade-internal sources                                                 | SYSTEM | -          | ✅ done | #1755 |
+| 3   | **S1b**: add the missing options the guard now demands; derive `validateRegistrations`' argument from the container; mothership call site becomes total                | SYSTEM | 2          | ✅ done | #1755 |
+| 4   | **S1c**: `pipelineRegistry` in mothership mode: `PipelineSource` read or the documented boot warn, decided and asserted                                                | SYSTEM | 3          | ✅ done | #1755 |
+| 5   | **S3a**: refuse a `builtin`-tier `documentRef` at boot, naming the supported paths; assert it                                                                          | SYSTEM | -          | ✅ done | #1755 |
+| 6   | **S2**: `PromptFragmentRegistry` + `PromptFragmentSource`; absorb `registerTaskTypeDefaultFragments`; `SEAM_ROUTES` entries; conformance both runtimes                 | SYSTEM | 2          | ✅ done | #1755 |
+| 7   | **S5**: `Logger` into `FragmentLibraryService`; the run records the standing-context ids it dropped                                                                    | SYSTEM | -          | ✅ done | #1755 |
+| 8   | **S6**: conditional `defaultFragmentIds` over `DescriptorFieldShowWhen`; one shared evaluator; boot validation                                                         | SYSTEM | -          | ✅ done | #1755 |
+| 9   | **S7**: `section?: string` + the caption; hidden-section and ordering rules                                                                                            | BOTH   | -          | ⬜ todo |       |
+| 10  | **S3b**: deployment-scoped document source (its own tracker, opened by this slice or explicitly declined)                                                              | SYSTEM | 5          | ⬜ todo |       |
+
+Slices 1-8 landed together rather than one PR each. They turned out to be one change: the seam
+guard (2) fails until the options exist (3), the options are what the fragment registry (6) is
+threaded through, and the registry is what S3a (5) validates and what S5 (7) reports against. What
+survived as separable is S7, which is presentation-only and touches neither, and S3b, which is a
+feature rather than a fix.
+
+## What landed, and where it differs from the plan above
+
+- **S1c chose the boot WARN, not a `PipelineSource`.** The tracker offered either. The deciding
+  difference from the two sources that DO read remotely: when the two builds disagree about a
+  pipeline the failure is LOUD. A definition only the mothership has is offered by the board and
+  then refused at `adoptForRun` (no stored row, no catalog entry, null); a definition only the node
+  has is adopted INTO a row through the remote repository, so it lands on the mothership. Neither
+  is the silent omission an empty foundational tier produces. The other half is that
+  `seedPipelines`/`retiredPipelines` are synchronous and read on every board list, so a remote
+  source would put an awaited network hop on a hot path to remove a divergence that already fails
+  safely. The reasoning is recorded at the warn site; if a future change makes the skew silent,
+  that comment is the thing to re-read.
+- **S2 took `defaultFragmentIdsFor` async.** The per-task-type default SET is org state a creation
+  resolves, so it rides the source rather than the registry, which made
+  `TaskTypeCreationDefaults.fragmentIdsFor` async and `BoardService.addTask` await it. The throw
+  propagates on that path deliberately: a task seeded with a silently short standing context is the
+  failure the seam exists to prevent, and creation is a user action that can be retried.
+- **S2 changed one behaviour rather than preserving it.** `registerTaskTypeDefaults` REPLACES a
+  built-in per-type set instead of unioning with it. The module-global seam unioned silently, which
+  meant a deployment could not remove a shipped default however it wrote the call. A deployment
+  that wants both now spreads `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` into its own list, which says
+  so in the code. Internal surface, so no shim; named in the changeset.
+- **S4 was wider than the one link.** The new guard found 46 escaping links across 10 shipped docs
+  (`@cat-factory/cli`, `eks`, `prompt-fragments`, `provider-bedrock`, `provider-s3`,
+  `executor-harness`, `app`, `sdk/mcp`, `sdk/typescript`), not just the
+  `consumer-extensions.md` → `reusable-operations.md` one the report hit. All are now absolute
+  repo URLs. The example package stays `private: true` and is CITED by absolute URL rather than
+  published: the repo is public, so the link is reachable from an install, and publishing a
+  `backend/internal/*` package would cut against the repository layout for no gain the URL does not
+  already give.
+- **S3b is DECLINED for now, not opened.** A deployment-scoped document source needs an owner-scope
+  member on `FragmentOwnerKind`, a credential home, and a mothership routing decision, and nothing
+  currently asks for it: the account tier already serves an org-wide living document, and S3a's
+  boot error now names that path at the moment a deployment reaches for the wrong one. Re-open it
+  when a deployment has an org-wide document it cannot nominate ANY workspace's connection for.
 
 ## Conventions & gotchas
 

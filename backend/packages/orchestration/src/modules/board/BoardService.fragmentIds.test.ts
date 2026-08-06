@@ -1,12 +1,18 @@
 import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
-import { afterEach, describe, expect, it } from 'vitest'
-import type { Block, RecordedLogLine, TaskTypeRegistry } from '@cat-factory/kernel'
-import { createRecordingLogger, defaultTaskTypeRegistry } from '@cat-factory/kernel'
+import { beforeEach, describe, expect, it } from 'vitest'
+import type {
+  Block,
+  PromptFragmentRegistry,
+  RecordedLogLine,
+  TaskTypeRegistry,
+} from '@cat-factory/kernel'
 import {
-  clearRegisteredTaskTypeDefaultFragments,
-  DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
-  registerTaskTypeDefaultFragments,
-} from '@cat-factory/prompt-fragments'
+  createRecordingLogger,
+  defaultTaskTypeRegistry,
+  registryPromptFragmentSource,
+} from '@cat-factory/kernel'
+import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragments'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A task OWNS its best-practice prompt fragment selection from creation. These pin how
@@ -18,7 +24,12 @@ import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 describe('BoardService fragment pinning at creation', () => {
   const WS = 'ws_1'
 
-  afterEach(() => clearRegisteredTaskTypeDefaultFragments())
+  // A FRESH registry per test, carrying the shipped per-type defaults. What an `afterEach` used to
+  // undo on a module global is now scoped by construction.
+  let fragments: PromptFragmentRegistry
+  beforeEach(() => {
+    fragments = promptFragmentRegistryWithBuiltins()
+  })
 
   function build(
     serviceFragmentIds?: string[],
@@ -60,7 +71,10 @@ describe('BoardService fragment pinning at creation', () => {
         async llmCallObserved() {},
       },
     } as unknown as BoardServiceDependencies
-    return new BoardService(deps)
+    return new BoardService({
+      ...deps,
+      promptFragmentSource: registryPromptFragmentSource(fragments),
+    })
   }
 
   it('persists the picked fragments on a normal task', async () => {
@@ -116,7 +130,7 @@ describe('BoardService fragment pinning at creation', () => {
   })
 
   it('seeds a deployment-registered task-type default (e.g. review) onto a new task', async () => {
-    registerTaskTypeDefaultFragments('review', ['org.review-checklist'])
+    fragments.registerTaskTypeDefaults('review', ['org.review-checklist'])
     const task = await build().addTask(
       WS,
       'frame_svc',
@@ -127,7 +141,7 @@ describe('BoardService fragment pinning at creation', () => {
   })
 
   it('unions a registered type default with the inherited service standards (deduped)', async () => {
-    registerTaskTypeDefaultFragments('feature', ['org.feature-default'])
+    fragments.registerTaskTypeDefaults('feature', ['org.feature-default'])
     const task = await build(['node.best-practices', 'org.feature-default']).addTask(
       WS,
       'frame_svc',

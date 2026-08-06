@@ -1,18 +1,20 @@
 import {
   isNamespacedId,
+  matchesDescriptorCondition,
   sanitizeDescriptorFields,
   validateDescriptorFields,
   withDescriptorFieldDefaults,
 } from '@cat-factory/contracts'
+import type { CustomTaskType } from '@cat-factory/contracts'
 import type {
   Block,
   Logger,
+  PromptFragmentSource,
   TaskTypeFields,
   TaskTypeRegistry,
   TaskTypeSuppressionRepository,
 } from '@cat-factory/kernel'
 import { defaultPipelineIdForTaskType, ValidationError } from '@cat-factory/kernel'
-import { defaultFragmentIdsForTaskType } from '@cat-factory/prompt-fragments'
 
 // ---------------------------------------------------------------------------
 // What a new task's TYPE implies for the row `BoardService.addTask` writes: whether the workspace
@@ -39,20 +41,27 @@ export interface TaskTypeCreationDefaults {
   /**
    * The best-practice fragment ids the task OWNS from creation, deduped and in precedence order.
    *
-   * Three sources union. The SERVICE-inherited set is the create form's explicit list when it
+   * FOUR sources union. The SERVICE-inherited set is the create form's explicit list when it
    * provided one (the user edited the pre-seeded picker), INCLUDING an empty list, which means "the
    * user cleared the inherited picks", else the enclosing service's `serviceFragmentIds` (so a task
    * created without the form, e.g. via the public API, still inherits its service's standards).
    * Every task additionally always carries its TASK-TYPE defaults (the built-in document
-   * writing-style set plus any deployment-registered per-type defaults). And a REGISTERED custom
-   * type's own `defaultFragmentIds` join both: an operation's standing context (an org's API
-   * guidelines, its auth requirements) is part of the bundle, so every invocation carries it with no
-   * per-task picking.
+   * writing-style set plus any deployment-registered per-type defaults). A REGISTERED custom type's
+   * own `defaultFragmentIds` join those: an operation's standing context (an org's API guidelines,
+   * its auth requirements) is part of the bundle, so every invocation carries it with no per-task
+   * picking. And finally its `conditionalFragmentIds`, the entries whose condition holds against the
+   * values this creation just collected.
    *
    * A task owns the result outright: the engine folds exactly this selection and does NOT re-union
    * the service's fragments at run time, so a per-task removal actually takes effect. Only the id SET
    * freezes here; bodies live-resolve per run, so editing a guideline reaches tasks created before
    * the edit.
+   *
+   * Async because the per-task-type default set is read through the app-owned
+   * {@link PromptFragmentSource}, which on a mothership-mode node crosses the machine API. That read
+   * THROWS on failure rather than answering empty, and the throw propagates: seeding a task with a
+   * silently short standing context is the failure this whole seam exists to prevent, and creation
+   * is a user action that can be retried, not a best-effort side channel.
    */
   fragmentIdsFor(input: {
     taskType: ResolvedTaskType
@@ -60,7 +69,13 @@ export interface TaskTypeCreationDefaults {
     explicit?: string[]
     /** The enclosing service's standing standards, used only when `explicit` is absent. */
     serviceFragmentIds?: string[]
-  }): string[]
+    /**
+     * The per-type values this creation collected, ALREADY sanitized (so a field hidden by its own
+     * `showWhen` is absent, and a rule keyed on it correctly does not fire). Drives
+     * `conditionalFragmentIds`; absent means no conditional entry holds.
+     */
+    fields?: TaskTypeFields
+  }): Promise<string[]>
   /**
    * The pipeline a new task of this type defaults to when the creator pins none. A `document` task
    * defaults to the document-authoring pipeline (`pl_document`) rather than the workspace's
@@ -132,9 +147,12 @@ function standingContextFor(
   taskType: ResolvedTaskType,
   registry: TaskTypeRegistry | undefined,
   log: Logger,
+  fields: TaskTypeFields | undefined,
 ): readonly string[] {
   const registered = registry?.get(taskType)
-  if (registered) return registered.defaultFragmentIds ?? []
+  if (registered) {
+    return [...(registered.defaultFragmentIds ?? []), ...conditionalContextFor(registered, fields)]
+  }
   if (isNamespacedId(taskType)) {
     log.warn(
       'Task created under a custom task type this process does not register; its standing-context fragments were not seeded and this task will not gain them later',
@@ -142,6 +160,49 @@ function standingContextFor(
     )
   }
   return []
+}
+
+/**
+ * The `conditionalFragmentIds` entries whose condition holds against the values just collected.
+ *
+ * Evaluated through contracts' `matchesDescriptorCondition`, the SAME evaluator the form's own
+ * field visibility uses, so the two can never disagree about what a condition means. That matters
+ * for one rule above all: an absent value reads as `false` against a boolean condition, which a
+ * second implementation gets wrong in the direction that silently seeds nothing.
+ *
+ * Reads the per-type `custom` sub-bag, which for a DESCRIPTOR-driven type has by this point been
+ * through `sanitizeDescriptorFields`: a field hidden by its own `showWhen` has already been dropped,
+ * so a rule keyed on one reduces to false and matches what the row actually freezes. A type with a
+ * bespoke `formPanel` collects its bag through its own component and passes it through untouched,
+ * so a rule there is evaluated against exactly what the panel submitted, which is the only thing
+ * that could be meant by a condition on a form this layer does not model.
+ *
+ * A rule keyed on a field a descriptor-driven type does not declare cannot reach here at all,
+ * because boot refuses it (`task_type_field_unknown_condition`).
+ *
+ * The one place this deliberately departs from the shared evaluator is a condition with NEITHER
+ * predicate: `matchesDescriptorCondition` reads that as satisfied, which is right for field
+ * visibility (the alternative hides a field forever) and exactly wrong here, where it would seed
+ * every case of the type with guidance meant for one. That is the silent misseeding conditional
+ * fragments exist to remove, so this site states its own safe default rather than re-deriving the
+ * evaluator's, exactly as that function's contract asks. Boot refuses such a rule outright
+ * (`task_type_conditional_no_predicate`); this is the second half, for a registration that reached
+ * a run without passing through validation.
+ */
+function conditionalContextFor(
+  registered: CustomTaskType,
+  fields: TaskTypeFields | undefined,
+): string[] {
+  const rules = registered.conditionalFragmentIds ?? []
+  if (rules.length === 0) return []
+  const values = fields?.custom ?? {}
+  return rules
+    .filter(
+      (rule) =>
+        (rule.when.equals !== undefined || rule.when.includes !== undefined) &&
+        matchesDescriptorCondition(rule.when, values),
+    )
+    .flatMap((rule) => rule.fragmentIds)
 }
 
 /**
@@ -199,6 +260,12 @@ async function assertNotSuppressed(
 export function createTaskTypeCreationDefaults(deps: {
   /** The app-owned registry a deployment registers its custom task types on. */
   taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * Where the per-task-type DEFAULT SETS are read from: the app-owned source, which is this
+   * deployment's own registry or (on a mothership-mode node) the mothership's. Absent ⇒ no
+   * per-type defaults, the honest answer for a caller that wired no pool at all.
+   */
+  promptFragmentSource?: PromptFragmentSource
   /** The per-workspace hide-list; absent ⇒ nothing is suppressed. */
   taskTypeSuppressionRepository?: TaskTypeSuppressionRepository
   logger: Logger
@@ -206,11 +273,11 @@ export function createTaskTypeCreationDefaults(deps: {
   return {
     assertNotSuppressed: (workspaceId, taskType) =>
       assertNotSuppressed(workspaceId, taskType, deps.taskTypeSuppressionRepository),
-    fragmentIdsFor: ({ taskType, explicit, serviceFragmentIds }) => [
+    fragmentIdsFor: async ({ taskType, explicit, serviceFragmentIds, fields }) => [
       ...new Set([
         ...(explicit ?? serviceFragmentIds ?? []),
-        ...defaultFragmentIdsForTaskType(taskType),
-        ...standingContextFor(taskType, deps.taskTypeRegistry, deps.logger),
+        ...((await deps.promptFragmentSource?.defaultFragmentIdsFor(taskType)) ?? []),
+        ...standingContextFor(taskType, deps.taskTypeRegistry, deps.logger, fields),
       ]),
     ],
     pipelineIdFor: (taskType) => defaultPipelineIdForTaskType(taskType, deps.taskTypeRegistry),

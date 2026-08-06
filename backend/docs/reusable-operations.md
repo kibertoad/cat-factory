@@ -210,8 +210,9 @@ harness change and no image bump: the fold rides the user prompt the backend com
 ## Standing context, and the trait that gates it
 
 `defaultFragmentIds` name best-practice fragments from the universal code pool (the built-in
-catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / workspace rows, and the
-`src:<sourceId>:<slug>` ids of a repo-backed fragment source).
+catalog plus whatever the deployment passes to `promptFragmentRegistry.registerAll()`) or from the
+tenant tiers (account / workspace rows, and the `src:<sourceId>:<slug>` ids of a repo-backed
+fragment source).
 
 - **Fragments fold only for `code-aware` / `doc-aware` agent kinds**
   (`AgentContextBuilder.resolveFragments`). An operation whose pipeline runs the deployment's own
@@ -220,9 +221,9 @@ catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / works
 - **A long fragment is folded as its condensed `brief` for implementer kinds** and in full for
   reviewer/planner kinds, so ship a `brief` alongside a long `body`
   ([`prompt-fragments/README.md`](../packages/prompt-fragments/README.md)).
-- **`registerTaskTypeDefaultFragments` is NOT the seam for an operation.** That module-global is
-  for attaching defaults to a BUILT-IN type, which has no descriptor to carry them. A registered
-  type declares `defaultFragmentIds` on its own registration, where boot validation can see it.
+- **`promptFragmentRegistry.registerTaskTypeDefaults()` is NOT the seam for an operation.** It
+  attaches defaults to a BUILT-IN type, which has no descriptor to carry them. A registered type
+  declares `defaultFragmentIds` on its own registration, where boot validation can see it.
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
   go back for it, because only the id SET freezes at creation. `BoardService` logs a warning
@@ -324,29 +325,62 @@ a custom agent kind.
 const agentKindRegistry = defaultAgentKindRegistry()
 const pipelineRegistry = defaultPipelineRegistry()
 const taskTypeRegistry = defaultTaskTypeRegistry()
+// The shipped best-practice catalog, so the org's own standards join it rather than replace it.
+const promptFragmentRegistry = promptFragmentRegistryWithBuiltins()
 
-registerMyOrgOperations({ agentKindRegistry, pipelineRegistry, taskTypeRegistry })
-start({ agentKindRegistry, pipelineRegistry, taskTypeRegistry /* …the rest */ })
+registerMyOrgOperations({
+  agentKindRegistry,
+  pipelineRegistry,
+  taskTypeRegistry,
+  promptFragmentRegistry,
+})
+start({
+  agentKindRegistry,
+  pipelineRegistry,
+  taskTypeRegistry,
+  promptFragmentRegistry /* …the rest */,
+})
 ```
 
-> Two things a deployment outside this repo needs to know about that snippet. The whole
-> vocabulary it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
+> One thing a deployment outside this repo needs to know about that snippet: the whole vocabulary
+> it types against (`CustomTaskType`, `TaskTypeFieldDescriptor`, `PromptFragment`, the
 > descriptor-field rules, the `*_PIPELINE_ID` constants) is re-exported from
-> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed. And
-> `pipelineRegistry` is NOT yet an option on `start()` / `startLocal()`: on the Node facade it
-> currently rides `buildContainer`, and on the local facade a registered pipeline is unreachable.
-> That gap and the rest of what a consumer build hit are tracked in
-> [`deployment-extension-seam-gaps.md`](../../docs/initiatives/deployment-extension-seam-gaps.md).
+> `@cat-factory/kernel`, so no `@cat-factory/contracts` dependency is needed.
+> `promptFragmentRegistryWithBuiltins()` comes from `@cat-factory/prompt-fragments`; a deployment
+> that wants ONLY its own standards news a bare `defaultPromptFragmentRegistry()` (kernel) instead.
+>
+> Every app-owned registry is an option on BOTH `start()` and `startLocal()`, and a drift guard
+> asserts that against the entry points themselves rather than the container builder behind them
+> (`backend/runtimes/node/test/registry-seams.spec.ts`). `pipelineRegistry` used to be the
+> exception: it was a documented builder option that no boot path forwarded, so on the local facade
+> a registered pipeline was unreachable outright.
 
 Inside, order matters for boot validation rather than for behaviour: register the fragments and
 the variants, then the pipeline that selects them, then the task type that names the pipeline, so
 `validateRegistrations` resolves every reference.
 
-1. **Standing context**: `registerPromptFragments([...])` with the org's guidelines (or reference
-   a repo fragment source's `src:<sourceId>:<slug>` ids; tenant-tier ids warn rather than refuse).
+1. **Standing context**: `promptFragmentRegistry.registerAll([...])` with the org's guidelines (or
+   reference a repo fragment source's `src:<sourceId>:<slug>` ids; tenant-tier ids warn rather than
+   refuse). Registering by REFERENCE onto the injected instance is what makes this work from a
+   published install: the module-global `registerPromptFragments` it replaced was correct only
+   while every reader resolved the same physical copy of `@cat-factory/prompt-fragments`, and a
+   `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+   newer patch got two copies and every task of the operation folded nothing.
+   A fragment registered here may NOT carry a `documentRef`: a code registration lands on the
+   `builtin` tier, whose live resolution needs a connection workspace a deployment-wide
+   registration cannot name, so boot refuses it (`fragment_document_ref_unsupported`) rather than
+   rendering it as live and ignoring it. Register the body inline, or create the fragment at the
+   ACCOUNT tier with a fetch-via workspace.
 2. **Steering**: `registerVariant` per steered step.
 3. **The canned pipeline**: `pipelineRegistry.register({ builtin: true, version: 1, … })`.
 4. **The operation**: `taskTypeRegistry.register({ taskType, presentation, fields, defaultFragmentIds, defaultPipelineId })`.
+   Standing context that depends on the ANSWERS a case supplies goes in `conditionalFragmentIds`:
+   each entry is `{ when, fragmentIds }` where `when` is a `showWhen` condition in the same
+   vocabulary the form's own field visibility uses, evaluated once at creation against the
+   collected values. That is what lets one operation collecting `protocol: rest | graphql` seed the
+   GraphQL standard only for a GraphQL case, instead of paying for every branch on every run or
+   folding the conditional material into one long standard and losing its per-standard citation. A
+   `when.key` naming a field the type does not declare fails boot.
 
 Pass the SAME registry instances into the facade build. `resolveCoreRuntime` supplies an empty
 default for an un-passed registry, and the engine reads `runtime.taskTypeRegistry` rather than an

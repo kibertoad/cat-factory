@@ -134,6 +134,24 @@ export type OperationalCounter =
    */
   | 'dispatch.token_scope_widened'
   /**
+   * A run's standing-context fragment ids resolved against nothing, so the guidance they name
+   * never reached the agent (`FragmentLibraryService.resolveBodiesForRun`).
+   *
+   * Counted because the failure is invisible per run and only visible as a rate: the run still
+   * succeeds, the agent still answers, and a reviewer's adherence report reads exactly like a
+   * deployment that never wrote the standard down. The shapes that produce it are all standing
+   * conditions rather than incidents (a deployment resolving two physical copies of the fragment
+   * package, so the whole registered pool is empty; a task type pinning a typo'd id; a node
+   * whose mothership build moved underneath it), which is precisely what a log line cannot say
+   * and a rate can.
+   *
+   * UNDIMENSIONED: the split worth having is the CAUSE, and the drop site cannot tell a typo
+   * from a deliberate tier suppression without a read it does not have (see the comment there).
+   * A dimension carrying the fragment id would be unbounded, being whatever a deployment named
+   * its own standards. The ids and the workspace ride the log line at the increment site.
+   */
+  | 'fragments.dropped_from_run'
+  /**
    * A linked context document could NOT be confirmed against its source at dispatch, so the run
    * read the copy stored at import time. Dimensioned by `reason` (the `DocumentFreshnessGap`
    * union) and `source` (the `DocumentSourceKind` union), both closed, so the cardinality is the

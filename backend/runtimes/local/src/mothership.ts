@@ -7,6 +7,7 @@ import {
   HttpMachineTelemetryReadClient,
   HttpBinaryGeneratorSource,
   HttpFoundationalBuiltinSource,
+  HttpPromptFragmentSource,
   HttpPersistenceRpcClient,
   type LocalFirstPersistenceRepository,
   type Logger,
@@ -119,6 +120,17 @@ export interface MothershipComposition {
    * invisible in the message. Reads the SAME per-request machine token as the persistence RPC.
    */
   binaryGenerators: HttpBinaryGeneratorSource
+  /**
+   * The deployment's best-practice PROMPT-FRAGMENT pool (and the per-task-type default sets that
+   * select them), read from the MOTHERSHIP over `GET /internal/prompt-fragments` rather than from
+   * this node's own `PromptFragmentRegistry`. The same story as its two siblings above: what a run
+   * folds as its standards has to be what the deployment actually registered, and this node's build
+   * can only hold a second copy. The symptom here is the quietest of the three, which is why it
+   * matters: a run judged against a standard the org never wrote, or against nothing at all, and
+   * the reviewer's adherence report reads perfectly well either way. Reads the SAME per-request
+   * machine token as the persistence RPC.
+   */
+  promptFragments: HttpPromptFragmentSource
   /**
    * The real-time UPSTREAM propagation adapter: forwards this local node's engine events to the
    * mothership over `POST /internal/events/publish`, so a hosted teammate on the same shared board
@@ -242,6 +254,9 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
   // builder offered them from, and this node's own build can only hold a second copy of it (see
   // the boot warning in `server.ts` when one is nonetheless registered).
   const binaryGenerators = new HttpBinaryGeneratorSource({ baseUrl, token: machineToken })
+  // …and the standards pool, on the same base URL + per-request token, for the same reason once
+  // more (see the boot warning in `server.ts` when a registry is nonetheless registered here).
+  const promptFragments = new HttpPromptFragmentSource({ baseUrl, token: machineToken })
   // Real-time, BOTH directions, on the SAME base URL + per-request token, so the stream follows the
   // same connect/expiry lifecycle as the rest of the machine API. A token-less node neither
   // publishes nor subscribes (its own SPA still gets every locally produced event).
@@ -287,6 +302,7 @@ export function composeMothership(env: NodeJS.ProcessEnv): MothershipComposition
     githubTokenSource,
     foundationalBuiltins,
     binaryGenerators,
+    promptFragments,
     realtimeAdapter,
     realtimeSubscriber,
     notificationChannel,

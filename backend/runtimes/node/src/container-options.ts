@@ -49,6 +49,8 @@ import {
   type BinaryGeneratorSource,
   type FoundationalBuiltinSource,
   type FoundationalServiceRegistry,
+  type PromptFragmentRegistry,
+  type PromptFragmentSource,
   type TaskTypeRegistry,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -422,8 +424,22 @@ export interface NodeContainerOptions {
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
+   * The app-owned prompt-fragment registry: the deployment's best-practice standards and the
+   * per-task-type default sets that select them, registered BY REFERENCE. Optional; the facade
+   * defaults it to `promptFragmentRegistryWithBuiltins()` (the shipped catalog), NOT to the
+   * engine's empty default, so a deployment that passes its own instance is stating that it wants
+   * only what it registered.
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * Where that pool is READ from when it is not the registry above: set only by a MOTHERSHIP-MODE
+   * node, which resolves it over `GET /internal/prompt-fragments`. The exact sibling of
+   * {@link foundationalBuiltinSource}, alternatives never a merge.
+   */
+  promptFragmentSource?: PromptFragmentSource
+  /**
    * Where the catalog's `builtin` tier is READ from, when it is not this process's own registry
-   * above. Set by exactly one caller — the local facade booting in MOTHERSHIP mode, which reads
+   * above. Set by exactly one caller, the local facade booting in MOTHERSHIP mode, which reads
    * the mothership's registry over `GET /internal/foundational-services` because the estate is
    * org state and a node's own build can only hold a second, drifting copy of it. See
    * `kernel/src/ports/foundational-builtins.ts`.
@@ -431,7 +447,7 @@ export interface NodeContainerOptions {
   foundationalBuiltinSource?: FoundationalBuiltinSource
   /**
    * Where the deployment's GENERATIVE BINARY INTEGRATIONS are READ from, when that is not this
-   * process's own registry above. Set by exactly one caller — the local facade booting in
+   * process's own registry above. Set by exactly one caller, the local facade booting in
    * MOTHERSHIP mode, which reads the mothership's registry over `GET /internal/binary-generators`
    * because the set the pipeline builder OFFERED and the set run admission RESOLVES have to be
    * one set. See `kernel/src/ports/binary-generators.ts`.

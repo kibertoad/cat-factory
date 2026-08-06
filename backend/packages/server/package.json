@@ -37,7 +37,6 @@
     "@cat-factory/kernel": "workspace:*",
     "@cat-factory/mcp-server": "workspace:*",
     "@cat-factory/orchestration": "workspace:*",
-    "@cat-factory/prompt-fragments": "workspace:*",
     "@cat-factory/spend": "workspace:*",
     "@toad-contracts/core": "0.4.0",
     "@toad-contracts/hono": "0.3.2",

@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { RecordedLogLine } from '@cat-factory/kernel'
-import { createRecordingLogger, defaultTaskTypeRegistry } from '@cat-factory/kernel'
 import {
-  clearRegisteredTaskTypeDefaultFragments,
+  createRecordingLogger,
+  defaultTaskTypeRegistry,
+  registryPromptFragmentSource,
+} from '@cat-factory/kernel'
+import {
   DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
+  promptFragmentRegistryWithBuiltins,
 } from '@cat-factory/prompt-fragments'
 import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 
@@ -11,8 +15,6 @@ import { createTaskTypeCreationDefaults } from './taskTypeCreationDefaults.js'
 // through the service. `BoardService.fragmentIds.test.ts` covers the same rules end to end; these
 // cover the branches a service-level test cannot reach cheaply.
 describe('taskTypeCreationDefaults', () => {
-  afterEach(() => clearRegisteredTaskTypeDefaultFragments())
-
   function build(
     register?: Parameters<ReturnType<typeof defaultTaskTypeRegistry>['register']>[0],
     suppressed: string[] = [],
@@ -24,6 +26,8 @@ describe('taskTypeCreationDefaults', () => {
       lines,
       defaults: createTaskTypeCreationDefaults({
         taskTypeRegistry,
+        // A fresh registry per build, carrying the shipped per-type defaults.
+        promptFragmentSource: registryPromptFragmentSource(promptFragmentRegistryWithBuiltins()),
         taskTypeSuppressionRepository: {
           list: async () => suppressed,
           suppress: async () => {},
@@ -45,11 +49,11 @@ describe('taskTypeCreationDefaults', () => {
     defaultFragmentIds: ['org.api-guidelines'],
   }
 
-  it('honours an EMPTY explicit list as "the user cleared the inherited picks"', () => {
+  it('honours an EMPTY explicit list as "the user cleared the inherited picks"', async () => {
     // The distinction an `??` chain exists for: an empty array is a choice, absence is not.
     const { defaults } = build()
     expect(
-      defaults.fragmentIdsFor({
+      await defaults.fragmentIdsFor({
         taskType: 'feature',
         explicit: [],
         serviceFragmentIds: ['node.best-practices'],
@@ -57,25 +61,28 @@ describe('taskTypeCreationDefaults', () => {
     ).toEqual([])
   })
 
-  it('inherits the service standards when the form sent no list', () => {
+  it('inherits the service standards when the form sent no list', async () => {
     const { defaults } = build()
     expect(
-      defaults.fragmentIdsFor({ taskType: 'feature', serviceFragmentIds: ['node.best-practices'] }),
+      await defaults.fragmentIdsFor({
+        taskType: 'feature',
+        serviceFragmentIds: ['node.best-practices'],
+      }),
     ).toEqual(['node.best-practices'])
   })
 
-  it('always adds the per-type defaults, even over a cleared list', () => {
+  it('always adds the per-type defaults, even over a cleared list', async () => {
     // A document task cannot lose its writing-style set by clearing the picker.
     const { defaults } = build()
-    expect(defaults.fragmentIdsFor({ taskType: 'document', explicit: [] })).toEqual([
+    expect(await defaults.fragmentIdsFor({ taskType: 'document', explicit: [] })).toEqual([
       ...DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS,
     ])
   })
 
-  it("adds a registered operation's standing context, deduped and last", () => {
+  it("adds a registered operation's standing context, deduped and last", async () => {
     const { defaults, lines } = build(OPERATION)
     expect(
-      defaults.fragmentIdsFor({
+      await defaults.fragmentIdsFor({
         taskType: 'org:introduce-api',
         explicit: ['org.api-guidelines', 'react.hooks'],
       }),
@@ -83,9 +90,9 @@ describe('taskTypeCreationDefaults', () => {
     expect(lines).toEqual([])
   })
 
-  it('WARNS on a namespaced type this process does not register', () => {
+  it('WARNS on a namespaced type this process does not register', async () => {
     const { defaults, lines } = build()
-    expect(defaults.fragmentIdsFor({ taskType: 'org:introduce-api' })).toEqual([])
+    expect(await defaults.fragmentIdsFor({ taskType: 'org:introduce-api' })).toEqual([])
     expect(lines.map((line) => line.level)).toEqual(['warn'])
     expect(lines[0]?.fields?.taskType).toBe('org:introduce-api')
   })
