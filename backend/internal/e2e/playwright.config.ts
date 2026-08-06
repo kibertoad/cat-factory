@@ -1,14 +1,28 @@
 import { defineConfig, devices } from '@playwright/test'
+// Every port and origin comes from the ONE derivation the backend, the launcher and the specs' own
+// helpers read (`src/ports.ts`), so what Playwright starts is what the specs open under any override.
+import {
+  AUTH_BACKEND_PORT,
+  AUTH_BACKEND_URL,
+  AUTH_FRONTEND_PORT,
+  AUTH_FRONTEND_URL,
+  BACKEND_PORT,
+  BACKEND_URL,
+  FRONTEND_PORT,
+  FRONTEND_URL,
+} from './src/ports.ts'
 
 // e2e against the assembled product: Playwright drives a real Chromium against the real
 // SPA (Nuxt dev server), which talks to the real Node backend (real Postgres + real
 // WebSocket) booted by `src/testServer.ts` with the external deps faked. Both servers are
 // started by Playwright's `webServer` below; nothing else is needed beyond a reachable
 // `DATABASE_URL` (Postgres) — CI provides one, mirroring the existing `test-rest` job.
-const BACKEND_PORT = Number(process.env.PORT ?? 8787)
-const FRONTEND_PORT = Number(process.env.E2E_FRONTEND_PORT ?? 3000)
-const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`
-const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
+//
+// The AUTH-ENABLED stack (`AUTH_BACKEND_URL` / `AUTH_FRONTEND_URL`) is a second HTTP surface over the
+// SAME backend process (`src/authBackend.ts`) and a second instance of the SAME SPA build pointed at
+// it (`src/authFrontend.mjs`). It exists for the specs whose subject is identity (the login screen,
+// and any policy that names PEOPLE), which the primary `TESTING_NO_AUTH` stack structurally cannot
+// show.
 
 export default defineConfig({
   testDir: './tests',
@@ -60,10 +74,16 @@ export default defineConfig({
       timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
-      // Allow-list the SPA's actual origin for CORS — derived from the SAME port var the
-      // frontend server binds, so overriding E2E_FRONTEND_PORT can't desync them and
-      // silently break every in-browser REST call.
-      env: { PORT: String(BACKEND_PORT), CORS_ALLOWED_ORIGINS: FRONTEND_URL },
+      // Allow-list the SPA's actual origin for CORS, and hand this process the RESOLVED ends of the
+      // auth stack it also serves: the port its second listener binds, and the SPA origin allowed to
+      // call it. Passing the resolved values (rather than letting each side re-derive) is what stops
+      // an override moving one end and silently breaking every in-browser REST call.
+      env: {
+        PORT: String(BACKEND_PORT),
+        CORS_ALLOWED_ORIGINS: FRONTEND_URL,
+        E2E_AUTH_PORT: String(AUTH_BACKEND_PORT),
+        E2E_AUTH_FRONTEND_URL: AUTH_FRONTEND_URL,
+      },
     },
     {
       // The SPA (the @cat-factory/app layer via the deploy/frontend consumer), pointed at
@@ -94,6 +114,28 @@ export default defineConfig({
         NUXT_PUBLIC_API_BASE: BACKEND_URL,
         PORT: String(FRONTEND_PORT),
         NUXT_SOURCEMAP_CLIENT: 'true',
+      },
+    },
+    {
+      // The same SPA build served a second time against the auth-enabled backend surface. Runs the
+      // emitted server bundle directly (no second `nuxt build`): the shell re-reads
+      // NUXT_PUBLIC_API_BASE at startup, so the API base is a runtime choice here. The launcher waits
+      // for the entry ABOVE to be serving before it starts, since webServer entries start in parallel
+      // and that entry's `nuxt build` rewrites the very `.output` this one runs.
+      command: 'node src/authFrontend.mjs',
+      url: AUTH_FRONTEND_URL,
+      reuseExistingServer: !process.env.CI,
+      // The primary build plus this process's own start: the same budget as the build it waits for.
+      timeout: 240_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      // The three resolved ends the launcher needs: the port it binds (the one this entry's `url`
+      // waits on, whichever knob moved it), the auth backend the SPA is pointed at, and the primary
+      // SPA whose build it is waiting for.
+      env: {
+        E2E_AUTH_FRONTEND_PORT: String(AUTH_FRONTEND_PORT),
+        E2E_AUTH_BACKEND_URL: AUTH_BACKEND_URL,
+        E2E_FRONTEND_URL: FRONTEND_URL,
       },
     },
   ],

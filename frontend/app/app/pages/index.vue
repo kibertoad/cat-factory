@@ -191,10 +191,16 @@ const autoOpenedPreset = ref(false)
 // availability reflects that workspace's keys/subscriptions). This populates the AI-readiness
 // signals regardless of which lazy picker happens to mount, so the onboarding prompts below
 // can fire. Credential edits re-fetch via `models.refresh()` in the provider panels.
+//
+// Through `prefetchForBoard` because the FIRST run reads the persisted pin, which `init()` has
+// not validated yet: a board that was deleted, or whose access was revoked while the browser
+// held the pin, 404s here exactly as it does for init's own speculative snapshot fetch. That
+// board is not this watcher's last word (init re-points the pin and it fires again), so the
+// miss is dropped rather than left to surface as an uncaught rejection in the page.
 watch(
   () => workspace.workspaceId,
   (id, prev) => {
-    if (id) void models.ensureLoaded(id)
+    if (id) void models.prefetchForBoard(id)
     // Switching workspaces resets the per-session AI-onboarding state: dismissals and the
     // auto-open guards are scoped to one workspace, so a prompt dismissed in workspace A must
     // not suppress the (independent) prompt for workspace B that also lacks a usable source.
