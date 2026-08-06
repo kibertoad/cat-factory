@@ -43,6 +43,9 @@ for no reader's benefit.)
 How this repository is developed, released and kept honest. Nothing here is part
 of the product.
 
+- [`internal/running-tests.md`](./internal/running-tests.md): getting a green
+  suite off a CI runner. The Postgres the two facade suites need, and the two
+  traps that make a working tree look broken when only a database is missing.
 - [`internal/releases.md`](./internal/releases.md): changesets, the runner-image
   rollout recipe, and the checklist for a newly published package.
 - [`internal/mutation-testing.md`](./internal/mutation-testing.md): the nightly

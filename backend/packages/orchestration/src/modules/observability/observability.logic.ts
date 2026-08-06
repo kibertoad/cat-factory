@@ -1,33 +1,23 @@
+import { type LlmCallMetric, type LlmRateResolver, costOfTokenClasses } from '@cat-factory/kernel'
 import {
-  LLM_WARNING_FINISH_REASONS,
-  type LlmCallMetric,
-  type LlmRateResolver,
-  costOfTokenClasses,
-} from '@cat-factory/kernel'
-import type { LlmExportInsight, LlmMetricsExport } from '@cat-factory/contracts'
+  isLlmWarningFinishReason,
+  type LlmExportInsight,
+  type LlmMetricsExport,
+} from '@cat-factory/contracts'
 
-// Pure classification + headroom helpers for LLM observability, kept out of the
-// service so they are trivially unit-testable and reused by the frontend's mental
-// model (errors fail a run's call, warnings flag truncation/filtering).
-
-export type LlmCallOutcome = 'ok' | 'warning' | 'error'
-
-/** Whether a finish reason is a (non-fatal) warning — output truncated or filtered. */
-export function isWarningFinishReason(finishReason: string | null): boolean {
-  return (
-    finishReason != null && (LLM_WARNING_FINISH_REASONS as readonly string[]).includes(finishReason)
-  )
-}
-
-/**
- * Classify a recorded call: a non-2xx/failed call is an `error`; a successful call
- * cut short by the output limit or content filter is a `warning`; otherwise `ok`.
- */
-export function classifyCall(metric: Pick<LlmCallMetric, 'ok' | 'finishReason'>): LlmCallOutcome {
-  if (!metric.ok) return 'error'
-  if (isWarningFinishReason(metric.finishReason)) return 'warning'
-  return 'ok'
-}
+// Pure headroom + fold helpers for LLM observability, kept out of the service so they are
+// trivially unit-testable.
+//
+// The CLASSIFICATION they fold by is not here: `classifyLlmCallOutcome` and
+// `isLlmWarningFinishReason` live in `@cat-factory/contracts`, because the SPA has to reach the
+// same verdict about the same call and cannot see kernel. This module had its own copy of both,
+// which is exactly the drift that turns a shared judgement into two, so it re-exports the
+// canonical pair rather than restating it.
+export {
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
+  type LlmCallOutcome,
+} from '@cat-factory/contracts'
 
 /**
  * Fraction (0..1) of the output budget the largest single completion consumed, or
@@ -249,7 +239,7 @@ export function buildLlmMetricsExport(
       overheadMs,
       transportOverheadRatio: transportOverheadRatio(upstreamMs, overheadMs),
       errors: kindCalls.filter((c) => !c.ok).length,
-      warnings: kindCalls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
+      warnings: kindCalls.filter((c) => c.ok && isLlmWarningFinishReason(c.finishReason)).length,
       costEstimate: costOfCalls(kindCalls, rates, truncated),
     }
   })
@@ -275,7 +265,7 @@ export function buildLlmMetricsExport(
       overheadMs,
       transportOverheadRatio: transportOverheadRatio(upstreamMs, overheadMs),
       errors: calls.filter((c) => !c.ok).length,
-      warnings: calls.filter((c) => c.ok && isWarningFinishReason(c.finishReason)).length,
+      warnings: calls.filter((c) => c.ok && isLlmWarningFinishReason(c.finishReason)).length,
       truncatedCalls: calls.filter((c) => c.finishReason === 'length').length,
       costEstimate: costOfCalls(calls, rates, truncated),
     },

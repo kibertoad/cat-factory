@@ -3487,6 +3487,51 @@
       "provider": "Provider",
       "resultsCount": "{count} Ergebnis | {count} Ergebnisse",
       "queriesTitle": "Durchgeführte Suchen"
+    },
+    "callsTitle": "Modellaufrufe",
+    "noCallsMatching": "Keine Modellaufrufe entsprechen diesem Filter.",
+    "filter": {
+      "all": "Alle",
+      "failed": "Fehlgeschlagen",
+      "warning": "Abgeschnitten",
+      "ok": "OK"
+    },
+    "failure": {
+      "title": "Was fehlgeschlagen ist",
+      "kind": "Fehler: {kind}",
+      "atStep": "bei Schritt {index}",
+      "lastErroredCall": "Letzter fehlgeschlagener Modellaufruf",
+      "moreErroredCalls": "und {count} weiterer früherer fehlgeschlagener Aufruf | und {count} weitere frühere fehlgeschlagene Aufrufe",
+      "lastFailedToolCall": "Letzter fehlgeschlagener Werkzeugaufruf",
+      "aFailedToolCall": "Ein fehlgeschlagener Tool-Aufruf",
+      "moreFailedToolCalls": "und {count} weiterer früherer fehlgeschlagener Werkzeugaufruf | und {count} weitere frühere fehlgeschlagene Werkzeugaufrufe",
+      "toolReturnedNothing": "Das Werkzeug hat nichts zurückgegeben.",
+      "toolBodiesWithheld": "Argumente und Ergebnisse wurden für diesen Lauf nicht erfasst, daher liegt der Fehlertext des Werkzeugs nicht vor.",
+      "noFailingCall": {
+        "sink-unreachable": "Ein Teil der Telemetrie dieses Laufs konnte nicht geladen werden, daher lässt sich nicht sagen, was fehlgeschlagen ist.",
+        "recorded-clean": "Weder ein Modellaufruf noch ein Werkzeugaufruf meldet einen Fehler, die Ursache hat also in keiner der beiden Quellen einen Eintrag hinterlassen: Sehen Sie in der Engine, im Container-Obduktionsbericht des fehlgeschlagenen Schritts und im Bereitstellungsprotokoll nach.",
+        "partial-calls-only": "Kein Modellaufruf meldet einen Fehler, und für diesen Lauf wurden keine Werkzeugaufrufe aufgezeichnet, daher kann der Verlauf dazu nichts sagen.",
+        "partial-tools-only": "Kein Werkzeugaufruf meldet einen Fehler, und für diesen Lauf wurden keine Modellaufrufe aufgezeichnet.",
+        "no-telemetry": "Für diesen Lauf wurden weder Modellaufrufe noch Werkzeugaufrufe aufgezeichnet, er ist also vor (oder außerhalb) jeder Agentenarbeit fehlgeschlagen. Prüfen Sie das Bereitstellungsprotokoll."
+      }
+    },
+    "toolCalls": {
+      "title": "Werkzeugaufrufe",
+      "subtitle": "was die Agenten getan haben, in der Reihenfolge, in der sie es taten",
+      "loading": "Werkzeugaufrufe werden geladen…",
+      "error": "Die Werkzeugaufrufe konnten nicht geladen werden.",
+      "none": "Für diesen Lauf wurden keine Werkzeugaufrufe aufgezeichnet.",
+      "noneMatching": "Keine Werkzeugaufrufe entsprechen diesem Filter.",
+      "failed": "Fehlgeschlagen",
+      "durationHint": "Wie lange das Werkzeug gebraucht hat",
+      "dispatch": "Auftrag {jobId}",
+      "seq": "Aufruf #{seq} dieses Auftrags",
+      "bodiesWithheld": "Argumente und Ergebnisse wurden nicht erfasst, aus ihrem Fehlen lässt sich also nichts schließen.",
+      "arguments": "Argumente",
+      "result": "Ergebnis",
+      "dropped": "{chars} Zeichen bei der Erfassung verworfen",
+      "truncated": "Es werden die ersten {shown} Aufrufe dieses Laufs angezeigt. Die Zahlen oben gelten für den gesamten Lauf; filtere auf die Fehlschläge, um alle zu sehen.",
+      "failuresTruncated": "Es werden die ersten {shown} fehlgeschlagenen Aufrufe angezeigt. Die Zahl oben gilt für den gesamten Lauf."
     }
   },
   "platformObservability": {

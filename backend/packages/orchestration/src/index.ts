@@ -316,8 +316,8 @@ export {
 } from './modules/spend/spend-alert.logic.js'
 export {
   cacheHitRate,
-  classifyCall,
-  isWarningFinishReason,
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
   outputHeadroomRatio,
   transportOverheadRatio,
   buildLlmMetricsExport,

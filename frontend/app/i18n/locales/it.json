@@ -3487,6 +3487,51 @@
       "provider": "Provider",
       "resultsCount": "{count} risultato | {count} risultati",
       "queriesTitle": "Ricerche effettuate"
+    },
+    "callsTitle": "Chiamate al modello",
+    "noCallsMatching": "Nessuna chiamata al modello corrisponde a questo filtro.",
+    "filter": {
+      "all": "Tutte",
+      "failed": "Fallite",
+      "warning": "Troncate",
+      "ok": "OK"
+    },
+    "failure": {
+      "title": "Che cosa è fallito",
+      "kind": "Errore: {kind}",
+      "atStep": "al passo {index}",
+      "lastErroredCall": "Ultima chiamata al modello fallita",
+      "moreErroredCalls": "e {count} chiamata fallita precedente | e {count} chiamate fallite precedenti",
+      "lastFailedToolCall": "Ultima chiamata a strumento fallita",
+      "aFailedToolCall": "Una chiamata di strumento fallita",
+      "moreFailedToolCalls": "e {count} chiamata a strumento fallita precedente | e {count} chiamate a strumento fallite precedenti",
+      "toolReturnedNothing": "Lo strumento non ha restituito nulla.",
+      "toolBodiesWithheld": "Argomenti e risultati non sono stati acquisiti per questa esecuzione, quindi il testo dell'errore dello strumento non è disponibile.",
+      "noFailingCall": {
+        "sink-unreachable": "Parte della telemetria di questa esecuzione non è stata caricata, quindi non si può concludere nulla su cosa sia fallito.",
+        "recorded-clean": "Nessuna chiamata al modello e nessuna chiamata a strumento ha segnalato un errore, quindi la causa non ha lasciato righe in nessuna delle due fonti: guardate il motore, l'autopsia del container del passo fallito e il registro di provisioning.",
+        "partial-calls-only": "Nessuna chiamata al modello ha segnalato un errore e per questa esecuzione non sono state registrate chiamate a strumenti, quindi la traiettoria non può rispondere.",
+        "partial-tools-only": "Nessuna chiamata a strumento ha segnalato un errore e per questa esecuzione non sono state registrate chiamate al modello.",
+        "no-telemetry": "Per questa esecuzione non sono state registrate né chiamate al modello né chiamate a strumenti, quindi è fallita prima (o al di fuori) di qualsiasi lavoro dell'agente. Controllate il registro di provisioning."
+      }
+    },
+    "toolCalls": {
+      "title": "Chiamate a strumenti",
+      "subtitle": "che cosa hanno fatto gli agenti, nell'ordine in cui l'hanno fatto",
+      "loading": "Caricamento delle chiamate a strumenti…",
+      "error": "Impossibile caricare le chiamate a strumenti.",
+      "none": "Nessuna chiamata a strumento registrata per questa esecuzione.",
+      "noneMatching": "Nessuna chiamata a strumento corrisponde a questo filtro.",
+      "failed": "Fallita",
+      "durationHint": "Quanto è durato lo strumento",
+      "dispatch": "Invio {jobId}",
+      "seq": "Chiamata n. {seq} di questo invio",
+      "bodiesWithheld": "Argomenti e risultati non sono stati acquisiti, quindi dalla loro assenza non si può concludere nulla.",
+      "arguments": "Argomenti",
+      "result": "Risultato",
+      "dropped": "{chars} caratteri scartati all'acquisizione",
+      "truncated": "Sono mostrate le prime {shown} chiamate di questa esecuzione. I conteggi sopra si riferiscono all'intera esecuzione; filtra sui fallimenti per vederli tutti.",
+      "failuresTruncated": "Sono mostrate le prime {shown} chiamate fallite. Il conteggio sopra si riferisce all'intera esecuzione."
     }
   },
   "platformObservability": {

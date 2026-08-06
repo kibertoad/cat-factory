@@ -1632,6 +1632,51 @@
       "provider": "Dostawca",
       "resultsCount": "{count} wynik | {count} wyniki | {count} wyników",
       "queriesTitle": "Wykonane wyszukiwania"
+    },
+    "callsTitle": "Wywołania modelu",
+    "noCallsMatching": "Żadne wywołanie modelu nie pasuje do tego filtra.",
+    "filter": {
+      "all": "Wszystkie",
+      "failed": "Nieudane",
+      "warning": "Ucięte",
+      "ok": "OK"
+    },
+    "failure": {
+      "title": "Co zawiodło",
+      "kind": "Błąd: {kind}",
+      "atStep": "na kroku {index}",
+      "lastErroredCall": "Ostatnie nieudane wywołanie modelu",
+      "moreErroredCalls": "oraz {count} wcześniejsze nieudane wywołanie | oraz {count} wcześniejsze nieudane wywołania | oraz {count} wcześniejszych nieudanych wywołań",
+      "lastFailedToolCall": "Ostatnie nieudane wywołanie narzędzia",
+      "aFailedToolCall": "Nieudane wywołanie narzędzia",
+      "moreFailedToolCalls": "oraz {count} wcześniejsze nieudane wywołanie narzędzia | oraz {count} wcześniejsze nieudane wywołania narzędzia | oraz {count} wcześniejszych nieudanych wywołań narzędzi",
+      "toolReturnedNothing": "Narzędzie nic nie zwróciło.",
+      "toolBodiesWithheld": "Argumenty i wyniki nie zostały zapisane dla tego uruchomienia, więc treść błędu samego narzędzia jest niedostępna.",
+      "noFailingCall": {
+        "sink-unreachable": "Części telemetrii tego uruchomienia nie udało się wczytać, więc nie można wyciągnąć żadnych wniosków o tym, co zawiodło.",
+        "recorded-clean": "Ani wywołanie modelu, ani wywołanie narzędzia nie zgłosiło błędu, więc przyczyna nie zostawiła wpisu w żadnym z tych źródeł: sprawdź silnik, raport pośmiertny kontenera na kroku, który zawiódł, oraz dziennik provisioningu.",
+        "partial-calls-only": "Żadne wywołanie modelu nie zgłosiło błędu, a dla tego uruchomienia nie zapisano wywołań narzędzi, więc trajektoria nie może na to odpowiedzieć.",
+        "partial-tools-only": "Żadne wywołanie narzędzia nie zgłosiło błędu, a dla tego uruchomienia nie zapisano wywołań modelu.",
+        "no-telemetry": "Dla tego uruchomienia nie zapisano ani wywołań modelu, ani wywołań narzędzi, więc zawiodło przed jakąkolwiek pracą agenta (lub poza nią). Sprawdź dziennik provisioningu."
+      }
+    },
+    "toolCalls": {
+      "title": "Wywołania narzędzi",
+      "subtitle": "co zrobiły agenty, w kolejności, w jakiej to robiły",
+      "loading": "Ładowanie wywołań narzędzi…",
+      "error": "Nie udało się załadować wywołań narzędzi.",
+      "none": "Brak zarejestrowanych wywołań narzędzi dla tego uruchomienia.",
+      "noneMatching": "Żadne wywołanie narzędzia nie pasuje do tego filtra.",
+      "failed": "Nieudane",
+      "durationHint": "Jak długo trwało narzędzie",
+      "dispatch": "Zlecenie {jobId}",
+      "seq": "Wywołanie nr {seq} tego zlecenia",
+      "bodiesWithheld": "Argumenty i wyniki nie zostały zapisane, więc z ich braku nic nie wynika.",
+      "arguments": "Argumenty",
+      "result": "Wynik",
+      "dropped": "{chars} znaków odrzuconych przy zapisie",
+      "truncated": "Pokazano pierwsze {shown} wywołań tego uruchomienia. Liczby powyżej dotyczą całego uruchomienia; zawęź do nieudanych, aby zobaczyć wszystkie.",
+      "failuresTruncated": "Pokazano pierwsze {shown} nieudanych wywołań. Liczba powyżej dotyczy całego uruchomienia."
     }
   },
   "platformObservability": {

@@ -81,7 +81,20 @@ const API_PREFIX = '/api/v1'
 // number this one addition has held (1.12 → 1.13 → 1.14 → 1.15 → 1.16), and 1.15 was taken by the
 // `/me` endpoint landing on main while this branch was in flight, caught by re-reading this line
 // after the merge rather than by trusting a clean auto-merge of the VERSION itself.
-const API_VERSION = '1.16.0'
+// 1.17.0, not 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by
+// `?outcome=ok|error`, the same param name and vocabulary the llm-call list already uses. This is
+// a MINOR for a change that is technically breaking, taken deliberately: `?ok=` existed for one
+// release, has no known consumer, and the two drill-downs answering the same question under two
+// spellings is the wart the change exists to remove. A picklist also lets the set gain a member (a
+// timeout, a refusal) where `true|false` could only be retyped. If an adopter turns up before this
+// lands, the honest shape is `?ok=` served beside `?outcome=` for a release, not a rename.
+//
+// This branch reserved 1.17.0 while 1.16.0 was still unlanded, on the reasoning that the multi-repo
+// verification-report branch held it and two branches sitting on the same number auto-merge the
+// VERSION line byte-identically, conflicting only in this comment: the silent failure the note at
+// the top of this block describes. That branch has since merged, so 1.16.0 is main's published
+// number and 1.17.0 is simply the next free one. Re-read against `origin/main` anyway.
+const API_VERSION = '1.17.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

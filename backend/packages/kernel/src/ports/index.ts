@@ -116,6 +116,7 @@ export type {
   LlmCallMetricPage,
   LlmCallMetricRepository,
   LlmCallMetricSummary,
+  LlmCallOutcome,
   LlmCallOutcomeFilter,
   LlmCallPageQuery,
   LlmCallRollupTotals,
@@ -177,6 +178,7 @@ export type {
   AgentToolCallTrajectoryQuery,
   RecordAgentToolCallInput,
   ToolCallBodiesState,
+  ToolCallOutcome,
 } from './agent-tool-calls.js'
 export type {
   LlmGenerationEvent,

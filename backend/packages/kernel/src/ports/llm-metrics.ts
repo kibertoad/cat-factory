@@ -9,11 +9,20 @@
 // (D1 on Cloudflare, Drizzle/Postgres on Node).
 
 /**
- * Upstream finish reasons that are not failures but warrant a warning: the model
- * was cut short by the output limit, or filtered. Shared by the service's
- * classification and each repo's summary aggregation so the two runtimes agree.
+ * Upstream finish reasons that are not failures but warrant a warning: the model was cut short
+ * by the output limit, or filtered. Shared by the service's classification and each repo's
+ * summary aggregation so the two runtimes agree.
+ *
+ * DEFINED in `@cat-factory/contracts` and re-exported here: the SPA must make the same
+ * judgement to badge and to FILTER a call list, and it cannot see kernel. Re-exported rather
+ * than moved outright so every backend consumer keeps importing it from the port it belongs to.
  */
-export const LLM_WARNING_FINISH_REASONS = ['length', 'content_filter'] as const
+export { LLM_WARNING_FINISH_REASONS } from '@cat-factory/contracts'
+
+// The outcome vocabulary itself, for the same reason and from the same place. Kernel names it
+// so the port's query types read in kernel's own terms without owning a second copy.
+import type { LlmCallOutcome } from '@cat-factory/contracts'
+export type { LlmCallOutcome }
 
 /** One proxied LLM call, with its full prompt/response and timing breakdown. */
 export interface LlmCallMetric {
@@ -295,8 +304,15 @@ export interface LlmCallMetricPage extends Omit<
   reasoning: LlmCallBodySlice
 }
 
-/** Outcome classes a call page may narrow to, applied in SQL. */
-export type LlmCallOutcomeFilter = 'ok' | 'warning' | 'error'
+/**
+ * Outcome classes a call page may narrow to, applied in SQL.
+ *
+ * An ALIAS of the shared {@link LlmCallOutcome} vocabulary, not a restatement: each store turns
+ * these members into a `WHERE` predicate that must select exactly what
+ * `classifyLlmCallOutcome` puts in the class, so a union that could drift from the classifier
+ * is a filter that silently disagrees with the badge on the row it returned.
+ */
+export type LlmCallOutcomeFilter = LlmCallOutcome
 
 /** A bounded, keyset-paginated query over one run's calls. */
 export interface LlmCallPageQuery {

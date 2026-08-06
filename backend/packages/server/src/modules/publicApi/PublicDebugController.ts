@@ -241,7 +241,8 @@ export function publicDebugController(): Hono<AppEnv> {
   // capture, so the page size is computable before the request) with `bodies` saying whether
   // they were retained at all. Two orders: the keyset page every sibling list serves, and the
   // TRAJECTORY — what the agent did, in the order it did it, which is the read this sink
-  // exists for and the one a client cannot correctly derive from the rows itself.
+  // exists for and the one a client cannot correctly derive from the rows itself. `?outcome=`
+  // narrows either order to the calls that FAILED, the one failure class no LLM rollup sees.
   buildHonoRoute(app, listDebugToolCallsContract, async (c) => {
     const gate = await authorize(c, 'read')
     if ('fail' in gate) return refuse(c, gate.fail)
@@ -259,11 +260,13 @@ export function publicDebugController(): Hono<AppEnv> {
       ...(cursor.cursor ? { cursor: cursor.cursor } : {}),
       ...(query.jobId ? { jobId: query.jobId } : {}),
       ...(query.order ? { order: query.order } : {}),
-      // `ok` is a string on the wire (a query param always is), so the enum is narrowed to the
-      // boolean the port takes here rather than carried as text down to the SQL. Keyed on
-      // PRESENCE, not truthiness: `'false'` is a truthy string, and reading it as one would send
-      // the filter down inverted the day the picklist gains a member.
-      ...(query.ok !== undefined ? { ok: query.ok === 'true' } : {}),
+      // The wire vocabulary is `outcome=ok|error`, shared with the llm-call list; the port below
+      // narrows a two-valued column, so it takes the boolean. Converting HERE keeps that one
+      // representation under the boundary while the published surface keeps the name a reader
+      // learned on the other drill-down. Keyed on PRESENCE, not truthiness: an absent filter and
+      // a filter for the calls that failed are different requests, and only the absent one means
+      // "every call".
+      ...(query.outcome !== undefined ? { ok: query.outcome === 'ok' } : {}),
     })
     return c.json({ toolCalls: page.items, nextCursor: nextCursorOf(page) }, 200)
   })
