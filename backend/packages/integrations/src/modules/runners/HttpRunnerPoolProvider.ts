@@ -5,6 +5,7 @@ import type {
   RunnerDispatchAck,
   RunnerDispatchRequest,
   RunnerJobResult,
+  RunnerJobStopOutcome,
   RunnerValidationReport,
   RunnerReproductionPhase,
   RunnerReproductionReport,
@@ -108,12 +109,19 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
       this.scope(req.jobId, req.spec),
       req.resolveSecret,
     )
-    // The capability handshake, IF the scheduler passes the harness's acceptance body through.
-    // Read off the scheduler's response directly rather than through a manifest mapping: the
-    // field is the harness's, not the scheduler's, so a pool that proxies the body needs no
-    // configuration and a pool that does not has nothing to map. Absent ⇒ unknown, never a
-    // refusal. See `domain/harness-capabilities.ts`.
-    return readRunnerDispatchAck(json)
+    // The capability handshake, IF the manifest says where in the scheduler's response the
+    // harness's acceptance body lands. Manifest-mapped like every other pool field, and for a
+    // sharper reason than consistency: `capabilities` is an ordinary word, and a scheduler that
+    // answers with its OWN (`["gpu","docker"]`) would be read as a harness reporting a list with
+    // neither `mcpServers` nor `skills` in it: an `unsupported` verdict that HARD-REFUSES every
+    // capability dispatch against a perfectly current image. Guessing cannot tell the two apart;
+    // the operator can, in one line. Unmapped ⇒ unknown, which is the truth about a control plane
+    // this backend knows nothing about. See `domain/harness-capabilities.ts`.
+    const path = req.manifest.response.dispatchCapabilitiesPath
+    if (!path) return undefined
+    return readRunnerDispatchAck({
+      capabilities: environmentsLogic.extractByPath(json, path),
+    })
   }
 
   async poll(req: RunnerPollRequest): Promise<RunnerJobView> {
@@ -152,9 +160,14 @@ export class HttpRunnerPoolProvider implements RunnerPoolProvider {
     return this.mapJobView(req.manifest, json)
   }
 
-  async release(req: RunnerPollRequest): Promise<void> {
-    if (!req.manifest.release) return
+  async release(req: RunnerPollRequest): Promise<RunnerJobStopOutcome> {
+    // No template ⇒ nothing happens, and saying so is the point: this same call is a caller's only
+    // way to CANCEL a pool job, so a silent `void` return here reads as a job that was stopped.
+    if (!req.manifest.release) return 'unsupported'
     await this.execute(req.manifest, req.manifest.release, this.scope(req.jobId), req.resolveSecret)
+    // The scheduler accepted the call. Whether its runner actually stopped is behind a control
+    // plane with no read this backend can make, so `requested` is the strongest honest answer.
+    return 'requested'
   }
 
   /** A manifest-driven pool: the config IS the manifest, so describe its secret keys. */

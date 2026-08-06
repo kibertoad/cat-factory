@@ -16,7 +16,7 @@
 // capability perfectly, while the second has said it cannot. Folding them would refuse every
 // run on every image older than this one, which is a false accusation, not a safety margin.
 
-import type { RunnerDispatchAck } from '../ports/runner-transport.js'
+import type { RunnerDispatchAck, RunnerJobStopOutcome } from '../ports/runner-transport.js'
 
 /**
  * The optional job-body fields that are CAPABILITIES: a promise the prompt makes on the body's
@@ -141,17 +141,60 @@ export function resolveHarnessCapabilitySupport(
 }
 
 /**
- * The refusal a blind dispatch is failed with, naming the capability, the fix, and WHOSE fix it
- * is. Written for the person reading a failed run: the fault is a runner image behind the
- * backend, which is an operator action on the pool, not anything the run's author can change.
+ * What became of the blind job the refusal tried to stop: the transport's own
+ * {@link RunnerJobStopOutcome}, plus the `failed` case that is a THROW at the port rather than a
+ * returned value (see the port's doc for why).
+ */
+export type BlindJobStopOutcome = RunnerJobStopOutcome | 'failed'
+
+/**
+ * The one sentence that says whether the agent this run just refused is actually gone.
+ *
+ * Refusing the step and stopping the container are two different achievements, and only one of
+ * them is guaranteed. A refusal that stayed silent about the difference would read, on every
+ * backend, as the strongest case: `stopped`. It is not. A self-hosted pool whose manifest declares
+ * no cancel has a full agent pass still running against the repo, free to push a branch and open a
+ * pull request for a step the engine has already failed, and the person reading the failure is the
+ * only one who can go and kill it. So each outcome gets its own words, and three of the four say
+ * plainly that something may still be running.
+ */
+function describeBlindJobStop(stop: BlindJobStopOutcome): string {
+  switch (stop) {
+    case 'stopped':
+      return 'The job was stopped, so nothing is still running against the repository.'
+    case 'requested':
+      return (
+        'A cancel was sent to the runner pool, but this backend cannot confirm the job ended: ' +
+        'check the pool for a run still working on this branch.'
+      )
+    case 'unsupported':
+      return (
+        'This runner backend offers no way to stop an accepted job, so the agent is probably ' +
+        'still running: stop it on the runner and discard any branch or pull request it opens.'
+      )
+    case 'failed':
+      return (
+        'Stopping the job FAILED, so the agent is probably still running: stop it on the runner ' +
+        'and discard any branch or pull request it opens.'
+      )
+  }
+}
+
+/**
+ * The refusal a blind dispatch is failed with, naming the capability, the fix, WHOSE fix it is,
+ * and whether the blind agent was actually stopped. Written for the person reading a failed run:
+ * the fault is a runner image behind the backend, which is an operator action on the pool, not
+ * anything the run's author can change.
  */
 export function harnessCapabilityUnsupportedMessage(
   missing: readonly HarnessBodyCapability[],
+  stop: BlindJobStopOutcome,
 ): string {
   const what = missing.map(describeHarnessBodyCapability).join(' and ')
   return (
     `The runner image serving this job does not support ${what}, which this step's prompt ` +
     'already tells the agent it has. Refused rather than run blind. Update the runner pool to ' +
-    'the harness image this deployment expects, or remove the capability from the agent kind.'
+    `the harness image this deployment expects, or remove the capability from the agent kind. ` +
+    describeBlindJobStop(stop)
   )
 }

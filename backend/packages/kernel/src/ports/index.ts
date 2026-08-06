@@ -519,6 +519,7 @@ export type {
   RunnerJobProgress,
   RunnerJobRef,
   RunnerJobResult,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerReproductionPhase,
   RunnerReproductionReport,

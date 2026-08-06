@@ -1,4 +1,5 @@
 import {
+  type BlindJobStopOutcome,
   type HarnessCapabilitySupport,
   type LogFields,
   type Logger,
@@ -63,6 +64,16 @@ export interface ContainerJobLog {
    * A no-op on `supported`, so every dispatch site can call it unconditionally.
    */
   capabilityGap(support: HarnessCapabilitySupport): void
+  /**
+   * What became of the blind job the refusal tried to stop. The refusal message already tells the
+   * run's reader; this is for the OPERATOR, who has the different question: how often does this
+   * deployment fail a run and leave the agent running anyway.
+   *
+   * Only a `stopped` outcome is silent. The other three each mean an agent may still be working
+   * against a repository with nobody watching, which is a standing property of the deployment's
+   * runner backend rather than a fact about one run, so each is counted under its own dimension.
+   */
+  blindJobStopped(outcome: BlindJobStopOutcome): void
 }
 
 /**
@@ -158,5 +169,15 @@ export function containerJobLog(
       if (fields?.evicted) countFailure(metrics, 'container.evicted', fields.evicted)
     },
     capabilityGap: (support) => reportCapabilityGap(logger, metrics, support),
+    blindJobStopped: (outcome) => {
+      if (outcome === 'stopped') return
+      logger.warn('refused container job may still be running: the backend could not stop it', {
+        outcome,
+      })
+      // The dimension is the OUTCOME, a closed union of three, because the three need different
+      // operator actions: `unsupported` is a runner backend to give a cancel path, `requested` is
+      // a pool to go and verify, `failed` is a fault to investigate.
+      metrics.increment('container.blind_job_not_stopped', { outcome })
+    },
   }
 }

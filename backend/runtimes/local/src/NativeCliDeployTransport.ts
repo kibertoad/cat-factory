@@ -3,6 +3,7 @@ import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -72,6 +73,17 @@ class JobScopedRunnerTransport implements RunnerTransport {
 
   release(ref: RunnerJobRef): Promise<void> {
     return this.inner.release?.(this.rekey(ref)) ?? Promise.resolve()
+  }
+
+  /**
+   * Forwarded with the same re-key, even though the only caller today (the capability refusal)
+   * cannot reach a deploy job: a deploy runs no agent, so its body carries no capability and there
+   * is nothing to refuse. A decorator that quietly dropped the method would report `unsupported`
+   * for a backend that supports it perfectly well, which is the failure mode a silently
+   * non-forwarding decorator always has.
+   */
+  stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    return this.inner.stopJob?.(this.rekey(ref)) ?? Promise.resolve('unsupported')
   }
 }
 

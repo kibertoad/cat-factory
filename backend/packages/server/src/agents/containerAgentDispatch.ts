@@ -1,7 +1,9 @@
 import {
+  type BlindJobStopOutcome,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobStopOutcome,
   UnavailableError,
   harnessCapabilityUnsupportedMessage,
   parseHarnessBodyCapabilities,
@@ -32,7 +34,7 @@ export interface ContainerJobDispatcher {
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
   ): Promise<{ capabilities?: readonly string[] } | undefined>
-  release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void>
+  stopJob(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobStopOutcome>
 }
 
 /** One job's addressing plus the seam that records what happened to it. */
@@ -65,9 +67,12 @@ export interface AcceptContainerJobArgs {
  *     So the BLIND SPOT is reported (a warn line plus a counter) and the run proceeds.
  *   - unsupported: the image SAID it does not parse the field. Refuse.
  *
- * The refusal stops the job it just started: the harness begins work on acceptance, so leaving it
- * would run a full agent pass (possibly opening a PR) for a step the engine has already failed.
- * The reclaim is best-effort, so a teardown that fails must not replace the accurate refusal.
+ * The refusal STOPS the job it just started, and states whether it managed to. The harness begins
+ * work on acceptance, so a refusal that only throws leaves a full agent pass running against the
+ * repository, free to push a branch and open a pull request for a step the engine has already
+ * failed. Not every backend can stop it (see {@link stopBlindJob}), so the outcome is reported
+ * rather than assumed: the refusal message tells the reader either that nothing is running or that
+ * they have to go and look.
  *
  * Runs BEFORE the caller records anything about the dispatch, because a refused job is one that
  * should never have been treated as started.
@@ -91,11 +96,37 @@ export async function acceptContainerJob(
   )
   jobLog.capabilityGap(support)
   if (support.kind !== 'unsupported') return
-  await runBestEffort(jobLog.logger, 'containerAgent.stopBlindJob', () =>
-    jobs.release(workspaceId, ref),
-  )
+  const stop = await stopBlindJob(jobs, workspaceId, ref, jobLog)
+  jobLog.blindJobStopped(stop)
   throw new UnavailableError(
-    harnessCapabilityUnsupportedMessage(support.missing),
+    harnessCapabilityUnsupportedMessage(support.missing, stop),
     'runner_image_capability',
   )
+}
+
+/**
+ * Stop the job the refusal just decided must not run, and answer with what that ACHIEVED.
+ *
+ * Deliberately `stopJob` and not `release`, which is a reclaim and answers a different question on
+ * every backend: on a per-run container it happens to kill the job, on a pooled one it hands the
+ * container BACK with the agent still working in it, and on a self-hosted pool with no `release`
+ * template it does nothing at all. All three return the same `void`, so a refusal built on it
+ * reported an identical, confident stop for a job that was destroyed, one that was handed to the
+ * next run, and one that was never touched.
+ *
+ * Never throws. A failure to stop must not replace an accurate refusal with a teardown error: the
+ * step is being failed either way, and what the reader needs is the capability message. So the
+ * failure becomes the fourth outcome, logged with its cause by `runBestEffort` and named in the
+ * message rather than swallowed.
+ */
+async function stopBlindJob(
+  jobs: ContainerJobDispatcher,
+  workspaceId: string,
+  ref: RunnerJobRef,
+  jobLog: ContainerJobLog,
+): Promise<BlindJobStopOutcome> {
+  const outcome = await runBestEffort(jobLog.logger, 'containerAgent.stopBlindJob', () =>
+    jobs.stopJob(workspaceId, ref),
+  )
+  return outcome ?? 'failed'
 }

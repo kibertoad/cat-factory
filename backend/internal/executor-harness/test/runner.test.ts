@@ -494,3 +494,53 @@ describe('JobRegistry.abortAll', () => {
     expect(registry.abortAll('again')).toBe(0)
   })
 })
+
+describe('JobRegistry.abort (one job)', () => {
+  /** A registry whose jobs hang until their own abort signal fires, so a stop is observable. */
+  const hangingRegistry = (): JobRegistry<TestJob, TestResult> =>
+    new JobRegistry<TestJob, TestResult>(loadRunnerLimits(), (_job, opts: RunOptions) => {
+      return new Promise<TestResult>((_resolve, reject) => {
+        opts.signal?.addEventListener(
+          'abort',
+          () => reject(opts.signal?.reason ?? new Error('aborted')),
+          { once: true },
+        )
+      })
+    })
+
+  it('waits for the job to SETTLE before answering, so the state it reports is real', async () => {
+    // The caller is a dispatch that refused a blind body and now has to tell a human whether an
+    // agent is still working against their repository. It reports "stopped" on the strength of
+    // this answer alone, so answering the moment the signal fires would be a guess.
+    const registry = hangingRegistry()
+    registry.start('one', { jobId: 'one' })
+    expect(registry.runningCount()).toBe(1)
+
+    expect(await registry.abort('one', 'stopped by the backend')).toBe('failed')
+    // Not "settles shortly after": already terminal by the time the answer came back.
+    expect(registry.runningCount()).toBe(0)
+  })
+
+  it('stops ONE job and leaves its siblings running', async () => {
+    // Why this exists at all rather than the refusal reaching for `abortAll`: a pooled container
+    // serves other runs, so taking out every job would cost unrelated work its whole run.
+    const registry = hangingRegistry()
+    registry.start('refused', { jobId: 'refused' })
+    registry.start('innocent', { jobId: 'innocent' })
+
+    await registry.abort('refused', 'stopped by the backend')
+    expect(registry.get('refused')?.state).toBe('failed')
+    expect(registry.get('innocent')?.state).toBe('running')
+    expect(registry.runningCount()).toBe(1)
+  })
+
+  it('is idempotent, and never mistakes an unknown job for a stopped one', async () => {
+    // The two answers must stay distinguishable: an unknown id is also what a caller addressing
+    // the wrong runner sees, and only the other one means nothing is running.
+    const registry = hangingRegistry()
+    registry.start('done-already', { jobId: 'done-already' })
+    expect(await registry.abort('done-already', 'first')).toBe('failed')
+    expect(await registry.abort('done-already', 'second')).toBe('failed')
+    expect(await registry.abort('never-existed', 'stop')).toBeUndefined()
+  })
+})

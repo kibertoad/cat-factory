@@ -6,10 +6,11 @@ import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
-import { redactSecrets, runBestEffort } from '@cat-factory/kernel'
+import { describeError, redactSecrets, runBestEffort } from '@cat-factory/kernel'
 import { resolveDockerResources } from '@cat-factory/contracts'
 import type { LocalSettings } from '@cat-factory/contracts'
 import { logger } from '@cat-factory/server'
@@ -23,6 +24,7 @@ import {
   pollInlineJob,
   pollHarnessJob,
   postHarnessJob,
+  stopHarnessJob,
   waitForHarnessHealth,
 } from './harnessHttp.js'
 import {
@@ -459,6 +461,56 @@ export class LocalContainerRunnerTransport implements RunnerTransport {
     this.cache.delete(ref.runId)
     if (!containerId) return
     await this.adapter.remove(this.exec, containerId)
+  }
+
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`, because this transport owns the
+   * container the job runs in and can therefore always make the answer true.
+   *
+   * The graceful path asks the harness to abort that job and waits for it to settle. When that
+   * fails the container is DESTROYED, which is a confirmed stop of everything inside it and the
+   * only remaining way to get one. That escalation is what makes the pooled case safe: a member
+   * whose job could not be aborted must never return to the warm pool, since `harnessHealthy`
+   * still answers 200 for it and the next run would lease a container with a live agent and a
+   * live checkout in it: the exact collision `acquireMember`'s synchronous claim exists to
+   * prevent. Destroying it removes it from the pool as well as from the job.
+   *
+   * Deliberately NOT `release`: on the pooled path release does the opposite of stopping.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const member = this.members.find((m) => m.leasedTo === ref.runId)
+    const endpoint = member ?? (await this.resolve(ref.runId))
+    // Nothing is serving this run: there is no job left to stop, which IS the stopped state.
+    if (!endpoint) return 'stopped'
+    try {
+      await stopHarnessJob({
+        fetchImpl: this.fetchImpl,
+        endpoint,
+        jobId: ref.jobId,
+        secret: this.sharedSecret,
+        timeoutMs: this.requestTimeoutMs,
+        label: 'Local container',
+      })
+      return 'stopped'
+    } catch (error) {
+      // Escalate rather than swallow. A throw from here would leave the caller reporting "could
+      // not stop" while a container it owns keeps running the agent, and (pooled) while that
+      // container stays leasable. If the teardown ALSO fails there is genuinely nothing left to
+      // try, so that error propagates with the graceful failure named as its cause.
+      logger.warn('local container job stop failed; destroying the container instead', {
+        runId: ref.runId,
+        jobId: ref.jobId,
+        ...describeError(error),
+      })
+      if (member) {
+        this.dropMember(member)
+        await this.adapter.remove(this.exec, member.containerId)
+      } else {
+        this.cache.delete(ref.runId)
+        await this.adapter.remove(this.exec, endpoint.containerId)
+      }
+      return 'stopped'
+    }
   }
 
   /**

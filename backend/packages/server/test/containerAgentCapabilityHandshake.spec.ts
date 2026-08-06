@@ -3,6 +3,7 @@ import type {
   McpServerDefinition,
   RunnerDispatchAck,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerTransport,
 } from '@cat-factory/kernel'
 import { createOperationalMetricsCollector, createRecordingLogger } from '@cat-factory/kernel'
@@ -49,15 +50,29 @@ interface Harness {
   executor: ContainerAgentExecutor
   bodies: Record<string, unknown>[]
   released: RunnerJobRef[]
+  stopped: RunnerJobRef[]
   logger: ReturnType<typeof createRecordingLogger>
   metrics: ReturnType<typeof createOperationalMetricsCollector>
 }
 
-function makeExecutor(opts: { ack?: RunnerDispatchAck; withToolServer?: boolean } = {}): Harness {
+interface ExecutorOptions {
+  ack?: RunnerDispatchAck
+  withToolServer?: boolean
+  /**
+   * What the backend's `stopJob` does. A returned value is its outcome, `'throws'` is a stop that
+   * errored, and `'absent'` is a transport with no stop at all: the three shapes a refusal has to
+   * describe differently.
+   */
+  stop?: RunnerJobStopOutcome | 'throws' | 'absent'
+}
+
+function makeExecutor(opts: ExecutorOptions = {}): Harness {
   const bodies: Record<string, unknown>[] = []
   const released: RunnerJobRef[] = []
+  const stopped: RunnerJobRef[] = []
   const logger = createRecordingLogger()
   const metrics = createOperationalMetricsCollector()
+  const stop = opts.stop ?? 'stopped'
   const transport: RunnerTransport = {
     async dispatch(_ref, spec) {
       bodies.push(spec as Record<string, unknown>)
@@ -69,6 +84,15 @@ function makeExecutor(opts: { ack?: RunnerDispatchAck; withToolServer?: boolean 
     async release(ref) {
       released.push(ref)
     },
+    ...(stop === 'absent'
+      ? {}
+      : {
+          async stopJob(ref: RunnerJobRef) {
+            stopped.push(ref)
+            if (stop === 'throws') throw new Error('scheduler unreachable')
+            return stop
+          },
+        }),
   }
   const deps: ContainerAgentExecutorDependencies = {
     resolveTransport: async () => transport,
@@ -96,7 +120,7 @@ function makeExecutor(opts: { ack?: RunnerDispatchAck; withToolServer?: boolean 
     nativeAmbientAuth: () => true,
     ...(opts.withToolServer === false ? {} : { agentKindRegistry: registryWithToolServer() }),
   }
-  return { executor: new ContainerAgentExecutor(deps), bodies, released, logger, metrics }
+  return { executor: new ContainerAgentExecutor(deps), bodies, released, stopped, logger, metrics }
 }
 
 function context(): AgentRunContext {
@@ -118,9 +142,67 @@ describe('capability handshake at dispatch', () => {
   it('refuses a run the image told us it cannot serve, and stops the job it started', async () => {
     // The harness begins work on acceptance, so a refusal that left the job running would let a
     // blind agent finish (and possibly open a PR) for a step the engine has already failed.
-    const { executor, released } = makeExecutor({ ack: { capabilities: ['skills'] } })
+    const { executor, stopped, released } = makeExecutor({ ack: { capabilities: ['skills'] } })
     await expect(executor.startJob(context())).rejects.toThrow(/tool servers \(MCP\)/)
-    expect(released).toEqual([{ runId: 'ex_1', jobId: 'ex_1-coder' }])
+    expect(stopped).toEqual([{ runId: 'ex_1', jobId: 'ex_1-coder' }])
+    // Through `stopJob`, NEVER `release`. Release is a reclaim, and on a pooled backend it returns
+    // the container (job and all) to the warm pool for the next run to lease.
+    expect(released).toEqual([])
+  })
+
+  it('states that the agent is stopped only when the backend confirmed it', async () => {
+    const { executor } = makeExecutor({ ack: { capabilities: [] }, stop: 'stopped' })
+    await expect(executor.startJob(context())).rejects.toThrow(/nothing is still running/)
+  })
+
+  it.each([
+    // A pool cancel the scheduler took but nothing can verify.
+    { stop: 'requested' as const, expect: /check the pool/ },
+    // A backend with no cancel path at all (a pool manifest declaring no `release` template).
+    { stop: 'unsupported' as const, expect: /stop it on the runner/ },
+    // A transport that offers no stop, which the job client reports as `unsupported`.
+    { stop: 'absent' as const, expect: /stop it on the runner/ },
+    // The stop was attempted and errored.
+    { stop: 'throws' as const, expect: /stop it on the runner/ },
+  ])('tells the reader to go and look when the stop was not confirmed ($stop)', async (c) => {
+    // The refusal is right either way; what changes is whether a full agent pass is STILL RUNNING
+    // against the repository, able to push a branch and open a pull request for a failed step.
+    // Reported as a stop, that is silent data loss the reader has no reason to go looking for.
+    const { executor } = makeExecutor({ ack: { capabilities: [] }, stop: c.stop })
+    const error = await executor.startJob(context()).catch((e: unknown) => e)
+    expect((error as Error).message).toMatch(c.expect)
+    expect((error as Error).message).not.toMatch(/nothing is still running/)
+  })
+
+  it('counts an unstopped blind job for the operator, dimensioned by the outcome', async () => {
+    // A different severity from the refusal itself, and a standing property of the deployment's
+    // runner backend rather than a fact about one run: each outcome is a different operator fix.
+    const { executor, logger, metrics } = makeExecutor({
+      ack: { capabilities: [] },
+      stop: 'requested',
+    })
+    await expect(executor.startJob(context())).rejects.toThrow()
+    expect(metrics.drain()).toContainEqual({
+      counter: 'container.blind_job_not_stopped',
+      dimensions: { outcome: 'requested' },
+      value: 1,
+    })
+    expect(logger.lines.find((l) => l.msg.includes('may still be running'))?.level).toBe('warn')
+  })
+
+  it('says nothing about the stop when the job really was stopped', async () => {
+    const { executor, metrics } = makeExecutor({ ack: { capabilities: [] }, stop: 'stopped' })
+    await expect(executor.startJob(context())).rejects.toThrow()
+    expect(metrics.drain().some((m) => m.counter === 'container.blind_job_not_stopped')).toBe(false)
+  })
+
+  it('keeps the refusal accurate when stopping the job throws', async () => {
+    // A teardown error must never REPLACE the capability refusal: the step is failing either way,
+    // and the capability message is the only thing that tells anyone why.
+    const { executor } = makeExecutor({ ack: { capabilities: [] }, stop: 'throws' })
+    await expect(executor.startJob(context())).rejects.toMatchObject({
+      details: { reason: 'runner_image_capability' },
+    })
   })
 
   it('refuses with a machine-readable reason, so the step failure is a preflight fault', async () => {
@@ -133,20 +215,20 @@ describe('capability handshake at dispatch', () => {
   })
 
   it('proceeds when the image named the capability', async () => {
-    const { executor, released } = makeExecutor({ ack: { capabilities: ['mcpServers'] } })
+    const { executor, stopped } = makeExecutor({ ack: { capabilities: ['mcpServers'] } })
     const handle = await executor.startJob(context())
     expect(handle.jobId).toBe('ex_1-coder')
-    expect(released).toEqual([])
+    expect(stopped).toEqual([])
   })
 
   it('proceeds, and says so, when no handshake was reported at all', async () => {
     // The false-accusation guard. Every image between "tool servers landed" and "the handshake
     // landed" serves them perfectly and reports nothing; refusing here would take those runs out
     // on no evidence. The blind spot is REPORTED instead, on both channels.
-    const { executor, logger, metrics, released } = makeExecutor({ ack: undefined })
+    const { executor, logger, metrics, stopped } = makeExecutor({ ack: undefined })
     const handle = await executor.startJob(context())
     expect(handle.jobId).toBe('ex_1-coder')
-    expect(released).toEqual([])
+    expect(stopped).toEqual([])
     const line = logger.lines.find(
       (l) => l.msg === 'container job dispatched without a capability handshake',
     )

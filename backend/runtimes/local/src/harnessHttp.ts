@@ -75,6 +75,41 @@ export async function postHarnessJob(opts: {
   return readRunnerDispatchAck(await safeJson(res))
 }
 
+/**
+ * Ask a harness to stop ONE job (`DELETE /jobs/{id}`) and CONFIRM that it did, resolving only when
+ * the job has left `running`. Throws otherwise, so the caller reports an honest failure to stop
+ * instead of a stop that never happened.
+ *
+ * Every non-2xx is a failure to confirm, the 404 included: it is what a caller addressing a
+ * recreated harness sees just as much as one addressing a reaped job, and only one of those means
+ * nothing is running. A caller that can prove the job is gone by other means (no container at all)
+ * decides that for itself rather than reading it into a status code.
+ */
+export async function stopHarnessJob(opts: {
+  fetchImpl: typeof fetch
+  endpoint: HarnessEndpoint
+  jobId: string
+  secret: string
+  timeoutMs: number
+  label: string
+}): Promise<void> {
+  const res = await opts.fetchImpl(
+    harnessUrl(opts.endpoint, `/jobs/${encodeURIComponent(opts.jobId)}`),
+    {
+      method: 'DELETE',
+      headers: { [SECRET_HEADER]: opts.secret },
+      signal: AbortSignal.timeout(opts.timeoutMs),
+    },
+  )
+  if (!res.ok) {
+    throw new Error(`${opts.label} job stop failed (HTTP ${res.status}): ${await safeText(res)}`)
+  }
+  const state = (await safeJson(res)) as { state?: unknown } | undefined
+  if (state?.state === 'running') {
+    throw new Error(`${opts.label} job stop did not settle: the job is still running`)
+  }
+}
+
 /** The acceptance body as JSON, or undefined when it cannot be read. Never throws. */
 async function safeJson(res: Response): Promise<unknown> {
   try {

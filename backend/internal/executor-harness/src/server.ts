@@ -140,6 +140,27 @@ const server = createServer((req, res) => {
       }
       return send(res, 404, { error: 'job not found' })
     }
+    // Stop one job: DELETE /jobs/{id}. The counterpart of the capability handshake below. A
+    // backend that reads the acceptance and decides the body cannot be honoured has, by then,
+    // already started an agent, and the only thing that keeps it from running to completion (and
+    // opening a pull request for a step the engine has failed) is being told to stop.
+    //
+    // Scoped to ONE job on purpose: a pooled container serves other runs, so the shutdown-time
+    // `abortAll` is not an alternative. The response reports the state the job actually REACHED
+    // (the registry waits for it to settle), never merely that the signal was sent, because the
+    // caller turns this into a statement to a human about whether anything is still running.
+    if (req.method === 'DELETE' && req.url?.startsWith('/jobs/')) {
+      const id = decodeURIComponent(req.url.slice('/jobs/'.length))
+      // `abort` (not `get`) is the existence probe: `get` DRAINS the job's span / follow-up /
+      // call-metric buffers, so probing with it would swallow telemetry the backend never polled.
+      for (const { registry } of Object.values(KINDS)) {
+        const state = await registry.abort(id, 'stopped by the backend')
+        if (state) return send(res, 200, { jobId: id, state })
+      }
+      // No such job here. A 404 is NOT "already stopped": it is also what a caller addressing the
+      // wrong runner sees, so it must stay distinguishable from the 200 above.
+      return send(res, 404, { error: 'job not found' })
+    }
     // Start (or re-attach to) a job: POST /jobs with the kind in the body. The body's
     // `kind` selects the validator + registry; the rest is that kind's job spec.
     // Returns immediately with the job id; the caller polls GET /jobs/{id} for live

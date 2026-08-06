@@ -331,19 +331,42 @@ Recorded so the next iteration does not re-propose them.
   table to keep in step, to answer a question the image can simply be asked. So `unknown` is its own
   disposition: proceed, and report the BLIND SPOT rather than the run. It is expected to decay to
   zero, which is what makes `container.capability_unknown` worth having.
-- **The refusal RELEASES the job before throwing.** The harness starts work on acceptance, so a
-  throw alone leaves a blind agent running to completion (possibly opening a PR) for a step the
-  engine has already failed. The release is best-effort by the transport's own contract, so it goes
-  through `runBestEffort`: a reclaim that fails must not replace an accurate refusal with a teardown
-  error. On a per-run-container backend this destroys the run's container, which is correct here
-  and only here, because the run is failing anyway.
-- **A pool's ack is read off the scheduler's response DIRECTLY, with no manifest mapping.** Every
-  other pool field is manifest-mapped, so a mapping was the obvious shape. But `capabilities` is
-  the HARNESS's field, not the scheduler's: a pool that proxies `POST /jobs` needs no configuration
-  to be correct, and a pool that answers with its own envelope has nothing to map. A mapping would
-  have added a knob whose only correct settings are "the default" and "absent". The consequence is
-  named in the docs rather than hidden: the deployment shape most likely to be behind is also the
-  one most likely to land in `unknown`.
+- **The refusal STOPS the job through its own port method, and REPORTS whether that worked.** The
+  harness starts work on acceptance, so a throw alone leaves a blind agent running to completion
+  (possibly opening a PR) for a step the engine has already failed.
+
+  _WITHDRAWN, first attempt: reusing `release`._ It reads as the reclaim and it is, on the one
+  backend the design was checked against. It is not a stop anywhere else: `HttpRunnerPoolProvider.release`
+  is a NO-OP when the manifest declares no `release` template, and `LocalContainerRunnerTransport.releasePooled`
+  hands the warm-pool member BACK with the job still running in it. All three return the same `void`,
+  so the refusal reported an identical confident stop for a job that was destroyed, one that was
+  handed to the next run, and one that was never touched. The pooled case was the worse half: the
+  member's harness still answers `/health`, so the next run leases a container with a live agent and
+  a live checkout in it, which is the collision `acquireMember`'s synchronous claim exists to prevent.
+
+  What replaced it: `RunnerTransport.stopJob`, a harness `DELETE /jobs/{id}` that aborts ONE job
+  (never `abortAll`, since a pooled container serves other runs) and waits for it to settle before
+  answering, and a returned {`stopped` | `requested` | `unsupported`} outcome plus `failed` for a
+  throw. A container-owning backend always reaches `stopped` because a graceful abort that fails
+  ESCALATES to destroying the container, which also takes a poisoned pool member off the idle list.
+  A pool reaches at most `requested`. The three non-`stopped` outcomes are named in the refusal
+  message and counted as `container.blind_job_not_stopped`, per the degrade-loudly rule: the
+  environment-disposal flow learned the identical lesson (a teardown call returning is not the
+  environment being gone).
+
+- **A pool's ack is MANIFEST-MAPPED (`response.dispatchCapabilitiesPath`), like every other pool
+  field.**
+
+  _WITHDRAWN, first attempt: reading `capabilities` off the scheduler's response by name._ The
+  argument was that the field is the HARNESS's and not the scheduler's, so a proxying pool would
+  need no configuration and a non-proxying one would have nothing to map. It is wrong about what a
+  scheduler's response contains: `capabilities` is an ordinary word for a scheduler to use about its
+  own runners, and `{"capabilities":["gpu","docker"]}` narrows to `[]`, which resolves to
+  `unsupported` and HARD-REFUSES every capability dispatch against a perfectly current image. The
+  whole point of the three-state design is that the middle state exists to avoid a false accusation;
+  guessing at an arbitrary JSON document manufactures one. Nothing in the response can tell the two
+  apart, and the operator can, in one line. Unmapped now means `unknown`, which is the truth about a
+  control plane this backend knows nothing about.
 
 ## Gotchas slice 5 (handshake) surfaced
 

@@ -3,6 +3,7 @@ import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -82,6 +83,21 @@ export class NativeRoutingRunnerTransport implements RunnerTransport {
     const transport = this.routed.get(refKey(ref)) ?? (await this.recoverTransport())
     this.routed.delete(refKey(ref))
     await transport?.release?.(ref)
+  }
+
+  /**
+   * Stop the job on the leg that dispatched it. The route is KEPT (unlike release, which is
+   * terminal): a stop is about one job, and the run may well go on to poll or reclaim the same
+   * backend afterwards.
+   *
+   * An unroutable ref falls back to the managed leg exactly as poll/release do, and a deployment
+   * with no container leg at all (Claude/Codex-only native) reports `unsupported` rather than a
+   * stop it never performed.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const transport = this.routed.get(refKey(ref)) ?? (await this.recoverTransport())
+    if (!transport?.stopJob) return 'unsupported'
+    return transport.stopJob(ref)
   }
 
   /**

@@ -57,6 +57,18 @@ export type OperationalCounter =
    * not actually reaching them. Dimensioned by `capability`, same closed union as above.
    */
   | 'container.capability_unknown'
+  /**
+   * A container dispatch was refused as blind AND the backend could not confirm the job it had
+   * already started was stopped. Dimensioned by `outcome` (`requested` | `unsupported` |
+   * `failed`), a closed union of three, each naming a different operator action: verify at the
+   * pool, give the backend a cancel path, investigate a fault.
+   *
+   * Counted separately from the refusal itself because they are different severities. A refusal
+   * that stopped its job cost one step; one that did not left an agent running unsupervised
+   * against a repository, able to push a branch and open a pull request for a step the engine
+   * already failed, and nothing else in the system will notice.
+   */
+  | 'container.blind_job_not_stopped'
   /** An observability export was dropped (a trace sink, a metrics POST). */
   | 'telemetry.export_dropped'
   /** An outbound notification delivery failed after its retries. */

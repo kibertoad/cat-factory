@@ -534,6 +534,28 @@ export interface RunnerDispatchAck {
   capabilities?: readonly string[]
 }
 
+/**
+ * What a request to stop ONE in-flight job actually achieved, which is a different question from
+ * whether the request returned.
+ *
+ * A job that has already been ACCEPTED is doing work: a harness starts on acceptance, so a caller
+ * that has decided the job must not run (the capability refusal) has to stop it, and a caller that
+ * cannot stop it must say so rather than let the silence read as a stop. That is the same rule the
+ * environment-disposal flow learned the hard way (a teardown call returning is not the environment
+ * being gone), so the outcome is REPORTED rather than assumed:
+ *
+ *   - `stopped`: the job is confirmed no longer running. Either the harness acknowledged the abort
+ *     and the job left `running`, or the thing that held it (the container, the pod) was destroyed.
+ *   - `requested`: a cancel was handed to a control plane this backend cannot see through (a
+ *     self-hosted pool's scheduler) and accepted. Better than nothing and worse than proof.
+ *   - `unsupported`: there is no mechanism at all: a transport with no {@link RunnerTransport.stopJob},
+ *     or a pool whose manifest declares no `release` template. Nothing was even attempted.
+ *
+ * A stop that was attempted and ERRORED is not a member: it throws, so the caller can log the cause
+ * and report the fourth fact (the attempt failed) instead of picking one of these to stand in for it.
+ */
+export type RunnerJobStopOutcome = 'stopped' | 'requested' | 'unsupported'
+
 export interface RunnerTransport {
   /**
    * A stable identifier for this backend (`local-native` / `local-container` / `runner-pool` /
@@ -569,6 +591,25 @@ export interface RunnerTransport {
    * that share one across the run (Cloudflare, local Docker), and any of the run's
    * still-running jobs on a per-job backend (a self-hosted pool cancels `ref.jobId`).
    * Best-effort and idempotent — releasing an already-gone run/job is a no-op.
+   *
+   * NOT a way to stop a job. On a backend that shares one container across a run this reclaims
+   * (and so kills) whatever is inside it, but on a POOLED backend it does the opposite: a warm
+   * pool member is handed back for the next run to lease, job and all. Use {@link stopJob} where
+   * the job itself must die.
    */
   release?(ref: RunnerJobRef): Promise<void>
+  /**
+   * Optionally stop the single in-flight job `ref.jobId`, and report what that achieved (see
+   * {@link RunnerJobStopOutcome}). Idempotent: stopping a job that already settled is `stopped`.
+   *
+   * Distinct from {@link release} because the intents differ and so do the correct behaviours: a
+   * release hands a pool member BACK, which is exactly wrong for a job that must not keep running,
+   * and a release on a per-job pool is frequently a no-op. A transport that owns the container the
+   * job runs in may ESCALATE (destroy the container) when the graceful abort fails, since that is
+   * still a confirmed stop.
+   *
+   * Absent ⇒ the caller reads `unsupported`: this backend has no way to stop an accepted job, which
+   * is a fact to report, never one to assume away.
+   */
+  stopJob?(ref: RunnerJobRef): Promise<RunnerJobStopOutcome>
 }

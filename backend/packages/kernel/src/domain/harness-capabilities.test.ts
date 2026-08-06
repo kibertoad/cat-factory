@@ -119,8 +119,31 @@ describe('readRunnerDispatchAck', () => {
 
 describe('harnessCapabilityUnsupportedMessage', () => {
   it('names the capability and whose fix it is', () => {
-    const message = harnessCapabilityUnsupportedMessage(['mcpServers'])
+    const message = harnessCapabilityUnsupportedMessage(['mcpServers'], 'stopped')
     expect(message).toContain(describeHarnessBodyCapability('mcpServers'))
     expect(message).toContain('runner pool')
+  })
+
+  it('says the agent is stopped ONLY when it is', () => {
+    // Refusing the step and stopping the container are two achievements, and only a `stopped`
+    // outcome is both. Every other one has to send the reader to look, because on those backends
+    // a full agent pass really is still running against the repository.
+    expect(harnessCapabilityUnsupportedMessage(['skills'], 'stopped')).toContain(
+      'nothing is still running',
+    )
+    for (const stop of ['requested', 'unsupported', 'failed'] as const) {
+      const message = harnessCapabilityUnsupportedMessage(['skills'], stop)
+      expect(message).not.toContain('nothing is still running')
+      // Each still has to say what to DO, or the honesty is just an unactionable caveat.
+      expect(message).toMatch(/check the pool|stop it on the runner/)
+    }
+  })
+
+  it('distinguishes a pool that was asked from a backend that cannot be', () => {
+    // Both mean "go and look", but at different things: one deployment has a cancel that may not
+    // have worked, the other has no cancel at all and needs one wired.
+    expect(harnessCapabilityUnsupportedMessage(['skills'], 'requested')).not.toEqual(
+      harnessCapabilityUnsupportedMessage(['skills'], 'unsupported'),
+    )
   })
 })

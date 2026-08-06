@@ -3,6 +3,7 @@ import type {
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -71,5 +72,19 @@ export class RunnerJobClient {
   async release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void> {
     const transport = await this.resolveTransport(workspaceId)
     await transport.release?.(ref)
+  }
+
+  /**
+   * Stop the single in-flight job `ref.jobId` on the backend it dispatched to, and report what
+   * that achieved (see {@link RunnerJobStopOutcome}).
+   *
+   * A transport with no `stopJob` answers `unsupported` rather than resolving quietly, because
+   * the caller (the capability refusal) turns this into a statement to a human about whether an
+   * agent is still working against their repository. Silence would be read as a stop.
+   */
+  async stopJob(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const transport = await this.resolveTransport(workspaceId)
+    if (!transport.stopJob) return 'unsupported'
+    return transport.stopJob(ref)
   }
 }

@@ -6,6 +6,7 @@
 '@cat-factory/worker': minor
 '@cat-factory/local-server': minor
 '@cat-factory/observability-otel': minor
+'@cat-factory/contracts': minor
 ---
 
 Refuse a blind run: the harness now tells the backend which job-body capabilities it parses
@@ -35,15 +36,34 @@ died; `unknown` proceeds and is REPORTED as the deployment's own blind spot, on 
 `container.capability_unknown` counter that should decay to zero as pools update. A body carrying
 no capability says nothing at all, which is most dispatches.
 
-Two things worth a reviewer's attention. The refusal releases the job before throwing, because the
-harness begins work on acceptance and a refusal that left it running would let a blind agent
-finish, possibly opening a PR for a step the engine has already failed; the release is best-effort,
-so a failed reclaim cannot replace the accurate refusal with a teardown error. And a runner pool
-gets the handshake only if its scheduler passes the harness's acceptance body through. It is read
-off that response directly rather than through a manifest mapping, since the field is the
-harness's and not the scheduler's, so a pool that does not forward it lands in `unknown`, which
-is honest and counted rather than quietly treated as a pass.
+Refusing the step is only half of it: the harness begins work on acceptance, so a refusal that
+merely throws leaves a full agent pass running against the repository, free to push a branch and
+open a pull request for a step the engine already failed. The refusal therefore STOPS the job,
+through a new `RunnerTransport.stopJob` and a new harness `DELETE /jobs/{id}` that aborts one job
+and waits for it to settle before answering. Never through `release`, which is a reclaim and means
+something different on every backend: on a per-run container it happens to kill the job, on a warm
+pool member it hands the container BACK with the agent still working in it, and on a self-hosted
+pool with no `release` template it does nothing at all.
+
+Not every backend can PROVE the job died, so the outcome is reported rather than assumed and the
+failure message says which of four it was: `stopped` (nothing is still running), `requested` (a
+pool cancel was accepted but cannot be verified), `unsupported` (no cancel path exists), `failed`.
+The last three also increment `container.blind_job_not_stopped`, dimensioned by the outcome,
+because each is a different operator fix. A backend that owns the container always reaches
+`stopped`, since a graceful abort that fails escalates to destroying it; on the local warm pool
+that escalation is also what keeps a member whose job could not be aborted off the idle list, where
+it still answers `/health` and the next run would lease a container with a live agent and a live
+checkout in it.
+
+A runner pool gets the handshake only when its manifest MAPS it: `response.dispatchCapabilitiesPath`,
+one line for a pool that proxies `POST /jobs` verbatim. Deliberately not read by name, because
+`capabilities` is an ordinary word for a scheduler to use about its own runners (`["gpu","docker"]`)
+and reading one of those as the harness's answer would narrow to an empty list and hard-refuse every
+capability dispatch against a perfectly current image. Unmapped lands in `unknown`, which is honest
+about a control plane this backend knows nothing about.
 
 OPERATORS: this bumps the runner image to `1.93.0`. A pool on an older image keeps working exactly
 as before; it simply reports no handshake, so tool-server and skill dispatches there are counted as
-unverifiable instead of confirmed.
+unverifiable instead of confirmed. To get the check on a self-hosted pool, map
+`response.dispatchCapabilitiesPath` to `capabilities` and declare a `release` template so a refused
+run can actually be cancelled.

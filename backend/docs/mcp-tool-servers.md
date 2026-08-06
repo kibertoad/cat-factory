@@ -134,21 +134,55 @@ place the body it just sent is still in scope, and the last moment before the ag
 
 There are THREE answers, not two, and which one a dispatch got decides what happens:
 
-| Answer                     | What it means                                                        | What the dispatch does                                                               |
-| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Named the capability       | The image parses the field                                           | Nothing. The run proceeds.                                                           |
-| Reported a list WITHOUT it | The image said it cannot serve it                                    | REFUSED. The started job is released and the step fails as a `preflight` fault.      |
-| Reported no list at all    | An image older than the handshake, or a pool that did not forward it | Proceeds, and the blind spot is logged and counted (`container.capability_unknown`). |
+| Answer                     | What it means                                                    | What the dispatch does                                                               |
+| -------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Named the capability       | The image parses the field                                       | Nothing. The run proceeds.                                                           |
+| Reported a list WITHOUT it | The image said it cannot serve it                                | REFUSED: the started job is STOPPED and the step fails as a `preflight` fault.       |
+| Reported no list at all    | An image older than the handshake, or a pool that did not map it | Proceeds, and the blind spot is logged and counted (`container.capability_unknown`). |
 
 The third row is why this is not a boolean. Every image between "tool servers landed" and "the
 handshake landed" serves them perfectly and reports nothing, so treating silence as a refusal
 would take those runs out on no evidence at all.
 
-**For a self-hosted pool, forward the harness's acceptance body.** The handshake is read straight
-off the scheduler's dispatch response, with no manifest mapping to configure. The `capabilities`
-field is the harness's, not the scheduler's. A pool that proxies `POST /jobs` gets the check for
-free; a pool that answers with its own envelope lands in the third row, so its dispatches are
-counted as unverifiable and the operator obligation to keep the image current stands unchanged.
+### Refusing means STOPPING the job, and saying whether that worked
+
+The harness begins work on ACCEPTANCE, so a refusal that only fails the step leaves a full agent
+pass running against the repository, free to push a branch and open a pull request for a step the
+engine has already failed. The refusal therefore stops it, through the transport port's `stopJob`
+(`DELETE /jobs/{id}` on the harness) and never through `release`, which is a reclaim and means
+something different on every backend: on a per-run container it happens to kill the job, on a
+pooled one it hands the container BACK with the agent still working in it, and on a pool with no
+`release` template it does nothing at all.
+
+Not every backend can prove the job died, so the outcome is REPORTED rather than assumed, and the
+failure message says which:
+
+| Outcome       | Where it comes from                                                                                    | What the message says    |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ------------------------ |
+| `stopped`     | Cloudflare / local / Kubernetes: the harness confirmed the job settled, or the container was destroyed | Nothing is still running |
+| `requested`   | A self-hosted pool: its `release` template was called and accepted                                     | Check the pool           |
+| `unsupported` | A pool with no `release` template, or a transport with no stop at all                                  | Stop it on the runner    |
+| `failed`      | The stop was attempted and errored                                                                     | Stop it on the runner    |
+
+A container-owning backend always reaches `stopped`, because a graceful abort that fails ESCALATES
+to destroying the container. That escalation is right only here: the run is being failed anyway, so
+there is no sibling step left to protect, and on the local warm pool it is also what keeps a member
+whose job could not be aborted off the idle list (a busy member still answers `/health`, so
+re-pooling it would hand the next run a container with a live agent and a live checkout in it).
+
+Anything other than `stopped` also increments `container.blind_job_not_stopped`, dimensioned by the
+outcome, because each one is a different operator fix.
+
+**For a self-hosted pool, map the acceptance body and declare a `release` template.** Two lines,
+each buying a different half:
+
+- `response.dispatchCapabilitiesPath: "capabilities"` for a pool that proxies `POST /jobs`
+  verbatim. Without it the dispatch lands in the third row above. It is deliberately not read by
+  name: `capabilities` is an ordinary word for a scheduler to use about its own runners
+  (`["gpu","docker"]`), and reading one of those as the harness's answer would narrow to an empty
+  list and hard-refuse every capability dispatch against a perfectly current image.
+- A `release` template, so a refused run can be cancelled at all. Without one the pool reports
+  `unsupported` and the blind agent runs to completion.
 
 The refused case names the capability, the fix and whose fix it is, and it is a configuration
 fault rather than a container failure: an operator updates the pool, or removes the capability
@@ -460,10 +494,12 @@ this list exists so an adopting deployment learns the ceiling from the docs rath
   cannot be connected. Registering a client at runtime would be deployment state with no home in a
   composition-root registration and no operator-visible identity at the vendor, which is why it is
   deferred rather than absent by accident.
-- **A runner pool whose scheduler does not proxy the harness's acceptance body gets no capability
-  handshake** (see below). Its dispatches are then counted as UNVERIFIABLE rather than confirmed,
-  which is honest but is not the same as safe: keeping pool images at the pinned tag remains an
-  adopter obligation.
+- **A runner pool that maps no `dispatchCapabilitiesPath` gets no capability handshake** (see
+  above). Its dispatches are then counted as UNVERIFIABLE rather than confirmed, which is honest
+  but is not the same as safe: keeping pool images at the pinned tag remains an adopter obligation.
+- **A runner pool cannot PROVE it stopped a refused job**, and one with no `release` template
+  cannot stop it at all. Both are stated on the failure rather than hidden, but on that backend a
+  refused blind run really can keep working against the repository until someone kills it.
 - **No per-workspace or per-step server selection** (slice 6). A registered server applies to
   every workspace's runs of the kinds it is declared on; only the credential half is per-workspace
   today. Capability credentials are also SPA-only (absent from the public API) until the same
