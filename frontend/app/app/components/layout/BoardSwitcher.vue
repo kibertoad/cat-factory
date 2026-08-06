@@ -107,12 +107,17 @@ const boardItems = computed<DropdownMenuItem[][]>(() => [
     // manages membership can see at a glance which boards are scoped vs open to the account.
     icon: w.accessMode === 'restricted' ? 'i-lucide-lock' : 'i-lucide-layout-dashboard',
     trailingIcon: w.id === workspace.workspaceId ? 'i-lucide-check' : undefined,
+    // Addressable per board id: which board a row opens is the one thing about this menu a test
+    // (or a screen reader's user testing a switch) cannot get from the label, which is a name a
+    // person chose and two boards may share.
+    'data-testid': `board-option-${w.id}`,
     onSelect: () => void switchBoard(w.id),
   })),
   [
     {
       label: t('layout.boardSwitcher.board.new'),
       icon: 'i-lucide-plus',
+      'data-testid': 'board-new',
       onSelect: () => openPrompt('board'),
     },
     // Rename/delete of the active board is `settings.manage` — omit for a member/viewer,
@@ -290,6 +295,8 @@ async function submitPrompt() {
         class="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-start transition hover:bg-slate-800/60"
         :class="collapsed ? 'justify-center' : ''"
         :disabled="busy"
+        data-testid="board-switcher"
+        :data-board-id="workspace.workspaceId ?? ''"
       >
         <UIcon name="i-lucide-layout-dashboard" class="h-4 w-4 shrink-0 text-indigo-400" />
         <span v-if="!collapsed" class="truncate text-sm font-medium text-white">
