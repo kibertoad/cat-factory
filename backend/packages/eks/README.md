@@ -55,7 +55,7 @@ own first-class environment _engine_ in the SPA infra-handler selector (the conn
 lower to `{ kind: 'eks' }` rather than `{ kind: 'kubernetes' }`). That needs a dedicated
 `InfraEngine('eks')` threaded through the contract engine union + `handlerConfigToBackendConfig` +
 the per-provision-type SPA forms; tracked in
-[`docs/initiatives/descriptor-driven-infra-forms.md`](../../../docs/initiatives/descriptor-driven-infra-forms.md).
+[`docs/initiatives/descriptor-driven-infra-forms.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/descriptor-driven-infra-forms.md).
 
 ## Tests
 

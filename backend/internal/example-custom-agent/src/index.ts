@@ -12,6 +12,7 @@ import type {
   InitiativePresetRegistry,
   JudgeRegistry,
   PipelineRegistry,
+  PromptFragmentRegistry,
   ProviderRegistry,
   RepoOp,
   StepCompletionResolver,
@@ -901,6 +902,12 @@ export interface ExampleRegistries {
   pipelineRegistry: PipelineRegistry
   judgeRegistry: JudgeRegistry
   taskTypeRegistry: TaskTypeRegistry
+  /**
+   * The deployment's best-practice standards pool. Carried here for the same reason every other
+   * registry is: the operation's standing context has to land on the instance the FACADE was
+   * built with, and a module-global registration only appeared to do that.
+   */
+  promptFragmentRegistry: PromptFragmentRegistry
 }
 
 /**
@@ -925,6 +932,7 @@ export function registerExampleCustomAgents(registries: ExampleRegistries): void
     pipelineRegistry,
     judgeRegistry,
     taskTypeRegistry,
+    promptFragmentRegistry,
   } = registries
   // Capability definitions FIRST: a kind referencing an id registered later would be reported as
   // an unresolved reference by the boot-time `validateRegistrations` check.
@@ -1027,5 +1035,10 @@ export function registerExampleCustomAgents(registries: ExampleRegistries): void
   stepResolverRegistry.register(researchVerdictResolver.kind, () => researchVerdictResolver)
   // The REUSABLE OPERATION: a canned unit of work invoked again and again with per-case form
   // input, bundling its standing context and its own pipeline onto a custom task type.
-  registerIntroduceApiOperation(registry, pipelineRegistry, taskTypeRegistry)
+  registerIntroduceApiOperation(
+    registry,
+    pipelineRegistry,
+    taskTypeRegistry,
+    promptFragmentRegistry,
+  )
 }

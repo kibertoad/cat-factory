@@ -411,6 +411,15 @@ jobs:
       - name: Guard gate-approval raises
         run: node scripts/check-gate-approval-raise.mjs
 
+      # Requires every markdown file that SHIPS in a published tarball to link inside its own
+      # package. An escaping relative link resolves perfectly from a checkout and is dead for the
+      # consumer who installed the package, so it is invisible to everyone able to fix it: an org
+      # building against the published packages could not read the reusable-operations reference
+      # its own `@cat-factory/app` doc pointed at. Its fixtures run in the `node --test` step
+      # above. Pure node, no install.
+      - name: Guard shipped documentation links
+        run: node scripts/check-shipped-doc-links.mjs
+
   # The former monolithic "Build & typecheck" job was one long SERIAL chain (build →
   # publint/attw → knip → typechecks → nuxt generate → drizzle) and, at ~3m, a co-critical
   # blocking path. It is split into three lanes that run in PARALLEL — `build-typecheck`

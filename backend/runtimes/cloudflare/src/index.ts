@@ -80,6 +80,7 @@ import {
   sweepBinaryArtifactRetention,
   validateRegistrationsOnce,
 } from '@cat-factory/orchestration'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
 import {
@@ -187,6 +188,14 @@ export {
   type BinaryGeneratorDefinition,
   defaultBinaryGeneratorRegistry,
 } from '@cat-factory/kernel'
+// The app-owned PROMPT-FRAGMENT registry (the same shape once more): a deployment news a
+// `promptFragmentRegistryWithBuiltins()` (or a bare `defaultPromptFragmentRegistry()` when it
+// wants only its own standards), registers its best-practice fragments and per-task-type default
+// sets on it by reference, and injects it via the `promptFragmentRegistry` override. Replaces the
+// module-global `registerPromptFragment` seam, which was correct only while every reader resolved
+// the same physical copy of `@cat-factory/prompt-fragments`.
+export { PromptFragmentRegistry, defaultPromptFragmentRegistry } from '@cat-factory/kernel'
+export { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 // The options {@link createWorker} takes — re-exported from the root so a deployment can name the
 // type of what it passes without reaching for the `@cat-factory/worker/app` subpath.
 export type { CreateAppOptions } from './app'
@@ -235,6 +244,12 @@ function resolveEntryRegistries(overrides: Partial<CoreDependencies>) {
     // ones are what a binary-generating step may produce with, and a malformed definition or a
     // cleartext endpoint fails boot rather than a dispatch.
     binaryGeneratorRegistry: overrides.binaryGeneratorRegistry ?? defaultBinaryGeneratorRegistry(),
+    // The best-practice standards pool: the SHIPPED catalog plus whatever a deployment registered
+    // onto the same instance. Defaulted to the built-ins HERE, not in `createCore`, because the
+    // engine's default is deliberately empty, so a facade must say it wants the platform's standards,
+    // through the same public seam a deployment registers on.
+    promptFragmentRegistry:
+      overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins(),
   }
 }
 
@@ -946,13 +961,9 @@ export function createWorker(options: CreateAppOptions = {}): WorkerHandler {
       // guarded — a `scheduled`/`queue` invocation can be the FIRST to run in a fresh isolate.
       applyLogSettings(env)
       validateRegistrationsOnce({
-        agentKindRegistry: registries.agentKindRegistry,
-        gateRegistry: registries.gateRegistry,
-        pipelineRegistry: registries.pipelineRegistry,
-        taskTypeRegistry: registries.taskTypeRegistry,
-        initiativePresetRegistry: registries.initiativePresetRegistry,
-        foundationalServiceRegistry: registries.foundationalServiceRegistry,
-        binaryGeneratorRegistry: registries.binaryGeneratorRegistry,
+        // The resolved bundle whole, for the reason the two Node-hosted facades pass their
+        // container: a hand-picked list is the one shape that can silently be short by one.
+        registries,
         onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
       })
       const response = Promise.resolve(app.fetch(request, env, ctx))

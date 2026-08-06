@@ -1,5 +1,4 @@
 import type { PromptFragment } from '@cat-factory/contracts'
-import { universalFragments } from '@cat-factory/prompt-fragments'
 import type {
   CreateDocumentFragmentInput,
   CreatePromptFragmentInput,
@@ -11,7 +10,8 @@ import type {
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
 import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
-import type { Clock, GroupCacheHandle } from '@cat-factory/kernel'
+import type { Clock, GroupCacheHandle, Logger, PromptFragmentSource } from '@cat-factory/kernel'
+import { noopLogger } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
   FragmentResolver,
@@ -56,15 +56,31 @@ export interface FragmentLibraryServiceDependencies {
   promptFragmentRepository: PromptFragmentRepository
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * Where this service REPORTS what it dropped. Optional and normalised once to `noopLogger`, so
+   * the service stays unit-testable standalone while a facade always wires the real one.
+   *
+   * It had none at all, and that is why an unresolvable standing-context id was invisible: an
+   * operation meant to fold three standards folded two, forever, on every run, and the only trace
+   * anywhere was one boot WARNING that cannot tell a typo from a legitimate tenant-tier id.
+   */
+  logger?: Logger
   /** Relevance selector; defaults to the deterministic matcher when omitted. */
   selector?: FragmentSelector
   /**
-   * Built-in catalog tier; overridable for tests. Defaults to the UNIVERSAL pool —
-   * the shipped FRAGMENTS plus any deployment-registered fragments — read lazily per
-   * catalog resolve, so a `registerPromptFragment` override of a built-in id (and any
-   * extra registered fragment) is part of the merged tenant catalog and can be
-   * shadowed or tombstoned per tier like every other built-in.
+   * Where the built-in catalog tier is READ from: the app-owned {@link PromptFragmentSource}:
+   * this deployment's own registry, or the MOTHERSHIP's on a mothership-mode node. Read per
+   * catalog resolve, so a registration made at startup is part of the merged tenant catalog
+   * whatever the construction order, and can be shadowed or tombstoned per tier like every
+   * other built-in.
+   *
+   * Absent (a direct test construction, or a caller with no registry in hand) ⇒ the tier is
+   * EMPTY. Deliberately not a silent fall-back to the shipped module catalog: this used to read a
+   * module global, and a caller that forgot to wire it was indistinguishable from one whose
+   * deployment registered nothing.
    */
+  promptFragmentSource?: PromptFragmentSource
+  /** Built-in catalog tier as a fixed list, for tests that want no source at all. */
   builtins?: PromptFragment[]
   /**
    * Live document reader for document-backed fragments. When absent the feature
@@ -116,6 +132,8 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly clock: Clock
   private readonly selector: FragmentSelector
   private readonly builtinsOverride?: PromptFragment[]
+  private readonly fragmentSource?: PromptFragmentSource
+  private readonly log: Logger
   private readonly documentResolver?: DocumentContentResolver
   private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
   private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
@@ -127,6 +145,8 @@ export class FragmentLibraryService implements FragmentResolver {
     this.clock = deps.clock
     this.selector = deps.selector ?? new DeterministicFragmentSelector()
     this.builtinsOverride = deps.builtins
+    this.fragmentSource = deps.promptFragmentSource
+    this.log = deps.logger ?? noopLogger
     this.documentResolver = deps.documentContentResolver
     this.catalogCache = deps.catalogCache
     this.documentBodyCache = deps.documentBodyCache
@@ -134,12 +154,18 @@ export class FragmentLibraryService implements FragmentResolver {
   }
 
   /**
-   * The built-in tier: the injected test override, else the UNIVERSAL pool (shipped
-   * catalog + deployment-registered fragments), read lazily so registrations made at
-   * startup are seen regardless of construction order.
+   * The built-in tier: the injected fixed list, else the app-owned SOURCE, read per resolve so
+   * registrations made at startup are seen regardless of construction order.
+   *
+   * Async because one implementation crosses a network (a mothership-mode node reads the pool
+   * from the mothership), and that read THROWS rather than answering empty. An unreachable
+   * mothership and a deployment with no standards are the same value and opposite facts. The
+   * throw propagates: this is the catalog every tier merges onto, so swallowing it here would
+   * serve a catalog silently missing the deployment's whole standards library.
    */
-  private builtins(): PromptFragment[] {
-    return this.builtinsOverride ?? universalFragments()
+  private async builtins(): Promise<PromptFragment[]> {
+    if (this.builtinsOverride) return this.builtinsOverride
+    return (await this.fragmentSource?.all()) ?? []
   }
 
   /** This tier's hand-authored/sourced fragments (raw, not merged), newest first. */
@@ -412,7 +438,7 @@ export class FragmentLibraryService implements FragmentResolver {
       accountId ? this.repo.listByOwner('account', accountId, true) : Promise.resolve([]),
       this.repo.listByOwner('workspace', workspaceId, true),
     ])
-    return mergeCatalog(this.builtins(), accountRows, workspaceRows, {
+    return mergeCatalog(await this.builtins(), accountRows, workspaceRows, {
       accountId: accountId ?? null,
       workspaceId,
     })
@@ -518,15 +544,40 @@ export class FragmentLibraryService implements FragmentResolver {
 
     const resolved: { entry: ResolvedCatalogEntry; body: string }[] = []
     const seen = new Set<string>()
+    const dropped: string[] = []
     for (const id of ids) {
       if (seen.has(id)) continue
       seen.add(id)
       const entry = byId.get(id)
-      if (!entry) continue
+      if (!entry) {
+        dropped.push(id)
+        continue
+      }
       const body = entry.documentRef
         ? await this.resolveDocumentBody(workspaceId, entry)
         : entry.body
       resolved.push({ entry, body })
+    }
+    // Every cap records what it dropped. Silently skipping these is why a mis-typed
+    // `defaultFragmentIds` entry (or a deployment running two physical copies of the fragment
+    // package, which resolves the whole registered pool to nothing) cost a run's standards on EVERY
+    // run with no signal anywhere: the boot warning fires once, cannot distinguish a typo from a
+    // tenant-tier id, and says nothing at all about the run that just went without.
+    //
+    // A WARN rather than a refusal, because dropping is the correct behaviour: a tombstoned or
+    // superseded id must not resolve, and re-adding a static fallback would defeat suppression
+    // (ADR 0006). What was missing is the report, not the disposition.
+    if (dropped.length > 0) {
+      this.log.warn(
+        'Standing-context fragments were dropped from a run: these ids resolve against neither ' +
+          "the deployment-registered pool nor this workspace's account/workspace tiers, so the " +
+          'guidance they name did not reach the agent',
+        {
+          workspaceId,
+          droppedFragmentIds: dropped,
+          ...(options.executionId ? { executionId: options.executionId } : {}),
+        },
+      )
     }
 
     // Only an implementer dispatch folds condensed variants, so only it pays to resolve

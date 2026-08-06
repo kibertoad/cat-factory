@@ -62,6 +62,8 @@ export interface PlatformModulesInput {
    * `resolveCoreRuntime`.
    */
   foundationalBuiltins: CoreRuntime['foundationalBuiltins']
+  /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
+  promptFragments: CoreRuntime['promptFragments']
 }
 
 export interface PlatformModules {
@@ -82,6 +84,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     executionEventPublisher,
     boardService,
     foundationalBuiltins,
+    promptFragments,
   } = input
   // The price table the run-telemetry rollups are costed against: the DEPLOYMENT base table,
   // deliberately, and its own currency. A workspace may override the budget's currency without
@@ -244,7 +247,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     createDocumentsModule(dependencies, boardService),
   )
   const fragmentLibrary = modules.build('fragmentLibrary', () =>
-    createFragmentLibraryModule(dependencies, documents?.contentResolver, caches),
+    createFragmentLibraryModule(dependencies, documents?.contentResolver, caches, promptFragments),
   )
   const skillLibrary = modules.build('skillLibrary', () =>
     createSkillLibraryModule(dependencies, caches),

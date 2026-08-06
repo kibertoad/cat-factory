@@ -9,6 +9,7 @@ import type {
   McpSecretRef,
   McpServerDefinition,
   PipelineRegistry,
+  PromptFragmentRegistry,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
 import {
@@ -29,7 +30,6 @@ import {
   toolServerDeclaredBytes,
   validateFoundationalDefinition,
 } from '@cat-factory/kernel'
-import { universalFragments } from '@cat-factory/prompt-fragments'
 import {
   type BinaryGeneratorDefinition,
   type CustomTaskType,
@@ -79,21 +79,33 @@ export interface RegistrationProblem {
   message: string
 }
 
-/** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
-export interface ValidateRegistrationsOptions {
+/**
+ * Everything this validator reads, as ONE object a facade satisfies by passing its CONTAINER.
+ *
+ * It used to be seven optional fields on the options object, hand-listed at each call site, and
+ * that shape is what put the local MOTHERSHIP boot two registries behind the others: it passed
+ * five of them, its own comment claimed parity with `start()`, and a custom task type naming an
+ * unregistered pipeline booted clean there while failing on the Postgres path. A hand-list has no
+ * failure mode other than being incomplete, and nothing can tell that it is.
+ *
+ * The container carries every one of these as a required field, so `{ registries: container }`
+ * type-checks and cannot be partial. A registry added to the validator therefore reaches all three
+ * facades with no call-site edit at all.
+ */
+export interface ValidatedRegistries {
   /**
    * The app-owned agent-kind registry to validate (the facade's injected instance). Required:
    * without it there are no registered kinds to cross-check the gates/pipelines against.
    */
   agentKindRegistry: AgentKindRegistry
   /**
-   * The app-owned gate registry to validate (the facade's injected instance — the SAME one it
+   * The app-owned gate registry to validate (the facade's injected instance, the SAME one it
    * threads through `CoreDependencies.gateRegistry`). Required: the gate-helper + pipeline-kind
    * cross-checks read the registered gates from it rather than a module global.
    */
   gateRegistry: GateRegistry
   /**
-   * The app-owned pipeline registry to validate (the facade's injected instance — the SAME one it
+   * The app-owned pipeline registry to validate (the facade's injected instance, the SAME one it
    * threads through `CoreDependencies.pipelineRegistry`). Optional: when omitted, no
    * deployment-registered pipelines are cross-checked (the pipeline-kind check still needs
    * `knownAgentKinds`). A facade that registers custom pipelines passes it so a pipeline naming a
@@ -130,6 +142,18 @@ export interface ValidateRegistrationsOptions {
    * fails boot rather than surfacing as a refused run or an unexplained 401 mid-generation.
    */
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * The app-owned prompt-fragment registry (the facade's injected instance, the SAME one it
+   * threads through `CoreDependencies.promptFragmentRegistry`). Optional: when omitted, the
+   * built-in catalog alone is the pool a task type's `defaultFragmentIds` are checked against.
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
+}
+
+/** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
+export interface ValidateRegistrationsOptions {
+  /** Every app-owned registry the checks read. A facade passes its container. */
+  registries: ValidatedRegistries
   /** Override the canonical result-view id set (defaults to contracts' {@link RESULT_VIEW_ID_SET}). */
   knownResultViewIds?: ReadonlySet<string>
   /** Built-in helper kinds a gate may escalate to (defaults to ci-fixer/conflict-resolver/on-call). */
@@ -158,12 +182,12 @@ export function collectRegistrationProblems(
 ): RegistrationProblem[] {
   const knownResultViewIds = opts.knownResultViewIds ?? RESULT_VIEW_ID_SET
   const builtInHelperKinds = opts.builtInHelperKinds ?? BUILT_IN_HELPER_KINDS
-  const registry = opts.agentKindRegistry
+  const registry = opts.registries.agentKindRegistry
   const problems: RegistrationProblem[] = []
 
   const agentKinds = registry.all()
   const registeredKindIds = new Set(agentKinds.map((d) => d.kind))
-  const gateFactories = opts.gateRegistry.factories()
+  const gateFactories = opts.registries.gateRegistry.factories()
   const gateKinds = new Set(gateFactories.map((g) => g.kind))
 
   // 1. Every gate's helperKind must resolve to a registered container-capable kind or a
@@ -241,7 +265,55 @@ export function collectRegistrationProblems(
   // 9. Deployment-registered GENERATIVE BINARY INTEGRATIONS (only when a registry is supplied).
   problems.push(...checkBinaryGenerators(opts))
 
+  // 10. Deployment-registered PROMPT FRAGMENTS (only when a registry is supplied).
+  problems.push(...checkPromptFragments(opts))
+
   return problems
+}
+
+/**
+ * Section 10 of {@link collectRegistrationProblems}: a code-registered prompt fragment that carries
+ * a `documentRef`.
+ *
+ * The registration is ACCEPTED today, faithfully carried through the catalog merge with
+ * `docViaWorkspaceId: null`, put on the wire, and rendered by the library UI with a
+ * `fragments.catalog.live` badge NAMING the source. And then `resolveDocumentBody` refuses it:
+ * `entry.tier === 'builtin'` short-circuits before any resolution. Every code-registered fragment
+ * lands on that tier, so the reference is preserved everywhere it is visible and honoured nowhere,
+ * and the surface most confident about it is the one telling a human the body is live.
+ *
+ * An ERROR rather than a warning, because it is a dead seam rather than a degraded one: there is no
+ * deployment state in which the reference starts resolving, and the failure it produces is a lie
+ * rather than an omission.
+ *
+ * The refusal is deliberately NOT "honour it at builtin tier", which is what the report that
+ * surfaced this asked for. `resolveDocumentBody` needs a connection WORKSPACE to fetch through, and
+ * a deployment-wide registration has none: resolving through an arbitrary tenant's stored
+ * credential would fetch text into every other workspace's prompts on one workspace's connection,
+ * and would key ONE deployment-wide document under N per-workspace cache groups. That is the exact
+ * fan-out the existing guard refuses for the account tier, and it is not an oversight. A living
+ * deployment-wide document needs a DEPLOYMENT-scoped document source (an owner-scope change, a
+ * credential home and a mothership routing decision), which is its own initiative rather than a
+ * field on a registration.
+ */
+function checkPromptFragments(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  const registry = opts.registries.promptFragmentRegistry
+  if (!registry) return []
+  return registry
+    .all()
+    .filter((fragment) => fragment.documentRef)
+    .map((fragment) => ({
+      severity: 'error' as const,
+      code: 'fragment_document_ref_unsupported',
+      message:
+        `Prompt fragment "${fragment.id}" is registered in code with a documentRef, which is ` +
+        `carried through the catalog and rendered as a live source but is never resolved: a ` +
+        `code-registered fragment lands on the "builtin" tier, and live resolution needs a ` +
+        `connection workspace a deployment-wide registration cannot name. Register the body ` +
+        `inline instead, or create the fragment at the ACCOUNT tier (POST the fragment with its ` +
+        `documentRef and a fetch-via workspace), which is the supported path to an org-wide ` +
+        `living document.`,
+    }))
 }
 
 /**
@@ -263,8 +335,8 @@ export function collectRegistrationProblems(
  */
 function checkBinaryGenerators(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  if (!opts.binaryGeneratorRegistry) return problems
-  for (const definition of opts.binaryGeneratorRegistry.all()) {
+  if (!opts.registries.binaryGeneratorRegistry) return problems
+  for (const definition of opts.registries.binaryGeneratorRegistry.all()) {
     const issues = binaryGeneratorDefinitionIssues(definition)
     if (issues.length > 0) {
       problems.push({
@@ -345,8 +417,8 @@ function checkBinaryGeneratorDetails(definition: BinaryGeneratorDefinition): Reg
  */
 function checkFoundationalServices(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  if (!opts.foundationalServiceRegistry) return problems
-  for (const definition of opts.foundationalServiceRegistry.all()) {
+  if (!opts.registries.foundationalServiceRegistry) return problems
+  for (const definition of opts.registries.foundationalServiceRegistry.all()) {
     const issues = foundationalServiceDefinitionIssues(definition)
     if (issues.length > 0) {
       problems.push({
@@ -389,7 +461,7 @@ function checkAgentKindVariants(
   registeredKindIds: ReadonlySet<string>,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  for (const variant of opts.agentKindRegistry.variants()) {
+  for (const variant of opts.registries.agentKindRegistry.variants()) {
     if (!variant.systemPrompt?.trim() && !variant.promptAddition?.trim()) {
       problems.push({
         severity: 'error',
@@ -441,11 +513,11 @@ function checkAgentKindVariants(
  */
 function checkPipelineVariantSelections(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
+  for (const pipeline of opts.registries.pipelineRegistry?.registered() ?? []) {
     pipeline.stepOptions?.forEach((options, i) => {
       const variantId = options?.agentVariantId
       if (!variantId || pipeline.enabled?.[i] === false) return
-      const variant = opts.agentKindRegistry.variant(variantId)
+      const variant = opts.registries.agentKindRegistry.variant(variantId)
       const problem = !variant
         ? 'which this deployment does not register'
         : variant.baseKind !== pipeline.agentKinds[i]
@@ -874,7 +946,7 @@ function checkPipelineKinds(
   const problems: RegistrationProblem[] = []
   if (!opts.knownAgentKinds) return problems
   const known = opts.knownAgentKinds
-  for (const pipeline of opts.pipelineRegistry?.registered() ?? []) {
+  for (const pipeline of opts.registries.pipelineRegistry?.registered() ?? []) {
     for (const agentKind of pipeline.agentKinds) {
       const ok =
         known.has(agentKind) ||
@@ -911,7 +983,7 @@ function checkPipelineKinds(
  * store the row.
  */
 function checkPipelineRetirements(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
-  const registry = opts.pipelineRegistry
+  const registry = opts.registries.pipelineRegistry
   if (!registry) return []
   const retired = registry.retired()
   if (retired.length === 0) return []
@@ -944,8 +1016,10 @@ function checkPipelineRetirements(opts: ValidateRegistrationsOptions): Registrat
 function checkTaskTypeFragments(
   taskType: CustomTaskType,
   pool: Set<string>,
+  /** The ids to check; defaults to the type's unconditional `defaultFragmentIds`. */
+  ids: readonly string[] = taskType.defaultFragmentIds ?? [],
 ): RegistrationProblem[] {
-  const unresolved = (taskType.defaultFragmentIds ?? []).filter((id) => !pool.has(id))
+  const unresolved = ids.filter((id) => !pool.has(id))
   if (unresolved.length === 0) return []
   return [
     {
@@ -960,6 +1034,53 @@ function checkTaskTypeFragments(
         `here. Check the id if you meant a code-registered fragment.`,
     },
   ]
+}
+
+/**
+ * A registered task type's CONDITIONAL standing context: the entries whose fragment ids join
+ * `defaultFragmentIds` when their condition holds against the values a creation collected.
+ *
+ * Two checks, at deliberately different severities:
+ *
+ * - a `when.key` naming a field the type does not DECLARE is an ERROR, the same class as
+ *   `task_type_field_unknown_condition` on a field's own `showWhen` and for the same reason: every
+ *   input is fully known from the registration, the condition can never hold, and the only symptom
+ *   is guidance that silently never seeds. There is no forward state in which it starts working.
+ * - an unresolvable fragment ID is the same WARN `defaultFragmentIds` gets, through the same
+ *   checker, because the reason is identical: an account/workspace-tier id merges per workspace at
+ *   run time and is structurally invisible at boot, so refusing here would reject the tenant-tier
+ *   reference deployments are told to use.
+ *
+ * A rule whose condition names a field gated by its OWN `showWhen` is deliberately NOT reported.
+ * It is coherent (the outer gate simply has to hold too) and it reduces to false when the value was
+ * dropped by sanitisation, which is the behaviour documented on the contract.
+ */
+function checkConditionalFragments(
+  taskType: CustomTaskType,
+  pool: Set<string>,
+): RegistrationProblem[] {
+  const rules = taskType.conditionalFragmentIds ?? []
+  if (rules.length === 0) return []
+  const declared = new Set((taskType.fields ?? []).map((field) => field.key))
+  const problems: RegistrationProblem[] = []
+  for (const rule of rules) {
+    if (!declared.has(rule.when.key)) {
+      problems.push({
+        severity: 'error',
+        code: 'task_type_field_unknown_condition',
+        message:
+          `Custom task type "${taskType.taskType}" gates conditional fragments ` +
+          `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}", ` +
+          `which it does not declare, so the condition can never hold and those fragments would ` +
+          `never be seeded.`,
+      })
+    }
+  }
+  // Reported as ONE list rather than per rule: the unresolvable-id message names the cause it
+  // cannot distinguish (typo vs tenant tier), and repeating that paragraph per rule would bury the
+  // ids it exists to name.
+  const conditionalIds = rules.flatMap((rule) => rule.fragmentIds)
+  return [...problems, ...checkTaskTypeFragments(taskType, pool, conditionalIds)]
 }
 
 /**
@@ -1057,8 +1178,8 @@ function defaultOutsideOptions(
  * exactly as a deployment-authored one does.
  */
 function checkInitiativePresetForms(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
-  if (!opts.initiativePresetRegistry) return []
-  return opts.initiativePresetRegistry
+  if (!opts.registries.initiativePresetRegistry) return []
+  return opts.registries.initiativePresetRegistry
     .descriptors()
     .flatMap((descriptor) =>
       descriptorFormProblems(
@@ -1080,10 +1201,12 @@ function checkInitiativePresetForms(opts: ValidateRegistrationsOptions): Registr
  */
 function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
-  if (!opts.taskTypeRegistry) return problems
-  const knownPipelineIds = new Set(seedPipelines(opts.pipelineRegistry).map((p) => p.id))
-  const fragmentPool = new Set(universalFragments().map((fragment) => fragment.id))
-  for (const taskType of opts.taskTypeRegistry.all()) {
+  if (!opts.registries.taskTypeRegistry) return problems
+  const knownPipelineIds = new Set(seedPipelines(opts.registries.pipelineRegistry).map((p) => p.id))
+  const fragmentPool = new Set(
+    (opts.registries.promptFragmentRegistry?.all() ?? []).map((fragment) => fragment.id),
+  )
+  for (const taskType of opts.registries.taskTypeRegistry.all()) {
     problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
     problems.push(
       ...descriptorFormProblems(
@@ -1092,6 +1215,7 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
         `Custom task type "${taskType.taskType}"`,
       ),
     )
+    problems.push(...checkConditionalFragments(taskType, fragmentPool))
     if (!isNamespacedId(taskType.taskType)) {
       problems.push({
         severity: 'error',

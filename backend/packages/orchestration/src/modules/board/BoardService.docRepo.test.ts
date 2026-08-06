@@ -1,6 +1,8 @@
 import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block } from '@cat-factory/kernel'
+import { registryPromptFragmentSource } from '@cat-factory/kernel'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A `document` repository frame is authored, not implemented: BoardService.addTask must accept
@@ -46,7 +48,13 @@ describe('BoardService document-repository task gating', () => {
         async llmCallObserved() {},
       },
     } as unknown as BoardServiceDependencies
-    return new BoardService(deps)
+    // The shipped standards pool, wired exactly as a facade wires it. The per-task-type defaults
+    // are read through the app-owned source rather than a module global, so a caller that wires
+    // none legitimately seeds none, which is why this has to be explicit here.
+    return new BoardService({
+      ...deps,
+      promptFragmentSource: registryPromptFragmentSource(promptFragmentRegistryWithBuiltins()),
+    })
   }
 
   it('rejects a feature task under a document repository', async () => {

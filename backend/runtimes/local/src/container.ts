@@ -438,6 +438,11 @@ function buildLocalNodeOptions(bundle: LocalNodeOptionsBundle): NodeContainerOpt
           // is what the MOTHERSHIP registers. `startLocal` warns at boot if this node registered
           // integrations anyway, because that registration no longer decides any run.
           binaryGeneratorSource: mothership.binaryGenerators,
+          // …and the deployment's best-practice STANDARDS, the third of the same family. The pool
+          // a run folds, and the per-task-type default sets a creation seeds from, are the
+          // MOTHERSHIP's registrations; this node's build can only hold a second copy of them.
+          // `startLocal` warns at boot if this node registered fragments anyway.
+          promptFragmentSource: mothership.promptFragments,
         }
       : {}),
     // Share the SAME registries the pool resolver above was built with (so a custom runner

@@ -295,6 +295,23 @@ export {
   registryBuiltinSource,
 } from './ports/foundational-builtins.js'
 
+// The app-owned registry a DEPLOYMENT registers its best-practice PROMPT FRAGMENTS (and the
+// per-task-type default sets that select them) on. Replaces the two module globals in
+// `@cat-factory/prompt-fragments`, which were correct only while every reader resolved the same
+// physical copy of that package. The shipped catalog installs onto one through the same public
+// seam (`promptFragmentRegistryWithBuiltins()`).
+export {
+  PromptFragmentRegistry,
+  defaultPromptFragmentRegistry,
+} from './domain/prompt-fragment-registry.js'
+
+// Where that pool is READ from: the in-process registry by default, the MOTHERSHIP's over
+// `/internal/prompt-fragments` on a mothership-mode node. See `ports/prompt-fragments.ts`.
+export {
+  type PromptFragmentSource,
+  registryPromptFragmentSource,
+} from './ports/prompt-fragments.js'
+
 // Binary-output steps: pure validation/parsing/rendering for a kind that generates binary
 // artifacts and stores them through a selected foundational service, scoped by further
 // selected context services. See `domain/binary-outputs.ts` and

@@ -29,9 +29,16 @@ import {
 import {
   runBestEffort,
   type CreateSharedStackInput,
+  type GateRegistry,
+  type JudgeRegistry,
+  type PipelineRegistry,
+  type PromptFragmentRegistry,
+  type StepResolverRegistry,
   type ToolSecretResolver,
+  type VcsProviderRegistry,
 } from '@cat-factory/kernel'
 import { validateRegistrationsOnce } from '@cat-factory/orchestration'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import type { BackendRegistries, RegisterHandlerInput } from '@cat-factory/integrations'
 import { applyLocalDefaults, withLocalEnvCliAdvice } from './config.js'
 import { buildLocalContainer } from './container.js'
@@ -54,6 +61,169 @@ import {
 
 const execFileAsync = promisify(execFile)
 
+/**
+ * Everything {@link startLocal} accepts. A named interface for the same reason
+ * {@link StartOptions} is one: the registry-seam guard asserts against the BOOT ENTRY POINT, and
+ * this facade deliberately withholds `buildContainer`, so an app-owned seam missing from here is
+ * unreachable on local mode with no escape hatch behind it.
+ */
+export interface StartLocalOptions {
+  env?: NodeJS.ProcessEnv
+  host?: string
+  /**
+   * App-owned DI seam for custom agent kinds — a deployment news a
+   * `defaultAgentKindRegistry()`, registers its own kinds on it, and passes it here.
+   * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
+   * Absent → the built-in-only default.
+   */
+  agentKindRegistry?: AgentKindRegistry
+  /**
+   * App-owned DI seam for custom initiative presets — a deployment news a
+   * `defaultInitiativePresetRegistry()`, registers its own presets on it, and passes it here.
+   * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
+   * Absent → the built-in-only default (generic / docs-refresh / tech-migration).
+   */
+  initiativePresetRegistry?: InitiativePresetRegistry
+  /**
+   * App-owned DI seam for custom task types — a deployment news a `defaultTaskTypeRegistry()`,
+   * registers its namespaced task types on it, and passes it here. Threaded through to
+   * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the built-in
+   * picklist only.
+   */
+  taskTypeRegistry?: TaskTypeRegistry
+  /**
+   * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES — a deployment news a
+   * `defaultFoundationalServiceRegistry()`, registers the shared capabilities its org already
+   * runs on it, and passes it here. Threaded through to `buildLocalContainer` (both the Postgres
+   * and mothership paths) as the catalog's `builtin` tier. Absent → an empty tier.
+   */
+  foundationalServiceRegistry?: FoundationalServiceRegistry
+  /**
+   * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS — a deployment news a
+   * `defaultBinaryGeneratorRegistry()`, registers the image / music / video generation APIs it
+   * pays for on it, and passes it here. Threaded through to `buildLocalContainer` (both the
+   * Postgres and mothership paths), where a step carrying the `binary-output` trait selects from
+   * them (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry.
+   *
+   * **In MOTHERSHIP mode a registration here decides no run**: the set a run resolves against is
+   * read from the mothership, which is what the pipeline builder offered it from, and this
+   * node's build can only hold a second copy. Register on the mothership's own entry point
+   * instead; boot warns and names any ids registered here. (They are still boot-VALIDATED, since
+   * a laptop is the cheapest place to learn a definition is malformed.)
+   */
+  binaryGeneratorRegistry?: BinaryGeneratorRegistry
+  /**
+   * App-owned DI seam for the deployment's PREDEFINED PIPELINES: a deployment news a
+   * `defaultPipelineRegistry()`, registers (and retires) pipelines on it, and passes it here.
+   * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths). Absent →
+   * the built-in palette only.
+   *
+   * **In MOTHERSHIP mode a registration here decides no run**, exactly as for
+   * {@link binaryGeneratorRegistry}: a run ADOPTS its pipeline from the catalog the mothership
+   * served the board, so this node's registry can only hold a second copy. Boot warns and names
+   * the ids; they are still boot-VALIDATED, because a laptop is the cheapest place to learn a
+   * definition names an agent kind nothing registers.
+   */
+  pipelineRegistry?: PipelineRegistry
+  /**
+   * App-owned DI seam for custom POLLING GATES: a deployment news a `defaultGateRegistry()`,
+   * installs the built-ins with `registerBuiltinGates(...)`, registers its own definitions on it,
+   * and passes it here. Threaded through on both paths. Absent → the built-in suite only.
+   */
+  gateRegistry?: GateRegistry
+  /**
+   * App-owned DI seam for custom JUDGES: a deployment news a `defaultJudgeRegistry()`, registers
+   * its `JudgeDefinition`s on it, and passes it here. Threaded through on both paths. Absent →
+   * the empty default (the platform ships no judges).
+   */
+  judgeRegistry?: JudgeRegistry
+  /**
+   * App-owned DI seam for custom STEP COMPLETION RESOLVERS, threaded through on both paths.
+   * Absent → the empty default (the built-in `merger` resolver is a privileged engine built-in,
+   * not a registry entry).
+   */
+  stepResolverRegistry?: StepResolverRegistry
+  /**
+   * App-owned DI seam for VCS PROVIDERS, threaded through on both paths. Absent → the built-in
+   * `github` + `gitlab` bundle.
+   */
+  vcsRegistry?: VcsProviderRegistry
+  /**
+   * App-owned DI seam for the deployment's best-practice PROMPT FRAGMENTS and the per-task-type
+   * default sets that select them, threaded through on both paths. Absent → the shipped catalog
+   * alone.
+   *
+   * **In MOTHERSHIP mode this node reads the pool from the mothership**, so a registration here is
+   * not what any run folds; boot warns and names the ids. Same shape, and the same reason, as
+   * {@link binaryGeneratorRegistry}.
+   */
+  promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+   * server's (MCP) and a generative binary integration's alike. Threaded through to
+   * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the
+   * deployment-environment default, `createEnvToolSecretResolver(env)`.
+   *
+   * This is the `ToolSecretResolver` port's own extension seam: a deployment holding
+   * PER-WORKSPACE credentials implements the port and passes it here, and nothing else in the
+   * dispatch path changes. The narrower env bound composes through the same option —
+   * `(env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` — which is the shape a
+   * MOTHERSHIP-MODE node wants: its integration definitions are authored by the mothership, and
+   * the environment their keys are read from is this laptop's. (The platform's OWN
+   * configuration variables need no such list; they are refused with no configuration at all.)
+   */
+  createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
+  /**
+   * Whether this node's environment answers a capability credential the workspace has not
+   * stored. Defaults to true, which is right for a laptop: the operator sets the variable they
+   * already set for everything else. A multi-tenant deployment built on this facade sets it
+   * false so a workspace that has typed nothing resolves nothing. Ignored when
+   * {@link createToolSecretResolver} is set, which replaces the chain outright.
+   */
+  capabilityCredentialEnvironmentFallback?: boolean
+  /**
+   * App-owned backend registries (environment + runner kind → provider), registered BY
+   * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
+   * A deployment builds `createBackendRegistries()`, registers its custom backend(s) onto it
+   * (e.g. a custom ephemeral-environment provider), and passes it here; it is threaded into
+   * `buildLocalContainer` on both the Postgres and mothership paths. Absent → the built-in-only
+   * default (`manifest` + `kubernetes`).
+   *
+   * This lets a custom-backend deployment call `startLocal()` — and inherit its boot preflights
+   * (harness-image refresh, container-runtime probe, PAT/auth warnings) — instead of
+   * re-implementing the boot path (`start()` + `buildLocalContainer` by hand) just to inject a
+   * registry, which silently forgoes those preflights.
+   */
+  backendRegistries?: BackendRegistries
+  /**
+   * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A local deploy-app wrapper passes this
+   * to change the out-of-the-box default without editing library code. Threaded into
+   * `buildLocalContainer` on BOTH the Postgres and mothership paths. Applied only at FIRST seed
+   * of a workspace's preset library, so a user's later manual default choice always wins.
+   * Omitted ⇒ the local facade default (Claude Opus 5).
+   */
+  defaultModelPresetId?: string
+  /**
+   * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
+   * local deploy-app wrapper passes this so the server auto-registers its
+   * infra handler per workspace with no manual SPA step. Threaded into `buildLocalContainer` on
+   * BOTH the Postgres path (through `start()` → `o`) and the mothership path, and used to
+   * boot-backfill every existing workspace; new workspaces are seeded by `WorkspaceService.create`.
+   * Omitted ⇒ no seeding.
+   */
+  seedEnvironmentHandlers?: RegisterHandlerInput[]
+  /**
+   * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+   * compose infra its previews attach to. Threaded on BOTH local boot paths and backfilled
+   * exactly like {@link seedEnvironmentHandlers}. A seed's compose layers may be inline
+   * documents, paths in another repo, or paths in the stack's own clone, so a local deployment
+   * can declare its whole infra dependency set in code — including a stack with no repo of its
+   * own. Bringing one UP needs the host Docker daemon, which local mode has. Omitted ⇒ no seeding.
+   */
+  seedSharedStacks?: CreateSharedStackInput[]
+}
+
 // Boot the local-mode service. It reuses the Node facade's `start()` — Postgres +
 // pg-boss + the execution worker + sweepers, served over @hono/node-server — passing
 // the local composition root so agent jobs run in local containers (Docker/Podman/
@@ -70,116 +240,7 @@ const execFileAsync = promisify(execFile)
 // container transport, PAT-backed GitHub client) — `backendRegistries` is the narrow seam that
 // injects a custom backend without giving that up.
 export async function startLocal(
-  options: {
-    env?: NodeJS.ProcessEnv
-    host?: string
-    /**
-     * App-owned DI seam for custom agent kinds — a deployment news a
-     * `defaultAgentKindRegistry()`, registers its own kinds on it, and passes it here.
-     * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
-     * Absent → the built-in-only default.
-     */
-    agentKindRegistry?: AgentKindRegistry
-    /**
-     * App-owned DI seam for custom initiative presets — a deployment news a
-     * `defaultInitiativePresetRegistry()`, registers its own presets on it, and passes it here.
-     * Threaded through to `buildLocalContainer` (both the Postgres and mothership paths).
-     * Absent → the built-in-only default (generic / docs-refresh / tech-migration).
-     */
-    initiativePresetRegistry?: InitiativePresetRegistry
-    /**
-     * App-owned DI seam for custom task types — a deployment news a `defaultTaskTypeRegistry()`,
-     * registers its namespaced task types on it, and passes it here. Threaded through to
-     * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the built-in
-     * picklist only.
-     */
-    taskTypeRegistry?: TaskTypeRegistry
-    /**
-     * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES — a deployment news a
-     * `defaultFoundationalServiceRegistry()`, registers the shared capabilities its org already
-     * runs on it, and passes it here. Threaded through to `buildLocalContainer` (both the Postgres
-     * and mothership paths) as the catalog's `builtin` tier. Absent → an empty tier.
-     */
-    foundationalServiceRegistry?: FoundationalServiceRegistry
-    /**
-     * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS — a deployment news a
-     * `defaultBinaryGeneratorRegistry()`, registers the image / music / video generation APIs it
-     * pays for on it, and passes it here. Threaded through to `buildLocalContainer` (both the
-     * Postgres and mothership paths), where a step carrying the `binary-output` trait selects from
-     * them (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry.
-     *
-     * **In MOTHERSHIP mode a registration here decides no run**: the set a run resolves against is
-     * read from the mothership, which is what the pipeline builder offered it from, and this
-     * node's build can only hold a second copy. Register on the mothership's own entry point
-     * instead; boot warns and names any ids registered here. (They are still boot-VALIDATED, since
-     * a laptop is the cheapest place to learn a definition is malformed.)
-     */
-    binaryGeneratorRegistry?: BinaryGeneratorRegistry
-    /**
-     * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
-     * server's (MCP) and a generative binary integration's alike. Threaded through to
-     * `buildLocalContainer` (both the Postgres and mothership paths). Absent → the
-     * deployment-environment default, `createEnvToolSecretResolver(env)`.
-     *
-     * This is the `ToolSecretResolver` port's own extension seam: a deployment holding
-     * PER-WORKSPACE credentials implements the port and passes it here, and nothing else in the
-     * dispatch path changes. The narrower env bound composes through the same option —
-     * `(env) => createEnvToolSecretResolver(env, { allowKeys: [...] })` — which is the shape a
-     * MOTHERSHIP-MODE node wants: its integration definitions are authored by the mothership, and
-     * the environment their keys are read from is this laptop's. (The platform's OWN
-     * configuration variables need no such list; they are refused with no configuration at all.)
-     */
-    createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
-    /**
-     * Whether this node's environment answers a capability credential the workspace has not
-     * stored. Defaults to true, which is right for a laptop: the operator sets the variable they
-     * already set for everything else. A multi-tenant deployment built on this facade sets it
-     * false so a workspace that has typed nothing resolves nothing. Ignored when
-     * {@link createToolSecretResolver} is set, which replaces the chain outright.
-     */
-    capabilityCredentialEnvironmentFallback?: boolean
-    /**
-     * App-owned backend registries (environment + runner kind → provider), registered BY
-     * REFERENCE — the same seam the Node facade exposes on `buildContainer.backendRegistries`.
-     * A deployment builds `createBackendRegistries()`, registers its custom backend(s) onto it
-     * (e.g. a custom ephemeral-environment provider), and passes it here; it is threaded into
-     * `buildLocalContainer` on both the Postgres and mothership paths. Absent → the built-in-only
-     * default (`manifest` + `kubernetes`).
-     *
-     * This lets a custom-backend deployment call `startLocal()` — and inherit its boot preflights
-     * (harness-image refresh, container-runtime probe, PAT/auth warnings) — instead of
-     * re-implementing the boot path (`start()` + `buildLocalContainer` by hand) just to inject a
-     * registry, which silently forgoes those preflights.
-     */
-    backendRegistries?: BackendRegistries
-    /**
-     * The catalog id of the built-in model preset a fresh workspace is seeded with as its
-     * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A local deploy-app wrapper passes this
-     * to change the out-of-the-box default without editing library code. Threaded into
-     * `buildLocalContainer` on BOTH the Postgres and mothership paths. Applied only at FIRST seed
-     * of a workspace's preset library, so a user's later manual default choice always wins.
-     * Omitted ⇒ the local facade default (Claude Opus 5).
-     */
-    defaultModelPresetId?: string
-    /**
-     * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
-     * local deploy-app wrapper passes this so the server auto-registers its
-     * infra handler per workspace with no manual SPA step. Threaded into `buildLocalContainer` on
-     * BOTH the Postgres path (through `start()` → `o`) and the mothership path, and used to
-     * boot-backfill every existing workspace; new workspaces are seeded by `WorkspaceService.create`.
-     * Omitted ⇒ no seeding.
-     */
-    seedEnvironmentHandlers?: RegisterHandlerInput[]
-    /**
-     * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
-     * compose infra its previews attach to. Threaded on BOTH local boot paths and backfilled
-     * exactly like {@link seedEnvironmentHandlers}. A seed's compose layers may be inline
-     * documents, paths in another repo, or paths in the stack's own clone, so a local deployment
-     * can declare its whole infra dependency set in code — including a stack with no repo of its
-     * own. Bringing one UP needs the host Docker daemon, which local mode has. Omitted ⇒ no seeding.
-     */
-    seedSharedStacks?: CreateSharedStackInput[]
-  } = {},
+  options: StartLocalOptions = {},
 ): Promise<Awaited<ReturnType<typeof start>>> {
   const env = options.env ?? process.env
   // Same first move as the Node facade's `start`: verbosity, then the process-level guards.
@@ -302,6 +363,12 @@ async function bootLocal(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    pipelineRegistry: options.pipelineRegistry,
+    gateRegistry: options.gateRegistry,
+    judgeRegistry: options.judgeRegistry,
+    stepResolverRegistry: options.stepResolverRegistry,
+    vcsRegistry: options.vcsRegistry,
+    promptFragmentRegistry: options.promptFragmentRegistry,
     createToolSecretResolver: options.createToolSecretResolver,
     capabilityCredentialEnvironmentFallback: options.capabilityCredentialEnvironmentFallback,
     // A mandatory value missing from the reused Node boot (DATABASE_URL) is caught inside `start()`,
@@ -354,21 +421,17 @@ async function bootLocal(
 async function startLocalMothership(
   env: NodeJS.ProcessEnv,
   host: string | undefined,
-  /** The deployment extension seams threaded into `buildLocalContainer` (bundled to stay under
-   *  the parameter-count lint; `startLocal` passes its own `options`, a structural superset). */
-  extensions: {
-    agentKindRegistry?: AgentKindRegistry
-    initiativePresetRegistry?: InitiativePresetRegistry
-    backendRegistries?: BackendRegistries
-    defaultModelPresetId?: string
-    taskTypeRegistry?: TaskTypeRegistry
-    foundationalServiceRegistry?: FoundationalServiceRegistry
-    binaryGeneratorRegistry?: BinaryGeneratorRegistry
-    createToolSecretResolver?: (env: NodeJS.ProcessEnv) => ToolSecretResolver
-    capabilityCredentialEnvironmentFallback?: boolean
-    seedEnvironmentHandlers?: RegisterHandlerInput[]
-    seedSharedStacks?: CreateSharedStackInput[]
-  },
+  /**
+   * The deployment extension seams threaded into `buildLocalContainer`.
+   *
+   * Typed as the WHOLE {@link StartLocalOptions} rather than a hand-listed subset, which is what
+   * it was: a second enumeration of the same seams, one entry per thing somebody remembered. It
+   * drifted exactly the way that shape always does, and the mothership path is the worst place
+   * for it, because this is the boot that has no `buildContainer` escape hatch behind it. Now a
+   * seam added to the entry point reaches here by construction, and `env`/`host` (which this path
+   * takes as its own parameters) are simply not read off it.
+   */
+  extensions: StartLocalOptions,
 ): Promise<Awaited<ReturnType<typeof serve>>> {
   const {
     agentKindRegistry,
@@ -378,6 +441,12 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    pipelineRegistry,
+    gateRegistry,
+    judgeRegistry,
+    stepResolverRegistry,
+    vcsRegistry,
+    promptFragmentRegistry,
     createToolSecretResolver,
     capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
@@ -405,6 +474,12 @@ async function startLocalMothership(
     taskTypeRegistry,
     foundationalServiceRegistry,
     binaryGeneratorRegistry,
+    pipelineRegistry,
+    gateRegistry,
+    judgeRegistry,
+    stepResolverRegistry,
+    vcsRegistry,
+    promptFragmentRegistry,
     createToolSecretResolver,
     capabilityCredentialEnvironmentFallback,
     seedEnvironmentHandlers,
@@ -421,11 +496,12 @@ async function startLocalMothership(
   // tier remotely (below): they are the SAME code the mothership boots, so a malformed one is a
   // real defect and a laptop is the cheapest place to learn about it.
   validateRegistrationsOnce({
-    agentKindRegistry: container.agentKindRegistry,
-    gateRegistry: container.gateRegistry,
-    initiativePresetRegistry: container.initiativePresetRegistry,
-    foundationalServiceRegistry: container.foundationalServiceRegistry,
-    binaryGeneratorRegistry: container.binaryGeneratorRegistry,
+    // The whole container. This call site is why `ValidatedRegistries` is one object: it used to
+    // hand-list five registries while claiming parity with `start()`, so a custom task type naming
+    // an unregistered pipeline (and a non-namespaced id, a duplicate field key, an optionless
+    // picker, a `showWhen` on an undeclared field) booted CLEAN on a laptop and failed on the
+    // Postgres path. There is now nothing here to fall behind.
+    registries: container,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 
@@ -458,6 +534,61 @@ async function startLocalMothership(
         'is what the pipeline builder offered them from. Register them on the mothership’s own ' +
         'entry point.',
       { binaryGeneratorIds: localGenerators },
+    )
+  }
+
+  // The third member of the same family, and the one whose disposition had to be DECIDED rather
+  // than copied. A pipeline a deployment registers in code is state a RUN resolves, so the org-state
+  // rule points at an `/internal/*` read like the two above. It gets the boot WARN instead, and the
+  // difference that earns it is what happens when the two builds disagree:
+  //
+  // - a definition the MOTHERSHIP has and this node does not is offered by the board (the SPA reads
+  //   the mothership) and then refused at `adoptForRun`, which finds no stored row and no catalog
+  //   entry and returns null. That is a loud, named refusal at run start, not the silent omission an
+  //   empty foundational tier produces, and silence is the whole reason those two read remotely;
+  // - a definition this node has and the mothership does not is adopted into a workspace row
+  //   through the REMOTE repository, so it lands on the mothership and stops being local.
+  //
+  // The other half of the reasoning is that `seedPipelines`/`retiredPipelines` are synchronous and
+  // read on every board list, so a remote source would make the catalog an awaited network read on
+  // a hot path to remove a divergence that already fails safely. If a future change makes the skew
+  // silent (a run resolving a definition with no row and no refusal), this becomes a `PipelineSource`
+  // and the reasoning above is the thing to re-read.
+  // The standards pool, whose registration is the quietest of the family to lose: a run folds
+  // guidance the org never wrote, or none at all, and a reviewer's adherence report reads perfectly
+  // well either way.
+  //
+  // Unlike its two siblings this registry is NOT empty by default (it carries the shipped
+  // catalog), so the warn has to name what the DEPLOYMENT added rather than everything present, or
+  // every mothership boot would list ~40 built-ins as a misconfiguration. Both shapes of addition
+  // count: a fragment the catalog does not ship, AND an override of one it does, which is a
+  // registration that equally no longer decides any run.
+  const shipped = new Map(
+    promptFragmentRegistryWithBuiltins()
+      .all()
+      .map((f) => [f.id, f.body]),
+  )
+  const localFragments = container.promptFragmentRegistry
+    .all()
+    .filter((fragment) => shipped.get(fragment.id) !== fragment.body)
+  if (localFragments.length > 0) {
+    logger.warn(
+      'local mode: prompt fragments registered on this node are NOT what a run folds in ' +
+        'mothership mode: the pool (and each task type’s default set) is read from the ' +
+        'mothership, which is authoritative for the deployment’s standards. Register them on the ' +
+        'mothership’s own entry point.',
+      { fragmentIds: localFragments.map((fragment) => fragment.id) },
+    )
+  }
+
+  const localPipelines = container.pipelineRegistry.registered()
+  if (localPipelines.length > 0) {
+    logger.warn(
+      'local mode: pipelines registered on this node are NOT what a board offers in mothership ' +
+        'mode: the SPA reads the catalog from the mothership, so a definition only this node ' +
+        'knows is invisible there, and one only the mothership knows is refused at run start. ' +
+        'Register them on the mothership’s own entry point.',
+      { pipelineIds: localPipelines.map((pipeline) => pipeline.id) },
     )
   }
 

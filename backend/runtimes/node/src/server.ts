@@ -237,130 +237,185 @@ export function serveMisconfigured(
 }
 
 /**
+ * Everything {@link start} accepts. A named interface rather than an inline literal so the
+ * registry-seam guard (`test/registry-seams.spec.ts`) can assert against the BOOT ENTRY POINT a
+ * deployment actually calls, not only against the container builder behind it. Asserting the
+ * builder alone is what let `pipelineRegistry` sit on `NodeContainerOptions` (documented, guarded,
+ * green) while being unreachable through this function.
+ */
+export interface StartOptions {
+  env?: NodeJS.ProcessEnv
+  /**
+   * The composition root to build. Defaults to {@link buildNodeContainer}; a sibling
+   * facade (local mode) passes its own builder (same signature) so it reuses this
+   * whole boot sequence — Postgres + pg-boss + sweepers — while supplying only its
+   * differentiators (e.g. the local Docker transport + PAT token source).
+   */
+  buildContainer?: (options: NodeContainerOptions) => ServerContainer
+  /**
+   * App-owned DI seam for custom agent kinds (mirroring the Worker's `buildContainer`
+   * override): a deployment news a `defaultAgentKindRegistry()`, registers its own kinds on
+   * it by reference, and passes it here. Forwarded to `buildNodeContainer` (and, via the
+   * local facade's builder, to `buildLocalContainer`). Absent → the built-in-only default.
+   */
+  agentKindRegistry?: NodeContainerOptions['agentKindRegistry']
+  /**
+   * App-owned DI seam for custom initiative presets (mirroring `agentKindRegistry`): a
+   * deployment news a `defaultInitiativePresetRegistry()`, registers its own presets on it by
+   * reference, and passes it here. Forwarded to `buildNodeContainer`. Absent → the built-in-only
+   * default (generic / docs-refresh / tech-migration).
+   */
+  initiativePresetRegistry?: NodeContainerOptions['initiativePresetRegistry']
+  /**
+   * App-owned DI seam for custom task types (mirroring `agentKindRegistry`): a deployment news
+   * a `defaultTaskTypeRegistry()`, registers its namespaced task types on it by reference, and
+   * passes it here. Forwarded to `buildNodeContainer` (and, via the local facade's builder, to
+   * `buildLocalContainer`). Absent → no custom task types (the built-in picklist only).
+   */
+  taskTypeRegistry?: NodeContainerOptions['taskTypeRegistry']
+  /**
+   * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES (mirroring
+   * `agentKindRegistry`): a deployment news a `defaultFoundationalServiceRegistry()`, registers
+   * the shared capabilities its org already runs on it by reference, and passes it here. They
+   * resolve as the `builtin` tier of every workspace's catalog. Absent → an empty catalog tier.
+   */
+  foundationalServiceRegistry?: NodeContainerOptions['foundationalServiceRegistry']
+  /**
+   * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS (the same shape once
+   * more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
+   * video generation APIs it pays for on it by reference, and passes it here. A pipeline step
+   * whose kind carries the `binary-output` trait then SELECTS from them
+   * (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry, so any step selecting
+   * an integration is refused at admission rather than dispatching an agent that cannot generate.
+   */
+  binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
+  /**
+   * App-owned DI seam for the deployment's PREDEFINED PIPELINES: a deployment news a
+   * `defaultPipelineRegistry()`, registers (and retires) pipelines on it by reference, and passes
+   * it here. Registered entries seed into every new workspace, are reconciled against the CATALOG
+   * on every board read, and validate at boot. Absent → the built-in palette only.
+   *
+   * **In MOTHERSHIP mode a registration here decides no run**, for the same reason
+   * {@link binaryGeneratorRegistry} does not: a run ADOPTS its pipeline from the catalog the
+   * mothership served the board, so this node's copy is a second one by construction. Boot warns
+   * and names the ids. They are still boot-VALIDATED, because a laptop is the cheapest place to
+   * learn a definition names an agent kind nothing registers.
+   */
+  pipelineRegistry?: NodeContainerOptions['pipelineRegistry']
+  /**
+   * App-owned DI seam for custom POLLING GATES: a deployment news a `defaultGateRegistry()`,
+   * installs the built-ins with `registerBuiltinGates(...)`, registers its own `GateDefinition`s
+   * on it by reference, and passes it here. Absent → the built-in suite only.
+   */
+  gateRegistry?: NodeContainerOptions['gateRegistry']
+  /**
+   * App-owned DI seam for custom JUDGES (an inline LLM scoring a step's work against a rubric):
+   * a deployment news a `defaultJudgeRegistry()`, registers its `JudgeDefinition`s on it by
+   * reference, and passes it here. Absent → the empty default (the platform ships no judges).
+   */
+  judgeRegistry?: NodeContainerOptions['judgeRegistry']
+  /**
+   * App-owned DI seam for custom STEP COMPLETION RESOLVERS: a deployment news a
+   * `defaultStepResolverRegistry()`, registers its resolvers on it by reference, and passes it
+   * here. Absent → the empty default (the built-in `merger` resolver is a privileged engine
+   * built-in, not a registry entry).
+   */
+  stepResolverRegistry?: NodeContainerOptions['stepResolverRegistry']
+  /**
+   * App-owned DI seam for VCS PROVIDERS: a deployment news a `defaultVcsRegistry()`, registers a
+   * provider bundle on it by reference, and passes it here. Absent → the built-in
+   * `github` + `gitlab` bundle.
+   */
+  vcsRegistry?: NodeContainerOptions['vcsRegistry']
+  /**
+   * App-owned DI seam for the deployment's best-practice PROMPT FRAGMENTS and the per-task-type
+   * default sets that select them: a deployment news a `promptFragmentRegistryWithBuiltins()`,
+   * registers its standards on it by reference, and passes it here. Absent → the shipped catalog
+   * alone.
+   *
+   * Passing a bare `defaultPromptFragmentRegistry()` is how a deployment says it wants ONLY its own
+   * standards; the built-ins install through the same public methods, so there is no hidden tier.
+   */
+  promptFragmentRegistry?: NodeContainerOptions['promptFragmentRegistry']
+  /**
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+   * server's (MCP) and a generative binary integration's alike. Called once at composition with
+   * this process's environment. Absent → the deployment-environment default,
+   * `createEnvToolSecretResolver(env)`.
+   *
+   * The `ToolSecretResolver` port's extension seam: a deployment holding PER-WORKSPACE
+   * credentials (its own sealed store, Vault) implements the port and passes it here rather
+   * than reassembling the boot sequence — which is what reaching the port used to cost, and
+   * which forgoes every preflight `start()` exists to provide.
+   */
+  createToolSecretResolver?: NodeContainerOptions['createToolSecretResolver']
+  /**
+   * Whether this node's environment answers a capability credential the workspace has not
+   * stored. Defaults to true; a multi-tenant deployment sets it false so a tenant that has
+   * typed nothing resolves nothing instead of silently running on the operator's own vendor
+   * account. See `NodeContainerOptions.capabilityCredentialEnvironmentFallback`.
+   */
+  capabilityCredentialEnvironmentFallback?: NodeContainerOptions['capabilityCredentialEnvironmentFallback']
+  /**
+   * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
+   * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
+   * the LAN — but note repo-operating agent containers reach this service's LLM proxy
+   * via `PUBLIC_URL`, so on native Linux Docker (where that resolves to the bridge
+   * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
+   */
+  host?: string
+  /**
+   * Per-cache profile overrides merged over the default profile. A sibling facade passes
+   * this to opt a cache out where its coherence assumptions don't hold: local mode makes
+   * the repo projection pass-through because its `link-repo` CLI writes the projection
+   * out-of-process and local mode has no cross-process invalidation bus (the same reason
+   * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
+   */
+  cachesProfile?: Partial<AppCachesProfile>
+  /**
+   * The catalog id of the built-in model preset a fresh workspace is seeded with as its
+   * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
+   * change the out-of-the-box default without editing library code — e.g.
+   * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
+   * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).
+   * Applied only at FIRST seed of a workspace's preset library, so a user's later manual
+   * default choice is always preserved. Omitted ⇒ the facade default (Node → Kimi K2.7).
+   */
+  defaultModelPresetId?: string
+  /**
+   * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
+   * deploy-app wrapper passes this so the server auto-registers the deployment's infra handlers
+   * per workspace with no manual SPA step. Forwarded onto the `NodeContainerOptions` handed to
+   * `buildContainer` (so it
+   * rides through `createCore`), and used AFTER listen to boot-backfill every existing workspace;
+   * new workspaces are seeded by `WorkspaceService.create`. Also reaches `buildLocalContainer` via
+   * the local facade's builder. Omitted ⇒ no seeding.
+   */
+  seedEnvironmentHandlers?: NodeContainerOptions['seedEnvironmentHandlers']
+  /**
+   * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+   * compose infra its previews attach to. Threaded and backfilled exactly like
+   * {@link seedEnvironmentHandlers}; a seed's ordered compose layers may be inline documents,
+   * paths in another repo, or paths in the stack's own clone, so a deployment can describe a
+   * service's full infra dependencies in code. Omitted ⇒ no seeding.
+   */
+  seedSharedStacks?: NodeContainerOptions['seedSharedStacks']
+  /**
+   * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
+   * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
+   * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
+   * Node/Worker facades have no analogue for) ABOVE the per-variable remedies. Absent ⇒ the
+   * problems are served verbatim.
+   */
+  augmentConfigProblems?: (problems: ConfigProblem[]) => ConfigProblem[]
+}
+
+/**
  * Boot the Node HTTP server: connect to Postgres (`DATABASE_URL`), ensure the schema,
  * start pg-boss + the durable execution worker + the stale-run sweeper, build the app,
  * and listen. Registers SIGTERM/SIGINT handlers for a clean, ordered shutdown.
  */
-export async function start(
-  options: {
-    env?: NodeJS.ProcessEnv
-    /**
-     * The composition root to build. Defaults to {@link buildNodeContainer}; a sibling
-     * facade (local mode) passes its own builder (same signature) so it reuses this
-     * whole boot sequence — Postgres + pg-boss + sweepers — while supplying only its
-     * differentiators (e.g. the local Docker transport + PAT token source).
-     */
-    buildContainer?: (options: NodeContainerOptions) => ServerContainer
-    /**
-     * App-owned DI seam for custom agent kinds (mirroring the Worker's `buildContainer`
-     * override): a deployment news a `defaultAgentKindRegistry()`, registers its own kinds on
-     * it by reference, and passes it here. Forwarded to `buildNodeContainer` (and, via the
-     * local facade's builder, to `buildLocalContainer`). Absent → the built-in-only default.
-     */
-    agentKindRegistry?: NodeContainerOptions['agentKindRegistry']
-    /**
-     * App-owned DI seam for custom initiative presets (mirroring `agentKindRegistry`): a
-     * deployment news a `defaultInitiativePresetRegistry()`, registers its own presets on it by
-     * reference, and passes it here. Forwarded to `buildNodeContainer`. Absent → the built-in-only
-     * default (generic / docs-refresh / tech-migration).
-     */
-    initiativePresetRegistry?: NodeContainerOptions['initiativePresetRegistry']
-    /**
-     * App-owned DI seam for custom task types (mirroring `agentKindRegistry`): a deployment news
-     * a `defaultTaskTypeRegistry()`, registers its namespaced task types on it by reference, and
-     * passes it here. Forwarded to `buildNodeContainer` (and, via the local facade's builder, to
-     * `buildLocalContainer`). Absent → no custom task types (the built-in picklist only).
-     */
-    taskTypeRegistry?: NodeContainerOptions['taskTypeRegistry']
-    /**
-     * App-owned DI seam for the deployment's FOUNDATIONAL SERVICES (mirroring
-     * `agentKindRegistry`): a deployment news a `defaultFoundationalServiceRegistry()`, registers
-     * the shared capabilities its org already runs on it by reference, and passes it here. They
-     * resolve as the `builtin` tier of every workspace's catalog. Absent → an empty catalog tier.
-     */
-    foundationalServiceRegistry?: NodeContainerOptions['foundationalServiceRegistry']
-    /**
-     * App-owned DI seam for the deployment's GENERATIVE BINARY INTEGRATIONS (the same shape once
-     * more): a deployment news a `defaultBinaryGeneratorRegistry()`, registers the image / music /
-     * video generation APIs it pays for on it by reference, and passes it here. A pipeline step
-     * whose kind carries the `binary-output` trait then SELECTS from them
-     * (`stepOptions.binaryOutput.generatorIds`). Absent → an empty registry, so any step selecting
-     * an integration is refused at admission rather than dispatching an agent that cannot generate.
-     */
-    binaryGeneratorRegistry?: NodeContainerOptions['binaryGeneratorRegistry']
-    /**
-     * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
-     * server's (MCP) and a generative binary integration's alike. Called once at composition with
-     * this process's environment. Absent → the deployment-environment default,
-     * `createEnvToolSecretResolver(env)`.
-     *
-     * The `ToolSecretResolver` port's extension seam: a deployment holding PER-WORKSPACE
-     * credentials (its own sealed store, Vault) implements the port and passes it here rather
-     * than reassembling the boot sequence — which is what reaching the port used to cost, and
-     * which forgoes every preflight `start()` exists to provide.
-     */
-    createToolSecretResolver?: NodeContainerOptions['createToolSecretResolver']
-    /**
-     * Whether this node's environment answers a capability credential the workspace has not
-     * stored. Defaults to true; a multi-tenant deployment sets it false so a tenant that has
-     * typed nothing resolves nothing instead of silently running on the operator's own vendor
-     * account. See `NodeContainerOptions.capabilityCredentialEnvironmentFallback`.
-     */
-    capabilityCredentialEnvironmentFallback?: NodeContainerOptions['capabilityCredentialEnvironmentFallback']
-    /**
-     * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
-     * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
-     * the LAN — but note repo-operating agent containers reach this service's LLM proxy
-     * via `PUBLIC_URL`, so on native Linux Docker (where that resolves to the bridge
-     * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
-     */
-    host?: string
-    /**
-     * Per-cache profile overrides merged over the default profile. A sibling facade passes
-     * this to opt a cache out where its coherence assumptions don't hold: local mode makes
-     * the repo projection pass-through because its `link-repo` CLI writes the projection
-     * out-of-process and local mode has no cross-process invalidation bus (the same reason
-     * the Worker's isolate-safe profile passes it through). Omitted ⇒ the default profile.
-     */
-    cachesProfile?: Partial<AppCachesProfile>
-    /**
-     * The catalog id of the built-in model preset a fresh workspace is seeded with as its
-     * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
-     * change the out-of-the-box default without editing library code — e.g.
-     * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
-     * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).
-     * Applied only at FIRST seed of a workspace's preset library, so a user's later manual
-     * default choice is always preserved. Omitted ⇒ the facade default (Node → Kimi K2.7).
-     */
-    defaultModelPresetId?: string
-    /**
-     * A deployment's pre-declared environment-handler seeds (each a `RegisterHandlerInput`). A
-     * deploy-app wrapper passes this so the server auto-registers the deployment's infra handlers
-     * per workspace with no manual SPA step. Forwarded onto the `NodeContainerOptions` handed to
-     * `buildContainer` (so it
-     * rides through `createCore`), and used AFTER listen to boot-backfill every existing workspace;
-     * new workspaces are seeded by `WorkspaceService.create`. Also reaches `buildLocalContainer` via
-     * the local facade's builder. Omitted ⇒ no seeding.
-     */
-    seedEnvironmentHandlers?: NodeContainerOptions['seedEnvironmentHandlers']
-    /**
-     * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
-     * compose infra its previews attach to. Threaded and backfilled exactly like
-     * {@link seedEnvironmentHandlers}; a seed's ordered compose layers may be inline documents,
-     * paths in another repo, or paths in the stack's own clone, so a deployment can describe a
-     * service's full infra dependencies in code. Omitted ⇒ no seeding.
-     */
-    seedSharedStacks?: NodeContainerOptions['seedSharedStacks']
-    /**
-     * Optional last-mile transform over the {@link ConfigProblem} list before the misconfiguration
-     * fallback is served, letting a sibling facade layer a facade-specific remedy onto the shared
-     * problems. Local mode passes one that advertises its `.env`-generating CLI (which the hosted
-     * Node/Worker facades have no analogue for) ABOVE the per-variable remedies. Absent ⇒ the
-     * problems are served verbatim.
-     */
-    augmentConfigProblems?: (problems: ConfigProblem[]) => ConfigProblem[]
-  } = {},
-): Promise<ReturnType<typeof serve>> {
+export async function start(options: StartOptions = {}): Promise<ReturnType<typeof serve>> {
   const env = options.env ?? process.env
   // Before ANYTHING else: apply the configured verbosity and arm the process-level guards, so a
   // failure inside boot itself (a bad binding, a Postgres that never answers) is logged at the
@@ -712,6 +767,12 @@ async function bootServer(
     taskTypeRegistry: options.taskTypeRegistry,
     foundationalServiceRegistry: options.foundationalServiceRegistry,
     binaryGeneratorRegistry: options.binaryGeneratorRegistry,
+    pipelineRegistry: options.pipelineRegistry,
+    gateRegistry: options.gateRegistry,
+    judgeRegistry: options.judgeRegistry,
+    stepResolverRegistry: options.stepResolverRegistry,
+    vcsRegistry: options.vcsRegistry,
+    promptFragmentRegistry: options.promptFragmentRegistry,
     createToolSecretResolver: options.createToolSecretResolver,
     capabilityCredentialEnvironmentFallback: options.capabilityCredentialEnvironmentFallback,
     // Forward the deployment's default-preset choice (undefined ⇒ the builder's facade
@@ -762,13 +823,10 @@ async function bootServer(
   // `register*` import side effect has run by now. A typo'd gate helperKind or an unknown
   // resultView fails loudly here instead of mid-run. Mirrors the Worker's first-request guard.
   validateRegistrationsOnce({
-    agentKindRegistry: container.agentKindRegistry,
-    gateRegistry: container.gateRegistry,
-    pipelineRegistry: container.pipelineRegistry,
-    taskTypeRegistry: container.taskTypeRegistry,
-    initiativePresetRegistry: container.initiativePresetRegistry,
-    foundationalServiceRegistry: container.foundationalServiceRegistry,
-    binaryGeneratorRegistry: container.binaryGeneratorRegistry,
+    // The CONTAINER, not a hand-picked list of its registries: it satisfies `ValidatedRegistries`
+    // wholly, so a registry the validator gains later is checked here with no edit, and this call
+    // site cannot fall behind its siblings the way the local mothership one did.
+    registries: container,
     onWarn: (problem) => logger.warn(problem.message, { code: problem.code }),
   })
 

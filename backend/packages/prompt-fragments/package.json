@@ -31,7 +31,8 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@cat-factory/contracts": "workspace:*"
+    "@cat-factory/contracts": "workspace:*",
+    "@cat-factory/kernel": "workspace:*"
   },
   "devDependencies": {
     "typescript": "7.0.2",

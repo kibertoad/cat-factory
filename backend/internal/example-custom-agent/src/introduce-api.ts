@@ -2,10 +2,10 @@ import type { AgentKindRegistry } from '@cat-factory/agents'
 import type {
   CustomTaskType,
   PipelineRegistry,
+  PromptFragmentRegistry,
   PromptFragment,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
-import { registerPromptFragments } from '@cat-factory/prompt-fragments'
 
 // ---------------------------------------------------------------------------
 // A WORKED EXAMPLE of a REUSABLE OPERATION: "Introduce API".
@@ -203,8 +203,15 @@ export function registerIntroduceApiOperation(
   agentKindRegistry: AgentKindRegistry,
   pipelineRegistry: PipelineRegistry,
   taskTypeRegistry: TaskTypeRegistry,
+  /**
+   * The deployment's standards pool, injected BY REFERENCE like every other registry here. It was
+   * a module-global `registerPromptFragments` import side effect, which worked only while every
+   * reader resolved the same physical copy of `@cat-factory/prompt-fragments`, not something the
+   * published dependency graph guarantees, and silent when it fails.
+   */
+  promptFragmentRegistry: PromptFragmentRegistry,
 ): void {
-  registerPromptFragments(INTRODUCE_API_FRAGMENTS)
+  promptFragmentRegistry.registerAll(INTRODUCE_API_FRAGMENTS)
   // Per-KIND steering rides variants selected by the pipeline's own `stepOptions`, not a second
   // text channel on the task type: the operation OWNS its pipeline, so the per-step seam is
   // already available, and a `promptAddition` composes with (rather than displacing) both the
