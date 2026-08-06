@@ -43,3 +43,11 @@ The SPA changes are `data-testid` hooks the specs select through, plus one attri
 out: the risk-policy picker's hook lived on its DEFAULT trigger, which the inspector replaces via the
 `#trigger` slot, so the inspector's own picker had no hook at all. Selecting the merge policy a task
 runs under was, until now, unreachable from a test.
+
+The access-administration spec also found a real one, which is fixed here. A removed member's next
+visit still carries the persisted pin for the board they just lost, and the boot watcher loads the
+model catalog for whatever that pin says before `init()` has validated it, so the gate's 404 escaped
+as an uncaught rejection in the page. Every other boot read of the unvalidated pin already tolerates
+the miss (init's own speculative snapshot fetch, the GitHub probe, the stream ticket mint); the
+catalog load now says so too, through `models.prefetchForBoard`, which keeps the store UNLOADED on a
+miss so the failure reads as unresolved rather than as a board with no AI configured.
