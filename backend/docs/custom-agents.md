@@ -291,7 +291,7 @@ What matters from THIS doc's altitude:
   `ToolSecretResolver` port; the VALUE rides the job body's dedicated `mcpServers` field only,
   never `AgentRunContext`, a prompt, or the telemetry snapshot. A workspace's own stored value
   wins over the deployment's environment, per key
-  ([`capability-credential-store.md`](../../docs/initiatives/capability-credential-store.md)).
+  ([ADR 0040](./adr/0040-capability-credential-store.md)).
 - **A declared server that cannot be wired for a run is STATED to the agent** (a closed reason
   vocabulary rendered in the prompt's tool-server section) and recorded on the run's context
   snapshot, never silently dropped.

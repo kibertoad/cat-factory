@@ -4,7 +4,6 @@ import type {
   AgentContextFragment,
   RecordAgentContextInput,
 } from '@cat-factory/kernel'
-import type { ResolvedToolServers } from './toolServers.js'
 
 // The agent-context observability SNAPSHOT: composing the redacted record of everything one
 // dispatch handed its agent. Extracted from `ContainerAgentExecutor` because it is a distinct
@@ -66,14 +65,6 @@ export function buildAgentContextRecord(
   ids: {
     workspaceId: string
     executionId: string
-    /**
-     * The tool servers actually wired for this dispatch, and any that were declared but could
-     * not be. Passed in rather than read off `context` because the harness (not the engine)
-     * decides what is servable, so the run context the engine built does not carry them. Safe to
-     * record: this is the NON-SECRET projection — the credentials live only on the job body's
-     * `mcpServers` field, which this allow-list deliberately never copies.
-     */
-    toolServers?: ResolvedToolServers
   },
 ): RecordAgentContextInput {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -116,23 +107,15 @@ export function buildAgentContextRecord(
       webSearch: body.webSearch ?? false,
       infra: redactInfra(body.infra),
       decisions: context.decisions,
-      ...(ids.toolServers?.toolServers.length
-        ? { toolServers: ids.toolServers.toolServers.map((t) => t.id) }
-        : {}),
-      ...(ids.toolServers?.unavailableToolServers.length
-        ? {
-            unavailableToolServers: ids.toolServers.unavailableToolServers.map((t) => ({
-              id: t.id,
-              reason: t.reason,
-            })),
-          }
-        : {}),
-      // The generative binary integrations this dispatch ran with — ids and content types only.
-      // Worth recording for the same reason `toolServers` is: when a generation step's output is
-      // wrong or missing, "which integration was it even pointed at" is the first question, and
-      // the step's own selection can be edited after the run. The credential KEY name is
-      // deliberately not copied: it identifies nothing about the run and this is a body a human
-      // reads for debugging.
+      // The generative binary integrations this dispatch ran with: ids and content types only.
+      // When a generation step's output is wrong or missing, "which integration was it even
+      // pointed at" is the first question, and the step's own selection can be edited after the
+      // run. The credential KEY name is deliberately not copied: it identifies nothing about the
+      // run and this is a body a human reads for debugging.
+      //
+      // The tool servers a dispatch wired used to sit here too. They now ride the STEP
+      // (`step.toolServers`), which is not gated behind prompt recording and outlives the
+      // telemetry retention window; keeping a copy here would be a second authority to drift.
       ...(context.binaryGenerators?.length
         ? {
             binaryGenerators: context.binaryGenerators.map((generator) => ({

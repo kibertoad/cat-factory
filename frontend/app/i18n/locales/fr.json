@@ -1418,6 +1418,22 @@
         "reduced": "Ce qui a réduit l'efficacité",
         "obstacles": "Principaux obstacles"
       },
+      "toolServers": {
+        "heading": "Serveurs d'outils (MCP)",
+        "none": "Cet agent n'a reçu aucun serveur d'outils.",
+        "allTools": "Tous les outils exposés par ce serveur.",
+        "narrowed": "Limité à : {tools}",
+        "reason": {
+          "harnessUnsupported": "n'était pas disponible : la CLI d'agent de cette étape n'a pas de client MCP.",
+          "transportUnsupported": "n'était pas disponible : la CLI d'agent de cette étape ne peut pas atteindre ce type de serveur.",
+          "missingSecret": "n'était pas disponible : un identifiant dont il a besoin n'est pas renseigné pour ce tableau.",
+          "reservedSecret": "n'était pas disponible : il demande une variable qui appartient à la configuration de la plateforme, la déclaration doit donc changer.",
+          "oauthNotConnected": "n'était pas disponible : personne n'a encore connecté ce tableau à ce serveur.",
+          "oauthTokenFailed": "n'était pas disponible : la connexion ne produit plus de jeton d'accès.",
+          "overBudget": "n'était pas disponible : cet agent déclare plus de serveurs d'outils qu'une exécution n'en transporte.",
+          "unknown": "n'était pas disponible ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Respect des bonnes pratiques",
         "headingHint": "Les standards de bonnes pratiques integres au prompt de ce relecteur, et le degre de respect de chacun qu'il a estime pour la modification.",

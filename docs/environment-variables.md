@@ -69,7 +69,7 @@ server. See [`custom-agents.md`](../backend/docs/custom-agents.md).
 Capability credentials are resolved from the per-workspace **capability-credential store** first,
 falling back to this environment per key, so a multi-tenant deployment gives each workspace its own
 vendor account instead of sharing one variable. See
-[`capability-credential-store.md`](initiatives/capability-credential-store.md). Setting a variable
+[ADR 0040](../backend/docs/adr/0040-capability-credential-store.md). Setting a variable
 still works and is the right mechanism for a single-tenant or local install.
 
 ## Deployment modes

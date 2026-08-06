@@ -50,6 +50,7 @@ import { buildContextFiles, renderSkillsForHarness } from './contextFiles.js'
 import {
   dispatchToolServerDeps,
   resolveDispatchToolServers,
+  stepToolServerRecord,
   type ResolvedToolServers,
 } from './toolServers.js'
 import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
@@ -520,7 +521,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     if (recorder) {
       await runBestEffort(jobLog.logger, 'containerAgent.recordAgentContext', () =>
         recorder.record(
-          buildAgentContextRecord(context, body, model, { workspaceId, executionId, toolServers }),
+          buildAgentContextRecord(context, body, model, { workspaceId, executionId }),
         ),
       )
     }
@@ -537,6 +538,9 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       agentKind: context.agentKind,
       search,
       repo: repoSummary,
+      // The run's own record of what the agent could call. Unconditional on purpose: see
+      // `stepToolServerRecord`, where the empty-vs-absent rule lives.
+      toolServers: stepToolServerRecord(toolServers),
       ...(subscriptionTokenId ? { subscriptionTokenId } : {}),
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
     }

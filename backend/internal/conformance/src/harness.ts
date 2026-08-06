@@ -41,6 +41,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import type { StepToolServers } from '@cat-factory/contracts'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
 import type { OnboardingProbe } from './onboarding.js'
 
@@ -374,6 +375,50 @@ export interface ConformanceApp {
    * not wire the store (no ENCRYPTION_KEY).
    */
   packageRegistries?(): PackageRegistriesProbe | undefined
+  /**
+   * The facade's TOOL-SERVER (MCP) dispatch resolution over its own composed capability-credential
+   * chain: the half of both subsystems no HTTP route exposes, since the credential values are
+   * write-only on the wire and the resolution happens inside a job body nothing else can see.
+   *
+   * The conformance suite runs a `FakeAgentExecutor`, which composes no job body, so without this
+   * a facade that wired its credential chain differently (or not at all) passes every assertion
+   * and hands its agents an unauthenticated tool server. Built with
+   * {@link makeToolServerDispatchProbe} over the facade's container, so it observes the real
+   * wiring rather than restating it. Undefined when the facade did not build a container the suite
+   * can reach.
+   */
+  toolServerDispatch?(): ToolServerDispatchProbe | undefined
+}
+
+/** What one dispatch resolved for its tool servers: the run's record, plus the job-body specs. */
+export interface ToolServerDispatchResult {
+  /**
+   * The non-secret projection the RUN records on its step, which the SPA renders as chips. Carries
+   * no credential by construction, which is half of what the suite asserts.
+   */
+  record: StepToolServers
+  /**
+   * The job-body `mcpServers` field, credentials included. The only place the resolved VALUES are
+   * observable, which is what lets the suite assert that a workspace's stored credential reaches a
+   * dispatch under the channel its declaration named.
+   */
+  mcpServers: {
+    id: string
+    transport: string
+    env?: Record<string, string>
+    headers?: Record<string, string>
+    secretKeys?: string[]
+  }[]
+}
+
+/** The dispatch-side subset of the tool-server resolution the conformance suite drives. */
+export interface ToolServerDispatchProbe {
+  resolveForDispatch(input: {
+    workspaceId: string
+    agentKind: string
+    /** The CLI this dispatch would run on, which decides whether MCP is reachable at all. */
+    harness: string
+  }): Promise<ToolServerDispatchResult>
 }
 
 /** The dispatch-side subset of the package-registry service the conformance suite drives. */

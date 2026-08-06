@@ -32,7 +32,11 @@ import type { OwnServiceContext } from '../domain/block-tree.js'
 import type { CustomTaskTypeContext } from '../domain/task-type-context.js'
 import type { ContainerEvictionKind } from './runner-transport.js'
 import type { HarnessFailureCause } from '../domain/harness-failure.js'
-import type { AgentEffortReport, InitiativePresetPhaseTemplate } from '@cat-factory/contracts'
+import type {
+  AgentEffortReport,
+  InitiativePresetPhaseTemplate,
+  StepToolServers,
+} from '@cat-factory/contracts'
 
 // Port for "an agent doing its work". The execution engine calls this to perform
 // each pipeline step. An agent either produces a work product or asks for a
@@ -913,6 +917,19 @@ export interface AgentJobHandle {
    * the run's repo origin. Absent for executors that don't operate on a repo (inline agents, tests).
    */
   repo?: { owner: string; name: string; baseBranch?: string; provider?: string }
+  /**
+   * What this dispatch did with the tool servers (MCP) the running agent kind declared: the ones
+   * it wired, and the ones it dropped with the reason it dropped them. Recorded on the step
+   * immediately, for the same reason {@link model} and {@link search} are: the poll site rebuilds
+   * this handle from the STEP alone, so a dispatch-time resolution not recorded here is gone by
+   * the time the job settles.
+   *
+   * It genuinely cannot be re-derived later: whether a server is servable depends on the resolved
+   * harness and on the facade-wired secret/OAuth resolvers at that moment, and a workspace that
+   * fills in a missing credential an hour later would make a step that ran without the tool read
+   * as one that had it. Absent for executors that wire no tool servers (inline agents, tests).
+   */
+  toolServers?: StepToolServers
 }
 
 /** The outcome of polling an {@link AgentJobHandle}. */

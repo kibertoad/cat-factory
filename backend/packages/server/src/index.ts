@@ -129,6 +129,7 @@ export {
   type ResolvedToolServers,
   createEnvToolSecretResolver,
   resolveToolServers,
+  stepToolServerRecord,
 } from './agents/toolServers.js'
 // The per-workspace capability-credential resolver and the per-KEY composition that puts it in
 // front of the environment one. See `capabilityCredentialResolver.ts` for why an environment

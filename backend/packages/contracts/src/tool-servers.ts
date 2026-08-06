@@ -60,6 +60,76 @@ export const toolServerNotProbeableReasonSchema = v.picklist([
 export type ToolServerNotProbeableReason = v.InferOutput<typeof toolServerNotProbeableReasonSchema>
 
 /**
+ * Why a declared tool server did NOT reach one dispatch.
+ *
+ * The vocabulary kernel's `UnavailableToolServer` is typed against, held here because both sides
+ * have to agree about it: the container executor decides a member, and the SPA maps each one to
+ * translated copy on the run surface. Leaving the union in kernel, which the SPA cannot see, would
+ * make the SPA's mapping a hand-written duplicate of a closed list, and a member added on one side
+ * only renders as a blank chip on the other.
+ *
+ * Every member names a DIFFERENT fix, which is why they are not folded together. The reasoning per
+ * member lives on kernel's `UnavailableToolServer`, which is where a dispatch chooses one; what
+ * matters here is that the list is CLOSED and PERSISTED (it lands on `PipelineStep.toolServers`
+ * and outlives the run), so a member retired later has to be RENDERED as retired rather than
+ * dropped: a reader hitting a stale value is by construction the surface whose whole job is
+ * naming what an operator must go and fix.
+ */
+export const toolServerUnavailableReasonSchema = v.picklist([
+  'harness_unsupported',
+  'transport_unsupported',
+  'missing_secret',
+  'reserved_secret',
+  'oauth_not_connected',
+  'oauth_token_failed',
+  'over_budget',
+])
+export type ToolServerUnavailableReason = v.InferOutput<typeof toolServerUnavailableReasonSchema>
+
+/**
+ * What one dispatch did with the tool servers its agent kind declared, recorded on the step.
+ *
+ * Two lists rather than one list with a status, because they are not two states of one thing: a
+ * WIRED server is a capability the prompt promised the agent, while an UNAVAILABLE one is a
+ * promise the platform deliberately withheld and stated instead. A reader filtering a mixed list
+ * by status would get the same answer; a reader who forgot to filter would report a dropped server
+ * as a working one, which is the exact failure the unavailability vocabulary exists to prevent.
+ *
+ * Recorded at DISPATCH, not read back from the container: the harness materialises what this
+ * decided, and the poll site rebuilds the job handle from the step alone, so nothing downstream
+ * can re-derive it (see `recordDispatchAttribution`).
+ *
+ * ABSENT and `{ wired: [], unavailable: [] }` are different states and both are load-bearing:
+ * absent means no container dispatch recorded here (an inline step, or a run that predates the
+ * field), while both-empty means a dispatch ran and its kind declared no tool servers at all.
+ */
+export const stepToolServersSchema = v.object({
+  /** The servers whose transport, harness and credentials all resolved, so the agent could call them. */
+  wired: v.array(
+    v.object({
+      id: v.string(),
+      label: v.string(),
+      transport: toolServerTransportSchema,
+      /**
+       * The tools the definition narrowed the agent to. Absent ⇒ every tool the server exposes.
+       * Recorded because a narrowed list is the likeliest reason a working server produced no
+       * useful call, and the declaration can be edited after the run.
+       */
+      tools: v.optional(v.array(v.string())),
+    }),
+  ),
+  /** The servers the kind declared and this dispatch dropped, each with the reason it was dropped. */
+  unavailable: v.array(
+    v.object({
+      id: v.string(),
+      label: v.string(),
+      reason: toolServerUnavailableReasonSchema,
+    }),
+  ),
+})
+export type StepToolServers = v.InferOutput<typeof stepToolServersSchema>
+
+/**
  * One credential a declaration asks for, by NAME.
  *
  * `usage` is the declaration's own note on what value belongs here. It is the same field the

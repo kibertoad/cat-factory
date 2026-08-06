@@ -1418,6 +1418,22 @@
         "reduced": "Co obniżyło skuteczność",
         "obstacles": "Kluczowe przeszkody"
       },
+      "toolServers": {
+        "heading": "Serwery narzędzi (MCP)",
+        "none": "Ten agent nie otrzymał żadnych serwerów narzędzi.",
+        "allTools": "Wszystkie narzędzia udostępniane przez ten serwer.",
+        "narrowed": "Ograniczone do: {tools}",
+        "reason": {
+          "harnessUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie ma klienta MCP.",
+          "transportUnsupported": "nie był dostępny: CLI agenta, na którym działał ten krok, nie dosięga serwera tego rodzaju.",
+          "missingSecret": "nie był dostępny: potrzebne mu poświadczenie nie jest ustawione dla tej tablicy.",
+          "reservedSecret": "nie był dostępny: prosi o zmienną należącą do konfiguracji samej platformy, więc trzeba zmienić deklarację.",
+          "oauthNotConnected": "nie był dostępny: nikt jeszcze nie połączył z nim tej tablicy.",
+          "oauthTokenFailed": "nie był dostępny: połączenie przestało wydawać token dostępu.",
+          "overBudget": "nie był dostępny: ten agent deklaruje więcej serwerów narzędzi, niż niesie jedno uruchomienie.",
+          "unknown": "nie był dostępny ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Zgodność z najlepszymi praktykami",
         "headingHint": "Standardy dobrych praktyk wplecione w prompt tego recenzenta oraz to, jak ściśle jego zdaniem zmiana trzyma się każdego z nich.",

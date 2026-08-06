@@ -279,6 +279,17 @@ export interface FakeAgentOptions {
    */
   effortReport?: AgentRunResult['effortReport']
   /**
+   * The tool-server record every dispatch's job handle carries (the deterministic analogue of
+   * `ContainerAgentExecutor` resolving a kind's declared MCP servers against the run's harness and
+   * the workspace's credentials). Set it to assert the engine FOLDS the record onto the step and
+   * each runtime's store round-trips it; omitted ⇒ no record, exactly like an inline agent.
+   *
+   * The resolution itself is observed through the harness's `toolServerDispatch()` probe instead,
+   * because a fake cannot assert a facade's credential wiring, which is the half that actually
+   * differs between deployments.
+   */
+  toolServers?: AgentJobHandle['toolServers']
+  /**
    * The app-owned agent-kind registry the fake reads to detect a structured `container-explore`
    * kind (built-in `bug-investigator` or a registered CUSTOM kind) so it returns `result.custom`.
    * The custom-kind conformance case injects the SAME instance the container was built with;
@@ -752,6 +763,8 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
   private readonly pollFailCause: HarnessFailureCause
   private readonly pollFailDetail: string
   protected readonly followUpItems: FakeAgentOptions['followUps']
+  /** The tool-server record every dispatch's handle carries, if the suite set one. */
+  protected readonly toolServers: FakeAgentOptions['toolServers']
 
   constructor(options: FakeAgentOptions = {}) {
     super(options)
@@ -767,6 +780,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
       options.pollFailDetail ??
       'Phase timings: clone=2s, agent=600s. last completed tool bash 600s ago.'
     this.followUpItems = options.followUps
+    this.toolServers = options.toolServers
   }
 
   runsAsync(context: AgentRunContext): boolean {
@@ -804,6 +818,7 @@ export class AsyncFakeAgentExecutor extends FakeAgentExecutor implements AsyncAg
       model: 'fake',
       workspaceId: context.workspaceId,
       subscriptionTokenId: 'fake-pool-token',
+      ...(this.toolServers ? { toolServers: this.toolServers } : {}),
       ...(context.initiatedByUserId ? { initiatedByUserId: context.initiatedByUserId } : {}),
     }
   }

@@ -1418,6 +1418,22 @@
         "reduced": "Etkinliği azaltan etkenler",
         "obstacles": "Başlıca engeller"
       },
+      "toolServers": {
+        "heading": "Araç sunucuları (MCP)",
+        "none": "Bu ajana hiçbir araç sunucusu verilmedi.",
+        "allTools": "Bu sunucunun sunduğu tüm araçlar.",
+        "narrowed": "Şunlarla sınırlandı: {tools}",
+        "reason": {
+          "harnessUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'sinde MCP istemcisi yok.",
+          "transportUnsupported": "kullanılamadı: bu adımın çalıştığı ajan CLI'si bu türden bir sunucuya erişemiyor.",
+          "missingSecret": "kullanılamadı: ihtiyaç duyduğu kimlik bilgisi bu pano için ayarlanmamış.",
+          "reservedSecret": "kullanılamadı: platformun kendi yapılandırmasına ait bir değişken istiyor, bu yüzden bildirimin değişmesi gerekiyor.",
+          "oauthNotConnected": "kullanılamadı: bu panoyu henüz kimse ona bağlamadı.",
+          "oauthTokenFailed": "kullanılamadı: bağlantı artık erişim jetonu üretmiyor.",
+          "overBudget": "kullanılamadı: bu ajan tek bir çalıştırmanın taşıdığından fazla araç sunucusu bildiriyor.",
+          "unknown": "kullanılamadı ({reason})."
+        }
+      },
       "adherence": {
         "heading": "En iyi uygulamalara uyum",
         "headingHint": "Bu gözden geçirenin istemine eklenen iyi uygulama standartları ve değişikliğin her birine ne kadar uyduğuna dair değerlendirmesi.",

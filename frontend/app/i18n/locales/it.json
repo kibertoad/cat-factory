@@ -1975,6 +1975,22 @@
         "reduced": "Cosa ha ridotto l'efficacia",
         "obstacles": "Ostacoli principali"
       },
+      "toolServers": {
+        "heading": "Server di strumenti (MCP)",
+        "none": "A questo agente non è stato dato alcun server di strumenti.",
+        "allTools": "Tutti gli strumenti esposti da questo server.",
+        "narrowed": "Limitato a: {tools}",
+        "reason": {
+          "harnessUnsupported": "non era disponibile: la CLI dell'agente di questo passo non ha un client MCP.",
+          "transportUnsupported": "non era disponibile: la CLI dell'agente di questo passo non riesce a raggiungere server di questo tipo.",
+          "missingSecret": "non era disponibile: una credenziale che gli serve non è impostata per questa lavagna.",
+          "reservedSecret": "non era disponibile: chiede una variabile che appartiene alla configurazione della piattaforma, quindi va cambiata la dichiarazione.",
+          "oauthNotConnected": "non era disponibile: nessuno ha ancora collegato questa lavagna al server.",
+          "oauthTokenFailed": "non era disponibile: la connessione ha smesso di produrre un token di accesso.",
+          "overBudget": "non era disponibile: questo agente dichiara più server di strumenti di quanti ne porti una singola esecuzione.",
+          "unknown": "non era disponibile ({reason})."
+        }
+      },
       "adherence": {
         "heading": "Aderenza alle best practice",
         "headingHint": "Gli standard di buone pratiche inseriti nel prompt di questo revisore, e quanto fedelmente ha giudicato che la modifica segua ciascuno.",

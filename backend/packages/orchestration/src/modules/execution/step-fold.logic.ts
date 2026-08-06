@@ -38,6 +38,13 @@ export function recordDispatchAttribution(
   if (handle.model) step.model = handle.model
   if (handle.subscriptionTokenId) step.subscriptionTokenId = handle.subscriptionTokenId
   if (handle.initiatedByUserId) step.initiatedByUserId = handle.initiatedByUserId
+  // What the agent could actually call. Written whenever the handle carries it, including when
+  // BOTH lists are empty, which is a kind declaring no tool servers and is exactly the state an
+  // executor that resolves none is reporting. Guarded on presence rather than on content, like
+  // every other field here, so a re-dispatch by an executor that wires no tool servers (the
+  // inline path picking up a step a container path started) never erases the container round's
+  // record.
+  if (handle.toolServers) step.toolServers = handle.toolServers
   // Order-preserving by FIRST dispatch, counting every one after it: the count is what makes a
   // gate's fourth fixer round visible, so a re-dispatch increments rather than deduplicating.
   const dispatches = step.dispatches ?? []

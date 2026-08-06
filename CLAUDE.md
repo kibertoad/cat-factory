@@ -873,7 +873,7 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
   look for. `{ allowKeys }` is the deployment-set bound for everything else, registered PROCESS-WIDE on
   the Worker (`registerToolSecretPolicy`). The chain is a REQUIRED dependency of both executor builders,
   and the fallback description is a tri-state read off what was COMPOSED, never asserted. Full model:
-  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+  [ADR 0040](./backend/docs/adr/0040-capability-credential-store.md).
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
   carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
