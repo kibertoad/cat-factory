@@ -152,6 +152,9 @@ messages, code comments, UI copy.
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
+- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
+  for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
+  vitest summary is a task a sibling CANCELLED. Recipe: [`CONTRIBUTING.md`](./CONTRIBUTING.md#running-the-suites).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
   Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
@@ -567,9 +570,8 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 ### Run the CI guard scripts locally before committing
 
 > **Do NOT run locally: `pnpm lint:knip`, `node scripts/check-package-catalog.mjs`** (slow; CI's
-> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (Stryker: minutes of CPU per
-> package, so it runs ONLY in its own nightly non-blocking workflow, never in `pnpm test:run`; scope,
-> floors and how to read a survivor: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly non-blocking
+> workflow only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -585,8 +587,7 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
 - `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting
   changed.
-- `pnpm lint:fix` (whole tree) and `pnpm exec turbo run typecheck --filter=<touched package>` (typecheck
-  covers tests, which the build configs exclude).
+- `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 
 ## Execution flow (the canonical async + observable pattern)
 
