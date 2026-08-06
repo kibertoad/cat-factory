@@ -10,7 +10,7 @@ import type {
 import { hostMarkdown, redactSecrets } from '@cat-factory/kernel'
 import { PR_REPORT_MAX_OUTPUT_CHARS } from '@cat-factory/contracts'
 import { REPRO_DECLARATION_KIND } from './reproductionProof.logic.js'
-import { findStep } from './prReport.steps.js'
+import { absentNote, findStep } from './prReport.steps.js'
 
 // ---------------------------------------------------------------------------
 // The verification report's two CAPTURED-OUTPUT sections: the platform's own pre-PR validation
@@ -202,7 +202,7 @@ export function renderValidation(validation: PrReportValidation): string[] {
   if (validation.status === 'absent') {
     // The note already carries the read failure in this branch (it displaces the "configures no
     // checks" claim rather than qualifying it), so the callout would only repeat it.
-    return [...out, `_${validation.note}_`, '']
+    return [...out, absentNote(validation.note), '']
   }
   if (validation.configUnreadable) out.push(CONFIG_UNREADABLE_LINE, '')
   out.push(
@@ -372,7 +372,7 @@ function renderPhaseOutput(
 
 export function renderReproduction(repro: PrReportReproduction): string[] {
   const out = ['### Reproduction proof', '']
-  if (repro.status === 'absent') return [...out, `_${repro.note}_`, '']
+  if (repro.status === 'absent') return [...out, absentNote(repro.note), '']
   out.push(`**Verdict:** ${reproductionHeadline(repro.verdict)}`)
 
   if (repro.verdict === 'declared_infeasible') {

@@ -105,6 +105,28 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
 }
 
 /**
+ * The workspace's whole repo projection, read through the per-workspace cache when one is
+ * wired.
+ *
+ * Shared by BOTH builders below rather than open-coded in each: this is the hot, unbounded read
+ * on every dispatch, poll tick and report publish, and a resolver that misses the cache costs a
+ * full re-list every time while looking identical at the call site. The installation lookup and
+ * the ancestry walk stay live (both cheap / tree-depth-bounded), so a reparent or a service
+ * repo-link change needs no invalidation; only the projection's own writes do.
+ */
+async function listProjection(
+  deps: Pick<ResolveRepoTargetDependencies, 'repoProjectionRepository' | 'repoProjectionCache'>,
+  workspaceId: string,
+): Promise<GitHubRepo[]> {
+  const { repoProjectionRepository, repoProjectionCache } = deps
+  return repoProjectionCache
+    ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
+        repoProjectionRepository.list(workspaceId),
+      )
+    : await repoProjectionRepository.list(workspaceId)
+}
+
+/**
  * Resolve the repo linked to a running block's enclosing service, shared verbatim by
  * both runtime facades (Worker D1 + Node Drizzle/Postgres). Repos are linked at the
  * service-frame level (via the account-owned {@link ServiceRepository}), but execution
@@ -122,19 +144,11 @@ function toRepoTarget(installationId: number, resolved: ResolvedRepo): RepoTarge
  * because each wires its own resolver).
  */
 export function buildResolveRepoTarget(deps: ResolveRepoTargetDependencies): ResolveRepoTarget {
-  const { installationRepository, repoProjectionRepository, repoProjectionCache } = deps
+  const { installationRepository } = deps
   return async (workspaceId, blockId) => {
     const installation = await installationRepository.getByWorkspace(workspaceId)
     if (!installation) return null
-    // The whole-projection re-list is the hot, unbounded read here — cache it per
-    // workspace. The installation lookup above and the block ancestry walk below stay
-    // live (both cheap / tree-depth-bounded), so a reparent or service repo-link
-    // change needs no cache invalidation; only the projection's own writes do.
-    const repos = repoProjectionCache
-      ? await repoProjectionCache.get(workspaceId, workspaceId, () =>
-          repoProjectionRepository.list(workspaceId),
-        )
-      : await repoProjectionRepository.list(workspaceId)
+    const repos = await listProjection(deps, workspaceId)
     if (repos.length === 0) return null
     const resolved = await walkToRepo(deps, workspaceId, blockId, indexRepos(repos))
     if (!resolved) {
@@ -215,7 +229,7 @@ export interface ResolveRepoTargetsDependencies extends ResolveRepoTargetDepende
  * primary must resolve or we throw, exactly like the singular resolver.
  */
 export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): ResolveRepoTargets {
-  const { installationRepository, repoProjectionRepository, serviceRepository } = deps
+  const { installationRepository, serviceRepository } = deps
   return async (workspaceId, primaryBlockId, involvedFrameIds, primaryTarget) => {
     // The installation id: reuse the pre-resolved primary target's when provided (skips a second
     // installation read), else read it here.
@@ -232,7 +246,7 @@ export function buildResolveRepoTargets(deps: ResolveRepoTargetsDependencies): R
       }
       installationId = installation.installationId
     }
-    const repos = await repoProjectionRepository.list(workspaceId)
+    const repos = await listProjection(deps, workspaceId)
     const index = indexRepos(repos)
 
     // The primary checkout: reuse the caller's already-resolved target when given (no ancestry
