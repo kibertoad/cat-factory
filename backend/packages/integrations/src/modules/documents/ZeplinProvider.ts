@@ -8,7 +8,7 @@ import {
 import { renderDesignContext } from './design.logic.js'
 import { DocumentHttpError, createHostPinnedFetch, readCappedText } from './http.js'
 import {
-  MAX_SCREENS,
+  SCREEN_FETCH_LIMIT,
   ZEPLIN_API_HOST,
   ZEPLIN_DESCRIPTOR,
   buildZeplinDesignContext,
@@ -166,7 +166,7 @@ export class ZeplinProvider implements DocumentSourceProvider {
     }
     const listed = await this.get<unknown>(
       credentials,
-      `/projects/${encodeURIComponent(projectId)}/screens?limit=${MAX_SCREENS}`,
+      `/projects/${encodeURIComponent(projectId)}/screens?limit=${SCREEN_FETCH_LIMIT}`,
     )
     return unwrapArray<ZeplinScreen>(listed, 'screens')
   }

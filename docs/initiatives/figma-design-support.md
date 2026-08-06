@@ -149,10 +149,19 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
 - [x] **Real whole-file content.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) The `depth=2` file read became an OUTLINE read, and the frames
       it names are fetched as real subtrees in chunks of 4, capped at `MAX_FILE_FRAMES`. Chunked
       rather than one request because an oversize response must cost its own frames, not every
-      frame: a chunk that fails leaves those frames at outline depth and says so, beside the note
-      naming the frames the cap dropped. The two caps that bound the render moved with it: the
-      per-frame node cap now sits under an IMPORT-wide budget, since a per-frame cap alone bounds
-      nothing about a whole-file import that fans out over a dozen frames.
+      frame: a chunk that fails leaves those frames at outline depth and says so (with the HTTP
+      status, since a 403, a 429 and a 502 need different fixes), beside the note naming the frames
+      the cap dropped and the pages they spread over. The two caps that bound the render moved with
+      it: the per-frame node cap now sits under an IMPORT-wide budget, since a per-frame cap alone
+      bounds nothing about a whole-file import that fans out over a dozen frames.
+      **Each cap owns its own note, and a DEPTH cut does not stop the walk.** Collapsing the caps
+      into one "was truncated" boolean is what made a branch nested past the cap drop every later
+      sibling of every ancestor (auto-layout nests past six levels routinely, so this hit ordinary
+      frames), and what left the TEXT caps stating nothing at all: since the renderer drops an empty
+      section, a frame whose text the budget refused was byte-for-byte a frame with no text. The
+      requested API `depth=` is now DERIVED from the renderer's own cap, plus one level so a node at
+      the cap can still see whether it has children: without that, a tree the FETCH truncated and a
+      complete one arrive identical.
 - [x] **Styling in the layout tree.** ([#1745](https://github.com/kibertoad/cat-factory/pull/1745)) Fills, strokes, typography, corner radius and the
       auto-layout facts ride the node's own layout line in brackets, rather than a per-frame
       `Styling` section: the facts are per-node, and a second section would make the reader join
@@ -166,7 +175,11 @@ omits what it lacks, and the conformity of the two is what keeps Penpot cheap la
       its property assignment, so it identifies nothing alone), and every variant and property the
       design uses folds onto that one component's `note`. Folded rather than one entry per variant
       because the shared `dedupeComponents` keys on the name, so per-variant entries would collapse
-      to whichever one was seen first.
+      to whichever one was seen first. The components and tokens lists are CAPPED too, since both
+      grow with the design system rather than with the frames imported, so the layout/text budgets
+      bound neither; the component cap ranks by instance count so what survives it is what the
+      design leans on, and the token cap sorts by the rendered order first so its "N not listed"
+      note points at the tail the reader can see is missing.
 - [ ] **Auto-fold `design.context`.** Fold the fragment (brief for implementer kinds, full body
       for reviewer/planner kinds, the existing two-tier rule) whenever the run's resolved context
       includes a design-origin document. A deterministic presence rule at prompt assembly, NOT a

@@ -1,4 +1,5 @@
 import {
+  describeError,
   ValidationError,
   type DocumentContent,
   type DocumentCredentials,
@@ -29,8 +30,17 @@ const USER_AGENT = 'cat-factory'
  * the entire document at once and blows the response cap on any real file.
  */
 const FILE_DEPTH = 2
-/** Depth requested per frame subtree: one level past what the layout renderer will show. */
-const FRAME_DEPTH = 7
+/**
+ * API `depth` requested for a frame subtree, DERIVED from the renderer's own depth cap so the
+ * fetch and the render cannot drift.
+ *
+ * Figma counts `depth=1` as the requested node alone, so a descendant the renderer places at
+ * its depth `d` needs `d + 2`. `MAX_TREE_DEPTH + 2` therefore feeds the renderer exactly what
+ * it will show, and ONE MORE level is requested on top so a node AT the cap can still see
+ * whether it has children: without it, a tree the FETCH truncated and a genuinely complete one
+ * arrive identical, and the renderer would state a cut on the first and nothing on the second.
+ */
+const FRAME_DEPTH = figmaLogic.MAX_TREE_DEPTH + 3
 /** Frames per `/nodes` request: bounded so one oversize response can't cost every frame. */
 const FRAME_CHUNK = 4
 /** Hard cap on the bytes read off any response body, to protect the isolate. */
@@ -85,6 +95,17 @@ interface FetchedNodes {
   notes: string[]
 }
 
+/**
+ * What the chunked frame-subtree reads produced: the subtrees, the frames a FAILED chunk left
+ * at outline depth, and the distinct causes of those failures. Kept apart from "Figma returned
+ * no subtree" because only the failures have a cause worth naming.
+ */
+interface SubtreeReads {
+  byId: Map<string, figmaLogic.FigmaNode>
+  failed: Set<string>
+  causes: Set<string>
+}
+
 /** The variables read is three-valued: a 403 is a PLAN GATE, not a failure. */
 type VariablesRead =
   | { status: 'ok'; meta: figmaLogic.FigmaVariablesMeta | null }
@@ -114,6 +135,31 @@ interface ImagesResponse {
 /** Figma's file `version` (falling back to `lastModified`) as the staleness token. */
 function fileVersion(res: { version?: string; lastModified?: string }): string {
   return res.version ?? res.lastModified ?? ''
+}
+
+/**
+ * `Page 1: 12, Page 2: 2`, itself bounded: the frame cap is what made this note necessary, so
+ * the note may not become the unbounded thing.
+ */
+function describePages(pages: { name: string; frames: number }[]): string {
+  const shown = pages.slice(0, 6)
+  const rest = pages.length - shown.length
+  const listed = shown.map((page) => `${page.name}: ${page.frames}`).join(', ')
+  return rest > 0 ? `${listed}, +${rest} more` : listed
+}
+
+/**
+ * A short cause phrase for a coverage NOTE, which an end user reads. A status alone is the
+ * actionable part of an API failure, and it is bounded: the provider's own error message
+ * carries the request URL and up to 300 bytes of response body, so anything else is scrubbed
+ * through `describeError` and clipped rather than pasted into the document body.
+ */
+function describeFetchCause(error: unknown): string {
+  if (error instanceof FigmaApiError) return `HTTP ${error.status}`
+  const { err, errKind } = describeError(error)
+  const message = typeof err === 'string' ? err.trim() : ''
+  if (!message) return String(errKind ?? 'unknown error')
+  return message.length > 120 ? `${message.slice(0, 120)}…` : message
 }
 
 export class FigmaProvider implements DocumentSourceProvider {
@@ -208,7 +254,12 @@ export class FigmaProvider implements DocumentSourceProvider {
     return await this.fetchFileFrames(credentials, fileKey)
   }
 
-  /** A node link: one `/nodes` read of the referenced frame's full subtree. */
+  /**
+   * A node link: one `/nodes` read of the referenced frame's subtree, bounded by the same
+   * {@link FRAME_DEPTH} the whole-file path uses. Unbounded, a deep frame can exceed
+   * {@link MAX_RESPONSE_BYTES} and fail the whole import for content the renderer would have
+   * capped anyway.
+   */
   private async fetchNodeSubtree(
     credentials: DocumentCredentials,
     fileKey: string,
@@ -216,7 +267,8 @@ export class FigmaProvider implements DocumentSourceProvider {
   ): Promise<FetchedNodes> {
     const res = await this.get<NodesResponse>(
       credentials,
-      `/files/${encodeURIComponent(fileKey)}/nodes?ids=${encodeURIComponent(nodeId)}`,
+      `/files/${encodeURIComponent(fileKey)}/nodes` +
+        `?ids=${encodeURIComponent(nodeId)}&depth=${FRAME_DEPTH}`,
     )
     const entry = res.nodes?.[nodeId]
     if (!entry?.document) {
@@ -270,19 +322,37 @@ export class FigmaProvider implements DocumentSourceProvider {
 
     const selected = outline.slice(0, figmaLogic.MAX_FILE_FRAMES)
     if (selected.length < outline.length) {
+      // Frames are flattened across pages in document order, so a frame COUNT alone cannot say
+      // whether the cap stopped mid-page or dropped a whole page of the design. Naming the
+      // per-page counts is the difference between those two facts.
+      const pages = figmaLogic.figmaPageSummary(res.document)
+      const perPage =
+        pages.length > 1 ? ` across ${pages.length} pages (${describePages(pages)})` : ''
       base.notes.push(
-        `This file has ${outline.length} top-level frames; the first ${selected.length} were ` +
-          `imported. Link a specific frame URL to import one that is not listed here.`,
+        `This file has ${outline.length} top-level frames${perPage}; the first ` +
+          `${selected.length} in document order were imported. Link a specific frame URL to ` +
+          `import one that is not listed here.`,
       )
     }
 
     const deep = await this.fetchFrameSubtrees(credentials, fileKey, selected, maps)
-    base.roots = selected.map((frame) => (frame.id ? (deep.get(frame.id) ?? frame) : frame))
-    const unread = selected.length - deep.size
-    if (unread > 0) {
+    base.roots = selected.map((frame) => (frame.id ? (deep.byId.get(frame.id) ?? frame) : frame))
+    // A read that FAILED and a read that came back without the frame need different fixes (a
+    // token scope or rate limit vs. a frame Figma would not return), so they are counted and
+    // stated apart rather than summed into one "unread" tally.
+    if (deep.failed.size) {
+      const causes = [...deep.causes].sort().join(', ')
       base.notes.push(
-        `${unread} of ${selected.length} frame subtree reads failed; those frames show their ` +
-          `name and size only, not their layout or text.`,
+        `${deep.failed.size} of ${selected.length} frame subtree reads failed` +
+          `${causes ? ` (${causes})` : ''}; those frames show their name and size only, not ` +
+          `their layout or text.`,
+      )
+    }
+    const missing = selected.length - deep.byId.size - deep.failed.size
+    if (missing > 0) {
+      base.notes.push(
+        `Figma returned no subtree for ${missing} of ${selected.length} frames, so they show ` +
+          `their name and size only. The frames may have been deleted since the link was made.`,
       )
     }
     return base
@@ -298,8 +368,8 @@ export class FigmaProvider implements DocumentSourceProvider {
     fileKey: string,
     frames: figmaLogic.FigmaNode[],
     maps: Required<FigmaMaps>,
-  ): Promise<Map<string, figmaLogic.FigmaNode>> {
-    const out = new Map<string, figmaLogic.FigmaNode>()
+  ): Promise<SubtreeReads> {
+    const out: SubtreeReads = { byId: new Map(), failed: new Set(), causes: new Set() }
     for (let i = 0; i < frames.length; i += FRAME_CHUNK) {
       const ids = frames
         .slice(i, i + FRAME_CHUNK)
@@ -313,16 +383,20 @@ export class FigmaProvider implements DocumentSourceProvider {
           `/files/${encodeURIComponent(fileKey)}/nodes` +
             `?ids=${encodeURIComponent(ids.join(','))}&depth=${FRAME_DEPTH}`,
         )
-      } catch {
+      } catch (err) {
         // silent-catch-ok: the miss is REPORTED by the caller as the frames left at outline
-        // depth, which is the honest form of it; a failed chunk must not fail the import.
+        // depth, WITH this cause, which is the honest form of it; a chunk may not fail the
+        // import. A 403 (token scope), a 429 (rate limit) and a 502 (oversize response) each
+        // need a different fix, so the cause is carried rather than flattened to "failed".
+        for (const id of ids) out.failed.add(id)
+        out.causes.add(describeFetchCause(err))
         continue
       }
       for (const id of ids) {
         const entry = res.nodes?.[id]
         if (!entry?.document) continue
         mergeMaps(maps, entry)
-        out.set(id, entry.document)
+        out.byId.set(id, entry.document)
       }
     }
     return out

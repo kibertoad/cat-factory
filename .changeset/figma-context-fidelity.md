@@ -19,6 +19,22 @@ the frame cap and the failed reads are named in a new `### Notes` section: a bou
 not read as the whole design. The per-frame node cap now sits under an import-wide budget, because
 a per-frame cap alone bounds nothing about an import that fans out over a dozen frames.
 
+Each cap gets its OWN note, because they are not interchangeable. A DEPTH cut is local to one
+branch and the walk must carry on; a node or text budget is exhaustion and must stop. Conflating
+the two is what made a branch nested past the cap drop every later sibling of every ancestor, so a
+frame whose first branch was deep rendered as that branch alone (auto-layout nests past six levels
+routinely, so this hit ordinary frames). The caps also ask the reader for different things: link a
+sub-frame, or import fewer frames. A depth cut now names how many nodes it left below, so it cannot
+read as a leaf, and one cut leaves ONE marker instead of one per unwinding ancestor.
+
+Text caps are stated too, in the section as well as the notes. The renderer DROPS an empty section,
+so a frame whose text the import budget refused was byte-for-byte a frame that contains no text:
+the exact silence the rest of this change exists to break. Components and tokens are bounded as
+well, since both grow with the design SYSTEM rather than with the frames imported and the layout
+budget says nothing about them. The component cap ranks by instance count, computed from what was
+observed, so what survives is what the design leans on; the token cap sorts by the rendered order
+first, so "N not listed" points at the tail the reader can actually see is missing.
+
 The layout tree carried name, type and size only, so every colour, type ramp, radius and stack
 direction was left for the model to invent. Each node's line now carries those facts in brackets,
 bounded by the tree's own caps because they are the same lines.
@@ -36,6 +52,11 @@ variant's own component name is its property assignment ("Size=Large") and ident
 its own, and every variant and property the design uses folds onto that component's note. That is
 the signal "reuse the existing component" needs to match against repo code.
 
+Zeplin's screens read asks for one more screen than it renders, so that a project with more screens
+than we import is detectable at all: asking for exactly the render cap makes a full page and a
+truncated one identical, which silently dropped the cap note in the one case it exists for.
+
 Watch the corpus budget when reviewing: richer renders mean larger bodies, and linked-context
-delivery is load-bearing (`context_documents_over_budget`). Every cap here states what it dropped
-rather than shortening in silence.
+delivery is load-bearing (`context_documents_over_budget`). The cap constants carry the arithmetic
+that sizes them against it, so raising one means redoing that arithmetic rather than picking a
+bigger number. Every cap states what it dropped rather than shortening in silence.

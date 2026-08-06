@@ -6,6 +6,7 @@ import {
   buildFigmaDesignContext,
   figmaBlocks,
   figmaComponents,
+  figmaPageSummary,
   figmaStyleTokens,
   figmaStylingFacts,
   figmaTokenOrigin,
@@ -15,6 +16,7 @@ import {
   normalizeFigmaNodeId,
   parseFigmaRef,
   splitFigmaExternalId,
+  type FigmaComponentMap,
   type FigmaNode,
 } from './figma.logic.js'
 
@@ -274,9 +276,57 @@ describe('figmaBlocks caps', () => {
 
   it('marks a frame the depth cap cut, and names the cap in a note', () => {
     const { blocks, notes } = figmaBlocks([{ name: 'Deep', type: 'FRAME', children: [chain(9)] }])
-    expect(blocks[0]!.sections[0]!.lines.some((l) => l.includes('(truncated)'))).toBe(true)
+    expect(blocks[0]!.sections[0]!.lines.some((l) => l.includes('deeper'))).toBe(true)
     expect(notes).toHaveLength(1)
-    expect(notes[0]).toContain('1 of 1 frames were cut')
+    expect(notes[0]).toContain('1 of 1 frames a branch continues past that')
+  })
+
+  it('keeps the SIBLINGS of a branch the depth cap cut', () => {
+    // The depth cap is LOCAL to a branch: conflating it with budget exhaustion made one deep
+    // first child drop every later sibling of every ancestor, which for a real frame (auto-layout
+    // nests past 6 levels routinely) reduced the layout to its first branch.
+    const { blocks, notes } = figmaBlocks([
+      {
+        name: 'Screen',
+        type: 'FRAME',
+        children: [
+          { name: 'DeepBranch', type: 'FRAME', children: [chain(9)] },
+          { name: 'SiblingTwo', type: 'FRAME', children: [{ name: 'b', type: 'TEXT' }] },
+          { name: 'SiblingThree', type: 'FRAME' },
+        ],
+      },
+    ])
+    const layout = blocks[0]!.sections[0]!.lines.join('\n')
+    expect(layout).toContain('SiblingTwo')
+    expect(layout).toContain('SiblingThree')
+    // The cut is still STATED, at the branch that was cut, and exactly once.
+    expect(layout.match(/deeper node/g)).toHaveLength(1)
+    expect(notes[0]).toContain('a branch continues past that')
+  })
+
+  it('names how many nodes a depth cut left below, so a cut cannot read as a leaf', () => {
+    const { blocks } = figmaBlocks([
+      {
+        name: 'Deep',
+        type: 'FRAME',
+        children: [
+          (() => {
+            let node: FigmaNode = {
+              name: 'atCap',
+              type: 'FRAME',
+              children: [
+                { name: 'x', type: 'TEXT' },
+                { name: 'y', type: 'TEXT' },
+                { name: 'z', type: 'TEXT' },
+              ],
+            }
+            for (let i = 0; i < 6; i++) node = { name: `n${i}`, type: 'FRAME', children: [node] }
+            return node
+          })(),
+        ],
+      },
+    ])
+    expect(blocks[0]!.sections[0]!.lines.join('\n')).toContain('(3 deeper nodes not shown)')
   })
 
   it('says nothing when nothing was dropped', () => {
@@ -297,7 +347,60 @@ describe('figmaBlocks caps', () => {
     const { blocks, notes } = figmaBlocks(Array.from({ length: 40 }, (_, i) => wide(`F${i}`)))
     const rendered = blocks.reduce((n, b) => n + b.sections[0]!.lines.length, 0)
     expect(rendered).toBeLessThan(2000)
-    expect(notes[0]).toContain('frames were cut')
+    expect(notes.join('\n')).toContain('import-wide budget of 1500 layout nodes')
+  })
+
+  it('leaves ONE truncation marker where the budget ran out, not one per unwinding ancestor', () => {
+    // A marker per ancestor is noise the model has to read past, and it misreports one cut as
+    // a dozen. The exhaustion guard owns the marker, so ancestors add nothing as they unwind.
+    const deepWide: FigmaNode = {
+      name: 'Frame',
+      type: 'FRAME',
+      children: [chain(5)],
+    }
+    const many = Array.from({ length: 60 }, () => deepWide)
+    const { blocks } = figmaBlocks(many)
+    const markers = blocks
+      .flatMap((b) => b.sections[0]!.lines)
+      .filter((l) => l.includes('(truncated)')).length
+    // One frame is where the budget runs out; every frame after it renders nothing at all.
+    expect(markers).toBeLessThanOrEqual(1)
+  })
+
+  it('STATES a text cap instead of letting the dropped text read as a frame with none', () => {
+    // The renderer drops an empty section, so a frame whose text the import budget refused was
+    // byte-for-byte a frame that contains no text. That is the silence this whole model exists
+    // to break, and the layout notes said nothing about text.
+    const texty = (name: string): FigmaNode => ({
+      name,
+      type: 'FRAME',
+      children: Array.from({ length: 80 }, (_, i) => ({
+        name: `t${i}`,
+        type: 'TEXT',
+        characters: `line ${i}`,
+      })),
+    })
+    const { blocks, notes } = figmaBlocks(Array.from({ length: 12 }, (_, i) => texty(`F${i}`)))
+    const last = blocks[11]!.sections[1]!.lines
+    expect(last).not.toEqual([])
+    expect(last.at(-1)).toContain('(text truncated)')
+    expect(notes.join('\n')).toContain('import-wide budget of 600 text lines')
+  })
+
+  it('distinguishes the per-frame text cap from the import-wide one', () => {
+    const { notes } = figmaBlocks([
+      {
+        name: 'Wordy',
+        type: 'FRAME',
+        children: Array.from({ length: 250 }, (_, i) => ({
+          name: `t${i}`,
+          type: 'TEXT',
+          characters: `line ${i}`,
+        })),
+      },
+    ])
+    expect(notes.join('\n')).toContain('capped at 200 lines per frame')
+    expect(notes.join('\n')).not.toContain('import-wide budget of 600 text lines')
   })
 })
 
@@ -370,6 +473,114 @@ describe('figmaComponents', () => {
       c9: { name: 'Avatar' },
     })
     expect(components).toEqual([{ name: 'Avatar', note: undefined }])
+  })
+})
+
+describe('component + token caps (they grow with the design SYSTEM, not the frames)', () => {
+  /** `count` distinct instances, each of a differently-named component. */
+  function instances(count: number, repeatFirst = 0): FigmaNode {
+    const children: FigmaNode[] = []
+    for (let i = 0; i < count; i++) children.push({ type: 'INSTANCE', componentId: `c${i}` })
+    for (let i = 0; i < repeatFirst; i++) children.push({ type: 'INSTANCE', componentId: 'c0' })
+    return { name: 'Frame', type: 'FRAME', children }
+  }
+
+  function componentMap(count: number): FigmaComponentMap {
+    return Object.fromEntries(
+      Array.from({ length: count }, (_, i) => [
+        `c${i}`,
+        { name: `Comp${String(i).padStart(3, '0')}` },
+      ]),
+    )
+  }
+
+  it('caps the components list and STATES what it dropped', () => {
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key',
+      fileName: 'Library',
+      roots: [instances(180)],
+      components: componentMap(180),
+    })
+    expect(ctx.components).toHaveLength(150)
+    expect(ctx.notes?.join('\n')).toContain('30 of 180 components are not listed')
+  })
+
+  it('keeps the components the design leans on: the cap ranks by instance count', () => {
+    // The cap has to drop SOMETHING; dropping the most-used component would be the one
+    // outcome that makes "reuse the existing component" useless.
+    const heavy = 'Comp179'
+    const roots = [instances(180, 40)]
+    const map = componentMap(180)
+    map.c0 = { name: heavy }
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key',
+      fileName: 'Library',
+      roots,
+      components: map,
+    })
+    expect(ctx.components.map((c) => c.name)).toContain(heavy)
+  })
+
+  it('caps tokens as a PREFIX of the order they render in, and states the drop', () => {
+    const variables = Object.fromEntries(
+      Array.from({ length: 300 }, (_, i) => [
+        `v${i}`,
+        {
+          name: `color/${String(i).padStart(3, '0')}`,
+          variableCollectionId: 'c1',
+          valuesByMode: { m1: i },
+        },
+      ]),
+    )
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key',
+      fileName: 'F',
+      roots: [{ name: 'F', type: 'FRAME' }],
+      components: {},
+      variablesMeta: { variables, variableCollections: { c1: { name: 'Core', modes: [] } } },
+    })
+    expect(ctx.tokens).toHaveLength(250)
+    expect(ctx.notes?.join('\n')).toContain('50 of 300 design tokens are not listed')
+    // A prefix of the RENDERED order: the reader can trust that the tail is what is missing.
+    const md = renderDesignContext(ctx)
+    expect(md).toContain('color/000')
+    expect(md).toContain('color/249')
+    expect(md).not.toContain('color/250')
+  })
+
+  it('says nothing about either cap when neither bit', () => {
+    const ctx = buildFigmaDesignContext({
+      externalId: 'Key',
+      fileName: 'F',
+      roots: [instances(3)],
+      components: componentMap(3),
+    })
+    expect(ctx.notes?.join('\n') ?? '').not.toContain('not listed')
+  })
+})
+
+describe('figmaPageSummary', () => {
+  it('counts the importable frames each page contributes, naming an unnamed page by index', () => {
+    expect(
+      figmaPageSummary({
+        name: 'Document',
+        children: [
+          {
+            name: 'Marketing',
+            children: [
+              { id: '1:1', type: 'FRAME' },
+              { id: '1:2', type: 'STICKY' },
+            ],
+          },
+          { children: [{ id: '2:1', type: 'COMPONENT' }] },
+          // A page with nothing importable is not worth a row.
+          { name: 'Scratch', children: [{ id: '3:1', type: 'STICKY' }] },
+        ],
+      }),
+    ).toEqual([
+      { name: 'Marketing', frames: 1 },
+      { name: 'Page 2', frames: 1 },
+    ])
   })
 })
 

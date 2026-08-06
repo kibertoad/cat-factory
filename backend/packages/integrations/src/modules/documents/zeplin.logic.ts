@@ -181,6 +181,17 @@ export interface ZeplinDesignTokens {
  */
 export const MAX_SCREENS = 40
 
+/**
+ * Screens REQUESTED from the API: one more than {@link MAX_SCREENS} is rendered, so that a
+ * project with more screens than we import is DETECTABLE.
+ *
+ * Asking for exactly `MAX_SCREENS` makes the two indistinguishable (a full page and a truncated
+ * one are both 40 rows), which silently drops the cap note for every project the cap actually
+ * bites: the one case it exists for. The extra row is a PROBE and is never rendered, so what
+ * the reader sees is still bounded by `MAX_SCREENS`.
+ */
+export const SCREEN_FETCH_LIMIT = MAX_SCREENS + 1
+
 function screenMeta(screen: ZeplinScreen): string | undefined {
   return dimensionMeta(screen.image?.width, screen.image?.height)
 }
@@ -266,11 +277,13 @@ export function buildZeplinDesignContext(input: ZeplinContextInput): DesignConte
       'The Zeplin component read failed, so the components section is missing rather than empty.',
     )
   }
-  const screens = input.screens.length
-  if (screens > MAX_SCREENS) {
+  // The fetch asks for SCREEN_FETCH_LIMIT, so more than MAX_SCREENS rows means the cap bit.
+  // It does NOT reveal how many more there are, and stating a total we do not have would be a
+  // guess dressed as a count, so the note says "more than" instead.
+  if (input.screens.length > MAX_SCREENS) {
     notes.push(
-      `This project has ${screens} screens; the first ${MAX_SCREENS} were imported. Link a ` +
-        `specific screen URL to import one that is not listed here.`,
+      `This project has more than ${MAX_SCREENS} screens; the first ${MAX_SCREENS} were ` +
+        `imported. Link a specific screen URL to import one that is not listed here.`,
     )
   }
   return {

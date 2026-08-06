@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FigmaApiError, FigmaProvider } from './FigmaProvider.js'
+import { MAX_TREE_DEPTH } from './figma.logic.js'
 
 // Fetch-shell tests for the Figma provider: they exercise the HTTP behaviour the pure
 // `figma.logic` tests can't — host-pinning + Bearer/X-Figma-Token headers, the Enterprise
@@ -191,8 +192,130 @@ describe('FigmaProvider.fetchDocument', () => {
     expect(requested).toHaveLength(12)
     expect(doc.body).toContain('- Body _TEXT_')
     expect(doc.body).toContain('- text 1:0')
-    expect(doc.body).toContain('This file has 14 top-level frames; the first 12 were imported')
+    expect(doc.body).toContain(
+      'This file has 14 top-level frames; the first 12 in document order were imported',
+    )
     expect(doc.body).not.toContain('Frame 12')
+  })
+
+  it('names the PAGES a multi-page file spreads its frames over when the cap bites', async () => {
+    // A frame count alone cannot say whether the cap stopped mid-page or dropped a whole page
+    // of the design, and those are different losses.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/nodes?')) {
+          const ids = new URL(url).searchParams.get('ids')!.split(',')
+          return jsonResponse({
+            nodes: Object.fromEntries(
+              ids.map((id) => [id, { document: { id, name: `F${id}`, type: 'FRAME' } }]),
+            ),
+          })
+        }
+        if (url.includes('/files/KEY?depth=2')) {
+          return jsonResponse({
+            name: 'Multi',
+            document: {
+              name: 'Document',
+              children: [
+                {
+                  name: 'Marketing',
+                  children: Array.from({ length: 13 }, (_, i) => ({
+                    id: `1:${i}`,
+                    name: `M${i}`,
+                    type: 'FRAME',
+                  })),
+                },
+                { name: 'Admin', children: [{ id: '2:1', name: 'Dashboard', type: 'FRAME' }] },
+              ],
+            },
+          })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY', 'ws_1')
+    expect(doc.body).toContain('across 2 pages (Marketing: 13, Admin: 1)')
+  })
+
+  it('carries the CAUSE of a failed subtree chunk into the note, not a bare "failed"', async () => {
+    // A 403 (token scope), a 429 (rate limit) and a 502 (oversize response) need three
+    // different fixes, and the note is the only place the person who can apply one will look.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/nodes?')) return new Response('slow down', { status: 429 })
+        if (url.includes('/variables/local')) return jsonResponse({ meta: {} })
+        if (url.includes('/files/KEY?depth=2')) {
+          return jsonResponse({
+            name: 'File',
+            document: {
+              name: 'Document',
+              children: [
+                { name: 'Page 1', children: [{ id: '1:1', name: 'Home', type: 'FRAME' }] },
+              ],
+            },
+          })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY', 'ws_1')
+    expect(doc.body).toContain('1 of 1 frame subtree reads failed (HTTP 429)')
+  })
+
+  it('separates "Figma returned no subtree" from a failed read', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        // The chunk SUCCEEDS but carries no entry for the requested frame.
+        if (url.includes('/nodes?')) return jsonResponse({ nodes: {} })
+        if (url.includes('/variables/local')) return jsonResponse({ meta: {} })
+        if (url.includes('/files/KEY?depth=2')) {
+          return jsonResponse({
+            name: 'File',
+            document: {
+              name: 'Document',
+              children: [
+                { name: 'Page 1', children: [{ id: '1:1', name: 'Home', type: 'FRAME' }] },
+              ],
+            },
+          })
+        }
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    const doc = await new FigmaProvider().fetchDocument(TOKEN, 'KEY', 'ws_1')
+    expect(doc.body).toContain('Figma returned no subtree for 1 of 1 frames')
+    expect(doc.body).not.toContain('subtree reads failed')
+  })
+
+  it('bounds a node-link subtree read by the same depth the renderer will show', async () => {
+    // Unbounded, a deep frame can exceed the response cap and fail the whole import for
+    // content the renderer would have capped anyway.
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        seen.push(url)
+        if (url.includes('/nodes?')) {
+          return jsonResponse({ name: 'F', nodes: { '1:2': { document: { name: 'Card' } } } })
+        }
+        if (url.includes('/variables/local')) return jsonResponse({ meta: {} })
+        if (url.includes('/images/')) return jsonResponse({ images: { '1:2': null } })
+        throw new Error(`unexpected ${url}`)
+      }),
+    )
+
+    await new FigmaProvider().fetchDocument(TOKEN, 'KEY:1:2', 'ws_1')
+    const nodesUrl = seen.find((u) => u.includes('/nodes?'))!
+    // Derived from MAX_TREE_DEPTH rather than hard-coded, so the two cannot drift: the renderer
+    // shows MAX_TREE_DEPTH levels (+2 for Figma's counting) and one MORE is needed for a node at
+    // the cap to know it has children at all.
+    expect(new URL(nodesUrl).searchParams.get('depth')).toBe(String(MAX_TREE_DEPTH + 3))
   })
 
   it('leaves a frame at outline depth when its subtree read fails, and says so', async () => {
