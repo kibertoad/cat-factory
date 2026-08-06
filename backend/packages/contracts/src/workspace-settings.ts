@@ -189,6 +189,37 @@ export const workspaceSettingsSchema = v.object({
    */
   artifactRetentionDays: v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
   /**
+   * How many completed tasks a service frame's "Done" swimlane renders, newest completion
+   * first. Default 20. Bounded 0–500.
+   *
+   * `0` is valid and means "count them, show none": the lane still states how many tasks
+   * the service has finished, which is the fact a collapsed archive is there to carry. The
+   * cap exists because completed tasks accrue forever — a long-lived service reaches
+   * hundreds — and an uncapped terminal column would make its frame arbitrarily tall.
+   *
+   * Paired with {@link doneLaneRetentionDays}: this one bounds the SIZE of the lane, that
+   * one bounds its AGE, and the board reports the two drop counts separately because they
+   * tell a reader different things ("there is more from this period" vs "there is older
+   * history").
+   */
+  doneLaneMaxItems: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(500)),
+  /**
+   * How many days a completed task stays in the "Done" swimlane before the board stops
+   * rendering it. Default 14. Bounded 1–3650. Null ⇒ no age cap, so
+   * {@link doneLaneMaxItems} alone bounds the lane.
+   *
+   * This hides a card; it deletes nothing. A task aged out of the lane is still on the
+   * board's data, still reachable from search and its own inspector, and still counted in
+   * the lane's total.
+   *
+   * A task whose `completedAt` is absent (merged before that column existed) is EXEMPT
+   * rather than treated as ancient: hiding history on the strength of a timestamp nobody
+   * recorded would be the platform inferring a fact it does not have.
+   */
+  doneLaneRetentionDays: v.nullable(
+    v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
+  ),
+  /**
    * Whether the Kaizen agent grades agent steps after each run completes and
    * recommends prompt/model improvements. On by default. When off, no gradings are
    * scheduled (existing history + verified combos are retained, just not extended).
@@ -300,6 +331,10 @@ export const updateWorkspaceSettingsSchema = v.object({
   publishPrVerificationReport: v.optional(v.boolean()),
   artifactRetentionDays: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650)),
+  ),
+  doneLaneMaxItems: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(500))),
+  doneLaneRetentionDays: v.optional(
+    v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(3650))),
   ),
   kaizenEnabled: v.optional(v.boolean()),
   delegateAgentsToRunnerPool: v.optional(v.boolean()),

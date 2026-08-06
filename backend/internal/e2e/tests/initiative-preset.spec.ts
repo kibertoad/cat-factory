@@ -55,8 +55,8 @@ test('creating a docs-refresh initiative auto-plans and spawns a decorated docum
   //
   // `confidence: 0.2` is what makes the assertion below observable at all, and it is not a
   // timing knob. `pl_document_quick` ends in a `merger`, so at the default (high) confidence the
-  // spawned task AUTO-MERGES and lands `done`, and a `done` task deliberately renders NO card
-  // (see `DraggableTask`: a merged task stops being a unit of work). The spawned run is entirely
+  // spawned task AUTO-MERGES and lands `done`, which moves it into the frame's Done swimlane —
+  // collapsed by default, so no card for it renders. The spawned run is entirely
   // unattended and faster than the coarse, debounced board refresh that is the ONLY delivery
   // path for a spawned block, so whether the card was ever painted came down to which of the two
   // won, and CI lost it. A severe merger assessment instead raises `merge_review` and settles the

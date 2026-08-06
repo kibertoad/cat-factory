@@ -9,11 +9,18 @@ const draggingId = ref<string | null>(null)
 
 /**
  * Pointer-driven dragging for blocks positioned inside a container's 2D canvas
- * (tasks inside services/modules, modules inside services) and for free-floating
- * service frames (via their header handle). Movement is divided by the board zoom
- * so the block tracks the cursor. When `reparent` is set, the drop point is
- * hit-tested against `[data-drop-zone]` ancestors so a task can be dragged from a
- * service into a module (or back out).
+ * (initiative cards inside services) and for free-floating service frames (via
+ * their header handle). Movement is divided by the board zoom so the block tracks
+ * the cursor. When `reparent` is set, the drop point is hit-tested against
+ * `[data-drop-zone]` ancestors so a block can be dragged from a service into a
+ * module (or back out).
+ *
+ * A TASK is a `positioned: false` drag, because tasks are laid out in swimlanes and
+ * carry no coordinates a reader can see. Such a drag previews nothing and commits
+ * nothing on a same-container drop: its ONLY effect is a reparent, which is what a
+ * task drag is still for (moving work between services, and into or out of a module).
+ * A position write there would persist coordinates nothing renders and emit a board
+ * event for a change with no visible result.
  */
 export function useBlockDrag() {
   const board = useBoardStore()
@@ -23,7 +30,7 @@ export function useBlockDrag() {
   function startDrag(
     block: Block,
     e: PointerEvent,
-    opts: { reparent?: boolean; clamp?: boolean } = {},
+    opts: { reparent?: boolean; clamp?: boolean; positioned?: boolean } = {},
   ) {
     if (e.button !== 0) return
     // Read-only viewers can pan/inspect but never move or reparent a block — the drag
@@ -35,9 +42,11 @@ export function useBlockDrag() {
     const startX = e.clientX
     const startY = e.clientY
     const orig = { ...block.position }
-    // Container-local blocks (tasks/modules) are clamped to their parent's origin;
-    // frames live in free-floating flow space, so they opt out via `clamp: false`.
+    // Container-local blocks (initiative cards) are clamped to their parent's origin;
+    // frames live in free-floating flow space, so they opt out via `clamp: false`. Inert for
+    // a `positioned: false` drag, which never writes a position at all.
     const clamp = opts.clamp ?? true
+    const positioned = opts.positioned ?? true
     draggingId.value = block.id
     // Position is only previewed locally while dragging and persisted once on
     // release. Writing every move raced — a late, out-of-order response could land
@@ -51,7 +60,10 @@ export function useBlockDrag() {
       const ny = orig.y + (ev.clientY - startY) / z
       moved = true
       last = { x: clamp ? Math.max(0, nx) : nx, y: clamp ? Math.max(0, ny) : ny }
-      board.previewMove(block.id, last)
+      // A lane task has nowhere to preview TO: its place in the column is derived from its
+      // status and the reader's sort, so following the cursor would be a lie the drop then
+      // undoes. The `draggingId` state the card dims itself with is the whole feedback.
+      if (positioned) board.previewMove(block.id, last)
     }
     const onUp = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', onMove)
@@ -60,9 +72,9 @@ export function useBlockDrag() {
         // A successful reparent persists the move itself; otherwise commit the final
         // position in place. Either way it's a single write, not one per frame. Run
         // the hit-test BEFORE clearing draggingId so the dragged element is still
-        // marked non-interactive (see DraggableTask) and the zone beneath resolves.
-        const reparented = opts.reparent && reparentAt(block, ev.clientX, ev.clientY)
-        if (!reparented) void board.moveBlock(block.id, last)
+        // marked non-interactive (see LaneTask) and the zone beneath resolves.
+        const reparented = opts.reparent && reparentAt(block, ev.clientX, ev.clientY, positioned)
+        if (!reparented && positioned) void board.moveBlock(block.id, last)
       }
       draggingId.value = null
     }
@@ -71,10 +83,15 @@ export function useBlockDrag() {
   }
 
   /** Returns true when the block was dropped into a *different* container. */
-  function reparentAt(block: Block, clientX: number, clientY: number): boolean {
+  function reparentAt(
+    block: Block,
+    clientX: number,
+    clientY: number,
+    positioned: boolean,
+  ): boolean {
     const el = document.querySelector(`[data-block-id="${block.id}"]`) as HTMLElement | null
     if (!el) return false
-    // The dragged block is already non-interactive while dragging (DraggableTask
+    // The dragged block is already non-interactive while dragging (LaneTask
     // drops pointer-events on the whole wrapper, handle included); belt-and-braces,
     // also neutralise this node so elementFromPoint resolves the zone beneath it.
     const prev = el.style.pointerEvents
@@ -87,14 +104,27 @@ export function useBlockDrag() {
     const newParent = zoneEl.getAttribute('data-drop-zone')!
     if (newParent === block.parentId) return false // same container — caller commits position
 
+    void board.reparentBlock(block.id, newParent, positionIn(zoneEl, el, positioned))
+    return true
+  }
+
+  /**
+   * Where the dropped block lands in its new container.
+   *
+   * A lane task gets the origin, not the coordinates it happened to be released over.
+   * Its place in the new container is derived from its status and the reader's sort, so a
+   * captured offset would be a coordinate nothing reads and every later reader would have
+   * to wonder whether it meant something.
+   */
+  function positionIn(zoneEl: HTMLElement, el: HTMLElement, positioned: boolean) {
+    if (!positioned) return { x: 0, y: 0 }
     const z = ui.zoom || 1
     const zr = zoneEl.getBoundingClientRect()
     const er = el.getBoundingClientRect()
-    void board.reparentBlock(block.id, newParent, {
+    return {
       x: Math.max(0, (er.left - zr.left) / z),
       y: Math.max(0, (er.top - zr.top) / z),
-    })
-    return true
+    }
   }
 
   return { draggingId, startDrag }

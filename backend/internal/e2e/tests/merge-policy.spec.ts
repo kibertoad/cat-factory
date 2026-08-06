@@ -66,10 +66,11 @@ test.describe('merge policy (authored in the UI, applied by the merger)', () => 
     await expect(card).toHaveAttribute('data-status', 'planned')
     await startRun(request, workspaceId, 'task_login', pipeline.id)
 
-    // LIVE: the merge actually lands, and the board says so by UN-rendering the task: a merged
-    // task stops being a unit of work (`DraggableTask` renders no card for a `done` block), which
-    // is the settled state this outcome holds. Asserting the absence is only sound because the
-    // card was asserted PRESENT above, so this is a transition rather than a never-rendered node.
+    // LIVE: the merge actually lands, and the board says so by moving the task out of its three
+    // live swimlanes: a merged task stops being a unit of work and joins the frame's Done lane,
+    // which is COLLAPSED by default, so no card for it is in the DOM. Asserting the absence is
+    // only sound because the card was asserted PRESENT above, so this is a transition rather
+    // than a never-rendered node.
     await expect(card).toBeHidden({ timeout: RUN_TERMINAL_TIMEOUT })
     // Corroboration over REST for WHICH terminal state that absence is: `done` (merged), not the
     // `pr_ready` a refusal would have left behind. The absence alone cannot tell those apart.

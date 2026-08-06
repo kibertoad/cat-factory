@@ -761,7 +761,21 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
       })
       expect(blocked.status).toBe(409)
     })
+  })
 
+  registerBlockRepositoryTests(harness)
+}
+
+/**
+ * The `BlockRepository` port itself, driven directly rather than through HTTP.
+ *
+ * Split out of the epics/dependency suite above, whose `describe` had grown to cover three
+ * unrelated concerns (epics + the dependency graph, the JSON-column round-trips, and these
+ * port-level reads and writes). These are the ones with no HTTP surface of their own: a batched
+ * read the engine uses internally, and a column the repository DERIVES rather than accepts.
+ */
+function registerBlockRepositoryTests(harness: ConformanceHarness): void {
+  describe('block repository port', () => {
     it('findByIds resolves blocks across workspaces in one batched read', async () => {
       // The cross-workspace dependency gate resolves a dependent's foreign blockers via
       // the batched `BlockRepository.findByIds` (never a point-read per id) — assert the
@@ -785,6 +799,44 @@ function registerEpicDependencyTests(harness: ConformanceHarness): void {
       expect(byId.get(a.body.id)?.block.title).toBe('Home task')
       // Empty input short-circuits to an empty result.
       expect(await repo.findByIds([])).toEqual([])
+    })
+
+    it('stamps completedAt when a block reaches done, and only the FIRST time', async () => {
+      // The board's Done swimlane ages a completed task out of view, and `blocks` carried no
+      // timestamp at all before this. The stamp is derived in the repository rather than at
+      // the several services that mark a task done, so it is the STORE that has to agree
+      // across runtimes — hence a conformance assertion rather than a unit test.
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const repo = app.blockRepository()
+      const created = await app.call<Block>(
+        'POST',
+        `/workspaces/${workspace.id}/blocks/blk_auth/tasks`,
+        { title: 'Ship it' },
+      )
+      const id = created.body.id
+
+      // An unfinished task has no completion date, and that must read as absent rather than
+      // as a zero a reader could mistake for "completed at the epoch".
+      expect((await repo.get(workspace.id, id))?.completedAt ?? null).toBeNull()
+
+      await repo.update(workspace.id, id, { status: 'done' })
+      const first = (await repo.get(workspace.id, id))?.completedAt
+      expect(typeof first).toBe('number')
+
+      // A second `done` write — what a replaying durable driver does — must NOT move the
+      // date, or a re-drive would quietly age the task back into the lane.
+      await repo.update(workspace.id, id, { status: 'done', progress: 1 })
+      expect((await repo.get(workspace.id, id))?.completedAt).toBe(first)
+
+      // A patch that does not touch `status` leaves the stamp alone.
+      await repo.update(workspace.id, id, { title: 'Ship it (renamed)' })
+      expect((await repo.get(workspace.id, id))?.completedAt).toBe(first)
+
+      // Leaving `done` clears it, which is what a reset-and-rerun does: the lane must date
+      // the attempt that actually landed, not the one that was thrown away.
+      await repo.update(workspace.id, id, { status: 'in_progress' })
+      expect((await repo.get(workspace.id, id))?.completedAt ?? null).toBeNull()
     })
   })
 }

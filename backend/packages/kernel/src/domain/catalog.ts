@@ -41,6 +41,11 @@ export const DEFAULT_WORKSPACE_SETTINGS: WorkspaceSettings = {
   storeAgentContext: true,
   publishPrVerificationReport: true,
   artifactRetentionDays: 14,
+  // The Done swimlane keeps two weeks and 20 cards. Both are visibility caps, not deletion:
+  // a service that has merged 400 tasks still says so in the lane's total, and everything
+  // aged out stays reachable from search and its own inspector.
+  doneLaneMaxItems: 20,
+  doneLaneRetentionDays: 14,
   kaizenEnabled: true,
   delegateAgentsToRunnerPool: false,
   // On, and deliberately not opt-in: every blocking finding names an input a model could not

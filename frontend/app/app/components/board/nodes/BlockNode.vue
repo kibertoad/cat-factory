@@ -2,9 +2,8 @@
 import type { Block, BlockStatus } from '~/types/domain'
 import { blockTypeMeta, STATUS_META } from '~/utils/catalog'
 import DecisionBadge from './DecisionBadge.vue'
-import DraggableTask from './DraggableTask.vue'
+import FrameSwimlanes from './FrameSwimlanes.vue'
 import InitiativeCard from './InitiativeCard.vue'
-import ModuleFrame from './ModuleFrame.vue'
 import ResizeGrips from './ResizeGrips.vue'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
@@ -37,7 +36,9 @@ const isShared = computed(() => services.isSharedFrame(props.id))
 const typeMeta = computed(() => (block.value ? blockTypeMeta(block.value.type) : null))
 
 // ---- this service's children (tasks + modules) -----------------------------
-const directTasks = computed(() => board.tasksOf(props.id))
+// No `directTasks` here: the swimlanes take EVERY task under the frame, its modules' included,
+// because a module is a grouping inside a lane now rather than a box of its own. `modules` is
+// still read for the composition line's module count.
 const modules = computed(() => board.modulesOf(props.id))
 const initiativeBlocks = computed(() => board.initiativesOf(props.id))
 const allTasks = computed(() => board.allTasksUnder(props.id))
@@ -389,7 +390,7 @@ const ITEM_ICON: Record<string, string> = {
       </div>
     </div>
 
-    <!-- ===================== EXPANDED: 2D canvas of tasks + modules ===================== -->
+    <!-- ================= EXPANDED: the initiative band + task swimlanes ================= -->
     <div
       v-else
       class="relative overflow-visible rounded-2xl border bg-slate-900/95 shadow-2xl backdrop-blur"
@@ -594,15 +595,24 @@ const ITEM_ICON: Record<string, string> = {
           </div>
         </div>
 
-        <!-- the 2D drop zone: modules and loose tasks live here, draggable -->
+        <!-- The frame's canvas. Tasks are laid out in status swimlanes rather than at
+             coordinates, so this is a fixed-size viewport (each lane scrolls) instead of the 2D
+             free-drag surface it used to be. `data-drop-zone` stays on the outer box so a drop
+             in the padding between lanes still resolves to this service rather than falling
+             through to nothing; each lane body carries the same zone for drops inside it. -->
         <div
           :data-drop-zone="block.id"
-          class="nodrag relative rounded-xl bg-slate-950/40"
-          :style="{ width: canvas.w + 'px', height: canvas.h + 'px' }"
+          class="nodrag relative rounded-xl bg-slate-950/40 p-2"
+          :style="{ width: canvas.w + 'px', minHeight: canvas.h + 'px' }"
         >
-          <ModuleFrame v-for="m in modules" :key="m.id" :module-id="m.id" />
-          <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
-          <DraggableTask v-for="t in directTasks" :key="t.id" :task-id="t.id" />
+          <!-- Initiatives sit in a wrapping band above the lanes: they are containers of work,
+               not units of it, so they belong in no status lane. -->
+          <div v-if="initiativeBlocks.length" class="mb-2 flex flex-wrap gap-2">
+            <InitiativeCard v-for="i in initiativeBlocks" :key="i.id" :block-id="i.id" />
+          </div>
+
+          <FrameSwimlanes v-if="hasTasks" :frame-id="block.id" />
+
           <button
             v-if="!hasTasks && access.canWriteBoard.value"
             type="button"

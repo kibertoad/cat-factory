@@ -15,6 +15,7 @@ The SPA source lives under `app/` (the Nuxt srcDir).
 - [What it is](#what-it-is)
 - [Tech stack](#tech-stack)
 - [Layout](#layout)
+- [Task swimlanes](#task-swimlanes)
 - [Interface modes (basic / advanced)](#interface-modes-basic--advanced)
 - [Agent tiers (basic / intermediate / advanced)](#agent-tiers-basic--intermediate--advanced)
 - [In-app tutorial tours](#in-app-tutorial-tours)
@@ -135,6 +136,69 @@ Some bare tags do work, which is exactly what makes this worth writing down. Nux
 The failure is silent, which is why this is a rule rather than a preference. An unresolved tag warns in dev and then renders nothing, so a built SPA has a hole where the component should be. Nothing catches it: not typecheck, not the unit tests, not the e2e suite, and not the user, who reads it as a backend returning no data. Seven components had shipped this way.
 
 `scripts/check-component-imports.mjs` enforces it (CI's `repo-guards` job). If a panel section is missing and the data looks right, check the import first.
+
+## Task swimlanes
+
+A service frame lays its tasks out in **status lanes**, not at coordinates. Three lanes a reader
+works in (`not_started`, `in_progress`, `needs_you`) plus a collapsed **Done** strip beneath them.
+The vocabulary, the classification and the Done caps are `app/utils/swimlanes.ts`; the ordering and
+grouping are `app/utils/laneSort.ts`; `composables/useFrameLanes.ts` is the only store-facing half.
+
+**A lane is a CLAIM, which is a higher bar than a badge.** A mislabelled badge sits beside the
+truth; a card filed in the wrong lane states something false _and_ hides the card from the column
+its reader was scanning. Three rules follow, and they are what the tests pin:
+
+- **The classification is TOTAL.** `BASE_REASON_BY_STATUS` is a `Record<BlockStatus, …>`, so a new
+  status fails the build; and a status the TYPE says is impossible while the DATABASE still holds it
+  (a retired picklist member on an old row) resolves to `unclassified` → `needs_you`, never to
+  `undefined`, which would drop the card out of every lane with nothing left to say it existed.
+- **An imprecise reason beats a wrong lane.** The SPA models only decisions and approvals as global
+  per-block selectors; a judge / human-test / visual-confirmation / fork / follow-up / input-gate
+  park is reachable only by drilling into a step. But every one of them parks the RUN at
+  `status: 'blocked'`, and that coarse marker places the card correctly even when this layer cannot
+  name the surface. Such a park reports `parked` — named but imprecise, never demoted to "in flight".
+- **The reason is a separate answer from the lane.** The lane says "look at this"; the reason says
+  "what would I do". `failed`, `budget_paused` and `approval` all stop work dead and need three
+  unrelated actions, which is why `blocking_reason` is a grouping and why a lane header can name it.
+
+**Ordering defaults per lane** (`smart`), because the actionable order genuinely differs by column:
+what can be started now / what has gone quiet / what has waited longest. Two rules bind any new
+comparator: an **unknown timestamp sorts last in BOTH directions** (a run that reported no activity
+is not stale and not fresh, and ranking it as either invents a fact), and **every comparator ends on
+board order**, since these re-run on every live push and an unresolved tie makes the lane shuffle
+itself. `nullsLast` is the single place the first rule lives.
+
+**Sizing is decoupled from content** (`utils/laneGeometry.ts`, read by both `contentSize` and
+`FrameSwimlanes`). A lane scrolls; it does not grow. A service with 300 open tasks gets the same
+frame as one with three, which is what the old free layout could not do — a busy service grew until
+it dwarfed its neighbours. A dragged frame border raises the floor those constants set.
+
+**Two preferences, deliberately different scopes.** The sort/group choice is per user, per browser
+(`stores/laneView.ts`, persisted like the interface tier): it is personal and changes several times
+an hour, and making it shared would let one person's triage sweep re-arrange everyone's board. The
+Done lane's two **caps** are per-workspace settings (`doneLaneMaxItems`, `doneLaneRetentionDays`),
+because what the board may show of a service's history is a shared decision. Both caps hide cards
+only, and the lane reports the two drop counts separately: an age drop means "there is older
+history", a cap drop means "there is more from this period".
+
+**A task with no `completedAt` is exempt from the age cap**, not treated as ancient. Every block
+merged before that column existed reads that way, and hiding history on the strength of a timestamp
+nobody recorded would be the platform inferring a fact it does not have. The count cap still bounds
+them, so the exemption cannot make the lane unbounded, and `undatedShown` says how many there are.
+
+**A FRAME still has coordinates, and they live on its `WorkspaceMount`, not on the block** (one
+shared service sits at a different spot on every board that mounts it), so every frame-returning read
+projects through kernel's `applyMountLayout`. The resize path is where people hit a missed projection,
+because a `size`-only edit is the one frame patch with no other visible effect: the SPA upserts the
+authoritative block the mutation returned and the frame jumps to coordinates no board shows it at.
+
+**Dragging a card now only reparents** (`positioned: false` in `useBlockDrag`): between services,
+and into or out of a module via a module group header's drop zone. Which LANE a card is in is not
+something a drop can decide — the lane is derived from state, so dropping a not-started card on
+"In progress" could only lie or silently do nothing. Because that drop target exists only while the
+reader has grouping set to `module`, the inspector carries a **module picker** that does not depend
+on the current grouping; module sub-frames no longer render as boxes, so without it the only route
+into a module would be to change a view preference first.
 
 ## Interface modes (basic / advanced)
 
@@ -732,8 +796,11 @@ example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tr
 ## Key UI surfaces
 
 - **Board canvas** (`components/board`): `BoardCanvas` + `nodes/` (`BlockNode`,
-  `ModuleFrame`, `TaskCard`), dependency edges, the per-block `AgentFailureCard` /
-  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. A running task card expands
+  `FrameSwimlanes` / `TaskLane` / `LaneGroup` / `LaneTask`, `TaskCard`), dependency edges,
+  the per-block `AgentFailureCard` /
+  `AgentStopButton`, and a deep-zoom `focus/BlockFocusView`. Tasks are laid out in status
+  lanes rather than at coordinates (see [Task swimlanes](#task-swimlanes)); the board-level
+  order/grouping override is `LaneViewControl` in the toolbar. A running task card expands
   its build pipeline (`TaskPipelineMini`) on hover at any zoom level, and across every
   on-screen card past the `steps` zoom band: the two grants are combined in the
   `taskExpansion` store and driven by `useTaskExpansion`.
