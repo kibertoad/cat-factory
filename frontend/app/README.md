@@ -79,6 +79,30 @@ earlier than before takes the entire SPA down at boot, and the unit suite cannot
 (nothing there installs the plugin). Every e2e spec does, because every one of them boots
 the app.
 
+### The persisted board pin is UNVALIDATED until `init()` resolves it
+
+`workspace.workspaceId` is restored from persisted state SYNCHRONOUSLY, before any request fires,
+so every `immediate: true` watcher on it (`pages/index.vue`) runs against an id nothing has
+checked. The pin can name a board that was deleted, or one whose access was revoked while the
+browser held it, and the RBAC gate answers both with a 404 (it hides a denial as a not-found, so
+existence never leaks). `init()` then validates the pin against `GET /workspaces` and re-points it
+at a board the user can actually reach.
+
+Firing the per-board reads on the pin anyway is deliberate: it overlaps them with the workspace
+list instead of queueing them behind it, which is why `init()` fetches the pinned SNAPSHOT
+speculatively too. **What travels with that is the miss.** Each of those boot reads states its own
+tolerance at its own seam (`init`'s `.catch(() => null)`, `github.ensureProbed`'s internal catch,
+`models.prefetchForBoard`), because a 404 there is an expected outcome and not a fault: the
+watcher fires again for the board init resolved, which is the read that counts. A bare
+`void store.load(workspace.workspaceId)` in that chain is an uncaught rejection in a real user's
+browser, and the e2e suite's `pageErrors` fixture fails the spec that boots a session whose access
+was just revoked.
+
+Tolerating the miss is not the same as pretending it succeeded: a dropped load leaves its store
+UNLOADED (`models.loaded` stays false, so `useAiReadiness().ready` is false), which reads as
+unresolved rather than as a board with nothing configured, and leaves the next caller free to
+retry. Pin new boot reads with a store-level unit test (`stores/models.spec.ts`).
+
 ### A backend-DECLARED form renders through `DescriptorFields.vue`
 
 When the backend declares the fields and the SPA only collects them, render them with the shared

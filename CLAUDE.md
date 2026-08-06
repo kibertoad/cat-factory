@@ -155,7 +155,7 @@ messages, code comments, UI copy.
   is POSIX sh, so `@'…'@` leaks literal `@` characters into the commit subject. Use
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
-  Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
+  Verify pure-logic changes with `--filter=@cat-factory/orchestration`.
 - **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
   for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
   vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
@@ -573,9 +573,9 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 
 ### Run the CI guard scripts locally before committing
 
-> **Do NOT run locally: `pnpm lint:knip`, `node scripts/check-package-catalog.mjs`** (slow; CI's
-> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly non-blocking
-> workflow only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> **Do NOT run locally: the whole-tree `pnpm test:run` (CI's test lanes own it), `pnpm lint:knip`,
+> `node scripts/check-package-catalog.mjs`** (slow; CI's `Build & typecheck` is authoritative) **or
+> `turbo run test:mutation`** (nightly only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -968,9 +968,9 @@ faked. Spec-writing mechanics and the Specs table:
 - **What e2e is FOR**: what only the assembled product shows, above all the live WebSocket-pushed UI
   round-trip. A pure backend side-effect belongs in conformance. Anything needing a real outbound call
   must be mocked at the backend's OUTBOUND boundary, never in the browser.
-- **Spec shape (mandatory)**: seed/trigger over REST, then assert only on LIVE pushed UI updates. No
-  reloads, no fixed sleeps, no canvas drag/zoom; only web-first assertions on the named timeouts in
-  `tests/helpers.ts`. Selectors are `data-testid`, always.
+- **Spec shape (mandatory)**: seed/trigger over REST, then assert only on LIVE pushed UI updates: no
+  reloads, no sleeps, no canvas drag/zoom, `data-testid` selectors, `helpers.ts` timeouts. A spec
+  about IDENTITY (the login screen, a policy naming PEOPLE) needs the AUTH-ENABLED stack.
 - **A flaky e2e test is a BLOCKING bug: investigate and deflake, NEVER retry.** Playwright enforces this
   (`failOnFlakyTests: true`); the retry exists ONLY to capture the trace. A flake almost always exposes a
   REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin
@@ -1075,9 +1075,10 @@ AND that a gated controller leaves no route of its own uncovered.
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`). Only the LLM is faked. **Iterate on `pnpm test:changed`** (changed packages plus dependents)
-  or `pnpm test:quick` (nothing needing Postgres/`workerd`); `pnpm test:run` is the whole tree and needs a DB up.
-  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
+  (`DATABASE_URL`); only the LLM is faked. **Running the WHOLE tree locally is BANNED: that is CI's lane.** Run
+  the narrowest scope that covers the change (`pnpm test:changed`, `pnpm test:quick` for what needs neither
+  Postgres nor `workerd`, or one `--filter`ed package or vitest file) and let CI prove the rest. A green run
+  printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
@@ -1087,7 +1088,6 @@ AND that a gated controller leaves no route of its own uncovered.
   EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
   existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
   bug is consistent in both halves.
-- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw script
-  from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces as spurious
-  `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`: `--filter=@cat-factory/app`,
-  or `--filter='...[origin/main]'` for what you changed plus its dependents. (Exception: a task with no build deps.)
+- **Always run `typecheck`/`test`/`build` through Turbo from the repo root**, never a package's raw script from inside
+  its directory (exception: a task with no build deps), and scope with `--filter` rather than a `cd`. Turbo's `^build`
+  edge only fires through Turbo; bypassing it surfaces as spurious `TS2307 Cannot find module '@cat-factory/contracts'`.

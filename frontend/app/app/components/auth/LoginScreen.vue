@@ -205,7 +205,10 @@ const noSignInMethod = computed(
 </script>
 
 <template>
-  <div class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100">
+  <div
+    class="flex h-screen w-screen items-center justify-center bg-slate-950 text-slate-100"
+    data-testid="login-screen"
+  >
     <div
       class="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/80 p-8 backdrop-blur"
     >
@@ -392,6 +395,7 @@ const noSignInMethod = computed(
           icon="i-lucide-at-sign"
           size="lg"
           class="w-full"
+          data-testid="login-email"
         />
         <SecretInput
           v-model="password"
@@ -400,9 +404,17 @@ const noSignInMethod = computed(
           icon="i-lucide-lock"
           size="lg"
           class="w-full"
+          data-testid="login-password"
         />
-        <p v-if="error" class="text-sm text-rose-400">{{ error }}</p>
-        <UButton block size="lg" color="primary" type="submit" :loading="busy">
+        <p v-if="error" class="text-sm text-rose-400" data-testid="login-error">{{ error }}</p>
+        <UButton
+          block
+          size="lg"
+          color="primary"
+          type="submit"
+          :loading="busy"
+          data-testid="login-submit"
+        >
           {{ mode === 'signup' ? t('auth.login.createAccount') : t('auth.login.signIn') }}
         </UButton>
         <p class="text-center text-xs text-slate-400">

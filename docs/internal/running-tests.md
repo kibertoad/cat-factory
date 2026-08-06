@@ -5,26 +5,26 @@ is part of the product: it is the setup, the scope worth running per edit, and t
 traps that make a working tree look broken when the only thing missing is a database.
 
 Kept SHORT and ratcheted (`scripts/check-file-size.mjs`) because `CLAUDE.md` points an
-agent straight here. A pointer is only cheap while the thing it points at is: detail
-that belongs to one package goes in that package's `AGENTS.md`, and anything a human
-contributor needs before their first commit goes in
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+agent straight here. A pointer is only cheap while the thing it points at is: detail for
+one package goes in that package's `AGENTS.md`, and anything a human contributor needs
+before their first commit goes in [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
 ## The suites
 
-`pnpm test:run` from the root covers every package, and most of it needs no setup at
-all. Two are the exception: the Node and Local facades test against a real Postgres,
-and with no server reachable they fail with `DATABASE_URL is required to run the local
-conformance tests` while every other task passes. Read that as "no database here", not
-as a broken merge. Not in `pnpm test:run` at all: Playwright (`backend/internal/e2e`,
-which needs Postgres and a browser) and mutation testing (nightly CI only, see
-[`mutation-testing.md`](./mutation-testing.md)).
+`pnpm test:run` from the root covers every package, and it is CI's lane: running the
+whole tree locally is BANNED (`CLAUDE.md`), so the scopes below are what you run. Most
+of it needs no setup; two packages are the exception, the Node and Local facades, which
+test against a real Postgres and with no server reachable fail with `DATABASE_URL is
+required to run the local conformance tests` while every other task passes: read that
+as "no database here", not as a broken merge. Not in `pnpm test:run` at all: Playwright
+(`backend/internal/e2e`, needing Postgres and a browser) and mutation testing (nightly
+CI only, see [`mutation-testing.md`](./mutation-testing.md)).
 
-## While iterating, run a SCOPE, not the tree
+## Run a SCOPE, never the tree
 
 The whole tree is minutes of wall clock and wants a database up, which is the wrong
-price to pay per edit. Two root scripts narrow it, and they replace running
-`pnpm test:run` after every edit, never running it before a PR:
+price to pay per edit and the wrong thing to re-prove before a PR, since CI runs it on
+every push. Two root scripts narrow it, and one of them is what you run instead:
 
 - **`pnpm test:changed`**: the packages you changed plus everything depending on them
   (`--filter='...[origin/main]'`). The scope to iterate on. It carries `--env-mode=loose`

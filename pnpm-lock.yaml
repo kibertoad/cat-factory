@@ -174,6 +174,9 @@ importers:
       '@cat-factory/node-server':
         specifier: workspace:*
         version: link:../../runtimes/node
+      '@cat-factory/server':
+        specifier: workspace:*
+        version: link:../../packages/server
     devDependencies:
       '@cat-factory/orchestration':
         specifier: workspace:*

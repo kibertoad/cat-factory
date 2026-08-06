@@ -1,5 +1,140 @@
 # @cat-factory/app
 
+## 0.236.1
+
+### Patch Changes
+
+- 982deff: Cover the front door and the three policies that decide what lands, end to end
+
+  Four surfaces the product cannot be used without had no browser coverage, and each fails in the one
+  direction a test suite is supposed to catch: silently, in production, on someone else's behalf.
+
+  - **Sign-in.** The whole suite ran with authentication OFF, so the one screen every user of a hosted
+    deployment passes through was untested, and its failure mode is the worst in the product: nobody
+    gets in and nothing says so. The spec drives the real form (gate, refusal, sign-in, reload,
+    sign-out) and asserts the live WebSocket connects for the session too, which is the only assertion
+    that separates a session good enough for REST from one good enough for the stream.
+  - **The merge policy.** The auto-merge ceilings are the one setting that decides, unattended, whether
+    an agent's work lands on the default branch, and neither the library in Workspace Settings nor the
+    per-task picker was covered. `merge-review.spec` looked like coverage but reaches its refusal by
+    making the AGENT report a bad diff, so nothing in it depends on the policy at all: a panel that
+    dropped a field or wrote percentages where fractions were expected would leave it green while
+    auto-merging what an operator had forbidden. The new spec hands the merger the SAME assessment
+    twice and changes only the policy, so the two outcomes ARE the policy.
+  - **Access administration.** `rbac.spec` proves a viewer's board and an admin's board render
+    differently, but it seeds both roles into the database. The act itself (a role changed, a member
+    removed) was uncovered, and the proof of it is what a DIFFERENT signed-in user's browser then
+    renders, so each test spends a second context booted after the change.
+  - **Quorum and named approvers.** "Two people must sign off, and only these people may" is the shape
+    a team uses for anything that ships. Every way it can break is invisible: a quorum that counts one
+    person's two clicks, a policy saved against the wrong step index, a refusal enforced only in the
+    SPA. Three signed-in people now drive one parked step.
+
+  The last two need identities the browser can see, and the suite's backend deliberately has none: its
+  `TESTING_NO_AUTH` opt-in is what lets 40-odd specs seed over anonymous REST, and under it the SPA
+  renders the board anonymously and never resolves a user, so a gate policy that names people refuses
+  everybody. Rather than fork the backend, the e2e process now serves a SECOND HTTP surface with
+  `config.auth` on (the same container, one engine, one worker) and a second instance of the same SPA
+  build pointed at it. Two properties of the product made that cheap and are worth knowing: `authConfig`
+  reads `container.config.auth` per request, so an auth-enabled deployment is a config clone rather than
+  a second wiring; and the SPA's Nitro shell re-reads `NUXT_PUBLIC_API_BASE` at startup, so a second
+  origin costs a process rather than a second (slowest-step) build. The one thing that is not free is
+  the WebSocket hub, which `start()` keeps to itself, so engine events are teed into both listeners.
+
+  The SPA changes are `data-testid` hooks the specs select through, plus one attribute worth calling
+  out: the risk-policy picker's hook lived on its DEFAULT trigger, which the inspector replaces via the
+  `#trigger` slot, so the inspector's own picker had no hook at all. Selecting the merge policy a task
+  runs under was, until now, unreachable from a test.
+
+  The access-administration spec also found a real one, which is fixed here. A removed member's next
+  visit still carries the persisted pin for the board they just lost, and the boot watcher loads the
+  model catalog for whatever that pin says before `init()` has validated it, so the gate's 404 escaped
+  as an uncaught rejection in the page. Every other boot read of the unvalidated pin already tolerates
+  the miss (init's own speculative snapshot fetch, the GitHub probe, the stream ticket mint); the
+  catalog load now says so too, through `models.prefetchForBoard`, which keeps the store UNLOADED on a
+  miss so the failure reads as unresolved rather than as a board with no AI configured.
+
+## 0.236.0
+
+### Minor Changes
+
+- ab0c228: A pasted document link is judged before the task is saved, not after
+
+  Attaching a page to a task accepted whatever text sat in the picker's box. The only thing that ever
+  checked it was the IMPORT, and the import ran after the task had been created, so a link the source
+  could not read produced a task that already existed, carrying context it never got, with the verdict
+  arriving as a toast over a closed dialog. A Figma share link is where this bit hardest, because the
+  Copy link button emits a title segment plus `?p=` / `&t=` tracking params on top of the frame's node
+  id: that whole string was staged verbatim, and a node id the parser cannot read degrades silently to
+  the WHOLE FILE, so "I attached this frame" and "I attached the entire design" looked identical right
+  up until an agent read the wrong thing.
+
+  `POST /document-sources/:source/resolve-ref` is the fix's spine: `DocumentImportService.resolveRef`
+  is `import` with the fetch removed, and `import` now goes through it rather than parsing again, so
+  the pre-flight and the import cannot disagree about which refs are usable. It spends no upstream
+  call and needs no connection, which is what makes it cheap enough for the picker to call as the user
+  types. It answers the canonical form the reference will be stored under, including a `canonicalUrl`
+  the provider rebuilds from the id (a new optional `DocumentSourceProvider.canonicalUrl`, implemented
+  by Figma, Zeplin and Notion). That method is optional because the absence is a real fact rather than
+  a gap, and the two shapes of absence are worth keeping apart: Confluence needs the connection's site
+  base URL and Linear the workspace slug, while GitHub docs has everything but the HOST, which is a
+  deployment fact (a GitLab-backed deployment reaches that source through the VCS adapter, so a
+  `github.com` link built from the id would be wrong for it and presented as the supported form the
+  paste was trimmed to). All of them answer null, and the id itself is the canonical form there, which
+  callers must render rather than read as a failed resolution.
+
+  A reference the provider could only parse by DROPPING the frame it named says so on its own field.
+  `parseRef` falling back to the whole file is right (nothing knows which frame a complex instance id
+  meant, and Figma's Copy link emits one for any component instance), but the fallback is invisible: a
+  valid id, a valid canonical URL, and a "trimmed to the supported form" note that reads the same
+  whether tracking params were dropped or the whole design was swapped in for one frame. The new
+  optional `DocumentSourceProvider.droppedScope` carries the discarded qualifier as pasted, and the
+  picker gives it its own warning line, because a trim and a widening are opposite facts.
+
+  A refusal names WHICH correction it needs, as a closed `details.reason` vocabulary with two members
+  rather than one. `document_ref_unrecognized` means no link of this shape will work here and carries
+  the format that would; `document_ref_claimed_by_other_source` means the link is perfectly good and
+  aimed at the wrong source, and names the claimant so the picker can offer to switch with the text
+  unchanged. Collapsing them would tell someone who pasted a valid Figma frame URL into a Notion-backed
+  picker that their link is malformed. Claimants are searched host-PINNED first, through the same
+  `orderSourcesByClaimConfidence` the prose-URL canonicaliser reads rather than a second copy of its
+  two passes: a blind parser claims a shape, so registration order deciding would point a design link
+  at Notion, and a confidence rule living in two places gets refined in one of them. The quoted input
+  goes through `redactSecrets`, since a pasted link routinely carries a `?token=` the error envelope
+  would otherwise echo into the logs. Both reason codes reach `/api/v1` through the public task-create
+  attachment, so the surface version steps to `1.19.0` and `public-api.md` names them.
+
+  The SPA half is the other side of one rule, not a second copy of it: the picker asks the backend
+  rather than restating any provider's parse, and shows the canonical form on the row it is about to
+  stage, saying when it trimmed and, separately, when the reference is WIDER than what was pasted. Only
+  the source's own refusal blocks a paste: a resolve call that FAILED leaves the reference unjudged and
+  still stageable with the import as the backstop, and an unknown reason value falls into that same
+  bucket, because reading a 502 or an older backend's vocabulary as "your link is wrong" is the
+  misattribution this surface exists to avoid, and an outage that made attaching impossible would be a
+  worse failure than the one being fixed. Fetching moved ahead of the create too
+  (`useContextLinking().resolvePending`, used by both the add-task and create-initiative forms): every
+  attachment is imported before the block is written, all failures are reported together rather than
+  one round trip at a time, and nothing is created while any of them is unresolved, so the correction
+  is made with the form still open. That raises the bar on saying WHICH attachment is at fault, so a
+  failed fetch is marked on the staged chip itself and not only in the toast, and the add-task form's
+  issue-body pre-fetch records its cause instead of swallowing it (a tracker reference has no
+  `parseRef` to pre-flight, so that attempt is its pre-flight). What stays after the create is the LINK
+  step alone, whose realistic failure is a document another task already holds.
+
+  Reviewing: the interesting part is the split between "the source refused this" and "we could not
+  ask", since only the first may be shown to a user as a bad link, and the parallel split between a
+  trim and a widening. Worth checking too that the picker stages the RESOLVED external id rather than
+  the pasted text (there is a round-trip test for it: a provider whose bare-id branch were stricter
+  than its URL branch would refuse the very reference the pre-flight approved), and that a task is
+  genuinely not created when an attachment cannot be fetched. Nothing about the description-paste path
+  changed: a URL named in prose still resolves best-effort against the imported corpus and still
+  degrades to an info log when it matches nothing.
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+
 ## 0.235.0
 
 ### Minor Changes
