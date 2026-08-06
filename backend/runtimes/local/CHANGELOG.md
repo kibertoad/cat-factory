@@ -1,5 +1,11 @@
 # @cat-factory/local-server
 
+## 0.113.3
+
+### Patch Changes
+
+- @cat-factory/node-server@0.180.2
+
 ## 0.113.2
 
 ### Patch Changes

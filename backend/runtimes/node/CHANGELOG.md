@@ -1,5 +1,12 @@
 # @cat-factory/node-server
 
+## 0.180.2
+
+### Patch Changes
+
+- Updated dependencies [b8b6888]
+  - @cat-factory/gates@0.9.14
+
 ## 0.180.1
 
 ### Patch Changes
