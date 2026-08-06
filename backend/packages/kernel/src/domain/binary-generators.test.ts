@@ -641,7 +641,7 @@ describe('renderBinaryOutputBrief with generators', () => {
   })
 })
 
-describe('renderBinaryGeneratorSection — one integration’s entry', () => {
+describe('renderBinaryGeneratorSection: one integration’s entry', () => {
   const section = (view: BinaryGeneratorView) =>
     renderBinaryGeneratorSection({
       selection: { selected: [view], unresolvedIds: [] },
@@ -685,7 +685,7 @@ describe('renderBinaryGeneratorSection — one integration’s entry', () => {
   })
 })
 
-describe('renderBinaryGeneratorSection — unresolved ids', () => {
+describe('renderBinaryGeneratorSection: unresolved ids', () => {
   const section = (unresolvedIds: string[]) =>
     renderBinaryGeneratorSection({
       selection: { selected: [generator()], unresolvedIds },
@@ -707,7 +707,7 @@ describe('renderBinaryGeneratorSection — unresolved ids', () => {
   })
 })
 
-describe('renderBinaryGeneratorSection — the requirement lines', () => {
+describe('renderBinaryGeneratorSection: the requirement lines', () => {
   const requirements = (
     requestedModalities: Parameters<typeof renderBinaryGeneratorSection>[0]['requestedModalities'],
     requestedMediaTypes: string[],
@@ -761,7 +761,7 @@ describe('renderBinaryGeneratorSection — the requirement lines', () => {
   })
 })
 
-describe('renderBinaryGeneratorSection — the overlap paragraph', () => {
+describe('renderBinaryGeneratorSection: the overlap paragraph', () => {
   const overlap = (selected: BinaryGeneratorView[]) =>
     renderBinaryGeneratorSection({
       selection: { selected, unresolvedIds: [] },

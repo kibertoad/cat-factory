@@ -127,7 +127,7 @@ describe('aggregateRepoCi', () => {
     expect(aggregateRepoCi([green, green])).toBe('success')
     expect(aggregateRepoCi([green, running])).toBe('pending')
     expect(aggregateRepoCi([green, red])).toBe('failure')
-    // A failure in ANY repo beats a pending elsewhere — the gate must not sleep on a red peer.
+    // A failure in ANY repo beats a pending elsewhere: the gate must not sleep on a red peer.
     expect(aggregateRepoCi([running, red])).toBe('failure')
   })
 

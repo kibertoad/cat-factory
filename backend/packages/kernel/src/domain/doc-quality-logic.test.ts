@@ -230,7 +230,7 @@ describe('documentHeadings', () => {
 
     it('only strips front matter at the very START of the document', () => {
       // Mid-document the same three lines are ordinary Markdown, so `title: x` underlined by
-      // `---` is a setext H2 — which is the point: only a LEADING block is config.
+      // `---` is a setext H2, which is the point: only a LEADING block is config.
       expect(texts('# Real\n\n---\ntitle: x\n---\n\n## After\n')).toEqual([
         'H1 Real',
         'H2 title: x',
@@ -276,7 +276,7 @@ describe('documentHeadings', () => {
   })
 })
 
-describe('analyzeDocStructure — section matching', () => {
+describe('analyzeDocStructure: section matching', () => {
   const missing = (content: string, requiredSections: string[]) =>
     analyzeDocStructure({ content, requiredSections }).missingSections
 
@@ -305,7 +305,7 @@ describe('analyzeDocStructure — section matching', () => {
   })
 })
 
-describe('analyzeDocStructure — placeholder scanning', () => {
+describe('analyzeDocStructure: placeholder scanning', () => {
   const placeholders = (content: string) =>
     analyzeDocStructure({ content, requiredSections: [] }).placeholders
 
@@ -341,7 +341,7 @@ describe('analyzeDocStructure — placeholder scanning', () => {
   })
 })
 
-describe('analyzeDocStructure — heading hierarchy', () => {
+describe('analyzeDocStructure: heading hierarchy', () => {
   const issues = (content: string) =>
     analyzeDocStructure({ content, requiredSections: [] }).headingIssues
 
@@ -370,7 +370,7 @@ describe('analyzeDocStructure — heading hierarchy', () => {
   })
 })
 
-describe('analyzeDocStructure — relative links', () => {
+describe('analyzeDocStructure: relative links', () => {
   const links = (content: string) =>
     analyzeDocStructure({ content, requiredSections: [] }).relativeLinks
 
@@ -425,7 +425,7 @@ describe('hasDocStructureIssues', () => {
   })
 })
 
-describe('resolveDocLinkPath — the remaining edges', () => {
+describe('resolveDocLinkPath: the remaining edges', () => {
   it('collapses empty and current-directory segments', () => {
     expect(resolveDocLinkPath('docs/a.md', './/b//c.md')).toBe('docs/b/c.md')
     expect(resolveDocLinkPath('docs/a.md', './././b.md')).toBe('docs/b.md')

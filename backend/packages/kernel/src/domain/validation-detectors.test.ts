@@ -214,7 +214,7 @@ describe('detectPython', () => {
 
   it('yields nothing for a marker that evidences neither a dependency source nor a check', () => {
     // `setup.cfg` alone names no dependency manager and no tool, so python is RECOGNISED and
-    // still contributes nothing — which `ecosystem()` collapses to no detection at all.
+    // still contributes nothing, which `ecosystem()` collapses to no detection at all.
     expect(detectPython(view({ 'setup.cfg': null }))).toBeNull()
   })
 
@@ -708,7 +708,7 @@ describe('the detector registries', () => {
 
   it('fetch the content of every manifest a detector actually READS', () => {
     // A detector reading a file the fetch list omits sees `undefined` forever: the rule silently
-    // never fires, and nothing fails. Anchored the other way round too — an entry nothing reads
+    // never fires, and nothing fails. Anchored the other way round too: an entry nothing reads
     // is a round trip bought on every detection for nothing.
     const contentReaders = new Set([
       'package.json',

@@ -567,7 +567,7 @@ describe('isOpenApiDocument', () => {
   })
 })
 
-describe('indexOpenApiOperations — the remaining shapes', () => {
+describe('indexOpenApiOperations: the remaining shapes', () => {
   const index = (doc: unknown) => indexOpenApiOperations(JSON.stringify(doc))
 
   it('indexes nothing when the document declares no paths, or a paths key that is not a map', () => {
@@ -639,7 +639,7 @@ describe('indexContractOperations', () => {
   })
 })
 
-describe('indexToadContractOperations — the path forms it can and cannot read', () => {
+describe('indexToadContractOperations: the path forms it can and cannot read', () => {
   const contract = (method: string, resolver: string) =>
     [
       'export const c = defineApiContract({',
@@ -720,7 +720,7 @@ describe('indexToadContractOperations — the path forms it can and cannot read'
   })
 })
 
-describe('parseFoundationalDeclaration — the remaining line shapes', () => {
+describe('parseFoundationalDeclaration: the remaining line shapes', () => {
   const known = ['file-storage', 'notifications']
 
   it('strips list markers and backticks, and folds case', () => {

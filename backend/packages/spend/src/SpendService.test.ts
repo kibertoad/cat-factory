@@ -843,7 +843,7 @@ describe('SpendService with no optional repository wired', () => {
   })
 })
 
-describe('SpendService tier statuses — the remaining verdict edges', () => {
+describe('SpendService tier statuses: the remaining verdict edges', () => {
   const NOW = Date.UTC(2026, 6, 17, 9, 30)
   const at = (costEstimate: number) => ({ inputTokens: 1, outputTokens: 1, costEstimate })
 
@@ -897,7 +897,7 @@ describe('SpendService tier statuses — the remaining verdict edges', () => {
   })
 })
 
-describe('SpendService.isOverBudget — what it declines to ask', () => {
+describe('SpendService.isOverBudget: what it declines to ask', () => {
   const NOW = Date.UTC(2026, 6, 17, 9, 30)
 
   it('does not read an INACTIVE tier’s ledger at all', async () => {

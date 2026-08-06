@@ -203,7 +203,7 @@ describe('seedPipelines — named-gate lowering', () => {
   })
 })
 
-describe('seedBlocks — the sample board a new workspace opens on', () => {
+describe('seedBlocks: the sample board a new workspace opens on', () => {
   const blocks = () => seedBlocks()
   const byBlockId = () => new Map(blocks().map((b) => [b.id, b]))
 
@@ -293,7 +293,7 @@ describe('seedBlocks — the sample board a new workspace opens on', () => {
   })
 })
 
-describe('seedPipelines — built-in tagging and versioning', () => {
+describe('seedPipelines: built-in tagging and versioning', () => {
   it('tags every catalog entry as a built-in and gives it a version', () => {
     for (const p of seedPipelines()) {
       expect(p.builtin, `${p.id} builtin`).toBe(true)

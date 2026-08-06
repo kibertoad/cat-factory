@@ -338,7 +338,7 @@ describe('mergeSpendAlertStates', () => {
   })
 })
 
-describe('forecastSpend — the remaining verdict edges', () => {
+describe('forecastSpend: the remaining verdict edges', () => {
   it('publishes an ok confidence once a young scope has observed long enough', () => {
     // The insufficient-history rule is about the OBSERVED span, so a scope whose first row is
     // recent enough to be tracked but old enough to measure is confidently forecast.
@@ -362,7 +362,7 @@ describe('forecastSpend — the remaining verdict edges', () => {
   })
 })
 
-describe('spendAlertState — the remaining verdict edges', () => {
+describe('spendAlertState: the remaining verdict edges', () => {
   it('withholds an overrun from a published forecast carrying no projection', () => {
     // An `ok` confidence beside a null projection is a combination the type admits, and this
     // guard is what stops the null being compared against the limit as a NaN.
@@ -382,7 +382,7 @@ describe('spendAlertState — the remaining verdict edges', () => {
   })
 })
 
-describe('mergeSpendAlertStates — the remaining fold edges', () => {
+describe('mergeSpendAlertStates: the remaining fold edges', () => {
   it('takes the first of two EQUAL thresholds rather than flapping between them', () => {
     expect(
       mergeSpendAlertStates(PERIOD_START, [

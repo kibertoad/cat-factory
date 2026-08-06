@@ -616,7 +616,7 @@ describe('humanReviewGate', () => {
   })
 })
 
-describe('humanReviewGate — what the awaiting-approval card actually says', () => {
+describe('humanReviewGate: what the awaiting-approval card actually says', () => {
   // Every branch below produces a DIFFERENT card for a human, and picking the wrong one sends
   // them to the wrong action: "assign a reviewer" to someone who already approved, or "awaiting
   // review" when a review has already happened and is blocking the merge.
@@ -735,7 +735,7 @@ describe('humanReviewGate — what the awaiting-approval card actually says', ()
   })
 })
 
-describe('humanReviewGate — the grace window and the comment cursor', () => {
+describe('humanReviewGate: the grace window and the comment cursor', () => {
   let providerRegistry: ProviderRegistry
   beforeEach(() => {
     providerRegistry = defaultProviderRegistry()
