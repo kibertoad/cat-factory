@@ -9,6 +9,7 @@ import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
   BlockRepository,
+  BoardChange,
   DocInterviewRepository,
   AccountSettingsRepository,
   DocumentRepository,
@@ -57,19 +58,30 @@ export class RecordingEventPublisher implements ExecutionEventPublisher {
   /** Every compact `llmCall` activity the proxy pushed (via `llmCallObserved`), in order. */
   readonly llmCalls: LlmCallActivity[] = []
   /**
-   * Every coarse `boardChanged` the engine/board service pushed, in order — so the suite can
-   * assert a human board mutation (add/rename/move/reparent/delete) emits a real-time signal on
-   * every runtime, not just returns over REST.
+   * Every `boardChanged` the engine/board service pushed, in order, so the suite can assert a
+   * human board mutation (add/rename/move/reparent/delete) emits a real-time signal on every
+   * runtime, not just returns over REST. `hasBlock` records whether the change carried its block
+   * as a PAYLOAD (the targeted shape) or only named one (the coarse shape).
    */
-  readonly boardEvents: { workspaceId: string; reason: string; blockId: string | null }[] = []
+  readonly boardEvents: {
+    workspaceId: string
+    reason: string
+    blockId: string | null
+    hasBlock: boolean
+  }[] = []
 
   async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {
     // Clone so the engine's later in-place mutations don't rewrite recorded history.
     this.emits.push(structuredClone(instance))
   }
 
-  async boardChanged(workspaceId: string, reason: string, blockId?: string | null): Promise<void> {
-    this.boardEvents.push({ workspaceId, reason, blockId: blockId ?? null })
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    this.boardEvents.push({
+      workspaceId,
+      reason: change.reason,
+      blockId: change.blockId ?? change.block?.id ?? null,
+      hasBlock: change.block != null,
+    })
   }
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}

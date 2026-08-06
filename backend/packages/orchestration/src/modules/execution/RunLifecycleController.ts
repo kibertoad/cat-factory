@@ -607,11 +607,12 @@ export class RunLifecycleController {
       progress: 0,
       executionId: null,
     })
-    // The run record is gone and the block is back to planned; the client can't
-    // reconstruct that from a per-instance event, so signal a coarse refresh. Name the block
-    // so the refresh fans out to every board mounting its shared service.
-    await this.deps.events.boardChanged(workspaceId, 'cancel', blockId)
-    return this.deps.requireBlock(workspaceId, blockId)
+    // The run record is gone and the block is back to planned; the client can't reconstruct that
+    // from a per-instance event (there is no instance left to emit one). Carry the reset block so
+    // every board mounting its shared service patches it instead of re-reading a snapshot.
+    const block = await this.deps.requireBlock(workspaceId, blockId)
+    await this.deps.events.boardChanged(workspaceId, { reason: 'cancel', block })
+    return block
   }
 
   /**

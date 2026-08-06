@@ -349,7 +349,12 @@ export class InitiativeLoopService {
       status: 'done',
       progress: 1,
     })
-    await this.deps.events.boardChanged(workspaceId, 'initiative-complete', done.blockId)
+    // No payload: the initiative block's own row is only half of what finished, since each item's
+    // spawned task settled separately and the board reads their rollup.
+    await this.deps.events.boardChanged(workspaceId, {
+      reason: 'initiative-complete',
+      blockId: done.blockId,
+    })
     await runBestEffort(
       this.log,
       'initiative.recommitTracker',
@@ -458,7 +463,10 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      await this.deps.events.boardChanged(workspaceId, 'block-added', block.id)
+      // The spawned task rides along so every open board patches it in rather than re-fetching a
+      // snapshot. This is the loop's per-item event, so it is the one that used to make a busy
+      // initiative refetch the whole board once per spawned task.
+      await this.deps.events.boardChanged(workspaceId, { reason: 'block-added', block })
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.

@@ -1,6 +1,6 @@
 import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
-import type { Block } from '@cat-factory/kernel'
+import type { Block, BoardChange } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A board mutation on a service MOUNTED from another workspace must push its real-time
@@ -19,6 +19,8 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
     reason: string
     blockId: string | null
     originConnectionId: string | null
+    /** The block the change CARRIED, if any: the difference between a targeted and a coarse one. */
+    carried: Block | null
   }
 
   function build(blocks: Block[]) {
@@ -61,17 +63,13 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
       clock: { now: () => 0 },
       executionEventPublisher: {
         async executionChanged() {},
-        async boardChanged(
-          workspaceId: string,
-          reason: string,
-          blockId?: string | null,
-          originConnectionId?: string | null,
-        ) {
+        async boardChanged(workspaceId: string, change: BoardChange) {
           emits.push({
             workspaceId,
-            reason,
-            blockId: blockId ?? null,
-            originConnectionId: originConnectionId ?? null,
+            reason: change.reason,
+            blockId: change.blockId ?? change.block?.id ?? null,
+            originConnectionId: change.originConnectionId ?? null,
+            carried: change.block ?? null,
           })
         },
         async bootstrapChanged() {},
@@ -183,5 +181,115 @@ describe('BoardService real-time origin for mounted (shared) services', () => {
     expect(e).toBeDefined()
     expect(e?.workspaceId).toBe(HOME)
     expect(e?.blockId).toBe('blk_a')
+  })
+})
+
+// Which mutations CARRY their block decides what a busy board costs: a carried block is one
+// upsert on every subscriber, a bare signal is a full snapshot fetch per open board. The split is
+// a judgement made per call site (is this change fully described by one block?), so it is pinned
+// here rather than left to whoever edits the emit next.
+describe('BoardService targeted vs coarse board changes', () => {
+  const WS = 'ws_1'
+
+  function build(blocks: Block[]) {
+    const emits: { reason: string; carried: Block | null }[] = []
+    const byId = new Map(blocks.map((b) => [b.id, b]))
+    const deps = {
+      workspaceRepository: { get: async (id: string) => ({ id }) },
+      blockRepository: {
+        get: async (_ws: string, id: string) => byId.get(id) ?? null,
+        findById: async (id: string) => {
+          const block = byId.get(id)
+          return block ? { workspaceId: WS, serviceId: null, block } : null
+        },
+        listByWorkspace: async () => blocks,
+        update: async (_ws: string, id: string, patch: Partial<Block>) => {
+          const existing = byId.get(id)
+          if (existing) byId.set(id, { ...existing, ...patch })
+        },
+        insert: async () => {},
+        setService: async () => {},
+        deleteMany: async () => {},
+        shiftChildPositions: async () => {},
+      },
+      executionRepository: { deleteByBlock: async () => {} },
+      idGenerator: { next: (prefix: string) => `${prefix}_new` },
+      clock: { now: () => 0 },
+      executionEventPublisher: {
+        async executionChanged() {},
+        async boardChanged(_ws: string, change: BoardChange) {
+          emits.push({ reason: change.reason, carried: change.block ?? null })
+        },
+        async bootstrapChanged() {},
+        async notificationChanged() {},
+        async llmCallObserved() {},
+      },
+    } as unknown as BoardServiceDependencies
+    return { service: new BoardService(deps), emits }
+  }
+
+  function frame(id: string): Block {
+    return {
+      id,
+      title: 'Service',
+      type: 'service',
+      description: '',
+      position: { x: 0, y: 0 },
+      status: 'ready',
+      progress: 0,
+      dependsOn: [],
+      executionId: null,
+      level: 'frame',
+      parentId: null,
+    }
+  }
+
+  function task(id: string, parentId: string): Block {
+    return { ...frame(id), title: 'A task', level: 'task', parentId }
+  }
+
+  it('carries the new task on addTask', async () => {
+    const { service, emits } = build([frame('frame_1')])
+    const created = await service.addTask(
+      WS,
+      'frame_1',
+      { title: 'New task' },
+      UNATTRIBUTED_BLOCK_EDITOR,
+    )
+    expect(emits.at(-1)?.carried?.id).toBe(created.id)
+  })
+
+  it('carries the edited block on updateBlock', async () => {
+    const { service, emits } = build([task('blk_1', 'frame_1')])
+    await service.updateBlock(WS, 'blk_1', { title: 'Renamed' }, UNATTRIBUTED_BLOCK_EDITOR)
+    const e = emits.find((x) => x.reason === 'block-updated')
+    // The block as it is AFTER the write: carrying the pre-write object would push subscribers
+    // the value the edit replaced, which is worse than not carrying one at all.
+    expect(e?.carried?.title).toBe('Renamed')
+  })
+
+  it('carries the moved block on moveBlock', async () => {
+    const { service, emits } = build([task('blk_1', 'frame_1')])
+    await service.moveBlock(WS, 'blk_1', { x: 42, y: 7 })
+    const e = emits.find((x) => x.reason === 'block-moved')
+    expect(e?.carried?.position).toEqual({ x: 42, y: 7 })
+  })
+
+  it('does NOT carry a block for a removal', async () => {
+    const { service, emits } = build([frame('frame_1'), task('blk_1', 'frame_1')])
+    await service.removeBlock(WS, 'blk_1')
+    const removals = emits.filter((x) => x.reason === 'block-removed')
+    expect(removals.length).toBeGreaterThan(0)
+    // A delete CASCADES over descendants and prunes dangling edges on blocks the event never
+    // names, so the client has to re-read: a payload here would state only part of the change.
+    expect(removals.every((x) => x.carried === null)).toBe(true)
+  })
+
+  it('does NOT carry a block for a reparent', async () => {
+    const { service, emits } = build([frame('frame_1'), frame('frame_2'), task('blk_1', 'frame_1')])
+    await service.reparent(WS, 'blk_1', { parentId: 'frame_2', position: { x: 1, y: 2 } })
+    const e = emits.find((x) => x.reason === 'block-reparented')
+    expect(e).toBeDefined()
+    expect(e?.carried).toBeNull()
   })
 })

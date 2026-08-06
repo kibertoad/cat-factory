@@ -27,10 +27,29 @@ export type WorkspaceEvent =
    */
   | { type: 'execution'; instance: ExecutionInstance; block: Block | null; at: number }
   /**
-   * A structural board change the per-instance event can't express (a module
-   * materialised, a run cancelled). The client responds with a full refresh.
+   * The board changed in a way the per-instance event can't express: a task spawned by an
+   * initiative loop, a module materialised, a run cancelled, a service archived.
+   *
+   * `block` is present when the change is fully described by ONE block, and the client upserts it
+   * exactly like an `execution` event's block. That is the common case on a busy board (every
+   * initiative-spawned task, every dependency toggle, every field edit) and it costs one small
+   * payload instead of a whole board snapshot.
+   *
+   * `block` is absent when the change is structural (a removal, a reparent, a cascade), or when
+   * the subject is a SERVICE FRAME, whose position and size are per-board and so cannot be carried
+   * correctly to the several boards a shared service's event reaches. The client falls back to a
+   * debounced full refresh, which is what every `board` event used to do.
+   *
+   * `blockId` names a block of the affected service (the fan-out subject). It is present whenever
+   * the publisher knew one, including the frame case where no payload rides along.
    */
-  | { type: 'board'; reason: string; at: number }
+  | {
+      type: 'board'
+      reason: string
+      blockId?: string | null
+      block?: Block | null
+      at: number
+    }
   /**
    * A repo-bootstrap run advanced. Carries the updated job (with live `subtasks`)
    * and its provisional/linked service frame, so the client patches the board

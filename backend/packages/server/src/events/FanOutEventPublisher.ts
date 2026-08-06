@@ -1,5 +1,6 @@
 import type {
   Block,
+  BoardChange,
   BootstrapJob,
   BrainstormSession,
   ConsensusSession,
@@ -65,20 +66,15 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     await Promise.all(targets.map((ws) => this.inner.executionChanged(ws, instance, block)))
   }
 
-  async boardChanged(
-    workspaceId: string,
-    reason: string,
-    blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void> {
-    // A structural change to a shared service (a module materialised, a run cancelled, a
-    // bootstrap finished) must prompt a refresh on EVERY board that mounts it. When the caller
-    // names a block of the affected service we resolve it to that set; a genuinely block-less
-    // signal falls back to the originating workspace only.
-    const targets = await this.targets(workspaceId, blockId)
-    await Promise.all(
-      targets.map((ws) => this.inner.boardChanged(ws, reason, blockId, originConnectionId)),
-    )
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    // A change to a shared service (a task spawned, a module materialised, a run cancelled, a
+    // bootstrap finished) must reach EVERY board that mounts it. When the caller names a block of
+    // the affected service we resolve it to that set; a genuinely block-less signal falls back to
+    // the originating workspace only. The block a targeted change CARRIES is the same object on
+    // every target: `deliverableBoardBlock` (applied by the inner publisher) is what keeps that
+    // sound, by refusing to carry the one level whose payload is per-board.
+    const targets = await this.targets(workspaceId, change.blockId ?? change.block?.id)
+    await Promise.all(targets.map((ws) => this.inner.boardChanged(ws, change)))
   }
 
   async bootstrapChanged(

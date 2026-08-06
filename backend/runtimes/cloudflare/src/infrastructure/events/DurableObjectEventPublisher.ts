@@ -16,6 +16,8 @@ import type {
   WorkspaceEvent,
 } from '@cat-factory/contracts'
 import {
+  type BoardChange,
+  deliverableBoardBlock,
   describeError,
   type ExecutionEventPublisher,
   type InfraSetupTransition,
@@ -56,17 +58,24 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(
-    workspaceId: string,
-    reason: string,
-    _blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void> {
-    // `_blockId` is used by the FanOutEventPublisher decorator to resolve which workspaces a
-    // shared service's change reaches; the per-workspace publish itself is block-agnostic.
-    // `originConnectionId` (when present) rides as a side-channel header so the hub can skip
-    // the socket that caused the change — the wire event stays identical across all clients.
-    await this.publish(workspaceId, { type: 'board', reason, at: Date.now() }, originConnectionId)
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    // `blockId` is what the FanOutEventPublisher decorator resolved the mounting workspaces from;
+    // it rides along so a client can tell WHICH block a coarse signal was about. `block` is the
+    // payload that lets the client patch instead of re-reading, and `deliverableBoardBlock` is the
+    // one place the frame rule lives (a frame's geometry is per-board, so it cannot be carried).
+    // `originConnectionId` (when present) rides as a side-channel header so the hub can skip the
+    // socket that caused the change — the wire event stays identical across all clients.
+    await this.publish(
+      workspaceId,
+      {
+        type: 'board',
+        reason: change.reason,
+        blockId: change.blockId ?? change.block?.id ?? null,
+        block: deliverableBoardBlock(change.block),
+        at: Date.now(),
+      },
+      change.originConnectionId,
+    )
   }
 
   async bootstrapChanged(

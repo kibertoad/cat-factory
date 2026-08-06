@@ -18,6 +18,8 @@ import type {
   WorkspaceEvent,
 } from '@cat-factory/contracts'
 import {
+  type BoardChange,
+  deliverableBoardBlock,
   describeError,
   type ExecutionEventPublisher,
   type InfraSetupTransition,
@@ -215,15 +217,22 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     })
   }
 
-  async boardChanged(
-    workspaceId: string,
-    reason: string,
-    _blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void> {
-    // Pass the origin connection through so the hub skips echoing this board mutation back to
-    // the connection that caused it (see {@link NodeRealtimeHub.broadcast}).
-    this.publish(workspaceId, { type: 'board', reason, at: Date.now() }, originConnectionId)
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    // The Worker twin (`DurableObjectEventPublisher.boardChanged`) carries the reasoning for the
+    // wire shape; both project the payload through the same `deliverableBoardBlock` rule. Pass the
+    // origin connection through so the hub skips echoing this board mutation back to the
+    // connection that caused it (see {@link NodeRealtimeHub.broadcast}).
+    this.publish(
+      workspaceId,
+      {
+        type: 'board',
+        reason: change.reason,
+        blockId: change.blockId ?? change.block?.id ?? null,
+        block: deliverableBoardBlock(change.block),
+        at: Date.now(),
+      },
+      change.originConnectionId,
+    )
   }
 
   async bootstrapChanged(

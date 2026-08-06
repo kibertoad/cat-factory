@@ -577,8 +577,13 @@ export class BootstrapService {
       `Service bootstrapped from ${outcome.owner}/${outcome.name}. Drop tasks here to implement against it.`,
     )
     await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
-    // Name the service frame so the refresh fans out to every board mounting this service.
-    await this.deps.eventPublisher?.boardChanged(workspaceId, 'bootstrap-succeeded', record.blockId)
+    // Name the service FRAME so the refresh fans out to every board mounting this service. No
+    // payload: a frame's geometry is per-board, and the bootstrap also linked a repo projection
+    // the block alone does not state.
+    await this.deps.eventPublisher?.boardChanged(workspaceId, {
+      reason: 'bootstrap-succeeded',
+      blockId: record.blockId,
+    })
 
     // Kick off the initial blueprint run for the new repo (best-effort): it maps
     // the bootstrapped code into the in-repo `blueprints/` folder and reconciles

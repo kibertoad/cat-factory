@@ -28,6 +28,33 @@ import type { InfraSetupTransition } from '../domain/infra-reachability.js'
 // event by re-fetching the snapshot on (re)connect), so the push is purely an
 // optimisation and implementations swallow their own errors.
 
+/**
+ * One board change, as published to subscribed clients.
+ *
+ * `blockId` identifies a block of the AFFECTED SERVICE so the change can be fanned out to every
+ * workspace that mounts it (in-org sharing); omit it for a genuinely board-wide signal, which then
+ * reaches the originating workspace only. When {@link block} is given its id serves as the subject,
+ * so a caller holding the block never restates it.
+ *
+ * `block` is the DELIVERY shape, and it is what separates a targeted change from a coarse one. Give
+ * it only when the change is FULLY described by that one block: the client then upserts it and pays
+ * nothing, where a coarse signal costs a whole board snapshot. Leave it absent when the change is
+ * structural (a removal, a reparent, a cascade) and the client must re-read to see the new shape.
+ * A SERVICE FRAME is never carried: its position and size live on the per-workspace mount rather
+ * than on the shared row, so one payload cannot be correct on the several boards a fan-out reaches.
+ * Publishers therefore drop a frame payload and fall back to the coarse signal.
+ *
+ * `originConnectionId` (when known) is the realtime connection that caused the change: the
+ * transport skips delivering the echo back to it, so a client never refreshes off its own move
+ * (which would snap an in-flight drag back to a stale position).
+ */
+export interface BoardChange {
+  reason: string
+  blockId?: string | null
+  block?: Block | null
+  originConnectionId?: string | null
+}
+
 export interface ExecutionEventPublisher {
   /** A run advanced: push the updated instance and its rolled-up block. */
   executionChanged(
@@ -36,21 +63,12 @@ export interface ExecutionEventPublisher {
     block?: Block | null,
   ): Promise<void>
   /**
-   * A structural board change the per-instance event can't express (a module
-   * materialised, a run cancelled) — a coarse signal that prompts a full refresh.
-   * `blockId` (when known) identifies a block of the affected service so the change can
-   * be fanned out to every workspace that mounts it (in-org sharing); omit it for a
-   * genuinely board-wide signal, which then reaches the originating workspace only.
-   * `originConnectionId` (when known) is the realtime connection that caused the change:
-   * the transport skips delivering the echo back to it, so a client never refreshes off
-   * its own move (which would snap an in-flight drag back to a stale position).
+   * The board changed in a way the per-instance event can't express (a task spawned, a module
+   * materialised, a run cancelled). Carries the changed block when the change is fully described
+   * by one, so the client patches it in place; otherwise it is a coarse signal prompting a full
+   * refresh. See {@link BoardChange}.
    */
-  boardChanged(
-    workspaceId: string,
-    reason: string,
-    blockId?: string | null,
-    originConnectionId?: string | null,
-  ): Promise<void>
+  boardChanged(workspaceId: string, change: BoardChange): Promise<void>
   /**
    * A repo-bootstrap run advanced: push the updated job (with live `subtasks`)
    * and its provisional/linked service frame, so the board patches the

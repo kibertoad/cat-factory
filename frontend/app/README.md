@@ -552,11 +552,17 @@ The recurring product bug behind most e2e flakes: a stale full-snapshot refresh 
 live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
 event left to restore it.
 
-- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced
-  full `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block
-  reaches the browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry
-  the entity and `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that
-  must appear reliably.
+- **Know how your entity is delivered.** Targeted events (`execution`/`bootstrap`/`initiative`)
+  carry the entity and `upsert` it, so they don't clobber. A `board` event is delivered EITHER
+  way and the backend decides per change: it carries `block` when the change is fully described
+  by one (a spawned task, a field edit, a dependency toggle, a move), and carries none when it is
+  not (a removal, a reparent, a blueprint reconcile, and anything about a service FRAME, whose
+  position and size are per-board and so cannot ride one shared payload). A payload-less `board`
+  event still means a debounced full `workspace.refresh()`, where `hydrate` REPLACES whole lists.
+  Routing lives in `composables/workspaceStream/applyWorkspaceEvent.ts`; the emit-site decision
+  lives in `BoardService.emitBoardChanged`'s doc comment, and the frame rule is enforced once at
+  the wire by kernel's `deliverableBoardBlock`. Prefer a targeted upsert for anything that must
+  appear reliably.
 - **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
   resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
   reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
