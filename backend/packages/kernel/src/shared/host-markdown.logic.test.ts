@@ -4,10 +4,12 @@ import {
   boundOutput,
   capList,
   cell,
+  cellLink,
   codeCell,
   dropOpenFence,
   inline,
   inlineCode,
+  link,
   MAX_CELL_CHARS,
   MAX_LIST_ITEMS,
   MAX_PROSE_CHARS,
@@ -211,5 +213,41 @@ describe('dropOpenFence', () => {
 
   it('leaves fence-free text untouched', () => {
     expect(dropOpenFence('no fences here')).toBe('no fences here')
+  })
+})
+
+describe('link / cellLink', () => {
+  it('links an http(s) target and escapes the label', () => {
+    expect(link('#7', 'https://github.test/o/r/pull/7')).toBe(
+      '[&#35;7](https://github.test/o/r/pull/7)',
+    )
+  })
+
+  it('renders the label alone when there is no target', () => {
+    expect(link('#7', null)).toBe('&#35;7')
+    expect(link('#7', undefined)).toBe('&#35;7')
+    expect(link('#7', '')).toBe('&#35;7')
+  })
+
+  it('refuses a target that would break out of the link syntax', () => {
+    // `)` closes the target early: everything after it, including whatever the caller wrote
+    // next, lands in the document as prose.
+    expect(link('report', 'https://x.test/a)b')).toBe('report')
+    expect(link('report', 'https://x.test/a b')).toBe('report')
+    expect(link('report', 'https://x.test/a<b')).toBe('report')
+  })
+
+  it('refuses a target whose scheme this platform never publishes', () => {
+    // A URL reaches the report from harness output, so the scheme is not ours to trust. The
+    // label still renders: degrading to plain text keeps the reader informed and the host inert.
+    expect(link('click', 'javascript:alert(1)')).toBe('click')
+    expect(link('click', 'data:text/html;base64,AAA')).toBe('click')
+    expect(link('click', 'file:///etc/passwd')).toBe('click')
+    expect(link('click', '/relative/path')).toBe('click')
+  })
+
+  it('escapes the label as a CELL in the table variant, so a pipe cannot open a column', () => {
+    expect(cellLink('a | b', 'https://x.test/1')).toBe('[a \\| b](https://x.test/1)')
+    expect(cellLink('a | b', null)).toBe('a \\| b')
   })
 })

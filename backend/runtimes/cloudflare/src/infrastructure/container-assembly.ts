@@ -395,6 +395,54 @@ Partial<CoreDependencies> & Pick<CoreDependencies, 'gateOutcomeRepository'> {
 }
 
 /**
+ * The plain D1-backed repositories the domain reads its own state through: tenancy (account,
+ * membership, user, workspace + its members and mounts), the board (blocks, services), the run
+ * (pipelines, executions, the personal-credential activation), and token usage.
+ *
+ * Grouped out of {@link buildWorkerCoreDependencies} to keep it inside its size budget, and
+ * cohesive on the plainest criterion the assembler has: every entry here is one repository over
+ * the MAIN `db` with no capability behind it and nothing to decide. A binding-gated store (the
+ * audit log's own database), a selector that reads `env`, and anything wrapping a provider stay
+ * where the decision they encode is visible.
+ */
+function selectWorkerCorePersistence(
+  deps: Pick<WorkerContainerAssemblyInput, 'db' | 'clock'>,
+): Pick<
+  CoreDependencies,
+  | 'workspaceRepository'
+  | 'workspaceMemberRepository'
+  | 'accountRepository'
+  | 'membershipRepository'
+  | 'userRepository'
+  | 'passwordHasher'
+  | 'blockRepository'
+  | 'pipelineRepository'
+  | 'executionRepository'
+  | 'subscriptionActivationRepository'
+  | 'serviceRepository'
+  | 'workspaceMountRepository'
+  | 'tokenUsageRepository'
+> {
+  const { db, clock } = deps
+  return {
+    workspaceRepository: new D1WorkspaceRepository({ db }),
+    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
+    accountRepository: new D1AccountRepository({ db }),
+    membershipRepository: new D1MembershipRepository({ db }),
+    userRepository: new D1UserRepository({ db }),
+    passwordHasher: new WebCryptoPasswordHasher(),
+    blockRepository: new D1BlockRepository({ db }),
+    pipelineRepository: new D1PipelineRepository({ db }),
+    executionRepository: new D1ExecutionRepository({ db, clock }),
+    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
+    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
+    serviceRepository: new D1ServiceRepository({ db }),
+    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
+    tokenUsageRepository: new D1TokenUsageRepository({ db }),
+  }
+}
+
+/**
  * How this facade resolves the agent executor: the container/inline selection, wrapped for
  * consensus panels when the dispatched step runs as one.
  *
@@ -542,20 +590,7 @@ function buildWorkerCoreDependencies(input: WorkerContainerAssemblyInput): CoreD
     // Resolves the per-account binary-artifact store (screenshots) for the
     // visual-confirmation gate; resolving to null ⇒ the gate passes through.
     resolveBinaryArtifactStore,
-    workspaceRepository: new D1WorkspaceRepository({ db }),
-    workspaceMemberRepository: new D1WorkspaceMemberRepository({ db }),
-    accountRepository: new D1AccountRepository({ db }),
-    membershipRepository: new D1MembershipRepository({ db }),
-    userRepository: new D1UserRepository({ db }),
-    passwordHasher: new WebCryptoPasswordHasher(),
-    blockRepository: new D1BlockRepository({ db }),
-    pipelineRepository: new D1PipelineRepository({ db }),
-    executionRepository: new D1ExecutionRepository({ db, clock }),
-    // Clear a finished run's personal-credential activation promptly (TTL sweep is the backstop).
-    subscriptionActivationRepository: new D1SubscriptionActivationRepository({ db }),
-    serviceRepository: new D1ServiceRepository({ db }),
-    workspaceMountRepository: new D1WorkspaceMountRepository({ db }),
-    tokenUsageRepository: new D1TokenUsageRepository({ db }),
+    ...selectWorkerCorePersistence({ db, clock }),
     ...selectWorkerObservabilityDeps({
       config,
       db,
