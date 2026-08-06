@@ -35,15 +35,15 @@ import {
   type BinaryGeneratorDefinition,
   type CustomTaskType,
   type DescriptorField,
-  type DescriptorFieldShowWhen,
   binaryGeneratorDefinitionIssues,
+  descriptorConditionHasPredicate,
+  duplicatedDescriptorSectionCaptions,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
   isNamespacedId,
   isReservedPlatformEnvKey,
   isToolchainEnvName,
   modalitiesOfMediaType,
-  nonContiguousDescriptorSections,
   reservedEnvKeyMessage,
   toolchainEnvNameMessage,
   isValidResultViewId,
@@ -264,9 +264,11 @@ export function collectRegistrationProblems(
   // 5. Custom task types (only when a task-type registry is supplied).
   problems.push(...checkCustomTaskTypes(opts))
 
-  // 5b. Initiative presets: the OTHER surface that declares a form over the same vocabulary, held
-  //     to the same fillability bar by the same checker.
+  // 5b/5c. The OTHER two surfaces that declare a form over the same vocabulary, held to the same
+  //        bar by the same checker: an initiative preset's create form, and a registered gate's
+  //        per-step config form.
   problems.push(...checkInitiativePresetForms(opts))
+  problems.push(...checkGateConfigForms(opts))
 
   // 6. Agent capabilities: the skills + tool servers declared for each kind.
   problems.push(...checkAgentCapabilities(registry))
@@ -1100,7 +1102,7 @@ function checkConditionalFragments(
   if (rules.length === 0) return []
   const problems: RegistrationProblem[] = []
   for (const rule of rules) {
-    if (!hasPredicate(rule.when)) {
+    if (!descriptorConditionHasPredicate(rule.when)) {
       // A `when` carrying neither `equals` nor `includes` is accepted by the schema (both are
       // optional, so a dropped `equals: 'graphql'` still validates) and reads as SATISFIED at run
       // time, because the shared evaluator defaults a predicate-less condition to `true`: right
@@ -1150,30 +1152,37 @@ function checkConditionalFragments(
   ]
 }
 
-/** Whether a condition states anything at all. See the refusal that reads it. */
-function hasPredicate(condition: DescriptorFieldShowWhen): boolean {
-  return condition.equals !== undefined || condition.includes !== undefined
-}
+/**
+ * The surfaces that declare a descriptor-driven form, as the prefix their boot-error codes carry.
+ *
+ * A UNION rather than a `string`, so adding the next such surface has to come here and be named,
+ * which is the moment to ask whether {@link descriptorFormProblems} is wired for it at all. That
+ * question went unasked for the gate config form, which rendered through the same component for a
+ * release with none of these checks behind it.
+ */
+type DescriptorFormSubject = 'task_type' | 'initiative_preset' | 'gate'
 
 /**
- * A descriptor-driven create FORM that structurally cannot be filled, plus the one grouping fault
- * that has no honest rendering. Each of these is a typo in the deployment's own descriptor with no
- * run-time recovery, and each fails SILENTLY without this check: a duplicate key means the later
- * declaration wins wherever the fields are indexed, an optionless picker renders an empty control
- * (and, if required, makes the subject un-creatable), and a `showWhen` naming no declared field
- * hides its own field forever, so the value can never be collected.
+ * A descriptor-driven FORM that structurally cannot be filled, plus the one grouping fault that has
+ * no honest rendering. Each of these is a typo in the deployment's own descriptor with no run-time
+ * recovery, and each fails SILENTLY without this check: a duplicate key means the later declaration
+ * wins wherever the fields are indexed, an optionless picker renders an empty control (and, if
+ * required, makes the subject un-creatable), and a `showWhen` naming no declared field hides its own
+ * field forever, so the value can never be collected.
  *
  * Errors rather than warnings, because unlike a `defaultFragmentIds` id (which may legitimately name
  * a tenant-tier fragment invisible at boot) every input here is fully known from the registration.
  *
- * Takes a plain FIELD LIST, because both surfaces that declare a form draw on one vocabulary
- * (`contracts/src/form-fields.ts`): a custom task type's per-case form and an initiative preset's
- * create form fail these three ways identically, so they are checked by one function under their
- * own code prefixes rather than by a copy each.
+ * Takes a plain FIELD LIST, because every surface that declares a form draws on one vocabulary
+ * (`contracts/src/form-fields.ts`) and renders through one component: a custom task type's per-case
+ * form, an initiative preset's create form and a registered gate's per-step config form fail these
+ * ways identically, so they are checked by one function under their own {@link DescriptorFormSubject}
+ * prefixes rather than by a copy each. A surface reaching that component without reaching this
+ * checker is the gap to look for.
  */
 function descriptorFormProblems(
   fields: readonly DescriptorField[],
-  codePrefix: 'task_type' | 'initiative_preset',
+  codePrefix: DescriptorFormSubject,
   subject: string,
 ): RegistrationProblem[] {
   const problems: RegistrationProblem[] = []
@@ -1203,17 +1212,22 @@ function descriptorFormProblems(
     }
     problems.push(...defaultOutsideOptions(field, codePrefix, subject))
   }
-  // A `section` declared in two places, with other fields between them. Presentation rather than
-  // fillability, and an error all the same: the renderer preserves declaration order, so the caption
-  // renders TWICE (reading as a platform fault rather than as the declaration it is), and the only
+  // A `section` a filled form can be made to caption TWICE. Presentation rather than fillability,
+  // and an error all the same: the renderer preserves declaration order, so the caption renders
+  // twice (reading as a platform fault rather than as the declaration it is), and the only
   // alternative would be moving a field away from where its author wrote it. Fully knowable from the
   // registration, so boot is where it can still be fixed.
-  for (const caption of nonContiguousDescriptorSections(fields)) {
+  //
+  // Reachability, not contiguity: interleaving a section with a MUTUALLY EXCLUSIVE branch is how a
+  // form keeps each branch's fields beside the picker they qualify, and it prints one caption in
+  // every state. Refusing it would fail boot over a form nobody can break.
+  for (const caption of duplicatedDescriptorSectionCaptions(fields)) {
     bad(
       'field_section_interleaved',
-      `declares section "${caption}" in two places with other fields between them, so its caption ` +
-        `renders twice. Declare a section's fields consecutively (matching on case and spacing, ` +
-        `which the renderer folds).`,
+      `declares section "${caption}" in two places with a field between them that shows at the ` +
+        `same time, so its caption renders twice. Declare a section's fields consecutively ` +
+        `(matching on case and spacing, which the renderer folds), or gate the field between them ` +
+        `so it cannot show alongside both.`,
     )
   }
   return problems
@@ -1231,7 +1245,7 @@ function descriptorFormProblems(
  */
 function defaultOutsideOptions(
   field: DescriptorField,
-  codePrefix: 'task_type' | 'initiative_preset',
+  codePrefix: DescriptorFormSubject,
   subject: string,
 ): RegistrationProblem[] {
   const options = new Set((field.options ?? []).map((option) => option.value))
@@ -1273,6 +1287,28 @@ function checkInitiativePresetForms(opts: ValidateRegistrationsOptions): Registr
         `Initiative preset "${descriptor.id}"`,
       ),
     )
+}
+
+/**
+ * Section 5c of {@link collectRegistrationProblems}: every registered GATE's per-step config form
+ * must be fillable and renderable, on the same bar and through the same checker as the two other
+ * surfaces that declare a form ({@link descriptorFormProblems}).
+ *
+ * It is the third such surface and the one easiest to forget, because a gate declares its form as
+ * an OPTION on `GateRegistry.register` rather than as a field of a descriptor type, so nothing about
+ * the registration call says "this is a descriptor form". It renders through the very same
+ * `DescriptorFields` component the other two do, which is exactly why it fails the same ways: a gate
+ * that declared a duplicate key, an optionless picker, a `showWhen` naming nothing, a default
+ * outside its options, or a section its form captions twice would boot clean and break where a
+ * pipeline author authors, with nothing naming the registration that did it.
+ *
+ * Reads `configForms()`, so a gate declaring no fields is not a subject here rather than a subject
+ * with an empty form.
+ */
+function checkGateConfigForms(opts: ValidateRegistrationsOptions): RegistrationProblem[] {
+  return opts.registries.gateRegistry
+    .configForms()
+    .flatMap(({ kind, fields }) => descriptorFormProblems(fields, 'gate', `Gate "${kind}"`))
 }
 
 /**

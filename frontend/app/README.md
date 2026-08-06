@@ -116,6 +116,15 @@ builds: consecutive fields sharing a `section` render under one caption, and the
 `showWhen` first, so a section whose every field is hidden renders no caption. Never re-group or
 re-order the fields at a call site, or a form renders in an order its author never wrote.
 
+**A captioned run is rendered FLAT, never as a per-run wrapper element** (`descriptorFormRows`
+carries each run's caption on the field that opens it). Run membership is derived state that shifts
+as `showWhen` reveals fields, while a field's identity does not: nesting the fields inside a wrapper
+re-parents them when a boundary moves, and Vue can only do that by unmounting and remounting. The
+remounted input is typically the one being TYPED INTO, because typing into the trigger is what moved
+the boundary, so it loses focus, caret and IME composition mid-keystroke. Keep every field a sibling
+keyed by `field.key` and the diff MOVES it instead. The same trap as keying any list by index, with a
+worse symptom: `descriptorFields.spec.ts` pins that a reveal preserves every field key.
+
 Four rules travel with it. **Validate with the shared `validateDescriptorFields`** so the submit
 button reflects exactly what the server will refuse, and **submit the shared
 `sanitizeDescriptorFields` result** so a stale answer on a since-hidden `showWhen` field never

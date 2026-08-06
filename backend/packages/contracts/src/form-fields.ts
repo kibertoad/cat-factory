@@ -262,6 +262,20 @@ export function withDescriptorFieldDefaults(
  * gate hold", because the alternative silently removes a field from a form. A caller for whom the
  * safe default is the other way round says so at its own site rather than by re-deriving the rule.
  */
+/**
+ * Whether a condition STATES anything. Both predicates are optional in the schema, so a dropped
+ * `equals: 'graphql'` still validates and arrives here saying nothing.
+ *
+ * Exported because the two readers must not each re-derive it, and they react OPPOSITELY:
+ * {@link matchesDescriptorCondition} treats a predicate-less condition as satisfied (the
+ * alternative hides a field forever), while boot validation refuses one on a conditional-fragment
+ * rule (where "always satisfied" seeds every case with guidance meant for one). One predicate, two
+ * dispositions, is the shape the repo already uses for a rule whose outcome is judged per caller.
+ */
+export function descriptorConditionHasPredicate(condition: DescriptorFieldShowWhen): boolean {
+  return condition.equals !== undefined || condition.includes !== undefined
+}
+
 export function matchesDescriptorCondition(
   condition: DescriptorFieldShowWhen,
   values: DescriptorFieldValues,
@@ -321,7 +335,7 @@ function sectionOf(field: DescriptorField): { key: string; caption: string } | u
  *
  * The grouping rule lives here rather than in the renderer because two surfaces read it: the SPA's
  * `DescriptorFields.vue`, and the boot check that refuses a declaration this reduction cannot render
- * honestly ({@link nonContiguousDescriptorSections}).
+ * honestly ({@link duplicatedDescriptorSectionCaptions}).
  *
  * Two properties the caller gets from the ORDER of the two steps:
  *
@@ -357,35 +371,83 @@ export function descriptorFieldSections(
 }
 
 /**
- * The sections a field list declares in more than one RUN, in first-offence order: a section broken
- * apart by a different section, or by fields declaring none.
+ * Whether two fields can be visible AT THE SAME TIME, i.e. whether some value bag satisfies both
+ * their `showWhen` conditions at once.
+ *
+ * This is what keeps {@link duplicatedDescriptorSectionCaptions} from refusing a declaration that
+ * renders perfectly. A form whose shape is chosen by one picker routinely declares the branches
+ * INTERLEAVED, because each branch's fields belong beside the ones they qualify:
+ *
+ *   kind (select) | Endpoint: method (kind=http) | Command: argv (kind=cli) | Endpoint: timeout (kind=http)
+ *
+ * `Endpoint` is declared in two places and can never print twice, because the `Command` field
+ * between them is visible in exactly the state its two neighbours are not. Reading contiguity off
+ * the flat list alone would fail this deployment's boot over a form no user can break.
+ *
+ * Sound for the single-condition vocabulary: two conditions on DIFFERENT keys are independent (one
+ * bag satisfies both), and on the SAME key only two shapes contradict, both because one value
+ * cannot be two things at once: differing `equals`, and `equals` (a scalar) against `includes` (an
+ * array). Because pairwise contradiction is the only kind available, checking pairs decides
+ * satisfiability for a whole set. A predicate-less condition states nothing and reads as
+ * always-visible, matching {@link matchesDescriptorCondition}.
+ */
+function canCoexist(a: DescriptorField, b: DescriptorField): boolean {
+  const x = a.showWhen
+  const y = b.showWhen
+  if (!x || !y) return true
+  if (!descriptorConditionHasPredicate(x) || !descriptorConditionHasPredicate(y)) return true
+  if (x.key !== y.key) return true
+  if (x.equals !== undefined && y.equals !== undefined) return x.equals === y.equals
+  if (x.includes !== undefined && y.includes !== undefined) return true
+  return false
+}
+
+/**
+ * The sections whose caption a form can be made to print TWICE, in first-offence order.
  *
  * Boot refuses these, because neither available rendering is honest. {@link descriptorFieldSections}
- * preserves declaration order, so the caption appears TWICE, which reads as a platform fault rather
+ * preserves declaration order, so the caption appears twice, which reads as a platform fault rather
  * than as the declaration it is; merging the runs instead would render a field order nobody wrote.
  * Both are fully knowable from the registration, which is the one place it can still be fixed, and
  * both are presentation, so there is no run-time recovery to prefer either way.
  *
+ * The criterion is REACHABILITY, never contiguity in the declared list, because the reduction this
+ * mirrors applies visibility BEFORE it cuts the runs. So a caption is reported only on finding a
+ * concrete state that prints it twice: two of its fields with a differently-captioned field between
+ * them, all three simultaneously visible ({@link canCoexist}). A declaration that interleaves only
+ * through mutually exclusive branches is silently fine, which is the common case rather than an edge
+ * one, and a false refusal here would fail boot outright.
+ *
  * Reported by the FIRST-SEEN spelling, and folded through the same key the runs are cut on, so a
  * case-variant re-declaration is caught rather than passing as a distinct section.
  */
-export function nonContiguousDescriptorSections(fields: readonly DescriptorField[]): string[] {
-  const firstSpelling = new Map<string, string>()
-  const closed = new Set<string>()
-  const broken = new Map<string, string>()
-  let openKey: string | undefined
-  for (const field of fields) {
-    const declared = sectionOf(field)
-    if (declared?.key === openKey) continue
-    if (openKey !== undefined) closed.add(openKey)
-    if (declared) {
-      const caption = firstSpelling.get(declared.key) ?? declared.caption
-      firstSpelling.set(declared.key, caption)
-      if (closed.has(declared.key)) broken.set(declared.key, caption)
+export function duplicatedDescriptorSectionCaptions(fields: readonly DescriptorField[]): string[] {
+  const declared = fields.map((field) => ({ field, section: sectionOf(field) }))
+  const reported = new Map<string, string>()
+  for (const [index, opener] of declared.entries()) {
+    const open = opener.section
+    if (!open || reported.has(open.key)) continue
+    for (let split = index + 1; split < declared.length; split++) {
+      const splitter = declared[split]!
+      // A field of the same section only EXTENDS the open run, and one that cannot be on screen
+      // beside the opener cannot close its run either.
+      if (splitter.section?.key === open.key) continue
+      if (!canCoexist(opener.field, splitter.field)) continue
+      const reopens = declared
+        .slice(split + 1)
+        .some(
+          (candidate) =>
+            candidate.section?.key === open.key &&
+            canCoexist(opener.field, candidate.field) &&
+            canCoexist(splitter.field, candidate.field),
+        )
+      if (reopens) {
+        reported.set(open.key, open.caption)
+        break
+      }
     }
-    openKey = declared?.key
   }
-  return [...broken.values()]
+  return [...reported.values()]
 }
 
 /** Whether a filled value matches the field's declared type (structural, pre-semantic check). */

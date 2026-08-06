@@ -31,18 +31,42 @@ on case and whitespace, exactly as the task-type picker's category rows do, and 
 the one rendered, because a caption is the deployment's own words rather than an id.
 
 Declaration order is never rearranged, and that is what makes the second reader a boot ERROR
-(`task_type_field_section_interleaved` / `initiative_preset_field_section_interleaved`, through the
-same `descriptorFormProblems` checker both surfaces already share). A section declared in two places
-has no honest rendering: the caption prints twice, which reads as a platform fault rather than as the
-declaration it is, and the alternative repair moves a field away from where its author wrote it.
-Refusing the declaration at boot is the only disposition that leaves the renderer free of a repair
-nobody asked for, and it is the bar the surrounding checks already hold registrations to (error on
-what is fully knowable from the registration).
+(`task_type_field_section_interleaved` and its `initiative_preset_` / `gate_` siblings, through the
+same `descriptorFormProblems` checker every declaring surface shares). A section a form can be made to
+caption twice has no honest rendering: the caption prints twice, which reads as a platform fault
+rather than as the declaration it is, and the alternative repair moves a field away from where its
+author wrote it. Refusing the declaration at boot is the only disposition that leaves the renderer
+free of a repair nobody asked for, and it is the bar the surrounding checks already hold registrations
+to (error on what is fully knowable from the registration).
+
+What that check judges is REACHABILITY, never contiguity in the declared list, because the reduction
+it mirrors applies visibility before it cuts the runs. A branching form is written with its branches
+interleaved (each branch's fields beside the picker they qualify), so a section is reported only on
+finding a concrete state that prints it twice: two of its fields with a differently-captioned field
+between them that can be on screen beside both. For the single-condition vocabulary that is decidable
+pairwise, since the only contradictions available are two `equals` on one key and an `equals` against
+an `includes`. Reading contiguity alone would fail a deployment's boot outright over a form no user
+can break, which is a far worse failure than the duplicate caption it is guarding.
+
+The third surface reaching that checker is new here: a registered GATE's per-step config form
+rendered through the same component, which had none of these checks behind it, so a gate could boot
+clean and print the duplicate caption the platform calls its own fault (along with unchecked duplicate
+keys, optionless pickers and out-of-options defaults). It declares its form as an option on
+`GateRegistry.register` rather than as a field of a descriptor type, which is why nothing at the call
+site read as a descriptor form; the code prefix is now a named union so the next such surface has to
+be added deliberately.
 
 Reviewing: the interesting question is that severity, since grouping is cosmetic and every other
 error in that checker is a form that cannot be filled. The renderer's own behaviour for an
 interleaved declaration is still defined and total, because it has to be for a wire descriptor from a
 node whose build differs.
+
+One rendering constraint is worth knowing before touching the component: the captioned runs render
+FLAT, with each run's caption on the field that opens it, never as a per-run wrapper element. Run
+membership shifts as `showWhen` reveals fields while a field's identity does not, so nesting the
+fields inside a wrapper re-parents them when a boundary moves, and Vue can only do that by remounting
+them. The remounted input is the one being typed into, because typing into the trigger is what moved
+the boundary.
 
 `section` reaches `/api/v1` through `GET /api/v1/task-types`, so the surface version steps to
 `1.20.0` and the SDKs are regenerated. Additive per ADR 0034: it groups nothing the create call

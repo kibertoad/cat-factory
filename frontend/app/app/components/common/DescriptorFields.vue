@@ -16,9 +16,10 @@
 // `checkbox` a boolean, `checkbox-group` a `string[]`), so it round-trips the wire contract and the
 // shared `validateDescriptorFields` / `sanitizeDescriptorFields` rules unchanged.
 import { computed } from 'vue'
-import { descriptorFieldSections, isSafeRepoDirPath } from '@cat-factory/contracts'
+import { isSafeRepoDirPath } from '@cat-factory/contracts'
 import type { DescriptorField, DescriptorFieldValue, DescriptorFieldValues } from '~/types/domain'
 import {
+  descriptorFormRows,
   descriptorGroupValue,
   setDescriptorCheckbox,
   setDescriptorValue,
@@ -40,16 +41,20 @@ const props = withDefaults(
 const model = defineModel<DescriptorFieldValues>({ required: true })
 const { t } = useI18n()
 
-// The fields to render, grouped into the runs their declared `section` captions span. Only fields
-// whose `showWhen` holds against the current values are shown; a hidden field's stale value is kept
-// in the model (so re-showing restores it) but the server + client both drop it at sanitize/validate
-// time, so it can never freeze an unvalidated value.
+// The fields to render, each carrying the section caption that opens its run. Only fields whose
+// `showWhen` holds against the current values are shown; a hidden field's stale value is kept in the
+// model (so re-showing restores it) but the server + client both drop it at sanitize/validate time,
+// so it can never freeze an unvalidated value.
 //
-// Both halves are the shared `descriptorFieldSections` rather than a filter here: a caption spans
-// exactly what one function says it spans, which is the same statement the boot check refuses a
-// declaration against (a section declared in two places). A form declaring no section is one
-// uncaptioned run, i.e. byte-for-byte the flat column this component always rendered.
-const sections = computed(() => descriptorFieldSections(props.fields, model.value))
+// The grouping underneath is the shared `descriptorFieldSections`, so a caption spans exactly what
+// one function says it spans, which is the same statement the boot check refuses a declaration
+// against. A form declaring no section is one uncaptioned run, i.e. byte-for-byte the flat column
+// this component always rendered.
+//
+// The rows are FLAT, and the template keeps them siblings keyed by `field.key`, because run
+// membership shifts as `showWhen` reveals fields while a field's identity does not: see
+// `descriptorFormRows` for why a per-run wrapper would remount the input being typed into.
+const rows = computed(() => descriptorFormRows(props.fields, model.value))
 
 // The value-mutation rules live in `utils/descriptorFields.ts` as pure functions over the bag (what
 // an edit does to it, including the drop-when-empty rule that keeps an unset answer from freezing),
@@ -95,27 +100,30 @@ function selectItems(field: DescriptorField) {
 </script>
 
 <template>
-  <div v-if="sections.length" class="space-y-5">
-    <div v-for="(group, index) in sections" :key="index" class="space-y-4">
+  <div v-if="rows.length" class="space-y-4">
+    <!-- One keyed fragment per FIELD, never per run: a run's caption rides the field that opens it,
+         so revealing a field re-captions rows in place instead of re-parenting the inputs (which
+         Vue can only do by remounting them, destroying the one being typed into). -->
+    <template v-for="{ field, caption, startsGroup } in rows" :key="field.key">
       <!-- The section caption, rendered verbatim above its run (deployment-authored English, like
            the field labels themselves). Its testid is the same on every caption, because a caption
            is arbitrary Unicode a deployment writes in its own language: a spec addresses one by the
            TEXT it is asserting about (`getByTestId(...).filter({ hasText })`) rather than by a
            testid that would have to be slugified to be selectable. -->
       <p
-        v-if="group.section"
+        v-if="caption"
         class="-mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400"
+        :class="{ 'pt-2': startsGroup }"
         :data-testid="`${testidPrefix}-section`"
       >
-        {{ group.section }}
+        {{ caption }}
       </p>
       <UFormField
-        v-for="field in group.fields"
-        :key="field.key"
         :label="field.label"
         :help="field.help"
         :required="field.required"
         :error="pathInvalid(field) ? t('common.pathInvalid') : undefined"
+        :class="{ 'pt-2': startsGroup && !caption }"
         :data-testid="`${testidPrefix}-${field.key}`"
       >
         <!-- checkbox-group: a vertical list of toggles whose value is the checked option set. -->
@@ -179,6 +187,6 @@ function selectItems(field: DescriptorField) {
           @update:model-value="(v: string) => set(field.key, v)"
         />
       </UFormField>
-    </div>
+    </template>
   </div>
 </template>

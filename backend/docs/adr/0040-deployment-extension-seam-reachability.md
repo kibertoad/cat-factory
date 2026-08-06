@@ -80,9 +80,12 @@ value reads as `false` against a boolean condition).
 
 **A descriptor form groups under optional `section` captions.** Consecutive fields sharing a caption
 render as one run, visibility applies before the runs are cut (so a section whose every field is
-hidden renders no caption), and declaration order is never rearranged. A section declared in two
-places fails boot, because the two available renderings are a caption printed twice and a field moved
-away from where its author wrote it.
+hidden renders no caption), and declaration order is never rearranged. A section a filled form can be
+made to caption TWICE fails boot, because the two available renderings are a caption printed twice and
+a field moved away from where its author wrote it. That refusal judges REACHABILITY rather than
+contiguity in the declared list, for the same reason the runs are cut after visibility is applied: a
+branching form interleaves its branches on purpose, and refusing it would fail boot over a form no
+user can break. Every surface declaring such a form is checked, the gate config form included.
 
 **The reference docs ship inside the published tarballs**, with a CI guard
 (`check-shipped-doc-links.mjs`) failing any markdown file in a tarball whose relative link escapes
@@ -113,7 +116,14 @@ its package root.
   invisible at boot).
 - **A grouping caption is presentation, and it still fails boot when it cannot be rendered
   honestly.** Refusing at boot keeps the renderer free of a repair nobody asked for: it never
-  reorders a form, so what a deployment declared is what a user sees.
+  reorders a form, so what a deployment declared is what a user sees. The counterweight is that a
+  refusal at error severity is itself a failure mode: it must be judged against what a form can
+  actually be made to PRINT, or the check breaks more deployments than the fault it names.
+- **A shared vocabulary spreads its rendering surfaces faster than its checks.** `section` reached the
+  gate config form for free, through the shared field spread and the shared component, while the boot
+  check reached only the two surfaces whose declarations are descriptor TYPES. Adding an attribute to
+  the spread is therefore not the whole change: every surface that renders the vocabulary owes the
+  check, and the checker's subject is a named union so the next one has to be added deliberately.
 
 ## Consequences
 

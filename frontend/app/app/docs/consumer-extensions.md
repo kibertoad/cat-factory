@@ -191,8 +191,9 @@ module). The SPA merges it into the create-task picker and the card-badge catalo
   enforced server-side on create as well (required answers, option lists, lengths); a code-shipped
   one is known only to the SPA, so the create form is its only check (see the Validation note below).
   A `section` groups a long form into captioned runs and changes nothing else; declare a section's
-  fields consecutively, since a backend registration that splits one in two fails boot and a
-  code-shipped one would simply render its caption twice.
+  fields consecutively, since a backend registration whose form could caption one twice fails boot
+  and a code-shipped one would simply render the caption twice. Interleaving a section with a
+  mutually exclusive `showWhen` branch is not that fault: only one half is ever on screen.
 - **`formPanel`** optionally names a bespoke create-form section component you contribute to the
   `taskTypeFormPanels` slot (paired by that id, like `resultViews`); shown INSTEAD of `fields`. An
   unpaired id degrades to the descriptor fields.
