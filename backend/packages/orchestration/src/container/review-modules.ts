@@ -1,4 +1,5 @@
 import { applicableFragmentIds, resolveServiceFrameBlock } from '@cat-factory/kernel'
+import type { LinkedDocumentRefresher } from '@cat-factory/kernel'
 import { getFragment } from '@cat-factory/prompt-fragments'
 import { RequirementReviewService } from '../modules/requirements/RequirementReviewService.js'
 import { ClarityReviewService } from '../modules/clarity/ClarityReviewService.js'
@@ -40,6 +41,13 @@ export function createRequirementsModule(
   deps: CoreDependencies,
   notificationService?: NotificationService,
   fragmentLibrary?: FragmentLibraryModule,
+  /**
+   * The dispatch-time linked-document refresher. Threaded in rather than read off `deps` because it
+   * belongs to the documents MODULE, and the requirements review is the first reader of a block's
+   * attachments in the default pipelines: without it, the step a human signs off on is the one step
+   * still reviewing the import-time copy.
+   */
+  documentRefresher?: LinkedDocumentRefresher,
 ): RequirementsModule | undefined {
   const { requirementReviewRepository } = deps
   if (!requirementReviewRepository) return undefined
@@ -63,6 +71,7 @@ export function createRequirementsModule(
     // through a leased per-run activation (local container inline backend) can lease it.
     resolveRunContext: resolveBlockRunContext(deps),
     documentRepository: deps.documentRepository,
+    ...(documentRefresher ? { documentRefresher } : {}),
     taskRepository: deps.taskRepository,
     // The Requirement Writer (second companion) grounds recommendations on the run's repo
     // (`spec/` + `tech-spec/` via the checkout-free RepoFiles) — wired in all three facades.

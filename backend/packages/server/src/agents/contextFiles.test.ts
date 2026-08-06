@@ -14,6 +14,7 @@ function doc(over: Partial<ContextDoc> = {}): ContextDoc {
   return {
     title: 'Design Doc',
     url: 'https://docs.example/design',
+    origin: 'confluence',
     excerpt: 'excerpt',
     summary: 'summary',
     body: 'the full body',
@@ -39,6 +40,47 @@ describe('buildContextFiles', () => {
     expect(out.files[0]?.content).toBe(
       '# Design Doc\nSource: https://docs.example/design\n\nthe full body',
     )
+  })
+
+  it('records the revision a confirmed document was built against', () => {
+    const out = buildContextFiles(
+      ctx({
+        contextDocs: [
+          doc({ freshness: { status: 'confirmed', version: '2317456', reimported: true } }),
+        ],
+      }),
+    )
+
+    // Between the origin line and the body, so "which revision of the design did this run read"
+    // is answerable from the checkout the agent worked in.
+    expect(out.files[0]?.content).toBe(
+      '# Design Doc\nSource: https://docs.example/design\nRevision: 2317456\n\nthe full body',
+    )
+  })
+
+  it('warns in the file itself when the copy could not be confirmed', () => {
+    const out = buildContextFiles(
+      ctx({
+        contextDocs: [doc({ freshness: { status: 'unconfirmed', reason: 'source_unreachable' } })],
+      }),
+    )
+
+    // An agent handed a design has no other way to learn the copy might trail the live file, and an
+    // omitted note reads exactly like a copy that WAS checked.
+    expect(out.files[0]?.content).toContain('NOT confirmed against the source')
+    expect(out.files[0]?.content).toContain('could not be reached')
+  })
+
+  it('is byte-for-byte unchanged for a document with no freshness verdict', () => {
+    // The un-wired path: a deployment that does not refresh must not gain a header, and an `upload`
+    // (nothing to be stale relative to) must not gain a warning.
+    const none = buildContextFiles(ctx({ contextDocs: [doc()] }))
+    const notApplicable = buildContextFiles(
+      ctx({ contextDocs: [doc({ freshness: { status: 'not-applicable' } })] }),
+    )
+
+    expect(notApplicable.files[0]?.content).toBe(none.files[0]?.content)
+    expect(none.files[0]?.content).not.toContain('Revision:')
   })
 
   it('falls back to the excerpt when a doc has no body', () => {

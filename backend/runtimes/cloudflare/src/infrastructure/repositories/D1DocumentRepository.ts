@@ -19,6 +19,7 @@ interface DocumentRow {
   excerpt: string
   body: string
   content_hash: string | null
+  source_version: string | null
   linked_block_id: string | null
   role: string | null
   doc_kind: string | null
@@ -51,6 +52,7 @@ function rowToRecord(row: DocumentRow): DocumentRecord {
     excerpt: row.excerpt,
     body: row.body,
     contentHash: row.content_hash ?? '',
+    sourceVersion: row.source_version,
     linkedBlockId: row.linked_block_id,
     role: (row.role as DocumentLinkRole | null) ?? null,
     docKind: (row.doc_kind as DocKind | null) ?? null,
@@ -72,14 +74,15 @@ export class D1DocumentRepository implements DocumentRepository {
       .prepare(
         `INSERT INTO documents
           (workspace_id, source, external_id, title, url, excerpt, body,
-           content_hash, linked_block_id, synced_at, deleted_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+           content_hash, source_version, linked_block_id, synced_at, deleted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
          ON CONFLICT (workspace_id, source, external_id) DO UPDATE SET
            title = excluded.title,
            url = excluded.url,
            excerpt = excluded.excerpt,
            body = excluded.body,
            content_hash = excluded.content_hash,
+           source_version = excluded.source_version,
            linked_block_id = excluded.linked_block_id,
            synced_at = excluded.synced_at,
            deleted_at = NULL`,
@@ -93,6 +96,7 @@ export class D1DocumentRepository implements DocumentRepository {
         record.excerpt,
         record.body,
         record.contentHash,
+        record.sourceVersion,
         record.linkedBlockId,
         record.syncedAt,
       )

@@ -21,6 +21,7 @@ function record(over: Partial<DocumentRecord> = {}): DocumentRecord {
     excerpt: 'Token bucket.',
     body: '# Rate limiter\n\nToken bucket, 100 rps.',
     contentHash: 'h',
+    sourceVersion: null,
     linkedBlockId: 'task_1',
     role: null,
     docKind: null,

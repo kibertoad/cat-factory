@@ -61,6 +61,18 @@ export interface DocumentRecord {
   body: string
   /** FNV-1a digest of `body`, for cheap change detection across re-imports. */
   contentHash: string
+  /**
+   * The source's own opaque version token ({@link DocumentContent.version}) that THIS stored body
+   * came from — a Figma file version, a Confluence version number, a git sha. What the dispatch-time
+   * refresh compares a cheap `probeVersion` against, so a run can tell "the page has not moved" from
+   * "the page moved and this copy is behind it" without re-downloading the body.
+   *
+   * NULL for three distinct cases, all of which the refresh treats the same (re-import once, which
+   * records the version): an `upload` with no source at all, a source that exposes no version, and a
+   * row imported before this column existed. Never a guessed value, because a wrong version reads as
+   * "confirmed current" forever — the one failure this column exists to prevent.
+   */
+  sourceVersion: string | null
   linkedBlockId: string | null
   /**
    * The workspace+`DocKind` link role this document plays, if any (WS1 items 2–4): `template`

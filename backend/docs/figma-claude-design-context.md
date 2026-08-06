@@ -85,11 +85,117 @@ Two traps this shape exists to prevent:
   was byte-for-byte a frame that contains no text. Every text cut therefore leaves a
   `(text truncated)` line IN the section, not only a note.
 
+### The guidance is folded by PRESENCE, not by selection
+
 One **best-practice prompt fragment** serves all design sources: `design.context`
-(`prompt-fragments/src/collections/design.ts`, category `Design`, `appliesTo: {blockTypes:
-['frontend']}`). Pin it on a frontend service (or a block) and a `code-aware` agent (`coder`) reads
-the materialised structure, matches `### Components` to existing repo components, and honours
-`### Design tokens`.
+(`prompt-fragments/src/collections/design.ts`, category `Design`). It tells a `code-aware` agent to
+read the materialised structure, match `### Components` against existing repo components, and honour
+`### Design tokens` instead of ad-hoc values.
+
+**The engine adds it whenever the run's resolved linked context carries a design-origin document**
+(`withDesignContextFragment`, applied in `AgentContextBuilder.resolveFragments`), on top of whatever
+the block pins. Selection alone reached almost nobody: the fragment's `appliesTo` selector is a
+management-surface hint the run path never drove, it is in no seed pin set, and basic mode hides the
+per-task fragment picker, so the standard case (a designer links a Figma frame and starts a run)
+executed with a design context file on disk and no instruction anywhere to honour it.
+
+Two properties to preserve when touching this:
+
+- **The trigger is the document, not the block type.** A deterministic presence rule at prompt
+  assembly cannot drift from what is on disk, whereas `blockTypes: ['frontend']` was wrong in both
+  directions: it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design at all. It is deliberately NOT a revival of the retired `appliesTo` run-path selector.
+- **It rides the normal fold, so it inherits the normal rules.** Ids go through the same resolver, so
+  a workspace override of `design.context` wins, the two-tier `brief`/full verbosity applies (an
+  implementer folds the condensed variant), and a kind that receives no standards at all still
+  receives none.
+
+### Freshness: the body is re-confirmed at dispatch, not frozen at import
+
+Import writes a projection of a page someone else keeps editing. Nothing used to look at the source
+again, so a run started after a frame moved fed its agent the old markdown with the run reading as
+perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+it means the agent routinely builds the previous revision.
+
+`LinkedDocumentRefreshService` (the kernel `LinkedDocumentRefresher` port) runs on the linked-context
+resolution path of every dispatch. **The cost model is the design**, because that path runs per STEP:
+
+1. `probeVersion` the source (Figma's `?depth=1` file read).
+2. Compare the probed token against `DocumentRecord.sourceVersion`, the token the stored body was
+   imported at. This column is why "unchanged" is provable at all; without it every dispatch would
+   pay a full re-download, and a whole-file Figma import fans out into chunked per-frame node reads.
+3. Re-import (`DocumentImportService.reimport`, idempotent, preserves the block link and role tag)
+   only when they differ. A row recording no version cannot be proven current, so it re-imports once
+   and self-heals.
+
+Three things bound what that costs, and each bounds a different half:
+
+- **The `linkedDocumentVersion` app cache holds the OUTCOME of the whole ladder**, re-import included,
+  on a short TTL. So a burst of step dispatches costs ONE round trip per document, two concurrent
+  dispatches of the same document dedupe onto a single download, and a source that is DOWN is
+  remembered as down rather than re-asked by every dispatch until it recovers (a cache loader that
+  throws caches nothing, which is why an unreachable source is a cached VALUE). Its coherence is that
+  TTL plus invalidation on every write that can move either side of the comparison: a
+  connect/disconnect drops the workspace group, a manual re-import drops the document's entry.
+- **The workspace's connection is resolved ONCE for the whole corpus** (`resolveConnections`, one
+  stored-row read), not per document and again inside each probe. It is invariant per
+  `(workspace, source)` for the entire pass.
+- **The per-document fan-out is bounded.** A task can attach a corpus budget's worth of frames, and
+  unbounded, one dispatch becomes that many concurrent whole-file imports at a source that answers
+  429 well before finishing them.
+
+**The ladder must CONVERGE**, which is why `reimport` records the caller's PROBED token when the
+source's own fetch exposes none. A provider may resolve its version best-effort inside `fetchDocument`
+(GitHub docs' commit sha degrades to `null` on a rate-limited request) while the cheap probe still
+answers: the row then holds `null`, mismatches the probe on every future dispatch, and re-downloads
+the whole document forever while reporting `unversioned` about a source that plainly versions.
+Recording the probed token is also the conservative direction, since the body is at least as new as
+that token, so a later edit still moves the probe past it.
+
+The verdict rides each context doc as `DocumentFreshness` and is rendered by `freshnessHeaderLines`
+into BOTH surfaces a document reaches: the materialised `.cat-context/` file's header, and the
+in-prompt injection an INLINE kind gets instead of a checkout. One renderer, because an inline judge,
+estimator or requirements reviewer scoring against a stale design is the same failure as a container
+agent building from one, and it has no file to read the warning from. Three dispositions, deliberately
+not one:
+
+- **`confirmed`** contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. Whether the check had to re-import does not change the
+  rendered claim (both mean the agent is reading the live revision); the distinction is for logs.
+- **`not-applicable`** renders NOTHING. An `upload` has no source to trail, and neither does a source
+  this deployment wired no provider for, so a freshness warning would invent a problem.
+- **`unconfirmed`** renders a warning naming the gap, because an agent handed a design has no other
+  way to know the copy might trail the live file, and an omitted note reads exactly like a copy that
+  WAS checked. Four gaps, because each needs a different fix: `not_connected` (reconnect the source),
+  `source_unreachable` (an outage, wait it out; the cause is on the operator's log line),
+  `unversioned` (the source exposes no token, so nothing can be fixed and nothing may be claimed),
+  and `credentials_unreadable` (the connection could not be READ, so the source was never asked).
+
+The last one is not defensive: it is **mothership mode**, where a node runs the engine with no main
+database and a document-source connection is sealed with the mothership's `ENCRYPTION_KEY`, so the
+read fails permanently and by design. Reporting that as an outage would send an operator hunting a
+Figma incident that does not exist (see
+[`mothership-mode.md`](../../docs/initiatives/mothership-mode.md)).
+
+Every gap also increments the `document.freshness_gap` operational counter, dimensioned by `reason`
+and `source` (both closed vocabularies). A log line answers "what happened to this run"; these
+conditions are per-dispatch and most of them are permanent while they last, so the line repeats with
+no remedy anyone intends to apply and only the RATE says whether the deployment is serving more stale
+context than it was.
+
+The refresh is **best-effort by port contract**: it never throws, so a source outage costs the run a
+stale body and a stated warning, never the run itself. The readability refusal
+(`assertContextDocumentsReadable`) runs on the REFRESHED records, because a page emptied since import
+is exactly the case worth refusing. With no refresher wired every document passes through with NO
+verdict, which is byte-for-byte the prior behaviour: a deployment that does not refresh has not
+concluded these bodies are unverifiable, it never asked.
+
+**Every inline reader of a block's attachments goes through the same refresher**, not just the
+container dispatch path: the initiative-planning interviewer, and the REQUIREMENTS REVIEW, which is
+the first step of the default pipelines and the one a human signs off on. Reviewing the import-time
+copy there would record an approval against a revision nobody built while the coder two steps later
+receives the current one, and it would leave two readability verdicts about one document (this
+review's and the first dispatch's) free to disagree.
 
 ## Figma
 

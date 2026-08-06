@@ -117,6 +117,10 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     // auto-matches its imported page even with a title segment or tracking params the
     // stored canonical url omits. Absent providers → undefined (url-string match only).
     documentUrlResolver: makeDocumentUrlResolver(dependencies.documentSourceProviders),
+    // Re-confirm each linked document against its source before a dispatch reads it, so an agent
+    // builds against the current design rather than the copy import stored. Present whenever the
+    // document module is (it needs no extra facade wiring); absent ⇒ nothing is linked to refresh.
+    documentRefresher: platform.documents?.linkedRefresher,
     requirementReviewService: requirements?.service,
     docInterviewService: docInterview,
     forkChatService: forkChat,
