@@ -609,7 +609,10 @@ export class RunLifecycleController {
     })
     // The run record is gone and the block is back to planned; the client can't reconstruct that
     // from a per-instance event (there is no instance left to emit one). Carry the reset block so
-    // every board mounting its shared service patches it instead of re-reading a snapshot.
+    // every board mounting its shared service patches it instead of re-reading a snapshot. A
+    // cancelled public-API run's HEADLESS anchor block is refused at the wire by
+    // `deliverableBoardBlock` (the twin of the check `RunStateMachine.emitInstance` makes), so it
+    // degrades to a coarse signal here rather than pushing a card no board may show.
     const block = await this.deps.requireBlock(workspaceId, blockId)
     await this.deps.events.boardChanged(workspaceId, { reason: 'cancel', block })
     return block

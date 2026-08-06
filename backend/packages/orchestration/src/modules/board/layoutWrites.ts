@@ -129,9 +129,13 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
     }
     // Coarse, because the children moved too: a `block-updated` signal carrying the container
     // alone would let every other board re-render it at its new size with its contents still at
-    // the old offsets. Origin = the block's HOME so a shared service fans out to every mount.
+    // the old offsets. Origin = the block's HOME, and the block is NAMED (payload withheld, not
+    // subject withheld) so a shared service still fans the refresh out to every mount. A coarse
+    // change that names nobody resolves no service and collapses to this one board, which is how
+    // a resized module reached its own board and no other.
     await deps.emitBoardChanged(homeWorkspaceId, {
       reason: 'block-updated',
+      blockId: id,
       originConnectionId,
     })
     return deps.projectForWorkspace(

@@ -18,6 +18,7 @@ import type {
   RequirementReview,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
+import { boardChangeSubject } from '@cat-factory/kernel'
 
 export interface FanOutEventPublisherDependencies {
   workspaceMountRepository: Pick<WorkspaceMountRepository, 'listWorkspaceIdsMountingBlock'>
@@ -73,7 +74,7 @@ export class FanOutEventPublisher implements ExecutionEventPublisher {
     // the originating workspace only. The block a targeted change CARRIES is the same object on
     // every target: `deliverableBoardBlock` (applied by the inner publisher) is what keeps that
     // sound, by refusing to carry the one level whose payload is per-board.
-    const targets = await this.targets(workspaceId, change.blockId ?? change.block?.id)
+    const targets = await this.targets(workspaceId, boardChangeSubject(change))
     await Promise.all(targets.map((ws) => this.inner.boardChanged(ws, change)))
   }
 

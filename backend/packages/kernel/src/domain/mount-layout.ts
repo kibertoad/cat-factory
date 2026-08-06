@@ -24,22 +24,6 @@ export function applyMountLayout(
   return next
 }
 
-/**
- * The block a real-time board event may carry as a PAYLOAD the client upserts verbatim, or `null`
- * when the change has to be delivered as a coarse "re-read your board" signal instead.
- *
- * One event reaches every workspace that mounts the affected service, and its payload is published
- * once for all of them. For a service frame that is unsatisfiable: the reader above explains why a
- * frame's position and size are per-board, so whichever mount a publisher projected through would
- * be wrong on every OTHER board and would jump the frame there, which is the same silent failure
- * `applyMountLayout` exists to prevent. A frame change is therefore announced without a payload and
- * each board re-reads its own projection.
- *
- * Every other level (task, module, epic, initiative) carries its geometry on the shared row, so a
- * single payload is correct everywhere it lands. Both facades' publishers project through here, so
- * the rule cannot hold on one runtime and drift on the other.
- */
-export function deliverableBoardBlock(block: Block | null | undefined): Block | null {
-  if (!block) return null
-  return (block.level ?? 'frame') === 'frame' ? null : block
-}
+// The other half of this rule (which blocks a real-time event may CARRY, given that a frame's
+// geometry is per-board) is `deliverableBoardBlock` in `./board-events.ts`, beside the wire-event
+// assembly that is its only caller.

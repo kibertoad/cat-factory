@@ -17,7 +17,8 @@ import type {
 } from '@cat-factory/contracts'
 import {
   type BoardChange,
-  deliverableBoardBlock,
+  boardWireEvent,
+  bootstrapWireEvent,
   describeError,
   type ExecutionEventPublisher,
   type InfraSetupTransition,
@@ -59,23 +60,11 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
   }
 
   async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
-    // `blockId` is what the FanOutEventPublisher decorator resolved the mounting workspaces from;
-    // it rides along so a client can tell WHICH block a coarse signal was about. `block` is the
-    // payload that lets the client patch instead of re-reading, and `deliverableBoardBlock` is the
-    // one place the frame rule lives (a frame's geometry is per-board, so it cannot be carried).
-    // `originConnectionId` (when present) rides as a side-channel header so the hub can skip the
-    // socket that caused the change — the wire event stays identical across all clients.
-    await this.publish(
-      workspaceId,
-      {
-        type: 'board',
-        reason: change.reason,
-        blockId: change.blockId ?? change.block?.id ?? null,
-        block: deliverableBoardBlock(change.block),
-        at: Date.now(),
-      },
-      change.originConnectionId,
-    )
+    // The wire shape (above all WHICH payloads may ride) is assembled by the shared kernel
+    // builder, so this facade and its Node twin cannot drift. `originConnectionId` stays a
+    // side-channel argument: it tells the hub which socket to skip, and the wire event itself is
+    // identical for every client that does receive it.
+    await this.publish(workspaceId, boardWireEvent(change, Date.now()), change.originConnectionId)
   }
 
   async bootstrapChanged(
@@ -83,12 +72,7 @@ export class DurableObjectEventPublisher implements ExecutionEventPublisher {
     job: BootstrapJob,
     block?: Block | null,
   ): Promise<void> {
-    await this.publish(workspaceId, {
-      type: 'bootstrap',
-      job,
-      block: block ?? null,
-      at: Date.now(),
-    })
+    await this.publish(workspaceId, bootstrapWireEvent(job, block, Date.now()))
   }
 
   async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {

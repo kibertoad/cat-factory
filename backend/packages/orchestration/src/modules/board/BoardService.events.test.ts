@@ -1,6 +1,7 @@
 import { UNATTRIBUTED_BLOCK_EDITOR } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import type { Block, BoardChange } from '@cat-factory/kernel'
+import { boardChangeSubject } from '@cat-factory/kernel'
 import { BoardService, type BoardServiceDependencies } from './BoardService.js'
 
 // A board mutation on a service MOUNTED from another workspace must push its real-time
@@ -192,7 +193,7 @@ describe('BoardService targeted vs coarse board changes', () => {
   const WS = 'ws_1'
 
   function build(blocks: Block[]) {
-    const emits: { reason: string; carried: Block | null }[] = []
+    const emits: { reason: string; carried: Block | null; subject: string | null }[] = []
     const byId = new Map(blocks.map((b) => [b.id, b]))
     const deps = {
       workspaceRepository: { get: async (id: string) => ({ id }) },
@@ -218,7 +219,11 @@ describe('BoardService targeted vs coarse board changes', () => {
       executionEventPublisher: {
         async executionChanged() {},
         async boardChanged(_ws: string, change: BoardChange) {
-          emits.push({ reason: change.reason, carried: change.block ?? null })
+          emits.push({
+            reason: change.reason,
+            carried: change.block ?? null,
+            subject: boardChangeSubject(change),
+          })
         },
         async bootstrapChanged() {},
         async notificationChanged() {},
@@ -291,5 +296,21 @@ describe('BoardService targeted vs coarse board changes', () => {
     const e = emits.find((x) => x.reason === 'block-reparented')
     expect(e).toBeDefined()
     expect(e?.carried).toBeNull()
+  })
+
+  it('withholds the payload on a resize but still NAMES the block it resized', async () => {
+    // Two different withholdings, and conflating them costs the fan-out. The PAYLOAD is withheld
+    // because a resize also shifts the container's children, so a subscriber upserting the
+    // container alone would draw it at its new size around contents still at the old offsets. The
+    // SUBJECT must survive that: `FanOutEventPublisher` resolves the mounting workspaces from it,
+    // so a change naming nobody reaches the acting board only, which is how a resized module
+    // stopped reaching the other boards mounting its service at all.
+    const { service, emits } = build([frame('frame_1'), task('blk_1', 'frame_1')])
+
+    await service.resizeBlock(WS, 'blk_1', { position: { x: 5, y: 5 }, size: { w: 300, h: 200 } })
+
+    const e = emits.find((x) => x.reason === 'block-updated')
+    expect(e?.carried).toBeNull()
+    expect(e?.subject).toBe('blk_1')
   })
 })

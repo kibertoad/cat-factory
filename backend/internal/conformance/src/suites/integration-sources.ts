@@ -85,6 +85,17 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       const frame = snap.body.blocks.find((b) => b.id === frameId)
       expect(frame?.level).toBe('frame')
       expect(frame?.status).not.toBe('blocked')
+
+      // The frame's own transitions (materialised, then ready) reach the board as coarse events
+      // NAMING it, never as a payload: a frame's position and size are a per-board mount override,
+      // so the one payload published for every board mounting the service would be wrong on all
+      // but one of them. Each board re-reads its own projection instead. The progress ticks in
+      // between ride the `bootstrap` event alone and cost no refresh at all, which is the whole
+      // reason the two are split.
+      const frameSignals = app.boardEmits(frameId)
+      expect(frameSignals.length).toBeGreaterThan(0)
+      expect(frameSignals.every((e) => !e.hasBlock)).toBe(true)
+      expect(frameSignals.some((e) => e.reason === 'bootstrap-succeeded')).toBe(true)
     })
 
     it('reads a stopped run’s structured failure back off the store', async () => {

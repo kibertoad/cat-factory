@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Block, WorkspaceMount } from './types.js'
-import { applyMountLayout, deliverableBoardBlock } from './mount-layout.js'
+import { applyMountLayout } from './mount-layout.js'
 
 function frame(over: Partial<Block> = {}): Block {
   return {
@@ -61,34 +61,5 @@ describe('applyMountLayout', () => {
       mount({ size: { w: 900, h: 700 } }),
     )
     expect(projected.size).toEqual({ w: 900, h: 700 })
-  })
-})
-
-describe('deliverableBoardBlock', () => {
-  it('refuses to carry a service frame', () => {
-    // The failure this prevents is silent: one payload is published for every board a shared
-    // service is mounted on, so a frame carrying the origin's coordinates would land on the
-    // others and jump the frame to a spot none of them shows it at. Exactly what
-    // `applyMountLayout` exists to stop, arriving by a different door.
-    expect(deliverableBoardBlock(frame())).toBeNull()
-  })
-
-  it('treats a block with no explicit level as a frame', () => {
-    // `level` is optional on the wire and the board reads an absent one as `frame`
-    // (`useBlockQueries`). Defaulting the other way here would carry exactly the payload the
-    // rule above refuses.
-    expect(deliverableBoardBlock(frame({ level: undefined }))).toBeNull()
-  })
-
-  it('carries every level whose geometry lives on the shared row', () => {
-    for (const level of ['task', 'module', 'epic', 'initiative'] as const) {
-      const block = frame({ level, parentId: 'frame_1' })
-      expect(deliverableBoardBlock(block), `${level} should be deliverable`).toBe(block)
-    }
-  })
-
-  it('answers null for an absent block', () => {
-    expect(deliverableBoardBlock(null)).toBeNull()
-    expect(deliverableBoardBlock(undefined)).toBeNull()
   })
 })

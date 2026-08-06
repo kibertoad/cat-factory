@@ -237,28 +237,46 @@ unit test.
 
 **As landed.** The kernel port takes a `BoardChange` value (`reason` / `blockId` / `block` /
 `originConnectionId`) instead of four positionals, so adding a field does not grow a signature
-and every call site reads as the decision it is making. The wire event gained `blockId` and
-`block`; the SPA upserts a carried block through the SAME `board.upsert` the `execution` branch
-uses, which is what keeps the monotonic live-upsert stamp in play, and falls back to the old
-debounced refresh when none is carried.
+and every call site reads as the decision it is making. The wire event gained `block`; the SPA
+upserts a carried block through the SAME `board.upsert` the `execution` branch uses, which is what
+keeps the monotonic live-upsert stamp in play, and falls back to the old debounced refresh when
+none is carried.
 
-Two things the original finding did not anticipate, both learned while implementing:
+`blockId` stays on the BoardChange and off the wire. It is how the backend resolves which
+workspaces to publish to (`boardChangeSubject` → `FanOutEventPublisher.targets`), spent before the
+event exists; a client has nothing to do with it the payload does not already say, and an id
+riding along for no reader is the kind of inert surface the next person assumes is load-bearing.
 
-- **A service FRAME can never be carried**, so the reason-by-reason list above is not the whole
-  rule. One payload is published for every board that mounts the affected service, and a frame's
-  position and size live on the per-workspace `WorkspaceMount`, so whichever mount the publisher
-  projected through would be wrong on every other board and would jump the frame there: the exact
-  failure `applyMountLayout` exists to prevent, arriving by a different door. Kernel's
-  `deliverableBoardBlock` enforces it at the WIRE (both facades project through it) rather than
-  at each call site, so a future emitter cannot reintroduce it. `cancel` therefore CAN carry its
-  block (it is a task) even though the finding grouped it with the structural reasons.
+Three things the original finding did not anticipate, all learned while implementing:
+
+- **Two blocks can never be CARRIED**, so the reason-by-reason list above is not the whole rule.
+  A service FRAME: one payload is published for every board that mounts the affected service, and
+  a frame's position and size live on the per-workspace `WorkspaceMount`, so whichever mount the
+  publisher projected through would be wrong on every other board and would jump the frame there,
+  the exact failure `applyMountLayout` exists to prevent, arriving by a different door. And a
+  headless `internal` anchor block (a public-API run's own "task"), which `composeBoard` filters
+  out of every snapshot and which would therefore render as a card no later read can remove.
+  Kernel's `deliverableBoardBlock` enforces both at the WIRE rather than at each call site, and
+  both facades assemble every block-carrying event through it (`boardWireEvent` /
+  `bootstrapWireEvent`), so a future emitter cannot reintroduce either. `cancel` therefore CAN
+  carry its block for an ordinary task, even though the finding grouped it with the structural
+  reasons, and degrades to coarse for the internal one.
+- **Withholding the PAYLOAD is not withholding the SUBJECT.** A coarse change that also drops
+  `blockId` resolves no service, so `FanOutEventPublisher` collapses it to the acting board and
+  every other mount of a shared service learns nothing. Resize is the case that bites: children
+  shift with the container, so the payload must go, but the block still has to be named.
 - **`block-updated` and `epic-assigned`/`dependency-toggled` re-read the block anyway** to build
   their REST response, so carrying it cost a reorder rather than a query. Emitting before the
   re-read would have shipped the pre-write value, which is worse than carrying nothing.
 
+A targeted upsert also does not self-heal the way the coarse signal did, so ORDER became load
+bearing where a payload rides: the initiative loop announces a spawned task only once
+`executionService.start` has resolved, because the failure path deletes the block and emits
+nothing, and the refresh a coarse event triggered used to reconcile that away by itself.
+
 Still coarse, and deliberately: removal (cascades over descendants and prunes edges on blocks the
 event never names), reparent (moves a subtree between parents), resize (children shift too),
-blueprint reconcile, `bootstrap-succeeded`, `module`, and every frame change.
+blueprint reconcile, bootstrap frame transitions, `module`, and every frame change.
 
 ### 7. `SpendService` homebrew TTL Maps → AppCaches slices (P2)
 

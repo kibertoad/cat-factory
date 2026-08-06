@@ -29,15 +29,22 @@ event never names, a reparent moves a subtree between parents, a resize shifts c
 blueprint reconcile rewrites a whole service. A payload there would state part of the change and
 read as all of it.
 
-A service FRAME is never carried, on any reason. One payload is published for every board that
-mounts the affected service, and a frame's position and size live on the per-workspace mount
-rather than on the shared row, so whichever mount a publisher projected through would be wrong on
-every other board and would jump the frame to coordinates none of them shows it at. That is the
-failure `applyMountLayout` exists to prevent, arriving through a door it does not cover, so the
-rule is enforced once at the wire (kernel's `deliverableBoardBlock`, which both facades project
-through) rather than trusted to each emit site.
+Two blocks are never carried, on any reason or event. A service FRAME, because one payload is
+published for every board that mounts the affected service and a frame's position and size live on
+the per-workspace mount rather than on the shared row, so whichever mount a publisher projected
+through would be wrong on every other board and would jump the frame to coordinates none of them
+shows it at. And a headless `internal` anchor block (a public-API run's own "task"), which the
+snapshot read filters out of every board and which would otherwise render as a card carrying the
+external caller's brief that no later read can remove. Both are refused once at the wire, by
+kernel's `deliverableBoardBlock`, which every block-carrying event on both facades is assembled
+through (`boardWireEvent` / `bootstrapWireEvent`) rather than trusted to each emit site.
 
-Internal breaks, both pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
-`BoardChange` value instead of four positional arguments, and the `board` wire event gained
-`blockId` and `block`. A client on the old shape sees `block` as absent and refreshes, which is
-the behaviour it already had.
+That makes the `bootstrap` event's frame payload a withheld one too, so a repo bootstrap now
+announces its frame's transitions (materialised, ready, blocked) as coarse `board` events beside
+the job. The live "bootstrapping…" progress still rides the job with no refresh at all; what
+stops is a poll tick pushing frame coordinates that are stale the moment anyone drags the card.
+
+Internal breaks, all pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
+`BoardChange` value instead of four positional arguments; the `board` wire event gained `block`;
+and the `bootstrap` wire event's `block` is now always null. A client on the old shape sees
+`block` as absent and refreshes, which is the behaviour it already had.

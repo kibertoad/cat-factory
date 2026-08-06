@@ -463,16 +463,27 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      // The spawned task rides along so every open board patches it in rather than re-fetching a
-      // snapshot. This is the loop's per-item event, so it is the one that used to make a busy
-      // initiative refetch the whole board once per spawned task.
-      await this.deps.events.boardChanged(workspaceId, { reason: 'block-added', block })
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
       await this.deps.executionService.start(workspaceId, block.id, pipelineId, {
         gatesOverride: item.spawn?.gates,
       })
+      // Announced only once the run has actually started, because the rollback below deletes the
+      // block and emits nothing. A coarse signal would have healed itself (the refresh it triggers
+      // re-reads a board the row is no longer on); a targeted upsert would not, leaving a task
+      // that does not exist rendered on every open board until an unrelated event or a reconnect
+      // happens to re-hydrate. The payload is the whole point here, so the ORDER carries the fix.
+      //
+      // Best-effort for the same reason it moved: past the start there is nothing left to roll
+      // back, so a fan-out read that fails must not fall into the catch below and delete a block
+      // whose run is live. The board reconciles a missed push on its next snapshot.
+      await runBestEffort(
+        this.log,
+        'initiative.announceSpawnedBlock',
+        () => this.deps.events.boardChanged(workspaceId, { reason: 'block-added', block }),
+        { workspaceId, blockId: block.id, itemId: item.id },
+      )
       return { outcome: 'spawned', entity: claimed }
     } catch (error) {
       // Roll back the block, then decide on the item. A per-service task-limit ConflictError is

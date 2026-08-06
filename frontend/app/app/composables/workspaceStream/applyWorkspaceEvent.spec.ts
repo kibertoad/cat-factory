@@ -51,13 +51,7 @@ const task = {
 describe('applyWorkspaceEvent: the board branch', () => {
   it('patches the carried block instead of refreshing the whole board', () => {
     const to = targets()
-    const event: WorkspaceEvent = {
-      type: 'board',
-      reason: 'block-added',
-      blockId: task.id,
-      block: task,
-      at: 1,
-    }
+    const event: WorkspaceEvent = { type: 'board', reason: 'block-added', block: task, at: 1 }
 
     applyWorkspaceEvent(event, to)
 
@@ -68,26 +62,21 @@ describe('applyWorkspaceEvent: the board branch', () => {
 
   it('falls back to a full refresh when the change carries no block', () => {
     const to = targets()
-    // A removal cascades and a reparent moves a subtree: neither has a single block that states
-    // the new shape, so the backend deliberately sends no payload and the client must re-read.
-    const event: WorkspaceEvent = { type: 'board', reason: 'block-removed', blockId: null, at: 1 }
+    // Everything the publisher withholds a payload for lands here: a removal that cascades, a
+    // reparent that moves a subtree, and a service FRAME whose geometry is per-board. None has a
+    // single block that states the new shape, so the client must re-read its own projection.
+    const event: WorkspaceEvent = { type: 'board', reason: 'block-removed', at: 1 }
 
     applyWorkspaceEvent(event, to)
 
     expect(to.calls).toEqual(['refreshBoard'])
   })
 
-  it('falls back to a full refresh when a block is only NAMED, not carried', () => {
+  it('falls back to a full refresh when the payload is explicitly null', () => {
     const to = targets()
-    // The service-frame shape: `blockId` rides along for correlation, but a frame's geometry is
-    // per-board, so the publisher withholds the payload and each board re-reads its own mount.
-    const event: WorkspaceEvent = {
-      type: 'board',
-      reason: 'block-archived',
-      blockId: 'blk_frame',
-      block: null,
-      at: 1,
-    }
+    // The frame shape as the publishers actually emit it: `deliverableBoardBlock` answers `null`
+    // rather than omitting the key, and an absent payload and a null one must route identically.
+    const event: WorkspaceEvent = { type: 'board', reason: 'block-archived', block: null, at: 1 }
 
     applyWorkspaceEvent(event, to)
 
@@ -101,10 +90,7 @@ describe('applyWorkspaceEvent: the board branch', () => {
     const upsertBlock = vi.fn()
     const to = { ...targets(), upsertBlock }
 
-    applyWorkspaceEvent(
-      { type: 'board', reason: 'block-updated', blockId: task.id, block: task, at: 1 },
-      to,
-    )
+    applyWorkspaceEvent({ type: 'board', reason: 'block-updated', block: task, at: 1 }, to)
     applyWorkspaceEvent(
       {
         type: 'execution',
@@ -123,8 +109,9 @@ describe('applyWorkspaceEvent: the board branch', () => {
 
 describe('applyWorkspaceEvent: the other branches', () => {
   it('keeps every non-board event on its own targeted store call', () => {
-    // A drift guard: every event type below is delivered as a patch, so adding one that silently
-    // falls through to a full board refresh (or to nothing at all) fails here.
+    // Each type below is delivered as a patch rather than a board refresh. This table cannot see
+    // a NEW event type (an absent member is just absent from a hand-written list). That job
+    // belongs to the `never` guard on the switch's `default`, which fails the BUILD instead.
     const cases: [WorkspaceEvent, string][] = [
       [{ type: 'bootstrap', job: {} as never, block: null, at: 1 }, 'upsertBootstrap'],
       [{ type: 'env-config-repair', job: {} as never, at: 1 }, 'upsertEnvConfigRepair'],
@@ -149,5 +136,15 @@ describe('applyWorkspaceEvent: the other branches', () => {
       applyWorkspaceEvent(event, to)
       expect(to.calls, `${event.type} should route to ${expected}`).toEqual([expected])
     }
+  })
+
+  it('drops an event type it does not know rather than tearing down the session', () => {
+    // A backend one release ahead pushes types this build has never heard of. The socket carries
+    // every other event for the whole workspace, so the unknown one is dropped, not thrown on.
+    const to = targets()
+
+    applyWorkspaceEvent({ type: 'a-later-release', at: 1 } as unknown as WorkspaceEvent, to)
+
+    expect(to.calls).toEqual([])
   })
 })

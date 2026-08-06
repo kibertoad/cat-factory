@@ -1,32 +1,49 @@
-import type { WorkspaceEvent } from '~/types/domain'
+import type {
+  Block,
+  BootstrapJob,
+  EnvConfigRepairJob,
+  EnvironmentTestRun,
+  ExecutionInstance,
+  InfraSetupArea,
+  InfraSetupStatus,
+  Initiative,
+  KaizenGrading,
+  LlmCallActivity,
+  Notification,
+  WorkspaceEvent,
+} from '~/types/domain'
+import type { BrainstormSession } from '~/types/brainstorm'
+import type { ClarityReview } from '~/types/clarity'
+import type { ConsensusSession } from '~/types/consensus'
+import type { DocInterviewSession } from '~/types/doc-interview'
+import type { RequirementReview } from '~/types/requirements'
 
 /**
  * Everything {@link applyWorkspaceEvent} needs to route one pushed event into the stores, as bound
  * callbacks rather than the stores themselves: it makes the routing (above all the `board` branch's
  * targeted-vs-coarse decision) unit-testable without a Pinia instance or a live socket.
+ *
+ * Each callback names the DOMAIN type it takes, not the event field it happens to be fed from
+ * today. `upsertBlock` is the reason that matters: three branches (`execution`, `board`,
+ * `bootstrap`) share it, so typing it off any one of their payloads would silently retype the
+ * other two the next time that event's shape moved.
  */
 export interface WorkspaceEventTargets {
-  upsertExecution: (instance: Extract<WorkspaceEvent, { type: 'execution' }>['instance']) => void
-  upsertBlock: (block: NonNullable<Extract<WorkspaceEvent, { type: 'execution' }>['block']>) => void
-  upsertBootstrap: (job: Extract<WorkspaceEvent, { type: 'bootstrap' }>['job']) => void
-  upsertEnvConfigRepair: (
-    job: Extract<WorkspaceEvent, { type: 'env-config-repair' }>['job'],
-  ) => void
-  upsertEnvironmentTest: (run: Extract<WorkspaceEvent, { type: 'envTest' }>['run']) => void
-  patchInfraSetup: (
-    area: Extract<WorkspaceEvent, { type: 'infraSetup' }>['area'],
-    status: Extract<WorkspaceEvent, { type: 'infraSetup' }>['status'],
-    detail?: string,
-  ) => void
-  upsertNotification: (n: Extract<WorkspaceEvent, { type: 'notification' }>['notification']) => void
-  appendLlmCall: (call: Extract<WorkspaceEvent, { type: 'llmCall' }>['call']) => void
-  upsertRequirements: (r: Extract<WorkspaceEvent, { type: 'requirements' }>['review']) => void
-  upsertConsensus: (s: Extract<WorkspaceEvent, { type: 'consensus' }>['session']) => void
-  upsertClarity: (r: Extract<WorkspaceEvent, { type: 'clarity' }>['review']) => void
-  upsertBrainstorm: (s: Extract<WorkspaceEvent, { type: 'brainstorm' }>['session']) => void
-  upsertKaizen: (g: Extract<WorkspaceEvent, { type: 'kaizen' }>['grading']) => void
-  upsertInitiative: (i: Extract<WorkspaceEvent, { type: 'initiative' }>['initiative']) => void
-  upsertDocInterview: (s: Extract<WorkspaceEvent, { type: 'docInterview' }>['session']) => void
+  upsertExecution: (instance: ExecutionInstance) => void
+  upsertBlock: (block: Block) => void
+  upsertBootstrap: (job: BootstrapJob) => void
+  upsertEnvConfigRepair: (job: EnvConfigRepairJob) => void
+  upsertEnvironmentTest: (run: EnvironmentTestRun) => void
+  patchInfraSetup: (area: InfraSetupArea, status: InfraSetupStatus, detail?: string) => void
+  upsertNotification: (n: Notification) => void
+  appendLlmCall: (call: LlmCallActivity) => void
+  upsertRequirements: (r: RequirementReview) => void
+  upsertConsensus: (s: ConsensusSession) => void
+  upsertClarity: (r: ClarityReview) => void
+  upsertBrainstorm: (s: BrainstormSession) => void
+  upsertKaizen: (g: KaizenGrading) => void
+  upsertInitiative: (i: Initiative) => void
+  upsertDocInterview: (s: DocInterviewSession) => void
   /** Debounced full `workspace.refresh()`: the fallback for a change no payload can state. */
   refreshBoard: () => void
 }
@@ -134,5 +151,23 @@ export function applyWorkspaceEvent(event: WorkspaceEvent, to: WorkspaceEventTar
       // convergence): patch the cache so an open interview window reflects it live.
       to.upsertDocInterview(event.session)
       return
+    default:
+      return dropUnknownEvent(event)
   }
+}
+
+/**
+ * The exhaustiveness guard for the routing above.
+ *
+ * The COMPILE-TIME half is the point: `never` fails the build the moment `WorkspaceEvent` gains a
+ * member with no case, so a new pushed event cannot ship as a branch that silently does nothing.
+ * The spec's per-type table cannot do that job: a member absent from a hand-written list is just
+ * absent, and the suite stays green.
+ *
+ * At RUNTIME this deliberately drops the event. A backend one release ahead of the SPA legitimately
+ * pushes types this build has never heard of, and the connection carries every other event for the
+ * whole workspace: throwing would trade one unknown payload for the entire live session.
+ */
+function dropUnknownEvent(event: never): void {
+  void event
 }

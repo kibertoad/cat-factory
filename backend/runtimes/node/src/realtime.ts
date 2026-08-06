@@ -19,7 +19,8 @@ import type {
 } from '@cat-factory/contracts'
 import {
   type BoardChange,
-  deliverableBoardBlock,
+  boardWireEvent,
+  bootstrapWireEvent,
   describeError,
   type ExecutionEventPublisher,
   type InfraSetupTransition,
@@ -218,21 +219,11 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
   }
 
   async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
-    // The Worker twin (`DurableObjectEventPublisher.boardChanged`) carries the reasoning for the
-    // wire shape; both project the payload through the same `deliverableBoardBlock` rule. Pass the
-    // origin connection through so the hub skips echoing this board mutation back to the
-    // connection that caused it (see {@link NodeRealtimeHub.broadcast}).
-    this.publish(
-      workspaceId,
-      {
-        type: 'board',
-        reason: change.reason,
-        blockId: change.blockId ?? change.block?.id ?? null,
-        block: deliverableBoardBlock(change.block),
-        at: Date.now(),
-      },
-      change.originConnectionId,
-    )
+    // Assembled by the shared kernel builder, the same one the Worker twin
+    // (`DurableObjectEventPublisher.boardChanged`) calls, so the two runtimes cannot drift over
+    // which payloads may ride. Pass the origin connection through so the hub skips echoing this
+    // board mutation back to the connection that caused it (see {@link NodeRealtimeHub.broadcast}).
+    this.publish(workspaceId, boardWireEvent(change, Date.now()), change.originConnectionId)
   }
 
   async bootstrapChanged(
@@ -240,7 +231,7 @@ export class NodeEventPublisher implements ExecutionEventPublisher {
     job: BootstrapJob,
     block?: Block | null,
   ): Promise<void> {
-    this.publish(workspaceId, { type: 'bootstrap', job, block: block ?? null, at: Date.now() })
+    this.publish(workspaceId, bootstrapWireEvent(job, block, Date.now()))
   }
 
   async envConfigRepairChanged(workspaceId: string, job: EnvConfigRepairJob): Promise<void> {

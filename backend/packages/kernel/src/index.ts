@@ -667,7 +667,14 @@ export {
   registerServiceForFrame,
 } from './domain/service-registration.js'
 
-export { applyMountLayout, deliverableBoardBlock } from './domain/mount-layout.js'
+export { applyMountLayout } from './domain/mount-layout.js'
+export {
+  type BoardChange,
+  boardChangeSubject,
+  boardWireEvent,
+  bootstrapWireEvent,
+  deliverableBoardBlock,
+} from './domain/board-events.js'
 export { normalizeWorkspaceMetadata } from './domain/workspace-metadata.js'
 
 export { MapSourceRegistry } from './shared/source-registry.logic.js'

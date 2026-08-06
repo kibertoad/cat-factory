@@ -15,6 +15,7 @@ import type {
   RequirementReview,
 } from '../domain/types.js'
 import type { InfraSetupTransition } from '../domain/infra-reachability.js'
+import type { BoardChange } from '../domain/board-events.js'
 
 // Port for pushing state changes to connected clients in real time, instead of
 // the browser polling for them. The execution engine calls this whenever it
@@ -27,33 +28,6 @@ import type { InfraSetupTransition } from '../domain/infra-reachability.js'
 // The persisted DB write remains the source of truth (a client reconciles any missed
 // event by re-fetching the snapshot on (re)connect), so the push is purely an
 // optimisation and implementations swallow their own errors.
-
-/**
- * One board change, as published to subscribed clients.
- *
- * `blockId` identifies a block of the AFFECTED SERVICE so the change can be fanned out to every
- * workspace that mounts it (in-org sharing); omit it for a genuinely board-wide signal, which then
- * reaches the originating workspace only. When {@link block} is given its id serves as the subject,
- * so a caller holding the block never restates it.
- *
- * `block` is the DELIVERY shape, and it is what separates a targeted change from a coarse one. Give
- * it only when the change is FULLY described by that one block: the client then upserts it and pays
- * nothing, where a coarse signal costs a whole board snapshot. Leave it absent when the change is
- * structural (a removal, a reparent, a cascade) and the client must re-read to see the new shape.
- * A SERVICE FRAME is never carried: its position and size live on the per-workspace mount rather
- * than on the shared row, so one payload cannot be correct on the several boards a fan-out reaches.
- * Publishers therefore drop a frame payload and fall back to the coarse signal.
- *
- * `originConnectionId` (when known) is the realtime connection that caused the change: the
- * transport skips delivering the echo back to it, so a client never refreshes off its own move
- * (which would snap an in-flight drag back to a stale position).
- */
-export interface BoardChange {
-  reason: string
-  blockId?: string | null
-  block?: Block | null
-  originConnectionId?: string | null
-}
 
 export interface ExecutionEventPublisher {
   /** A run advanced: push the updated instance and its rolled-up block. */
@@ -70,10 +44,12 @@ export interface ExecutionEventPublisher {
    */
   boardChanged(workspaceId: string, change: BoardChange): Promise<void>
   /**
-   * A repo-bootstrap run advanced: push the updated job (with live `subtasks`)
-   * and its provisional/linked service frame, so the board patches the
-   * "bootstrapping…" card and its progress without a refetch. Optional so
-   * publishers/tests that predate bootstrap progress need no change.
+   * A repo-bootstrap run advanced: push the updated job (with live `subtasks`) so the board
+   * patches the "bootstrapping…" card and its progress without a refetch. `block` is the run's
+   * provisional/linked service FRAME, which the wire refuses to carry as a payload for the reason
+   * `deliverableBoardBlock` states; it is passed anyway because the port may not assume its own
+   * callers only ever hand it frames. Optional so publishers/tests that predate bootstrap progress
+   * need no change.
    */
   bootstrapChanged?(workspaceId: string, job: BootstrapJob, block?: Block | null): Promise<void>
   /**

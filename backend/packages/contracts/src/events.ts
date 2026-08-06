@@ -37,24 +37,27 @@ export type WorkspaceEvent =
    *
    * `block` is absent when the change is structural (a removal, a reparent, a cascade), or when
    * the subject is a SERVICE FRAME, whose position and size are per-board and so cannot be carried
-   * correctly to the several boards a shared service's event reaches. The client falls back to a
-   * debounced full refresh, which is what every `board` event used to do.
+   * correctly to the several boards a shared service's event reaches, or when it is a headless
+   * internal anchor block no board may show at all. The client falls back to a debounced full
+   * refresh, which is what every `board` event used to do.
    *
-   * `blockId` names a block of the affected service (the fan-out subject). It is present whenever
-   * the publisher knew one, including the frame case where no payload rides along.
+   * There is deliberately no block ID beside the payload. Which block a change was ABOUT is how
+   * the backend resolved the set of workspaces to publish to, spent before this event exists; a
+   * client has nothing to do with it that the payload does not already say, and an id riding along
+   * for nobody reads to the next reader as something load-bearing.
    */
   | {
       type: 'board'
       reason: string
-      blockId?: string | null
       block?: Block | null
       at: number
     }
   /**
-   * A repo-bootstrap run advanced. Carries the updated job (with live `subtasks`)
-   * and its provisional/linked service frame, so the client patches the board
-   * card and its progress without a refetch. `block` is null only if the frame
-   * vanished between the transition and the publish.
+   * A repo-bootstrap run advanced. Carries the updated job (with live `subtasks`) so the client
+   * patches the "bootstrapping…" card's progress without a refetch. `block` is the run's service
+   * FRAME and is therefore always withheld (see the `board` case): the frame's own transitions
+   * arrive as coarse `board` events, so each board re-reads its own per-board geometry rather than
+   * upserting coordinates the frame is not at anywhere.
    */
   | { type: 'bootstrap'; job: BootstrapJob; block: Block | null; at: number }
   /**
