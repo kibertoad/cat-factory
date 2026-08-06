@@ -192,11 +192,19 @@ describe('withDynamicPrices', () => {
     expect(priceFor(overlaid, { provider: 'openrouter', model: 'vendor/unpriced' })).toEqual(
       pricing.defaultPrice,
     )
-    // A model priced on ONE side only is real pricing and is still overlaid.
-    const half = withDynamicPrices(pricing, [meta('vendor/output-only', 0, 3)])
-    expect(priceFor(half, { provider: 'openrouter', model: 'vendor/output-only' })).toEqual({
-      inputPerMillion: 0,
-      outputPerMillion: 3,
+  })
+
+  // The skip is ENTIRELY-unpriced, so it takes BOTH halves to pin: a model priced on one side is
+  // real pricing and stays overlaid whichever side that is. Asserting only one half leaves the
+  // other comparison free to be anything, including a constant.
+  it.each([
+    { side: 'output', id: 'vendor/output-only', input: 0, output: 3 },
+    { side: 'input', id: 'vendor/input-only', input: 5, output: 0 },
+  ])('overlays a model priced on the $side side only', ({ id, input, output }) => {
+    const overlaid = withDynamicPrices(pricing, [meta(id, input, output)])
+    expect(priceFor(overlaid, { provider: 'openrouter', model: id })).toEqual({
+      inputPerMillion: input,
+      outputPerMillion: output,
     })
   })
 })

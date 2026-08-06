@@ -42,6 +42,7 @@ import {
   RELEASE_HEALTH_PROVIDER,
 } from './providers.js'
 import { gateConfigNumber } from './gateConfigFields.js'
+import { joinSentences } from './prose.js'
 import {
   classifyHumanReview,
   isApproved,
@@ -122,16 +123,18 @@ export const ciGate = (ctx: GateContext): GateDefinition => ({
       blockId: block.id,
       executionId: instance.id,
       title: `CI is still failing for "${block.title}"`,
-      body:
-        `The CI-fixer agent tried ${attempts} time(s) but CI is still red. ${summary ?? ''} ` +
-        `Take a look and retry the run once fixed.`,
+      body: joinSentences(
+        `The CI-fixer agent tried ${attempts} time(s) but CI is still red.`,
+        summary,
+        'Take a look and retry the run once fixed.',
+      ),
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
       },
     })
     return {
-      error: `CI did not pass after ${attempts} CI-fixer attempt(s). ${summary ?? ''}`.trim(),
+      error: joinSentences(`CI did not pass after ${attempts} CI-fixer attempt(s).`, summary),
     }
   },
 })
@@ -260,17 +263,21 @@ export const docQualityGate = (ctx: GateContext): GateDefinition => ({
       blockId: block.id,
       executionId: instance.id,
       title: `Document quality needs attention for "${block.title}"`,
-      body:
-        `The doc-fixer tried ${attempts} time(s) but the document still fails the quality ` +
-        `checks. ${summary ?? ''} Review the PR and retry the run once fixed.`.trim(),
+      body: joinSentences(
+        `The doc-fixer tried ${attempts} time(s) but the document still fails the quality checks.`,
+        summary,
+        'Review the PR and retry the run once fixed.',
+      ),
       payload: {
         ...(block.pullRequest?.url ? { prUrl: block.pullRequest.url } : {}),
         pipelineName: instance.pipelineName,
       },
     })
     return {
-      error:
-        `The document still fails the quality checks after ${attempts} doc-fixer attempt(s). ${summary ?? ''}`.trim(),
+      error: joinSentences(
+        `The document still fails the quality checks after ${attempts} doc-fixer attempt(s).`,
+        summary,
+      ),
     }
   },
 })
@@ -289,8 +296,11 @@ async function raiseReleaseRegression(
     ? `Post-release monitoring flagged a regression after this PR shipped. On-call recommends ` +
       `**${assessment.recommendation}** (culprit confidence ${pct(assessment.culpritConfidence)}). ` +
       `${assessment.rationale}`
-    : `Post-release monitoring flagged a regression after this PR shipped. ${summary} ` +
-      `Investigate before deciding whether to revert.`
+    : joinSentences(
+        'Post-release monitoring flagged a regression after this PR shipped.',
+        summary,
+        'Investigate before deciding whether to revert.',
+      )
   await ctx.raiseNotification(workspaceId, {
     type: 'release_regression',
     blockId: block.id,
@@ -437,8 +447,10 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
       summary ?? '',
     )
     return {
-      error:
-        `Post-release health regressed and no on-call investigation was configured. ${summary ?? ''}`.trim(),
+      error: joinSentences(
+        'Post-release health regressed and no on-call investigation was configured.',
+        summary,
+      ),
     }
   },
   // The on-call helper INVESTIGATES — it changes nothing the precheck would re-observe — so on
@@ -472,7 +484,10 @@ export const postReleaseHealthGate = (ctx: GateContext): GateDefinition => ({
     }
     const baseSummary = step.gate?.lastFailureSummary ?? ''
     const summary = investigationFailed
-      ? `${baseSummary} The automated on-call investigation could not complete, so no culprit assessment is available — investigate manually.`.trim()
+      ? joinSentences(
+          baseSummary,
+          'The automated on-call investigation could not complete, so no culprit assessment is available — investigate manually.',
+        )
       : baseSummary
     await raiseReleaseRegression(
       ctx,

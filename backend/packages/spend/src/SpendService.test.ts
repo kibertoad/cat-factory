@@ -442,8 +442,55 @@ describe('SpendService tier statuses', () => {
     })
     expect((await svc.accountStatus('acc'))?.costLimit).toBe(80)
     expect((await svc.userStatus('usr'))?.costLimit).toBe(80)
-    // The cap alone activates the tier for an account that configured nothing.
+    // Spend of 90 against the clamped 80: the CAP is what the tier gates on, not the 500.
     expect((await svc.accountStatus('acc'))?.exceeded).toBe(true)
+    expect((await svc.userStatus('usr'))?.exceeded).toBe(true)
+  })
+
+  // The tier above configured a limit, so it stays active whatever the cap does. This is the
+  // OTHER activation route, and the only one that tells a configured-limit-only reading of
+  // `effectiveTierLimit` apart from the real rule: nothing is configured, so the tier owes its
+  // very existence to the operator cap.
+  it('activates a tier on the operator cap alone when nothing is configured', async () => {
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90, user: 5 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80, userMonthlyLimitCap: 80 },
+      accountRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as AccountRepository,
+      userSettingsRepository: {
+        get: async () => ({ spendMonthlyLimit: null }),
+      } as unknown as UserSettingsRepository,
+    })
+    const account = await svc.accountStatus('acc')
+    expect(account?.costLimit).toBe(80)
+    expect(account?.exceeded).toBe(true)
+    // Active does not mean exceeded: the same cap-only tier reports a status well under it.
+    const user = await svc.userStatus('usr')
+    expect(user?.costLimit).toBe(80)
+    expect(user?.exceeded).toBe(false)
+  })
+
+  // A tier with NO repository wired at all resolves through the same rule, so an operator cap
+  // still gates it: the absent row and a row holding null are the same fact here.
+  it('gates an unwired tier on the operator cap', async () => {
+    const svc = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: { ...DEFAULT_SPEND_PRICING, accountMonthlyLimitCap: 80 },
+    })
+    expect((await svc.accountStatus('acc'))?.costLimit).toBe(80)
+    // ...and with no cap either, it does not gate at all.
+    const uncapped = new SpendService({
+      tokenUsageRepository: tieredLedger({ account: 90 }),
+      idGenerator,
+      clock: { now: () => NOW },
+      pricing: DEFAULT_SPEND_PRICING,
+    })
+    expect(await uncapped.accountStatus('acc')).toBeNull()
   })
 
   it('takes a preloaded user limit instead of re-reading the settings row', async () => {

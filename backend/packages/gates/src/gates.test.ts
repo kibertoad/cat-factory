@@ -203,12 +203,16 @@ describe('ci gate', () => {
       instance,
       block: block(),
       // A step that never reached a gate state at all: the count is still reported as zero, and
-      // the error carries no dangling summary separator.
+      // neither the card nor the error carries a dangling summary separator. The body is asserted
+      // WHOLE because the hole sits mid-sentence, which is the position a `toContain` on either
+      // surrounding clause cannot see.
       step: {} as unknown as PipelineStep,
       summary: undefined,
     })
     expect(raised[0]?.payload).toEqual({ pipelineName: 'Ship it' })
-    expect(raised[0]?.body).toContain('0 time(s)')
+    expect(raised[0]?.body).toBe(
+      'The CI-fixer agent tried 0 time(s) but CI is still red. Take a look and retry the run once fixed.',
+    )
     expect(result.error).toBe('CI did not pass after 0 CI-fixer attempt(s).')
   })
 })
@@ -352,7 +356,7 @@ describe('doc-quality gate', () => {
       'The document still fails the quality checks after 0 doc-fixer attempt(s).',
     )
     expect(raised[0]?.body).toBe(
-      'The doc-fixer tried 0 time(s) but the document still fails the quality checks.  Review the PR and retry the run once fixed.',
+      'The doc-fixer tried 0 time(s) but the document still fails the quality checks. Review the PR and retry the run once fixed.',
     )
   })
 })
@@ -517,6 +521,25 @@ describe('post-release-health gate', () => {
     expect(raised[0]?.payload?.onCallAssessment).toBeUndefined()
     expect(raised[0]?.body).toContain('Regressed signals: checkout p99')
     expect(result.error).toContain('no on-call investigation was configured')
+  })
+
+  it('leaves no dangling separator when the regression carries no summary to quote', async () => {
+    wireHealth({ status: 'regressed' })
+    const { ctx, raised } = recordingContext({ getBlock: async () => doneBlock })
+    const result = await postReleaseHealthGate(ctx).onExhausted({
+      workspaceId: 'ws',
+      instance,
+      block: block(),
+      step: step({ regressedSignals: [signal()] }),
+      summary: undefined,
+    })
+    expect(raised[0]?.body).toBe(
+      'Post-release monitoring flagged a regression after this PR shipped. ' +
+        'Investigate before deciding whether to revert.',
+    )
+    expect(result.error).toBe(
+      'Post-release health regressed and no on-call investigation was configured.',
+    )
   })
 
   describe('on-call completion', () => {
