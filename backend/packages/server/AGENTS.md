@@ -93,6 +93,13 @@ resolve everything from `c.get('container')` (a `ServerContainer` = the domain `
   INPUT rather than a tail step. Every dispatcher of the `agent` kind (the executor, the bootstrapper and
   `ContainerEnvConfigRepairer`) puts `workspaceId`/`executionId` on its job body so the
   container's own log lines join to the backend's.
+  `agents/jobBody.ts` renders the harness job body from ONE path: compose the prompt, resolve the
+  kind's `AgentStepSpec` off the agent-kind registry (a container-backed companion synthesizes one;
+  an unregistered kind falls back to the implementer's), build the generic body. There is no
+  `switch (agentKind)` here and none in `containerAgentResult.ts`, whose kind-aware coercion is one
+  `registry.mapStructuredResult(kind)` lookup — both switches went when the built-ins became
+  registrations. What still lives in `agents/prompts.ts` is what is NOT about a kind: the tester
+  infra spec (derived per run from the frame's profile and what the run provisioned) and the PR body.
   `agents/providerCapabilities.ts` resolves what a workspace (+ its account + the user) has
   configured into kernel's `ProviderCapabilities`, the one join point the model catalog and the
   pipeline-start guard share; `agents/bedrock.ts` parses `BEDROCK_MODELS` for it and is the ONLY

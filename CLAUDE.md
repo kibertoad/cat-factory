@@ -873,14 +873,14 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
 - **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must
   ALWAYS carry the CLI's built-in tool names too (it is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
-- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no
-  MCP client; an ambient Codex run has no per-run config home; a required secret didn't resolve).
+- **A capability that can't be honoured is STATED to the agent, never silently dropped.**
 - **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the
   checkout. Changing what it writes means an image bump.
 - **A deployment's own TASK TYPES ride the same kind of seam**; one bundling a per-case form, its
   standing context and its own canned pipeline is a REUSABLE OPERATION: [`reusable-operations.md`](./backend/docs/reusable-operations.md).
-- **NOT yet done**: the built-in agents aren't migrated; their rendering still lives in the harness.
-  Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
+- **The BUILT-INS ride the same seam**: every container kind is a `registerAgentKind` entry
+  declaring an `AgentStepSpec`; a hard-coded set beside the registry is the anti-pattern replaced.
+  Trap: it declares NO `systemPrompt` (the TRACK owns it) and NO `presentation` (palette duplicate).
 
 ## Per-workspace agent prompt overrides
 

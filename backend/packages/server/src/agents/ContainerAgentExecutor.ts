@@ -59,11 +59,7 @@ import { containerJobLog } from './containerAgentLogging.js'
 import { acceptContainerJob } from './containerAgentDispatch.js'
 import { buildAgentContextRecord } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
-import {
-  UI_TESTER_AGENT_KIND,
-  isTesterKind,
-  type HarnessCallsRecordInput,
-} from '@cat-factory/orchestration'
+import { isTesterKind, type HarnessCallsRecordInput } from '@cat-factory/orchestration'
 import type { ContainerSessionService } from '../containers/ContainerSessionService.js'
 import { RunnerJobClient, type ResolveRunnerTransport } from './RunnerJobClient.js'
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
@@ -611,7 +607,7 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
     // modeled quota-cycle counters. Both are idempotent (once per job id) and behaviour-neutral.
     await this.recordSubscriptionUsageOnce(handle, result)
     await this.recordSubscriptionQuotaUsageOnce(handle, result)
-    const runResult = toRunResult(result, handle.agentKind)
+    const runResult = toRunResult(result, handle.agentKind, this.agentKindRegistry)
     // The poll site can't resolve the model ref, but the dispatch captured its label
     // (`handle.model`, already used for `recordHarnessCalls`). Fold it onto the result so the
     // durable poll path's `recordStepResult` → `spend.record` records the REAL model instead of
@@ -842,9 +838,10 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
   private dispatchOptions(context: AgentRunContext): RunnerDispatchOptions | undefined {
     const provider = context.service?.cloudProvider
     const size = context.service?.instanceSize
-    // The UI tester needs the heavier Playwright+browser image; every other kind uses
-    // the default harness image (so the browser never bloats their cold-start).
-    const image: 'ui' | undefined = context.agentKind === UI_TESTER_AGENT_KIND ? 'ui' : undefined
+    // The image the kind DECLARED on its registration (`ui` selects the heavier
+    // Playwright + browser image); absent ⇒ the default harness image, so the browser never
+    // bloats every other kind's cold start.
+    const image = this.agentKindRegistry.agentStep(context.agentKind)?.image
     if (!provider && !size && !image) return undefined
     return {
       ...(provider || size ? { instanceTypeId: resolveInstanceTypeId(provider, size) } : {}),
