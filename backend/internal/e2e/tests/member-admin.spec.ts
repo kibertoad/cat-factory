@@ -8,7 +8,7 @@ import {
   taskCard,
   useAdvancedInterfaceMode,
 } from './helpers'
-import type { Browser, Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 // WORKSPACE ACCESS ADMINISTRATION: the surface an admin uses to decide who may touch a board.
 //
@@ -26,15 +26,19 @@ import type { Browser, Page } from '@playwright/test'
 test.describe('workspace access administration (the members roster)', () => {
   test.slow()
 
-  /** Boot a second, independent browser session as `principal` on `workspaceId`. */
+  /**
+   * Boot a second, independent browser session as `principal` on `workspaceId`.
+   *
+   * Through the `newSession` fixture, so this session's uncaught SPA exceptions fail the test and its
+   * context is closed even when an assertion below throws first (see `fixtures.ts`).
+   */
   async function openBoardAs(
-    browser: Browser,
+    newSession: () => Promise<Page>,
     workspaceId: string,
     accountId: string,
     principal: { token: string; userId: string },
   ): Promise<Page> {
-    const context = await browser.newContext()
-    const page = await context.newPage()
+    const page = await newSession()
     await pinAuthedWorkspace(page, workspaceId, principal.token, principal.userId, accountId)
     await useAdvancedInterfaceMode(page)
     return page
@@ -43,7 +47,7 @@ test.describe('workspace access administration (the members roster)', () => {
   test('promoting a viewer to member in the roster gives that user an authoring board', async ({
     page,
     request,
-    browser,
+    newSession,
   }) => {
     const tag = Math.random().toString(36).slice(2, 8)
     const scenario = await seedTeamScenario(request, {
@@ -91,7 +95,12 @@ test.describe('workspace access administration (the members roster)', () => {
     // The promoted user's OWN session, booted fresh: their access is resolved by the real gate from
     // the row just written. A `member` may author, which is exactly what a `viewer` may not (the
     // read-only half of that pair is `rbac.spec`).
-    const theirs = await openBoardAs(browser, scenario.workspaceId, scenario.accountId, contributor)
+    const theirs = await openBoardAs(
+      newSession,
+      scenario.workspaceId,
+      scenario.accountId,
+      contributor,
+    )
     await openBoard(theirs)
     await expect(theirs.getByTestId('frame-add-task').first()).toBeVisible({
       timeout: LIVE_TIMEOUT,
@@ -100,14 +109,15 @@ test.describe('workspace access administration (the members roster)', () => {
     const run = theirs.getByTestId('run-start')
     await expect(run).toBeVisible()
     await expect(run).toBeEnabled()
+    // The refusal a viewer's board carries is absent. Sound as an absence because the enabled
+    // `run-start` above is the same render pass that would have carried it.
     await expect(theirs.getByTestId('run-blocked-reason')).toHaveCount(0)
-    await theirs.context().close()
   })
 
   test('removing a member from a restricted board takes that board out of their reach', async ({
     page,
     request,
-    browser,
+    newSession,
   }) => {
     const tag = Math.random().toString(36).slice(2, 8)
     const scenario = await seedTeamScenario(request, {
@@ -149,7 +159,7 @@ test.describe('workspace access administration (the members roster)', () => {
     // pin and opens the one board they can still reach. That landing is the positive fact this
     // rests on: without it, "the seeded task is absent" would also pass on a board that simply had
     // not painted yet.
-    const theirs = await openBoardAs(browser, scenario.workspaceId, scenario.accountId, leaver)
+    const theirs = await openBoardAs(newSession, scenario.workspaceId, scenario.accountId, leaver)
     await theirs.goto('/')
     await expect(theirs.getByTestId('board-canvas')).toBeVisible({ timeout: BOOT_TIMEOUT })
     const switcher = theirs.getByTestId('board-switcher')
@@ -158,9 +168,16 @@ test.describe('workspace access administration (the members roster)', () => {
     })
     // ...and the revoked board is not on offer to switch BACK to, which is the list filtering the
     // gate applies (a board they cannot read is not merely unopened, it is unlisted).
+    //
+    // In that order for the same reason `board-switch.spec` orders its pair: the menu's rows mount a
+    // tick after the click, so the spare board's row appearing is what makes the revoked one's
+    // absence a rendered LIST rather than a menu that had not opened yet. `toHaveCount(0)` passes on
+    // its first poll, so on its own it is an assertion that cannot fail.
     await switcher.click()
+    await expect(theirs.getByTestId(`board-option-${scenario.spareWorkspaceId}`)).toBeVisible({
+      timeout: LIVE_TIMEOUT,
+    })
     await expect(theirs.getByTestId(`board-option-${scenario.workspaceId}`)).toHaveCount(0)
     await expect(taskCard(theirs, 'task_login')).toHaveCount(0)
-    await theirs.context().close()
   })
 })

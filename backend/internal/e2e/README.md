@@ -36,8 +36,13 @@ See [`src/testServer.ts`](./src/testServer.ts) for the backend wiring (it reuses
 
 Every spec follows the same signature pattern: **seed/trigger over REST, then assert only on
 LIVE pushed UI updates** (no reloads, no fragile canvas drag/zoom). Shared setup lives in
-[`tests/fixtures.ts`](./tests/fixtures.ts): a `seededBoard` fixture (seed → pin → open) and an
-**auto** `pageErrors` fixture that fails any test on an uncaught SPA exception. Common helpers
+[`tests/fixtures.ts`](./tests/fixtures.ts): a `seededBoard` fixture (seed → pin → open), an
+**auto** `pageErrors` fixture that fails any test on an uncaught SPA exception, and `newSession`
+for a second signed-in browser. **Take a secondary session from `newSession`, never from
+`browser.newContext()`**: it joins the session to `pageErrors` (a hand-rolled context is outside
+that auto fixture, so a component throwing in the very rail under test would pass) and closes the
+context on teardown, failure path included (`browser` is worker-scoped, so a leaked context keeps a
+live subscriber for every later test in the worker). Common helpers
 
 - named timeouts are in [`tests/helpers.ts`](./tests/helpers.ts).
 
@@ -159,22 +164,39 @@ spec does. Four facts make that cheap:
 - **`authConfig(c)` reads `container.config.auth` PER REQUEST**, so an app built over a container
   whose auth config differs is a full auth-enabled deployment with no forked wiring
   (`authEnabledContainer` is a shallow clone: same services, same repositories, `config.auth` on).
+  It turns `devOpen` off along with `testingNoAuth`, even though every reader tests `enabled` first
+  and the surface is closed either way today: a flag that only happens to be harmless through
+  statement order is not a configuration, and the sign-in spec asserts what the SPA RENDERS, so it
+  would stay green if that order ever changed.
 - **It is the same container**, so one Postgres, one pg-boss worker, one engine. A run started over
   the ANONYMOUS surface is driven by that worker and pushed to browsers watching over this one,
   which is why the auth specs keep using the ordinary REST helpers for setup.
 - **The SPA needs no second build.** Its API base is baked in at build time, but the Nitro server
   that serves the shell re-reads `NUXT_PUBLIC_API_BASE` at STARTUP, so the second origin is one
-  extra process over the same `.output`, not a second (slowest-step) build. The launcher waits for
-  the primary frontend's build to emit that bundle, since Playwright starts `webServer` entries in
-  parallel.
+  extra process over the same `.output`, not a second (slowest-step) build. Since Playwright starts
+  `webServer` entries in parallel, the launcher waits for the PRIMARY SPA to answer before it starts:
+  that entry's command is `nuxt build && nuxt preview`, so a response means the build finished and
+  `.output` is complete. Waiting on the FILE instead would start on whatever an earlier run left
+  there, which the concurrent build then deletes under the process (a chunk fails inside a request,
+  reading like a product bug) or which is simply the previous SPA, missing whatever a new spec
+  selects. Both are silent, and the entry's own readiness probe passes either way.
 - **Cookies are not PORT-scoped**, so `pinAuthedWorkspace` / `pinBoardForUser` /
   `useAdvancedInterfaceMode` seed both origins and no parallel set of helpers is needed.
 
 The one thing that does NOT come for free is the WebSocket: the hub the primary listener registers
 sockets on is created inside `start()` and never handed to the container, so the auth surface brings
 its own and `fanOutRealtime` tees engine events into both. Without that a board opened on the auth
-stack paints once from REST and then goes deaf. That is why that function (and the config clone) are
-pinned by `src/authBackend.test.ts` in the browser-free lane rather than left to surface as a flake.
+stack paints once from REST and then goes deaf, which is why a missing `realtimeSink` FAILS the boot
+rather than skipping the tee, and why a drop inside the tee is logged through the kernel `Logger`
+port: those are the only two things that name the cause of a spec that otherwise just hangs. That
+function (and the config clone) are pinned by `src/authBackend.test.ts` in the browser-free lane
+rather than left to surface as a flake.
+
+Every port and origin on both stacks comes from ONE module, [`src/ports.ts`](./src/ports.ts), read by
+the Playwright config (which starts the servers and probes them), the backend, the auth SPA's launcher
+and the specs' own helpers. Four ends have to agree here, and a copy of `PORT + 2` in one of them
+beside an `E2E_AUTH_PORT` read in another is not a knob: the stack boots, every probe passes, and a
+spec then fails on a connection error naming nothing. Add a port there, never beside it.
 
 ### Real people, real sessions (the `seedTeamScenario` / `seedPasswordUser` seams)
 
@@ -355,8 +377,9 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
 
 Playwright's `webServer` boots the backend (`src/testServer.ts`), the SPA (`deploy/frontend`, built
 once and served by `nuxt preview`, pointed at the backend via `NUXT_PUBLIC_API_BASE`) and a SECOND
-SPA instance on `3001` pointed at the backend's auth-enabled surface on `PORT + 2` (see the
-auth-enabled stack above; the same `.output`, so no second build). Use `test:e2e:ui` for the
+SPA instance beside it (`E2E_FRONTEND_PORT + 1`) pointed at the backend's auth-enabled surface on
+`PORT + 2` (see the auth-enabled stack above; the same `.output`, so no second build). Use
+`test:e2e:ui` for the
 interactive runner. The browser suite is **not** part of the
 unit `test:run` lane: it runs in its own CI job (`.github/workflows/ci.yml` → `Test
 e2e`). That job is **non-blocking**: it isn't wired into the aggregated `Test` gate, so a
@@ -410,11 +433,14 @@ which mainly exist so a whole-suite run can shift the defaults.
 - `E2E_CHROMIUM_PATH`: opt-in: launch Chromium from this path instead of a `playwright
 install` download. For sandboxes that ship a preinstalled browser and block the download
   (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.
-- `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`.
-- `E2E_AUTH_PORT` (default `PORT + 2`), `E2E_AUTH_FRONTEND_PORT` (default `3001`),
-  `E2E_AUTH_FRONTEND_URL`: the auth-enabled stack's ends. Each derives from the primary ports the
-  same way the control channel does, so overriding `PORT` / `E2E_FRONTEND_PORT` moves the whole set
-  consistently.
+- `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`,
+  `E2E_CONTROL_PORT` (default `PORT + 1`) / `E2E_CONTROL_URL`.
+- `E2E_AUTH_PORT` (default `PORT + 2`) / `E2E_AUTH_BACKEND_URL`, `E2E_AUTH_FRONTEND_PORT` (default
+  `E2E_FRONTEND_PORT + 1`) / `E2E_AUTH_FRONTEND_URL`: the auth-enabled stack's ends.
+- All of the above resolve in ONE place, [`src/ports.ts`](./src/ports.ts), which every end reads (the
+  Playwright config, the backend, the auth SPA's launcher, the specs' helpers). So overriding `PORT`
+  or `E2E_FRONTEND_PORT` moves the whole set together and can never collide with it, and a `*_URL`
+  override moves the LISTENER too, not just the callers.
 
 ### Promoting the e2e job to a required gate
 

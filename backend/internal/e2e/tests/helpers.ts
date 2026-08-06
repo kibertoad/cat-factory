@@ -8,18 +8,23 @@ import { INFRA_SETUP_AREAS, INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-facto
 import type { FakeProfile } from '../src/fakeProfile.ts'
 // Same reasoning for the team/password scenario shapes: type-only, from the seam that produces them.
 import type { PasswordUserScenario, TeamPrincipalSpec, TeamScenario } from '../src/seedTeam.ts'
+// The origins come from the ONE derivation the Playwright config, the backend and the auth SPA's
+// launcher all read (`src/ports.ts`), so no override can move what the specs open without moving what
+// the suite started. Re-exported here because a spec's whole vocabulary is this module.
+import { AUTH_FRONTEND_URL, BACKEND_URL, CONTROL_URL } from '../src/ports.ts'
 
-// The backend origin the specs seed/trigger state against. The auth gate is open in the
-// e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
-// backend runs on a non-default port.
-export const BACKEND_URL =
-  process.env.E2E_BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 8787}`
+/**
+ * The backend origin the specs seed/trigger state against. The auth gate is open in the e2e backend,
+ * so plain REST calls need no token.
+ */
+export { BACKEND_URL }
 
-// The test-only control channel `testServer.ts` listens on (a separate port, so it never
-// couples to the app's CORS/auth). Defaults to `PORT + 1` — the same derivation the backend
-// uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
-export const CONTROL_URL =
-  process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+/**
+ * The test-only control channel `testServer.ts` listens on (a separate port, so it never couples to
+ * the app's CORS/auth). A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE
+ * starting a run.
+ */
+export { CONTROL_URL }
 
 /**
  * The SPA origin served against the AUTH-ENABLED backend surface (`src/authBackend.ts`), for the
@@ -36,9 +41,7 @@ export const CONTROL_URL =
  * a named-approver gate refuses everybody in the browser, for a reason that is correct there and
  * useless as coverage.
  */
-export const AUTH_FRONTEND_URL =
-  process.env.E2E_AUTH_FRONTEND_URL ??
-  `http://localhost:${process.env.E2E_AUTH_FRONTEND_PORT ?? 3001}`
+export { AUTH_FRONTEND_URL }
 
 /**
  * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
@@ -98,7 +101,10 @@ export type {
  *
  * `tag` makes the seeded users/board unique per test. Also records the `infraless` provisioning
  * choice over REST for the same reason {@link createSeededWorkspace} does: otherwise the advisory
- * default-test-env banner overlays the board chrome the spec drives.
+ * default-test-env banner overlays the board chrome the spec drives. EVERY board the scenario
+ * created, the spare included: that one is where a revoked session actually lands, so it is the board
+ * such a spec has to click through. (It is only harmless today because the banner is gated on
+ * `settings.manage` and today's fallen-through principals are not admins.)
  */
 export async function seedTeamScenario(
   request: APIRequestContext,
@@ -113,9 +119,12 @@ export async function seedTeamScenario(
   const res = await request.post(`${CONTROL_URL}/team-seed`, { data: spec })
   if (!res.ok()) throw new Error(`team-seed control ${res.status()}: ${await res.text()}`)
   const scenario = (await res.json()) as TeamScenario
-  await request.put(`${BACKEND_URL}/workspaces/${scenario.workspaceId}/settings`, {
-    data: { defaultProvisionType: 'infraless' },
-  })
+  for (const workspaceId of [scenario.workspaceId, scenario.spareWorkspaceId]) {
+    if (!workspaceId) continue
+    await request.put(`${BACKEND_URL}/workspaces/${workspaceId}/settings`, {
+      data: { defaultProvisionType: 'infraless' },
+    })
+  }
   return scenario
 }
 

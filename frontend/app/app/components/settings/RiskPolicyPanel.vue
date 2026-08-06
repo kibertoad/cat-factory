@@ -300,7 +300,6 @@ async function create() {
       class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
       data-testid="risk-policy-row"
       :data-policy-id="p.id"
-      :data-policy-default="p.isDefault ? 'true' : 'false'"
     >
       <div class="mb-3 flex items-center gap-2">
         <UInput
@@ -308,7 +307,6 @@ async function create() {
           size="sm"
           class="flex-1"
           :placeholder="t('settings.riskPolicy.presetNamePlaceholder')"
-          data-testid="risk-policy-name"
         />
         <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
@@ -350,7 +348,6 @@ async function create() {
             :min="0"
             :max="100"
             size="sm"
-            :data-testid="`risk-policy-ceiling-${axis}`"
           />
         </label>
         <label class="block">
@@ -462,7 +459,6 @@ async function create() {
           size="xs"
           icon="i-lucide-save"
           :loading="busy === p.id"
-          data-testid="risk-policy-save"
           @click="save(p)"
         >
           {{ t('common.save') }}
