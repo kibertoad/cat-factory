@@ -730,6 +730,9 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'sweep.failed': 'cat_factory.platform.sweep_failures',
   'container.dispatch_failed': 'cat_factory.platform.container_dispatch_failures',
   'container.evicted': 'cat_factory.platform.container_evictions',
+  'container.capability_unsupported': 'cat_factory.platform.container_capability_unsupported',
+  'container.capability_unknown': 'cat_factory.platform.container_capability_unknown',
+  'container.blind_job_not_stopped': 'cat_factory.platform.container_blind_job_not_stopped',
   'telemetry.export_dropped': 'cat_factory.platform.telemetry_exports_dropped',
   'notification.delivery_failed': 'cat_factory.platform.notification_delivery_failures',
   'cache.hit': 'cat_factory.platform.cache_hits',
@@ -760,6 +763,11 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'sweep.failed': '{failure}',
   'container.dispatch_failed': '{failure}',
   'container.evicted': '{eviction}',
+  // One DISPATCH refused / unverifiable, not one run: a step re-dispatched by a gate helper
+  // contributes several, which is exactly what the rate should show.
+  'container.capability_unsupported': '{dispatch}',
+  'container.capability_unknown': '{dispatch}',
+  'container.blind_job_not_stopped': '{dispatch}',
   'telemetry.export_dropped': '{export}',
   'notification.delivery_failed': '{failure}',
   'cache.hit': '{read}',

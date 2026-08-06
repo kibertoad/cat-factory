@@ -35,8 +35,8 @@ import type {
 } from '@cat-factory/contracts'
 import {
   cacheHitRate,
-  classifyCall,
-  isWarningFinishReason,
+  classifyLlmCallOutcome,
+  isLlmWarningFinishReason,
   outputHeadroomRatio,
   transportOverheadRatio,
 } from '../observability/observability.logic.js'
@@ -193,7 +193,7 @@ export function toDebugLlmCall(call: LlmCallMetricPage, bodyOffset = 0): DebugLl
     provider: call.provider,
     model: call.model,
     createdAt: call.createdAt,
-    outcome: classifyCall(call),
+    outcome: classifyLlmCallOutcome(call),
     ok: call.ok,
     httpStatus: call.httpStatus,
     errorMessage: call.errorMessage,
@@ -466,6 +466,9 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
       count: totals.errors,
     })
   }
+  // `tool_calls_failed` is pushed further down, off the `(agentKind, tool)` rollup rather than
+  // off the sink status: the rollup is the only place that also has the RATE the count means
+  // something as, and it is folded from the same aggregate `sinks.toolCalls.count` comes out of.
   for (const step of steps) {
     if (step.evictionRecoveries > 0) {
       push(
@@ -511,6 +514,12 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     totals.errors === 0 &&
     totals.truncatedCalls === 0
   ) {
+    // The trajectory sink has already COUNTED the failing tool calls by the time this fires, so
+    // the pointer states what is there rather than sending the caller to look. The three answers
+    // it chooses between live in `toolFailurePointer`, and the split it keeps is the one worth
+    // spelling out: a sink this deployment never wired records nothing BY CONSTRUCTION, where a
+    // wired one that holds nothing is a fact about the run. Collapsing them would tell an
+    // operator to go looking at a container for the absence of a table.
     push(
       'failure_outside_model_calls',
       'warning',
@@ -538,7 +547,7 @@ export function deriveSignals(input: SignalInput): DebugSignal[] {
     push(
       'tool_calls_failed',
       'info',
-      `${toolTotals.failures} of the run's ${toolTotals.calls} tool call(s) failed inside the container (${Math.round((toolCallFailureRate(toolTotals) ?? 0) * 100)}%). These are tool-EXECUTION failures, so the model calls around them all report ok, and some are the ordinary shape of an agent loop. Read them with GET /debug/runs/:runId/tool-calls?ok=false.`,
+      `${toolTotals.failures} of the run's ${toolTotals.calls} tool call(s) failed inside the container (${Math.round((toolCallFailureRate(toolTotals) ?? 0) * 100)}%). These are tool-EXECUTION failures, so the model calls around them all report ok, and some are the ordinary shape of an agent loop. Read them with GET /debug/runs/:runId/tool-calls?outcome=error.`,
       { count: toolTotals.failures },
     )
   }
@@ -613,10 +622,14 @@ function toolFailurePointer(sink: DebugSinkStatus, totals: ToolCallRollupTotals)
     return `No tool-call trajectory is retained for this run${sink.available ? '' : ' (the sink is not wired on this deployment)'}, so what the agent did is unrecorded rather than uneventful. Search the bodies (GET /debug/runs/:runId/llm-calls?contains=...), and check each step's firstEvictionDetail plus /logs.`
   }
   if (totals.failures > 0) {
-    return `${totals.failures} of the run's ${totals.calls} tool call(s) DID fail, so start there: GET /debug/runs/:runId/tool-calls?ok=false (add &order=trajectory to see them in the order they hit).`
+    return `${totals.failures} of the run's ${totals.calls} tool call(s) DID fail, so start there: GET /debug/runs/:runId/tool-calls?outcome=error (add &order=trajectory to see them in the order they hit).`
   }
   return `None of the run's ${totals.calls} recorded tool calls failed either, which points at the engine rather than the container: search the bodies (GET /debug/runs/:runId/llm-calls?contains=...) for what no sink recorded, and check each step's firstEvictionDetail plus /logs.`
 }
 
-/** Re-exported so the service and its tests classify a call exactly as the SPA does. */
-export { classifyCall, isWarningFinishReason }
+/**
+ * Re-exported so the service and its tests classify a call exactly as the SPA does — which
+ * they now do by construction: both names resolve to the ONE implementation in
+ * `@cat-factory/contracts`, which the SPA imports directly.
+ */
+export { classifyLlmCallOutcome, isLlmWarningFinishReason }

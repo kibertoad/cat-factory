@@ -24,8 +24,8 @@
 // source of truth is the valibot schema in `@cat-factory/contracts`; re-exported here so
 // the port and the route contract can't drift. The recorder/repository interfaces below
 // stay in kernel (they have no wire form).
-import type { AgentToolCall, ToolCallBodiesState } from '@cat-factory/contracts'
-export type { AgentToolCall, ToolCallBodiesState }
+import type { AgentToolCall, ToolCallBodiesState, ToolCallOutcome } from '@cat-factory/contracts'
+export type { AgentToolCall, ToolCallBodiesState, ToolCallOutcome }
 
 /**
  * The fields a producer hands the recorder. The service assigns `id` (derived from

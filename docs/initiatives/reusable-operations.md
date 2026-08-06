@@ -847,6 +847,13 @@ omits), and both of them read the registry through the same projection the snaps
   a host allow-lists and a model calls, so `taskTypes_list` failed the host-safe naming rule
   outright. The Python SDK's keyword suffixing was the fourth: `type` on a descriptor field
   becomes `type_`, which only the first multi-word/reserved-name member ever exercises.
+- **The OpenAPI version moved twice, and the second time BOTH sides wrote the same number.** This
+  branch reserved 1.17.0 after the multi-repo report took 1.16.0; the tool-call `?outcome=` change
+  then reserved 1.17.0 too, on the same reasoning, and landed first. The VERSION line auto-merged
+  byte-identically and only the comment beside it conflicted, which is precisely the failure the
+  note at the top of that block describes and the only reason it surfaced. 1.18.0 now. The rule
+  the block states is the whole defence: re-read the line against `origin/main` after every merge
+  rather than trusting that it merged clean.
 - **A `pathResolver` serves TWO callers, and only one of them passes real values.** The suppression
   pair resolved its path param through `encodeURIComponent`, which is right for the client building
   a URL and wrong for route REGISTRATION, which calls the same resolver with the literal

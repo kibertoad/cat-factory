@@ -1,8 +1,11 @@
 import {
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
+  readRunnerDispatchAck,
+  type RunnerDispatchAck,
   type RunnerDispatchKind,
   type RunnerJobRef,
+  type RunnerJobStopOutcome,
   type RunnerJobView,
   type RunnerTransport,
 } from '@cat-factory/kernel'
@@ -42,6 +45,10 @@ const ROLLOUT_EVICTION_ERROR = `${EVICTION_ERROR} (transient infrastructure evic
 // container-side by the job's inactivity + max-duration watchdogs.
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
+// A stop, unlike those two, deliberately WAITS: the harness holds the response until the aborted
+// job has actually settled (up to its own ~6s force-kill window), because the caller's whole
+// question is whether the agent is still running. Sized to clear that with room to spare.
+const STOP_TIMEOUT_MS = 30_000
 
 // Inbound-auth header the harness checks when HARNESS_SHARED_SECRET is configured
 // (matches the harness server + the local Docker transport). Sent on every harness
@@ -88,7 +95,7 @@ export class CloudflareContainerTransport implements RunnerTransport {
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     // The container is per-RUN (one Durable Object per run id), so every step of a run
     // dispatches to the same instance; the harness keys the job by `ref.jobId` (in the
     // spec body), unique per step, so siblings never collide in its registries.
@@ -116,6 +123,9 @@ export class CloudflareContainerTransport implements RunnerTransport {
     // across a run's steps — the store preserves the earliest startedAt for a key.
     // Best-effort — the registry swallows store errors.
     await this.registry?.register(ref.runId, kind)
+    // The harness's capability handshake rides the acceptance body. Read AFTER the registry
+    // write so a malformed/absent body can never cost the reaper its record of a live container.
+    return readRunnerDispatchAck(await safeJson(res))
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -181,6 +191,53 @@ export class CloudflareContainerTransport implements RunnerTransport {
     }
     const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
     await stub.shutdown()
+  }
+
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`, because this backend owns the container
+   * the job runs in: the graceful path asks the harness to abort that job and wait for it to
+   * settle, and anything else escalates to reclaiming the container, which stops everything inside
+   * it.
+   *
+   * Escalating is right here and only here. A per-run container serves ONE run, and the caller
+   * that reaches for this has already failed the run, so there is no sibling step left to protect;
+   * what the escalation buys is the difference between telling a human "the agent is stopped" and
+   * telling them to go and look.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const stub = this.namespace.get(this.namespace.idFromName(ref.runId))
+    try {
+      const res = await stub.fetch(`http://container/jobs/${encodeURIComponent(ref.jobId)}`, {
+        method: 'DELETE',
+        headers: this.secretHeader(),
+        signal: AbortSignal.timeout(STOP_TIMEOUT_MS),
+      })
+      // A 404 is not a stop: the container may simply have been recreated under the same DO name,
+      // in which case nothing here has been asked to stop anything. Fall through to the reclaim.
+      if (res.ok) {
+        const body = (await safeJson(res)) as { state?: unknown } | undefined
+        if (body?.state !== 'running') return 'stopped'
+      }
+    } catch (error) {
+      // A drained/rolled-out container throws rather than answering; its job is gone with it, so
+      // that IS the stop. Anything else falls through to the reclaim below.
+      if (isRolloutSignal(error)) return 'stopped'
+    }
+    await this.release(ref)
+    return 'stopped'
+  }
+}
+
+/**
+ * The acceptance body as JSON, or undefined for anything unreadable. Never throws: the job is
+ * already accepted by the time this runs, so a body this transport cannot parse must degrade to
+ * "no handshake" (which the dispatch site reads as unknown) rather than fail a live dispatch.
+ */
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch {
+    return undefined
   }
 }
 

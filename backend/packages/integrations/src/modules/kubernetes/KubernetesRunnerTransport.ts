@@ -3,9 +3,12 @@ import {
   CONTAINER_EVICTION_ERROR,
   harnessDispatchError,
   type KubernetesRunnerConfig,
+  readRunnerDispatchAck,
+  type RunnerDispatchAck,
   type RunnerDispatchKind,
   type RunnerDispatchOptions,
   type RunnerJobRef,
+  type RunnerJobStopOutcome,
   type RunnerJobView,
   type RunnerTransport,
   type SecretResolver,
@@ -52,6 +55,10 @@ const EVICTION_ERROR = CONTAINER_EVICTION_ERROR
 
 const DISPATCH_TIMEOUT_MS = 30_000
 const POLL_TIMEOUT_MS = 30_000
+// A stop WAITS by design: the harness holds the response until the aborted job has actually
+// settled (up to its own ~6s force-kill window), because the caller's question is whether the
+// agent is still running, not whether a signal was sent.
+const STOP_TIMEOUT_MS = 30_000
 // Bounded readiness wait inside dispatch. The engine treats `dispatch` as blocking
 // until the runner has accepted the job (a plain dispatch throw hard-fails the run as
 // `failureKind: 'dispatch'`), exactly like the Cloudflare container backend, so we
@@ -90,7 +97,7 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     const name = podName(ref.runId)
     await this.ensurePod(name, ref.runId, options)
     await this.waitForPodReady(name)
@@ -104,6 +111,12 @@ export class KubernetesRunnerTransport implements RunnerTransport {
         body: await safeText(res),
       })
     }
+    // This transport POSTs to the harness ITSELF (through the apiserver pod-proxy), so the
+    // acceptance body it gets back IS the handshake, unlike a manifest-driven pool, which sees
+    // only whatever its own scheduler chose to return. Dropping it here would leave every k8s/EKS
+    // deployment permanently `unknown`: warning on each capability dispatch against an image that
+    // is in fact current, and unable to ever refuse a genuinely blind one.
+    return readRunnerDispatchAck(await safeJson(res))
   }
 
   async poll(ref: RunnerJobRef): Promise<RunnerJobView> {
@@ -148,6 +161,32 @@ export class KubernetesRunnerTransport implements RunnerTransport {
         `Failed to release runner pod '${name}' (HTTP ${res.status}): ${await safeText(res)}`,
       )
     }
+  }
+
+  /**
+   * Stop ONE job and confirm it. Always answers `stopped`: the graceful path aborts that job at
+   * the harness through the pod-proxy and waits for it to settle, and anything else escalates to
+   * deleting the pod, which stops everything in it.
+   *
+   * The pod is per-RUN, so the escalation costs the rest of the run, which is exactly the trade
+   * the only caller has already made by failing it. A bare Pod is not garbage-collected either,
+   * so a stop that gave up here would leak the pod as well as the agent.
+   */
+  async stopJob(ref: RunnerJobRef): Promise<RunnerJobStopOutcome> {
+    const name = podName(ref.runId)
+    const res = await this.proxyFetch(
+      'DELETE',
+      name,
+      `/jobs/${encodeURIComponent(ref.jobId)}`,
+      undefined,
+      STOP_TIMEOUT_MS,
+    )
+    if (res.ok) {
+      const body = (await safeJson(res)) as { state?: unknown } | undefined
+      if (body?.state !== 'running') return 'stopped'
+    }
+    await this.release(ref)
+    return 'stopped'
   }
 
   /** Probe the apiserver with the configured token (lists pods; nothing created). */
@@ -256,6 +295,20 @@ export class KubernetesRunnerTransport implements RunnerTransport {
     timeoutMs: number,
   ): Promise<Response> {
     return this.client.fetch(method, url, body, timeoutMs)
+  }
+}
+
+/**
+ * A response body as JSON, or undefined for anything unreadable. Never throws: both callers are
+ * past the point where a parse failure should change the outcome (the job is accepted, or the
+ * stop escalates), so an unreadable body degrades to "nothing reported".
+ */
+async function safeJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch {
+    // silent-catch-ok: an unreadable body IS the "nothing reported" answer both callers handle.
+    return undefined
   }
 }
 

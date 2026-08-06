@@ -383,3 +383,93 @@ describe('LocalContainerRunnerTransport (warm pool)', () => {
     expect(JSON.parse(String((post[1] as RequestInit).body)).persistentCheckout).toBeUndefined()
   })
 })
+
+describe('stopJob on a pooled member', () => {
+  /**
+   * A fetch that serves the pool normally but answers `DELETE /jobs/:id` from `stopAnswer`:
+   * the shape of a member whose harness will, or will not, confirm the abort.
+   */
+  function fetchWithStop(stopAnswer: () => Response) {
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (init?.method === 'DELETE') return stopAnswer()
+      if (url.endsWith('/health')) return new Response('ok', { status: 200 })
+      if (url.includes('/jobs/')) return jsonResponse({ state: 'running' })
+      return jsonResponse({ state: 'running' }, 202)
+    })
+  }
+
+  it('aborts the job at the harness and keeps the member warm', async () => {
+    // The graceful path. Once the harness confirms the job is terminal the member really is idle,
+    // so returning it to the pool is right and the next run gets a warm container.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: fetchWithStop(() =>
+        jsonResponse({ jobId: 'j1', state: 'failed' }),
+      ) as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+
+    expect(await transport.stopJob({ runId: 'r1', jobId: 'j1' })).toBe('stopped')
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(0)
+  })
+
+  it('DESTROYS the member when the abort cannot be confirmed, instead of re-pooling it', async () => {
+    // The bug this exists for. `release` hands a member back to the warm pool, and `harnessHealthy`
+    // answers 200 for one that is busy, so a refused run whose job could not be stopped would put
+    // a container with a LIVE agent and a live checkout back on the idle list for the next run to
+    // lease. Two runs, one container, one checkout: exactly what `acquireMember`'s synchronous
+    // claim exists to prevent. Removing it stops the job and takes it off the pool in one act.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: fetchWithStop(
+        () => new Response('no such route', { status: 404 }),
+      ) as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(1)
+
+    expect(await transport.stopJob({ runId: 'r1', jobId: 'j1' })).toBe('stopped')
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(1)
+
+    // And it is really gone from the pool: the next run cold-starts rather than leasing it.
+    await transport.dispatch({ runId: 'r2', jobId: 'j2' }, repoSpec('o', 'r'), 'agent')
+    expect(calls.filter((c) => c[0] === 'run')).toHaveLength(2)
+  })
+
+  it('escalates when the harness answers but the job is STILL running', async () => {
+    // A signalled abort is not a stopped agent, which is the whole reason the harness waits for
+    // the job to settle before answering.
+    const { exec, calls } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: fetchWithStop(() =>
+        jsonResponse({ jobId: 'j1', state: 'running' }),
+      ) as unknown as typeof fetch,
+    })
+    await transport.dispatch({ runId: 'r1', jobId: 'j1' }, repoSpec('o', 'r'), 'agent')
+
+    expect(await transport.stopJob({ runId: 'r1', jobId: 'j1' })).toBe('stopped')
+    expect(calls.filter((c) => c[0] === 'rm')).toHaveLength(1)
+  })
+
+  it('reports `stopped` for a run with nothing serving it', async () => {
+    // Idempotent: there is no job left to stop, which IS the stopped state.
+    const { exec } = fakeDockerPool()
+    const transport = mkTransport({
+      image: 'harness:test',
+      poolSize: 2,
+      exec,
+      fetchImpl: okFetch() as unknown as typeof fetch,
+    })
+    expect(await transport.stopJob({ runId: 'never-dispatched', jobId: 'j' })).toBe('stopped')
+  })
+})
