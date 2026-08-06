@@ -56,8 +56,8 @@ const busy = ref(false)
 const filter = ref('')
 
 // The palette archetypes PLUS the engine-driven kinds that still run an LLM
-// (spec-writer, merger, the fixers/resolver). The pure gates run no model, so they
-// stay out — exactly the set the per-agent override list should cover.
+// (merger, the fixers/resolver). The pure gates run no model, so they stay out —
+// exactly the set the per-agent override list should cover.
 const configurableKinds = computed(() => [...agents.archetypes, ...MODEL_CONFIGURABLE_SYSTEM_KINDS])
 
 // Narrowed to the selected agent tier, EXCEPT that a kind the preset being edited already
