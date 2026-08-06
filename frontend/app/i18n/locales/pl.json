@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Przegląd pull requesta",
         "prNotFound": "Nie znaleziono pull requesta #{number} w repozytorium tej usługi. Sprawdź numer albo powiąż usługę z repozytorium, w którym znajduje się ten pull request.",
         "prRepoMismatch": "Ten pull request jest w innym repozytorium. Ta usługa przegląda {repo}, więc utwórz zadanie przeglądu w usłudze powiązanej z repozytorium tego pull requesta."
-      }
+      },
+      "contextFailed": "Nie utworzono zadania: nie udało się odczytać {count} załącznika | Nie utworzono zadania: nie udało się odczytać {count} załączników | Nie utworzono zadania: nie udało się odczytać {count} załączników"
     },
     "recurring": {
       "title": "Dodaj cykliczny pipeline",
@@ -497,7 +498,8 @@
     "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
-    "importsOnAdd": "importowane przy dodaniu"
+    "importsOnAdd": "importowane przy dodaniu",
+    "unreadable": "Nie udało się pobrać: {error}"
   },
   "errors": {
     "generic": {
@@ -4166,7 +4168,15 @@
       "attachByReference": "Dołącz {ref} przez odwołanie",
       "noMatches": "Brak pasujących stron.",
       "emptySearchable": "Wyszukaj według tytułu lub wybierz zaimportowany dokument.",
-      "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć."
+      "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć.",
+      "refChecking": "Sprawdzanie odwołania…",
+      "refUnrecognized": "To nie jest odwołanie {source}. Oczekiwano: {expected}",
+      "refOtherSource": "To jest link {claimed}, a nie {source}.",
+      "refSwitchSource": "Użyj zamiast tego {source}",
+      "refTrimmed": "Skrócono do obsługiwanej postaci",
+      "refWidened": "Wskazuje ramkę, której to źródło nie potrafi odczytać ({scope}), więc dołączany jest cały plik.",
+      "refAlreadyAttached": "To odwołanie jest już dołączone.",
+      "refCheckFailed": "Nie udało się sprawdzić odwołania: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Szukaj repozytoriów…",
@@ -6296,7 +6306,8 @@
       "failedTitle": "Nie udalo sie utworzyc inicjatywy",
       "contextDocsHint": "Dołącz wymaganie, RFC lub PRD, aby agenci planowania przeczytali je podczas określania zakresu i tworzenia planu.",
       "contextIssuesHint": "Dołącz zgłoszenie, aby agenci planowania zobaczyli jego opis i komentarze podczas tworzenia planu.",
-      "linkFailed": "Inicjatywa utworzona, ale nie udało się powiązać {count} załącznika | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników"
+      "linkFailed": "Inicjatywa utworzona, ale nie udało się powiązać {count} załącznika | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników | Inicjatywa utworzona, ale nie udało się powiązać {count} załączników",
+      "contextFailed": "Nie utworzono inicjatywy: nie udało się odczytać {count} załącznika | Nie utworzono inicjatywy: nie udało się odczytać {count} załączników | Nie utworzono inicjatywy: nie udało się odczytać {count} załączników"
     },
     "status": {
       "planning": "Planowanie",

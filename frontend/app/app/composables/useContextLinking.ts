@@ -29,6 +29,17 @@ export interface PendingContext {
   description?: string
   /** True when the item must be imported before it can be linked. */
   needsImport: boolean
+  /**
+   * Why this item could not be FETCHED, when an attempt has already failed (the server's own
+   * message). Set by {@link useContextLinking.resolvePending} and by the add-task form's body
+   * pre-fetch; cleared the moment a later attempt succeeds.
+   *
+   * It exists because the fetch moved ahead of the create: a failure now costs the user the
+   * create, so the item that caused it has to be identifiable ON the form they are still looking
+   * at, not only in the toast that named it. A tracker issue has no pre-flight of its own, so this
+   * is the whole of its warning.
+   */
+  unreadable?: string
 }
 
 /**
@@ -115,6 +126,70 @@ export function useContextLinking() {
   const { copyAction } = useCopyToClipboard()
 
   /**
+   * Import every pending item that still needs it, BEFORE the block exists.
+   *
+   * The fetch against the external source is the half of attaching that actually fails (a page
+   * that moved, a token without access, a source that is down), and it needs no block id. Running
+   * it after the block was created therefore bought nothing and cost the user their chance to fix
+   * it: the task existed, carrying context it had not got. Run here, a failure is a correction
+   * the host can ask for with the form still open and the reference still editable.
+   *
+   * Returns the items with what succeeded folded in (`needsImport: false`, so the later
+   * {@link linkPending} links them directly), alongside the failures. The batch is NOT aborted on
+   * the first failure: one unreachable page must not hide a second one, or the user fixes them
+   * one round-trip at a time.
+   *
+   * What "folded in" covers is the whole point of running this before the create, so it is more
+   * than the id: a tracker issue's own DESCRIPTION arrives with the import, and the add-task form
+   * composes the saved description from exactly these items on the next statement. Keeping only
+   * the id dropped a body the platform had in hand at the one moment it was needed.
+   */
+  async function resolvePending(
+    items: PendingContext[],
+  ): Promise<{ resolved: PendingContext[]; failures: LinkFailure[] }> {
+    const failures: LinkFailure[] = []
+    const resolved: PendingContext[] = []
+    for (const item of items) {
+      if (!item.needsImport) {
+        resolved.push(item)
+        continue
+      }
+      try {
+        resolved.push(await importPending(item))
+      } catch (e) {
+        const failure = describeLinkFailure(item, e)
+        failures.push(failure)
+        // Kept in the list, still unresolved: the host aborts on any failure, and dropping the
+        // item here would silently discard an attachment the user asked for while they fix it.
+        // Marked, so the form the user is still looking at names WHICH attachment refused.
+        resolved.push({ ...item, unreadable: failure.message })
+      }
+    }
+    return { resolved, failures }
+  }
+
+  /** Fetch one pending item, folding everything the import answers back onto it. */
+  async function importPending(item: PendingContext): Promise<PendingContext> {
+    // `unreadable` is dropped rather than preserved: a prior failure is not a standing verdict, and
+    // leaving the mark on a page that has just been fetched would accuse a good attachment.
+    const { unreadable: _cleared, ...rest } = item
+    if (item.kind === 'document') {
+      const doc = await documents.importDocument(item.source as DocumentSourceKind, item.externalId)
+      return { ...rest, externalId: doc.externalId, needsImport: false }
+    }
+    const task = await tasks.importTask(item.source as TaskSourceKind, item.externalId)
+    return {
+      ...rest,
+      externalId: task.externalId,
+      needsImport: false,
+      // The body reaches the created task through the host's description composition, which reads
+      // `description` off these items: an import that fetched it and did not carry it forward is a
+      // task silently missing the issue text it was created from.
+      ...(task.description.trim() ? { description: task.description } : {}),
+    }
+  }
+
+  /**
    * Import (when needed) then link every pending item to `blockId`. Each failure
    * is captured with its actual cause rather than aborting the batch, so one bad
    * attachment doesn't sink the rest; returns the failures (empty ⇒ all linked).
@@ -137,23 +212,29 @@ export function useContextLinking() {
           await tasks.linkToBlock(blockId, source, externalId)
         }
       } catch (e) {
-        // Never swallow the cause: capture the server's own message + status/code/details
-        // so the toast can name the specific reason and the copy affordance can carry the
-        // full context (incl. the upstream GitHub status the backend puts on `details`).
-        const envelope = apiErrorEnvelope(e)
-        failures.push({
-          item,
-          message: e instanceof Error ? e.message : String(e),
-          status: apiErrorStatus(e),
-          code: envelope?.code,
-          details:
-            envelope?.details && typeof envelope.details === 'object'
-              ? (envelope.details as Record<string, unknown>)
-              : undefined,
-        })
+        failures.push(describeLinkFailure(item, e))
       }
     }
     return failures
+  }
+
+  /**
+   * Never swallow the cause: capture the server's own message + status/code/details so the toast
+   * can name the specific reason and the copy affordance can carry the full context (incl. the
+   * upstream GitHub status the backend puts on `details`).
+   */
+  function describeLinkFailure(item: PendingContext, e: unknown): LinkFailure {
+    const envelope = apiErrorEnvelope(e)
+    return {
+      item,
+      message: e instanceof Error ? e.message : String(e),
+      status: apiErrorStatus(e),
+      code: envelope?.code,
+      details:
+        envelope?.details && typeof envelope.details === 'object'
+          ? (envelope.details as Record<string, unknown>)
+          : undefined,
+    }
   }
 
   /**
@@ -209,5 +290,5 @@ export function useContextLinking() {
     })
   }
 
-  return { linkPending, presentLinkFailures }
+  return { resolvePending, linkPending, presentLinkFailures }
 }

@@ -9,6 +9,7 @@ import {
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
+  zeplinDroppedScreenId,
   zeplinTokens,
   zeplinUrlFor,
 } from './zeplin.logic.js'
@@ -47,6 +48,29 @@ describe('parseZeplinRef', () => {
     const pasted = 'https://app.zeplin.io/project/abc123/screen/def456?foo=bar'
     expect(parseZeplinRef(pasted)).toBe(externalId)
     expect(parseZeplinRef(zeplinUrlFor(externalId))).toBe(externalId)
+  })
+})
+
+describe('zeplinDroppedScreenId', () => {
+  it('names the screen qualifier the ref fell back from, and nothing when it survived', () => {
+    // Same two-level grammar and same silent widening as Figma's: a screen id the parser refuses
+    // leaves the reference on the whole project, which imports perfectly well and covers far more
+    // than the screen someone linked.
+    const kept = 'https://app.zeplin.io/project/abc123/screen/def456'
+    expect(zeplinDroppedScreenId(kept, parseZeplinRef(kept)!)).toBeNull()
+    const dropped = 'https://app.zeplin.io/project/abc123/screen/not a screen'
+    expect(zeplinDroppedScreenId(dropped, parseZeplinRef(dropped)!)).toBe('not a screen')
+    expect(zeplinDroppedScreenId('abc123:not!valid', 'abc123')).toBe('not!valid')
+    // A whole-project link named no screen, so there is nothing to report.
+    expect(zeplinDroppedScreenId('https://app.zeplin.io/project/abc123', 'abc123')).toBeNull()
+  })
+
+  it('validates the WHOLE screen segment rather than an alphanumeric prefix of it', () => {
+    // A prefix match minted a truncated id that looked resolved and 404s on import. Falling back to
+    // the project at least reaches a real page, and the drop is now stated instead of guessed.
+    const url = 'https://app.zeplin.io/project/abc123/screen/def456;instance'
+    expect(parseZeplinRef(url)).toBe('abc123')
+    expect(zeplinDroppedScreenId(url, 'abc123')).toBe('def456;instance')
   })
 })
 

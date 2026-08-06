@@ -101,7 +101,14 @@ const API_PREFIX = '/api/v1'
 // moves were found the same way, and it is the only way that works: by re-reading this line after
 // the merge, never by trusting that the VERSION itself auto-merged clean (it did, twice, to a
 // number main had already used).
-const API_VERSION = '1.18.0'
+// 1.19.0, not 1.18.0: attaching a document by REFERENCE gains two `error.details.reason` values on
+// its 422, `document_ref_unrecognized` and `document_ref_claimed_by_other_source` (the public create
+// resolves every ref through the same service the app's attach pre-flight calls). Additive: a
+// consumer that branches on nothing still sees the same status and message, and one that does gains
+// two codes to branch on. The reason VOCABULARY is part of the stable surface, which is why a new
+// member is a version step at all, and why `public-api.md` names both codes rather than describing
+// the refusal only in prose. 1.18.0 is main's published number as of this branch's last merge.
+const API_VERSION = '1.19.0'
 
 /**
  * The media types the artifact-blob route can answer with: the image allow-list it clamps a

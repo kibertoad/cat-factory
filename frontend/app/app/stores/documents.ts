@@ -9,6 +9,7 @@ import type {
   DocumentOrigin,
   DocumentSourceDescriptor,
   DocumentSourceKind,
+  ResolvedDocumentRef,
   SourceDocument,
 } from '~/types/domain'
 import { isConnectableSource } from '@cat-factory/contracts'
@@ -80,6 +81,16 @@ export const useDocumentsStore = defineStore('documents', () => {
   /** Load the imported documents for the workspace (across sources). */
   async function loadDocuments() {
     documents.value = await api.listDocuments(workspace.requireId())
+  }
+
+  /**
+   * Canonicalise a pasted URL/id into the reference this source would store it under, WITHOUT
+   * importing it. The backend's providers own the rule, so the picker validates against the same
+   * parse the import will run rather than a second copy of it that can drift; a ref the source
+   * cannot read comes back as a 422 whose `details.reason` says which correction it needs.
+   */
+  function resolveRef(source: DocumentSourceKind, ref: string): Promise<ResolvedDocumentRef> {
+    return api.resolveDocumentRef(workspace.requireId(), source, { ref })
   }
 
   /** Import (fetch + persist) a page by id or URL from a source. */
@@ -211,6 +222,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     connect,
     disconnect,
     loadDocuments,
+    resolveRef,
     importDocument,
     search,
     plan,

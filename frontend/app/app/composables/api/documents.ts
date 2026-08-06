@@ -9,6 +9,7 @@ import {
   listDocumentsContract,
   listDocumentSourcesContract,
   planDocumentContract,
+  resolveDocumentRefContract,
   searchDocumentsContract,
   spawnDocumentContract,
   unlinkDocumentForKindContract,
@@ -47,6 +48,15 @@ export function documentsApi({ send, ws }: ApiContext) {
 
     listDocuments: (workspaceId: string) =>
       send(listDocumentsContract, { pathPrefix: ws(workspaceId) }),
+
+    // Canonicalise a pasted URL/id without importing it: the pre-flight the attach pickers run
+    // so an unusable link is corrected before the task that carries it is saved.
+    resolveDocumentRef: (workspaceId: string, source: DocumentSourceKind, body: { ref: string }) =>
+      send(resolveDocumentRefContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { source },
+        body,
+      }),
 
     importDocument: (workspaceId: string, source: DocumentSourceKind, body: { ref: string }) =>
       send(importDocumentContract, { pathPrefix: ws(workspaceId), pathParams: { source }, body }),
