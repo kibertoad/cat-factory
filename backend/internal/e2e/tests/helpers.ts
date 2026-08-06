@@ -72,15 +72,18 @@ export async function setFakeProfile(
 export const GITHUB_REPO = { githubId: 424242, owner: 'octo', name: 'demo' } as const
 
 /**
- * The pull request the faked GitHub integration serves a diff for, and the one a `review` task
- * points at (source of truth: `src/fakeGitHub.ts` — `E2E_REVIEWED_PR`). Its diff touches
- * `src/auth.ts` lines 10-13 on the head side, so a review finding anchored in that range can be
- * posted as an INLINE comment rather than folded into the summary.
+ * The pull request the faked GitHub integration serves, and the one a `review` task points at
+ * (source of truth: `src/fakeGitHub.ts`, `E2E_REVIEWED_PR`). A task carries the NUMBER; the URL is
+ * the provider's to give, and creation canonicalises the stored reference to it.
+ *
+ * Its diff touches `src/auth.ts` lines 10-13 and `src/session.ts` line 21 on the head side, so a
+ * finding anchored in either range is posted as an INLINE comment rather than folded into the
+ * summary. `src/session.ts:21` is the anchor the fake refuses ONCE (the partial-post path).
  */
-export const GITHUB_REVIEWED_PR = {
-  number: 42,
-  url: 'https://github.com/octo/demo/pull/42',
-} as const
+export const GITHUB_REVIEWED_PR = { number: 42 } as const
+
+/** The anchor whose first post attempt the fake refuses (source: `E2E_TRANSIENT_REVIEW_POST_FAILURE`). */
+export const GITHUB_TRANSIENT_POST_FAILURE = { path: 'src/session.ts', line: 21 } as const
 
 /**
  * Make `workspaceId` a GitHub-connected workspace with the seeded repo + branches (see
@@ -115,6 +118,30 @@ export async function seedOwnRepo(
     name: string
     defaultBranch: string
   }
+}
+
+/** One PR-review write the engine attempted, as the control channel reports it. */
+export interface ReviewAttempt {
+  number: number
+  comments: { path: string; line: number }[]
+  hasBody: boolean
+}
+
+/**
+ * The PR-review writes a workspace's runs ATTEMPTED, oldest first.
+ *
+ * The only view of what the engine actually sent. The window's post report is derived from the
+ * outcomes the provider returned, so it reads identically whether a retry re-sent a comment that
+ * had already landed or skipped it: at-most-once posting is only observable here.
+ */
+export async function readReviewAttempts(
+  request: APIRequestContext,
+  workspaceId: string,
+): Promise<ReviewAttempt[]> {
+  const res = await request.post(`${CONTROL_URL}/github-review-attempts`, { data: { workspaceId } })
+  if (!res.ok())
+    throw new Error(`github-review-attempts control ${res.status()}: ${await res.text()}`)
+  return (await res.json()) as ReviewAttempt[]
 }
 
 /** Import a repo as a board service frame (the `POST /blocks/from-repo` the add-service modal calls). */
@@ -732,6 +759,24 @@ export async function openBoard(page: Page): Promise<void> {
   await expect(page.getByTestId('workspace-stream')).toHaveAttribute('data-connected', 'true', {
     timeout: LIVE_TIMEOUT,
   })
+}
+
+/**
+ * Put the browser on `workspaceId` through the sidebar board switcher, and confirm it landed.
+ *
+ * Idempotent, so a spec can use it to ESTABLISH which board it is on rather than inherit whichever
+ * board a cold load resolved to. That resolution is a product decision (the persisted choice, else
+ * the first of a newest-first list), not a suite guarantee, so a spec whose meaning depends on
+ * being on a particular board names it instead of relying on the order it seeded them in.
+ */
+export async function switchBoard(page: Page, workspaceId: string): Promise<void> {
+  const switcher = page.getByTestId('board-switcher')
+  await expect(switcher).toBeVisible({ timeout: BOOT_TIMEOUT })
+  if ((await switcher.getAttribute('data-board-id')) !== workspaceId) {
+    await switcher.click()
+    await page.getByTestId(`board-option-${workspaceId}`).click()
+  }
+  await expect(switcher).toHaveAttribute('data-board-id', workspaceId, { timeout: BOOT_TIMEOUT })
 }
 
 /** Locate a task card by its block id (the card root carries `data-block-id`). */

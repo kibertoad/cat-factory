@@ -39,6 +39,7 @@ import {
 import {
   createE2eGitHubClient,
   type GitHubSeed,
+  listReviewAttemptsFor,
   makeE2eRunRepoResolver,
   ownRepoFor,
   seedGitHubForWorkspace,
@@ -293,6 +294,20 @@ const controlServer = createServer((req, res) => {
           branches: [{ repoGithubId: repo.githubId, name: repo.defaultBranch, protected: true }],
         })
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(repo))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Report the PR-review write ATTEMPTS a workspace's runs made (see `listReviewAttemptsFor`).
+  // Read-only: the deep-review spec asserts the at-most-once posting rule on it, which is a fact
+  // about the wire that the window's own report structurally cannot show.
+  if (req.method === 'POST' && req.url === '/github-review-attempts') {
+    void readBody(req)
+      .then((raw) => {
+        const { workspaceId } = JSON.parse(raw) as { workspaceId: string }
+        res
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify(listReviewAttemptsFor(githubClient, workspaceId)))
       })
       .catch((err) => fail(res, 400, err))
     return

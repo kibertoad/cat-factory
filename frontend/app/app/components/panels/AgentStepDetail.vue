@@ -304,9 +304,13 @@ async function copyOutput() {
 <template>
   <Teleport to="body">
     <Transition name="reader-fade">
+      <!-- `data-agent-kind` names WHICH step this window is scoped to, as the kind rather than as
+           the heading beside it: the heading is a translated display label, so it is the wrong
+           thing to read for anything that needs to know which agent's step is open. -->
       <div
         v-if="open && step && agent"
         data-testid="step-detail"
+        :data-agent-kind="step?.agentKind"
         class="fixed inset-0 z-50 flex max-h-[100dvh] bg-slate-950/96 backdrop-blur-sm"
         role="dialog"
         aria-modal="true"
@@ -362,12 +366,7 @@ async function copyOutput() {
               <UIcon :name="agent.icon" class="h-5 w-5" :style="{ color: agent.color }" />
             </div>
             <div class="min-w-0">
-              <h1
-                class="truncate text-base font-semibold text-white"
-                data-testid="step-detail-agent"
-              >
-                {{ agent.label }}
-              </h1>
+              <h1 class="truncate text-base font-semibold text-white">{{ agent.label }}</h1>
               <p v-if="block" class="truncate text-xs text-slate-500">{{ block.title }}</p>
             </div>
             <div class="ms-auto flex items-center gap-1.5">

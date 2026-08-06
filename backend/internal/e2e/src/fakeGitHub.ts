@@ -43,13 +43,18 @@ export const E2E_BRANCHES: { name: string; protected: boolean }[] = [
  * suite must be deterministic.
  */
 export function installationIdFor(workspaceId: string): number {
+  // A positive 31-bit int, offset into a high range so it can't clash with any hand-picked id.
+  return 1_000_000 + (fnv1a(workspaceId) % 8_000_000)
+}
+
+/** FNV-1a over a string, as an unsigned 32-bit int. The one hash both id derivations read. */
+function fnv1a(value: string): number {
   let hash = 0x811c9dc5
-  for (let i = 0; i < workspaceId.length; i++) {
-    hash ^= workspaceId.charCodeAt(i)
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i)
     hash = Math.imul(hash, 0x01000193)
   }
-  // A positive 31-bit int, offset into a high range so it can't clash with any hand-picked id.
-  return 1_000_000 + ((hash >>> 0) % 8_000_000)
+  return hash >>> 0
 }
 
 /**
@@ -68,24 +73,62 @@ export function ownRepoFor(workspaceId: string): {
   name: string
   defaultBranch: string
 } {
-  // Offset well clear of both E2E_REPO's fixed id and the installation-id range.
-  const githubId = 50_000_000 + (installationIdFor(workspaceId) % 8_000_000)
+  // Offset well clear of both E2E_REPO's fixed id and the installation-id range, and hashed off a
+  // SALTED workspace id over a wide range: a collision between two workspaces would hand the
+  // second one the first one's frame, which is the exact failure this derivation exists to avoid,
+  // so it does not inherit the installation id's narrower 8M space.
+  const githubId = 50_000_000 + (fnv1a(`own-repo:${workspaceId}`) % 900_000_000)
   return { githubId, owner: E2E_REPO.owner, name: `demo-${githubId}`, defaultBranch: 'main' }
 }
 
 /**
- * The pull request the review surfaces are driven against: the reviewed PR of a `review` task.
- * Its number is what a spec puts in the task's `taskTypeFields`, so the engine resolves the same
- * PR the fake serves a diff for.
+ * The pull request every review surface is driven against: the reviewed PR of a `review` task.
+ *
+ * A spec puts {@link E2E_REVIEWED_PR.number} in the task's `taskTypeFields`, and the fake answers
+ * for THIS number only (an unknown number reads as a PR that does not exist), so a run that
+ * resolved the wrong PR fails instead of quietly reviewing the same canned diff. The head ref/sha
+ * are fixture-wide too: `getPullRequest`, `getPullRequestHeadRef` and `getPullRequestHeadSha` all
+ * report them, so the engine's drift check sees a branch that did not move and takes the INLINE
+ * path rather than folding every finding into the summary.
  */
-export const E2E_REVIEWED_PR = { number: 42, url: `https://github.com/octo/demo/pull/42` } as const
+export const E2E_REVIEWED_PR = {
+  number: 42,
+  headRef: 'feature/pr-head',
+  headSha: 'sha-pr-head',
+} as const
+
+/** The reviewed PR's canonical web URL for a repo, which is what task creation canonicalises to. */
+function reviewedPrUrl(ref: { owner: string; repo: string }): string {
+  return `https://github.com/${ref.owner}/${ref.repo}/pull/${E2E_REVIEWED_PR.number}`
+}
 
 /**
- * The one file the reviewed PR changes, as a unified patch. It exists so a review FINDING can
- * anchor to a real diff line: the engine pre-filters the human's selection against the PR's
- * actual changed lines (`computeCommentableLines`) and folds anything out-of-diff into the summary
- * comment instead of posting it inline. The hunk starts at line 10 on the head side, so lines
- * 10-13 are commentable on `RIGHT` — which is why the review fixture anchors its blocker at 12.
+ * The one inline comment the fake refuses, ONCE, per PR and workspace: a TRANSIENT upstream
+ * failure, which is the shape the port models (per-comment outcomes rather than a throw, because
+ * one un-postable comment must not reject the rest).
+ *
+ * It exists because a partial post is a whole disposition of its own: the run is re-parked carrying
+ * the report instead of finishing, and a retry posts ONLY what did not land (`postedFindingIds`),
+ * so nothing is double-posted. Refusing only the FIRST attempt is what lets one spec drive both
+ * halves. The memory is keyed per installation + PR + anchor, so the shared client cannot leak one
+ * spec's refusal into another's.
+ */
+export const E2E_TRANSIENT_REVIEW_POST_FAILURE = {
+  path: 'src/session.ts',
+  line: 21,
+  reason: 'Transient upstream error posting the inline comment.',
+} as const
+
+/**
+ * The files the reviewed PR changes, as unified patches. They exist so a review FINDING can anchor
+ * to a real diff line: the engine pre-filters the human's selection against the PR's actual changed
+ * lines (`computeCommentableLines`) and folds anything out-of-diff into the summary comment instead
+ * of posting it inline.
+ *
+ * `src/auth.ts`' hunk starts at line 10 on the head side, so lines 10-13 are commentable on
+ * `RIGHT` (the review fixture anchors its blocker at 12). `src/session.ts` hosts
+ * {@link E2E_TRANSIENT_REVIEW_POST_FAILURE}: line 21 is an added line, so a finding there is
+ * commentable and DOES reach the write, which is the only way to drive a per-comment failure.
  */
 const E2E_PR_CHANGED_FILES: E2eChangedFile[] = [
   {
@@ -98,32 +141,73 @@ const E2E_PR_CHANGED_FILES: E2eChangedFile[] = [
     patch:
       '@@ -10,2 +10,4 @@\n const token = read()\n+if (!token) return null\n+log(token)\n use(token)',
   },
+  {
+    // The path comes from the refusal fixture rather than being restated: the two have to name the
+    // same file, or the finding anchored for the partial-post path is folded into the summary and
+    // that test silently stops testing anything. Its line 21 is the `+audit(session)` line below.
+    path: E2E_TRANSIENT_REVIEW_POST_FAILURE.path,
+    previousPath: null,
+    status: 'modified',
+    additions: 1,
+    deletions: 0,
+    changes: 1,
+    patch: '@@ -20,2 +20,3 @@\n const session = start()\n+audit(session)\n return session',
+  },
 ]
 
 /**
- * The four OPTIONAL `GitHubClient` PR-review members, typed structurally — this test-only package
- * deliberately has no direct `@cat-factory/kernel` dependency (mirrors `fakeProfile.ts`, which
- * derives its shapes from the conformance fakes). The drift guard is the wiring site: the client
- * is passed to `buildNodeContainer`'s `overrides.githubClient`, which IS typed against the port,
- * so a member whose shape stops matching fails the e2e typecheck there.
+ * The shared fake client PLUS the five OPTIONAL `GitHubClient` PR-review members, typed
+ * structurally: this test-only package deliberately has no direct `@cat-factory/kernel` dependency
+ * (mirrors `fakeProfile.ts`, which derives its shapes from the conformance fakes).
+ *
+ * Two guards keep it honest in both directions. Towards the PORT: the client is passed to
+ * `buildNodeContainer`'s `overrides.githubClient`, which IS typed against `GitHubClient`, so a
+ * member whose shape stops matching fails the e2e typecheck there. Towards the FAKE: this is what
+ * {@link createE2eGitHubClient} returns and what {@link makeE2eRunRepoResolver} takes, so a
+ * capability that stops being installed is a compile error rather than a `TypeError` inside a
+ * resolver that had cast its way past the missing methods.
  */
-type E2eGitHubClient = FakeGitHubClient & {
-  /** Reviews posted through {@link E2eGitHubClient.createReview}, newest last (debugging aid). */
-  postedReviews: { number: number; input: E2eCreateReviewInput }[]
-  listChangedFiles(installationId: number, ref: unknown, number: number): Promise<E2eChangedFile[]>
+export type E2eGitHubClient = FakeGitHubClient & E2eReviewCapability
+
+/** One `createReview` CALL, whether or not every comment in it landed (see `reviewAttempts`). */
+interface E2eReviewAttempt {
+  installationId: number
+  number: number
+  input: E2eCreateReviewInput
+}
+
+/** The PR-review members {@link withReviewCapability} installs on the shared fake. */
+interface E2eReviewCapability {
+  /**
+   * Every `createReview` ATTEMPT, oldest first, across all workspaces (filter by installation id;
+   * {@link listReviewAttemptsFor} does). It is the only place the WIRE truth is visible: what the
+   * engine actually sent, as opposed to what the window renders about it, which is what makes it
+   * the evidence for at-most-once posting.
+   */
+  reviewAttempts: E2eReviewAttempt[]
+  getPullRequest(
+    installationId: number,
+    ref: E2eRepoRef,
+    number: number,
+  ): Promise<E2eOpenedPullRequest | null>
+  listChangedFiles(
+    installationId: number,
+    ref: E2eRepoRef,
+    number: number,
+  ): Promise<E2eChangedFile[]>
   getPullRequestHeadSha(
     installationId: number,
-    ref: unknown,
+    ref: E2eRepoRef,
     number: number,
   ): Promise<string | null>
   getPullRequestHeadRef(
     installationId: number,
-    ref: unknown,
+    ref: E2eRepoRef,
     number: number,
   ): Promise<string | null>
   createReview(
     installationId: number,
-    ref: unknown,
+    ref: E2eRepoRef,
     number: number,
     input: E2eCreateReviewInput,
   ): Promise<{
@@ -131,6 +215,10 @@ type E2eGitHubClient = FakeGitHubClient & {
     bodyPosted: boolean | null
   }>
 }
+/** The repo a client call is keyed by, as the port's `GitHubRepoRef`. */
+type E2eRepoRef = Parameters<FakeGitHubClient['getFileContent']>[1]
+/** A pull request as the port's `OpenedPullRequest`, derived from the fake's own write method. */
+type E2eOpenedPullRequest = Awaited<ReturnType<FakeGitHubClient['openPullRequest']>>
 /** One file a PR changed, as the port's `GitHubChangedFile`. */
 interface E2eChangedFile {
   path: string
@@ -161,27 +249,102 @@ interface E2eCreateReviewInput {
  *
  * `createReview` reports success per comment rather than throwing, exactly as the port specifies
  * (the real client posts each inline comment individually so one un-anchorable line can't reject
- * the rest). Posted reviews are recorded in memory for debugging; the SPA assertion is the post
- * REPORT the engine derives from the returned outcomes.
+ * the rest). It throws only when it cannot begin at all, which here means a PR the fake does not
+ * serve: the engine reports that as an all-failed attempt, so a run pointed at the wrong PR is
+ * loud instead of silently reviewing the canned diff.
+ *
+ * `Object.assign` rather than assignment-through-a-cast: it types the returned value as the
+ * intersection, so the capability object is checked against {@link E2eReviewCapability} here and
+ * the callers see the members instead of casting them back into existence.
  */
 function withReviewCapability(client: FakeGitHubClient): E2eGitHubClient {
-  const reviewCapable = client as E2eGitHubClient
-  reviewCapable.postedReviews = []
-  reviewCapable.listChangedFiles = async () => E2E_PR_CHANGED_FILES
-  // A STABLE head sha: the engine captures it when the review dispatches and re-reads it at post
-  // time, treating a change as branch drift (which would fold every finding into the summary
-  // instead of anchoring it inline). A constant means "the branch did not move", so the inline
-  // path is the one under test.
-  reviewCapable.getPullRequestHeadSha = async () => 'sha-pr-head'
-  reviewCapable.getPullRequestHeadRef = async () => 'feature/pr-head'
-  reviewCapable.createReview = async (_installationId, _ref, number, input) => {
-    reviewCapable.postedReviews.push({ number, input })
-    return {
-      comments: input.comments.map(() => ({ posted: true })),
-      bodyPosted: input.body ? true : null,
-    }
+  const reviewAttempts: E2eReviewAttempt[] = []
+  /** Anchors already refused once, keyed per installation + PR, so one spec cannot spend another's. */
+  const refused = new Set<string>()
+  const servesPr = (number: number): boolean => number === E2E_REVIEWED_PR.number
+  const capability: E2eReviewCapability = {
+    reviewAttempts,
+    getPullRequest: async (_installationId, ref, number) =>
+      servesPr(number)
+        ? {
+            // The catalogued repo id when the ref is one the canned catalog knows, else 0: a spec's
+            // OWN repo lives only in the Postgres projection. Nothing on the review path reads it
+            // (creation validates `number` and canonicalises `url`), so it is reported rather than
+            // invented, mirroring the shared fake's own `openPullRequest`.
+            repoGithubId:
+              client.repos.find((r) => r.owner === ref.owner && r.name === ref.repo)?.githubId ?? 0,
+            number: E2E_REVIEWED_PR.number,
+            githubId: 900_042,
+            title: 'Harden the session bootstrap',
+            state: 'open',
+            headRef: E2E_REVIEWED_PR.headRef,
+            baseRef: 'main',
+            headSha: E2E_REVIEWED_PR.headSha,
+            merged: false,
+            author: 'octo-dev',
+            updatedAt: 0,
+            syncedAt: 0,
+            url: reviewedPrUrl(ref),
+          }
+        : null,
+    listChangedFiles: async (_installationId, _ref, number) =>
+      servesPr(number) ? E2E_PR_CHANGED_FILES : [],
+    // A STABLE head sha: the engine captures it when the review dispatches and re-reads it at post
+    // time, treating a change as branch drift (which would fold every finding into the summary
+    // instead of anchoring it inline). A constant means "the branch did not move", so the inline
+    // path is the one under test.
+    getPullRequestHeadSha: async (_installationId, _ref, number) =>
+      servesPr(number) ? E2E_REVIEWED_PR.headSha : null,
+    getPullRequestHeadRef: async (_installationId, _ref, number) =>
+      servesPr(number) ? E2E_REVIEWED_PR.headRef : null,
+    createReview: async (installationId, _ref, number, input) => {
+      if (!servesPr(number)) throw new Error(`e2e fake serves no pull request #${number}`)
+      reviewAttempts.push({ installationId, number, input })
+      return {
+        comments: input.comments.map((comment) => {
+          const transient =
+            comment.path === E2E_TRANSIENT_REVIEW_POST_FAILURE.path &&
+            comment.line === E2E_TRANSIENT_REVIEW_POST_FAILURE.line
+          if (!transient) return { posted: true }
+          const key = `${installationId}:${number}:${comment.path}:${comment.line}`
+          if (refused.has(key)) return { posted: true }
+          refused.add(key)
+          return { posted: false, error: E2E_TRANSIENT_REVIEW_POST_FAILURE.reason }
+        }),
+        bodyPosted: input.body ? true : null,
+      }
+    },
   }
-  return reviewCapable
+  return Object.assign(client, capability)
+}
+
+/** One recorded attempt, projected to what a spec can assert on over the control channel. */
+export interface E2eReviewAttemptView {
+  number: number
+  comments: { path: string; line: number }[]
+  /** Whether this attempt carried the summary/body comment (suppressed once it has landed). */
+  hasBody: boolean
+}
+
+/**
+ * The review attempts a workspace's runs made, oldest first.
+ *
+ * Read over the control channel by the deep-review spec, because the AT-MOST-ONCE rule is a fact
+ * about the wire and nothing else can see it: the window reports what the engine derived, which
+ * would read identically if a retry re-sent a comment that had already landed.
+ */
+export function listReviewAttemptsFor(
+  client: E2eGitHubClient,
+  workspaceId: string,
+): E2eReviewAttemptView[] {
+  const installationId = installationIdFor(workspaceId)
+  return client.reviewAttempts
+    .filter((attempt) => attempt.installationId === installationId)
+    .map((attempt) => ({
+      number: attempt.number,
+      comments: attempt.input.comments.map((c) => ({ path: c.path, line: c.line })),
+      hasBody: !!attempt.input.body,
+    }))
 }
 
 /**
@@ -203,9 +366,8 @@ function withReviewCapability(client: FakeGitHubClient): E2eGitHubClient {
  */
 export function makeE2eRunRepoResolver(
   db: DrizzleDb,
-  client: FakeGitHubClient,
+  client: E2eGitHubClient,
 ): (workspaceId: string, blockId: string) => Promise<E2eRunRepoContext | null> {
-  const reviewCapable = client as E2eGitHubClient
   return async (workspaceId) => {
     const own = ownRepoFor(workspaceId)
     const projected = await new DrizzleRepoProjectionRepository(db).get(workspaceId, own.githubId)
@@ -215,7 +377,7 @@ export function makeE2eRunRepoResolver(
     return {
       // Every member delegates to the same fake client the GitHub module reads through, so a repo
       // op's write lands where a spec can observe it (`client.files` / `client.writes` /
-      // `client.postedReviews`). This is the shape `makeRepoFiles` composes in production; it is
+      // `client.reviewAttempts`). This is the shape `makeRepoFiles` composes in production; it is
       // hand-written here because that composer lives in a package this test-only one does not
       // depend on, and the drift guard is the `overrides` boundary, which is typed against the port.
       repo: {
@@ -227,13 +389,15 @@ export function makeE2eRunRepoResolver(
         deleteBranch: (branch) => client.deleteBranch(installationId, ref, branch),
         commitFiles: (input) => client.commitFiles(installationId, ref, input),
         openPullRequest: (input) => client.openPullRequest(installationId, ref, input),
-        listChangedFiles: (number) => reviewCapable.listChangedFiles(installationId, ref, number),
-        pullRequestHeadSha: (number) =>
-          reviewCapable.getPullRequestHeadSha(installationId, ref, number),
-        pullRequestHeadRef: (number) =>
-          reviewCapable.getPullRequestHeadRef(installationId, ref, number),
-        createReview: (number, input) =>
-          reviewCapable.createReview(installationId, ref, number, input),
+        // Wired, so `review`-task creation runs its real VALIDATION: an unknown PR number is
+        // refused at the create call and the stored reference is canonicalised to the provider's
+        // own URL. Omitting it (the shape before) passed every reference through unchecked, which
+        // silently exempted the fixture from the repo-mismatch and not-found refusals.
+        getPullRequest: (number) => client.getPullRequest(installationId, ref, number),
+        listChangedFiles: (number) => client.listChangedFiles(installationId, ref, number),
+        pullRequestHeadSha: (number) => client.getPullRequestHeadSha(installationId, ref, number),
+        pullRequestHeadRef: (number) => client.getPullRequestHeadRef(installationId, ref, number),
+        createReview: (number, input) => client.createReview(installationId, ref, number, input),
       },
       baseBranch: projected.defaultBranch ?? 'main',
       repoId: String(projected.githubId),
@@ -262,6 +426,7 @@ interface E2eRunRepoContext {
     openPullRequest: (
       input: Parameters<FakeGitHubClient['openPullRequest']>[2],
     ) => ReturnType<FakeGitHubClient['openPullRequest']>
+    getPullRequest: (number: number) => Promise<E2eOpenedPullRequest | null>
     listChangedFiles: (number: number) => Promise<E2eChangedFile[]>
     pullRequestHeadSha: (number: number) => Promise<string | null>
     pullRequestHeadRef: (number: number) => Promise<string | null>
@@ -288,7 +453,7 @@ interface E2eRunRepoContext {
  * workspace and collide on the installation PK. Specs must seed via `seedGitHub`, which uses the
  * per-workspace {@link installationIdFor}; the connect flow is out of scope until it needs one.
  */
-export function createE2eGitHubClient(): FakeGitHubClient {
+export function createE2eGitHubClient(): E2eGitHubClient {
   const client = withReviewCapability(new FakeGitHubClient())
   client.installations = [
     {

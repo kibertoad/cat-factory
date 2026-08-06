@@ -10,7 +10,7 @@ import {
 
 // The AUTHORING half of the delivery loop: a pipeline drawn by hand in the real builder, then run.
 //
-// A pipeline is the platform's central object — every run is one — and every other spec creates
+// A pipeline is the platform's central object (every run is one), and every other spec creates
 // them over REST (`createSimplePipeline`), which is exactly the layer that cannot fail the way this
 // surface does. The builder holds a DRAFT in a store (an ordered kind list plus a set of parallel
 // per-step flag arrays), assembles a wire payload from it on save, and the engine then reads those
@@ -19,7 +19,7 @@ import {
 // the companion/enabled bookkeeping produces a pipeline that saves cleanly, looks right in the
 // list, and runs differently from the picture the human drew.
 //
-// So the assertion is not that the builder saved something — it is that the ONE step the human
+// So the assertion is not that the builder saved something: it is that the ONE step the human
 // gated is the step the run stops on. The gate is what makes that observable at all: it is a
 // human checkpoint at a named position, so a draft/payload misalignment surfaces as the run
 // parking on the wrong step (or not parking), rather than as a silently different chain.
@@ -39,8 +39,8 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     await setFakeProfile(request, workspaceId, { decisionOnSteps: [] })
     const name = 'E2E hand-drawn pipeline'
 
-    // 1) Open the builder from the sidebar (a basic-mode destination — authoring a flow is part of
-    //    the everyday loop, so it is NOT behind the advanced tier).
+    // 1) Open the builder from the sidebar. It is a basic-mode destination: authoring a flow is
+    //    part of the everyday loop, so it is NOT behind the advanced tier.
     await page.getByTestId('nav-build-pipeline').click()
     const palette = page.getByTestId('pipeline-builder-palette')
     await expect(palette).toBeVisible({ timeout: LIVE_TIMEOUT })
@@ -64,7 +64,7 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     await expect(steps.nth(1)).toHaveAttribute('data-gated', 'false')
 
     await page.getByTestId('pipeline-builder-save').click()
-    // Saving closes the builder — the one signal the save resolved rather than toasted an error.
+    // Saving closes the builder, the one signal the save resolved rather than toasted an error.
     await expect(palette).toBeHidden({ timeout: LIVE_TIMEOUT })
 
     // 4) The persisted wire shape carries the drawing: the ordered kinds and the gate on index 0.
@@ -103,7 +103,7 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     // 6) Start it from the card and let it reach the gate.
     await card.getByTestId('task-start').click()
 
-    // LIVE: the run parks for APPROVAL (not a decision) — the card's attention affordance reads
+    // LIVE: the run parks for APPROVAL rather than a decision: the card's attention affordance reads
     // "Approve", which is the drawn gate arriving in the browser.
     await expect(card.getByTestId('task-resolve')).toHaveText(/approve/i, {
       timeout: RUN_TERMINAL_TIMEOUT,
@@ -112,16 +112,17 @@ test.describe('pipeline builder (author a pipeline by hand, then run it)', () =>
     // 7) The park is on the ARCHITECT, the step that was gated. Asserted on the step rail the
     //    affordance opens, so a gate that landed on the coder instead (the misalignment this spec
     //    exists for) fails here rather than passing as "a run that parked somewhere".
-    // The rail is scoped to ONE step and names it in its heading, so this reads the parked step
-    // itself rather than any prose that happens to mention an architect.
+    // The rail is scoped to ONE step and carries that step's KIND, so this reads the parked step
+    // itself: not prose that happens to mention an architect, and not the heading's display label,
+    // which is translated copy and would make this spec fail on a rename or a non-English locale.
     const detail = page.getByTestId('step-detail')
     await openAttention(card, detail)
-    await expect(detail.getByTestId('step-detail-agent')).toHaveText(/architect/i)
+    await expect(detail).toHaveAttribute('data-agent-kind', 'architect')
 
     await detail.getByTestId('step-approve').click()
 
     // LIVE: the gate clears and the rest of the chain (the ungated coder) carries the run to a
-    // terminal state — so the drawn pipeline ran to the end, not just up to its checkpoint.
+    // terminal state, so the drawn pipeline ran to the end and not just up to its checkpoint.
     await expect
       .poll(async () => await card.getAttribute('data-status'), { timeout: RUN_TERMINAL_TIMEOUT })
       .toMatch(/^(pr_ready|done)$/)
