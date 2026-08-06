@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Pull request'i incele",
         "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
         "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
-      }
+      },
+      "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı"
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -4166,7 +4167,13 @@
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
-      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
+      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır.",
+      "refChecking": "Referans denetleniyor…",
+      "refUnrecognized": "Bu bir {source} referansı değil. Beklenen: {expected}",
+      "refOtherSource": "Bu bir {claimed} bağlantısı, {source} bağlantısı değil.",
+      "refSwitchSource": "Bunun yerine {source} kullan",
+      "refTrimmed": "Desteklenen biçime kısaltıldı",
+      "refCheckFailed": "Referans denetlenemedi: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Depolarda ara…",
@@ -6296,7 +6303,8 @@
       "failedTitle": "Girisim olusturulamadi",
       "contextDocsHint": "Planlama ajanlarının kapsamı belirlerken ve planı hazırlarken okuması için bir gereksinim, RFC veya PRD ekleyin.",
       "contextIssuesHint": "Planlama ajanlarının planı hazırlarken açıklamasını ve yorumlarını görmesi için bir sorun kaydı ekleyin.",
-      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı"
+      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı",
+      "contextFailed": "Girişim oluşturulmadı: {count} ek okunamadı | Girişim oluşturulmadı: {count} ek okunamadı"
     },
     "status": {
       "planning": "Planlaniyor",

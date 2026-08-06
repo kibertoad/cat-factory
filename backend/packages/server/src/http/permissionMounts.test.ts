@@ -71,6 +71,7 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
  */
 const MEMBER_TIER_WRITES: Readonly<Record<string, readonly string[]>> = {
   documentSource: [
+    'POST /document-sources/:source/resolve-ref',
     'POST /document-sources/:source/import',
     'POST /document-sources/:source/search',
     'POST /document-sources/:source/plan',

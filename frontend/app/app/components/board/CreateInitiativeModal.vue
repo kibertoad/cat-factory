@@ -32,7 +32,7 @@ const board = useBoardStore()
 const initiatives = useInitiativesStore()
 const toast = useToast()
 const { t } = useI18n()
-const { linkPending, presentLinkFailures } = useContextLinking()
+const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed({
   get: () => ui.createInitiativeFrameId !== null,
@@ -127,6 +127,17 @@ async function create() {
   if (!frameId || !canSubmit.value) return
   const descriptor = selectedPreset.value
   try {
+    // Attachments are fetched BEFORE the initiative is written, for the reason the add-task form
+    // does it: an unreachable page is a correction the user can still make here, where the same
+    // failure after the create leaves an initiative carrying context it never got.
+    const { resolved, failures } = await resolvePending(pendingContext.value)
+    pendingContext.value = resolved
+    if (failures.length) {
+      presentLinkFailures(failures, undefined, {
+        title: (count) => t('initiative.create.contextFailed', { count }, count),
+      })
+      return
+    }
     const { block } = await initiatives.create(frameId, {
       title: title.value.trim(),
       description: description.value.trim() || undefined,
@@ -135,9 +146,9 @@ async function create() {
         ? sanitizeInitiativePresetInputs(descriptor, inputs.value)
         : undefined,
     })
-    // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
-    // permission/visibility error, a not-found doc, …) rather than a bare count. The initiative
-    // itself is already created, so a failed attachment never costs the user the form.
+    // Everything reachable was fetched above, so what can still fail here is the LINK itself (a
+    // doc another task already holds), surfaced with its specific cause rather than a bare count.
+    // The initiative is already created, so a failed link never costs the user the form.
     presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id, {
       title: (count) => t('initiative.create.linkFailed', { count }, count),
     })

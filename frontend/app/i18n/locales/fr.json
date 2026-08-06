@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Examiner la pull request",
         "prNotFound": "La pull request n° {number} est introuvable dans le dépôt de ce service. Vérifiez le numéro, ou reliez le service au dépôt qui héberge cette pull request.",
         "prRepoMismatch": "Cette pull request se trouve dans un autre dépôt. Ce service examine {repo} : créez la tâche de revue sous le service relié au dépôt de la pull request."
-      }
+      },
+      "contextFailed": "Tâche non créée : {count} pièce jointe illisible | Tâche non créée : {count} pièces jointes illisibles"
     },
     "recurring": {
       "title": "Ajouter une pipeline récurrente",
@@ -4166,7 +4167,13 @@
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucune page correspondante.",
       "emptySearchable": "Recherchez par titre ou choisissez un document importé.",
-      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre."
+      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre.",
+      "refChecking": "Vérification de la référence…",
+      "refUnrecognized": "Ce n'est pas une référence {source}. Format attendu : {expected}",
+      "refOtherSource": "C'est un lien {claimed}, pas un lien {source}.",
+      "refSwitchSource": "Utiliser {source} à la place",
+      "refTrimmed": "Réduit au format pris en charge",
+      "refCheckFailed": "Impossible de vérifier la référence : {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Rechercher des dépôts…",
@@ -6296,7 +6303,8 @@
       "failedTitle": "Impossible de creer l'initiative",
       "contextDocsHint": "Joignez une exigence, une RFC ou un PRD pour que les agents de planification la lisent en cadrant et en rédigeant le plan.",
       "contextIssuesHint": "Joignez un ticket pour que les agents de planification voient sa description et ses commentaires en rédigeant le plan.",
-      "linkFailed": "Initiative créée, mais {count} pièce jointe n’a pas pu être liée | Initiative créée, mais {count} pièces jointes n’ont pas pu être liées"
+      "linkFailed": "Initiative créée, mais {count} pièce jointe n’a pas pu être liée | Initiative créée, mais {count} pièces jointes n’ont pas pu être liées",
+      "contextFailed": "Initiative non créée : {count} pièce jointe illisible | Initiative non créée : {count} pièces jointes illisibles"
     },
     "status": {
       "planning": "Planification",

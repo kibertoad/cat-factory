@@ -178,6 +178,10 @@ export class FigmaProvider implements DocumentSourceProvider {
     return figmaLogic.parseFigmaRef(input)
   }
 
+  canonicalUrl(externalId: string): string {
+    return figmaLogic.figmaUrlFor(externalId)
+  }
+
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,

@@ -16,6 +16,7 @@ import {
   splitZeplinExternalId,
   unwrapArray,
   unwrapObject,
+  zeplinUrlFor,
   type ZeplinComponent,
   type ZeplinDesignTokens,
   type ZeplinScreen,
@@ -65,6 +66,10 @@ export class ZeplinProvider implements DocumentSourceProvider {
 
   parseRef(input: string): string | null {
     return parseZeplinRef(input)
+  }
+
+  canonicalUrl(externalId: string): string {
+    return zeplinUrlFor(externalId)
   }
 
   async fetchDocument(

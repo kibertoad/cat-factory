@@ -347,6 +347,10 @@
         "derivedTitleFallback": "Review pull request",
         "prNotFound": "Pull request #{number} was not found in this service's repository. Check the number, or link the service to the repository that pull request is on.",
         "prRepoMismatch": "That pull request is on a different repository. This service reviews {repo}, so create the review task under the service linked to the pull request's repository."
+      },
+      "contextFailed": "Task not created: {count} attachment could not be read | Task not created: {count} attachments could not be read",
+      "@contextFailed": {
+        "description": "Count-based: how many context attachments (docs/issues) could not be fetched, which is why nothing was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
       }
     },
     "recurring": {
@@ -4300,7 +4304,13 @@
       "attachByReference": "Attach {ref} by reference",
       "noMatches": "No matching pages.",
       "emptySearchable": "Search by title, or pick an imported document.",
-      "emptyRefOnly": "Paste a page URL or ID to attach it."
+      "emptyRefOnly": "Paste a page URL or ID to attach it.",
+      "refChecking": "Checking the reference…",
+      "refUnrecognized": "Not a {source} reference. Expected {expected}",
+      "refOtherSource": "That is a {claimed} link, not a {source} one.",
+      "refSwitchSource": "Use {source} instead",
+      "refTrimmed": "Trimmed to the supported form",
+      "refCheckFailed": "Could not check the reference: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Search repositories…",
@@ -6515,6 +6525,10 @@
       "linkFailed": "Initiative created, but {count} attachment could not be linked | Initiative created, but {count} attachments could not be linked",
       "@linkFailed": {
         "description": "Count-based: how many context attachments (docs/issues) failed to link after the initiative was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
+      },
+      "contextFailed": "Initiative not created: {count} attachment could not be read | Initiative not created: {count} attachments could not be read",
+      "@contextFailed": {
+        "description": "Count-based: how many context attachments (docs/issues) could not be fetched, which is why nothing was created (count is always >= 1). Provide ALL plural forms your language needs (English has 2; Polish/Ukrainian need 3 - one/few/many - via the custom pluralRules in i18n.config.ts)."
       }
     },
     "status": {

@@ -159,6 +159,7 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 | `POST /document-sources/:source/connect`      | Connect: `{ credentials: { … } }`                          |
 | `DELETE /document-sources/:source/connection` | Disconnect a source                                        |
 | `GET /documents`                              | List imported documents (all sources)                      |
+| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }` to `{ externalId, canonicalUrl }`   |
 | `POST /document-sources/:source/import`       | Fetch + persist a page: `{ ref }` (id or URL)              |
 | `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
 | `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
@@ -173,7 +174,7 @@ touches rather than which controller serves it:
 | -------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /document-sources/:source/connect`, `DELETE …/connection`                                          | `integrations.manage` | Writes and clears the per-workspace source CREDENTIAL.                                                                                      |
 | `POST /document-role-links`, `POST /document-role-links/remove`                                          | `integrations.manage` | A per-DocKind template/exemplar tag decides what EVERY doc run in the board writes from: the fragment-library blast radius, not one task's. |
-| `import`, `search`, `plan`, `spawn`, `POST /documents/link`                                              | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
+| `resolve-ref`, `import`, `search`, `plan`, `spawn`, `POST /documents/link`                               | member tier           | Reaching for a page and putting it on a task is board authoring.                                                                            |
 | every `GET` (`/document-sources`, `/document-sources/connections`, `/documents`, `/document-role-links`) | `workspace.read`      | Reads pass the admin gate by design.                                                                                                        |
 
 The member tier is enforced by the auth gate's own write floor (any non-GET requires `≥ member`),
@@ -186,13 +187,13 @@ feature unusable by the persona it exists for. Someone who links the spec or the
 is about is usually not the operator who connected the source, and the Add-task context picker
 imports the pasted ref and then links it, so for a `member` the attach flow failed on its first
 write. Cross-runtime coverage is in `defineWorkspaceRbacSuite`, which asserts both halves: a member
-is allowed the five authoring writes, a viewer is still refused every one of them (the floor), and
+is allowed the authoring writes, a viewer is still refused every one of them (the floor), and
 connect/disconnect stay admin-only.
 
-Those five are ALSO named in `permissionMounts.test.ts`'s `MEMBER_TIER_WRITES`, the one escape hatch
-from that test's rule that a gated controller covers every route it serves. They are listed as
-routes rather than waived by a flag on the controller so the split reads as five named decisions and
-adding a sixth costs a reviewer's attention: this table is the rationale that list points at. The
+Those writes are ALSO named in `permissionMounts.test.ts`'s `MEMBER_TIER_WRITES`, the one escape
+hatch from that test's rule that a gated controller covers every route it serves. They are listed
+as routes rather than waived by a flag on the controller so the split reads as named decisions and
+adding one more costs a reviewer's attention: this table is the rationale that list points at. The
 same test fails on a row that matches no route, so the hatch cannot rot into a standing
 pre-approval for whatever later takes the name.
 
@@ -201,6 +202,37 @@ modules and tasks are added inside that existing service frame. A document linke
 to a block is resolved at execution time and injected into the agent prompt
 (`resolveLinkedContext` in `packages/orchestration/src/modules/execution/linked-context.ts`
 → `renderLinkedContext` in `packages/agents`), under the delivery rule below.
+
+### A pasted reference is judged BEFORE anything is written
+
+`resolve-ref` is `import` with the fetch removed: `DocumentImportService.resolveRef` runs the
+provider's own `parseRef` and answers `{ externalId, canonicalUrl }`, and `import` now goes
+through it rather than re-parsing, so the pre-flight and the import cannot disagree about which
+refs are usable. It spends no upstream call and needs no connection, which is what lets the
+attach picker call it as the user types.
+
+Two things ride on it, and both were real defects in the attach flow:
+
+- **The paste is TRIMMED to the canonical form and that form is what gets staged.** A share link
+  carries a title segment and tracking params (`?p=` / `&t=` on Figma's own Copy link output);
+  accepting it verbatim hid whether the frame the URL named had survived the parse at all, since
+  a node id the parser cannot read silently degrades to the whole file. `canonicalUrl` is the
+  provider rebuilding the link from the id, so what the picker shows is what the import will do.
+  It is `null` for a source that cannot rebuild one without a fetch (Confluence needs the site
+  base URL, Linear the workspace slug); the id itself is the canonical form there, NOT a weaker
+  answer, and callers render it rather than reading the null as a failed resolution.
+- **A refusal names WHICH correction it needs**, as `details.reason` (the closed
+  `documentRefReasonSchema`). `document_ref_unrecognized` means no link of this shape will ever
+  work here, and carries the `expected` format; `document_ref_claimed_by_other_source` means the
+  link is fine and pointed at the wrong source, and names the claimant so the surface can offer
+  to switch with the text unchanged. Claimants are searched host-PINNED first, for the reason
+  `makeDocumentUrlResolver` orders the same way: a blind parser claims a shape, so registration
+  order deciding would point a Figma paste at Notion.
+
+The SPA half is the other side of the same rule: `ContextDocumentPicker` will not stage an
+unresolved reference at all, and `useContextLinking().resolvePending` fetches every staged
+attachment BEFORE the task or initiative is created, so an unreachable page is a correction the
+author can still make instead of a toast over a task that already exists without its context.
 
 ## A referenced context document reaches the agent, or the run breaks
 

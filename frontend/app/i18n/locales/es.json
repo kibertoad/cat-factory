@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Revisar la pull request",
         "prNotFound": "No se encontró la pull request n.º {number} en el repositorio de este servicio. Comprueba el número, o vincula el servicio al repositorio en el que está esa pull request.",
         "prRepoMismatch": "Esa pull request está en otro repositorio. Este servicio revisa {repo}, así que crea la tarea de revisión en el servicio vinculado al repositorio de la pull request."
-      }
+      },
+      "contextFailed": "Tarea no creada: no se pudo leer {count} adjunto | Tarea no creada: no se pudieron leer {count} adjuntos"
     },
     "recurring": {
       "title": "Añadir una pipeline recurrente",
@@ -4166,7 +4167,13 @@
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay páginas que coincidan.",
       "emptySearchable": "Busca por título o elige un documento importado.",
-      "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla."
+      "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla.",
+      "refChecking": "Comprobando la referencia…",
+      "refUnrecognized": "No es una referencia de {source}. Se esperaba {expected}",
+      "refOtherSource": "Es un enlace de {claimed}, no de {source}.",
+      "refSwitchSource": "Usar {source} en su lugar",
+      "refTrimmed": "Recortado al formato admitido",
+      "refCheckFailed": "No se pudo comprobar la referencia: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Buscar repositorios…",
@@ -6296,7 +6303,8 @@
       "failedTitle": "No se pudo crear la iniciativa",
       "contextDocsHint": "Adjunta un requisito, RFC o PRD para que los agentes de planificación lo lean al delimitar y redactar el plan.",
       "contextIssuesHint": "Adjunta una incidencia para que los agentes de planificación vean su descripción y comentarios al redactar el plan.",
-      "linkFailed": "Iniciativa creada, pero no se pudo vincular {count} adjunto | Iniciativa creada, pero no se pudieron vincular {count} adjuntos"
+      "linkFailed": "Iniciativa creada, pero no se pudo vincular {count} adjunto | Iniciativa creada, pero no se pudieron vincular {count} adjuntos",
+      "contextFailed": "Iniciativa no creada: no se pudo leer {count} adjunto | Iniciativa no creada: no se pudieron leer {count} adjuntos"
     },
     "status": {
       "planning": "Planificando",

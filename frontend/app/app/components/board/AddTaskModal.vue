@@ -57,7 +57,7 @@ const fragments = useFragmentsStore()
 const toast = useToast()
 const { t } = useI18n()
 
-const { linkPending, presentLinkFailures } = useContextLinking()
+const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 
 const open = computed(() => ui.addTaskContainerId !== null)
 
@@ -642,6 +642,18 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
   if (!containerId) return
   saving.value = true
   try {
+    // Attachments are fetched BEFORE the task is written. A page that moved, a token without
+    // access or a source that is down is a correction the user can still make with the form in
+    // front of them; the same failure after the create leaves a task carrying context it never
+    // got, reported by a toast over a closed dialog.
+    const { resolved, failures } = await resolvePending(pendingContext.value)
+    pendingContext.value = resolved
+    if (failures.length) {
+      presentLinkFailures(failures, undefined, {
+        title: (count) => t('board.addTask.contextFailed', { count }, count),
+      })
+      return
+    }
     const typeFields = buildTypeFields()
     // The saved description includes each linked issue's body (shown read-only above)
     // followed by the user's own notes, so the original issue description is part of the
@@ -672,9 +684,9 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
       ...(acknowledgeReviewDebt ? { acknowledgeReviewDebt: true } : {}),
     })
     if (block) {
-      // Surface the SPECIFIC cause of any attachment that couldn't be linked (a GitHub
-      // permission/visibility error, a not-found doc, …) instead of a bare count, plus a
-      // one-click "Copy details" for a bug report.
+      // Everything reachable was fetched above, so what can still fail here is the LINK itself
+      // (a doc another task already holds). Surfaced with its specific cause plus a one-click
+      // "Copy details" for a bug report, and after the create because the task is already sound.
       presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
     }
     ui.closeReviewFriction()

@@ -85,6 +85,55 @@ describe('contextKey', () => {
   })
 })
 
+describe('resolvePending', () => {
+  // Fetching an attachment moved AHEAD of the create: an unreachable page is a correction the
+  // user can still make with the form open, where the same failure afterwards leaves a task
+  // carrying context it never got. These pin the two halves that makes load-bearing: what the
+  // host gets back, and that one bad attachment does not hide a second one.
+  function stub(importDocument: (source: string, ref: string) => Promise<{ externalId: string }>) {
+    vi.stubGlobal('useDocumentsStore', () => ({ importDocument }))
+    vi.stubGlobal('useTasksStore', () => ({ importTask: async () => ({ externalId: 'T-1' }) }))
+    vi.stubGlobal('useWorkspaceStore', () => ({ workspaceId: 'ws_1' }))
+    vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
+    vi.stubGlobal('useI18n', () => ({ t: (key: string) => key }))
+    vi.stubGlobal('useCopyToClipboard', () => ({ copyAction: () => ({ label: 'copy' }) }))
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('imports what needs it and hands back items the later link can use directly', async () => {
+    stub(async (_source, ref) => ({ externalId: `resolved:${ref}` }))
+    const already = item({ externalId: 'acme/repo:docs/done.md', needsImport: false })
+
+    const { resolved, failures } = await useContextLinking().resolvePending([item(), already])
+
+    expect(failures).toEqual([])
+    // The import's own canonical id is carried forward, not the pasted ref, and the flag flips so
+    // `linkPending` links rather than re-fetching.
+    expect(resolved.map((c) => [c.externalId, c.needsImport])).toEqual([
+      ['resolved:acme/repo:docs/x.md', false],
+      ['acme/repo:docs/done.md', false],
+    ])
+  })
+
+  it('reports EVERY failure and keeps the failed item staged', async () => {
+    stub(async (_source, ref) => {
+      throw new Error(`no access to ${ref}`)
+    })
+    const a = item({ externalId: 'acme/repo:a.md' })
+    const b = item({ externalId: 'acme/repo:b.md' })
+
+    const { resolved, failures } = await useContextLinking().resolvePending([a, b])
+
+    // Both, not just the first: fixing them one round-trip at a time is the failure mode.
+    expect(failures.map((f) => f.item.externalId)).toEqual(['acme/repo:a.md', 'acme/repo:b.md'])
+    expect(failures[0]!.message).toContain('no access to acme/repo:a.md')
+    // Still staged and still unresolved: the host aborts the create, so dropping them here would
+    // silently discard attachments the user asked for while they are fixing them.
+    expect(resolved.map((c) => c.needsImport)).toEqual([true, true])
+  })
+})
+
 describe('presentLinkFailures', () => {
   // Stub the Nuxt auto-imports `useContextLinking` pulls in, so the toast-orchestration
   // side of the composable can be exercised without a full Nuxt runtime.

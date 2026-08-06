@@ -285,6 +285,49 @@ export const importDocumentSchema = v.object({
 })
 export type ImportDocumentInput = v.InferOutput<typeof importDocumentSchema>
 
+// ---- Reference resolution (the check that runs before anything is written) --
+
+/** Canonicalise a pasted URL/id into the reference the source would store it under. */
+export const resolveDocumentRefSchema = importDocumentSchema
+export type ResolveDocumentRefInput = v.InferOutput<typeof resolveDocumentRefSchema>
+
+/**
+ * What a pasted URL/id resolves to for one source: the stable key the platform would store the
+ * page under, plus the canonical link to show the person who pasted it.
+ */
+export const resolvedDocumentRefSchema = v.object({
+  source: documentSourceKindSchema,
+  /** The `(source, externalId)` key an import would land on. */
+  externalId: v.string(),
+  /**
+   * The canonical web URL for {@link externalId}, with the title segment and tracking params a
+   * share link carries dropped: the "supported format" the paste is trimmed to.
+   *
+   * Null when the source cannot rebuild a URL from the id alone: a Confluence page id needs the
+   * site base URL and a Linear document id the workspace slug, neither of which the id carries.
+   * That is "there is no link to show you", NOT a weaker reference, so a reader renders the
+   * `externalId` rather than treating the null as a failed resolution.
+   */
+  canonicalUrl: v.nullable(v.string()),
+})
+export type ResolvedDocumentRef = v.InferOutput<typeof resolvedDocumentRefSchema>
+
+/**
+ * Why a pasted reference was refused, carried as `error.details.reason` on the 422 so the SPA
+ * can state it in the reader's own language (the backend does not localize prose).
+ *
+ * Two members rather than one because they ask for DIFFERENT corrections. `unrecognized` means
+ * the text is not a reference this source could ever accept, and the only fix is a different
+ * link. `claimed_by_other_source` means the link is perfectly good and pointed at the wrong
+ * source, which is fixed by switching the picker with the same text still in it. Collapsing
+ * them would tell someone who pasted a valid Figma frame URL that their link is malformed.
+ */
+export const documentRefReasonSchema = v.picklist([
+  'document_ref_unrecognized',
+  'document_ref_claimed_by_other_source',
+])
+export type DocumentRefReason = v.InferOutput<typeof documentRefReasonSchema>
+
 /** Search a source's catalogue by free text (title/content). */
 export const searchDocumentsSchema = v.object({
   query: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(200)),

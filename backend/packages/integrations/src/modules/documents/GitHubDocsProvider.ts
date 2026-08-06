@@ -68,6 +68,15 @@ export class GitHubDocsProvider implements DocumentSourceProvider {
     return githubDocsLogic.parseGitHubDocRef(input)
   }
 
+  /**
+   * The `blob/HEAD` link for an `owner/repo:path` id. Null for a malformed id, which
+   * `parseRef` cannot produce but a hand-edited row can.
+   */
+  canonicalUrl(externalId: string): string | null {
+    const id = githubDocsLogic.parseGitHubDocExternalId(externalId)
+    return id ? githubDocsLogic.githubDocUrl(id) : null
+  }
+
   async fetchDocument(
     _credentials: DocumentCredentials,
     externalId: string,

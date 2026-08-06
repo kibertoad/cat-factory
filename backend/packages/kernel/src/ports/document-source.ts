@@ -73,6 +73,18 @@ export interface DocumentSourceProvider {
   /** Resolve a stable page id from raw user input (a bare id or a page URL); null if unparseable. */
   parseRef(input: string): string | null
   /**
+   * The canonical web URL for a page id, rebuilt WITHOUT a fetch: what a pasted share link is
+   * trimmed to once its title segment and tracking params are dropped. It is the half of
+   * {@link parseRef} an attach surface needs to SHOW someone what their paste resolved to,
+   * before any credential is spent or any row is written.
+   *
+   * OPTIONAL, and the absence is a real fact rather than an unimplemented method: a Confluence
+   * page id needs the connection's site base URL and a Linear document id the workspace slug,
+   * neither of which the id carries, so those providers can only answer by fetching. A caller
+   * renders the id itself in that case; it must NOT read the absence as a failed resolution.
+   */
+  canonicalUrl?(externalId: string): string | null
+  /**
    * Fetch a single page by its id using the connection credentials. `workspaceId` is
    * the workspace on whose behalf the read happens: a provider that authenticates
    * per-workspace out-of-band (e.g. the GitHub App/PAT, which ignores `credentials`)
