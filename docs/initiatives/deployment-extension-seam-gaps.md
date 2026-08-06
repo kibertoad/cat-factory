@@ -41,16 +41,16 @@ report too:
 
 ## Summary
 
-| #                     | Gap                                                                                       | Severity | Their ask                       | Disposition                                     |
-| --------------------- | ----------------------------------------------------------------------------------------- | -------- | ------------------------------- | ----------------------------------------------- |
-| [S1](#s1)             | The boot entry points expose an arbitrary SUBSET of the app-owned seams (G3 + G4)          | High     | forward `pipelineRegistry`      | Accept the bug, widen the fix                   |
-| [S2](#s2)             | The fragment pool is a module global in a package no facade re-exports (G2)                | High     | add a registry option           | Accept, plus the mothership source              |
-| [S3](#s3)             | A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time (G1)  | High     | honour it at `builtin`          | Accept the bug, REJECT the remedy               |
-| [S4](#s4)             | The canonical operations doc and worked example are unreachable from an install (G7)       | Medium   | publish them                    | Accept, land first                              |
-| [S5](#s5)             | An unresolvable standing-context id is dropped silently on EVERY run (G6)                  | Medium   | split the descriptor field      | Accept the defect, REJECT the field split       |
-| [S6](#s6)             | An operation's standing context cannot depend on the answers just collected (G9)           | Medium   | conditional `defaultFragmentIds`| Accept, refine the condition shape              |
-| [S7](#s7)             | Descriptor forms have no grouping, so a 13-field operation reads as one column (G8)        | Low      | `section?: string`              | Accept                                          |
-| [S8](#s8)             | `CustomTaskType` and the pipeline ids are unreachable from either facade (G5)              | -        | re-export from the facades      | **Stale**: landed in #1654 (kernel 0.246.0)     |
+| #         | Gap                                                                                       | Severity | Their ask                        | Disposition                                 |
+| --------- | ----------------------------------------------------------------------------------------- | -------- | -------------------------------- | ------------------------------------------- |
+| [S1](#s1) | The boot entry points expose an arbitrary SUBSET of the app-owned seams (G3 + G4)         | High     | forward `pipelineRegistry`       | Accept the bug, widen the fix               |
+| [S2](#s2) | The fragment pool is a module global in a package no facade re-exports (G2)               | High     | add a registry option            | Accept, plus the mothership source          |
+| [S3](#s3) | A `builtin`-tier `documentRef` is carried, rendered as live, and ignored at run time (G1) | High     | honour it at `builtin`           | Accept the bug, REJECT the remedy           |
+| [S4](#s4) | The canonical operations doc and worked example are unreachable from an install (G7)      | Medium   | publish them                     | Accept, land first                          |
+| [S5](#s5) | An unresolvable standing-context id is dropped silently on EVERY run (G6)                 | Medium   | split the descriptor field       | Accept the defect, REJECT the field split   |
+| [S6](#s6) | An operation's standing context cannot depend on the answers just collected (G9)          | Medium   | conditional `defaultFragmentIds` | Accept, refine the condition shape          |
+| [S7](#s7) | Descriptor forms have no grouping, so a 13-field operation reads as one column (G8)       | Low      | `section?: string`               | Accept                                      |
+| [S8](#s8) | `CustomTaskType` and the pipeline ids are unreachable from either facade (G5)             | -        | re-export from the facades       | **Stale**: landed in #1654 (kernel 0.246.0) |
 
 ## S1. The boot entry points expose an arbitrary subset of the app-owned seams {#s1}
 
@@ -253,19 +253,19 @@ convenience only. No action beyond one line in the reference doc naming kernel a
 
 ## Per-slice status checklist
 
-| #   | Slice (each one PR)                                                                                                                                                  | Scope  | Depends on | Status  | PR  |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
-| 0   | This tracker                                                                                                                                                         | DOCS   | -          | ✅ done |     |
+| #   | Slice (each one PR)                                                                                                                                                    | Scope  | Depends on | Status  | PR  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- | ------- | --- |
+| 0   | This tracker                                                                                                                                                           | DOCS   | -          | ✅ done |     |
 | 1   | **S4**: publish the reference doc + the example (or drop the citation); CI link check for docs shipped in a tarball; correct the `start({ pipelineRegistry })` snippet | DOCS   | -          | ⬜ todo |     |
-| 2   | **S1a**: extend the seam guard to `start()` / `startLocal()` option types; route class for the facade-internal sources                                                | SYSTEM | -          | ⬜ todo |     |
+| 2   | **S1a**: extend the seam guard to `start()` / `startLocal()` option types; route class for the facade-internal sources                                                 | SYSTEM | -          | ⬜ todo |     |
 | 3   | **S1b**: add the missing options the guard now demands; derive `validateRegistrations`' argument from the container; mothership call site becomes total                | SYSTEM | 2          | ⬜ todo |     |
-| 4   | **S1c**: `pipelineRegistry` in mothership mode: `PipelineSource` read or the documented boot warn, decided and asserted                                              | SYSTEM | 3          | ⬜ todo |     |
-| 5   | **S3a**: refuse a `builtin`-tier `documentRef` at boot, naming the supported paths; assert it                                                                         | SYSTEM | -          | ⬜ todo |     |
-| 6   | **S2**: `PromptFragmentRegistry` + `PromptFragmentSource`; absorb `registerTaskTypeDefaultFragments`; `SEAM_ROUTES` entries; conformance both runtimes                | SYSTEM | 2          | ⬜ todo |     |
-| 7   | **S5**: `Logger` into `FragmentLibraryService`; the run records the standing-context ids it dropped                                                                   | SYSTEM | -          | ⬜ todo |     |
-| 8   | **S6**: conditional `defaultFragmentIds` over `DescriptorFieldShowWhen`; one shared evaluator; boot validation                                                        | SYSTEM | -          | ⬜ todo |     |
-| 9   | **S7**: `section?: string` + the caption; hidden-section and ordering rules                                                                                          | BOTH   | -          | ⬜ todo |     |
-| 10  | **S3b**: deployment-scoped document source (its own tracker, opened by this slice or explicitly declined)                                                             | SYSTEM | 5          | ⬜ todo |     |
+| 4   | **S1c**: `pipelineRegistry` in mothership mode: `PipelineSource` read or the documented boot warn, decided and asserted                                                | SYSTEM | 3          | ⬜ todo |     |
+| 5   | **S3a**: refuse a `builtin`-tier `documentRef` at boot, naming the supported paths; assert it                                                                          | SYSTEM | -          | ⬜ todo |     |
+| 6   | **S2**: `PromptFragmentRegistry` + `PromptFragmentSource`; absorb `registerTaskTypeDefaultFragments`; `SEAM_ROUTES` entries; conformance both runtimes                 | SYSTEM | 2          | ⬜ todo |     |
+| 7   | **S5**: `Logger` into `FragmentLibraryService`; the run records the standing-context ids it dropped                                                                    | SYSTEM | -          | ⬜ todo |     |
+| 8   | **S6**: conditional `defaultFragmentIds` over `DescriptorFieldShowWhen`; one shared evaluator; boot validation                                                         | SYSTEM | -          | ⬜ todo |     |
+| 9   | **S7**: `section?: string` + the caption; hidden-section and ordering rules                                                                                            | BOTH   | -          | ⬜ todo |     |
+| 10  | **S3b**: deployment-scoped document source (its own tracker, opened by this slice or explicitly declined)                                                              | SYSTEM | 5          | ⬜ todo |     |
 
 ## Conventions & gotchas
 

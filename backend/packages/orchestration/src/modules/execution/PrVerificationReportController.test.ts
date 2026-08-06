@@ -2,6 +2,7 @@ import type {
   Block,
   BlockRepository,
   ExecutionInstance,
+  PrReportTarget,
   PrVerificationReportPublisher,
   WorkspaceSettingsRepository,
 } from '@cat-factory/kernel'
@@ -38,16 +39,27 @@ function makeDeps(block: Block | null, publisher?: PrVerificationReportPublisher
   }
 }
 
+/** The own-service target every test here resolves; see the port's `PrReportTarget`. */
+function ownTarget(provider: 'github' | 'gitlab' = 'github'): PrReportTarget {
+  return {
+    prNumber: 7,
+    repo: 'acme/api',
+    provider,
+    connection: { provider, connectionId: '1' },
+    role: 'own',
+  }
+}
+
 /** A publisher that records the sections handed to it. */
 function recordingPublisher() {
   const sections: string[] = []
   return {
     sections,
     publisher: {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' as const }),
-      publish: async (_ws: string, _block: string, section: string) => {
+      resolveTargets: async () => [ownTarget()],
+      publish: async (_ws: string, target: PrReportTarget, section: string) => {
         sections.push(section)
-        return { published: true }
+        return { published: true, prNumber: target.prNumber }
       },
     } satisfies PrVerificationReportPublisher,
   }
@@ -64,6 +76,53 @@ describe('PrVerificationReportController', () => {
     expect(sections).toHaveLength(1)
     expect(sections[0]).toContain('Verification report')
     expect(sections[0]).toContain('exec_1')
+  })
+
+  it('reads the run-scoped evidence ONCE for a multi-repo run, not once per pull request', async () => {
+    // The report's inputs (the block, its linked issues, its provisioning history) are facts about
+    // the RUN, so they cannot differ between two of its pull requests. Reading them per target
+    // would scale a hook that fires on EVERY settled step with the number of PRs, and nothing else
+    // would show it: all three reports still come out right.
+    const sections: string[] = []
+    let blockReads = 0
+    let issueReads = 0
+    const peers: PrReportTarget[] = [1, 2].map((n) => ({
+      prNumber: 10 + n,
+      repo: `acme/peer-${n}`,
+      provider: 'github',
+      connection: { provider: 'github', connectionId: '1' },
+      role: 'peer',
+      frameId: `frm_${n}`,
+    }))
+    const publisher: PrVerificationReportPublisher = {
+      resolveTargets: async () => [ownTarget(), ...peers],
+      publish: async (_ws, target, section) => {
+        sections.push(section)
+        return { published: true, prNumber: target.prNumber }
+      },
+    }
+    await new PrVerificationReportController({
+      blockRepository: {
+        get: async () => {
+          blockReads += 1
+          return BLOCK
+        },
+      } as unknown as BlockRepository,
+      clock: { now: () => 1_700_000_000_000 },
+      publisher,
+      taskRepository: {
+        listByBlock: async () => {
+          issueReads += 1
+          return []
+        },
+      } as never,
+    }).publishForRun('ws_1', makeInstance())
+
+    // Three pull requests, three distinct reports, one read of each shared input.
+    expect(sections).toHaveLength(3)
+    expect(new Set(sections).size).toBe(3)
+    expect(blockReads).toBe(1)
+    expect(issueReads).toBe(1)
   })
 
   it('is a no-op when no publisher is wired (tests / a no-VCS deployment)', async () => {
@@ -88,10 +147,10 @@ describe('PrVerificationReportController', () => {
     const sections: string[] = []
     let blockReads = 0
     const publisher: PrVerificationReportPublisher = {
-      resolveTarget: async () => null,
-      publish: async (_ws, _block, section) => {
+      resolveTargets: async () => [],
+      publish: async (_ws, target, section) => {
         sections.push(section)
-        return { published: true }
+        return { published: true, prNumber: target.prNumber }
       },
     }
     await new PrVerificationReportController({
@@ -113,10 +172,10 @@ describe('PrVerificationReportController', () => {
     // it is actually written onto.
     const sections: string[] = []
     const publisher: PrVerificationReportPublisher = {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'gitlab' }),
-      publish: async (_ws, _block, section) => {
+      resolveTargets: async () => [ownTarget('gitlab')],
+      publish: async (_ws, target, section) => {
         sections.push(section)
-        return { published: true }
+        return { published: true, prNumber: target.prNumber }
       },
     }
     const instance = makeInstance({
@@ -164,7 +223,7 @@ describe('PrVerificationReportController', () => {
 
   it('never lets a publisher failure escape into the run', async () => {
     const failing: PrVerificationReportPublisher = {
-      resolveTarget: async () => ({ prNumber: 7, repo: 'acme/api', provider: 'github' }),
+      resolveTargets: async () => [ownTarget()],
       publish: async () => {
         throw new Error('GitHub is down')
       },
@@ -221,8 +280,8 @@ describe('PrVerificationReportController', () => {
     // The publish path short-circuits here (nowhere to write); the read path must not, because a
     // headless job and a run that failed before it pushed are exactly what a consumer asks about.
     const publisher = {
-      resolveTarget: async () => null,
-      publish: async () => ({ published: false as const }),
+      resolveTargets: async () => [],
+      publish: async () => ({ published: false as const, prNumber: 0 }),
     } satisfies PrVerificationReportPublisher
     const report = await new PrVerificationReportController({
       ...makeDeps(BLOCK, publisher),

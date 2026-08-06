@@ -2140,6 +2140,63 @@
           "run": {
             "$ref": "#/components/schemas/PrReportRun"
           },
+          "scope": {
+            "properties": {
+              "frameId": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ownPullRequest": {
+                "anyOf": [
+                  {
+                    "properties": {
+                      "number": {
+                        "type": "number"
+                      },
+                      "repo": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "repo",
+                      "number"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "role": {
+                "enum": [
+                  "own",
+                  "peer"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "type": "object"
+          },
           "tests": {
             "$ref": "#/components/schemas/PrReportTests"
           },

@@ -1063,11 +1063,29 @@ export interface PrVerificationReport {
   reproduction: PrReportReproduction
   requirements: PrReportRequirements
   run: PrReportRun
+  scope?: PrVerificationReportScope
   tests: PrReportTests
   truncations: string[]
   validation: PrReportValidation
   version: number
 }
+
+export interface PrVerificationReportScope {
+  frameId?: string | null
+  ownPullRequest?: PrVerificationReportScopeOwnPullRequest | null
+  role: PrVerificationReportScopeRole
+}
+
+export interface PrVerificationReportScopeOwnPullRequest {
+  number: number
+  repo: string
+  url?: string | null
+}
+
+export type PrVerificationReportScopeRole = 'own' | 'peer'
+
+/** Every `PrVerificationReportScopeRole` value, for exhaustive handling and runtime validation. */
+export const PR_VERIFICATION_REPORT_SCOPE_ROLE_VALUES = ['own', 'peer'] as const
 
 export interface PublicAgentDecision {
   decisionId: string

@@ -1709,11 +1709,44 @@ type PrVerificationReport struct {
 	Reproduction  PrReportReproduction  `json:"reproduction"`
 	Requirements  PrReportRequirements  `json:"requirements"`
 	Run           PrReportRun           `json:"run"`
-	Tests         PrReportTests         `json:"tests"`
-	Truncations   []string              `json:"truncations"`
-	Validation    PrReportValidation    `json:"validation"`
-	Version       float64               `json:"version"`
+	// Scope may be absent entirely.
+	Scope       *PrVerificationReportScope `json:"scope,omitempty"`
+	Tests       PrReportTests              `json:"tests"`
+	Truncations []string                   `json:"truncations"`
+	Validation  PrReportValidation         `json:"validation"`
+	Version     float64                    `json:"version"`
 }
+
+// PrVerificationReportScope is the `PrVerificationReportScope` wire model.
+type PrVerificationReportScope struct {
+	// FrameID may be absent entirely.
+	FrameID *string `json:"frameId,omitempty"`
+	// OwnPullRequest may be absent entirely.
+	OwnPullRequest *PrVerificationReportScopeOwnPullRequest `json:"ownPullRequest,omitempty"`
+	Role           PrVerificationReportScopeRole            `json:"role"`
+}
+
+// PrVerificationReportScopeOwnPullRequest is the `PrVerificationReportScopeOwnPullRequest` wire model.
+type PrVerificationReportScopeOwnPullRequest struct {
+	Number float64 `json:"number"`
+	Repo   string  `json:"repo"`
+	// URL may be absent entirely.
+	URL *string `json:"url,omitempty"`
+}
+
+// PrVerificationReportScopeRole is the `PrVerificationReportScopeRole` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PrVerificationReportScopeRole string
+
+const (
+	PrVerificationReportScopeRoleOwn  PrVerificationReportScopeRole = "own"
+	PrVerificationReportScopeRolePeer PrVerificationReportScopeRole = "peer"
+)
+
+// PrVerificationReportScopeRoleValues lists every PrVerificationReportScopeRole this SDK release knows.
+var PrVerificationReportScopeRoleValues = []PrVerificationReportScopeRole{PrVerificationReportScopeRoleOwn, PrVerificationReportScopeRolePeer}
 
 // PublicAgentDecision is the `PublicAgentDecision` wire model.
 type PublicAgentDecision struct {

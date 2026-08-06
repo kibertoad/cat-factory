@@ -75,6 +75,12 @@ const API_PREFIX = '/api/v1'
 // more, which is the point of the note at the top of this block: on a repo landing this many
 // additive changes, a clean auto-merge of the VERSION line is the normal way to ship a number
 // someone else already published. Re-read it against `origin/main` every time.
+// 1.16.0, not 1.15.0: the run report gains an optional `scope`, naming WHICH of a multi-repo run's
+// pull requests a given copy is written onto. Additive: a consumer written against 1.15 reads every
+// field it knows, and an absent `scope` means what it always meant (the own-service PR). FIFTH
+// number this one addition has held (1.12 → 1.13 → 1.14 → 1.15 → 1.16), and 1.15 was taken by the
+// `/me` endpoint landing on main while this branch was in flight, caught by re-reading this line
+// after the merge rather than by trusting a clean auto-merge of the VERSION itself.
 // 1.17.0, not 1.15.0: the tool-call list's `?ok=true|false` filter is REPLACED by
 // `?outcome=ok|error`, the same param name and vocabulary the llm-call list already uses. This is
 // a MINOR for a change that is technically breaking, taken deliberately: `?ok=` existed for one
@@ -83,12 +89,11 @@ const API_PREFIX = '/api/v1'
 // timeout, a refusal) where `true|false` could only be retyped. If an adopter turns up before this
 // lands, the honest shape is `?ok=` served beside `?outcome=` for a release, not a rename.
 //
-// The number SKIPS 1.16.0 rather than taking the next free one above main, which is the usual
-// rule here. 1.16.0 is held by the multi-repo verification-report branch, which took it in the
-// same merge sweep as this one; both branches sitting on 1.16.0 would auto-merge the VERSION line
-// byte-identically and conflict only in this comment, the exact silent failure the note at the top
-// describes. A gap costs nothing (nothing reads these numbers as contiguous) and a collision costs
-// a surface shipped under a version someone else published. Re-read against `origin/main` anyway.
+// This branch reserved 1.17.0 while 1.16.0 was still unlanded, on the reasoning that the multi-repo
+// verification-report branch held it and two branches sitting on the same number auto-merge the
+// VERSION line byte-identically, conflicting only in this comment: the silent failure the note at
+// the top of this block describes. That branch has since merged, so 1.16.0 is main's published
+// number and 1.17.0 is simply the next free one. Re-read against `origin/main` anyway.
 const API_VERSION = '1.17.0'
 
 /**

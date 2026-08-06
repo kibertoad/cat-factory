@@ -23,7 +23,8 @@
 // goes).
 //
 // Adding a field to any host-bound body means picking one of {@link inline}, {@link cell} or
-// {@link prose} for it — never a bare template hole.
+// {@link prose} for it — never a bare template hole. A field that becomes a link TARGET rather
+// than link text picks {@link link}, which covers the other half of the same hole.
 // ---------------------------------------------------------------------------
 
 /** Free-text prose (a tester summary, a merge rationale) is capped at this many characters. */
@@ -231,6 +232,56 @@ export function cell(value: string): string {
 export function inline(value: string, max: number = MAX_CELL_CHARS): string {
   return inertLine(truncate(value.replace(/\s+/g, ' '), max))
 }
+
+/**
+ * Render a LINK whose target is not trusted either.
+ *
+ * The other helpers here neutralise a value that becomes link TEXT; this one covers the other
+ * half of `[text](target)`, which a bare template hole leaves open. A URL reaches the report
+ * from the harness's own job result (a peer repo's pull-request URL is a string the container
+ * reported), so it is exactly as untrusted as the prose beside it, and it lands in a position
+ * with its own syntax: an unescaped `)` closes the target early and spills the rest of the URL
+ * into the document, taking whatever the caller wrote after it along.
+ *
+ * Rather than escape a hostile target into something that still resolves, an unusable one is
+ * simply NOT LINKED: the label renders on its own. So a caller cannot emit a link to a scheme
+ * the platform never meant to publish (`javascript:`, `data:`), and the degraded form is the
+ * plain text a reader can still act on. `http(s)` only, on purpose — every link this platform
+ * writes onto a host is a web URL.
+ */
+export function link(label: string, url: string | null | undefined): string {
+  return renderLink(inline(label), url)
+}
+
+/**
+ * {@link link}'s table-cell twin: the label is escaped with {@link cell}, so a pipe in it cannot
+ * open a new column. The same split as {@link cell} versus {@link inline} and
+ * {@link codeCell} versus {@link inlineCode}, and it exists so a link inside a table row is not
+ * the one position where the boundary quietly drops back to the weaker escape.
+ */
+export function cellLink(label: string, url: string | null | undefined): string {
+  return renderLink(cell(label), url)
+}
+
+/**
+ * The shared half: emit `[text](url)` only for a target that is safe to put there, else the text
+ * alone. `text` is already escaped by the caller, which is what picks cell vs inline semantics.
+ */
+function renderLink(text: string, url: string | null | undefined): string {
+  return url && SAFE_LINK_TARGET.test(url) ? `[${text}](${url})` : text
+}
+
+/**
+ * What may stand between `](` and `)`: an absolute web URL, and nothing else.
+ *
+ * A pattern rather than a URL parse, and not only because kernel has no host APIs. The question
+ * here is not "is this a valid URL" but "can this sit in a markdown target without escaping the
+ * syntax", and a parser answers the wrong one: it ACCEPTS the delimiters by percent-encoding
+ * them on the way in, so a round-trip through it would hand back a string that still closes the
+ * target early. Whitespace and the bracket family are refused for that reason; the `https?`
+ * anchor is what keeps a `javascript:`/`data:` target from ever being emitted as a link.
+ */
+const SAFE_LINK_TARGET = /^https?:\/\/[^\s()<>[\]]+$/i
 
 /**
  * Wrap already-flattened text in a code span whose delimiter the text cannot break out of.
