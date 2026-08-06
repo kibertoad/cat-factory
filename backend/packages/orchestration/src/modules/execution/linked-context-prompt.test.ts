@@ -25,6 +25,7 @@ function contextFor(agentKind: AgentKind): AgentRunContext {
         {
           title: 'Export PRD',
           url: 'https://docs/export-prd',
+          origin: 'confluence' as const,
           excerpt: 'Export must be UTF-8.',
           summary: 'Export must be UTF-8.',
           body: '# Export PRD\n\nExport must be UTF-8.',

@@ -25,6 +25,7 @@ function attached(over: Partial<DocumentRecord> = {}): DocumentRecord {
     excerpt: '',
     body: '',
     contentHash: 'h',
+    sourceVersion: null,
     linkedBlockId: 'blk_1',
     role: null,
     docKind: null,

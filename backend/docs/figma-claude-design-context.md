@@ -85,11 +85,78 @@ Two traps this shape exists to prevent:
   was byte-for-byte a frame that contains no text. Every text cut therefore leaves a
   `(text truncated)` line IN the section, not only a note.
 
+### The guidance is folded by PRESENCE, not by selection
+
 One **best-practice prompt fragment** serves all design sources: `design.context`
-(`prompt-fragments/src/collections/design.ts`, category `Design`, `appliesTo: {blockTypes:
-['frontend']}`). Pin it on a frontend service (or a block) and a `code-aware` agent (`coder`) reads
-the materialised structure, matches `### Components` to existing repo components, and honours
-`### Design tokens`.
+(`prompt-fragments/src/collections/design.ts`, category `Design`). It tells a `code-aware` agent to
+read the materialised structure, match `### Components` against existing repo components, and honour
+`### Design tokens` instead of ad-hoc values.
+
+**The engine adds it whenever the run's resolved linked context carries a design-origin document**
+(`withDesignContextFragment`, applied in `AgentContextBuilder.resolveFragments`), on top of whatever
+the block pins. Selection alone reached almost nobody: the fragment's `appliesTo` selector is a
+management-surface hint the run path never drove, it is in no seed pin set, and basic mode hides the
+per-task fragment picker, so the standard case (a designer links a Figma frame and starts a run)
+executed with a design context file on disk and no instruction anywhere to honour it.
+
+Two properties to preserve when touching this:
+
+- **The trigger is the document, not the block type.** A deterministic presence rule at prompt
+  assembly cannot drift from what is on disk, whereas `blockTypes: ['frontend']` was wrong in both
+  directions: it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design at all. It is deliberately NOT a revival of the retired `appliesTo` run-path selector.
+- **It rides the normal fold, so it inherits the normal rules.** Ids go through the same resolver, so
+  a workspace override of `design.context` wins, the two-tier `brief`/full verbosity applies (an
+  implementer folds the condensed variant), and a kind that receives no standards at all still
+  receives none.
+
+### Freshness: the body is re-confirmed at dispatch, not frozen at import
+
+Import writes a projection of a page someone else keeps editing. Nothing used to look at the source
+again, so a run started after a frame moved fed its agent the old markdown with the run reading as
+perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+it means the agent routinely builds the previous revision.
+
+`LinkedDocumentRefreshService` (the kernel `LinkedDocumentRefresher` port) runs on the linked-context
+resolution path of every dispatch. **The cost model is the design**, because that path runs per STEP:
+
+1. `probeVersion` the source (Figma's `?depth=1` file read), served through the
+   `linkedDocumentVersion` app cache on a short TTL, so a burst of step dispatches costs ONE probe
+   per document.
+2. Compare the probed token against `DocumentRecord.sourceVersion`, the token the stored body was
+   imported at. This column is why "unchanged" is provable at all; without it every dispatch would
+   pay a full re-download, and a whole-file Figma import fans out into chunked per-frame node reads.
+3. Re-import (`DocumentImportService.reimport`, idempotent, preserves the block link and role tag)
+   only when they differ. A row recording no version cannot be proven current, so it re-imports once
+   and self-heals.
+
+The verdict rides each context doc as `DocumentFreshness` and is rendered into the materialised
+file's header by `freshnessHeaderLines`. Three dispositions, deliberately not one:
+
+- **`confirmed`** contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. Whether the check had to re-import does not change the
+  rendered claim (both mean the agent is reading the live revision); the distinction is for logs.
+- **`not-applicable`** renders NOTHING. An `upload` has no source to trail, and neither does a source
+  this deployment wired no provider for, so a freshness warning would invent a problem.
+- **`unconfirmed`** renders a warning naming the gap, because an agent handed a design has no other
+  way to know the copy might trail the live file, and an omitted note reads exactly like a copy that
+  WAS checked. Four gaps, because each needs a different fix: `not_connected` (reconnect the source),
+  `source_unreachable` (an outage, wait it out; the cause is on the operator's log line),
+  `unversioned` (the source exposes no token, so nothing can be fixed and nothing may be claimed),
+  and `credentials_unreadable` (the connection could not be READ, so the source was never asked).
+
+The last one is not defensive: it is **mothership mode**, where a node runs the engine with no main
+database and a document-source connection is sealed with the mothership's `ENCRYPTION_KEY`, so the
+read fails permanently and by design. Reporting that as an outage would send an operator hunting a
+Figma incident that does not exist (see
+[`mothership-mode.md`](../../docs/initiatives/mothership-mode.md)).
+
+The refresh is **best-effort by port contract**: it never throws, so a source outage costs the run a
+stale body and a stated warning, never the run itself. The readability refusal
+(`assertContextDocumentsReadable`) runs on the REFRESHED records, because a page emptied since import
+is exactly the case worth refusing. With no refresher wired every document passes through with NO
+verdict, which is byte-for-byte the prior behaviour: a deployment that does not refresh has not
+concluded these bodies are unverifiable, it never asked.
 
 ## Figma
 

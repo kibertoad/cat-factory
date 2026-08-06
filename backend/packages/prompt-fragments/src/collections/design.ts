@@ -6,9 +6,42 @@ import type { PromptFragment } from '@cat-factory/contracts'
 // blocks, a global `### Components`, `### Design tokens`, optional `### References`), so
 // one fragment serves them all — the agent doesn't need to know which tool authored it.
 
+/**
+ * The one fragment that tells an agent how to consume materialised design context.
+ *
+ * Named as a constant because the ENGINE folds it by presence rather than by selection: a run whose
+ * resolved context carries a design-origin document gets it automatically
+ * ({@link withDesignContextFragment}). Before that it was auto-selected by nothing — the `appliesTo`
+ * selector below is a management-surface hint the run path never drove, the fragment is in no seed pin
+ * set, and basic mode hides the per-task fragment picker — so the standard case (a designer links a
+ * Figma frame and starts a run) executed with a design context file on disk and no instruction
+ * anywhere to honour it.
+ */
+export const DESIGN_CONTEXT_FRAGMENT_ID = 'design.context'
+
+/**
+ * The applicable fragment ids for a run, plus `design.context` when that run actually carries a
+ * design document. PURE, and the ONLY place the presence rule lives.
+ *
+ * A deterministic presence rule at prompt assembly, deliberately NOT a revival of the retired
+ * `appliesTo` run-path selector: the trigger is the design document the run resolved, so it cannot
+ * drift from what is on disk — whereas a `blockTypes: ['frontend']` selector both misses a design
+ * linked to an unlabelled task and fires on a frontend task with no design at all.
+ *
+ * Appended LAST and only when not already present, so a workspace that pins the fragment explicitly
+ * (or overrides it in its own catalog) keeps its position and its single entry.
+ */
+export function withDesignContextFragment(
+  ids: readonly string[],
+  hasDesignContext: boolean,
+): string[] {
+  if (!hasDesignContext || ids.includes(DESIGN_CONTEXT_FRAGMENT_ID)) return [...ids]
+  return [...ids, DESIGN_CONTEXT_FRAGMENT_ID]
+}
+
 export const designFragments: PromptFragment[] = [
   {
-    id: 'design.context',
+    id: DESIGN_CONTEXT_FRAGMENT_ID,
     version: '1.0.0',
     title: 'Design context',
     category: 'Design',

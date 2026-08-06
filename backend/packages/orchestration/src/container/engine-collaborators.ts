@@ -33,7 +33,7 @@ import type { SpendService } from '@cat-factory/spend'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
 import type { createFragmentLibraryModule } from '../container-content-libraries.js'
-import type { CoreDependencies, NotificationsModule } from '../container.js'
+import type { CoreDependencies, DocumentsModule, NotificationsModule } from '../container.js'
 import type { resolveCoreRuntime } from './runtime.js'
 import {
   linkedContextSourcesFrom,
@@ -49,6 +49,12 @@ export interface EngineCollaboratorsInput {
   executionEventPublisher: CoreRuntime['executionEventPublisher']
   notifications: NotificationsModule | undefined
   fragmentLibrary: ReturnType<typeof createFragmentLibraryModule> | undefined
+  /**
+   * The document module, for its dispatch-time linked-document refresher: the interviewer resolves
+   * the same linked context the analyst and planner will, so it must re-confirm it the same way or an
+   * initiative gets interviewed against a design revision the build then no longer matches.
+   */
+  documents: DocumentsModule | undefined
   boardService: BoardService
   /** The spend safeguard, so the bug hunt's billable ranking honours the same budget a run does. */
   spend: SpendService
@@ -101,7 +107,10 @@ export function createEngineCollaborators(input: EngineCollaboratorsInput) {
     // reworked-description path it guards is task-only, and an initiative block never has one.
     resolveLinkedContext: (workspaceId, blockId, description) =>
       resolveLinkedContext(
-        linkedContextSourcesFrom(dependencies),
+        linkedContextSourcesFrom({
+          ...dependencies,
+          documentRefresher: input.documents?.linkedRefresher,
+        }),
         workspaceId,
         blockId,
         description,

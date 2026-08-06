@@ -96,6 +96,25 @@ export class DocumentImportService {
     if (!externalId) {
       throw new ValidationError(`Could not resolve a ${source} page id from '${ref}'`)
     }
+    return toSourceDocument(await this.reimport(workspaceId, source, externalId))
+  }
+
+  /**
+   * Re-fetch an ALREADY-resolved page id and upsert its projection, returning the stored record.
+   *
+   * The body of {@link import} minus the ref parsing, split out for the dispatch-time refresh
+   * (`LinkedDocumentRefreshService`), which starts from a stored row and therefore already holds the
+   * canonical external id. Round-tripping that id back through `parseRef` to reach `import` would
+   * put the ONE hop that can legitimately fail — turning user input into an id — on a path where
+   * there is no user input, so a provider whose bare-id branch is stricter than its URL branch would
+   * refuse to refresh a document it had happily imported.
+   */
+  async reimport(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+  ): Promise<DocumentRecord> {
+    const provider = this.requireProvider(source)
     const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
     const content = await provider.fetchDocument(connection.credentials, externalId, workspaceId)
 
@@ -106,14 +125,21 @@ export class DocumentImportService {
     // changed — the body (by hash) AND the title/url metadata (which feed the prompt's
     // summary index and the materialised file's `Source:` header). A renamed/moved page
     // whose body is unchanged still re-projects so the stale title/url don't linger.
+    //
+    // `sourceVersion` is part of that comparison even though no agent reads it, because it is what
+    // the refresh COMPARES: a page whose version bumped without changing a byte of its Markdown (a
+    // Figma file version moves on any edit in the file, including a frame this document doesn't
+    // cover) would otherwise keep the old token on the row and be re-fetched on every single
+    // dispatch forever, which is the cost the version probe exists to avoid.
     if (
       existing &&
       existing.deletedAt === null &&
       existing.contentHash === hash &&
       existing.title === content.title &&
-      existing.url === content.url
+      existing.url === content.url &&
+      existing.sourceVersion === (content.version || null)
     ) {
-      return toSourceDocument(existing)
+      return existing
     }
     const record: DocumentRecord = {
       workspaceId,
@@ -124,6 +150,9 @@ export class DocumentImportService {
       excerpt: buildExcerpt(content.body),
       body: content.body,
       contentHash: hash,
+      // NULL rather than `''` for a source that exposes no version, so "not versioned" is one value
+      // everywhere instead of two the refresh would have to test for separately.
+      sourceVersion: content.version || null,
       linkedBlockId: existing?.linkedBlockId ?? null,
       // Role links (template/exemplar) are owned by the link write path, not import — preserve
       // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
@@ -133,7 +162,7 @@ export class DocumentImportService {
       deletedAt: null,
     }
     await this.deps.documentRepository.upsert(record)
-    return toSourceDocument(record)
+    return record
   }
 
   /**
@@ -169,6 +198,9 @@ export class DocumentImportService {
       excerpt,
       body: input.content,
       contentHash: contentHash(input.content),
+      // No source, so no version: nothing can ever re-probe this body, which is the same fact
+      // `source: 'upload'` states one field over.
+      sourceVersion: null,
       linkedBlockId: null,
       role: null,
       docKind: null,

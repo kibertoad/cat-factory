@@ -13,6 +13,7 @@ import type {
   ConsensusGroupRepository,
   DocInterviewRepository,
   DocumentRepository,
+  LinkedDocumentRefresher,
   ExecutionEventPublisher,
   ExecutionRepository,
   GateOutcomeRepository,
@@ -216,6 +217,14 @@ export interface ExecutionServiceDependencies {
    * Forwarded to {@link AgentContextBuilder}; absent → url-string matching only.
    */
   documentUrlResolver?: DocumentUrlResolver
+  /**
+   * Optional: re-confirms each linked document against its source at dispatch time (cheap version
+   * probe through the app cache, re-import only on a change), so an agent reads the CURRENT revision
+   * of a page instead of the copy import stored — a design frame edited after import otherwise feeds
+   * every later run the old markdown, silently. Forwarded to {@link AgentContextBuilder}; absent →
+   * no refresh and no freshness note.
+   */
+  documentRefresher?: LinkedDocumentRefresher
   /**
    * Optional: when the task-source integration is configured, tracker issues
    * linked to a block are resolved here and fed to the agent as extra context.

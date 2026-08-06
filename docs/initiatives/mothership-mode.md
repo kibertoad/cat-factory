@@ -976,7 +976,7 @@ never remotely invocable (mothership-internal cron).
 | `fragmentSourceRepository`               | ◑ part  | owner-scoped list + link; id-keyed sync mgmt pending                                               |
 | `accountSkillRepository`                 | ✅ done | whole repo: catalog reads (run path) + the source-keyed sync writes                                |
 | `skillSourceRepository`                  | ✅ done | account list + link + the id-keyed sync mgmt; global `listByRepo` internal                         |
-| `documentRepository`                     | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
+| `documentRepository`                     | ◑ part  | run-path context reads; refresh `upsert` + mgmt writes pending (see the freshness note below)      |
 | `taskRepository`                         | ◑ part  | run-path context reads; mgmt writes pending (module needs the connection repo)                     |
 | `githubInstallationRepository`           | ◑ part  | `getByWorkspace` + `listActiveForAccount` run-path reads; id-keyed / sync writes pending           |
 | `repoProjectionRepository`               | ◑ part  | `list` (SPA + run path); sync/repo-write surface pending; `listByInstallation` internal            |
@@ -989,6 +989,17 @@ never remotely invocable (mothership-internal cron).
 | `invitationRepository`                   | ◑ part  | `listByAccount` read; `create`/`setStatus` admin, accept-invite lookups pre-auth                   |
 | `emailConnectionRepository`              | ◑ part  | `getByAccount` read (sealed); connect/disconnect admin                                             |
 | `passwordResetTokenRepository`           | ⬜ todo | pre-auth flow (all pending; `deleteExpired` sweeper)                                               |
+
+**Dispatch-time document freshness does not run on a mothership node, and SAYS so.** The linked-context
+refresh (`LinkedDocumentRefreshService`) probes each linked document's source and re-imports what moved,
+so it needs the workspace's document-source CONNECTION — a row sealed with the mothership's
+`ENCRYPTION_KEY`, which by the sealed-secret rule cannot be served over the persistence RPC. The
+connection repository therefore stays db-direct over the node's absent `db` handle and the read always
+fails there. It is reported as its own `credentials_unreadable` gap rather than folded into
+`source_unreachable`: the materialised context file then tells the agent "this deployment cannot read the
+source credentials" instead of claiming Figma is down, and an operator is not sent hunting an incident
+that does not exist. Closing it for real is the secrets-delegation slice (the mothership decrypting on
+the node's behalf), not a routing entry.
 
 **Excluded (never remotely invocable: admin-gated, so the token-scopes-accounts-not-roles rule keeps them off):**
 

@@ -1,10 +1,12 @@
 import type { PipelineStep } from '@cat-factory/contracts'
+import { isDesignSource } from '@cat-factory/contracts'
 import {
   PR_PRIOR_REVIEW_CONTEXT_FILE,
   PR_REVIEWER_KIND,
   renderPriorReviewContext,
 } from '@cat-factory/agents'
 import type { InjectedContextFile } from '@cat-factory/kernel'
+import type { LinkedContext } from './linked-context.js'
 
 // ---------------------------------------------------------------------------
 // The BUILDER's own injected-context-file contributors, extracted from `AgentContextBuilder`
@@ -12,6 +14,33 @@ import type { InjectedContextFile } from '@cat-factory/kernel'
 // files the builder derives from run STATE — as opposed to the repo-derived files a registered
 // kind's preOps contribute — plus the fold that keeps the two from clobbering each other.
 // ---------------------------------------------------------------------------
+
+/**
+ * Start the block's linked-context resolution and derive, from that SAME promise, whether the run
+ * carries a design document (which is what folds the design-context guidance into the prompt).
+ *
+ * A pair rather than two calls because the two must not resolve the corpus twice. Linked context and
+ * the fragment fold sit in the SAME `Promise.all` wave in `buildContext`, so the flag travels as a
+ * promise the fragment resolver awaits: that serialises those two alone, where lifting the corpus
+ * resolution out of the wave would cost every dispatch an extra round trip.
+ *
+ * The flag resolves `false` on rejection and never rethrows. An unreadable or oversized corpus is
+ * already the wave's own failure through the linked-context entry itself, and answering it twice
+ * would surface a run refusal as a fragment-resolution error naming the wrong thing.
+ */
+export function linkedContextWithDesignFlag(resolve: () => Promise<LinkedContext>): {
+  linkedContext: Promise<LinkedContext>
+  hasDesignContext: Promise<boolean>
+} {
+  const linkedContext = resolve()
+  return {
+    linkedContext,
+    hasDesignContext: linkedContext.then(
+      (ctx) => ctx.docs.some((doc) => isDesignSource(doc.origin)),
+      () => false,
+    ),
+  }
+}
 
 /**
  * Concatenate the builder's context-file contributors into the single optional field, dropping

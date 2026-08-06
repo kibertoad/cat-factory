@@ -86,6 +86,7 @@ export interface AppCachesProfile {
   skillCatalog: GroupCacheProfile
   foundationalServiceCatalog: GroupCacheProfile
   fragmentDocumentBody: GroupCacheProfile
+  linkedDocumentVersion: GroupCacheProfile
   repoProjection: GroupCacheProfile
   repoFiles: GroupCacheProfile
   accountModelPolicy: GroupCacheProfile
@@ -129,6 +130,19 @@ export const DEFAULT_APP_CACHES_PROFILE: AppCachesProfile = {
     maxGroups: 500,
     maxItemsPerGroup: 64,
     ttlLeftBeforeRefreshInMsecs: 60_000,
+  },
+  // The last-probed source version of a LINKED context document, grouped by workspace and keyed per
+  // document. A SHORT 60s TTL and NO refresh window, unlike the body cache above: the load is already
+  // the source's cheap version probe, so there is nothing cheaper to re-validate an entry with, and
+  // the TTL is the entire coherence story — it bounds how long a run keeps dispatching against a
+  // design edit nobody has noticed. A minute collapses a burst of step dispatches (the actual cost
+  // being avoided) while a designer's edit reaches the next step of a running pipeline. A task's
+  // attached corpus is small, so a modest per-group bound covers every board in the workspace.
+  linkedDocumentVersion: {
+    enabled: true,
+    ttlInMsecs: 60_000,
+    maxGroups: 500,
+    maxItemsPerGroup: 64,
   },
   // One repo-projection list per workspace, keyed by workspace id (so exactly one
   // entry per group). Invalidation-driven — no version probe (a DB read as the probe
@@ -248,6 +262,12 @@ export const ISOLATE_SAFE_APP_CACHES_PROFILE: AppCachesProfile = {
     enabled: false,
   },
   fragmentDocumentBody: { ...DEFAULT_APP_CACHES_PROFILE.fragmentDocumentBody },
+  // Stays ENABLED here for the same reason, one step further: the entry IS an external source's
+  // version token, so it is neither our own mutable state nor in need of a probe to re-validate — a
+  // peer isolate's copy self-heals when its 60s TTL lapses. Passing through instead would put a live
+  // `probeVersion` in front of every linked document on every step dispatch, which is exactly the
+  // per-dispatch cost this cache exists to remove.
+  linkedDocumentVersion: { ...DEFAULT_APP_CACHES_PROFILE.linkedDocumentVersion },
   // Pass-through: the repo projection is our own mutable D1 state, and a Worker
   // isolate has no cross-isolate invalidation bus (unlike `fragmentDocumentBody`,
   // whose external entries self-verify via a version probe). So the Worker reads it
@@ -478,6 +498,11 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     profile.fragmentDocumentBody,
     options,
   )
+  const linkedDocumentVersion = buildGroupCache<{ version: string }>(
+    'linked-document-version',
+    profile.linkedDocumentVersion,
+    options,
+  )
   const repoProjection = buildGroupCache<GitHubRepo[]>(
     'repo-projection',
     profile.repoProjection,
@@ -540,6 +565,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
     skillCatalog,
     foundationalServiceCatalog,
     fragmentDocumentBody,
+    linkedDocumentVersion,
     repoProjection,
     repoFiles,
     accountModelPolicy,
@@ -559,6 +585,7 @@ export function createAppCaches(options: CreateAppCachesOptions = {}): AppCaches
         skillCatalog.close(),
         foundationalServiceCatalog.close(),
         fragmentDocumentBody.close(),
+        linkedDocumentVersion.close(),
         repoProjection.close(),
         repoFiles.close(),
         accountModelPolicy.close(),

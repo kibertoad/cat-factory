@@ -30,6 +30,7 @@ import {
   DocumentImportService,
   DocumentLinkService,
   DocumentPlannerService,
+  LinkedDocumentRefreshService,
   EnvironmentConnectionService,
   EnvironmentTeardownService,
   GitHubInstallationService,
@@ -260,6 +261,7 @@ export function createGitHubModule(
 export function createDocumentsModule(
   deps: CoreDependencies,
   boardService: BoardService,
+  caches: AppCaches,
 ): DocumentsModule | undefined {
   const { documentSourceProviders, documentConnectionRepository, documentRepository } = deps
   if (
@@ -297,7 +299,26 @@ export function createDocumentsModule(
     documentRepository,
   })
   const contentResolver = new DocumentContentResolverService({ registry, connectionService })
-  return { connectionService, importService, plannerService, linkService, contentResolver }
+  // Wired unconditionally alongside the rest of the module: the refresh is not an opt-in capability
+  // but the correct behaviour of reading a linked document, and a facade that could forget it would
+  // silently go back to serving import-time copies (the failure this closes). Its own dependencies
+  // are all already in hand — the version cache passes through where a profile disables it, which
+  // costs a probe per dispatch rather than turning the refresh off.
+  const linkedRefresher = new LinkedDocumentRefreshService({
+    registry,
+    connectionService,
+    importService,
+    versionCache: caches.linkedDocumentVersion,
+    logger: deps.logger,
+  })
+  return {
+    connectionService,
+    importService,
+    plannerService,
+    linkService,
+    contentResolver,
+    linkedRefresher,
+  }
 }
 
 /**

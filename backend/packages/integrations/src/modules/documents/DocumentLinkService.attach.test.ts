@@ -75,6 +75,7 @@ function doc(externalId: string, linkedBlockId: string | null = null): DocumentR
     excerpt: 'x',
     body: 'x',
     contentHash: 'h',
+    sourceVersion: null,
     linkedBlockId,
     role: null,
     docKind: null,

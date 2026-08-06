@@ -16,7 +16,7 @@ import type { DocumentConnectionService } from './DocumentConnectionService.js'
 // while a changed body re-projects. The cross-runtime column mapping is exercised by the
 // repo builds + conformance; this pins the SERVICE behaviour without a live source.
 
-function makeService(body: { value: string }) {
+function makeService(body: { value: string }, version = { value: '1' }) {
   let upserts = 0
   const store = new Map<string, DocumentRecord>()
   const documentRepository: DocumentRepository = {
@@ -66,7 +66,7 @@ function makeService(body: { value: string }) {
       title: 'Export PRD',
       url: 'https://docs/export-prd',
       body: body.value,
-      version: '1',
+      version: version.value,
     }),
   }
   const registry: DocumentSourceRegistry = {
@@ -93,6 +93,7 @@ function makeService(body: { value: string }) {
   return {
     service,
     upserts: () => upserts,
+    stored: () => store.get('PAGE-1') ?? null,
     advance: (to: number) => {
       now = to
     },
@@ -120,5 +121,51 @@ describe('DocumentImportService content-hash idempotency', () => {
     const updated = await h.service.import('ws_1', 'confluence', 'PAGE-1')
     expect(h.upserts()).toBe(2)
     expect(updated.syncedAt).toBe(2000)
+  })
+})
+
+describe('DocumentImportService source-version recording', () => {
+  it('records the source version the stored body came from', async () => {
+    // The token the dispatch-time refresh compares against. Without it stored, "the page has not
+    // moved" is unprovable and every dispatch pays a full re-download.
+    const h = makeService({ value: '# PRD' }, { value: '2317456' })
+    await h.service.import('ws_1', 'confluence', 'PAGE-1')
+
+    expect(h.stored()?.sourceVersion).toBe('2317456')
+  })
+
+  it('re-projects a body that did not change when only the VERSION moved', async () => {
+    // A Figma file version bumps on any edit in the file, including a frame this document does not
+    // cover. Skipping the write here would leave the old token on the row and re-fetch the whole
+    // design on every single dispatch, forever — the exact cost the probe exists to avoid.
+    const version = { value: 'v1' }
+    const h = makeService({ value: '# PRD' }, version)
+    await h.service.import('ws_1', 'confluence', 'PAGE-1')
+    expect(h.upserts()).toBe(1)
+
+    version.value = 'v2'
+    await h.service.import('ws_1', 'confluence', 'PAGE-1')
+
+    expect(h.upserts()).toBe(2)
+    expect(h.stored()?.sourceVersion).toBe('v2')
+  })
+
+  it('stores NULL, not an empty string, for a source that exposes no version', async () => {
+    // "Not versioned" has to be ONE value everywhere, or the refresh has two absences to test for.
+    const h = makeService({ value: '# PRD' }, { value: '' })
+    await h.service.import('ws_1', 'confluence', 'PAGE-1')
+
+    expect(h.stored()?.sourceVersion).toBeNull()
+  })
+
+  it('reimport reaches the same projection without re-parsing a ref', async () => {
+    // The refresh path starts from a stored row, so it already holds the canonical external id.
+    // Routing it back through `parseRef` would put the one hop that can legitimately fail on a path
+    // with no user input to fail on.
+    const h = makeService({ value: '# PRD' }, { value: 'v7' })
+    const record = await h.service.reimport('ws_1', 'confluence', 'PAGE-1')
+
+    expect(record.externalId).toBe('PAGE-1')
+    expect(record.sourceVersion).toBe('v7')
   })
 })

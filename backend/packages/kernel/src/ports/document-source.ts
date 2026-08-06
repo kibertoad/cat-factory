@@ -3,6 +3,8 @@ import type {
   DocumentSourceDescriptor,
   DocumentSearchResult,
 } from '../domain/types.js'
+import type { DocumentFreshness } from '../domain/document-freshness.js'
+import type { DocumentRecord } from './document-repositories.js'
 
 // Port for a single document source (Confluence, Notion, …). A provider is the
 // only place that knows a source's specifics: how to validate its credentials,
@@ -134,6 +136,39 @@ export interface DocumentContentResolver {
    * same unreachable/not-connected conditions as {@link fetch}.
    */
   probeVersion(workspaceId: string, source: DocumentSourceKind, externalId: string): Promise<string>
+}
+
+/** One linked document as a run is about to read it, with what the refresh concluded about it. */
+export interface RefreshedDocument {
+  /**
+   * The record to read from: the re-imported one when the source had moved, else the stored one
+   * unchanged. The refresher returns the RECORD rather than a body so nothing downstream has to
+   * merge a partial update onto a row (and so a re-import's new title/url travel with its body).
+   */
+  readonly record: DocumentRecord
+  readonly freshness: DocumentFreshness
+}
+
+/**
+ * Re-confirm a run's linked documents against their sources at DISPATCH time, so an agent reads the
+ * current revision of a page rather than the copy import happened to store.
+ *
+ * A port rather than a direct call because the work spans two layers the engine cannot see: the
+ * provider (`probeVersion` / `fetchDocument`) and the local projection the re-import writes. It sits
+ * beside {@link DocumentContentResolver}, which deliberately does NOT persist — the difference is
+ * that a fragment owns its own cached body while a linked document IS the stored projection every
+ * other reader (the SPA row, the planner, the next dispatch) reads.
+ *
+ * BEST-EFFORT by contract: it never throws for a document it could not confirm, returning an
+ * `unconfirmed` verdict instead, because a source outage must cost the run a stale body and never
+ * the run itself. Order and length MIRROR the input, so a caller can zip the results back onto the
+ * list it passed.
+ */
+export interface LinkedDocumentRefresher {
+  refresh(
+    workspaceId: string,
+    documents: readonly DocumentRecord[],
+  ): Promise<readonly RefreshedDocument[]>
 }
 
 /** A lookup of the providers wired for this deployment, keyed by source. */

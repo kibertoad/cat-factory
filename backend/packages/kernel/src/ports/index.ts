@@ -318,6 +318,8 @@ export type {
   DocumentSourceProvider,
   DocumentSourceRegistry,
   DocumentContentResolver,
+  LinkedDocumentRefresher,
+  RefreshedDocument,
 } from './document-source.js'
 export type {
   DocumentConnectionRecord,

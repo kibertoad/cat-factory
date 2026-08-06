@@ -141,6 +141,23 @@ export interface AppCaches {
    */
   fragmentDocumentBody: GroupCacheHandle<DocumentContent>
   /**
+   * The last-probed VERSION TOKEN of a linked context document, grouped by workspace and keyed by
+   * `<source>:<externalId>` — what the dispatch-time refresh
+   * ({@link LinkedDocumentRefresher}) compares against the token the stored row was imported at.
+   *
+   * The sibling of `fragmentDocumentBody`, and deliberately NOT the same entry: this one caches the
+   * PROBE, not the body. Linked context is re-resolved on every STEP dispatch, so what has to be
+   * collapsed is the repeated `probeVersion` call — a whole-file Figma import fans out into chunked
+   * per-frame node reads, and caching the body would put that download on the critical path of any
+   * dispatch that missed. Caching the cheap token instead means an unchanged design costs one
+   * `?depth=1` read per TTL window and a changed one pays the download exactly once.
+   *
+   * Hence no refresh window: the LOAD is already the cheap probe, so there is nothing cheaper to
+   * re-validate it with. A short TTL is the whole coherence story, and it bounds how long a run can
+   * keep dispatching against a design edit it has not noticed.
+   */
+  linkedDocumentVersion: GroupCacheHandle<{ version: string }>
+  /**
    * The workspace's GitHub repo projection (`repoProjectionRepository.list`),
    * grouped AND keyed by workspace id — the whole-projection re-list the
    * block→repo resolver (`buildResolveRepoTarget`) runs on every agent dispatch and

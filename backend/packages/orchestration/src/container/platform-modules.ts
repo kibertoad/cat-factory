@@ -10,8 +10,8 @@
  * environments (a recipe's `prerequisites` re-run through it), and documents before the fragment
  * library (a document-backed fragment re-resolves through the document module's reader).
  *
- * Returns only what the engine downstream consumes; `documents`, `preflight`, `sharedStacks` and
- * the provisioning-log recorder are internal to this slice.
+ * Returns only what the engine downstream consumes; `preflight`, `sharedStacks` and the
+ * provisioning-log recorder are internal to this slice.
  */
 
 import { LlmObservabilityService } from '../modules/observability/LlmObservabilityService.js'
@@ -43,7 +43,7 @@ import type {
 } from '../container-content-libraries.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
-import type { CoreDependencies } from '../container.js'
+import type { CoreDependencies, DocumentsModule } from '../container.js'
 import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
 import type { resolveCoreRuntime } from './runtime.js'
 
@@ -65,6 +65,12 @@ export interface PlatformModulesInput {
 
 export interface PlatformModules {
   llmObservability: LlmObservabilityService | undefined
+  /**
+   * Returned (not just registered) because the ENGINE reads one of its seams: the dispatch-time
+   * linked-document refresher threads into `AgentContextBuilder`. Undefined when no document source
+   * is configured, in which case there is nothing to refresh either.
+   */
+  documents: DocumentsModule | undefined
   environments: ReturnType<typeof createEnvironmentsModule> | undefined
   environmentHandlerSeeder: EnvironmentHandlerSeeder | undefined
   sharedStackSeeder: SharedStackSeeder | undefined
@@ -226,7 +232,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = modules.build('documents', () =>
-    createDocumentsModule(dependencies, boardService),
+    createDocumentsModule(dependencies, boardService, caches),
   )
   const fragmentLibrary = modules.build('fragmentLibrary', () =>
     createFragmentLibraryModule(dependencies, documents?.contentResolver, caches),
@@ -239,6 +245,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   )
   return {
     llmObservability,
+    documents,
     environments,
     environmentHandlerSeeder,
     sharedStackSeeder,
