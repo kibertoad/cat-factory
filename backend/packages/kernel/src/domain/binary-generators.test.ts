@@ -640,3 +640,183 @@ describe('renderBinaryOutputBrief with generators', () => {
     expect(brief).toContain('`asset-store`')
   })
 })
+
+describe('renderBinaryGeneratorSection — one integration’s entry', () => {
+  const section = (view: BinaryGeneratorView) =>
+    renderBinaryGeneratorSection({
+      selection: { selected: [view], unresolvedIds: [] },
+      requestedModalities: [],
+    }).join('\n')
+
+  it('heads the entry with the id and the name, and states what it produces', () => {
+    const text = section(generator())
+    expect(text).toContain('### `retro-diffusion` — Retro Diffusion')
+    expect(text).toContain('- Produces: images.')
+    expect(text).toContain('- Formats: image/png.')
+    expect(text).toContain('- Endpoint: https://api.retrodiffusion.ai/v1')
+    expect(text).toContain('- Pixel-art image generation.')
+    expect(text).toContain('Good for sprites and tiles; not for photorealism.')
+  })
+
+  it('says the formats are UNDECLARED rather than listing none', () => {
+    // An empty list read as "emits nothing" would stop the agent asking for a format at all;
+    // the honest statement sends it to the contract.
+    const text = section(generator({ mediaTypes: [] }))
+    expect(text).toContain('- Formats: not declared')
+    expect(text).toContain('read them off its API contract rather than assuming one')
+  })
+
+  it('omits the endpoint line entirely when the integration declares none', () => {
+    expect(section(generator({ endpoint: undefined }))).not.toContain('- Endpoint:')
+  })
+
+  it('renders the authoring guidance beside the description, and neither when blank', () => {
+    expect(section(generator({ guidance: 'Prefer 64x64 for tiles.' }))).toContain(
+      'Prefer 64x64 for tiles.',
+    )
+    const bare = section(generator({ description: '   ', guidance: '   ' }))
+    expect(bare).toContain('### `retro-diffusion`')
+    expect(bare).not.toContain('   \n')
+  })
+
+  it('lists every content type an integration produces, not just the first', () => {
+    const text = section(generator({ modalities: ['image', 'video'] }))
+    expect(text).toContain('- Produces: images, video.')
+  })
+})
+
+describe('renderBinaryGeneratorSection — unresolved ids', () => {
+  const section = (unresolvedIds: string[]) =>
+    renderBinaryGeneratorSection({
+      selection: { selected: [generator()], unresolvedIds },
+      requestedModalities: [],
+    }).join('\n')
+
+  it('names ONE missing id in the singular', () => {
+    const text = section(['ghost'])
+    expect(text).toContain('This step also selects `ghost`')
+    expect(text).toContain('no endpoint and no contract are available for it')
+    expect(text).toContain('Do not guess at its API')
+  })
+
+  it('names SEVERAL in the plural, so the sentence still reads', () => {
+    const text = section(['ghost', 'phantom'])
+    expect(text).toContain('selects `ghost`, `phantom`')
+    expect(text).toContain('available for them')
+    expect(text).toContain('Do not guess at their API')
+  })
+})
+
+describe('renderBinaryGeneratorSection — the requirement lines', () => {
+  const requirements = (
+    requestedModalities: Parameters<typeof renderBinaryGeneratorSection>[0]['requestedModalities'],
+    requestedMediaTypes: string[],
+    selected: BinaryGeneratorView[] = [generator()],
+  ) =>
+    renderBinaryGeneratorSection({
+      selection: { selected, unresolvedIds: [] },
+      requestedModalities,
+      requestedMediaTypes,
+    }).join('\n')
+
+  it('states nothing at all when the step declares no requirement', () => {
+    const text = requirements([], [])
+    expect(text).not.toContain('This step is expected to deliver')
+    expect(text).not.toContain('must deliver')
+  })
+
+  it('carries its own SUBJECT when the format is the only requirement', () => {
+    // The modality sentence above it did not run, so "It" would refer to nothing.
+    expect(requirements([], ['image/png'])).toContain('This step must deliver this exact format')
+    expect(requirements(['image'], ['image/png'])).toContain('It must deliver this exact format')
+  })
+
+  it('inflects the format sentence for one format and for several', () => {
+    const one = requirements([], ['image/png'])
+    expect(one).toContain('this exact format: `image/png`')
+    expect(one).toContain('by name where its API lets you choose')
+    expect(one).toContain('accepts this one and not a near equivalent')
+
+    const many = requirements(
+      [],
+      ['image/png', 'image/webp'],
+      [generator({ mediaTypes: ['image/png', 'image/webp'] })],
+    )
+    expect(many).toContain('each of these exact formats: `image/png`, `image/webp`')
+    expect(many).toContain('accepts these and not a near equivalent')
+  })
+
+  it('inflects the uncovered-modality warning for one and for several', () => {
+    expect(requirements(['audio'], [])).toContain('Do not attempt to produce it another way')
+    expect(requirements(['audio', 'video'], [])).toContain(
+      'Do not attempt to produce them another way',
+    )
+  })
+
+  it('says nothing is missing when the selection covers the requirement', () => {
+    const text = requirements(['image'], ['image/png'])
+    expect(text).toContain('This step is expected to deliver: images.')
+    expect(text).not.toContain('No available integration produces')
+    expect(text).not.toContain('No available integration declares')
+  })
+})
+
+describe('renderBinaryGeneratorSection — the overlap paragraph', () => {
+  const overlap = (selected: BinaryGeneratorView[]) =>
+    renderBinaryGeneratorSection({
+      selection: { selected, unresolvedIds: [] },
+      requestedModalities: [],
+    }).join('\n')
+
+  it('says "both" for two producers and "all" for three', () => {
+    const two = overlap([generator({ id: 'a' }), generator({ id: 'b' })])
+    expect(two).toContain('`a` and `b` both produce images.')
+
+    const three = overlap([generator({ id: 'a' }), generator({ id: 'b' }), generator({ id: 'c' })])
+    expect(three).toContain('`a`, `b` and `c` all produce images.')
+  })
+
+  it('asks for the choice to be RECORDED rather than stating a preference', () => {
+    const text = overlap([generator({ id: 'a' }), generator({ id: 'b' })])
+    expect(text).toContain('They are not interchangeable.')
+    expect(text).toContain("Record the integration you used in each entry's `generator` field")
+    // The platform has no basis to prefer one, and must not pretend otherwise.
+    expect(text).not.toContain('prefer')
+  })
+
+  it('renders the paragraph AFTER the per-integration notes it points at', () => {
+    const lines = renderBinaryGeneratorSection({
+      selection: { selected: [generator({ id: 'a' }), generator({ id: 'b' })], unresolvedIds: [] },
+      requestedModalities: [],
+    })
+    const entryIndexes = lines.flatMap((l, i) => (l.startsWith('### ') ? [i] : []))
+    const lastEntry = entryIndexes.at(-1) ?? -1
+    const paragraph = lines.findIndex((l) => l.includes('does not tell you which to call'))
+    expect(paragraph).toBeGreaterThan(lastEntry)
+  })
+})
+
+describe('describeModality', () => {
+  it('renders each content type as words a human reads, distinguishing the two 3D kinds', () => {
+    // The pair is the reason the modality vocabulary split, so a rendering that collapses them
+    // would put the old ambiguity straight back into the refusal message.
+    const model = describeBinaryGeneratorSelectionIssues('modeller', [
+      { problem: 'modality_uncovered', modality: '3d-model' },
+    ])
+    const scene = describeBinaryGeneratorSelectionIssues('modeller', [
+      { problem: 'modality_uncovered', modality: '3d-scene' },
+    ])
+    expect(model).toContain('3D models (one asset each)')
+    expect(scene).toContain('3D scenes (several assets composed together)')
+    expect(model).not.toBe(scene)
+  })
+
+  it('renders every current member as its own distinct phrase', () => {
+    const phrases = (['image', 'audio', 'video', '3d-model', '3d-scene', 'document'] as const).map(
+      (modality) =>
+        describeBinaryGeneratorSelectionIssues('k', [{ problem: 'modality_uncovered', modality }]),
+    )
+    expect(new Set(phrases).size).toBe(phrases.length)
+    for (const phrase of phrases) expect(phrase).not.toContain('undefined')
+  })
+})

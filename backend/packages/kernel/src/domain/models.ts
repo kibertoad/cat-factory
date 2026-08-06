@@ -687,8 +687,13 @@ export function familyForModelId(id: string | undefined | null): ModelFamily | n
   if (model) return model.family ?? null
   const or = parseOpenRouterModelId(id)
   if (or) {
-    const vendor = or.model.split('/', 1)[0]?.toLowerCase()
-    return vendor ? (OPENROUTER_SLUG_FAMILY[vendor] ?? null) : null
+    // The vendor prefix is everything before the FIRST slash; a slug carrying no slash at
+    // all is its own prefix, and is unclassified unless the map happens to name it. Sliced
+    // rather than split so there is no absent-element case to guard: `parseOpenRouterModelId`
+    // has already refused an empty slug, so a prefix always exists.
+    const slash = or.model.indexOf('/')
+    const vendor = (slash === -1 ? or.model : or.model.slice(0, slash)).toLowerCase()
+    return OPENROUTER_SLUG_FAMILY[vendor] ?? null
   }
   return null
 }
@@ -709,7 +714,10 @@ export function isAllowedByFamilyPolicy(
   const trusted = !!effectiveProvider && policy.trustedProviders.includes(effectiveProvider)
   if (trusted) return true
   const family = familyForModelId(id)
-  const listed = family !== null && policy.families.includes(family)
+  // UNCLASSIFIED: there is no membership to test either way, so the MODE decides on its own.
+  // A blocklist has nothing to match, an allowlist has nothing to prove.
+  if (family === null) return policy.mode === 'blocklist'
+  const listed = policy.families.includes(family)
   return policy.mode === 'blocklist' ? !listed : listed
 }
 
