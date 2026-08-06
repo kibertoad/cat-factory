@@ -95,12 +95,12 @@ const API_PREFIX = '/api/v1'
 // the top of this block describes. That branch has since merged, so 1.16.0 is main's published
 // number and 1.17.0 is simply the next free one. Re-read against `origin/main` anyway.
 // 1.18.0, not 1.17.0: `GET /api/v1/task-types` plus `fields` on task creation, both additive (a new
-// endpoint and a new optional key). THIRD number this pair has held (1.16 → 1.17 → 1.18), and the
-// second time it moved because another branch published the number underneath it: the tool-call
-// `?outcome=` change above reserved 1.17.0 on the same reasoning this branch used, and landed
-// first. Both sides wrote `1.17.0`, so the VERSION line auto-merged byte-identically and ONLY this
-// comment conflicted, which is exactly the failure the note at the top of this block exists to
-// catch and the only reason it was caught. Re-read against `origin/main` every time.
+// endpoint and a new optional key). THIRD number this one addition has held: written against
+// 1.16.0, moved to 1.17.0 when the multi-repo report `scope` took 1.16.0 on main, and moved again
+// when the `?outcome=` rename above published 1.17.0 on main while this branch was in flight. Both
+// moves were found the same way, and it is the only way that works: by re-reading this line after
+// the merge, never by trusting that the VERSION itself auto-merged clean (it did, twice, to a
+// number main had already used).
 const API_VERSION = '1.18.0'
 
 /**
