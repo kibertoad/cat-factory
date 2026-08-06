@@ -1123,6 +1123,10 @@ export const documents = pgTable(
     excerpt: text('excerpt').notNull().default(''),
     body: text('body').notNull().default(''),
     content_hash: text('content_hash').notNull().default(''),
+    // The source version token this body was imported at (mirror of D1 migration 0083) — what the
+    // dispatch-time refresh compares a cheap `probeVersion` against. Nullable rather than defaulted:
+    // an empty string would be indistinguishable from a source that exposes no version at all.
+    source_version: text('source_version'),
     linked_block_id: text('linked_block_id'),
     // Workspace+DocKind role link (WS1 items 2–4), alongside `linked_block_id`: `template` |
     // `exemplar` scoped to `doc_kind`. Nullable — a plain imported / block-linked doc has neither.

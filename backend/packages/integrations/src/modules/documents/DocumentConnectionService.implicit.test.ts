@@ -24,11 +24,15 @@ function makeService(opts: {
 }) {
   const store = new Map<string, DocumentConnectionRecord>()
   for (const r of opts.stored ?? []) store.set(r.source, r)
+  const reads = { byWorkspace: 0, listed: 0 }
+  const invalidatedGroups: string[] = []
   const documentConnectionRepository: DocumentConnectionRepository = {
     async getByWorkspace(_ws, source) {
+      reads.byWorkspace += 1
       return store.get(source) ?? null
     },
     async listByWorkspace() {
+      reads.listed += 1
       return [...store.values()]
     },
     async upsert(record) {
@@ -61,11 +65,23 @@ function makeService(opts: {
   } as unknown as WorkspaceRepository
   const clock: Clock = { now: () => 1000 }
 
-  return new DocumentConnectionService({
+  const service = new DocumentConnectionService({
     documentConnectionRepository,
     registry,
     workspaceRepository,
     clock,
+    versionCache: {
+      get: async (_key, _group, load) => load(),
+      invalidate: async () => {},
+      invalidateGroup: async (group) => {
+        invalidatedGroups.push(group)
+      },
+      invalidateAll: async () => {},
+    },
+  })
+  return Object.assign(service, {
+    reads,
+    invalidatedGroups,
   })
 }
 
@@ -115,5 +131,77 @@ describe('DocumentConnectionService implicit connections', () => {
     // requireConnection returns the stored (credential-bearing) row, not the implicit marker.
     const record = await service.requireConnection('ws_1', 'github')
     expect(record.credentials).toEqual({ token: 'explicit' })
+  })
+})
+
+describe('DocumentConnectionService batch resolution', () => {
+  it('resolves several sources in ONE stored-row read', async () => {
+    // The dispatch-time refresh asks about a whole corpus on every step of every run: a read per
+    // document (or per document per source) is the N+1 this repo bans, and the connection is
+    // invariant per (workspace, source) for the entire pass.
+    const stored: DocumentConnectionRecord = {
+      workspaceId: 'ws_1',
+      source: 'confluence',
+      credentials: { token: 'c' },
+      label: 'Confluence',
+      createdAt: 1,
+      deletedAt: null,
+    }
+    const service = makeService({ githubInstalled: true, stored: [stored] })
+
+    const resolved = await service.resolveConnections('ws_1', ['confluence', 'github'])
+
+    expect(service.reads.listed).toBe(1)
+    expect(service.reads.byWorkspace).toBe(0)
+    expect(resolved.get('confluence')?.credentials).toEqual({ token: 'c' })
+    // Only a source with no stored row falls through to its provider's out-of-band credential.
+    expect(resolved.get('github')?.label).toBe('GitHub')
+  })
+
+  it('reads nothing at all for an empty source list', async () => {
+    const service = makeService({ githubInstalled: true })
+
+    expect(await service.resolveConnections('ws_1', [])).toEqual(new Map())
+    expect(service.reads.listed).toBe(0)
+  })
+
+  it('answers null for a source the workspace is not connected to, rather than throwing', async () => {
+    // The non-throwing twin exists because a caller that must tell "no connection" from "the read
+    // itself failed" cannot do it through a thrown ConflictError without catching every transport
+    // fault as the same fact: two gaps that need two different fixes.
+    const service = makeService({ githubInstalled: false })
+
+    const resolved = await service.resolveConnections('ws_1', ['confluence'])
+
+    expect(resolved.get('confluence')).toBeNull()
+  })
+})
+
+describe('DocumentConnectionService cache coherence', () => {
+  it('drops every cached freshness verdict for the workspace on connect', async () => {
+    // Those verdicts were reached with the credential this write just replaced. The TTL bounds how
+    // long a run dispatches against an unnoticed edit; only invalidation keeps a verdict from
+    // outliving the write that made it wrong.
+    const service = makeService({ githubInstalled: false })
+
+    await service.connect('ws_1', 'confluence', {})
+
+    expect(service.invalidatedGroups).toEqual(['ws_1'])
+  })
+
+  it('drops them on disconnect too', async () => {
+    const stored: DocumentConnectionRecord = {
+      workspaceId: 'ws_1',
+      source: 'confluence',
+      credentials: {},
+      label: 'Confluence',
+      createdAt: 1,
+      deletedAt: null,
+    }
+    const service = makeService({ githubInstalled: false, stored: [stored] })
+
+    await service.disconnect('ws_1', 'confluence')
+
+    expect(service.invalidatedGroups).toEqual(['ws_1'])
   })
 })

@@ -1,4 +1,4 @@
-import type { Clock } from '@cat-factory/kernel'
+import type { Clock, GroupCacheHandle, LinkedDocumentRefreshOutcome } from '@cat-factory/kernel'
 import type { DocumentConnectionRecord, DocumentConnectionRepository } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type {
@@ -22,6 +22,13 @@ export interface DocumentConnectionServiceDependencies {
   registry: DocumentSourceRegistry
   workspaceRepository: WorkspaceRepository
   clock: Clock
+  /**
+   * The dispatch-time freshness cache, so connecting or disconnecting a source drops every
+   * verdict that connection authorised. Optional only so the service stays unit-testable
+   * standalone; a deployment that caches and does not invalidate would compare a run's documents
+   * against a token fetched with a credential the workspace has since replaced.
+   */
+  versionCache?: GroupCacheHandle<LinkedDocumentRefreshOutcome>
 }
 
 function toConnection(record: DocumentConnectionRecord): DocumentConnection {
@@ -70,6 +77,9 @@ export class DocumentConnectionService {
       deletedAt: null,
     }
     await this.deps.documentConnectionRepository.upsert(record)
+    // The freshness verdicts cached for this workspace were reached with the credential this call
+    // just replaced, so drop the whole group rather than guessing which documents it covered.
+    await this.deps.versionCache?.invalidateGroup(workspaceId)
     return toConnection(record)
   }
 
@@ -78,10 +88,57 @@ export class DocumentConnectionService {
     workspaceId: string,
     source: DocumentSourceKind,
   ): Promise<DocumentConnection | null> {
+    const record = await this.resolveConnection(workspaceId, source)
+    return record ? toConnection(record) : null
+  }
+
+  /**
+   * The live connection record (WITH credentials) for a source, or null when the workspace has
+   * none. The non-throwing twin of {@link requireConnection}, and the one place the stored row ⊕
+   * implicit-connection resolution lives.
+   *
+   * Exists because a caller that must tell "no connection" from "the read itself failed" cannot do
+   * it through a thrown `ConflictError` without also catching every transport fault as the same
+   * fact (`LinkedDocumentRefreshService` reports those as two different gaps, needing two different
+   * fixes). Returning the RECORD rather than the safe projection means such a caller resolves the
+   * credential once instead of asking again through `requireConnection`.
+   */
+  async resolveConnection(
+    workspaceId: string,
+    source: DocumentSourceKind,
+  ): Promise<DocumentConnectionRecord | null> {
     const record = await this.deps.documentConnectionRepository.getByWorkspace(workspaceId, source)
-    if (record) return toConnection(record)
-    const implicit = await this.resolveImplicit(workspaceId, source)
-    return implicit ? toConnection(implicit) : null
+    return record ?? (await this.resolveImplicit(workspaceId, source))
+  }
+
+  /**
+   * {@link resolveConnection} for SEVERAL sources in one stored-row read.
+   *
+   * The batch shape exists for the dispatch-time refresh, which asks about a whole corpus on every
+   * step of every run: resolving per document (or even per document per source) is the N+1 this
+   * repo bans, and the connection is invariant per `(workspace, source)` for the entire pass. Only
+   * a source with NO stored row falls through to its provider's implicit resolution, which is an
+   * out-of-band credential the provider owns and so has nothing to batch.
+   */
+  async resolveConnections(
+    workspaceId: string,
+    sources: readonly DocumentSourceKind[],
+  ): Promise<Map<DocumentSourceKind, DocumentConnectionRecord | null>> {
+    const wanted = new Set(sources)
+    const resolved = new Map<DocumentSourceKind, DocumentConnectionRecord | null>()
+    if (wanted.size === 0) return resolved
+    const stored = await this.deps.documentConnectionRepository.listByWorkspace(workspaceId)
+    for (const record of stored) {
+      if (wanted.has(record.source)) resolved.set(record.source, record)
+    }
+    await Promise.all(
+      [...wanted]
+        .filter((source) => !resolved.has(source))
+        .map(async (source) => {
+          resolved.set(source, await this.resolveImplicit(workspaceId, source))
+        }),
+    )
+    return resolved
   }
 
   /**
@@ -113,10 +170,8 @@ export class DocumentConnectionService {
     workspaceId: string,
     source: DocumentSourceKind,
   ): Promise<DocumentConnectionRecord> {
-    const record = await this.deps.documentConnectionRepository.getByWorkspace(workspaceId, source)
+    const record = await this.resolveConnection(workspaceId, source)
     if (record) return record
-    const implicit = await this.resolveImplicit(workspaceId, source)
-    if (implicit) return implicit
     throw new ConflictError(`Workspace '${workspaceId}' is not connected to ${source}`)
   }
 
@@ -153,5 +208,9 @@ export class DocumentConnectionService {
       source,
       this.deps.clock.now(),
     )
+    // Same reason as `connect`: every cached verdict for this workspace was reached through a
+    // credential that no longer exists, and the next dispatch must find that out rather than
+    // report `confirmed` against a source it can no longer reach.
+    await this.deps.versionCache?.invalidateGroup(workspaceId)
   }
 }

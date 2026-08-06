@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { onTestFinished, vi } from 'vitest'
+import type { Logger } from '../src/logger.js'
 
 // Shared fixtures for the harness suite. Anything that redirects real, process-global state
 // (the home directory, and the dot-files the harness writes into it) belongs here rather than
@@ -53,4 +54,25 @@ export async function tempDir(prefix: string): Promise<string> {
     await rm(dir, { recursive: true, force: true })
   })
   return dir
+}
+
+/**
+ * A `Logger` that discards everything. Pass this wherever the code under test takes a logger
+ * and the test does not assert on what it logged.
+ *
+ * The harness logger has no level gate — it is a zero-dependency writer straight to
+ * stdout/stderr, because the container image ships no logging library — so the ONLY way to keep
+ * a green run quiet is to inject silence at the call site. Passing the real `log` instead put
+ * ~72KB of `reproduction: phase finished` and `dependency install` lines into every full-suite
+ * transcript, none of it read by anything.
+ *
+ * A test that wants to ASSERT on a line uses a recording logger of its own rather than reaching
+ * for this one; `silent` here means "not part of this test's subject", not "unimportant".
+ */
+export const silentLogger: Logger = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  child: () => silentLogger,
 }

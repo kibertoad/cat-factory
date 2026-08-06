@@ -40,6 +40,14 @@ name every member) rather than an `undefined` at whichever call site reaches for
 wide origin with `isConnectableSource` (`@cat-factory/contracts`), the predicate derived from the
 source picklist, never with an optional lookup.
 
+**A source's TRAITS live beside those unions, not on the provider.** `isDesignSource` (does this
+source describe a design rather than prose) and `isHostPinnedSource` (does its `parseRef` refuse a
+foreign host) are facts the backend AND the SPA have to agree about, and both are read where no
+provider is reachable: the engine folds design guidance from the first, the URL canonicaliser orders
+itself by the second, and a document surface has to label a design source without asking a provider
+it cannot see. They come off ONE exhaustive `Record<DocumentSourceKind, DocumentSourceTraits>`, so a
+new source fails to compile until it is classified.
+
 ## A document is attached to at most ONE block
 
 `linkedBlockId` is a single column, so attaching a document that another block already holds would
@@ -250,9 +258,9 @@ Testing the body and rendering the excerpt would re-open this very hole one fiel
 
 Two deliberate NON-refusals:
 
-- **A URL that matches nothing imported is logged, not refused.** The providers' `parseRef`
+- **A URL that matches nothing imported is logged, not refused.** SOME providers' `parseRef`
   implementations are host-blind (`parseNotionRef` claims any string carrying a UUID-shaped
-  run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so a claim is
+  run; `parseConfluenceRef` any URL with a `/pages/<digits>` segment), so such a claim is
   evidence of a shape, not of a reference: failing runs on it would block a task whose
   description happens to link a dashboard. The drop stays; an `info` line naming the URL and
   the source is what keeps it from being silent (importing the page turns it into real
@@ -260,6 +268,16 @@ Two deliberate NON-refusals:
   description that links a dashboard is a normal, permanent state of a healthy task, and
   this re-resolves on every dispatch; a warning would repeat forever with no remedy anyone
   intends to apply, which is how a channel gets tuned out.
+
+  **That difference in confidence is also what orders the canonicaliser.**
+  `makeDocumentUrlResolver` consults host-PINNED parsers first (`isHostPinnedSource` in
+  contracts: Figma, Zeplin, GitHub, Linear all refuse a foreign host) and host-blind ones
+  second, rather than in registration order. First-registered-wins let Notion claim a Figma
+  URL whose file key happened to carry a UUID-shaped run; the point lookup then searched
+  Notion's key space, found nothing, and the linked design reached the agent as no context at
+  all with only the `info` line above to show for it. Within each pass registration order
+  still decides, since two pinned sources cannot claim one host.
+
 - **A budget that omits an item from a PROMPT states the omission instead.** The
   materialised index is capped at `CONTEXT_BUDGET.maxItems`, and an inline (no-checkout)
   kind's injection at `CONTEXT_BUDGET.inlineBodyTokens`; `renderLinkedContext` says how many

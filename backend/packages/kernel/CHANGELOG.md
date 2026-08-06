@@ -1,5 +1,14 @@
 # @cat-factory/kernel
 
+## 0.251.0
+
+### Minor Changes
+
+- e845d65: Add `LogThreshold` (`LogLevel | 'silent'`) and widen the level gate to accept it, so a package's
+  vitest `setupFiles` can silence the process-wide logger for a suite. `LogLevel` stays the four emit
+  levels, keeping the OTLP severity maps exhaustive; `parseLogLevel` deliberately does not honour
+  `silent`, so no `LOG_LEVEL` value can mute a deployment.
+
 ## 0.250.0
 
 ### Minor Changes

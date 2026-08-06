@@ -60,6 +60,7 @@ export {
   type LogLevel,
   type LogRecord,
   type LogSink,
+  type LogThreshold,
   type Logger,
   type RecordedLogLine,
   createRecordingLogger,
@@ -324,6 +325,9 @@ export type {
   DocumentSourceProvider,
   DocumentSourceRegistry,
   DocumentContentResolver,
+  LinkedDocumentRefresher,
+  LinkedDocumentRefreshOutcome,
+  RefreshedDocument,
 } from './document-source.js'
 export type {
   DocumentConnectionRecord,

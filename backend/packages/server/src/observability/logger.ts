@@ -3,6 +3,7 @@ import {
   type LogFields,
   type LogLevel,
   type LogSink,
+  type LogThreshold,
   type Logger,
   noopLogger,
 } from '@cat-factory/kernel'
@@ -25,15 +26,31 @@ import {
 const LEVEL_RANK: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
 
 /**
+ * The gate's rank for each threshold. `silent` sits above every emit rank, so the comparison
+ * below drops all four levels without needing a second branch. Separate from `LEVEL_RANK`
+ * because that one ranks a LINE and this one ranks the GATE; see kernel's `LogThreshold`.
+ */
+const THRESHOLD_RANK: Record<LogThreshold, number> = {
+  ...LEVEL_RANK,
+  silent: Number.POSITIVE_INFINITY,
+}
+
+/**
  * The active threshold. Held here rather than on the pino instance because a facade
  * resolves `LOG_LEVEL` from its own config *after* module load (a Worker reads it off
  * `env` on the first request), and pino's child loggers snapshot their parent's level at
  * creation — so a late `logger.level = …` would silently miss every child already derived.
  * One module-level check is dynamic by construction.
  */
-let activeLevel: LogLevel = 'info'
+let activeLevel: LogThreshold = 'info'
 
-/** Parse a configured level, falling back to `info` for an absent or unrecognised value. */
+/**
+ * Parse a configured level, falling back to `info` for an absent or unrecognised value.
+ *
+ * Returns a `LogLevel`, not a `LogThreshold`: `LOG_LEVEL=silent` is deliberately NOT
+ * honoured, so a deployment can never be talked into emitting nothing (see `LogThreshold`).
+ * A test suite silences the gate by calling `setLogLevel('silent')` directly.
+ */
 export function parseLogLevel(value: string | undefined | null): LogLevel {
   const normalized = value?.trim().toLowerCase()
   if (
@@ -51,13 +68,17 @@ export function parseLogLevel(value: string | undefined | null): LogLevel {
  * Set the emit threshold. Facades call this once at boot from their resolved config
  * (`LOG_LEVEL` in the Node/local env, a wrangler var on the Worker). Takes effect
  * immediately for every logger already handed out, including children.
+ *
+ * Accepts `silent`, which no `LOG_LEVEL` value parses to: that is the seam a package's
+ * vitest `setupFiles` uses to keep a green run's transcript to its assertions instead of
+ * the application's own lines.
  */
-export function setLogLevel(level: LogLevel): void {
+export function setLogLevel(level: LogThreshold): void {
   activeLevel = level
 }
 
 /** The active threshold, for a facade that wants to report its own configuration. */
-export function getLogLevel(): LogLevel {
+export function getLogLevel(): LogThreshold {
   return activeLevel
 }
 
@@ -170,7 +191,7 @@ function adapt(instance: PinoLogger, bound: LogFields = {}): Logger {
   const emit =
     (level: LogLevel) =>
     (msg: string, fields?: LogFields): void => {
-      if (LEVEL_RANK[level] < LEVEL_RANK[activeLevel]) return
+      if (LEVEL_RANK[level] < THRESHOLD_RANK[activeLevel]) return
       instance[level](fields ?? {}, msg)
       // The threshold is applied ABOVE this: an exporter ships what the deployment chose to
       // log, so `LOG_LEVEL` governs both destinations and an operator has one dial, not two.
@@ -206,4 +227,4 @@ export function createPinoLogger(destination?: pino.DestinationStream): Logger {
 export const logger: Logger = createPinoLogger()
 
 export { noopLogger }
-export type { LogFields, LogLevel, LogSink, Logger }
+export type { LogFields, LogLevel, LogSink, LogThreshold, Logger }

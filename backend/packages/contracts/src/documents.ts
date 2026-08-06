@@ -61,12 +61,63 @@ export function isConnectableSource(origin: DocumentOrigin): origin is DocumentS
 }
 
 /**
+ * What a source IS, as opposed to what its provider can do. Two facts the backend and the SPA both
+ * have to agree about, which is why they live here rather than on the provider: the engine folds
+ * design guidance from the first, the URL canonicaliser orders itself by the second, and a document
+ * surface has to label a design source as one without asking a provider it cannot see.
+ */
+export interface DocumentSourceTraits {
+  /**
+   * The source describes a DESIGN (frames, components, tokens) rather than prose. What makes an
+   * agent's design guidance applicable, so it is a property of the source and not of the page: a
+   * Figma file is a design whether or not the frame someone linked happens to hold text.
+   */
+  readonly design: boolean
+  /**
+   * `parseRef` refuses a URL that is not on the source's OWN host, so a claim over one is
+   * high-confidence evidence of a reference. A host-BLIND parser claims a shape instead
+   * (`parseNotionRef` any UUID-shaped run, `parseConfluenceRef` any `/pages/<digits>` segment) and
+   * will therefore claim a dashboard link that has nothing to do with it. This is what
+   * `makeDocumentUrlResolver` orders by: consulted first-registered, a blind parser steals a
+   * pinned source's own URL.
+   */
+  readonly hostPinned: boolean
+}
+
+/**
+ * Every source's traits, exhaustive over the union so a new source cannot ship unclassified: the
+ * `Record` fails to compile until it is named here, and there is no default to fall into.
+ */
+const DOCUMENT_SOURCE_TRAITS: Record<DocumentSourceKind, DocumentSourceTraits> = {
+  confluence: { design: false, hostPinned: false },
+  notion: { design: false, hostPinned: false },
+  github: { design: false, hostPinned: true },
+  figma: { design: true, hostPinned: true },
+  zeplin: { design: true, hostPinned: true },
+  linear: { design: false, hostPinned: true },
+}
+
+/**
+ * Whether a stored document came from a DESIGN source. Takes the WIDE origin union because the
+ * callers hold a stored row: an `upload` is prose the platform was handed, so it is never a design
+ * (a design source is reached through its API, not pasted as Markdown).
+ */
+export function isDesignSource(origin: DocumentOrigin): boolean {
+  return isConnectableSource(origin) && DOCUMENT_SOURCE_TRAITS[origin].design
+}
+
+/** Whether a source's `parseRef` is pinned to its own host. See {@link DocumentSourceTraits}. */
+export function isHostPinnedSource(source: DocumentSourceKind): boolean {
+  return DOCUMENT_SOURCE_TRAITS[source].hostPinned
+}
+
+/**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
  * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`
  * links are a "good example to emulate" list the author agents are pointed at (multi-valued).
  * Both ride the SAME document projection + read path as a block-scoped context link — the only
- * new surface is this role/`docKind` tagging (see docs/initiatives/document-task-improvements.md).
+ * new surface is this role/`docKind` tagging (design record: `backend/docs/adr/0017-*`).
  */
 export const documentLinkRoleSchema = v.picklist(['template', 'exemplar'])
 export type DocumentLinkRole = v.InferOutput<typeof documentLinkRoleSchema>

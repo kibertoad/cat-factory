@@ -25,6 +25,18 @@ const BLOCK_TYPES: readonly BlockType[] = [
   'external',
 ]
 
+/**
+ * The `AppCaches.linkedDocumentVersion` key for one source document, within its workspace group.
+ *
+ * Lives here, in the folder's pure-logic module, because the READ path
+ * (`LinkedDocumentRefreshService`) and the write paths that must drop the entry
+ * (`DocumentImportService.import`) are different services: a key built twice is a key that can
+ * differ, and an invalidation that targets a key nothing reads fails silently.
+ */
+export function probeCacheKey(source: DocumentSourceKind, externalId: string): string {
+  return `${source}:${externalId}`
+}
+
 /** A trivial in-memory provider registry built from the wired providers. */
 export class MapDocumentSourceRegistry
   extends MapSourceRegistry<DocumentSourceKind, DocumentSourceProvider>

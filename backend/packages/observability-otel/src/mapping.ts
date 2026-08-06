@@ -744,6 +744,7 @@ export const OPERATIONAL_METRIC: Record<OperationalCounter, string> = {
   'tutorial.tour_abandoned': 'cat_factory.platform.tutorial_tours_abandoned',
   'pipeline.adopted': 'cat_factory.platform.pipelines_adopted',
   'dispatch.token_scope_widened': 'cat_factory.platform.dispatch_token_scope_widened',
+  'document.freshness_gap': 'cat_factory.platform.document_freshness_gaps',
 }
 
 /** Metric name per operational gauge. Exhaustive, for the same reason. */
@@ -784,6 +785,9 @@ const OPERATIONAL_UNIT: Record<OperationalCounter, string> = {
   'pipeline.adopted': '{adoption}',
   // One MINT that could not be narrowed, not one run: the unit names the token handed out.
   'dispatch.token_scope_widened': '{token}',
+  // One DOCUMENT left unconfirmed on one dispatch: a task with six attachments contributes six
+  // per step, which is what makes the rate read as "how much stale context is being served".
+  'document.freshness_gap': '{document}',
 }
 
 /**

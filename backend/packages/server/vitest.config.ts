@@ -11,5 +11,9 @@ export default defineConfig({
     // unit tests (e.g. the crypto ciphers, provider capabilities) — the latter must be
     // included explicitly or they silently never run.
     include: ['test/**/*.spec.ts', 'src/**/*.test.ts'],
+    // Silences the process-wide logger so a green run's output is its assertions, not the
+    // application's own lines. See the file for why the gate (rather than per-site
+    // `noopLogger` injection) is the seam.
+    setupFiles: ['test/setup/silenceLogs.ts'],
   },
 })

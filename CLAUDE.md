@@ -579,14 +579,13 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
   RESERVED, so it can never be named as a capability credential.
-- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
-  `buildStepApproval`.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
+- `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
-- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting
-  changed.
+- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting changed.
 - `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 
 ## Execution flow (the canonical async + observable pattern)
@@ -803,28 +802,24 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **`ci` (polling gate)**, auto-inserted second-to-last: green/none advances with nothing spun up,
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
-- **`merger`** (last standard step) scores the diff and returns ONLY a JSON assessment;
-  `resolveMergerStep` compares it to the task's merge threshold preset and either merges for real or
-  raises `merge_review`. A pipeline with no merger raises `pipeline_complete` instead of auto-`done`.
-- **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
-  auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
-- **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`,
-  `submissionClassesByRole`), and a bar on LANDING is refused at BOTH exits (auto-merge AND
-  `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin PERSISTS
-  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads as
-  a run with no policy rather than as an error. Docs:
+- **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
+  the task's merge threshold preset (a per-workspace library on `Block.mergePresetId`, carrying the
+  auto-merge ceilings, `ciMaxAttempts` and the per-class `classRules`) and either merges for real or raises
+  `merge_review`. A pipeline with no merger raises `pipeline_complete`, never auto-`done`.
+- **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
+  (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
+  PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads
+  as a run with no policy rather than as an error.
   [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
-- **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
-  yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
+- **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
+  which never matches a rule, so a VCS outage cannot change policy.
   [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
-- **Notifications** are a human-actionable surface behind the `NotificationChannel` port; the same
-  registered webhook endpoint also carries run-lifecycle events through the `RunLifecycleSink` port,
-  built beside the channel by `buildNotificationWebhookSupport` and driven through the ONE
-  `signedDelivery.ts` retry/SSRF/signature core. Traps: the started edge is exactly-once via
-  `handOffLiveRun` (announced LAST, after the claim and the local write); the terminal edges are
-  at-least-once with a `<runId>:<event>` dedupe id a receiver dedupes on, never on the body. Doc:
-  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+- **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
+  by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
+  retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
+  after the claim and the local write); the terminal edges are at-least-once with a `<runId>:<event>` dedupe
+  id a receiver dedupes on, never on the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **PR verification report**: the ENGINE keeps a report of captured facts on EVERY pull request a run
 opened (own-service plus each peer repo's) as a managed marker-delimited section of the body
@@ -1080,7 +1075,9 @@ AND that a gated controller leaves no route of its own uncovered.
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
+  (`DATABASE_URL`). Only the LLM is faked. **Iterate on `pnpm test:changed`** (changed packages plus dependents)
+  or `pnpm test:quick` (nothing needing Postgres/`workerd`); `pnpm test:run` is the whole tree and needs a DB up.
+  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
@@ -1090,8 +1087,7 @@ AND that a gated controller leaves no route of its own uncovered.
   EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
   existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
   bug is consistent in both halves.
-- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw
-  script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces
-  as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`:
-  `pnpm exec turbo run typecheck --filter=@cat-factory/app`. (The exception is a task with no build deps,
-  e.g. the i18n check.)
+- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw script
+  from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces as spurious
+  `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`: `--filter=@cat-factory/app`,
+  or `--filter='...[origin/main]'` for what you changed plus its dependents. (Exception: a task with no build deps.)

@@ -11,7 +11,12 @@ import {
   type ProviderRegistry,
 } from '@cat-factory/kernel'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { classifyHumanReview, isApproved, outstandingThreads } from './review.logic.js'
+import {
+  classifyHumanReview,
+  isApproved,
+  outstandingThreads,
+  renderReviewFeedbackForFixer,
+} from './review.logic.js'
 import { humanReviewGate } from './gates.js'
 import { wirePullRequestReviewProvider } from './providers.js'
 
@@ -195,6 +200,115 @@ describe('classifyHumanReview', () => {
   })
 })
 
+describe('the grace window', () => {
+  it('measures from the NEWEST piece of feedback, whichever kind it is', () => {
+    // A reviewer mid-review leaves a comment after an older thread: the window restarts from the
+    // comment, or the branch is churned while they are still typing. And symmetrically for a
+    // fresh thread beside an older comment.
+    const commentLast = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [thread({ latestCommentAt: NOW - 30 * MIN })],
+        comments: [{ id: 'c1', author: 'bob', body: 'and this', createdAt: NOW, isBot: false }],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(commentLast.kind).toBe('wait')
+
+    const threadLast = classifyHumanReview(
+      snapshot({
+        unresolvedThreads: [thread({ latestCommentAt: NOW })],
+        comments: [
+          { id: 'c1', author: 'bob', body: 'and this', createdAt: NOW - 30 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(threadLast.kind).toBe('wait')
+  })
+
+  it('dispatches the moment the window is exactly spent', () => {
+    const v = classifyHumanReview(
+      snapshot({ unresolvedThreads: [thread({ latestCommentAt: NOW - 10 * MIN })] }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind).toBe('dispatch')
+  })
+
+  it('advances the comment cursor to the NEWEST comment handed over, not the oldest', () => {
+    // The cursor is what stops the same comments re-triggering. Stamping the oldest would hand
+    // every comment but the first to the fixer again on the next poll.
+    const v = classifyHumanReview(
+      snapshot({
+        comments: [
+          { id: 'c1', author: 'bob', body: 'one', createdAt: NOW - 20 * MIN, isBot: false },
+          { id: 'c2', author: 'bob', body: 'two', createdAt: NOW - 15 * MIN, isBot: false },
+        ],
+      }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind).toBe('dispatch')
+    expect(v.kind === 'dispatch' && v.latestCommentAt).toBe(NOW - 15 * MIN)
+  })
+
+  it('stamps no comment cursor for a thread-only dispatch', () => {
+    const v = classifyHumanReview(
+      snapshot({ approvals: 1, unresolvedThreads: [thread()] }),
+      state(),
+      { graceMinutes: 10, now: NOW },
+    )
+    expect(v.kind === 'dispatch' && v.latestCommentAt).toBeNull()
+  })
+})
+
+describe('renderReviewFeedbackForFixer', () => {
+  it('renders each thread with where it was left and each comment under its author', () => {
+    const rendered = renderReviewFeedbackForFixer(
+      [
+        thread({ threadId: 't1', bodyExcerpt: 'rename this' }),
+        thread({ threadId: 't2', path: 'src/b.ts', line: null, bodyExcerpt: 'file-level note' }),
+        thread({ threadId: 't3', path: null, author: '', bodyExcerpt: 'general note' }),
+      ],
+      [{ id: 'c1', author: 'bob', body: 'and please rebase', createdAt: NOW, isBot: false }],
+    )
+    expect(rendered).toBe(
+      [
+        'A human reviewer left the feedback below on this pull request.',
+        'Address every item, commit your fixes to the PR branch, and for each review thread post a',
+        'short reply noting how you addressed it so the thread can be resolved.',
+        '',
+        'Review threads:',
+        '- reviewer (src/a.ts:10): rename this',
+        '- reviewer (src/b.ts): file-level note',
+        // An unattributed thread still names a human author rather than rendering an empty one.
+        '- reviewer: general note',
+        '',
+        'Reviewer comments:',
+        '- bob: and please rebase',
+      ].join('\n'),
+    )
+  })
+
+  it('omits a section entirely when that kind of feedback is absent', () => {
+    const threadsOnly = renderReviewFeedbackForFixer([thread()], [])
+    expect(threadsOnly).toContain('Review threads:')
+    expect(threadsOnly).not.toContain('Reviewer comments:')
+
+    const commentsOnly = renderReviewFeedbackForFixer(
+      [],
+      [{ id: 'c1', author: 'bob', body: 'rebase please', createdAt: NOW, isBot: false }],
+    )
+    expect(commentsOnly).not.toContain('Review threads:')
+    expect(commentsOnly).toContain('Reviewer comments:')
+    // No trailing blank line survives, whichever sections were rendered.
+    expect(commentsOnly).toBe(commentsOnly.trimEnd())
+    expect(threadsOnly).toBe(threadsOnly.trimEnd())
+  })
+})
+
 describe('humanReviewGate', () => {
   // A fresh provider registry per test (no module global to clear); the gate reads it through
   // `stubGateContext(overrides, providerRegistry)`.
@@ -351,6 +465,30 @@ describe('humanReviewGate', () => {
     // and retained it (still open in this snapshot) for the next retry.
     expect(calls).toEqual([{ ids: ['T7'], reply: '' }])
     expect(gs.pendingThreadIds).toEqual(['T7'])
+  })
+
+  it('makes no resolve call at all once the handed threads have propagated as resolved', async () => {
+    // Retention is snapshot-driven: a resolve that landed but hadn't propagated is re-checked
+    // next poll, and once GitHub reports the thread closed there is nothing left to re-attempt.
+    // Calling `resolveThreads` with an empty list would be a pointless round trip per poll for
+    // the rest of the wait.
+    const calls: string[][] = []
+    wirePullRequestReviewProvider(providerRegistry, {
+      getReview: async () => snapshot({ approvals: 1 }),
+      resolveThreads: async (_ws, _b, ids) => {
+        calls.push(ids)
+      },
+    })
+    const gate = humanReviewGate(stubGateContext({ clock: { now: () => NOW } }, providerRegistry))
+    const gs = {
+      phase: 'checking',
+      attempts: 0,
+      maxAttempts: 1,
+      pendingThreadIds: ['T7'],
+    } as GateStepState
+    expect((await gate.probe('ws', 'b', gs)).status).toBe('pass')
+    expect(calls).toEqual([])
+    expect(gs.pendingThreadIds).toBeNull()
   })
 
   it('never auto-resolves a third-party bot thread the gate did not hand the fixer', async () => {

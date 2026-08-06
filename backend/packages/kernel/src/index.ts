@@ -581,6 +581,14 @@ export {
   assertContextReferencesFit,
 } from './domain/context-references.js'
 
+// What the dispatch-time refresh concluded about a linked document's currency, plus the one renderer
+// that states it in the materialised context file. See `domain/document-freshness.ts`.
+export {
+  type DocumentFreshness,
+  type DocumentFreshnessGap,
+  freshnessHeaderLines,
+} from './domain/document-freshness.js'
+
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {
   clearsConsensusBar,
