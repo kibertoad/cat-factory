@@ -416,7 +416,6 @@
       "addTaskTitle": "Görev ekle",
       "createTaskFromIssueTitle": "Sorundan görev oluştur",
       "addRecurringTitle": "Yinelenen pipeline ekle",
-      "collapseTitle": "Daralt",
       "dragService": "Servisi sürükle",
       "dragTask": "Görevi sürükle",
       "dragToResize": "Yeniden boyutlandırmak için sürükle",
@@ -4166,7 +4165,11 @@
       "attachByReference": "{ref} öğesini referansla ekle",
       "noMatches": "Eşleşen sayfa yok.",
       "emptySearchable": "Başlığa göre ara veya içe aktarılmış bir belge seç.",
-      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır."
+      "emptyRefOnly": "Eklemek için bir sayfa URL'si veya ID'si yapıştır.",
+      "sourceLabel": "Kaynak",
+      "noSource": "Bir kaynak seç",
+      "connectSource": "{label} bağla",
+      "needsSource": "Bir sayfa eklemek için bir belge kaynağı bağla."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Depolarda ara…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "Sorunlarda ara",
       "searchPlaceholder": "Başlığa göre ara, bir sorun URL'si yapıştır veya bir sorun numarası yaz…",
       "createTasksIn": "Görevleri şurada oluştur",
+      "creatingIn": "Yeni görevler {container} içinde oluşturulur",
       "needFrameFirst": "Sorunlardan görev oluşturmak için önce panoya bir servis çerçevesi ekle.",
       "searchFailed": "Arama başarısız: {error}",
       "searchResults": "Arama sonuçları",

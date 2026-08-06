@@ -95,7 +95,9 @@ const selected = computed(() => ui.selectedBlockId === props.id)
 // Services are always expanded to their task canvas, at every zoom level: there is no
 // chip/compact collapse, so panning is a fixed layout and zooming has no expand/collapse
 // transition to snap on. The far-chip and compact-summary branches in the template are
-// kept (gated off) so the prior behaviour is one edit away if we want chips back.
+// kept (gated off) so the prior behaviour is one edit away if we want chips back — and the
+// header carries no collapse control, because with `showExpanded` pinned true it only ever
+// looked like one.
 const showExpanded = computed(() => true)
 
 // Every child whose parked run the frame badge speaks for: its tasks AND its initiative
@@ -497,8 +499,8 @@ const ITEM_ICON: Record<string, string> = {
                 >{{ statusLabel }}</UBadge
               >
               <!-- Board-authoring buttons (create task / from issue / recurring / initiative)
-                   are `board.write` — hidden for a read-only viewer, who keeps the badge +
-                   collapse toggle (view-only affordances). -->
+                   are `board.write` — hidden for a read-only viewer, who keeps the status badge
+                   (the one view-only affordance here). -->
               <template v-if="access.canWriteBoard.value">
                 <UButton
                   class="nodrag"
@@ -562,15 +564,6 @@ const ITEM_ICON: Record<string, string> = {
                   @click.stop="huntBugs"
                 />
               </template>
-              <UButton
-                class="nodrag"
-                :size="isTouch ? 'sm' : 'xs'"
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-chevron-up"
-                :title="t('board.frame.collapseTitle')"
-                @click.stop="toggleExpand"
-              />
             </div>
           </div>
 

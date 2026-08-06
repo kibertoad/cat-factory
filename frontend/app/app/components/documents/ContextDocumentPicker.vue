@@ -8,9 +8,17 @@
 // collects PendingContext items and links them once the block exists (see
 // useContextLinking). A search hit / pasted ref carries `needsImport: true` so
 // it's fetched + persisted before linking. Mirrors ContextIssuePicker.
+//
+// The source being searched is ALWAYS on screen (even when the workspace has exactly one, and
+// even when it has none), and its menu doubles as the "add a source" affordance: which source is
+// selected decides what a pasted ref resolves to and which repository a file pick browses, and
+// attaching context is where a missing integration is discovered. Connecting opens that source's
+// connect modal OVER the caller's form rather than navigating away from it.
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
 import EmptyState from '~/components/common/EmptyState.vue'
 import RepoContextDocPicker from '~/components/documents/RepoContextDocPicker.vue'
+import { buildSourceChoices, connectionSourceRows, reconcileSource } from '~/utils/sourcePicker'
 
 // Repo-backed document sources pick a FILE out of a repository (repo search → file
 // search / tree browse) instead of the generic free-text catalogue search. Today only
@@ -25,17 +33,66 @@ const emit = defineEmits<{ pick: [item: PendingContext] }>()
 
 const { t } = useI18n()
 const documents = useDocumentsStore()
+const ui = useUiStore()
+// Connecting a source stores a workspace credential and is admin-tier, while attaching what it
+// holds is member-tier — so the menu's "add a source" tier is withheld from a member rather than
+// offering a connect that would 403 (see `connectionSourceRows`).
+const { canManageIntegrations } = useWorkspaceAccess()
 
 const chosen = computed(() => new Set(props.chosenKeys ?? []))
 
-// Source: default to the first connected source; a selector appears only when
-// more than one is connected (the common case is a single source).
+// Source: default to the first connected source. The selector is always rendered, single source
+// or not: which source is being searched decides what a pasted ref resolves to, so it must never
+// be invisible.
 const source = ref<DocumentSourceKind | undefined>(documents.connectedSources[0]?.source)
-const sourceItems = computed(() =>
-  documents.connectedSources.map((s) => ({ label: s.label, value: s.source })),
-)
 const descriptor = computed(() =>
   source.value ? documents.descriptorFor(source.value) : undefined,
+)
+
+// The source the user left to connect, so it becomes the selection the moment it turns up
+// connected (the connect modal re-probes on success). Also the reconcile trigger for a source
+// that stops being connected while the caller's form sat open.
+const awaitingConnect = ref<DocumentSourceKind | null>(null)
+function addSource(s: DocumentSourceKind) {
+  awaitingConnect.value = s
+  ui.openDocumentConnect(s)
+}
+watch(
+  () => documents.connectedSources.map((s) => s.source),
+  (connected) => {
+    const next = reconcileSource(connected, source.value, awaitingConnect.value)
+    if (next && next === awaitingConnect.value) awaitingConnect.value = null
+    if (next !== source.value) source.value = next
+  },
+)
+
+// Two-tier menu: pick a connected source, or connect one the workspace hasn't got yet. A
+// document source carries no per-workspace enable toggle, so every add entry is a `connect`.
+const sourceMenu = computed<DropdownMenuItem[][]>(() =>
+  buildSourceChoices(
+    connectionSourceRows(documents.sources, {
+      isConnected: documents.isConnected,
+      canConnect: canManageIntegrations.value,
+    }),
+    source.value,
+  ).map((group) =>
+    group.map((choice) =>
+      choice.action === 'select'
+        ? {
+            label: choice.label,
+            icon: choice.icon,
+            trailingIcon: choice.active ? 'i-lucide-check' : undefined,
+            onSelect: () => {
+              source.value = choice.source
+            },
+          }
+        : {
+            label: t('documents.picker.connectSource', { label: choice.label }),
+            icon: 'i-lucide-plug',
+            onSelect: () => addSource(choice.source),
+          },
+    ),
+  ),
 )
 const searchable = computed(() => descriptor.value?.searchable ?? false)
 // A repo-backed source swaps the whole free-text search body for the repo→file picker.
@@ -176,17 +233,39 @@ onMounted(() => {
 
 <template>
   <div class="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-2">
-    <USelect
-      v-if="sourceItems.length > 1"
-      v-model="source"
-      :items="sourceItems"
-      size="xs"
-      class="w-full"
+    <!-- Which source is being searched, always visible, plus the sources the user could add
+         from here (each opens the connect modal over the caller's form). -->
+    <div class="flex items-center gap-1.5">
+      <span class="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {{ t('documents.picker.sourceLabel') }}
+      </span>
+      <UDropdownMenu :items="sourceMenu" :content="{ side: 'bottom', align: 'start' }">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          :icon="icon"
+          trailing-icon="i-lucide-chevron-down"
+          class="max-w-full"
+        >
+          <span class="truncate">{{ descriptor?.label ?? t('documents.picker.noSource') }}</span>
+        </UButton>
+      </UDropdownMenu>
+    </div>
+
+    <!-- No source selected: nothing is connected (or the last one was disconnected while this
+         sat open), so the menu above is the only action left. Say that rather than render a
+         search box that can only fail. -->
+    <EmptyState
+      v-if="!source"
+      compact
+      icon="i-lucide-plug"
+      :title="t('documents.picker.needsSource')"
     />
 
     <!-- Repo-backed source (GitHub / GitLab): pick a repository, then a file. -->
     <RepoContextDocPicker
-      v-if="isRepoSource && source"
+      v-else-if="isRepoSource"
       :source="source!"
       :icon="icon"
       :chosen-keys="chosenKeys"

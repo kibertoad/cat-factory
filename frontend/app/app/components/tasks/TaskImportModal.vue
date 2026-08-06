@@ -1,11 +1,16 @@
 <script setup lang="ts">
-// Create a board task from a connected tracker's issue. Pick a container (service
-// frame or module), then use the inline picker below to find an issue (search by
-// title, pick an already-imported one, or paste a URL/key) — choosing one opens the
+// Create a board task from a connected tracker's issue. Use the inline picker to find an issue
+// (search by title, pick an already-imported one, or paste a URL/key) — choosing one opens the
 // prefilled add-task form (title seeded, issue staged as linked context) where the
 // user confirms the pipeline / presets before it's created. This is the same picker
 // the add-task form uses for "context issues", so the two behave identically. A
 // pasted parent/epic reference can instead be spawned as a whole linked task group.
+//
+// Where the task lands depends on how the modal was opened. From a service frame's own
+// "create task from issue" button the target IS that frame — the button exists nowhere else, so
+// the modal states the frame rather than asking a question whose answer it already has. Opened
+// standalone (the command bar / the Integrations hub) it is the general tracker browser, with no
+// frame behind it, so there the container is a genuine choice and the picker stays.
 import type { TaskSourceKind } from '~/types/domain'
 import type { PendingContext } from '~/composables/useContextLinking'
 import ContextIssuePicker from '~/components/tasks/ContextIssuePicker.vue'
@@ -43,6 +48,15 @@ const descriptor = computed(() => (source.value ? tasks.descriptorFor(source.val
 // The container (service frame or module) a new task is created in.
 const containerId = ref<string | undefined>(undefined)
 
+// The frame the modal was opened from, when it was one: the create-in target is then fixed and
+// the picker below is replaced by a line naming it. Resolved THROUGH the board rather than
+// trusted as an id, so a frame deleted while the modal sat open falls back to the picker instead
+// of pinning the target to something nothing can be created in.
+const pinnedContainer = computed(() => {
+  const id = ui.taskImport?.containerId
+  return id ? board.getBlock(id) : undefined
+})
+
 // Containers a new task can be created in: every service frame and module on the
 // board. Modules are labelled with their parent frame so the choice is unambiguous.
 const containerItems = computed(() =>
@@ -60,9 +74,9 @@ watch(open, (isOpen) => {
   if (isOpen) {
     ref_.value = ''
     source.value = ui.taskImport?.source ?? tasks.offeredSources[0]?.source ?? undefined
-    // Opened from a service frame → preselect it as the create-in target; otherwise
-    // fall back to the first container on the board.
-    containerId.value = ui.taskImport?.containerId ?? containerItems.value[0]?.value
+    // Opened from a service frame → that frame IS the target; otherwise fall back to the first
+    // container on the board as the picker's initial selection.
+    containerId.value = pinnedContainer.value?.id ?? containerItems.value[0]?.value
     tasks.loadTasks().catch(() => {})
   }
 })
@@ -148,8 +162,16 @@ async function doSpawnEpic() {
 
       <!-- Main form -->
       <div v-else class="space-y-4">
-        <!-- Where the new task lands (preselected when opened from a service frame). -->
-        <UFormField :label="t('tasks.import.createTasksIn')">
+        <!-- Where the new task lands. Opened from a service frame the target is that frame and
+             is stated, not asked; opened standalone it is a real choice. -->
+        <p v-if="pinnedContainer" class="text-xs text-slate-400">
+          <i18n-t keypath="tasks.import.creatingIn" tag="span" scope="global">
+            <template #container>
+              <span class="font-medium text-slate-200">{{ pinnedContainer.title }}</span>
+            </template>
+          </i18n-t>
+        </p>
+        <UFormField v-else :label="t('tasks.import.createTasksIn')">
           <USelect
             v-model="containerId"
             :items="containerItems"

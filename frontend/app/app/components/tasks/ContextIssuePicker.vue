@@ -21,7 +21,7 @@ import type { TaskSourceReadReason } from '@cat-factory/contracts'
 import type { SourceTask, TaskSearchResult, TaskSourceKind } from '~/types/domain'
 import { apiErrorReason } from '~/composables/api/errors'
 import EmptyState from '~/components/common/EmptyState.vue'
-import { buildSourceChoices, reconcileSource } from '~/utils/taskSources'
+import { buildSourceChoices, reconcileSource } from '~/utils/sourcePicker'
 
 const props = defineProps<{
   /** contextKeys already staged by the caller, so they're filtered out / not re-offered. */

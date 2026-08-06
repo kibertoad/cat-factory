@@ -416,7 +416,6 @@
       "addTaskTitle": "タスクを追加",
       "createTaskFromIssueTitle": "課題からタスクを作成",
       "addRecurringTitle": "繰り返しパイプラインを追加",
-      "collapseTitle": "折りたたむ",
       "dragService": "サービスをドラッグ",
       "dragTask": "タスクをドラッグ",
       "dragToResize": "ドラッグしてサイズ変更",
@@ -4166,7 +4165,11 @@
       "attachByReference": "{ref} を参照で添付",
       "noMatches": "一致するページがありません。",
       "emptySearchable": "タイトルで検索するか、インポート済みドキュメントを選択してください。",
-      "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。"
+      "emptyRefOnly": "ページの URL または ID を貼り付けて添付します。",
+      "sourceLabel": "ソース",
+      "noSource": "ソースを選択",
+      "connectSource": "{label} を接続",
+      "needsSource": "ページを添付するにはドキュメントソースを接続してください。"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "リポジトリを検索…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "課題を検索",
       "searchPlaceholder": "タイトルで検索、課題の URL を貼り付け、または課題番号を入力…",
       "createTasksIn": "タスクの作成先",
+      "creatingIn": "新しいタスクは {container} に作成されます",
       "needFrameFirst": "課題からタスクを作成するには、先にボードにサービスフレームを追加してください。",
       "searchFailed": "検索に失敗しました: {error}",
       "searchResults": "検索結果",

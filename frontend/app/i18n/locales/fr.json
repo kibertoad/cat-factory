@@ -416,7 +416,6 @@
       "addTaskTitle": "Ajouter une tâche",
       "createTaskFromIssueTitle": "Créer une tâche depuis un ticket",
       "addRecurringTitle": "Ajouter une pipeline récurrente",
-      "collapseTitle": "Réduire",
       "dragService": "Faire glisser le service",
       "dragTask": "Faire glisser la tâche",
       "dragToResize": "Glisser pour redimensionner",
@@ -4166,7 +4165,11 @@
       "attachByReference": "Joindre {ref} par référence",
       "noMatches": "Aucune page correspondante.",
       "emptySearchable": "Recherchez par titre ou choisissez un document importé.",
-      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre."
+      "emptyRefOnly": "Collez l'URL ou l'ID d'une page pour la joindre.",
+      "sourceLabel": "Source",
+      "noSource": "Choisir une source",
+      "connectSource": "Connecter {label}",
+      "needsSource": "Connectez une source de documents pour joindre une page."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Rechercher des dépôts…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "Rechercher des tickets",
       "searchPlaceholder": "Recherchez par titre, collez l'URL d'un ticket ou saisissez un numéro de ticket…",
       "createTasksIn": "Créer des tâches dans",
+      "creatingIn": "Les nouvelles tâches sont créées dans {container}",
       "needFrameFirst": "Ajoutez d'abord un cadre de service au tableau pour créer des tâches à partir de tickets.",
       "searchFailed": "Échec de la recherche : {error}",
       "searchResults": "Résultats de la recherche",

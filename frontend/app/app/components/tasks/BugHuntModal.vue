@@ -24,7 +24,7 @@ import type {
   BugHuntConfidence,
   TaskSourceKind,
 } from '~/types/domain'
-import { type SourceChoice, buildSourceChoices, reconcileSource } from '~/utils/taskSources'
+import { type SourceChoice, buildSourceChoices, reconcileSource } from '~/utils/sourcePicker'
 import IntegrationBackTitle from '~/components/layout/IntegrationBackTitle.vue'
 
 const { t, d, n } = useI18n()
@@ -96,7 +96,7 @@ const addableSources = computed(() =>
  * Wording for an addable tracker: `enable` is connected but toggled off for this workspace,
  * so the user is never told to "connect" something they already connected.
  */
-function addLabel(choice: SourceChoice): string {
+function addLabel(choice: SourceChoice<TaskSourceKind>): string {
   return choice.action === 'enable'
     ? t('bugHunt.enableSource', { label: choice.label })
     : t('bugHunt.connectSource', { label: choice.label })

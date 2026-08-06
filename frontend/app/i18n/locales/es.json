@@ -416,7 +416,6 @@
       "addTaskTitle": "Añadir tarea",
       "createTaskFromIssueTitle": "Crear tarea desde incidencia",
       "addRecurringTitle": "Añadir pipeline recurrente",
-      "collapseTitle": "Contraer",
       "dragService": "Arrastrar servicio",
       "dragTask": "Arrastrar tarea",
       "dragToResize": "Arrastra para cambiar el tamaño",
@@ -4166,7 +4165,11 @@
       "attachByReference": "Adjuntar {ref} por referencia",
       "noMatches": "No hay páginas que coincidan.",
       "emptySearchable": "Busca por título o elige un documento importado.",
-      "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla."
+      "emptyRefOnly": "Pega la URL o el ID de una página para adjuntarla.",
+      "sourceLabel": "Fuente",
+      "noSource": "Elige una fuente",
+      "connectSource": "Conectar {label}",
+      "needsSource": "Conecta una fuente de documentos para adjuntar una página."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Buscar repositorios…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "Buscar incidencias",
       "searchPlaceholder": "Busca por título, pega la URL de una incidencia o escribe un número de incidencia…",
       "createTasksIn": "Crear tareas en",
+      "creatingIn": "Las tareas nuevas se crean en {container}",
       "needFrameFirst": "Añade primero un marco de servicio al tablero para crear tareas desde incidencias.",
       "searchFailed": "La búsqueda falló: {error}",
       "searchResults": "Resultados de la búsqueda",

@@ -464,7 +464,6 @@
       "addTaskTitle": "Add task",
       "createTaskFromIssueTitle": "Create task from issue",
       "addRecurringTitle": "Add recurring pipeline",
-      "collapseTitle": "Collapse",
       "dragService": "Drag service",
       "dragTask": "Drag task",
       "dragToResize": "Drag to resize",
@@ -4300,7 +4299,11 @@
       "attachByReference": "Attach {ref} by reference",
       "noMatches": "No matching pages.",
       "emptySearchable": "Search by title, or pick an imported document.",
-      "emptyRefOnly": "Paste a page URL or ID to attach it."
+      "emptyRefOnly": "Paste a page URL or ID to attach it.",
+      "sourceLabel": "Source",
+      "noSource": "Choose a source",
+      "connectSource": "Connect {label}",
+      "needsSource": "Connect a document source to attach a page."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Search repositories…",
@@ -4429,6 +4432,7 @@
       "searchIssues": "Search issues",
       "searchPlaceholder": "Search by title, paste an issue URL, or type an issue number…",
       "createTasksIn": "Create tasks in",
+      "creatingIn": "New tasks land in {container}",
       "needFrameFirst": "Add a service frame to the board first to create tasks from issues.",
       "searchFailed": "Search failed: {error}",
       "searchResults": "Search results",

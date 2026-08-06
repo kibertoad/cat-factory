@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { buildSourceChoices, reconcileSource } from './taskSources'
+import { buildSourceChoices, connectionSourceRows, reconcileSource } from './sourcePicker'
 import type { TaskSourceState } from '~/types/domain'
 
 /**
- * The pure tracker-selection behind `<ContextIssuePicker>` and `<BugHuntModal>`. Pins what
- * the always-visible selector promises: the tracker in use is named even when it is the only
- * one, a tracker the workspace hasn't got yet is offered as something to ADD (worded for its
- * actual state), and the selection stays valid as the offered set changes underneath it.
+ * The pure source-selection behind `<ContextIssuePicker>`, `<BugHuntModal>` and
+ * `<ContextDocumentPicker>`. Pins what the always-visible selector promises: the source in use
+ * is named even when it is the only one, a source the workspace hasn't got yet is offered as
+ * something to ADD (worded for its actual state), and the selection stays valid as the offered
+ * set changes underneath it.
  */
 const state = (source: string, { available = true, enabled = true } = {}): TaskSourceState =>
   ({
@@ -70,6 +71,50 @@ describe('buildSourceChoices', () => {
     expect(buildSourceChoices([state('github')], 'github')).toHaveLength(1)
     expect(buildSourceChoices([state('jira', { available: false })], undefined)).toHaveLength(1)
     expect(buildSourceChoices([], undefined)).toEqual([])
+  })
+})
+
+describe('connectionSourceRows', () => {
+  const sources = [
+    { source: 'github', label: 'GitHub', icon: 'i-lucide-github' },
+    { source: 'confluence', label: 'Confluence', icon: 'i-lucide-file-text' },
+  ]
+  const isConnected = (source: string) => source === 'github'
+
+  it('offers the connected source and the rest as something to add', () => {
+    const rows = connectionSourceRows(sources, { isConnected, canConnect: true })
+    const [offered, addable] = buildSourceChoices(rows, 'github')
+    expect(offered).toEqual([
+      {
+        action: 'select',
+        source: 'github',
+        label: 'GitHub',
+        icon: 'i-lucide-github',
+        active: true,
+      },
+    ])
+    expect(addable).toEqual([
+      { action: 'connect', source: 'confluence', label: 'Confluence', icon: 'i-lucide-file-text' },
+    ])
+  })
+
+  // A member can attach a document but not connect a source, so the add tier is withheld
+  // rather than rendered into a 403.
+  it('withholds the unconnected sources from a user who cannot connect one', () => {
+    const rows = connectionSourceRows(sources, { isConnected, canConnect: false })
+    expect(rows.map((r) => r.source)).toEqual(['github'])
+    expect(buildSourceChoices(rows, 'github')).toHaveLength(1)
+  })
+
+  // No per-workspace toggle exists for these sources, so `enable` — "connected but switched
+  // off here" — is a state they cannot be in, and the wording must never appear.
+  it('never words a document source as `enable`', () => {
+    const rows = connectionSourceRows(sources, { isConnected: () => false, canConnect: true })
+    expect(
+      buildSourceChoices(rows, undefined)
+        .flat()
+        .map((c) => c.action),
+    ).toEqual(['connect', 'connect'])
   })
 })
 

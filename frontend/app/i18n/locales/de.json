@@ -2923,7 +2923,6 @@
       "addTaskTitle": "Aufgabe hinzufügen",
       "createTaskFromIssueTitle": "Aufgabe aus Issue erstellen",
       "addRecurringTitle": "Wiederkehrende Pipeline hinzufügen",
-      "collapseTitle": "Einklappen",
       "dragService": "Service ziehen",
       "dragTask": "Aufgabe ziehen",
       "dragToResize": "Zum Ändern der Größe ziehen",
@@ -3783,7 +3782,11 @@
       "attachByReference": "{ref} per Referenz anhängen",
       "noMatches": "Keine passenden Seiten.",
       "emptySearchable": "Nach Titel suchen oder ein importiertes Dokument auswählen.",
-      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen."
+      "emptyRefOnly": "Fügen Sie eine Seiten-URL oder -ID ein, um sie anzuhängen.",
+      "sourceLabel": "Quelle",
+      "noSource": "Quelle wählen",
+      "connectSource": "{label} verbinden",
+      "needsSource": "Verbinden Sie eine Dokumentquelle, um eine Seite anzuhängen."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Repositorys suchen…",
@@ -3912,6 +3915,7 @@
       "searchIssues": "Issues durchsuchen",
       "searchPlaceholder": "Nach Titel suchen, eine Issue-URL einfügen oder eine Issue-Nummer eingeben…",
       "createTasksIn": "Aufgaben erstellen in",
+      "creatingIn": "Neue Aufgaben landen in {container}",
       "needFrameFirst": "Fügen Sie dem Board zuerst einen Service-Frame hinzu, um Aufgaben aus Issues zu erstellen.",
       "searchFailed": "Suche fehlgeschlagen: {error}",
       "searchResults": "Suchergebnisse",

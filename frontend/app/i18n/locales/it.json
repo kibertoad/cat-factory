@@ -2923,7 +2923,6 @@
       "addTaskTitle": "Aggiungi attività",
       "createTaskFromIssueTitle": "Crea attività da issue",
       "addRecurringTitle": "Aggiungi pipeline ricorrente",
-      "collapseTitle": "Comprimi",
       "dragService": "Trascina il servizio",
       "dragTask": "Trascina l'attività",
       "dragToResize": "Trascina per ridimensionare",
@@ -3783,7 +3782,11 @@
       "attachByReference": "Allega {ref} per riferimento",
       "noMatches": "Nessuna pagina corrispondente.",
       "emptySearchable": "Cerca per titolo, oppure scegli un documento importato.",
-      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla."
+      "emptyRefOnly": "Incolla l'URL o l'ID di una pagina per allegarla.",
+      "sourceLabel": "Fonte",
+      "noSource": "Scegli una fonte",
+      "connectSource": "Collega {label}",
+      "needsSource": "Collega una sorgente di documenti per allegare una pagina."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Cerca repository…",
@@ -3912,6 +3915,7 @@
       "searchIssues": "Cerca issue",
       "searchPlaceholder": "Cerca per titolo, incolla l'URL di una issue, o digita un numero di issue…",
       "createTasksIn": "Crea attività in",
+      "creatingIn": "Le nuove attività vengono create in {container}",
       "needFrameFirst": "Aggiungi prima un frame di servizio alla board per creare attività dalle issue.",
       "searchFailed": "Ricerca non riuscita: {error}",
       "searchResults": "Risultati della ricerca",

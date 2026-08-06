@@ -416,7 +416,6 @@
       "addTaskTitle": "הוסף משימה",
       "createTaskFromIssueTitle": "צור משימה מאישיו",
       "addRecurringTitle": "הוסף צינור מחזורי",
-      "collapseTitle": "כווץ",
       "dragService": "גרור שירות",
       "dragTask": "גרור משימה",
       "dragToResize": "גרור לשינוי גודל",
@@ -4166,7 +4165,11 @@
       "attachByReference": "צרף את {ref} לפי הפניה",
       "noMatches": "אין דפים תואמים.",
       "emptySearchable": "חפש לפי כותרת, או בחר מסמך שיובא.",
-      "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו."
+      "emptyRefOnly": "הדבק כתובת URL או מזהה של דף כדי לצרף אותו.",
+      "sourceLabel": "מקור",
+      "noSource": "בחר מקור",
+      "connectSource": "חבר {label}",
+      "needsSource": "חבר מקור מסמכים כדי לצרף עמוד."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "חיפוש מאגרים…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "חפש ניושנים",
       "searchPlaceholder": "חפש לפי כותרת, הדבק URL של ניושן, או הקלד מספר ניושן…",
       "createTasksIn": "צור משימות ב-",
+      "creatingIn": "משימות חדשות ייווצרו ב-{container}",
       "needFrameFirst": "הוסף תחילה מסגרת שירות ללוח כדי ליצור משימות מניושנים.",
       "searchFailed": "החיפוש נכשל: {error}",
       "searchResults": "תוצאות חיפוש",

@@ -416,7 +416,6 @@
       "addTaskTitle": "Dodaj zadanie",
       "createTaskFromIssueTitle": "Utwórz zadanie ze zgłoszenia",
       "addRecurringTitle": "Dodaj cykliczny pipeline",
-      "collapseTitle": "Zwiń",
       "dragService": "Przeciągnij usługę",
       "dragTask": "Przeciągnij zadanie",
       "dragToResize": "Przeciągnij, aby zmienić rozmiar",
@@ -4166,7 +4165,11 @@
       "attachByReference": "Dołącz {ref} przez odwołanie",
       "noMatches": "Brak pasujących stron.",
       "emptySearchable": "Wyszukaj według tytułu lub wybierz zaimportowany dokument.",
-      "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć."
+      "emptyRefOnly": "Wklej adres URL lub identyfikator strony, aby ją dołączyć.",
+      "sourceLabel": "Źródło",
+      "noSource": "Wybierz źródło",
+      "connectSource": "Połącz {label}",
+      "needsSource": "Połącz źródło dokumentów, aby dołączyć stronę."
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Szukaj repozytoriów…",
@@ -4295,6 +4298,7 @@
       "searchIssues": "Szukaj zgłoszeń",
       "searchPlaceholder": "Szukaj według tytułu, wklej adres URL zgłoszenia lub wpisz numer zgłoszenia…",
       "createTasksIn": "Utwórz zadania w",
+      "creatingIn": "Nowe zadania powstaną w {container}",
       "needFrameFirst": "Najpierw dodaj ramę usługi do tablicy, aby tworzyć zadania ze zgłoszeń.",
       "searchFailed": "Wyszukiwanie nie powiodło się: {error}",
       "searchResults": "Wyniki wyszukiwania",
