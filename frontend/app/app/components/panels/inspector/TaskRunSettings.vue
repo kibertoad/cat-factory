@@ -333,6 +333,7 @@ const technicalLabel = computed(() => {
               color="neutral"
               icon="i-lucide-git-merge"
               trailing-icon="i-lucide-chevron-down"
+              data-testid="risk-policy-picker-trigger"
             />
           </template>
         </RiskPolicyPicker>

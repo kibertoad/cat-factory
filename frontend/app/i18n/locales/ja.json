@@ -311,7 +311,8 @@
         "derivedTitleFallback": "プルリクエストをレビュー",
         "prNotFound": "プルリクエスト #{number} はこのサービスのリポジトリで見つかりませんでした。番号を確認するか、そのプルリクエストがあるリポジトリをサービスに紐付けてください。",
         "prRepoMismatch": "そのプルリクエストは別のリポジトリにあります。このサービスは {repo} をレビューします。プルリクエストのリポジトリに紐付いたサービスの下にレビュータスクを作成してください。"
-      }
+      },
+      "contextFailed": "タスクは作成されていません: {count} 件の添付を読み取れませんでした | タスクは作成されていません: {count} 件の添付を読み取れませんでした"
     },
     "recurring": {
       "title": "繰り返しパイプラインを追加",
@@ -496,7 +497,8 @@
     "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
-    "importsOnAdd": "追加時にインポート"
+    "importsOnAdd": "追加時にインポート",
+    "unreadable": "取得できませんでした: {error}"
   },
   "errors": {
     "generic": {
@@ -4169,7 +4171,15 @@
       "sourceLabel": "ソース",
       "noSource": "ソースを選択",
       "connectSource": "{label} を接続",
-      "needsSource": "ページを添付するにはドキュメントソースを接続してください。"
+      "needsSource": "ページを添付するにはドキュメントソースを接続してください。",
+      "refChecking": "参照を確認しています…",
+      "refUnrecognized": "{source} の参照ではありません。想定される形式: {expected}",
+      "refOtherSource": "これは {claimed} のリンクであり、{source} のものではありません。",
+      "refSwitchSource": "代わりに {source} を使う",
+      "refTrimmed": "サポートされる形式に整形しました",
+      "refWidened": "このソースが読み取れないフレーム（{scope}）を指しているため、ファイル全体を添付します。",
+      "refAlreadyAttached": "この参照はすでに添付されています。",
+      "refCheckFailed": "参照を確認できませんでした: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "リポジトリを検索…",
@@ -6300,7 +6310,8 @@
       "failedTitle": "イニシアチブを作成できませんでした",
       "contextDocsHint": "要件・RFC・PRD を添付すると、計画エージェントが範囲の確定と計画の作成の際にそれを読みます。",
       "contextIssuesHint": "issue を添付すると、計画エージェントが計画を作成する際にその説明とコメントを参照します。",
-      "linkFailed": "イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした | イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした"
+      "linkFailed": "イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした | イニシアチブを作成しましたが、{count} 件の添付をリンクできませんでした",
+      "contextFailed": "イニシアチブは作成されていません: {count} 件の添付を読み取れませんでした | イニシアチブは作成されていません: {count} 件の添付を読み取れませんでした"
     },
     "status": {
       "planning": "計画中",

@@ -10,6 +10,8 @@ import {
   linkDocumentForKindSchema,
   linkDocumentSchema,
   planDocumentSchema,
+  resolveDocumentRefSchema,
+  resolvedDocumentRefSchema,
   searchDocumentsSchema,
   sourceDocumentSchema,
   spawnDocumentSchema,
@@ -81,6 +83,18 @@ export const importDocumentContract = defineApiContract({
   pathResolver: ({ source }) => `/document-sources/${source}/import`,
   requestBodySchema: importDocumentSchema,
   responsesByStatusCode: { 201: sourceDocumentSchema, ...errorResponses },
+})
+
+// Canonicalise a pasted URL/id WITHOUT importing it: the pre-flight an attach surface runs so a
+// link the source cannot read is corrected before a task is saved, rather than surfacing as a
+// failed import afterwards. POST because a ref carries slashes and query strings; pure, so it
+// spends no upstream call and needs no connection.
+export const resolveDocumentRefContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: sourceParams,
+  pathResolver: ({ source }) => `/document-sources/${source}/resolve-ref`,
+  requestBodySchema: resolveDocumentRefSchema,
+  responsesByStatusCode: { 200: resolvedDocumentRefSchema, ...errorResponses },
 })
 
 export const searchDocumentsContract = defineApiContract({

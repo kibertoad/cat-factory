@@ -1,5 +1,93 @@
 # @cat-factory/worker
 
+## 0.166.1
+
+### Patch Changes
+
+- Updated dependencies [ab0c228]
+  - @cat-factory/contracts@0.256.0
+  - @cat-factory/kernel@0.255.0
+  - @cat-factory/integrations@0.138.0
+  - @cat-factory/orchestration@0.223.0
+  - @cat-factory/server@0.235.0
+  - @cat-factory/agents@0.116.1
+  - @cat-factory/consensus@0.14.38
+  - @cat-factory/eks@0.1.250
+  - @cat-factory/gates@0.9.18
+  - @cat-factory/gitlab@0.16.9
+  - @cat-factory/observability-otel@0.16.2
+  - @cat-factory/prompt-fragments@1.0.2
+  - @cat-factory/spend@0.15.20
+  - @cat-factory/caching@0.16.3
+  - @cat-factory/observability-langfuse@0.10.22
+  - @cat-factory/provider-cloudflare@0.7.400
+
+## 0.166.0
+
+### Minor Changes
+
+- ee6ce7c: Patch the board from a `board` event instead of re-fetching the whole snapshot
+
+  Every `board` event collapsed to one thing in the SPA: a debounced full `workspace.refresh()`,
+  which is a REPLACE-style rehydrate of ~20 stores. The backend already knew which block changed
+  and threw the id away at the publisher, so a spawned task cost the same as a service being
+  deleted. An initiative loop firing one `block-added` per spawned item put every open board into a
+  snapshot fetch every ~300ms debounce window, and a board mounting the shared service paid it too.
+
+  A `board` event now carries the changed block when the change is FULLY DESCRIBED by that one
+  block (a spawned task, a module materialising, a field edit, a move, a dependency toggle, an epic
+  assignment, a cancel), and the SPA upserts it through the same path an `execution` event's block
+  takes. That path is the one with the monotonic live-upsert stamp on it, so a targeted board
+  upsert is protected from a slower snapshot resolving on top of it exactly as run transitions
+  already were.
+
+  The change that is NOT fully described by one block keeps the full refresh, and that half is the
+  point rather than a leftover: a removal cascades over descendants and prunes edges on blocks the
+  event never names, a reparent moves a subtree between parents, a resize shifts children, a
+  blueprint reconcile rewrites a whole service. A payload there would state part of the change and
+  read as all of it.
+
+  Two blocks are never carried, on any reason or event. A service FRAME, because one payload is
+  published for every board that mounts the affected service and a frame's position and size live on
+  the per-workspace mount rather than on the shared row, so whichever mount a publisher projected
+  through would be wrong on every other board and would jump the frame to coordinates none of them
+  shows it at. And a headless `internal` anchor block (a public-API run's own "task"), which the
+  snapshot read filters out of every board and which would otherwise render as a card carrying the
+  external caller's brief that no later read can remove. Both are refused once at the wire, by
+  kernel's `deliverableBoardBlock`, which every block-carrying event on both facades is assembled
+  through (`boardWireEvent` / `bootstrapWireEvent`) rather than trusted to each emit site.
+
+  That makes the `bootstrap` event's frame payload a withheld one too, so a repo bootstrap now
+  announces its frame's transitions (materialised, ready, blocked) as coarse `board` events beside
+  the job. The live "bootstrapping…" progress still rides the job with no refresh at all; what
+  stops is a poll tick pushing frame coordinates that are stale the moment anyone drags the card.
+
+  Internal breaks, all pre-1.0 surfaces: `ExecutionEventPublisher.boardChanged` now takes a
+  `BoardChange` value instead of four positional arguments; the `board` wire event gained `block`;
+  and the `bootstrap` wire event's `block` is now always null. A client on the old shape sees
+  `block` as absent and refreshes, which is the behaviour it already had.
+
+### Patch Changes
+
+- Updated dependencies [184d263]
+- Updated dependencies [ee6ce7c]
+  - @cat-factory/agents@0.116.0
+  - @cat-factory/orchestration@0.222.0
+  - @cat-factory/kernel@0.254.0
+  - @cat-factory/contracts@0.255.0
+  - @cat-factory/server@0.234.0
+  - @cat-factory/consensus@0.14.37
+  - @cat-factory/provider-cloudflare@0.7.399
+  - @cat-factory/caching@0.16.2
+  - @cat-factory/eks@0.1.249
+  - @cat-factory/gates@0.9.17
+  - @cat-factory/gitlab@0.16.8
+  - @cat-factory/integrations@0.137.2
+  - @cat-factory/observability-langfuse@0.10.21
+  - @cat-factory/observability-otel@0.16.1
+  - @cat-factory/prompt-fragments@1.0.1
+  - @cat-factory/spend@0.15.19
+
 ## 0.165.0
 
 ### Minor Changes

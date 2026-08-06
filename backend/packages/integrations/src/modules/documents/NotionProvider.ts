@@ -153,6 +153,15 @@ export class NotionProvider implements DocumentSourceProvider {
     return notionLogic.parseNotionRef(input)
   }
 
+  /**
+   * Notion resolves a bare id URL to the page, so the id alone rebuilds a working link: the attach
+   * pre-flight can show what a pasted share link (`…/Some-Long-Title-1f2e3d…?pvs=4`) trimmed to,
+   * rather than falling back to the raw id on the source people paste into most.
+   */
+  canonicalUrl(externalId: string): string {
+    return notionLogic.notionPageUrl(externalId)
+  }
+
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,
@@ -169,7 +178,7 @@ export class NotionProvider implements DocumentSourceProvider {
     return {
       externalId: page.id,
       title: notionLogic.notionPageTitle(page.properties),
-      url: page.url ?? `https://www.notion.so/${page.id.replace(/-/g, '')}`,
+      url: page.url ?? notionLogic.notionPageUrl(page.id),
       body: notionLogic.notionBlocksToMarkdown(blocks),
       version: page.last_edited_time ?? '',
     }

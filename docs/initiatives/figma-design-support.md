@@ -311,6 +311,22 @@ visual-confirmation leftover. Multimodal delivery is the long pole and is delibe
       `isDesignSource`, so a new source cannot ship unclassified.
 - [x] **Fix the stale tracker pointer** in `contracts/src/documents.ts`
       ([#1754](https://github.com/kibertoad/cat-factory/pull/1754)): now cites ADR 0017.
+- [x] **A pasted ref is judged BEFORE the task is saved.** The attach picker staged whatever text
+      sat in its box and only found out by trying to IMPORT it, after the task had been created:
+      a Figma share link (title segment + `?p=`/`&t=`, what the Copy link button produces) was
+      staged verbatim, and a link the source could not read at all was staged just as readily.
+      `POST /document-sources/:source/resolve-ref` is the provider's own `parseRef` with the fetch
+      removed, so the picker shows the canonical form the paste is TRIMMED to (`canonicalUrl`,
+      rebuilt from the id by the provider) and refuses the rest with a reason naming WHICH
+      correction it needs: a different link, or the same link on the source that claims it. The
+      claimant search calls the same `orderSourcesByClaimConfidence` as the host-pinned ordering
+      above, so the hint cannot point a design link at Notion. A node id the parser CANNOT read
+      still falls back to the whole file, which is right and invisible, so the provider reports the
+      dropped frame (`droppedScope`) and the picker warns about it separately from the trim: for a
+      design source that widening is the defect, not the tracking params. The fetch itself moved
+      ahead of the create (`resolvePending`), so an unreachable page is a correction made with the
+      form still open rather than a toast over a task that already exists without its context.
+      Model: [`document-sources.md`](../../backend/docs/document-sources.md).
 - [ ] **Coverage for the designer path.** An e2e spec for attach-document-to-task and one for the
       start-from-design flow once Track A lands (live-push assertions per the e2e rules), plus
       unit specs for `stores/documents.ts`, which currently has none.

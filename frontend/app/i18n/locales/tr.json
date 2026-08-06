@@ -311,7 +311,8 @@
         "derivedTitleFallback": "Pull request'i incele",
         "prNotFound": "#{number} numaralı pull request bu servisin deposunda bulunamadı. Numarayı kontrol edin veya servisi, pull request'in bulunduğu depoya bağlayın.",
         "prRepoMismatch": "Bu pull request başka bir depoda. Bu servis {repo} deposunu inceliyor; inceleme görevini pull request'in deposuna bağlı servis altında oluşturun."
-      }
+      },
+      "contextFailed": "Görev oluşturulmadı: {count} ek okunamadı | Görev oluşturulmadı: {count} ek okunamadı"
     },
     "recurring": {
       "title": "Yinelenen bir işlem hattı ekle",
@@ -496,7 +497,8 @@
     "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
-    "importsOnAdd": "eklendiğinde içe aktarılır"
+    "importsOnAdd": "eklendiğinde içe aktarılır",
+    "unreadable": "Getirilemedi: {error}"
   },
   "errors": {
     "generic": {
@@ -4169,7 +4171,15 @@
       "sourceLabel": "Kaynak",
       "noSource": "Bir kaynak seç",
       "connectSource": "{label} bağla",
-      "needsSource": "Bir sayfa eklemek için bir belge kaynağı bağla."
+      "needsSource": "Bir sayfa eklemek için bir belge kaynağı bağla.",
+      "refChecking": "Referans denetleniyor…",
+      "refUnrecognized": "Bu bir {source} referansı değil. Beklenen: {expected}",
+      "refOtherSource": "Bu bir {claimed} bağlantısı, {source} bağlantısı değil.",
+      "refSwitchSource": "Bunun yerine {source} kullan",
+      "refTrimmed": "Desteklenen biçime kısaltıldı",
+      "refWidened": "Bu kaynağın okuyamadığı bir çerçeveyi ({scope}) belirtiyor, bu yüzden dosyanın tamamı ekleniyor.",
+      "refAlreadyAttached": "Bu referans zaten ekli.",
+      "refCheckFailed": "Referans denetlenemedi: {error}"
     },
     "repoPicker": {
       "searchRepoPlaceholder": "Depolarda ara…",
@@ -6300,7 +6310,8 @@
       "failedTitle": "Girisim olusturulamadi",
       "contextDocsHint": "Planlama ajanlarının kapsamı belirlerken ve planı hazırlarken okuması için bir gereksinim, RFC veya PRD ekleyin.",
       "contextIssuesHint": "Planlama ajanlarının planı hazırlarken açıklamasını ve yorumlarını görmesi için bir sorun kaydı ekleyin.",
-      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı"
+      "linkFailed": "Girişim oluşturuldu, ancak {count} ek bağlanamadı | Girişim oluşturuldu, ancak {count} ek bağlanamadı",
+      "contextFailed": "Girişim oluşturulmadı: {count} ek okunamadı | Girişim oluşturulmadı: {count} ek okunamadı"
     },
     "status": {
       "planning": "Planlaniyor",
