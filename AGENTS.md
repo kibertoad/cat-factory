@@ -26,4 +26,6 @@ requirements review, the merge/gate lifecycle, telemetry). **Read `CLAUDE.md` fi
 - Format/lint the **whole tree** only: `pnpm exec oxfmt .` / `pnpm lint:fix`, never a file subset.
 - Any change to one runtime facade must land the **symmetric** change in the others.
 - Add a **changeset** for any change to a versioned package.
-- Run `typecheck`/`test:run`/`build` through Turbo from the repo root.
+- Run `typecheck`/`test`/`build` through Turbo from the repo root.
+- Test a targeted **scope**, never the whole tree: `pnpm test:changed`, `pnpm test:quick` or one
+  `--filter`ed package. The full suite is CI's lane, and running it locally is banned.
