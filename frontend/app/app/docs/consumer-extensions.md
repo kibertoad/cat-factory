@@ -4,19 +4,19 @@ A deployment that consumes this layer (`extends: ['@cat-factory/app']`) can cont
 its own **components** (result windows, navigation entries, inspector panels, agent-kind
 palette data) **without forking the layer**. This is the frontend counterpart of the
 backend's public registries (`registerAgentKind`, `registerGate`; see
-[`backend/docs/custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/frontend/backend/docs/custom-agents.md)). The governing
+[`backend/docs/custom-agents.md`](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/custom-agents.md)). The governing
 principle is the same: **zero host edits for a consumer extension**.
 
 A worked, end-to-end example ships in the template deployment:
-[`deploy/frontend/app/`](https://github.com/kibertoad/cat-factory/blob/main/frontend/deploy/frontend) (the `acme:security` module): the
+[`deploy/frontend/app/`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend/app) (the `acme:security` module): the
 frontend analogue of the backend
-[`@cat-factory/example-custom-agent`](https://github.com/kibertoad/cat-factory/blob/main/frontend/backend/internal/example-custom-agent)
+[`@cat-factory/example-custom-agent`](https://github.com/kibertoad/cat-factory/tree/main/backend/internal/example-custom-agent)
 package. Read this guide alongside it.
 
 > This is the **landed** surface (modular-vue adoption slices 1–5). The larger consumer
 > extension programme (custom task types, generic interactive phases, overlays, consumer
 > notification kinds, stream events, and the hardened public export surface) is tracked in
-> [`docs/initiatives/frontend-extension-mechanism.md`](https://github.com/kibertoad/cat-factory/blob/main/frontend/docs/initiatives/frontend-extension-mechanism.md).
+> [`docs/initiatives/frontend-extension-mechanism.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/initiatives/frontend-extension-mechanism.md).
 
 ## The one seam: `registerAppModule`
 

@@ -210,8 +210,9 @@ harness change and no image bump: the fold rides the user prompt the backend com
 ## Standing context, and the trait that gates it
 
 `defaultFragmentIds` name best-practice fragments from the universal code pool (the built-in
-catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / workspace rows, and the
-`src:<sourceId>:<slug>` ids of a repo-backed fragment source).
+catalog plus whatever the deployment passes to `promptFragmentRegistry.registerAll()`) or from the
+tenant tiers (account / workspace rows, and the `src:<sourceId>:<slug>` ids of a repo-backed
+fragment source).
 
 - **Fragments fold only for `code-aware` / `doc-aware` agent kinds**
   (`AgentContextBuilder.resolveFragments`). An operation whose pipeline runs the deployment's own
@@ -220,9 +221,9 @@ catalog ∪ `registerPromptFragments`) or from the tenant tiers (account / works
 - **A long fragment is folded as its condensed `brief` for implementer kinds** and in full for
   reviewer/planner kinds, so ship a `brief` alongside a long `body`
   ([`prompt-fragments/README.md`](../packages/prompt-fragments/README.md)).
-- **`registerTaskTypeDefaultFragments` is NOT the seam for an operation.** That module-global is
-  for attaching defaults to a BUILT-IN type, which has no descriptor to carry them. A registered
-  type declares `defaultFragmentIds` on its own registration, where boot validation can see it.
+- **`promptFragmentRegistry.registerTaskTypeDefaults()` is NOT the seam for an operation.** It
+  attaches defaults to a BUILT-IN type, which has no descriptor to carry them. A registered type
+  declares `defaultFragmentIds` on its own registration, where boot validation can see it.
 - **Seeding STATES an unregistered type.** A task created on a process whose package lacks the
   registration is accepted and gets NONE of the operation's fragments, and a later build does not
   go back for it, because only the id SET freezes at creation. `BoardService` logs a warning

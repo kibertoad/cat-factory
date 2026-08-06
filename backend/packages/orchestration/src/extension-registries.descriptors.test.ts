@@ -186,6 +186,100 @@ describe('custom task types (reusable operations)', () => {
     expect(problems[0]?.code).toBe('task_type_unknown_fragment')
   })
 
+  it('names the DECLARATION the unresolvable ids came from, not always defaultFragmentIds', () => {
+    // The conditional check reuses the unconditional checker, which used to hardcode
+    // `defaultFragmentIds` into its message. An operator then greps their registration for an id
+    // that is not there, concludes the warning is stale, and moves on.
+    const problems = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [{ key: 'protocol', label: 'Protocol', type: 'text' }],
+      conditionalFragmentIds: [
+        { when: { key: 'protocol', equals: 'graphql' }, fragmentIds: ['org.graphq'] },
+      ],
+    })
+    expect(problems[0]?.message).toContain('conditionalFragmentIds')
+    expect(problems[0]?.message).not.toContain('defaultFragmentIds "org.graphq"')
+  })
+
+  it('fails boot on a conditional whose condition states no predicate at all', () => {
+    // `equals` and `includes` are both optional on the schema, so a dropped `equals: "graphql"`
+    // still validates, and the shared evaluator reads a predicate-less condition as SATISFIED
+    // (right for field visibility, where the alternative hides a field forever). Left alone, every
+    // REST case is silently seeded with the GraphQL standard: the misseeding conditional fragments
+    // exist to remove.
+    const problems = problemsFor({
+      ...base,
+      taskType: 'org:introduce-api',
+      fields: [{ key: 'protocol', label: 'Protocol', type: 'text' }],
+      conditionalFragmentIds: [{ when: { key: 'protocol' }, fragmentIds: ['org.graphql'] }],
+    })
+    expect(problems[0]?.severity).toBe('error')
+    expect(problems[0]?.code).toBe('task_type_conditional_no_predicate')
+  })
+
+  it('lets a formPanel type gate conditionals, having no descriptor fields to declare them in', () => {
+    // A bespoke panel collects its bag through its own component, so `fields` is legitimately
+    // empty and there is nothing to check a `when.key` against. Refusing was refusing BOOT for the
+    // one shape the feature exists to support.
+    promptFragmentRegistry.register(fragment('org.graphql'))
+    expect(
+      problemsFor({
+        ...base,
+        taskType: 'org:introduce-api',
+        formPanel: 'org:introduce-api-form',
+        conditionalFragmentIds: [
+          { when: { key: 'protocol', equals: 'graphql' }, fragmentIds: ['org.graphql'] },
+        ],
+      }),
+    ).toEqual([])
+  })
+
+  it('checks NOTHING against a pool this process cannot see', () => {
+    // A mothership-mode node: the registry holds the shipped catalog, and the deployment's
+    // standards live on the MOTHERSHIP, which is the only place they take effect. Judging ids
+    // against the local registry would warn about every org standard at every boot for a
+    // configuration that resolves perfectly at run time.
+    const taskTypeRegistry = defaultTaskTypeRegistry()
+    taskTypeRegistry.register({
+      ...base,
+      taskType: 'org:introduce-api',
+      defaultFragmentIds: ['org.api-guidelines'],
+    })
+    const registries = {
+      agentKindRegistry: defaultAgentKindRegistry(),
+      gateRegistry: defaultGateRegistry(),
+      taskTypeRegistry,
+      promptFragmentRegistry,
+    }
+    // In-process (the ordinary deployment): the id is checked, and warned about.
+    expect(
+      collectRegistrationProblems({
+        registries: {
+          ...registries,
+          promptFragments: {
+            inProcess: true,
+            all: async () => [],
+            defaultFragmentIdsFor: async () => [],
+          },
+        },
+      }).map((p) => p.code),
+    ).toEqual(['task_type_unknown_fragment'])
+    // Remote: silent, because there is no local pool that speaks for the run's.
+    expect(
+      collectRegistrationProblems({
+        registries: {
+          ...registries,
+          promptFragments: {
+            inProcess: false,
+            all: async () => [],
+            defaultFragmentIdsFor: async () => [],
+          },
+        },
+      }),
+    ).toEqual([])
+  })
+
   it('WARNS on an unresolvable fragment id, naming both causes it cannot tell apart', () => {
     // A workspace/account-tier fragment merges per workspace at RUN time, so boot structurally
     // cannot see one: refusing would reject a legitimate tenant-tier reference, and staying
@@ -214,6 +308,9 @@ describe('custom task types (reusable operations)', () => {
           agentKindRegistry: defaultAgentKindRegistry(),
           gateRegistry: defaultGateRegistry(),
           taskTypeRegistry,
+          // Passed deliberately: with no registry there is no pool, and the id checks stand down
+          // rather than reporting every id as unresolvable against an empty set.
+          promptFragmentRegistry,
         },
         onWarn: (p) => warned.push(p.code),
       }),

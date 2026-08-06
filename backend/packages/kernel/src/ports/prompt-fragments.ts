@@ -25,6 +25,19 @@ import type { PromptFragmentRegistry } from '../domain/prompt-fragment-registry.
  * implementation crosses a network; an in-process source resolves immediately.
  */
 export interface PromptFragmentSource {
+  /**
+   * Whether the pool this source answers from is THIS process's own registry.
+   *
+   * Read by anything that would otherwise judge a run's fragment ids against the local registry.
+   * Boot validation is the one that matters: on a mothership-mode node the registry holds the
+   * shipped catalog and nothing else (the deployment is told to register its standards on the
+   * MOTHERSHIP's entry point, which is the only place they take effect), so checking a task
+   * type's `defaultFragmentIds` against it would report every org standard as unresolvable on
+   * every boot, for a configuration that resolves perfectly at run time. "The pool is empty" and
+   * "the pool is somewhere this process cannot see" are the same value and opposite facts, which
+   * is the rule this whole port exists to keep.
+   */
+  readonly inProcess: boolean
   /** The universal pool: every registered fragment, in registration order. */
   all(): Promise<PromptFragment[]>
   /**
@@ -46,6 +59,7 @@ export function registryPromptFragmentSource(
   registry: PromptFragmentRegistry,
 ): PromptFragmentSource {
   return {
+    inProcess: true,
     all: async () => registry.all(),
     defaultFragmentIdsFor: async (taskType) => registry.defaultFragmentIdsFor(taskType),
   }

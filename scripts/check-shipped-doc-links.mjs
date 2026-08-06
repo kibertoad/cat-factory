@@ -52,25 +52,27 @@ function expandGlob(glob) {
 }
 
 const packageDirs = WORKSPACE_GLOBS.flatMap(expandGlob).map((rel) => join(repoRoot, rel))
-const violations = findViolations(packageDirs)
+const violations = findViolations(packageDirs, repoRoot)
 
 if (violations.length === 0) {
   console.log(
     `check-shipped-doc-links: every markdown file shipped by ${packageDirs.length} workspace ` +
-      `packages links inside its own tarball.`,
+      `packages links inside its own tarball, and every repo-absolute link resolves.`,
   )
   process.exit(0)
 }
 
-console.error('Shipped documentation links outside its own package tarball:\n')
+console.error('Shipped documentation carries a link its reader cannot follow:\n')
 for (const violation of violations) {
   console.error(`  ${violation.package}: ${relative(repoRoot, violation.doc)}`)
-  for (const target of violation.targets) console.error(`      ${target}`)
+  for (const target of violation.escaping) console.error(`      escapes the tarball: ${target}`)
+  for (const { target, reason } of violation.broken) console.error(`      ${reason}: ${target}`)
 }
 console.error(
   '\nA relative link that leaves the package root resolves only from a checkout, so it is dead ' +
     'for the consumer who installed the package. Replace it with an absolute ' +
     'https://github.com/kibertoad/cat-factory/blob/main/... URL, or move the material into the ' +
-    'package.',
+    'package. A repo-absolute link is held to the second half of the same bar: converting a ' +
+    'relative link carries its mistakes across, so the path is checked against this checkout.',
 )
 process.exit(1)

@@ -8,6 +8,7 @@
 '@cat-factory/node-server': minor
 '@cat-factory/local-server': minor
 '@cat-factory/worker': minor
+'@cat-factory/observability-otel': minor
 ---
 
 Close the deployment extension-seam gaps a consumer build hit: every app-owned registry is now
@@ -40,7 +41,9 @@ container) instead of seven hand-listed optional fields; that hand-list is why t
 boot validated five registries while its own comment claimed parity with `start()`, so a custom task
 type naming an unregistered pipeline booted clean on a laptop and failed on the Postgres path.
 `FragmentLibraryService` takes a `promptFragmentSource` and no longer falls back to the module pool.
-`TaskTypeCreationDefaults.fragmentIdsFor` is async.
+`TaskTypeCreationDefaults.fragmentIdsFor` is async. `PromptFragmentSource` gains a required
+`inProcess` flag, read by boot validation to tell "this deployment registered nothing" from "the
+pool lives on the mothership", which are the same empty list and opposite facts.
 
 **What is new rather than moved.** `start()` and `startLocal()` gain `pipelineRegistry`,
 `gateRegistry`, `judgeRegistry`, `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry`;
@@ -52,6 +55,8 @@ over the answers a case supplied, evaluated once at creation by the same evaluat
 field visibility uses. A code-registered fragment carrying a `documentRef` now FAILS boot rather than
 being carried through the catalog, rendered as a live source in the library UI, and ignored at run
 time. An unresolvable standing-context id is reported on the run that dropped it instead of only as
-one boot warning that cannot be told apart from a typo. And a mothership-mode node reads the pool
-from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering with an
-empty pool.
+one boot warning that cannot be told apart from a typo, and is COUNTED on the new
+`fragments.dropped_from_run` operational counter, because a run going without its standards still
+succeeds and only a rate says a deployment is doing it every time. And a mothership-mode node reads
+the pool from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering
+with an empty pool.

@@ -10,6 +10,7 @@ import type {
   McpServerDefinition,
   PipelineRegistry,
   PromptFragmentRegistry,
+  PromptFragmentSource,
   TaskTypeRegistry,
 } from '@cat-factory/kernel'
 import {
@@ -34,6 +35,7 @@ import {
   type BinaryGeneratorDefinition,
   type CustomTaskType,
   type DescriptorField,
+  type DescriptorFieldShowWhen,
   binaryGeneratorDefinitionIssues,
   foundationalServiceDefinitionIssues,
   isEnvVariableName,
@@ -144,10 +146,22 @@ export interface ValidatedRegistries {
   binaryGeneratorRegistry?: BinaryGeneratorRegistry
   /**
    * The app-owned prompt-fragment registry (the facade's injected instance, the SAME one it
-   * threads through `CoreDependencies.promptFragmentRegistry`). Optional: when omitted, the
-   * built-in catalog alone is the pool a task type's `defaultFragmentIds` are checked against.
+   * threads through `CoreDependencies.promptFragmentRegistry`). Optional: when omitted, a task
+   * type's fragment ids are NOT checked, because this process then has no pool to check them
+   * against and an empty one would report every id as unresolvable.
    */
   promptFragmentRegistry?: PromptFragmentRegistry
+  /**
+   * The RESOLVED pool source, read for one bit: whether the registry above is the pool a run will
+   * actually fold. On a mothership-mode node it is not, and the id checks stand down rather than
+   * judging the mothership's standards against this build's registry. Optional, and absent means
+   * the registry speaks for itself.
+   *
+   * Named as the CONTAINER names it, like every other member here, because the one call shape is
+   * `registries: container` and a field this type spells differently is a field that silently
+   * never arrives.
+   */
+  promptFragments?: PromptFragmentSource
 }
 
 /** Options for {@link collectRegistrationProblems} / {@link validateRegistrations}. */
@@ -1007,7 +1021,8 @@ function checkPipelineRetirements(opts: ValidateRegistrationsOptions): Registrat
 /**
  * A registered task type's `defaultFragmentIds` that the CODE pool cannot resolve, reported as a
  * WARN rather than an error, and the severity is the whole point. The pool visible at boot is the
- * built-in catalog plus whatever `registerPromptFragments` added; an account- or workspace-tier
+ * injected registry (the shipped catalog plus the deployment's own `registerAll`); an account- or
+ * workspace-tier
  * fragment row merges per WORKSPACE at run time, so boot structurally cannot see one and refusing
  * would reject a legitimate tenant-tier reference. The message therefore names both causes rather
  * than asserting the typo it cannot distinguish. Run-time behaviour is unchanged either way: an
@@ -1018,6 +1033,8 @@ function checkTaskTypeFragments(
   pool: Set<string>,
   /** The ids to check; defaults to the type's unconditional `defaultFragmentIds`. */
   ids: readonly string[] = taskType.defaultFragmentIds ?? [],
+  /** Which declaration the ids came from, so the message names the key the reader must go edit. */
+  declaredBy: 'defaultFragmentIds' | 'conditionalFragmentIds' = 'defaultFragmentIds',
 ): RegistrationProblem[] {
   const unresolved = ids.filter((id) => !pool.has(id))
   if (unresolved.length === 0) return []
@@ -1026,14 +1043,33 @@ function checkTaskTypeFragments(
       severity: 'warn',
       code: 'task_type_unknown_fragment',
       message:
-        `Custom task type "${taskType.taskType}" declares defaultFragmentIds ` +
-        `${unresolved.map((id) => `"${id}"`).join(', ')}, which the code fragment pool (built-in ` +
-        `catalog + registerPromptFragments) does not resolve. Either the id is a typo (a task of ` +
-        `this type would then be seeded with a fragment that folds nothing), or it names an ` +
-        `account/workspace-tier fragment, which merges per workspace at run time and is invisible ` +
-        `here. Check the id if you meant a code-registered fragment.`,
+        `Custom task type "${taskType.taskType}" declares ${declaredBy} ` +
+        `${unresolved.map((id) => `"${id}"`).join(', ')}, which this deployment's registered ` +
+        `fragment pool does not resolve. Either the id is a typo (a task of this type would then ` +
+        `be seeded with a fragment that folds nothing), or it names an account/workspace-tier ` +
+        `fragment, which merges per workspace at run time and is invisible here. Check the id ` +
+        `against what the deployment passes to promptFragmentRegistry.registerAll().`,
     },
   ]
+}
+
+/**
+ * The fragment ids boot can HONESTLY check a declaration against, or `undefined` when there is no
+ * such pool in this process and the id checks must not run at all.
+ *
+ * Two ways that happens, and they are the same fact: no registry was supplied (an embedder or a
+ * test constructing the checker directly), or the deployment resolves its pool REMOTELY, which is
+ * every mothership-mode node. There the local registry holds the shipped catalog and nothing else,
+ * because the deployment is told to register its standards on the mothership's entry point, so
+ * judging `defaultFragmentIds` against it would warn about every org standard at every boot for a
+ * configuration that resolves correctly at run time. Silence is right here rather than a warn of
+ * its own: the operator already gets one line naming exactly this at the mothership boot path, and
+ * a per-task-type repeat of it would bury the checks that CAN speak.
+ */
+function visibleFragmentPool(registries: ValidatedRegistries): Set<string> | undefined {
+  if (!registries.promptFragmentRegistry) return undefined
+  if (registries.promptFragments && !registries.promptFragments.inProcess) return undefined
+  return new Set(registries.promptFragmentRegistry.all().map((fragment) => fragment.id))
 }
 
 /**
@@ -1057,30 +1093,65 @@ function checkTaskTypeFragments(
  */
 function checkConditionalFragments(
   taskType: CustomTaskType,
-  pool: Set<string>,
+  pool: Set<string> | undefined,
 ): RegistrationProblem[] {
   const rules = taskType.conditionalFragmentIds ?? []
   if (rules.length === 0) return []
-  const declared = new Set((taskType.fields ?? []).map((field) => field.key))
   const problems: RegistrationProblem[] = []
   for (const rule of rules) {
-    if (!declared.has(rule.when.key)) {
+    if (!hasPredicate(rule.when)) {
+      // A `when` carrying neither `equals` nor `includes` is accepted by the schema (both are
+      // optional, so a dropped `equals: 'graphql'` still validates) and reads as SATISFIED at run
+      // time, because the shared evaluator defaults a predicate-less condition to `true`: right
+      // for field visibility, where the alternative is hiding a field forever, and exactly wrong
+      // here, where it seeds every case with guidance meant for one. Which is the silent
+      // misseeding conditional fragments exist to remove, so it is an error rather than a warn.
       problems.push({
         severity: 'error',
-        code: 'task_type_field_unknown_condition',
+        code: 'task_type_conditional_no_predicate',
         message:
           `Custom task type "${taskType.taskType}" gates conditional fragments ` +
-          `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}", ` +
-          `which it does not declare, so the condition can never hold and those fragments would ` +
-          `never be seeded.`,
+          `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}" ` +
+          `with neither an "equals" nor an "includes" predicate, so the condition always holds ` +
+          `and those fragments would be seeded onto EVERY task of this type. Give the condition ` +
+          `a predicate, or move the ids to defaultFragmentIds if that is what you meant.`,
       })
     }
   }
+  // A type with a bespoke `formPanel` collects its values through a component rather than a
+  // descriptor form, so it legitimately declares no `fields` and there is nothing here to check a
+  // `when.key` against. Skipping is not a hole: the panel is the deployment's own code, and the
+  // alternative was refusing BOOT for the one shape the feature is built to support.
+  const declared = new Set((taskType.fields ?? []).map((field) => field.key))
+  if (taskType.formPanel === undefined || (taskType.fields?.length ?? 0) > 0) {
+    for (const rule of rules) {
+      if (!declared.has(rule.when.key)) {
+        problems.push({
+          severity: 'error',
+          code: 'task_type_field_unknown_condition',
+          message:
+            `Custom task type "${taskType.taskType}" gates conditional fragments ` +
+            `${rule.fragmentIds.map((id) => `"${id}"`).join(', ')} on field "${rule.when.key}", ` +
+            `which it does not declare, so the condition can never hold and those fragments ` +
+            `would never be seeded.`,
+        })
+      }
+    }
+  }
+  if (!pool) return problems
   // Reported as ONE list rather than per rule: the unresolvable-id message names the cause it
   // cannot distinguish (typo vs tenant tier), and repeating that paragraph per rule would bury the
   // ids it exists to name.
   const conditionalIds = rules.flatMap((rule) => rule.fragmentIds)
-  return [...problems, ...checkTaskTypeFragments(taskType, pool, conditionalIds)]
+  return [
+    ...problems,
+    ...checkTaskTypeFragments(taskType, pool, conditionalIds, 'conditionalFragmentIds'),
+  ]
+}
+
+/** Whether a condition states anything at all. See the refusal that reads it. */
+function hasPredicate(condition: DescriptorFieldShowWhen): boolean {
+  return condition.equals !== undefined || condition.includes !== undefined
 }
 
 /**
@@ -1203,11 +1274,9 @@ function checkCustomTaskTypes(opts: ValidateRegistrationsOptions): RegistrationP
   const problems: RegistrationProblem[] = []
   if (!opts.registries.taskTypeRegistry) return problems
   const knownPipelineIds = new Set(seedPipelines(opts.registries.pipelineRegistry).map((p) => p.id))
-  const fragmentPool = new Set(
-    (opts.registries.promptFragmentRegistry?.all() ?? []).map((fragment) => fragment.id),
-  )
+  const fragmentPool = visibleFragmentPool(opts.registries)
   for (const taskType of opts.registries.taskTypeRegistry.all()) {
-    problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
+    if (fragmentPool) problems.push(...checkTaskTypeFragments(taskType, fragmentPool))
     problems.push(
       ...descriptorFormProblems(
         taskType.fields ?? [],

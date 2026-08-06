@@ -7,7 +7,12 @@
 
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { escapingLinks, isRelativePath, linkTargets } from './shipped-doc-links.mjs'
+import {
+  brokenRepoLinks,
+  escapingLinks,
+  isRelativePath,
+  linkTargets,
+} from './shipped-doc-links.mjs'
 
 test('reads inline links and reference definitions, ignoring plain prose', () => {
   const md = [
@@ -61,6 +66,59 @@ test('strips a fragment and a query before resolving, so an anchor is not a path
   assert.deepEqual(escapingLinks(md, 'app/docs', '.'), [])
   // …and an anchor on an ESCAPING target is still caught rather than hidden by the fragment.
   assert.deepEqual(escapingLinks('[x](../../../a.md#h)', 'app/docs', '.'), ['../../../a.md#h'])
+})
+
+// The repo-absolute half. A relative link is dead for the consumer; a converted one is dead for
+// everybody, which is strictly worse and is what the first conversion actually shipped.
+const REPO = 'https://github.com/kibertoad/cat-factory'
+const tree = { 'backend/docs/custom-agents.md': 'file', 'deploy/frontend/app': 'dir' }
+const lookup = (path) => tree[path] ?? null
+
+test('accepts a repo-absolute link that resolves, in either shape', () => {
+  const md = [
+    `[a file](${REPO}/blob/main/backend/docs/custom-agents.md)`,
+    `[a dir](${REPO}/tree/main/deploy/frontend/app)`,
+    `[a dir with a trailing slash](${REPO}/tree/main/deploy/frontend/app/)`,
+    `[an anchor](${REPO}/blob/main/backend/docs/custom-agents.md#a-heading)`,
+  ].join('\n')
+  assert.deepEqual(brokenRepoLinks(md, lookup), [])
+})
+
+test('catches the mechanical conversion that carried a wrong level across', () => {
+  // The four this guard was extended for: `frontend/` prefixed onto a path that was already
+  // relative to the wrong root. Each resolves from nowhere, and the relative half sees nothing.
+  const md = `[x](${REPO}/blob/main/frontend/backend/docs/custom-agents.md)`
+  assert.deepEqual(brokenRepoLinks(md, lookup), [
+    {
+      target: `${REPO}/blob/main/frontend/backend/docs/custom-agents.md`,
+      reason: 'no such path in the repo',
+    },
+  ])
+  assert.deepEqual(escapingLinks(md, 'app/docs', '.'), [])
+})
+
+test('catches blob/tree naming the wrong kind, which renders but reads as the wrong thing', () => {
+  assert.equal(
+    brokenRepoLinks(`[x](${REPO}/blob/main/deploy/frontend/app)`, lookup)[0].reason,
+    'a directory linked as `blob`; use `tree`',
+  )
+  assert.equal(
+    brokenRepoLinks(`[x](${REPO}/tree/main/backend/docs/custom-agents.md)`, lookup)[0].reason,
+    'a file linked as `tree`; use `blob`',
+  )
+})
+
+test('leaves alone every link this checkout cannot speak for', () => {
+  // A tag, a sha permalink, another repo, the repo root, a non-GitHub URL. Judging these against
+  // the working tree would fail the guard on links that are correct.
+  const md = [
+    `[tag](${REPO}/blob/v1.2.3/backend/docs/custom-agents.md)`,
+    `[sha](${REPO}/blob/0f1e2d3/backend/docs/custom-agents.md)`,
+    '[fork](https://github.com/someone/cat-factory/blob/main/nope.md)',
+    `[the repo](${REPO})`,
+    '[elsewhere](https://example.com/blob/main/nope.md)',
+  ].join('\n')
+  assert.deepEqual(brokenRepoLinks(md, lookup), [])
 })
 
 test('the exact link that motivated the guard, from the file it was in', () => {

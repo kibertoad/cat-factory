@@ -170,11 +170,24 @@ function standingContextFor(
  * for one rule above all: an absent value reads as `false` against a boolean condition, which a
  * second implementation gets wrong in the direction that silently seeds nothing.
  *
- * Reads the per-type `custom` sub-bag, which by this point has been through
- * `sanitizeDescriptorFields`: a field hidden by its own `showWhen` has already been dropped, so a
- * rule keyed on one reduces to false and matches what the row actually freezes. A rule keyed on a
- * field the type does not declare cannot reach here at all, because boot refuses it
- * (`task_type_field_unknown_condition`).
+ * Reads the per-type `custom` sub-bag, which for a DESCRIPTOR-driven type has by this point been
+ * through `sanitizeDescriptorFields`: a field hidden by its own `showWhen` has already been dropped,
+ * so a rule keyed on one reduces to false and matches what the row actually freezes. A type with a
+ * bespoke `formPanel` collects its bag through its own component and passes it through untouched,
+ * so a rule there is evaluated against exactly what the panel submitted, which is the only thing
+ * that could be meant by a condition on a form this layer does not model.
+ *
+ * A rule keyed on a field a descriptor-driven type does not declare cannot reach here at all,
+ * because boot refuses it (`task_type_field_unknown_condition`).
+ *
+ * The one place this deliberately departs from the shared evaluator is a condition with NEITHER
+ * predicate: `matchesDescriptorCondition` reads that as satisfied, which is right for field
+ * visibility (the alternative hides a field forever) and exactly wrong here, where it would seed
+ * every case of the type with guidance meant for one. That is the silent misseeding conditional
+ * fragments exist to remove, so this site states its own safe default rather than re-deriving the
+ * evaluator's, exactly as that function's contract asks. Boot refuses such a rule outright
+ * (`task_type_conditional_no_predicate`); this is the second half, for a registration that reached
+ * a run without passing through validation.
  */
 function conditionalContextFor(
   registered: CustomTaskType,
@@ -184,7 +197,11 @@ function conditionalContextFor(
   if (rules.length === 0) return []
   const values = fields?.custom ?? {}
   return rules
-    .filter((rule) => matchesDescriptorCondition(rule.when, values))
+    .filter(
+      (rule) =>
+        (rule.when.equals !== undefined || rule.when.includes !== undefined) &&
+        matchesDescriptorCondition(rule.when, values),
+    )
     .flatMap((rule) => rule.fragmentIds)
 }
 

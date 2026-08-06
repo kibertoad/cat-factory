@@ -248,7 +248,7 @@ export interface StartOptions {
   /**
    * The composition root to build. Defaults to {@link buildNodeContainer}; a sibling
    * facade (local mode) passes its own builder (same signature) so it reuses this
-   * whole boot sequence — Postgres + pg-boss + sweepers — while supplying only its
+   * whole boot sequence (Postgres + pg-boss + sweepers) while supplying only its
    * differentiators (e.g. the local Docker transport + PAT token source).
    */
   buildContainer?: (options: NodeContainerOptions) => ServerContainer
@@ -338,14 +338,14 @@ export interface StartOptions {
    */
   promptFragmentRegistry?: NodeContainerOptions['promptFragmentRegistry']
   /**
-   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch — a tool
+   * Build the resolver that supplies a registered capability's CREDENTIALS at dispatch. A tool
    * server's (MCP) and a generative binary integration's alike. Called once at composition with
    * this process's environment. Absent → the deployment-environment default,
    * `createEnvToolSecretResolver(env)`.
    *
    * The `ToolSecretResolver` port's extension seam: a deployment holding PER-WORKSPACE
    * credentials (its own sealed store, Vault) implements the port and passes it here rather
-   * than reassembling the boot sequence — which is what reaching the port used to cost, and
+   * than reassembling the boot sequence, which is what reaching the port used to cost, and
    * which forgoes every preflight `start()` exists to provide.
    */
   createToolSecretResolver?: NodeContainerOptions['createToolSecretResolver']
@@ -359,7 +359,7 @@ export interface StartOptions {
   /**
    * The address to bind the HTTP listener to. Defaults to `HOST` from the env, else
    * all interfaces. A facade or operator can pass `127.0.0.1` to keep the service off
-   * the LAN — but note repo-operating agent containers reach this service's LLM proxy
+   * the LAN, but note repo-operating agent containers reach this service's LLM proxy
    * via `PUBLIC_URL`, so on native Linux Docker (where that resolves to the bridge
    * gateway, not loopback) a loopback-only bind makes the proxy unreachable to them.
    */
@@ -375,7 +375,7 @@ export interface StartOptions {
   /**
    * The catalog id of the built-in model preset a fresh workspace is seeded with as its
    * DEFAULT (`MODEL_PRESET_SEED_IDS.{kimi,glm,claude}`). A deploy-app wrapper passes this to
-   * change the out-of-the-box default without editing library code — e.g.
+   * change the out-of-the-box default without editing library code, e.g.
    * `start({ defaultModelPresetId: MODEL_PRESET_SEED_IDS.claude })`. Forwarded to
    * `buildNodeContainer` (and, via the local facade's builder, to `buildLocalContainer`).
    * Applied only at FIRST seed of a workspace's preset library, so a user's later manual
@@ -393,7 +393,7 @@ export interface StartOptions {
    */
   seedEnvironmentHandlers?: NodeContainerOptions['seedEnvironmentHandlers']
   /**
-   * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`) — the long-lived
+   * A deployment's pre-declared SHARED STACKS (each a `CreateSharedStackInput`): the long-lived
    * compose infra its previews attach to. Threaded and backfilled exactly like
    * {@link seedEnvironmentHandlers}; a seed's ordered compose layers may be inline documents,
    * paths in another repo, or paths in the stack's own clone, so a deployment can describe a

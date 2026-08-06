@@ -196,6 +196,7 @@ export function createFragmentLibraryModule(
     workspaceRepository: deps.workspaceRepository,
     clock: deps.clock,
     logger: deps.logger,
+    operationalMetrics: deps.operationalMetrics,
     selector: deps.fragmentSelector,
     briefService,
     // The deployment-registered pool, read through the app-owned SOURCE so a mothership-mode node

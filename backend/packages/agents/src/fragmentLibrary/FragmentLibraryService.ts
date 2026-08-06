@@ -10,8 +10,14 @@ import type {
   UpdatePromptFragmentInput,
 } from '@cat-factory/kernel'
 import { ValidationError, buildExcerpt } from '@cat-factory/kernel'
-import type { Clock, GroupCacheHandle, Logger, PromptFragmentSource } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import type {
+  Clock,
+  GroupCacheHandle,
+  Logger,
+  OperationalMetrics,
+  PromptFragmentSource,
+} from '@cat-factory/kernel'
+import { noopLogger, noopOperationalMetrics } from '@cat-factory/kernel'
 import type {
   FragmentSelector,
   FragmentResolver,
@@ -65,6 +71,17 @@ export interface FragmentLibraryServiceDependencies {
    * anywhere was one boot WARNING that cannot tell a typo from a legitimate tenant-tier id.
    */
   logger?: Logger
+  /**
+   * Where the same drop is COUNTED. Optional and normalised once to `noopOperationalMetrics`,
+   * beside the logger and for the same reason.
+   *
+   * The log line answers "what did THIS run go without"; only the counter answers "is this
+   * happening more than it was", and every shape that produces a drop is a standing condition
+   * rather than an incident (a package resolved twice, a typo'd id pinned by a task type, a
+   * mothership build that moved). An operator who has to notice those in per-run logs does not
+   * notice them.
+   */
+  operationalMetrics?: OperationalMetrics
   /** Relevance selector; defaults to the deterministic matcher when omitted. */
   selector?: FragmentSelector
   /**
@@ -134,6 +151,7 @@ export class FragmentLibraryService implements FragmentResolver {
   private readonly builtinsOverride?: PromptFragment[]
   private readonly fragmentSource?: PromptFragmentSource
   private readonly log: Logger
+  private readonly metrics: OperationalMetrics
   private readonly documentResolver?: DocumentContentResolver
   private readonly catalogCache?: GroupCacheHandle<ResolvedCatalogEntry[]>
   private readonly documentBodyCache?: GroupCacheHandle<DocumentContent>
@@ -147,6 +165,7 @@ export class FragmentLibraryService implements FragmentResolver {
     this.builtinsOverride = deps.builtins
     this.fragmentSource = deps.promptFragmentSource
     this.log = deps.logger ?? noopLogger
+    this.metrics = deps.operationalMetrics ?? noopOperationalMetrics
     this.documentResolver = deps.documentContentResolver
     this.catalogCache = deps.catalogCache
     this.documentBodyCache = deps.documentBodyCache
@@ -568,16 +587,26 @@ export class FragmentLibraryService implements FragmentResolver {
     // superseded id must not resolve, and re-adding a static fallback would defeat suppression
     // (ADR 0006). What was missing is the report, not the disposition.
     if (dropped.length > 0) {
+      // The message states what was OBSERVED (the id is not in the merged catalog) and names the
+      // causes it cannot separate, rather than asserting the one that needs a fix. A tombstoned
+      // built-in reaches this line identically to a typo, and calling that "resolves against
+      // nothing" would report a workspace's own deliberate suppression as a defect on every run
+      // it makes. Separating them takes the tier ROWS, and only the merged entries survive the
+      // catalog cache this reads through, so the honest split is not available here for free.
       this.log.warn(
-        'Standing-context fragments were dropped from a run: these ids resolve against neither ' +
-          "the deployment-registered pool nor this workspace's account/workspace tiers, so the " +
-          'guidance they name did not reach the agent',
+        'Standing-context fragments were dropped from a run: these ids are not in the ' +
+          "workspace's merged fragment catalog, so the guidance they name did not reach the " +
+          'agent. Either the id resolves against nothing (a typo, or a deployment whose ' +
+          'registered pool is empty), or this tier deliberately suppressed it',
         {
           workspaceId,
           droppedFragmentIds: dropped,
           ...(options.executionId ? { executionId: options.executionId } : {}),
         },
       )
+      // Per FRAGMENT, not per run: a run pinning five ids against an empty pool is five times as
+      // short of its standards as one carrying a single typo.
+      this.metrics.increment('fragments.dropped_from_run', undefined, dropped.length)
     }
 
     // Only an implementer dispatch folds condensed variants, so only it pays to resolve

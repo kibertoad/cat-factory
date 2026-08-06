@@ -15,6 +15,15 @@
 // An ABSOLUTE URL is the fix, not a shorter relative path: the material lives in the repo, the
 // repo is public, and a link that works from both a checkout and a tarball is one that names the
 // canonical location rather than a position relative to the reader.
+//
+// Which is why this guard checks BOTH halves. Converting a relative link to an absolute one is
+// mechanical, and a mechanical conversion carries the original's mistakes across intact: the four
+// links this file's own motivating document gained pointed at `frontend/backend/...` and
+// `frontend/docs/...`, because the relative paths they were built from were already one level
+// short. Checking only the relative half would have called that document clean forever, having
+// swapped a link that resolves from a checkout for one that resolves from nowhere at all. A
+// repo-absolute link is checkable against the working tree, so it is checked: the path must exist,
+// and `blob` (a file) must not name a directory `tree` describes.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, posix, relative, resolve, sep } from 'node:path'
@@ -78,6 +87,40 @@ function toPosix(p) {
 }
 
 /**
+ * A link into THIS repo on the default branch: `https://github.com/<owner>/<repo>/blob|tree/main/<path>`.
+ *
+ * Only the canonical host/owner/repo and only `main`. A link to a tag, a permalink at a sha, or a
+ * line-range on someone else's fork names something this checkout cannot speak for, so it is left
+ * alone rather than guessed at.
+ */
+const REPO_LINK_RE = /^https:\/\/github\.com\/kibertoad\/cat-factory\/(blob|tree)\/main\/([^)\s]+)$/
+
+/**
+ * Repo-absolute links whose path does not exist, or whose `blob`/`tree` disagrees with what it is.
+ *
+ * `lookup(path)` answers `'file' | 'dir' | null` for a repo-relative path; the caller owns the
+ * filesystem so these extractors stay pure and the fixtures need no tmpdir. Returns
+ * `{ target, reason }`, because "the path is gone" and "you linked a directory as a file" are
+ * different edits and a guard that says only "bad link" makes the reader find that out themselves.
+ */
+export function brokenRepoLinks(markdown, lookup) {
+  const broken = []
+  for (const target of linkTargets(markdown)) {
+    const match = REPO_LINK_RE.exec(target.split('#')[0].split('?')[0])
+    if (!match) continue
+    const [, kind, path] = match
+    const found = lookup(decodeURIComponent(path.replace(/\/$/, '')))
+    if (!found) broken.push({ target, reason: 'no such path in the repo' })
+    else if (kind === 'blob' && found === 'dir') {
+      broken.push({ target, reason: 'a directory linked as `blob`; use `tree`' })
+    } else if (kind === 'tree' && found === 'file') {
+      broken.push({ target, reason: 'a file linked as `tree`; use `blob`' })
+    }
+  }
+  return broken
+}
+
+/**
  * The markdown files a package would publish.
  *
  * `files` decides most of it, but npm ALWAYS includes `README.md` whatever `files` says, so a
@@ -120,10 +163,18 @@ function* walk(dir) {
 }
 
 /**
- * Every violation across a list of package directories: `{ package, doc, targets }` per document
- * carrying at least one escaping link. Private packages are skipped, since nothing of theirs ships.
+ * Every violation across a list of package directories: `{ package, doc, escaping, broken }` per
+ * document carrying at least one of either. Private packages are skipped, since nothing of theirs
+ * ships. `repoRoot` is what a repo-absolute link's path is resolved against.
  */
-export function findViolations(packageDirs) {
+export function findViolations(packageDirs, repoRoot) {
+  const lookup = (path) => {
+    try {
+      return statSync(join(repoRoot, path)).isDirectory() ? 'dir' : 'file'
+    } catch {
+      return null
+    }
+  }
   const violations = []
   for (const dir of packageDirs) {
     let manifest
@@ -135,9 +186,11 @@ export function findViolations(packageDirs) {
     if (manifest.private) continue
     for (const doc of shippedMarkdown(dir, manifest)) {
       const docDir = relative(dir, resolve(doc, '..')) || '.'
-      const targets = escapingLinks(readFileSync(doc, 'utf8'), docDir, '.')
-      if (targets.length > 0) {
-        violations.push({ package: manifest.name ?? dir, doc, targets })
+      const markdown = readFileSync(doc, 'utf8')
+      const escaping = escapingLinks(markdown, docDir, '.')
+      const broken = brokenRepoLinks(markdown, lookup)
+      if (escaping.length > 0 || broken.length > 0) {
+        violations.push({ package: manifest.name ?? dir, doc, escaping, broken })
       }
     }
   }

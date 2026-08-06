@@ -23,15 +23,21 @@ import { UnavailableError, describeError } from '@cat-factory/kernel'
  * merges onto, so a short catalog is not a degraded answer, it is a wrong one), while a task
  * CREATION propagates it too, being a user action that can be retried.
  *
- * BOTH projections ride one response, so `defaultFragmentIdsFor` costs no second round-trip and
- * the two halves cannot answer from different reads of a redeploying mothership. The response is
- * memoised for the process lifetime after the first successful read: the pool is CODE on the
- * mothership, so it changes only when the mothership is redeployed, and re-reading it per catalog
- * miss would put a network hop under the per-workspace cache that already sits in front of this.
- * A FAILED read is never memoised, so an outage does not pin this node to a permanent throw.
+ * BOTH projections ride one response, so a call for either resolves the other's half from the same
+ * read and the two cannot disagree within one operation.
+ *
+ * There is no cache here on purpose, the same answer its two siblings give. `all()` is called once
+ * per miss of the per-workspace catalog cache that already sits in front of it, and
+ * `defaultFragmentIdsFor` once per task creation, so the call volume is bounded by that cache
+ * rather than by traffic. The memo this class shipped with was worse than a TTL'd copy: it was
+ * held for the PROCESS lifetime with no invalidation path, so an operator who added an org standard
+ * and redeployed the mothership reached every already-running node only by restarting it. A second
+ * copy of a value with no way to invalidate it is exactly the homebrew cache the caching seam
+ * exists to keep out.
  */
 export class HttpPromptFragmentSource implements PromptFragmentSource {
-  private cached: Promise<PoolPayload> | null = null
+  /** The pool lives on the mothership, so nothing in THIS process may be judged as if it were it. */
+  readonly inProcess = false
 
   constructor(
     private readonly opts: {
@@ -47,24 +53,11 @@ export class HttpPromptFragmentSource implements PromptFragmentSource {
   ) {}
 
   async all(): Promise<PromptFragment[]> {
-    return (await this.pool()).fragments
+    return (await this.read()).fragments
   }
 
   async defaultFragmentIdsFor(taskType: TaskType): Promise<string[]> {
-    return (await this.pool()).taskTypeDefaults[taskType] ?? []
-  }
-
-  private pool(): Promise<PoolPayload> {
-    if (this.cached) return this.cached
-    const pending = this.read().catch((error: unknown) => {
-      // Drop the memo on failure BEFORE rethrowing, so a mothership that comes back is read again.
-      // Memoising a rejected promise would turn one blip into a node that never resolves a standard
-      // until it is restarted.
-      this.cached = null
-      throw error
-    })
-    this.cached = pending
-    return pending
+    return (await this.read()).taskTypeDefaults[taskType] ?? []
   }
 
   private async read(): Promise<PoolPayload> {
@@ -104,6 +97,17 @@ export class HttpPromptFragmentSource implements PromptFragmentSource {
     if (!body || !Array.isArray(body.fragments)) throw unreadable('fragments')
     const defaults = body.taskTypeDefaults
     if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) {
+      throw unreadable('taskTypeDefaults')
+    }
+    // The VALUES too, not just the container. A default set is spread into the id set a new task is
+    // seeded with, so a reply mapping a task type to a bare `"node.style"` seeds ten single-character
+    // ids rather than one fragment: silent, and exactly the "the pool is unknown" case above, since
+    // a payload this client cannot read is one whose defaults it does not know.
+    if (
+      !Object.values(defaults).every(
+        (ids) => Array.isArray(ids) && ids.every((id) => typeof id === 'string'),
+      )
+    ) {
       throw unreadable('taskTypeDefaults')
     }
     return {
