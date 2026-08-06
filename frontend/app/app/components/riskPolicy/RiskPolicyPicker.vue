@@ -113,6 +113,9 @@ function choose(id: string) {
 
 <template>
   <UPopover v-model:open="open" :content="{ align: 'start' }">
+    <!-- A consumer that supplies its own `#trigger` must carry `risk-policy-picker-trigger` on it:
+         the popover trigger is `as-child`, so the slotted element REPLACES the default button below
+         and takes its test hook with it (the inspector's icon button is the one such consumer). -->
     <slot name="trigger" :label="triggerLabel">
       <UButton
         color="neutral"

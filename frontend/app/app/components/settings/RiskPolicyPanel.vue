@@ -282,7 +282,7 @@ async function create() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4" data-testid="risk-policy-panel">
     <i18n-t
       keypath="settings.riskPolicy.intro"
       tag="p"
@@ -298,6 +298,9 @@ async function create() {
       v-for="p in store.presets"
       :key="p.id"
       class="rounded-lg border border-slate-700 bg-slate-800/40 p-3"
+      data-testid="risk-policy-row"
+      :data-policy-id="p.id"
+      :data-policy-default="p.isDefault ? 'true' : 'false'"
     >
       <div class="mb-3 flex items-center gap-2">
         <UInput
@@ -305,6 +308,7 @@ async function create() {
           size="sm"
           class="flex-1"
           :placeholder="t('settings.riskPolicy.presetNamePlaceholder')"
+          data-testid="risk-policy-name"
         />
         <UBadge v-if="p.isDefault" color="primary" variant="subtle" size="sm">
           {{ t('settings.riskPolicy.default') }}
@@ -346,6 +350,7 @@ async function create() {
             :min="0"
             :max="100"
             size="sm"
+            :data-testid="`risk-policy-ceiling-${axis}`"
           />
         </label>
         <label class="block">
@@ -457,6 +462,7 @@ async function create() {
           size="xs"
           icon="i-lucide-save"
           :loading="busy === p.id"
+          data-testid="risk-policy-save"
           @click="save(p)"
         >
           {{ t('common.save') }}
@@ -478,6 +484,7 @@ async function create() {
             v-model="draft.name"
             size="sm"
             :placeholder="t('settings.riskPolicy.create.namePlaceholder')"
+            data-testid="risk-policy-create-name"
           />
         </label>
         <label class="block w-20">
@@ -490,19 +497,34 @@ async function create() {
             :min="0"
             :max="100"
             size="sm"
+            data-testid="risk-policy-create-complexity"
           />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
             {{ t('settings.riskPolicy.create.risk') }}
           </span>
-          <UInput v-model.number="draft.maxRisk" type="number" :min="0" :max="100" size="sm" />
+          <UInput
+            v-model.number="draft.maxRisk"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+            data-testid="risk-policy-create-risk"
+          />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
             {{ t('settings.riskPolicy.create.impact') }}
           </span>
-          <UInput v-model.number="draft.maxImpact" type="number" :min="0" :max="100" size="sm" />
+          <UInput
+            v-model.number="draft.maxImpact"
+            type="number"
+            :min="0"
+            :max="100"
+            size="sm"
+            data-testid="risk-policy-create-impact"
+          />
         </label>
         <label class="block w-20">
           <span class="mb-1 block text-[10px] uppercase tracking-wide text-slate-500">
@@ -549,6 +571,7 @@ async function create() {
           icon="i-lucide-plus"
           :loading="creating"
           :disabled="!draft.name.trim()"
+          data-testid="risk-policy-create-submit"
           @click="create"
         >
           {{ t('settings.riskPolicy.add') }}

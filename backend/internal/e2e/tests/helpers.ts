@@ -6,6 +6,8 @@ import { INFRA_SETUP_AREAS, INFRA_SETUP_DISMISSED_STORAGE_KEY } from '@cat-facto
 // test side can't drift from the control-channel payload the backend parses. Type-only, so it
 // pulls in none of that module's runtime deps (`@cat-factory/conformance`).
 import type { FakeProfile } from '../src/fakeProfile.ts'
+// Same reasoning for the team/password scenario shapes: type-only, from the seam that produces them.
+import type { PasswordUserScenario, TeamPrincipalSpec, TeamScenario } from '../src/seedTeam.ts'
 
 // The backend origin the specs seed/trigger state against. The auth gate is open in the
 // e2e backend, so plain REST calls need no token. Override with E2E_BACKEND_URL if the
@@ -18,6 +20,25 @@ export const BACKEND_URL =
 // uses. A spec `setFakeProfile`s its own freshly-seeded workspace here BEFORE starting a run.
 export const CONTROL_URL =
   process.env.E2E_CONTROL_URL ?? `http://localhost:${Number(process.env.PORT ?? 8787) + 1}`
+
+/**
+ * The SPA origin served against the AUTH-ENABLED backend surface (`src/authBackend.ts`), for the
+ * specs whose subject is identity: the login screen itself, and any policy that names PEOPLE.
+ *
+ * A spec opts into that stack with `test.use({ baseURL: AUTH_FRONTEND_URL })` and otherwise drives
+ * the product exactly as every other spec does. Two things make that work without a parallel set of
+ * helpers: it is the same backend PROCESS (one engine, one pg-boss worker, one realtime fan-out), so
+ * REST seeding and triggering still go through the anonymous surface at {@link BACKEND_URL}; and
+ * cookies are not port-scoped, so the session/board/tier seeds below apply to both origins.
+ *
+ * Why a second stack at all: the primary backend runs `TESTING_NO_AUTH`, under which the SPA renders
+ * the board anonymously and never resolves a signed-in user, so the login screen is unreachable and
+ * a named-approver gate refuses everybody in the browser, for a reason that is correct there and
+ * useless as coverage.
+ */
+export const AUTH_FRONTEND_URL =
+  process.env.E2E_AUTH_FRONTEND_URL ??
+  `http://localhost:${process.env.E2E_AUTH_FRONTEND_PORT ?? 3001}`
 
 /**
  * Re-export the backend `FakeProfile` so specs get the per-workspace fake-behaviour shape
@@ -56,6 +77,66 @@ export async function seedRbacScenario(
   const res = await request.post(`${CONTROL_URL}/rbac-seed`, { data: { tag } })
   if (!res.ok()) throw new Error(`rbac-seed control ${res.status()}: ${await res.text()}`)
   return (await res.json()) as RbacScenario
+}
+
+/**
+ * Re-export the team-scenario wire shapes from the backend seam that produces them, so the two
+ * ends of the control channel can't drift (same reason {@link FakeProfile} is re-exported).
+ */
+export type {
+  PasswordUserScenario,
+  SeededPrincipal,
+  TeamPrincipalSpec,
+  TeamScenario,
+} from '../src/seedTeam.ts'
+
+/**
+ * Seed an org + board + the principals a spec needs, each with a signed session (backend seam:
+ * `src/seedTeam.ts`). The general form of {@link seedRbacScenario}: a principal may be enrolled in
+ * the ACCOUNT and left UN-SCOPED (`role: null`), which is the state the members roster grants FROM,
+ * and the board starts unrestricted unless asked, so a spec can restrict it through the UI.
+ *
+ * `tag` makes the seeded users/board unique per test. Also records the `infraless` provisioning
+ * choice over REST for the same reason {@link createSeededWorkspace} does: otherwise the advisory
+ * default-test-env banner overlays the board chrome the spec drives.
+ */
+export async function seedTeamScenario(
+  request: APIRequestContext,
+  spec: {
+    tag: string
+    restricted?: boolean
+    principals?: TeamPrincipalSpec[]
+    /** Also seed a second, empty board in the account (see the backend seam's own note). */
+    spareBoard?: boolean
+  },
+): Promise<TeamScenario> {
+  const res = await request.post(`${CONTROL_URL}/team-seed`, { data: spec })
+  if (!res.ok()) throw new Error(`team-seed control ${res.status()}: ${await res.text()}`)
+  const scenario = (await res.json()) as TeamScenario
+  await request.put(`${BACKEND_URL}/workspaces/${scenario.workspaceId}/settings`, {
+    data: { defaultProvisionType: 'infraless' },
+  })
+  return scenario
+}
+
+/**
+ * Seed a user who can SIGN IN with a password, plus the account + board they land on (backend seam:
+ * `src/seedTeam.ts`). The credential is written through the identity service the signup endpoint
+ * calls, so the password a spec types is checked by production code.
+ *
+ * Only meaningful for a browser on {@link AUTH_FRONTEND_URL}: the primary stack has no login screen.
+ */
+export async function seedPasswordUser(
+  request: APIRequestContext,
+  spec: { tag: string; password: string },
+): Promise<PasswordUserScenario> {
+  const res = await request.post(`${CONTROL_URL}/password-user-seed`, { data: spec })
+  if (!res.ok()) throw new Error(`password-user-seed control ${res.status()}: ${await res.text()}`)
+  const scenario = (await res.json()) as PasswordUserScenario
+  await request.put(`${BACKEND_URL}/workspaces/${scenario.workspaceId}/settings`, {
+    data: { defaultProvisionType: 'infraless' },
+  })
+  return scenario
 }
 
 /** Register a fake behaviour profile for `workspaceId`. Call BEFORE starting the run. */
@@ -244,6 +325,18 @@ export interface PipelineShape {
   name: string
   agentKinds: string[]
   gates?: boolean[]
+  /**
+   * The per-step options bag, of which a spec reads only the GATE configuration: who may resolve
+   * the step's human checkpoint and how many of them must. Like `gates`, it is the persisted form
+   * of something DRAWN, so a builder that saved a policy against the wrong step index (or dropped
+   * it from the payload) is only visible here.
+   */
+  stepOptions?: {
+    gateConfig?: {
+      approvers?: { roles?: string[]; userIds?: string[] }
+      minApprovals?: number
+    }
+  }[]
 }
 // The full board read; only the fields the specs touch are typed.
 export interface WorkspaceSnapshot {
@@ -339,6 +432,59 @@ export async function findPipelineByName(
     await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
   )
   return (snapshot.pipelines ?? []).find((p) => p.name === name) ?? null
+}
+
+/**
+ * A merge-threshold preset as the workspace snapshot carries it (only the fields a spec reads).
+ *
+ * The three ceilings are what the `merger` compares a PR assessment against, so a spec that
+ * AUTHORED a preset through the settings panel reads them back to prove the numbers it typed are
+ * the numbers the engine will judge with.
+ */
+export interface RiskPolicyShape {
+  id: string
+  name: string
+  maxComplexity: number
+  maxRisk: number
+  maxImpact: number
+  autoMergeEnabled: boolean
+  isDefault: boolean
+}
+
+/**
+ * Find a workspace merge-threshold preset by NAME off the board snapshot, or null.
+ *
+ * By name for the same reason {@link findPipelineByName} is: the caller created the preset through
+ * the SPA, where the id is minted backend-side and never shown, so the name is the only handle the
+ * test typed. The returned id is what the inspector's picker options are keyed by.
+ */
+export async function findRiskPolicyByName(
+  request: APIRequestContext,
+  workspaceId: string,
+  name: string,
+): Promise<RiskPolicyShape | null> {
+  const snapshot = await json<{ riskPolicies?: RiskPolicyShape[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return (snapshot.riskPolicies ?? []).find((p) => p.name === name) ?? null
+}
+
+/**
+ * A block's status as the workspace snapshot reports it, or null when the block is absent.
+ *
+ * Corroboration only: a spec asserts on the live UI first and reads this to name WHICH terminal
+ * state the run reached, for the one outcome the board deliberately renders as an ABSENCE (an
+ * auto-merged task stops being a unit of work, so its card unmounts: see the e2e README).
+ */
+export async function readBlockStatus(
+  request: APIRequestContext,
+  workspaceId: string,
+  blockId: string,
+): Promise<string | null> {
+  const snapshot = await json<{ blocks: { id: string; status?: string }[] }>(
+    await request.get(`${BACKEND_URL}/workspaces/${workspaceId}`),
+  )
+  return snapshot.blocks.find((b) => b.id === blockId)?.status ?? null
 }
 
 /** An initiative as the create endpoint returns it (only the fields the specs read). */
@@ -686,6 +832,25 @@ export async function pinAuthedWorkspace(
   userId: string,
   accountId: string,
 ): Promise<void> {
+  await pinBoardForUser(page, { workspaceId, accountId, userId, token })
+}
+
+/**
+ * Seed the persisted state a signed-in user's board open needs, with the session token OPTIONAL.
+ *
+ * {@link pinAuthedWorkspace} is this plus a token, and is what a spec that boots straight into a
+ * session wants. A spec that means to SIGN IN through the form leaves the token out: it still has to
+ * say which board to open afterwards, because a signed-in user's list is account-filtered and the
+ * SPA otherwise resolves the first board of whichever account is active (creating an empty one when
+ * that is none, which lands the session on the repo-onboarding gate instead of a board).
+ *
+ * Cookies are not PORT-scoped, so this applies to the auth stack's origin as well as the primary
+ * one, which is why the auth specs need no parallel set of seeding helpers.
+ */
+export async function pinBoardForUser(
+  page: Page,
+  seed: { workspaceId: string; accountId: string; userId: string; token?: string },
+): Promise<void> {
   await answerTutorialPrompt(page, 'declined')
   const frontendUrl = `http://localhost:${process.env.E2E_FRONTEND_PORT ?? '3000'}`
   const cookie = (name: string, value: unknown) => ({
@@ -696,15 +861,19 @@ export async function pinAuthedWorkspace(
   await page
     .context()
     .addCookies([
-      cookie('auth', { token, autoLoginProvider: null }),
-      cookie('workspace', { workspaceId }),
-      cookie('accounts', { activeAccountId: accountId }),
+      ...(seed.token ? [cookie('auth', { token: seed.token, autoLoginProvider: null })] : []),
+      cookie('workspace', { workspaceId: seed.workspaceId }),
+      cookie('accounts', { activeAccountId: seed.accountId }),
     ])
   await page.addInitScript(
     ({ uid, dismissKey, areas }) => {
       window.localStorage.setItem(dismissKey, JSON.stringify({ local: areas, [uid]: areas }))
     },
-    { uid: userId, dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY, areas: [...INFRA_SETUP_AREAS] },
+    {
+      uid: seed.userId,
+      dismissKey: INFRA_SETUP_DISMISSED_STORAGE_KEY,
+      areas: [...INFRA_SETUP_AREAS],
+    },
   )
 }
 

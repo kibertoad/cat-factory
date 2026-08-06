@@ -295,6 +295,13 @@ async function save() {
     </template>
     <template #body>
       <UTabs v-model="activeTab" :items="tabs" variant="link" :ui="tabsUi">
+        <!-- The tab LABEL, overridden only to carry a per-tab test hook: `UTabs` renders its own
+             triggers and forwards nothing from an item, so this slot is the one place a stable
+             selector can name which tab a click means (the labels themselves are translated). -->
+        <template #default="{ item }">
+          <span :data-testid="`workspace-settings-tab-${item.value}`">{{ item.label }}</span>
+        </template>
+
         <!-- Workspace -->
         <template #workspace>
           <div class="space-y-6">

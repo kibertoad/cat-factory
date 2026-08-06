@@ -9,6 +9,13 @@ const BACKEND_PORT = Number(process.env.PORT ?? 8787)
 const FRONTEND_PORT = Number(process.env.E2E_FRONTEND_PORT ?? 3000)
 const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
+// The AUTH-ENABLED stack: a second HTTP surface over the SAME backend process (`src/authBackend.ts`)
+// and a second instance of the SAME SPA build pointed at it (`src/authFrontend.mjs`). It exists for
+// the specs whose subject is identity (the login screen, and any policy that names PEOPLE), which
+// the primary `TESTING_NO_AUTH` stack structurally cannot show. Both derive from the primary ports,
+// so overriding `PORT` / `E2E_FRONTEND_PORT` moves the whole set consistently.
+const AUTH_FRONTEND_PORT = Number(process.env.E2E_AUTH_FRONTEND_PORT ?? 3001)
+const AUTH_FRONTEND_URL = `http://localhost:${AUTH_FRONTEND_PORT}`
 
 export default defineConfig({
   testDir: './tests',
@@ -94,6 +101,23 @@ export default defineConfig({
         NUXT_PUBLIC_API_BASE: BACKEND_URL,
         PORT: String(FRONTEND_PORT),
         NUXT_SOURCEMAP_CLIENT: 'true',
+      },
+    },
+    {
+      // The same SPA build served a second time against the auth-enabled backend surface. Runs the
+      // emitted server bundle directly (no second `nuxt build`): the shell re-reads
+      // NUXT_PUBLIC_API_BASE at startup, so the API base is a runtime choice here. The launcher
+      // waits for the entry above to produce that bundle, since webServer entries start in parallel.
+      command: 'node src/authFrontend.mjs',
+      url: AUTH_FRONTEND_URL,
+      reuseExistingServer: !process.env.CI,
+      // The primary build plus this process's own start: the same budget as the build it waits for.
+      timeout: 240_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        E2E_AUTH_FRONTEND_PORT: String(AUTH_FRONTEND_PORT),
+        PORT: String(BACKEND_PORT),
       },
     },
   ],

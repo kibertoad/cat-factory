@@ -24,6 +24,11 @@ durable execution worker + sweepers, and the per-workspace real-time hub. So a r
 started over REST advances durably and the SPA updates **live over the WebSocket**, just
 with a fake agent doing the "work".
 
+The same process also serves a second, **auth-enabled** HTTP surface (with a second SPA instance
+pointed at it) for the specs whose subject is identity: the login screen, and any policy that names
+PEOPLE. Nothing is faked there either: it is the same container with `config.auth` on. See [the
+auth-enabled stack](#the-auth-enabled-stack-the-auth_frontend_url-seam).
+
 See [`src/testServer.ts`](./src/testServer.ts) for the backend wiring (it reuses the
 `buildContainer` seam of `@cat-factory/node-server`'s `start()`).
 
@@ -107,6 +112,10 @@ only a transient exists, the assertion belongs in a component or store unit test
 | `pr-review.spec.ts`              | DEEP PR REVIEW, both dispositions: what a human curates is what reaches the pull request. A `review` task's reviewer parks on three findings; the window groups them by slice, a nit is DISMISSED (curation, run stays parked), a medium is DESELECTED, and Post publishes the rest, after which the report reads back `1 of 1 comments posted`, the published finding is badged and the deselected one is not. A second test drives the PARTIAL post: the fake refuses one anchor ONCE, so the run is HANDED BACK (re-parked carrying the report, dispositions on offer again) rather than finished, the failure list names the anchor and the reason, and the retry attempts only the comment that did not land. Both tests then assert the WIRE (`readReviewAttempts`), which is the only place at-most-once posting is visible: the window's report reads the same whether a retry skipped or re-sent what had already landed. The engine's own repo-write path runs for real (`resolveRunRepoContext` → `createReview` against the fake client), so a review that silently posts nothing fails. Needs a repo-LINKED frame, hence `seedOwnRepo` (see below).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `outcome-summary.spec.ts`        | "READ THE RESULT": the run-keyed outcome card, which in basic mode is what the card's one result affordance opens. A tester-bearing run settles at `pr_ready` and its outcome reads back the disposition, the PR, what was asked, the per-requirement verdicts (including the UNCHECKED one) with what the tester observed, the greenlight, and the advisory concern that stands despite it. The reduction is unit-tested; what only the assembled product shows is that a producer's real recorded state reaches the section that renders it — the failure mode being a section that reads CLEAN because nothing arrived (`runOutcome.ts` rule 2). Also pins that a spec-less run marks its rows as ids and claims no regression.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `board-switch.spec.ts`           | Switching boards from the sidebar switcher, the affordance every other spec bypasses by pinning a board client-side, and the one that has to MOVE the live connection. Two seeded boards; it switches to the one it means to start from (`switchBoard`, idempotent) rather than resting on which board a cold load resolves to, then authors a task on each over REST and asserts the new board's arrives live while the left board's does not. Ordered so the positive is the synchronization point for the negative (an absence assertion alone would pass on a push that had not landed yet). The stale-subscription defect it guards is invisible otherwise: the new board's blocks all render from the REST snapshot, and only later updates go missing.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `merge-policy.spec.ts`           | The MERGE POLICY a human authors is the one the merger applies. Both tests hand the merger the SAME within-`Balanced` assessment and change only the policy: under the workspace default it auto-merges (the card un-renders, the block reads `done`), and under a stricter preset typed into Workspace Settings → Merge and pinned on the task through the inspector's picker, the identical assessment is refused and raises `merge_review`. The pair is the point: the refusal alone could be a dozen unrelated things, and `merge-review.spec` reaches its refusal by making the AGENT report a bad diff, so nothing there depends on the policy. Also asserts the stored ceilings (percentages in the editor, fractions on the wire), since a panel that shipped `10` for `0.1` would refuse this assessment too.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `member-admin.spec.ts`           | WORKSPACE ACCESS ADMINISTRATION: the Members tab, where a role is changed and a member removed. `rbac.spec` proves the two ends render differently but seeds both roles into the database; this drives the act itself, and the proof is what a DIFFERENT signed-in user's browser then renders (each test spends a second context, booted AFTER the change so it resolves fresh through the real gate). Promoting a `viewer` to `member` gives that user an authoring board; removing a member from a restricted board drops it out of their reach, evidenced by their session landing on the seeded SPARE board instead and the switcher not offering the revoked one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `quorum-gate.spec.ts`            | A human checkpoint with a POLICY: two named approvers, both required, authored in the real builder (`gate-required-approvals` + the roster-backed `gate-named-approvers`) and asserted on the persisted `stepOptions[i].gateConfig` before the run starts. Then one browser context per person: a `member` who is not named is refused in the rail (`gate-not-approver`, approve disabled), the first named approver's approval is RECORDED without releasing the run (quorum 1 of 2, card still `blocked`, the assertion a quorum that counts one person twice fails), and the second releases it. Runs on the AUTH-ENABLED stack, because a policy that names people needs a browser that has one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `sign-in.spec.ts`                | THE FRONT DOOR, on the AUTH-ENABLED stack: the login screen gates the board (no session ⇒ no canvas), a wrong password is refused ON the form without advancing, the right one signs in and the board loads as that user (identity in the sidebar, the seeded task, and the live WebSocket connected, the one assertion that catches a session good enough for REST and not for the stream), the session survives a RELOAD (the only way to show a returning user isn't re-gated), and sign-out returns to the gate and stays there across a reload. The one surface every user of a hosted deployment passes through, and previously the only one with no coverage at all.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `ui-mode.spec.ts`                | The basic/advanced interface separation: a board opens at the SHIPPED default (basic ⇒ icon rail, advanced destinations absent from the DOM), the sidebar rail toggle expands and re-collapses independently of the tier, switching tiers from the sidebar switcher re-gates the nav LIVE (no reload, same reactive slot filter an RBAC flip uses), a stored advanced choice survives a reload, a BASIC-mode rail choice survives a reload too (the preference is per-tier, so `collapsed` is basic's default rather than a rule that re-asserts itself), the command palette can reach the tier switch from basic mode (the route back out of the default tier), and the compact drawer is never railed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### Auth-enabled RBAC scenario (the `seedRbacScenario` seam)
@@ -120,7 +129,71 @@ a restricted board with an admin + a scoped `viewer` (mirroring the cross-runtim
 `defineWorkspaceRbacSuite` fixture) and mints a real Bearer token per principal; `pinAuthedWorkspace`
 seeds it (plus the pinned board + active account) into the SPA's persisted pinia stores, which are
 **cookie-backed** (`pinia-plugin-persistedstate/nuxt` defaults to cookies, not localStorage), so the
-board boots as that authenticated user on that specific restricted board.
+board boots as that authenticated user on that specific restricted board. It is one call into the
+generic `seedTeamScenario` below.
+
+What this hybrid gives you is a backend that ENFORCES per-user access while the SPA still renders
+anonymously, and that asymmetry is exactly its limit: the browser has a session the server honours and
+no identity the SPA can see. Anything that turns on who the VIEWER is (the login screen, a gate policy
+naming people) needs the auth-enabled stack instead.
+
+### The AUTH-ENABLED stack (the `AUTH_FRONTEND_URL` seam)
+
+The shared backend above runs `TESTING_NO_AUTH`, which is what lets 40-odd specs seed and drive over
+anonymous REST. That flag also makes two things structurally untestable there, and they are the two
+most consequential surfaces in the product:
+
+- the SPA renders the board anonymously instead of the LOGIN SCREEN (`needsLogin` short-circuits on
+  the flag), so the front door is unreachable; and
+- having no signed-in user, the SPA never resolves one. `config.auth.enabled` is false, so the auth
+  handshake skips `getMe()` even with a valid session token. Every actor is then `unattributed`, and
+  a gate policy that names PEOPLE refuses all of them. Correct for a deployment with auth off, and
+  useless as coverage.
+
+So the same process serves a SECOND HTTP surface with `config.auth` flipped on
+([`src/authBackend.ts`](./src/authBackend.ts)), and a SECOND instance of the same SPA build points at
+it ([`src/authFrontend.mjs`](./src/authFrontend.mjs)). A spec opts in with
+`test.use({ baseURL: AUTH_FRONTEND_URL })` and otherwise drives the product exactly as any other
+spec does. Four facts make that cheap:
+
+- **`authConfig(c)` reads `container.config.auth` PER REQUEST**, so an app built over a container
+  whose auth config differs is a full auth-enabled deployment with no forked wiring
+  (`authEnabledContainer` is a shallow clone: same services, same repositories, `config.auth` on).
+- **It is the same container**, so one Postgres, one pg-boss worker, one engine. A run started over
+  the ANONYMOUS surface is driven by that worker and pushed to browsers watching over this one,
+  which is why the auth specs keep using the ordinary REST helpers for setup.
+- **The SPA needs no second build.** Its API base is baked in at build time, but the Nitro server
+  that serves the shell re-reads `NUXT_PUBLIC_API_BASE` at STARTUP, so the second origin is one
+  extra process over the same `.output`, not a second (slowest-step) build. The launcher waits for
+  the primary frontend's build to emit that bundle, since Playwright starts `webServer` entries in
+  parallel.
+- **Cookies are not PORT-scoped**, so `pinAuthedWorkspace` / `pinBoardForUser` /
+  `useAdvancedInterfaceMode` seed both origins and no parallel set of helpers is needed.
+
+The one thing that does NOT come for free is the WebSocket: the hub the primary listener registers
+sockets on is created inside `start()` and never handed to the container, so the auth surface brings
+its own and `fanOutRealtime` tees engine events into both. Without that a board opened on the auth
+stack paints once from REST and then goes deaf. That is why that function (and the config clone) are
+pinned by `src/authBackend.test.ts` in the browser-free lane rather than left to surface as a flake.
+
+### Real people, real sessions (the `seedTeamScenario` / `seedPasswordUser` seams)
+
+There is no anonymous REST path to a user, an account membership or a workspace role, so the specs
+whose subject is WHO may do what seed through the built container's own services
+([`src/seedTeam.ts`](./src/seedTeam.ts)) over the control channel:
+
+- **`seedTeamScenario`** seeds an org, a board and the principals a scenario asks for, minting a
+  signed session per principal. The RBAC spec's fixed admin+viewer pair is one call into it. Its
+  vocabulary carries the two facts a scenario has to be able to state: a principal enrolled in the
+  ACCOUNT but NOT scoped to the board (`role: null`), and whether the board starts `restricted` or is
+  restricted later through the UI. `spareBoard` adds a second, EMPTY board in the account, for a
+  spec that takes access away, because the SPA resolves whatever board the caller can still reach
+  and CREATES one when that is none, landing the session on a fresh board's onboarding gate (a state
+  that says nothing about the revoke). It carries no sample architecture precisely so the primary
+  board's fixed block ids are absent there and can be asserted on.
+- **`seedPasswordUser`** writes a real password credential through the identity service the signup
+  endpoint calls, plus the account and board the user lands on, so the password `sign-in.spec` types
+  is verified by production code.
 
 ### Per-run fake behaviour (the `setFakeProfile` seam)
 
@@ -168,7 +241,9 @@ faults without one). Two families were added for the operational-gate + agent-lo
   evidence that a bounce happened: assert the round history the engine recorded.
 
 A workspace with no profile gets the base backend behaviour, so the
-pre-existing specs are unchanged. The channel is a tiny separate HTTP listener on `PORT + 1` (`E2E_CONTROL_PORT`),
+pre-existing specs are unchanged. The same channel carries the SEEDS that have no anonymous REST path
+(`/github-seed`, `/github-seed-own-repo`, `/rbac-seed`, `/team-seed`, `/password-user-seed`) and the
+one read-only report (`/github-review-attempts`). It is a tiny separate HTTP listener on `PORT + 1` (`E2E_CONTROL_PORT`),
 posted to from Node (Playwright's `request`), never from the browser: see
 [`src/testServer.ts`](./src/testServer.ts) + [`src/fakeProfile.ts`](./src/fakeProfile.ts).
 
@@ -278,9 +353,11 @@ DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/cat_factory_test \
   pnpm --filter @cat-factory/e2e run test:e2e
 ```
 
-Playwright's `webServer` boots both the backend (`src/testServer.ts`) and the SPA
-(`deploy/frontend`'s `nuxt dev`, pointed at the backend via `NUXT_PUBLIC_API_BASE`).
-Use `test:e2e:ui` for the interactive runner. The browser suite is **not** part of the
+Playwright's `webServer` boots the backend (`src/testServer.ts`), the SPA (`deploy/frontend`, built
+once and served by `nuxt preview`, pointed at the backend via `NUXT_PUBLIC_API_BASE`) and a SECOND
+SPA instance on `3001` pointed at the backend's auth-enabled surface on `PORT + 2` (see the
+auth-enabled stack above; the same `.output`, so no second build). Use `test:e2e:ui` for the
+interactive runner. The browser suite is **not** part of the
 unit `test:run` lane: it runs in its own CI job (`.github/workflows/ci.yml` → `Test
 e2e`). That job is **non-blocking**: it isn't wired into the aggregated `Test` gate, so a
 browser/boot flake can't block an otherwise-green PR. Promote it into `test-gate.needs`
@@ -334,6 +411,10 @@ which mainly exist so a whole-suite run can shift the defaults.
 install` download. For sandboxes that ship a preinstalled browser and block the download
   (e.g. `E2E_CHROMIUM_PATH=/opt/pw-browsers/chromium`). Unset in CI.
 - `PORT` (default `8787`), `E2E_FRONTEND_PORT` (default `3000`), `E2E_BACKEND_URL`.
+- `E2E_AUTH_PORT` (default `PORT + 2`), `E2E_AUTH_FRONTEND_PORT` (default `3001`),
+  `E2E_AUTH_FRONTEND_URL`: the auth-enabled stack's ends. Each derives from the primary ports the
+  same way the control channel does, so overriding `PORT` / `E2E_FRONTEND_PORT` moves the whole set
+  consistently.
 
 ### Promoting the e2e job to a required gate
 

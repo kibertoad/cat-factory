@@ -974,7 +974,8 @@ faked. Spec-writing mechanics and the Specs table:
   must be mocked at the backend's OUTBOUND boundary, never in the browser.
 - **Spec shape (mandatory)**: seed/trigger over REST, then assert only on LIVE pushed UI updates. No
   reloads, no fixed sleeps, no canvas drag/zoom; only web-first assertions on the named timeouts in
-  `tests/helpers.ts`. Selectors are `data-testid`, always.
+  `tests/helpers.ts`. Selectors are `data-testid`, always. A spec about IDENTITY (the login screen, a
+  policy naming PEOPLE) needs the AUTH-ENABLED stack: auth-off leaves the SPA with no user at all.
 - **A flaky e2e test is a BLOCKING bug: investigate and deflake, NEVER retry.** Playwright enforces this
   (`failOnFlakyTests: true`); the retry exists ONLY to capture the trace. A flake almost always exposes a
   REAL race, usually a frontend store reconcile or a `helpers.ts` readiness gate; fix the SOURCE and pin

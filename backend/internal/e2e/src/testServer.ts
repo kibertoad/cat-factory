@@ -21,7 +21,7 @@
 // Run directly via Node type stripping: `node src/testServer.ts` (Playwright's webServer
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { AsyncFakeAgentExecutor, makeOnboardingProbe, mintSession } from '@cat-factory/conformance'
+import { AsyncFakeAgentExecutor, makeOnboardingProbe } from '@cat-factory/conformance'
 import {
   buildNodeContainer,
   DrizzleBranchProjectionRepository,
@@ -32,8 +32,7 @@ import {
   DrizzleIssueProjectionRepository,
   DrizzlePullRequestProjectionRepository,
   DrizzleRepoProjectionRepository,
-  DrizzleWorkspaceMemberRepository,
-  DrizzleWorkspaceRepository,
+  NodeRealtimeHub,
   start,
 } from '@cat-factory/node-server'
 import {
@@ -53,6 +52,8 @@ import {
   type FakeProfile,
   FakeProfileRegistry,
 } from './fakeProfile.ts'
+import { fanOutRealtime, serveAuthBackend } from './authBackend.ts'
+import { seedPasswordUser, seedTeamScenario, type TeamScenarioRequest } from './seedTeam.ts'
 
 /** The options shape `AsyncFakeAgentExecutor`/`FakeAgentExecutor` accept (avoids importing
  * the kernel `AgentKind` type, which isn't a dependency of this test-only package). */
@@ -165,9 +166,11 @@ let rbacContainer: ReturnType<typeof buildNodeContainer> | null = null
  * channel (there is no anonymous REST path to create users / account members). Mirrors the
  * cross-runtime `defineWorkspaceRbacSuite` fixture: an org owned by admin A, a developer B
  * enrolled in the account and scoped to the board as a `viewer`, and the board flipped to
- * `restricted`. The board is created with a NULL owner (no creator auto-enroll), so A's full
- * access comes purely from the account-admin escape hatch. Returns the board id + a Bearer
- * token and user id for each principal, which the spec injects into the SPA.
+ * `restricted`.
+ *
+ * One call into the generic {@link seedTeamScenario}, whose vocabulary (principals with a role,
+ * or none) covers this pair and the member-admin flow alike; this keeps the RBAC spec's legacy
+ * field names, which are what it reads.
  */
 async function seedRbacScenario(
   container: NonNullable<typeof rbacContainer>,
@@ -181,43 +184,21 @@ async function seedRbacScenario(
   viewerToken: string
   viewerUserId: string
 }> {
-  const probe = makeOnboardingProbe(container)
-  const { accountId, ownerUserId: adminUserId } = await probe.makeOrgOwner(`rbac-${tag}`)
-  const viewer = await probe.users.findOrCreateByIdentity('github', `rbac-viewer-${tag}`, {
-    name: 'RBAC Viewer',
-    email: `rbac-viewer-${tag}@example.com`,
-    emailVerified: true,
+  const scenario = await seedTeamScenario(container, db, AUTH_SESSION_SECRET, {
+    tag: `rbac-${tag}`,
+    restricted: true,
+    principals: [{ key: 'viewer', role: 'viewer', name: 'RBAC Viewer' }],
   })
-  await probe.addAccountMember(accountId, adminUserId, viewer.id, ['developer'])
-  // Seed the sample architecture (so the board carries the runnable `task_login` the SPA
-  // readiness gate asserts on); null owner ⇒ no creator admin row.
-  const snapshot = await container.workspaceService.create(
-    { name: 'RBAC board', seed: true },
-    null,
-    accountId,
-  )
-  const workspaceId = snapshot.workspace.id
-  // Connect the (faked) GitHub App for the board, or the SPA sits on the onboarding gate.
-  await seedGitHubForWorkspace(db, workspaceId, {})
-  // Scope B as a viewer and restrict the board (raw repos — the seed predates any request,
-  // so nothing is cached to invalidate).
-  await new DrizzleWorkspaceMemberRepository(db).upsert({
-    workspaceId,
-    userId: viewer.id,
-    role: 'viewer',
-    createdAt: Date.now(),
-    addedByUserId: adminUserId,
-  })
-  await new DrizzleWorkspaceRepository(db).setAccessMode(workspaceId, 'restricted')
-  const [adminToken, viewerToken] = await Promise.all([
-    mintSession(AUTH_SESSION_SECRET, { id: adminUserId, login: `rbac-${tag}`, name: 'RBAC Admin' }),
-    mintSession(AUTH_SESSION_SECRET, {
-      id: viewer.id,
-      login: `rbac-viewer-${tag}`,
-      name: viewer.name,
-    }),
-  ])
-  return { workspaceId, accountId, adminToken, adminUserId, viewerToken, viewerUserId: viewer.id }
+  const viewer = scenario.principals.viewer
+  if (!viewer) throw new Error('[e2e] rbac seed: the viewer principal was not seeded')
+  return {
+    workspaceId: scenario.workspaceId,
+    accountId: scenario.accountId,
+    adminToken: scenario.ownerToken,
+    adminUserId: scenario.ownerUserId,
+    viewerToken: viewer.token,
+    viewerUserId: viewer.userId,
+  }
 }
 
 // A tiny, test-ONLY HTTP control channel (a separate listener, so it never couples to the
@@ -227,6 +208,14 @@ async function seedRbacScenario(
 // SAME derivation the `setFakeProfile` helper uses, so PORT drives both ends. Bound to
 // loopback: it's reached only from the local Playwright process, never publicly.
 const controlPort = Number(process.env.E2E_CONTROL_PORT ?? Number(process.env.PORT ?? '8787') + 1)
+// The AUTH-ENABLED HTTP surface (see `authBackend.ts`) and the SPA origin that talks to it. Both
+// derive from the primary ports the same way the control channel does, so overriding `PORT` /
+// `E2E_FRONTEND_PORT` moves every end consistently.
+const authPort = Number(process.env.E2E_AUTH_PORT ?? Number(process.env.PORT ?? '8787') + 2)
+const authFrontendOrigin = `http://localhost:${process.env.E2E_AUTH_FRONTEND_PORT ?? '3001'}`
+// The hub the auth surface registers its WebSocket subscribers on. Created out here so the
+// container build can tee engine events into it (`fanOutRealtime`) before the listener exists.
+const authHub = new NodeRealtimeHub()
 // Reject on a socket error so a caller gets a fast 400 instead of a hung request that only
 // surfaces as a spec timeout.
 const readBody = (req: IncomingMessage): Promise<string> =>
@@ -342,6 +331,41 @@ const controlServer = createServer((req, res) => {
       .catch((err) => fail(res, 400, err))
     return
   }
+  // Seed a user who can SIGN IN with a password, plus the account + board they land on (see
+  // `seedPasswordUser`). Only meaningful against the auth-enabled surface, which is the one the
+  // sign-in spec's browser talks to.
+  if (req.method === 'POST' && req.url === '/password-user-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('password-user seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as { tag: string; password: string }
+        const result = await seedPasswordUser(rbacContainer, seedDb, body)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
+  // Seed an org + board + the principals a scenario asks for, each with a signed session (see
+  // `seedTeam.ts`). The general form of `/rbac-seed`: it also admits a principal enrolled in the
+  // ACCOUNT but not scoped to the board, which is what the member-admin flow adds through the
+  // roster, and leaves the board unrestricted unless asked.
+  if (req.method === 'POST' && req.url === '/team-seed') {
+    void readBody(req)
+      .then(async (raw) => {
+        if (!rbacContainer || !seedDb) {
+          res.writeHead(503).end('team seed: container not ready')
+          return
+        }
+        const body = JSON.parse(raw) as TeamScenarioRequest
+        const result = await seedTeamScenario(rbacContainer, seedDb, AUTH_SESSION_SECRET, body)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result))
+      })
+      .catch((err) => fail(res, 400, err))
+    return
+  }
   // Seed a restricted-board RBAC scenario + mint the principals' sessions (see
   // `seedRbacScenario`). Returns the board id + a Bearer token per principal, which the RBAC
   // spec injects into the SPA to drive the board as an authenticated viewer vs admin.
@@ -442,6 +466,11 @@ await start({
     seedDb = db
     const container = buildNodeContainer({
       ...opts,
+      // Tee engine events into the auth surface's own WebSocket hub as well as the primary
+      // listener's. `start()` keeps its hub to itself (only the wrapping sink reaches the
+      // container), so this is the one place the second listener can be joined to the same engine,
+      // and it must be, or a board opened on the auth stack paints once and then goes deaf.
+      ...(opts.realtimeSink ? { realtimeSink: fanOutRealtime(opts.realtimeSink, authHub) } : {}),
       overrides: {
         agentExecutor,
         repoBootstrapper,
@@ -493,6 +522,16 @@ await start({
     // Capture the built container for the `/rbac-seed` control route (real user / account /
     // workspace services). Read only after boot, when a spec fires the route.
     rbacContainer = container
+    // The AUTH-ENABLED surface, on its own port: the same container with `config.auth` flipped on,
+    // for the specs whose subject is identity (see `authBackend.ts`). Served from here because the
+    // container is what it needs and this is where one exists; the primary listener is unaffected.
+    serveAuthBackend({
+      container,
+      hub: authHub,
+      env,
+      port: authPort,
+      corsOrigin: authFrontendOrigin,
+    })
     return container
   },
 })
