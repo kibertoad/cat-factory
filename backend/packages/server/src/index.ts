@@ -14,6 +14,7 @@ export {
   type LogFields,
   type LogLevel,
   type LogSink,
+  type LogThreshold,
   type Logger,
 } from './observability/logger.js'
 export { operationalMetrics } from './observability/operationalMetrics.js'

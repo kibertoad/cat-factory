@@ -60,6 +60,7 @@ export {
   type LogLevel,
   type LogRecord,
   type LogSink,
+  type LogThreshold,
   type Logger,
   type RecordedLogLine,
   createRecordingLogger,
