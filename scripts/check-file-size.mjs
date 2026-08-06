@@ -223,8 +223,17 @@ const LEGACY_ALLOWANCES = new Map([
  * restating two ADRs that already own every one of them.
  *
  * Ratcheted 1098 → 1095 by the same move one level up, on the merge-lifecycle entry those bullets
- * sit in: the threshold-preset bullet was a field list its own preset doc owns, and three siblings
- * re-narrated their linked ADR before linking it. Every link survived; only the restatement went.
+ * sit in: three siblings re-narrated their linked ADR before linking it, and the threshold-preset
+ * bullet was a field list whose per-flow half belongs to the flow doc that reads it. Every link
+ * survived; only the restatement went. One field had NO other home and a deeper doc pointed up
+ * here for it (`requirements-review.md` cited this entry for the review cap and tolerance), so
+ * that pair of knobs was written down THERE in the same change. Dropping a field list is only a
+ * shrink once something else states it: check for an inbound pointer before condensing one.
+ *
+ * Ratcheted 1095 → 1094 while ADDING the test-lane-parity guard to the guard-scripts list: two
+ * neighbouring entries were a hair short of their own wrap width and gave up a line each. A list
+ * that has to grow is the easiest place to find a line, and a hand-maintained count in it ("CI runs
+ * all five") is the same rot as a pinned total in a test, so that became a relation.
  *
  * `docs/internal/running-tests.md` is here for a second reason: CLAUDE.md points an agent at it
  * by name, so its whole length is a context cost paid on every read, and it sits in the tree
@@ -232,16 +241,23 @@ const LEGACY_ALLOWANCES = new Map([
  * unratcheted one relocates the growth rather than bounding it, which is what this entry closes.
  * Same shrink-only contract: if the recipe needs more, the surrounding prose gives up the lines.
  *
- * RAISED 78 → 98, deliberately and once: the doc gained the scoped-run section (`test:changed` /
- * `test:quick`), which is NEW SUBJECT MATTER rather than the recipe growing. 78 was sized when
- * the doc covered setup and traps only, and the alternative on offer was compressing the Postgres
- * and strict-env passages that exist precisely because someone lost an afternoon to each. Trading
- * a hard-won trap for a new section is not the shrink this ratchet is asking for. The contract is
- * otherwise unchanged, and it now binds a doc whose CLAUDE.md entry is a pointer, not a summary.
+ * RAISED 78 → 96, which this contract otherwise forbids, so it is written down as the deviation it
+ * is rather than as a number that moved: the doc gained the scoped-run section (`test:changed` /
+ * `test:quick`), NEW SUBJECT MATTER rather than the recipe growing, and 78 was sized when the doc
+ * covered setup and traps only. Three ways out were tried and rejected. Compressing the Postgres
+ * and strict-env passages trades a trap that cost someone an afternoon for a new section, which is
+ * not the shrink this ratchet asks for. Moving the new section (or the Postgres recipe) to an
+ * unratcheted doc is the relocation the paragraph above already refuses, and it relocates the wrong
+ * thing: CLAUDE.md's pointer exists FOR the reader who is about to run tests, so scoping advice is
+ * the most load-bearing content in the file, not the least. Re-wrapping the prose wider buys ~12
+ * lines and is pure metric-gaming, since the guard counts lines. What DID land is real: the
+ * cancelled-sibling fact the section had duplicated now sits once, in the section that owns it.
+ * Set at the file's exact length, with no slack, so the shrink-only contract binds again from here
+ * and the next addition has to earn its own justification instead of spending this one's headroom.
  */
 const DOC_ALLOWANCES = new Map([
-  ['CLAUDE.md', 1095],
-  ['docs/internal/running-tests.md', 98],
+  ['CLAUDE.md', 1094],
+  ['docs/internal/running-tests.md', 96],
 ])
 
 /** Roots scanned for source files (mirrors the workspace layout; deploy/* are one-liners). */

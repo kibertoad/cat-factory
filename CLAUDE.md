@@ -579,14 +579,13 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
   RESERVED, so it can never be named as a capability credential.
-- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
-  `buildStepApproval`.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
+- `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
-- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting
-  changed.
+- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting changed.
 - `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 
 ## Execution flow (the canonical async + observable pattern)

@@ -16,32 +16,29 @@ contributor needs before their first commit goes in
 all. Two are the exception: the Node and Local facades test against a real Postgres,
 and with no server reachable they fail with `DATABASE_URL is required to run the local
 conformance tests` while every other task passes. Read that as "no database here", not
-as a broken merge.
-
-Not in `pnpm test:run` at all: Playwright (`backend/internal/e2e`, which needs Postgres
-and a browser) and mutation testing (nightly CI only, see
+as a broken merge. Not in `pnpm test:run` at all: Playwright (`backend/internal/e2e`,
+which needs Postgres and a browser) and mutation testing (nightly CI only, see
 [`mutation-testing.md`](./mutation-testing.md)).
 
 ## While iterating, run a SCOPE, not the tree
 
 The whole tree is minutes of wall clock and wants a database up, which is the wrong
-price to pay per edit. Two root scripts narrow it:
+price to pay per edit. Two root scripts narrow it, and they replace running
+`pnpm test:run` after every edit, never running it before a PR:
 
-- **`pnpm test:changed`** — the packages you changed plus everything depending on them
+- **`pnpm test:changed`**: the packages you changed plus everything depending on them
   (`--filter='...[origin/main]'`). The scope to iterate on. It carries `--env-mode=loose`
   because a kernel or server edit pulls the two Postgres facades in with it, and strict
   mode would then drop their `DATABASE_URL` (next section).
-- **`pnpm test:quick`** — every package needing neither Postgres nor `workerd`, the same
-  set CI runs as its `Test units (no DB)` lane. Broad confidence with no infra.
+- **`pnpm test:quick`**: every package needing neither Postgres nor `workerd`, the same
+  set CI runs as its `Test units (no DB)` lane, which
+  `scripts/check-test-lane-parity.mjs` keeps true rather than merely asserted.
 
-They replace running `pnpm test:run` after every edit, never running it before a PR.
-
-Both cap Turbo at half the cores. Turbo fans out per package and each vitest then spawns
+Both cap Turbo at half the cores: it fans out per package and each vitest then spawns
 its own pool, so an unbounded run oversubscribes a small box badly enough to fail
-timing-sensitive tests that pass on their own: leave `--concurrency` on. Both also pass
+timing-sensitive tests that pass on their own. Both also pass
 `--output-logs=errors-only`, so a green run prints only Turbo's summary while a failing
-package still prints its whole vitest output. Sibling tasks CANCELLED by that failure
-print their bare `[ELIFECYCLE]` line too — see below for which one actually failed.
+package still prints its whole vitest output.
 
 ## Turbo does not hand `DATABASE_URL` to a task, so exporting it is not enough
 
@@ -63,7 +60,8 @@ pnpm exec turbo run test:run --env-mode=loose \
 Turbo stops the run when one task fails, so the others end with a bare
 `[ELIFECYCLE] Command failed.` and no vitest summary above it. Only the package named
 on Turbo's own `Failed:` line actually failed. Re-run anything else filtered and on its
-own before diagnosing it.
+own before diagnosing it. The scoped scripts above make this louder, not quieter: under
+`--output-logs=errors-only` a cancelled sibling's bare line is all it prints.
 
 Generation has the same shape of trap: `pnpm gen:openapi` reads
 `backend/packages/contracts/dist`, so on a fresh checkout it dies with
