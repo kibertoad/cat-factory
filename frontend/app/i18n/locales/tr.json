@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "Önce belge entegrasyonunu etkinleştirin",
     "attachIssueDisabledConnect": "Önce bir sorun izleyici bağlayın (Entegrasyonlar)",
     "attachIssueDisabledEnable": "Önce sorun izleyici entegrasyonunu etkinleştirin",
-    "importsOnAdd": "eklendiğinde içe aktarılır"
+    "importsOnAdd": "eklendiğinde içe aktarılır",
+    "unreadable": "Getirilemedi: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "Bu bir {claimed} bağlantısı, {source} bağlantısı değil.",
       "refSwitchSource": "Bunun yerine {source} kullan",
       "refTrimmed": "Desteklenen biçime kısaltıldı",
+      "refWidened": "Bu kaynağın okuyamadığı bir çerçeveyi ({scope}) belirtiyor, bu yüzden dosyanın tamamı ekleniyor.",
+      "refAlreadyAttached": "Bu referans zaten ekli.",
       "refCheckFailed": "Referans denetlenemedi: {error}"
     },
     "repoPicker": {

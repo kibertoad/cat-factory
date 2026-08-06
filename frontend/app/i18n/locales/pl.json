@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "Najpierw włącz integrację dokumentów",
     "attachIssueDisabledConnect": "Najpierw połącz system zgłoszeń (Integracje)",
     "attachIssueDisabledEnable": "Najpierw włącz integrację systemu zgłoszeń",
-    "importsOnAdd": "importowane przy dodaniu"
+    "importsOnAdd": "importowane przy dodaniu",
+    "unreadable": "Nie udało się pobrać: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "To jest link {claimed}, a nie {source}.",
       "refSwitchSource": "Użyj zamiast tego {source}",
       "refTrimmed": "Skrócono do obsługiwanej postaci",
+      "refWidened": "Wskazuje ramkę, której to źródło nie potrafi odczytać ({scope}), więc dołączany jest cały plik.",
+      "refAlreadyAttached": "To odwołanie jest już dołączone.",
       "refCheckFailed": "Nie udało się sprawdzić odwołania: {error}"
     },
     "repoPicker": {

@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "Activa primero la integración de documentos",
     "attachIssueDisabledConnect": "Conecta primero un gestor de incidencias (Integraciones)",
     "attachIssueDisabledEnable": "Activa primero la integración del gestor de incidencias",
-    "importsOnAdd": "se importa al añadir"
+    "importsOnAdd": "se importa al añadir",
+    "unreadable": "No se pudo obtener: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "Es un enlace de {claimed}, no de {source}.",
       "refSwitchSource": "Usar {source} en su lugar",
       "refTrimmed": "Recortado al formato admitido",
+      "refWidened": "Nombra un marco que esta fuente no puede leer ({scope}), así que se adjunta el archivo completo.",
+      "refAlreadyAttached": "Esta referencia ya está adjunta.",
       "refCheckFailed": "No se pudo comprobar la referencia: {error}"
     },
     "repoPicker": {

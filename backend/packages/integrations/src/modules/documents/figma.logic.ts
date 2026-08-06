@@ -111,6 +111,40 @@ export function parseFigmaRef(input: string): string | null {
   return node ? `${fileKey}:${node}` : fileKey
 }
 
+/**
+ * The node qualifier the input named that {@link parseFigmaRef} could NOT keep, or null.
+ *
+ * `parseRef` falls back to the whole FILE when a node id is not a simple `n` / `n:n` (a complex
+ * instance id like `I2649:14930;2649:14746` is the common case, and Figma's Copy link emits one for
+ * any component instance). That fallback is deliberate — nothing knows which frame such an id meant,
+ * and guessing would attach the wrong one — but it turns "this frame" into "the entire design file"
+ * with nothing in the resolved id to show it happened. This is what says it happened, and it returns
+ * the qualifier AS PASTED so the person who pasted it can recognise their own link.
+ *
+ * Null when the reference kept its node (`fileKey:nodeId`) and when the paste named no node at all,
+ * which are both "you got what you asked for".
+ */
+export function figmaDroppedNodeId(input: string, externalId: string): string | null {
+  if (splitFigmaExternalId(externalId).nodeId) return null
+  const raw = rawFigmaNodeQualifier(input)
+  return raw && !normalizeFigmaNodeId(raw) ? raw : null
+}
+
+/** The node qualifier as the input spells it: a URL's `?node-id=`, or a bare ref's `:` suffix. */
+function rawFigmaNodeQualifier(input: string): string | null {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+  if (!trimmed.includes('/') && !/figma\.com/i.test(trimmed)) {
+    const [, ...rest] = trimmed.split(':')
+    return rest.length ? rest.join(':') : null
+  }
+  try {
+    return new URL(trimmed).searchParams.get('node-id')
+  } catch {
+    return null
+  }
+}
+
 /** Split a composite external id back into its file key and optional node id (colon form). */
 export function splitFigmaExternalId(externalId: string): { fileKey: string; nodeId?: string } {
   const idx = externalId.indexOf(':')

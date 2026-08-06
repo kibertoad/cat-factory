@@ -167,29 +167,38 @@ function removePending(item: PendingContext) {
         <div
           v-for="item in pendingDocs"
           :key="contextKey(item)"
-          class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
+          class="rounded-md border border-slate-800 bg-slate-900/60"
         >
-          <UIcon
-            :name="item.icon ?? 'i-lucide-file-text'"
-            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-          />
-          <span class="truncate">{{ item.title }}</span>
-          <UBadge
-            v-if="item.needsImport"
-            color="neutral"
-            variant="soft"
-            size="xs"
-            class="ms-1 shrink-0"
+          <div class="flex items-center gap-1.5 px-2 py-1.5 text-xs text-slate-300">
+            <UIcon
+              :name="item.icon ?? 'i-lucide-file-text'"
+              class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+            />
+            <span class="truncate">{{ item.title }}</span>
+            <UBadge
+              v-if="item.needsImport"
+              color="neutral"
+              variant="soft"
+              size="xs"
+              class="ms-1 shrink-0"
+            >
+              {{ t('contextAttachments.importsOnAdd') }}
+            </UBadge>
+            <button
+              type="button"
+              class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
+              @click="removePending(item)"
+            >
+              <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p
+            v-if="item.unreadable"
+            class="px-2 pb-1.5 text-[11px] text-amber-400"
+            data-testid="context-item-unreadable"
           >
-            {{ t('contextAttachments.importsOnAdd') }}
-          </UBadge>
-          <button
-            type="button"
-            class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-            @click="removePending(item)"
-          >
-            <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-          </button>
+            {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
+          </p>
         </div>
       </div>
       <p v-else class="text-[11px] text-slate-500">
@@ -266,29 +275,41 @@ function removePending(item: PendingContext) {
         <div
           v-for="item in pendingIssues"
           :key="contextKey(item)"
-          class="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1.5 text-xs text-slate-300"
+          class="rounded-md border border-slate-800 bg-slate-900/60"
         >
-          <UIcon
-            :name="item.icon ?? 'i-lucide-square-check'"
-            class="h-3.5 w-3.5 shrink-0 text-indigo-400"
-          />
-          <span class="truncate">{{ item.title }}</span>
-          <UBadge
-            v-if="item.needsImport"
-            color="neutral"
-            variant="soft"
-            size="xs"
-            class="ms-1 shrink-0"
+          <div class="flex items-center gap-1.5 px-2 py-1.5 text-xs text-slate-300">
+            <UIcon
+              :name="item.icon ?? 'i-lucide-square-check'"
+              class="h-3.5 w-3.5 shrink-0 text-indigo-400"
+            />
+            <span class="truncate">{{ item.title }}</span>
+            <UBadge
+              v-if="item.needsImport"
+              color="neutral"
+              variant="soft"
+              size="xs"
+              class="ms-1 shrink-0"
+            >
+              {{ t('contextAttachments.importsOnAdd') }}
+            </UBadge>
+            <button
+              type="button"
+              class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
+              @click="removePending(item)"
+            >
+              <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <!-- An issue reference gets no pre-flight of its own (there is no `parseRef` to ask a
+               tracker), so this line IS its warning: the fetch is attempted when the form opens and
+               again on submit, and a failure now blocks the create. -->
+          <p
+            v-if="item.unreadable"
+            class="px-2 pb-1.5 text-[11px] text-amber-400"
+            data-testid="context-item-unreadable"
           >
-            {{ t('contextAttachments.importsOnAdd') }}
-          </UBadge>
-          <button
-            type="button"
-            class="ms-auto shrink-0 text-slate-400 hover:text-slate-200"
-            @click="removePending(item)"
-          >
-            <UIcon name="i-lucide-x" class="h-3.5 w-3.5" />
-          </button>
+            {{ t('contextAttachments.unreadable', { error: item.unreadable }) }}
+          </p>
         </div>
       </div>
       <p v-else class="text-[11px] text-slate-500">

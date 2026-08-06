@@ -3005,7 +3005,8 @@
     "attachDocDisabledEnable": "Aktivieren Sie zuerst die Dokumente-Integration",
     "attachIssueDisabledConnect": "Verbinden Sie zuerst einen Issue-Tracker (Integrationen)",
     "attachIssueDisabledEnable": "Aktivieren Sie zuerst die Issue-Tracker-Integration",
-    "importsOnAdd": "importiert beim Hinzufügen"
+    "importsOnAdd": "importiert beim Hinzufügen",
+    "unreadable": "Konnte nicht abgerufen werden: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3790,6 +3791,8 @@
       "refOtherSource": "Das ist ein {claimed}-Link, kein {source}-Link.",
       "refSwitchSource": "Stattdessen {source} verwenden",
       "refTrimmed": "Auf die unterstützte Form gekürzt",
+      "refWidened": "Nennt einen Frame, den diese Quelle nicht lesen kann ({scope}); daher wird die gesamte Datei angehängt.",
+      "refAlreadyAttached": "Diese Referenz ist bereits angehängt.",
       "refCheckFailed": "Referenz konnte nicht geprüft werden: {error}"
     },
     "repoPicker": {

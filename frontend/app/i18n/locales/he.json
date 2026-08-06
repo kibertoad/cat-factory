@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "הפעל תחילה את אינטגרציית המסמכים",
     "attachIssueDisabledConnect": "חבר תחילה מערכת לניהול אישיו (אינטגרציות)",
     "attachIssueDisabledEnable": "הפעל תחילה את אינטגרציית מערכת האישיו",
-    "importsOnAdd": "מיובא בעת ההוספה"
+    "importsOnAdd": "מיובא בעת ההוספה",
+    "unreadable": "לא ניתן לאחזר: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "זה קישור של {claimed}, לא של {source}.",
       "refSwitchSource": "להשתמש ב-{source} במקום",
       "refTrimmed": "קוצר לפורמט הנתמך",
+      "refWidened": "מציין מסגרת שהמקור הזה אינו יכול לקרוא ({scope}), ולכן מצורף כל הקובץ.",
+      "refAlreadyAttached": "ההפניה הזאת כבר מצורפת.",
       "refCheckFailed": "לא ניתן לבדוק את ההפניה: {error}"
     },
     "repoPicker": {

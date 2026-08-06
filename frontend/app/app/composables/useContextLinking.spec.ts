@@ -90,9 +90,18 @@ describe('resolvePending', () => {
   // user can still make with the form open, where the same failure afterwards leaves a task
   // carrying context it never got. These pin the two halves that makes load-bearing: what the
   // host gets back, and that one bad attachment does not hide a second one.
-  function stub(importDocument: (source: string, ref: string) => Promise<{ externalId: string }>) {
+  function stub(
+    importDocument: (source: string, ref: string) => Promise<{ externalId: string }>,
+    importTask: (
+      source: string,
+      ref: string,
+    ) => Promise<{
+      externalId: string
+      description: string
+    }> = async () => ({ externalId: 'T-1', description: '' }),
+  ) {
     vi.stubGlobal('useDocumentsStore', () => ({ importDocument }))
-    vi.stubGlobal('useTasksStore', () => ({ importTask: async () => ({ externalId: 'T-1' }) }))
+    vi.stubGlobal('useTasksStore', () => ({ importTask }))
     vi.stubGlobal('useWorkspaceStore', () => ({ workspaceId: 'ws_1' }))
     vi.stubGlobal('useToast', () => ({ add: vi.fn() }))
     vi.stubGlobal('useI18n', () => ({ t: (key: string) => key }))
@@ -131,6 +140,43 @@ describe('resolvePending', () => {
     // Still staged and still unresolved: the host aborts the create, so dropping them here would
     // silently discard attachments the user asked for while they are fixing them.
     expect(resolved.map((c) => c.needsImport)).toEqual([true, true])
+    // And MARKED, so the form the user is still looking at names which chip refused. The toast
+    // names them too, but the toast is gone by the time they go looking for the one to remove.
+    expect(resolved.map((c) => c.unreadable)).toEqual([
+      'no access to acme/repo:a.md',
+      'no access to acme/repo:b.md',
+    ])
+  })
+
+  it('clears a stale unreadable mark once the item does resolve', async () => {
+    // A prior failure is not a standing verdict: leaving the mark on a page that has just been
+    // fetched accuses a good attachment (and the retry is the whole point of keeping it staged).
+    stub(async (_source, ref) => ({ externalId: `resolved:${ref}` }))
+    const previouslyFailed = item({ unreadable: 'GitHub denied access (HTTP 403).' })
+
+    const { resolved } = await useContextLinking().resolvePending([previouslyFailed])
+
+    expect(resolved[0]!.unreadable).toBeUndefined()
+    expect(resolved[0]!.needsImport).toBe(false)
+  })
+
+  it("carries an imported issue's description forward, not just its id", async () => {
+    // The add-task form composes the saved description from these items on the very next statement
+    // (`linkedIssueBodies`), so an import that fetched the body and dropped it produced a task
+    // silently missing the issue text it was created from, with the bytes in hand at that moment.
+    stub(
+      async (_source, ref) => ({ externalId: ref }),
+      async () => ({ externalId: 'ENG-42', description: 'Steps to reproduce: …' }),
+    )
+    const issue = item({ kind: 'task', externalId: 'ENG-42', title: 'ENG-42 · Crash' })
+
+    const { resolved } = await useContextLinking().resolvePending([issue])
+
+    expect(resolved[0]).toMatchObject({
+      externalId: 'ENG-42',
+      needsImport: false,
+      description: 'Steps to reproduce: …',
+    })
   })
 })
 

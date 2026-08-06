@@ -182,6 +182,15 @@ export class FigmaProvider implements DocumentSourceProvider {
     return figmaLogic.figmaUrlFor(externalId)
   }
 
+  /**
+   * The frame the link named when `parseRef` could not read its node id and fell back to the whole
+   * file. Without it, "I attached this frame" and "I attached the entire design" resolve to the same
+   * visibly-fine reference.
+   */
+  droppedScope(input: string, externalId: string): string | null {
+    return figmaLogic.figmaDroppedNodeId(input, externalId)
+  }
+
   async fetchDocument(
     credentials: DocumentCredentials,
     externalId: string,

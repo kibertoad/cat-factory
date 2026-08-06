@@ -56,6 +56,14 @@ const description = ref('')
 const inputs = ref<InitiativePresetInputs>({})
 // Context the user chose to attach, committed once the initiative block exists (see create()).
 const pendingContext = ref<PendingContext[]>([])
+/**
+ * Whether THIS form is mid-submit. `initiatives.creating` cannot answer that any more: it is set
+ * inside `initiatives.create`, which the attachment fetch in `create()` now runs several network
+ * round trips ahead of. Through those seconds the button looked idle and enabled, and a second click
+ * re-entered with the ORIGINAL `pendingContext` (reassigned only after every import settles),
+ * re-imported everything and created a SECOND initiative. The add-task form's `saving` is the model.
+ */
+const submitting = ref(false)
 
 // Monotonic token so a slow probe response from a since-changed preset/frame is discarded.
 let probeSeq = 0
@@ -108,6 +116,7 @@ watch(open, (o) => {
   if (!o) return
   title.value = ''
   description.value = ''
+  submitting.value = false
   pendingContext.value = []
   selectedPresetId.value = GENERIC_PRESET_ID
   applyPreset()
@@ -119,13 +128,18 @@ const presetProblems = computed(() =>
   selectedPreset.value ? validateInitiativePresetInputs(selectedPreset.value, inputs.value) : [],
 )
 const canSubmit = computed(
-  () => title.value.trim().length > 0 && presetProblems.value.length === 0 && !initiatives.creating,
+  () =>
+    title.value.trim().length > 0 &&
+    presetProblems.value.length === 0 &&
+    !submitting.value &&
+    !initiatives.creating,
 )
 
 async function create() {
   const frameId = ui.createInitiativeFrameId
   if (!frameId || !canSubmit.value) return
   const descriptor = selectedPreset.value
+  submitting.value = true
   try {
     // Attachments are fetched BEFORE the initiative is written, for the reason the add-task form
     // does it: an unreachable page is a correction the user can still make here, where the same
@@ -162,6 +176,8 @@ async function create() {
       icon: 'i-lucide-triangle-alert',
       color: 'error',
     })
+  } finally {
+    submitting.value = false
   }
 }
 </script>
@@ -277,7 +293,7 @@ async function create() {
         <UButton
           data-testid="create-initiative-submit"
           color="primary"
-          :loading="initiatives.creating"
+          :loading="submitting || initiatives.creating"
           :disabled="!canSubmit"
           @click="create"
         >

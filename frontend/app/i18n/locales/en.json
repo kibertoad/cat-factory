@@ -552,7 +552,8 @@
     "attachDocDisabledEnable": "Enable the documents integration first",
     "attachIssueDisabledConnect": "Connect an issue tracker first (Integrations)",
     "attachIssueDisabledEnable": "Enable the issue-tracker integration first",
-    "importsOnAdd": "imports on add"
+    "importsOnAdd": "imports on add",
+    "unreadable": "Could not be fetched: {error}"
   },
   "errors": {
     "generic": {
@@ -4310,6 +4311,8 @@
       "refOtherSource": "That is a {claimed} link, not a {source} one.",
       "refSwitchSource": "Use {source} instead",
       "refTrimmed": "Trimmed to the supported form",
+      "refWidened": "Names a frame this source cannot read ({scope}), so the whole file is attached.",
+      "refAlreadyAttached": "This reference is already attached.",
       "refCheckFailed": "Could not check the reference: {error}"
     },
     "repoPicker": {

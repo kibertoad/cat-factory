@@ -5,7 +5,7 @@ import type { GroupCacheHandle, LinkedDocumentRefreshOutcome } from '@cat-factor
 import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
 import { contentHash, redactSecrets, ValidationError } from '@cat-factory/kernel'
 import {
-  isHostPinnedSource,
+  orderSourcesByClaimConfidence,
   type DocumentRefReason,
   type ResolvedDocumentRef,
 } from '@cat-factory/contracts'
@@ -106,12 +106,22 @@ export class DocumentImportService {
    * perfectly good link aimed at the wrong source, which is fixed by switching sources with the
    * same text. The message quotes the input through `redactSecrets`, since a pasted link
    * routinely carries a `?token=` the error envelope would otherwise echo into the logs.
+   *
+   * A ref that parses is not automatically the ref that was MEANT: `droppedScope` carries the
+   * frame/screen qualifier the provider had to discard, because a reference silently widened to
+   * the whole design file is the defect this pre-flight exists to surface, and it is indetectable
+   * from the resolved id alone.
    */
   resolveRef(source: DocumentSourceKind, ref: string): ResolvedDocumentRef {
     const provider = this.requireProvider(source)
     const externalId = provider.parseRef(ref)
     if (!externalId) throw this.refUnresolved(provider, source, ref)
-    return { source, externalId, canonicalUrl: provider.canonicalUrl?.(externalId) ?? null }
+    return {
+      source,
+      externalId,
+      canonicalUrl: provider.canonicalUrl?.(externalId) ?? null,
+      droppedScope: provider.droppedScope?.(ref, externalId) ?? null,
+    }
   }
 
   /** The 422 for a ref this source cannot read, naming the source that CAN when one exists. */
@@ -139,17 +149,14 @@ export class DocumentImportService {
   /**
    * The first OTHER configured source whose `parseRef` recognises this input, or undefined.
    *
-   * Host-PINNED sources are consulted first, for the reason `makeDocumentUrlResolver` orders the
-   * same way: a blind parser claims a SHAPE (any UUID-shaped run, any `/pages/<digits>` segment),
-   * so letting registration order decide would have this hint point a Figma paste at Notion.
+   * The ordering is `orderSourcesByClaimConfidence`, the same function `makeDocumentUrlResolver`
+   * reads rather than a second copy of its two passes: a blind parser claims a SHAPE (any
+   * UUID-shaped run, any `/pages/<digits>` segment), so letting registration order decide would
+   * have this hint point a Figma paste at Notion.
    */
   private claimingSource(exclude: DocumentSourceKind, ref: string): DocumentSourceKind | undefined {
     const candidates = this.deps.registry.list().filter((p) => p.kind !== exclude)
-    const ordered = [
-      ...candidates.filter((p) => isHostPinnedSource(p.kind)),
-      ...candidates.filter((p) => !isHostPinnedSource(p.kind)),
-    ]
-    return ordered.find((p) => p.parseRef(ref))?.kind
+    return orderSourcesByClaimConfidence(candidates).find((p) => p.parseRef(ref))?.kind
   }
 
   /**

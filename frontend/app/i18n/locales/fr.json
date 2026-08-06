@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "Activez d’abord l’intégration de documents",
     "attachIssueDisabledConnect": "Connectez d’abord un suivi de tickets (Intégrations)",
     "attachIssueDisabledEnable": "Activez d’abord l’intégration du suivi de tickets",
-    "importsOnAdd": "importé à l’ajout"
+    "importsOnAdd": "importé à l’ajout",
+    "unreadable": "Récupération impossible : {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "C'est un lien {claimed}, pas un lien {source}.",
       "refSwitchSource": "Utiliser {source} à la place",
       "refTrimmed": "Réduit au format pris en charge",
+      "refWidened": "Désigne un cadre que cette source ne peut pas lire ({scope}) : le fichier entier est donc joint.",
+      "refAlreadyAttached": "Cette référence est déjà jointe.",
       "refCheckFailed": "Impossible de vérifier la référence : {error}"
     },
     "repoPicker": {

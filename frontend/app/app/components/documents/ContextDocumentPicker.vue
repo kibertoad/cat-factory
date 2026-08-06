@@ -17,6 +17,15 @@
 // had been created. The resolve call is the source's own `parseRef`, so what is shown
 // here is what the import will do: the canonical trimmed link when it parses, and one
 // of two named corrections when it does not (see `REF_REJECTIONS`).
+//
+// Two distinctions the row has to keep, because collapsing either one recreates the bug in
+// quieter form. A reference the source could parse only by DROPPING the frame the link named
+// carries that fact separately from the trim (`droppedScope`): both change what was pasted,
+// but one resolves the same page and the other attaches the whole design file. And a resolve
+// call that could not be MADE leaves the reference unjudged rather than refused, still
+// stageable with the import as the backstop, because only the source's own refusal is evidence
+// against a link. An outage that made attaching impossible would be a worse failure than the
+// one the pre-flight fixes.
 import type { DocumentRefReason, DocumentSearchResult, DocumentSourceKind } from '~/types/domain'
 import {
   classifyRefFailure,
@@ -191,21 +200,39 @@ const refImported = computed(() => {
   )
 })
 
+/** Every id another row in this dropdown already offers, so one page is never listed twice. */
+const offeredIds = computed(
+  () =>
+    new Set([
+      ...importedRows.value.map((d) => d.externalId),
+      ...searchRows.value.map((r) => r.externalId),
+    ]),
+)
+
 /**
- * The attachable row for a resolved ref: the CANONICAL form the source settled on, never the
- * text that was typed. Suppressed once the same reference is already staged, keyed on the
- * resolved external id, so pasting the share link and then the bare id cannot stage it twice.
+ * The attachable row for the reference in the box: the CANONICAL form the source settled on, never
+ * the text that was typed (see `refRowFor`, which also carries the unjudged case).
+ *
+ * Suppressed in two cases, each with its own reason. Already STAGED, keyed on the resolved external
+ * id so pasting the share link and then the bare id cannot stage it twice (the `refAlreadyAttached`
+ * line says so, since a row that silently vanishes reads as a picker that lost the paste). Already
+ * OFFERED by an imported/search row above, which is the same page reachable by one click: the
+ * dedupe is against what is VISIBLE rather than against the whole imported list, because a URL
+ * query matches no title, so testing the full list would suppress the only row on offer.
  */
 const refRow = computed(() => {
-  const state = refState.value
   const pasted = refCandidate.value
-  if (state.status !== 'ok' || !pasted) return null
-  if (chosen.value.has(keyFor(state.ref.externalId))) return null
-  return {
-    ref: state.ref,
-    imported: !!refImported.value,
-    ...refRowFor(state.ref, pasted, refImported.value?.title),
-  }
+  if (!pasted) return null
+  const row = refRowFor(refState.value, pasted, refImported.value?.title)
+  if (!row) return null
+  if (chosen.value.has(keyFor(row.externalId)) || offeredIds.value.has(row.externalId)) return null
+  return { ...row, imported: !!refImported.value }
+})
+
+/** A resolved reference the caller has already staged: suppressed as a row, stated as a line. */
+const refAlreadyAttached = computed(() => {
+  const state = refState.value
+  return state.status === 'ok' && chosen.value.has(keyFor(state.ref.externalId))
 })
 
 /** The refusal to render under the input, in the reader's language, or null. */
@@ -234,6 +261,18 @@ function switchToClaimingSource() {
   if (target) source.value = target.source
 }
 
+/**
+ * Whether a line about the pasted reference is being rendered under the input. It is what keeps the
+ * dropdown TOTAL: every state now shows a row, a line, or the empty state. Keying the empty state
+ * on `status === 'none'` alone left a hole (a resolved reference the caller had already staged
+ * suppressed the row AND the empty state) that rendered as a blank panel explaining nothing.
+ */
+const refNotice = computed(
+  () =>
+    refState.value.status !== 'none' &&
+    (refState.value.status !== 'ok' || refAlreadyAttached.value),
+)
+
 const empty = computed(
   () =>
     !searching.value &&
@@ -241,7 +280,7 @@ const empty = computed(
     importedRows.value.length === 0 &&
     searchRows.value.length === 0 &&
     refRow.value === null &&
-    refState.value.status === 'none',
+    !refNotice.value,
 )
 
 function pickImported(externalId: string, title: string, excerpt: string) {
@@ -270,17 +309,23 @@ function pickSearch(r: DocumentSearchResult) {
 }
 
 /**
- * Stage a RESOLVED reference. The canonical external id is staged, never the pasted text, so
- * the item the host commits is the one the pre-flight judged. A reference the workspace has
- * already imported skips the re-fetch (`needsImport: false`) and carries its real title.
+ * Stage a reference. The canonical external id is staged, never the pasted text, so the item the
+ * host commits is the one the pre-flight judged. A reference the workspace has already imported
+ * skips the re-fetch (`needsImport: false`) and carries its real title.
+ *
+ * An UNJUDGED reference (the resolve call itself failed) carries the pasted text against the
+ * SELECTED source, which is what the picker did before any pre-flight existed: the import will
+ * judge it, and a source outage is not a reason to make attaching impossible.
  */
 function pickRef(row: NonNullable<typeof refRow.value>) {
+  const src = row.source ?? source.value
+  if (!src) return
   emit('pick', {
     kind: 'document',
-    source: row.ref.source,
-    externalId: row.ref.externalId,
+    source: src,
+    externalId: row.externalId,
     title: row.label,
-    subtitle: row.ref.canonicalUrl ?? descriptor.value?.label,
+    subtitle: row.canonicalUrl ?? descriptor.value?.label,
     icon: icon.value,
     needsImport: !row.imported,
   })
@@ -365,6 +410,15 @@ onMounted(() => {
       >
         {{ t('documents.picker.refCheckFailed', { error: refState.message }) }}
       </p>
+      <!-- Already staged, so the row is suppressed. Stated, because a paste that produces nothing
+           at all reads as a picker that dropped it. -->
+      <p
+        v-else-if="refAlreadyAttached"
+        class="px-1 text-[11px] text-slate-500"
+        data-testid="doc-ref-already-attached"
+      >
+        {{ t('documents.picker.refAlreadyAttached') }}
+      </p>
 
       <div class="max-h-56 space-y-0.5 overflow-y-auto">
         <!-- Already-imported documents (linked directly, no re-fetch). -->
@@ -415,6 +469,16 @@ onMounted(() => {
             </span>
             <span v-if="refRow.trimmed" class="block truncate text-[11px] text-slate-500">
               {{ t('documents.picker.refTrimmed') }}
+            </span>
+            <!-- A WIDENED reference, which the trim note above must never be left to imply: the
+                 frame this link named could not be read, so what gets attached is everything
+                 around it. Amber and separate, because it is a loss rather than tidying. -->
+            <span
+              v-if="refRow.droppedScope"
+              class="block text-[11px] text-amber-400"
+              data-testid="doc-ref-widened"
+            >
+              {{ t('documents.picker.refWidened', { scope: refRow.droppedScope }) }}
             </span>
           </span>
           <UBadge

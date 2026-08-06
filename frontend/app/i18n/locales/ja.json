@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "まずドキュメント連携を有効にしてください",
     "attachIssueDisabledConnect": "まず issue トラッカーを接続してください（連携）",
     "attachIssueDisabledEnable": "まず issue トラッカー連携を有効にしてください",
-    "importsOnAdd": "追加時にインポート"
+    "importsOnAdd": "追加時にインポート",
+    "unreadable": "取得できませんでした: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "これは {claimed} のリンクであり、{source} のものではありません。",
       "refSwitchSource": "代わりに {source} を使う",
       "refTrimmed": "サポートされる形式に整形しました",
+      "refWidened": "このソースが読み取れないフレーム（{scope}）を指しているため、ファイル全体を添付します。",
+      "refAlreadyAttached": "この参照はすでに添付されています。",
       "refCheckFailed": "参照を確認できませんでした: {error}"
     },
     "repoPicker": {

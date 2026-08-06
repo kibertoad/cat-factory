@@ -5,6 +5,8 @@ import { DocumentImportService } from './DocumentImportService.js'
 import { FigmaProvider } from './FigmaProvider.js'
 import { NotionProvider } from './NotionProvider.js'
 import { ConfluenceProvider } from './ConfluenceProvider.js'
+import { GitHubDocsProvider } from './GitHubDocsProvider.js'
+import { ZeplinProvider } from './ZeplinProvider.js'
 
 // `resolveRef` is the pre-flight the attach surfaces run BEFORE a task is saved: what a pasted
 // link canonicalises to, or a refusal that names which of the two corrections it needs. It is
@@ -51,6 +53,75 @@ describe('DocumentImportService.resolveRef', () => {
       source: 'figma',
       externalId: '6k0gqOC6ppDMAziCmZ2Gv9:5765:57229',
       canonicalUrl: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9?node-id=5765-57229',
+      // The frame the URL named survived the parse, which is the whole question a trim raises.
+      droppedScope: null,
+    })
+  })
+
+  it('states the frame it had to DROP when a node id widens the ref to the whole file', () => {
+    // Figma's Copy link emits a complex instance id for any component instance, and `parseRef`
+    // falls back to the file rather than guessing which frame it meant. Both outcomes resolve to a
+    // valid reference and a valid canonical URL, so without this the row that says "trimmed to the
+    // supported form" is the ONLY thing distinguishing "I attached this frame" from "I attached the
+    // entire design", which is the defect the pre-flight exists to catch.
+    const service = makeService([figma()])
+    const instanceUrl =
+      'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/Redwood?node-id=I2649:14930;2649:14746'
+
+    expect(service.resolveRef('figma', instanceUrl)).toEqual({
+      source: 'figma',
+      externalId: '6k0gqOC6ppDMAziCmZ2Gv9',
+      canonicalUrl: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9',
+      // As pasted, never normalised onto a supported form: nothing knows which frame it meant, and
+      // that unknowability is why the parser refused it.
+      droppedScope: 'I2649:14930;2649:14746',
+    })
+  })
+
+  it('reports a dropped Zeplin screen the same way, and nothing when the screen survives', () => {
+    const service = makeService([new ZeplinProvider()])
+    const project = 'https://app.zeplin.io/project/5f2d1c9a8b7e6d5c4b3a2910'
+    const screen = `${project}/screen/6a1b2c3d4e5f60718293a4b5`
+
+    expect(service.resolveRef('zeplin', screen).droppedScope).toBeNull()
+    // A screen segment the id grammar refuses leaves the reference on the whole PROJECT.
+    expect(service.resolveRef('zeplin', `${project}/screen/not a screen id`)).toMatchObject({
+      externalId: '5f2d1c9a8b7e6d5c4b3a2910',
+      droppedScope: 'not a screen id',
+    })
+  })
+
+  it('rebuilds a Notion link from the id, since Notion resolves a bare id URL', () => {
+    // The most-pasted source: a share link carries a title slug and `?pvs=`, and a picker that can
+    // only echo the raw id back cannot show what the paste was trimmed TO.
+    const service = makeService([notion()])
+    const pasted = 'https://www.notion.so/acme/Checkout-PRD-1f2e3d4c5b6a78901234567890abcdef?pvs=4'
+
+    expect(service.resolveRef('notion', pasted)).toEqual({
+      source: 'notion',
+      externalId: '1f2e3d4c-5b6a-7890-1234-567890abcdef',
+      canonicalUrl: 'https://www.notion.so/1f2e3d4c5b6a78901234567890abcdef',
+      droppedScope: null,
+    })
+  })
+
+  it('answers a null canonical URL where the id genuinely cannot rebuild one', () => {
+    // Confluence needs the connection's site base URL, and GitHub docs the deployment's VCS host (a
+    // GitLab-backed deployment reaches that source through the adapter, so a `github.com` link would
+    // be wrong for it). Both are "there is no link to show you", not a weaker reference: the id is
+    // the canonical form and a caller renders it rather than reading the null as a failure.
+    expect(makeService([confluence()]).resolveRef('confluence', '4567').canonicalUrl).toBeNull()
+    const github = makeService([
+      new GitHubDocsProvider({
+        githubClient: undefined as never,
+        installations: undefined as never,
+      }),
+    ])
+    expect(github.resolveRef('github', 'acme/api:docs/prd.md')).toEqual({
+      source: 'github',
+      externalId: 'acme/api:docs/prd.md',
+      canonicalUrl: null,
+      droppedScope: null,
     })
   })
 

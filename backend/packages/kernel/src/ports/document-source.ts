@@ -80,10 +80,28 @@ export interface DocumentSourceProvider {
    *
    * OPTIONAL, and the absence is a real fact rather than an unimplemented method: a Confluence
    * page id needs the connection's site base URL and a Linear document id the workspace slug,
-   * neither of which the id carries, so those providers can only answer by fetching. A caller
-   * renders the id itself in that case; it must NOT read the absence as a failed resolution.
+   * neither of which the id carries, so those providers can only answer by fetching. The GitHub
+   * docs source omits it for a different reason worth keeping distinct: the id carries everything
+   * a link needs EXCEPT the host, and the host is a deployment fact (a GitLab-backed deployment
+   * reaches the same source through the VCS adapter), so any URL built here would name the wrong
+   * one half the time. A caller renders the id itself in all these cases; it must NOT read the
+   * absence as a failed resolution.
    */
   canonicalUrl?(externalId: string): string | null
+  /**
+   * The narrowing qualifier `input` carried that {@link parseRef}'s id does NOT cover, or null.
+   *
+   * A design source's ref grammar is two-level: a file/project, optionally narrowed to a
+   * frame/screen. When the qualifier is one the parser cannot read, `parseRef` deliberately falls
+   * back to the CONTAINER rather than guessing which frame was meant, which silently widens the
+   * reference from one frame to the whole file. That widening is invisible in the result (a valid
+   * id, a valid canonical URL), so the provider that dropped it is the only thing that can say so.
+   *
+   * OPTIONAL: a source with a single-level grammar has no narrowing to drop, and its absence means
+   * exactly that. Implemented by the design sources (Figma, Zeplin). PURE, taking the same raw
+   * input `parseRef` took, so it costs a pre-flight nothing.
+   */
+  droppedScope?(input: string, externalId: string): string | null
   /**
    * Fetch a single page by its id using the connection credentials. `workspaceId` is
    * the workspace on whose behalf the read happens: a provider that authenticates

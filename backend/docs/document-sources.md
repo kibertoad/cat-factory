@@ -159,7 +159,7 @@ All endpoints are workspace-scoped under `/workspaces/:workspaceId` and return
 | `POST /document-sources/:source/connect`      | Connect: `{ credentials: { … } }`                          |
 | `DELETE /document-sources/:source/connection` | Disconnect a source                                        |
 | `GET /documents`                              | List imported documents (all sources)                      |
-| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }` to `{ externalId, canonicalUrl }`   |
+| `POST /document-sources/:source/resolve-ref`  | Canonicalise `{ ref }`: id, canonical URL, dropped scope   |
 | `POST /document-sources/:source/import`       | Fetch + persist a page: `{ ref }` (id or URL)              |
 | `POST /document-sources/:source/plan`         | Preview the board plan for `{ externalId }` (no writes)    |
 | `POST /document-sources/:source/spawn`        | Apply structure: `{ externalId, frameId? }`                |
@@ -215,24 +215,48 @@ Two things ride on it, and both were real defects in the attach flow:
 
 - **The paste is TRIMMED to the canonical form and that form is what gets staged.** A share link
   carries a title segment and tracking params (`?p=` / `&t=` on Figma's own Copy link output);
-  accepting it verbatim hid whether the frame the URL named had survived the parse at all, since
-  a node id the parser cannot read silently degrades to the whole file. `canonicalUrl` is the
-  provider rebuilding the link from the id, so what the picker shows is what the import will do.
-  It is `null` for a source that cannot rebuild one without a fetch (Confluence needs the site
-  base URL, Linear the workspace slug); the id itself is the canonical form there, NOT a weaker
+  accepting it verbatim hid whether the frame the URL named had survived the parse at all.
+  `canonicalUrl` is the provider rebuilding the link from the id, so what the picker shows is what
+  the import will do. It is `null` where the id genuinely cannot rebuild one: Confluence needs the
+  connection's site base URL and Linear the workspace slug, and GitHub docs needs the deployment's
+  VCS HOST (a GitLab-backed deployment reaches that source through the adapter, so a `github.com`
+  link would be wrong for it and `ResolveRepoOrigin`, which resolves a host, needs a workspace a
+  pure method does not get). The id itself is the canonical form in those cases, NOT a weaker
   answer, and callers render it rather than reading the null as a failed resolution.
+- **A reference that had to be WIDENED says so, separately from the trim.** A node/screen id the
+  parser cannot read (Figma's Copy link emits a complex instance id for any component instance)
+  makes `parseRef` fall back to the whole file or project rather than guess which frame was meant.
+  That is the right fallback and an invisible one: the result is a valid id with a valid canonical
+  URL, so "I attached this frame" and "I attached the entire design" render identically under a
+  bare "trimmed to the supported form" note. `droppedScope` (optional
+  `DocumentSourceProvider.droppedScope`, implemented by the design sources) carries the discarded
+  qualifier AS PASTED, and the picker states it in its own amber line. Never normalised onto a
+  supported form: nothing knows which frame it meant, which is why the parser refused it.
 - **A refusal names WHICH correction it needs**, as `details.reason` (the closed
   `documentRefReasonSchema`). `document_ref_unrecognized` means no link of this shape will ever
   work here, and carries the `expected` format; `document_ref_claimed_by_other_source` means the
   link is fine and pointed at the wrong source, and names the claimant so the surface can offer
-  to switch with the text unchanged. Claimants are searched host-PINNED first, for the reason
-  `makeDocumentUrlResolver` orders the same way: a blind parser claims a shape, so registration
-  order deciding would point a Figma paste at Notion.
+  to switch with the text unchanged. Claimants are searched host-PINNED first, through the SAME
+  `orderSourcesByClaimConfidence` that `makeDocumentUrlResolver` reads rather than a second copy of
+  its two passes: a blind parser claims a shape, so registration order deciding would point a Figma
+  paste at Notion, and a rule living in two places would be refined in one of them.
 
-The SPA half is the other side of the same rule: `ContextDocumentPicker` will not stage an
-unresolved reference at all, and `useContextLinking().resolvePending` fetches every staged
+The SPA half is the other side of the same rule: `ContextDocumentPicker` stages the RESOLVED
+reference rather than the pasted text, and `useContextLinking().resolvePending` fetches every staged
 attachment BEFORE the task or initiative is created, so an unreachable page is a correction the
 author can still make instead of a toast over a task that already exists without its context.
+
+Two consequences of running the fetch first, both about not overstating what the pre-flight knows:
+
+- **A refusal blocks a paste; a failed CALL does not.** `unchecked` (offline, 5xx, a proxy's own
+  error page, a reason value this build does not know) leaves the reference unjudged and still
+  stageable, with the import as the backstop it always was. Treating the two alike would make a
+  transient outage as final as a refusal, so a perfectly good link could not be attached at all.
+- **A staged item that could not be fetched is MARKED on the form** (`PendingContext.unreadable`),
+  not only named in the toast. The create is refused while any attachment is unresolved, so the
+  chip that caused it has to be identifiable where the author is still working. A tracker ISSUE has
+  no `parseRef` to pre-flight, so the add-task form's body pre-fetch is its warning: it records the
+  cause instead of swallowing it.
 
 ## A referenced context document reaches the agent, or the run breaks
 

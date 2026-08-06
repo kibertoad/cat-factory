@@ -498,7 +498,8 @@
     "attachDocDisabledEnable": "Спочатку увімкніть інтеграцію документів",
     "attachIssueDisabledConnect": "Спочатку підключіть трекер звернень (Інтеграції)",
     "attachIssueDisabledEnable": "Спочатку увімкніть інтеграцію трекера звернень",
-    "importsOnAdd": "імпортується при додаванні"
+    "importsOnAdd": "імпортується при додаванні",
+    "unreadable": "Не вдалося отримати: {error}"
   },
   "errors": {
     "generic": {
@@ -4173,6 +4174,8 @@
       "refOtherSource": "Це посилання {claimed}, а не {source}.",
       "refSwitchSource": "Використати натомість {source}",
       "refTrimmed": "Скорочено до підтримуваного вигляду",
+      "refWidened": "Вказує на фрейм, який це джерело не може прочитати ({scope}), тому додається весь файл.",
+      "refAlreadyAttached": "Це посилання вже додано.",
       "refCheckFailed": "Не вдалося перевірити посилання: {error}"
     },
     "repoPicker": {

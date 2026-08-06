@@ -3005,7 +3005,8 @@
     "attachDocDisabledEnable": "Abilita prima l'integrazione dei documenti",
     "attachIssueDisabledConnect": "Connetti prima un issue tracker (Integrazioni)",
     "attachIssueDisabledEnable": "Abilita prima l'integrazione dell'issue tracker",
-    "importsOnAdd": "importa all'aggiunta"
+    "importsOnAdd": "importa all'aggiunta",
+    "unreadable": "Impossibile recuperarlo: {error}"
   },
   "providers": {
     "presetMismatch": {
@@ -3790,6 +3791,8 @@
       "refOtherSource": "È un link {claimed}, non un link {source}.",
       "refSwitchSource": "Usa {source} invece",
       "refTrimmed": "Ridotto al formato supportato",
+      "refWidened": "Indica un frame che questa origine non può leggere ({scope}), quindi viene allegato l’intero file.",
+      "refAlreadyAttached": "Questo riferimento è già allegato.",
       "refCheckFailed": "Impossibile verificare il riferimento: {error}"
     },
     "repoPicker": {

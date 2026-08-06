@@ -453,8 +453,13 @@ const resolvingIssueBodies = ref(false)
 // A staged issue picked from search results carries no body yet (`needsImport`, and the
 // search result has no description). Resolve it once the form opens — from the local cache
 // when already imported, else by importing it (idempotent; we'd import on add anyway) — so
-// its description can be shown read-only and folded into the task. Best-effort: a failure
-// just leaves that issue without a preview, still linked on add.
+// its description can be shown read-only and folded into the task.
+//
+// Non-fatal (the form still opens), but NOT silent: an issue this cannot read is the very issue
+// that will block the submit, since the fetch moved ahead of the create. Recording the cause on the
+// item is what turns that into a warning the author sees NOW, on a chip they can remove, instead of
+// a create refused seconds later for a reason nothing on the form ever mentioned. A tracker
+// reference has no `parseRef`-style pre-flight to ask, so this attempt IS its pre-flight.
 async function resolvePendingIssueBodies() {
   const unresolved = pendingContext.value.filter(
     (c) => c.kind === 'task' && !(c.description ?? '').trim(),
@@ -463,6 +468,7 @@ async function resolvePendingIssueBodies() {
   resolvingIssueBodies.value = true
   try {
     const resolved: Record<string, string> = {}
+    const failed: Record<string, string> = {}
     for (const item of unresolved) {
       const source = item.source as TaskSourceKind
       const cached = tasks.tasks.find(
@@ -476,15 +482,16 @@ async function resolvePendingIssueBodies() {
       try {
         const imported = await tasks.importTask(source, item.externalId)
         if ((imported.description ?? '').trim()) resolved[contextKey(item)] = imported.description
-      } catch {
-        // Unreadable/forbidden issue — skip the preview; it still links on add.
+      } catch (e) {
+        failed[contextKey(item)] = e instanceof Error ? e.message : String(e)
       }
     }
-    if (Object.keys(resolved).length) {
-      // The issue is now imported, so it links directly on add (needsImport → false).
+    if (Object.keys(resolved).length || Object.keys(failed).length) {
       pendingContext.value = pendingContext.value.map((c) => {
-        const body = resolved[contextKey(c)]
-        return body ? { ...c, description: body, needsImport: false } : c
+        const key = contextKey(c)
+        // The issue is now imported, so it links directly on add (needsImport → false).
+        if (resolved[key]) return { ...c, description: resolved[key], needsImport: false }
+        return failed[key] ? { ...c, unreadable: failed[key] } : c
       })
     }
   } finally {

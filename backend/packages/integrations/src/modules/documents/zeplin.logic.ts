@@ -81,10 +81,61 @@ export function parseZeplinRef(input: string): string | null {
     return null
   }
   if (!/(^|\.)zeplin\.io$/i.test(url.hostname)) return null
-  const project = url.pathname.match(/\/project\/([A-Za-z0-9]+)/)?.[1]
-  if (!project) return null
-  const screen = url.pathname.match(/\/screen\/([A-Za-z0-9]+)/)?.[1]
-  return screen ? `${project}:${screen}` : project
+  // The WHOLE segment is validated, not an alphanumeric prefix of it: a partial match would mint a
+  // truncated id that looks resolved and 404s on import, where falling back to the project at least
+  // reaches a real page (and `zeplinDroppedScreenId` states that it did).
+  const project = pathSegmentAfter(url.pathname, 'project')
+  if (!project || !ID.test(project)) return null
+  const screen = pathSegmentAfter(url.pathname, 'screen')
+  return screen && ID.test(screen) ? `${project}:${screen}` : project
+}
+
+/** The path segment following `key`, or null when the path does not name one. */
+function pathSegmentAfter(pathname: string, key: string): string | null {
+  const segments = pathname.split('/').filter(Boolean)
+  const idx = segments.indexOf(key)
+  return idx === -1 ? null : (segments[idx + 1] ?? null)
+}
+
+/**
+ * The screen qualifier the input named that {@link parseZeplinRef} could NOT keep, or null.
+ *
+ * Zeplin's ref grammar is two-level like Figma's, and so is its fallback: a screen id the parser
+ * cannot read leaves the reference pointing at the whole PROJECT, which resolves and imports
+ * perfectly well while covering far more than the screen someone linked. Returns the qualifier as
+ * pasted, for the same reason Figma's does. Null when the screen survived, or when none was named.
+ */
+export function zeplinDroppedScreenId(input: string, externalId: string): string | null {
+  if (splitZeplinExternalId(externalId).screenId) return null
+  const raw = rawZeplinScreenQualifier(input)
+  // Detected on the RAW segment (what `parseRef` judged) and REPORTED decoded (what the person
+  // pasted): a `%20` in the warning names nothing they would recognise, and deciding on the decoded
+  // form would call a `%41` that the parse dropped "kept".
+  return raw && !ID.test(raw) ? readableQualifier(raw) : null
+}
+
+/** A path segment as it was pasted; a malformed escape is quoted verbatim rather than lost. */
+function readableQualifier(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+/** The screen qualifier as the input spells it: a URL's `/screen/<id>`, or a bare ref's suffix. */
+function rawZeplinScreenQualifier(input: string): string | null {
+  const trimmed = input.trim()
+  if (!trimmed) return null
+  if (!trimmed.includes('/') && !/zeplin\.io/i.test(trimmed)) {
+    const [, ...rest] = trimmed.split(':')
+    return rest.length ? rest.join(':') : null
+  }
+  try {
+    return pathSegmentAfter(new URL(trimmed).pathname, 'screen')
+  } catch {
+    return null
+  }
 }
 
 /** Split a composite external id back into its project id and optional screen id. */

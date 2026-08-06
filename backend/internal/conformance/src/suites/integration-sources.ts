@@ -587,13 +587,29 @@ function registerDocumentSourceTests(harness: ConformanceHarness): void {
         source: string
         externalId: string
         canonicalUrl: string | null
+        droppedScope: string | null
       }>('POST', `${base}/figma/resolve-ref`, { ref: pasted })
       expect(resolved.status).toBe(200)
       expect(resolved.body).toEqual({
         source: 'figma',
         externalId: '6k0gqOC6ppDMAziCmZ2Gv9:5765:57229',
         canonicalUrl: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9?node-id=5765-57229',
+        droppedScope: null,
       })
+
+      // A node id the parser cannot read (Figma's own Copy link emits one for any component
+      // instance) resolves to the whole FILE. That is a valid reference with a valid canonical URL,
+      // so the widening is invisible unless the answer names what it dropped: an attach surface
+      // showing only "trimmed to the supported form" would tell someone who linked one frame
+      // nothing about the agent then reading the entire design.
+      const widened = await call<{ externalId: string; droppedScope: string | null }>(
+        'POST',
+        `${base}/figma/resolve-ref`,
+        { ref: 'https://www.figma.com/design/6k0gqOC6ppDMAziCmZ2Gv9/R?node-id=I2649:14930;2649:1' },
+      )
+      expect(widened.status).toBe(200)
+      expect(widened.body.externalId).toBe('6k0gqOC6ppDMAziCmZ2Gv9')
+      expect(widened.body.droppedScope).toBe('I2649:14930;2649:1')
 
       // The SAME link aimed at the wrong source is a redirectable paste, not a malformed one, and
       // the reason says so: the correction is switching sources with the text unchanged. A single
