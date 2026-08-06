@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param options May be absent entirely.
  * @param placeholder May be absent entirely. Length 0..200.
  * @param required May be absent entirely.
+ * @param section May be absent entirely. Length 1..120.
  * @param showWhen May be absent entirely.
  * @param type May be absent entirely.
  */
@@ -60,6 +61,9 @@ public record ListPublicTaskTypesResponseTaskTypeField(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("required") @Nullable Boolean required,
 
+    /** May be absent entirely. Length 1..120. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("section") @Nullable String section,
+
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("showWhen") @Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhen showWhen,
 
@@ -90,6 +94,7 @@ public record ListPublicTaskTypesResponseTaskTypeField(
         private @Nullable List<ListPublicTaskTypesResponseTaskTypeFieldOption> options;
         private @Nullable String placeholder;
         private @Nullable Boolean required;
+        private @Nullable String section;
         private @Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhen showWhen;
         private @Nullable ListPublicTaskTypesResponseTaskTypeFieldType type;
 
@@ -159,6 +164,12 @@ public record ListPublicTaskTypesResponseTaskTypeField(
             return this;
         }
 
+        /** Set {@code section}. */
+        public Builder section(@Nullable String section) {
+            this.section = section;
+            return this;
+        }
+
         /** Set {@code showWhen}. */
         public Builder showWhen(@Nullable ListPublicTaskTypesResponseTaskTypeFieldShowWhen showWhen) {
             this.showWhen = showWhen;
@@ -173,7 +184,7 @@ public record ListPublicTaskTypesResponseTaskTypeField(
 
         /** Build the {@link ListPublicTaskTypesResponseTaskTypeField}. */
         public ListPublicTaskTypesResponseTaskTypeField build() {
-            return new ListPublicTaskTypesResponseTaskTypeField(defaultValue, defaultValues, help, key, label, max, maxLength, min, options, placeholder, required, showWhen, type);
+            return new ListPublicTaskTypesResponseTaskTypeField(defaultValue, defaultValues, help, key, label, max, maxLength, min, options, placeholder, required, section, showWhen, type);
         }
     }
 }

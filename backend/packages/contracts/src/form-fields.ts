@@ -107,6 +107,17 @@ export const descriptorFieldEntries = {
   key: v.pipe(v.string(), v.minLength(1), v.maxLength(DESCRIPTOR_FIELD_KEY_MAX)),
   /** Human label for the form field (deployment-supplied English). */
   label: v.pipe(v.string(), v.minLength(1), v.maxLength(120)),
+  /**
+   * Optional grouping caption, rendered once above the run of consecutively-declared fields that
+   * share it ({@link descriptorFieldSections}). Deployment-supplied English, like every other
+   * caption here.
+   *
+   * PRESENTATION ONLY: it groups nothing else. A section has no effect on validation, on what is
+   * frozen, or on how the answers fold into a prompt, so moving a field between sections can never
+   * change what the platform does with its value. It exists because a form that collects a dozen
+   * fields, each of which changes what the agents do, reads as one undifferentiated column.
+   */
+  section: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(120))),
   /** Optional helper text shown under the field. */
   help: v.optional(v.pipe(v.string(), v.maxLength(300))),
   /** Optional input placeholder. */
@@ -251,6 +262,20 @@ export function withDescriptorFieldDefaults(
  * gate hold", because the alternative silently removes a field from a form. A caller for whom the
  * safe default is the other way round says so at its own site rather than by re-deriving the rule.
  */
+/**
+ * Whether a condition STATES anything. Both predicates are optional in the schema, so a dropped
+ * `equals: 'graphql'` still validates and arrives here saying nothing.
+ *
+ * Exported because the two readers must not each re-derive it, and they react OPPOSITELY:
+ * {@link matchesDescriptorCondition} treats a predicate-less condition as satisfied (the
+ * alternative hides a field forever), while boot validation refuses one on a conditional-fragment
+ * rule (where "always satisfied" seeds every case with guidance meant for one). One predicate, two
+ * dispositions, is the shape the repo already uses for a rule whose outcome is judged per caller.
+ */
+export function descriptorConditionHasPredicate(condition: DescriptorFieldShowWhen): boolean {
+  return condition.equals !== undefined || condition.includes !== undefined
+}
+
 export function matchesDescriptorCondition(
   condition: DescriptorFieldShowWhen,
   values: DescriptorFieldValues,
@@ -277,6 +302,152 @@ export function isDescriptorFieldVisible(
   values: DescriptorFieldValues,
 ): boolean {
   return !field.showWhen || matchesDescriptorCondition(field.showWhen, values)
+}
+
+/** One run of a descriptor form: the fields to render, and the caption to render above them. */
+export interface DescriptorFieldSection {
+  /** The caption for this run, absent for the fields that declare no section. */
+  section?: string
+  /** The run's VISIBLE fields, in declaration order. Never empty. */
+  fields: DescriptorField[]
+}
+
+/**
+ * The caption a section groups under: its own text folded on CASE and on whitespace runs, so two
+ * spellings of one section ("Placement" / "placement") are ONE run rather than two identical-looking
+ * captions in a row. Whitespace-only is no section at all: the schema bounds a caption at
+ * `minLength(1)`, but a CODE registration is never parsed, so `'  '` reaches here and must read as
+ * "ungrouped" instead of rendering an empty heading.
+ *
+ * The same fold, for the same reason, as the task-type picker's category rows (`taskTypePicker.ts`),
+ * including why it is not slugified: a caption is arbitrary Unicode a deployment writes in its own
+ * language, so reducing it to an id-safe key would fold genuinely distinct captions together.
+ */
+function sectionOf(field: DescriptorField): { key: string; caption: string } | undefined {
+  const caption = field.section?.trim()
+  if (!caption) return undefined
+  return { key: caption.toLowerCase().replace(/\s+/g, ' '), caption }
+}
+
+/**
+ * A field list reduced to the runs a form RENDERS: consecutively-declared fields sharing one
+ * `section`, over the fields currently VISIBLE, in declaration order.
+ *
+ * The grouping rule lives here rather than in the renderer because two surfaces read it: the SPA's
+ * `DescriptorFields.vue`, and the boot check that refuses a declaration this reduction cannot render
+ * honestly ({@link duplicatedDescriptorSectionCaptions}).
+ *
+ * Two properties the caller gets from the ORDER of the two steps:
+ *
+ * - **A section whose every field is hidden renders NO caption**, because visibility is applied
+ *   before the runs are cut, so an empty run never exists. A caption over nothing reads as a form
+ *   that failed to load its own controls. It also means a hidden field BETWEEN two fields of one
+ *   section does not split its caption in half.
+ * - **Declaration order is never rearranged.** A field renders where its author declared it, and a
+ *   section declared in two places stays two runs. Merging them would move a field away from where
+ *   it was written, which is why the boot check refuses that declaration rather than this function
+ *   quietly repairing it.
+ */
+export function descriptorFieldSections(
+  fields: readonly DescriptorField[],
+  values: DescriptorFieldValues,
+): DescriptorFieldSection[] {
+  const sections: DescriptorFieldSection[] = []
+  let openKey: string | undefined
+  for (const field of fields) {
+    if (!isDescriptorFieldVisible(field, values)) continue
+    const declared = sectionOf(field)
+    const open = sections[sections.length - 1]
+    if (open && declared?.key === openKey) {
+      open.fields.push(field)
+      continue
+    }
+    // The FIRST spelling of a folded caption is the one rendered, because the caption is the
+    // deployment's own words rather than an id.
+    sections.push({ ...(declared ? { section: declared.caption } : {}), fields: [field] })
+    openKey = declared?.key
+  }
+  return sections
+}
+
+/**
+ * Whether two fields can be visible AT THE SAME TIME, i.e. whether some value bag satisfies both
+ * their `showWhen` conditions at once.
+ *
+ * This is what keeps {@link duplicatedDescriptorSectionCaptions} from refusing a declaration that
+ * renders perfectly. A form whose shape is chosen by one picker routinely declares the branches
+ * INTERLEAVED, because each branch's fields belong beside the ones they qualify:
+ *
+ *   kind (select) | Endpoint: method (kind=http) | Command: argv (kind=cli) | Endpoint: timeout (kind=http)
+ *
+ * `Endpoint` is declared in two places and can never print twice, because the `Command` field
+ * between them is visible in exactly the state its two neighbours are not. Reading contiguity off
+ * the flat list alone would fail this deployment's boot over a form no user can break.
+ *
+ * Sound for the single-condition vocabulary: two conditions on DIFFERENT keys are independent (one
+ * bag satisfies both), and on the SAME key only two shapes contradict, both because one value
+ * cannot be two things at once: differing `equals`, and `equals` (a scalar) against `includes` (an
+ * array). Because pairwise contradiction is the only kind available, checking pairs decides
+ * satisfiability for a whole set. A predicate-less condition states nothing and reads as
+ * always-visible, matching {@link matchesDescriptorCondition}.
+ */
+function canCoexist(a: DescriptorField, b: DescriptorField): boolean {
+  const x = a.showWhen
+  const y = b.showWhen
+  if (!x || !y) return true
+  if (!descriptorConditionHasPredicate(x) || !descriptorConditionHasPredicate(y)) return true
+  if (x.key !== y.key) return true
+  if (x.equals !== undefined && y.equals !== undefined) return x.equals === y.equals
+  if (x.includes !== undefined && y.includes !== undefined) return true
+  return false
+}
+
+/**
+ * The sections whose caption a form can be made to print TWICE, in first-offence order.
+ *
+ * Boot refuses these, because neither available rendering is honest. {@link descriptorFieldSections}
+ * preserves declaration order, so the caption appears twice, which reads as a platform fault rather
+ * than as the declaration it is; merging the runs instead would render a field order nobody wrote.
+ * Both are fully knowable from the registration, which is the one place it can still be fixed, and
+ * both are presentation, so there is no run-time recovery to prefer either way.
+ *
+ * The criterion is REACHABILITY, never contiguity in the declared list, because the reduction this
+ * mirrors applies visibility BEFORE it cuts the runs. So a caption is reported only on finding a
+ * concrete state that prints it twice: two of its fields with a differently-captioned field between
+ * them, all three simultaneously visible ({@link canCoexist}). A declaration that interleaves only
+ * through mutually exclusive branches is silently fine, which is the common case rather than an edge
+ * one, and a false refusal here would fail boot outright.
+ *
+ * Reported by the FIRST-SEEN spelling, and folded through the same key the runs are cut on, so a
+ * case-variant re-declaration is caught rather than passing as a distinct section.
+ */
+export function duplicatedDescriptorSectionCaptions(fields: readonly DescriptorField[]): string[] {
+  const declared = fields.map((field) => ({ field, section: sectionOf(field) }))
+  const reported = new Map<string, string>()
+  for (const [index, opener] of declared.entries()) {
+    const open = opener.section
+    if (!open || reported.has(open.key)) continue
+    for (let split = index + 1; split < declared.length; split++) {
+      const splitter = declared[split]!
+      // A field of the same section only EXTENDS the open run, and one that cannot be on screen
+      // beside the opener cannot close its run either.
+      if (splitter.section?.key === open.key) continue
+      if (!canCoexist(opener.field, splitter.field)) continue
+      const reopens = declared
+        .slice(split + 1)
+        .some(
+          (candidate) =>
+            candidate.section?.key === open.key &&
+            canCoexist(opener.field, candidate.field) &&
+            canCoexist(splitter.field, candidate.field),
+        )
+      if (reopens) {
+        reported.set(open.key, open.caption)
+        break
+      }
+    }
+  }
+  return [...reported.values()]
 }
 
 /** Whether a filled value matches the field's declared type (structural, pre-semantic check). */
