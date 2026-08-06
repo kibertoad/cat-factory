@@ -1247,13 +1247,12 @@ Each PR adds a changeset and updates this checklist.
 - **Task types stay NODE-LOCAL, and that is a decision, not a gap.** A `CustomTaskType` gets no
   `/internal/*` read of its own, unlike the foundational-services `builtin` tier, the
   `BinaryGeneratorSource` and the `PromptFragmentSource` beside it. The descriptor is inseparable
-  from code registered in the SAME
-  org package: its `defaultPipelineId` names a pipeline in that package, that pipeline names custom
-  KINDS and VARIANTS (functions, which cannot cross a wire), its `defaultFragmentIds` name fragments
-  in the same pool, and its `formPanel` names a component in the deployment's own SPA layer. Serving
-  the descriptor from the mothership while the executable half stayed local would produce a MIXED
-  bundle (a v2 descriptor naming a pipeline the node's v1 package lacks), which boot validation
-  structurally cannot see. The unit of distribution is the org package, exactly as for agent kinds.
+  from code registered in the SAME org package: its `defaultPipelineId` names a pipeline in that
+  package, that pipeline names custom KINDS and VARIANTS (functions, which cannot cross a wire), its
+  `defaultFragmentIds` name fragments in the same pool, and its `formPanel` names a component in the
+  deployment's own SPA layer. Serving the descriptor from the mothership while the executable half
+  stayed local would produce a MIXED bundle (a v2 descriptor naming a pipeline the node's v1 package
+  lacks), which boot validation structurally cannot see. The unit of distribution is the org package, exactly as for agent kinds.
   Consequences, named rather than hidden: a node a build behind offers last build's operations (the
   lag its agent kinds already have), a stock node in an org deployment offers none, and a run of such
   a task fails loudly at the existing seams (unknown kind at admission). The dispatch-time parameter
