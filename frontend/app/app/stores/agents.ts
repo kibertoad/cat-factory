@@ -69,9 +69,11 @@ export const useAgentsStore = defineStore('agents', () => {
    * mapped to display metadata, de-duplicated, and never shadowing a built-in or
    * system kind. The old `registerCustomKinds` only guarded `AGENT_BY_KIND`; this
    * intentionally ALSO drops any custom kind colliding with a `SYSTEM_AGENT_META`
-   * kind (`ci` / `merger` / `blueprints` / gates …), so a snapshot can't override an
-   * engine kind's palette entry either — matching `agentKindMeta`'s precedence
-   * (built-in → system → custom), where a colliding custom kind would never win anyway.
+   * kind (`ci` / `merger` / gates …), so a snapshot can't override an engine kind's
+   * palette entry either — matching `agentKindMeta`'s precedence (built-in → system
+   * → custom), where a colliding custom kind would never win anyway. Note the cost of
+   * that guard: a SYSTEM_AGENT_META entry silently removes a registered kind from the
+   * palette, so the map must stay limited to kinds the engine inserts itself.
    */
   const customArchetypes = computed<AgentArchetype[]>(() => {
     const seen = new Set<string>()

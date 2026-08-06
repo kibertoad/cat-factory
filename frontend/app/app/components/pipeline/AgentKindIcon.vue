@@ -2,7 +2,7 @@
 // The single rendering path for an agent kind's icon (+ optional label) anywhere a
 // pipeline or run lists its steps. Resolves display metadata through
 // `agentKindMeta`, which is total over every kind — palette archetypes, custom
-// agents and the engine's system kinds (ci / merger / blueprints / conflicts) — so
+// agents and the engine's system kinds (ci / merger / conflicts) — so
 // a saved pipeline that contains a system kind can never blow up the renderer.
 import { computed } from 'vue'
 import { agentKindMeta } from '~/utils/catalog'
