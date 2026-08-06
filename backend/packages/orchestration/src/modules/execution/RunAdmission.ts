@@ -556,8 +556,9 @@ export class RunAdmission {
     throw new ConflictError(
       `This service provisions a '${service!.provisioning!.type}' environment, but this pipeline ` +
         'has no Deployer step before its first Tester / human-test step, so the environment would ' +
-        'never be stood up. Reseed this pipeline to the latest built-in (which includes a Deployer) ' +
-        'and start a new run, or set the service to docker-compose / infraless.',
+        'never be stood up. Add a Deployer step before that step in the pipeline builder, reseed ' +
+        'this pipeline to the latest built-in (which includes one), or set the service to ' +
+        'docker-compose / infraless.',
       'deployer_required_before_tester',
       { provisionType: service!.provisioning!.type },
     )

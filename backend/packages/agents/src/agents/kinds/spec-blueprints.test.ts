@@ -57,7 +57,7 @@ describe('specWriterUserPrompt', () => {
 describe('registered blueprints + spec-writer kinds', () => {
   const registry = defaultAgentKindRegistry()
 
-  it('registers both as read-only structured container-explore kinds with no presentation', () => {
+  it('registers both as read-only structured container-explore palette kinds', () => {
     // Blueprinter: clones the PR branch, returns the tree as JSON only.
     expect(registry.requiresContainer(BLUEPRINTS_AGENT_KIND)).toBe(true)
     expect(registry.agentStep(BLUEPRINTS_AGENT_KIND)?.surface).toBe('container-explore')
@@ -67,9 +67,15 @@ describe('registered blueprints + spec-writer kinds', () => {
     // answer must fail loudly rather than be laundered by the structured repair.
     expect(registry.agentStep(SPEC_WRITER_AGENT_KIND)?.clone?.branch).toBe('work')
     expect(registry.agentStep(SPEC_WRITER_AGENT_KIND)?.output?.failOnUnusableFinal).toBe(true)
-    // Pipeline-internal, not user-draggable palette kinds: they stay out of `customAgentKinds`.
-    expect(registry.presentation(BLUEPRINTS_AGENT_KIND)).toBeUndefined()
-    expect(registry.presentation(SPEC_WRITER_AGENT_KIND)).toBeUndefined()
+    // Both declare `presentation`, which is what carries them into `customAgentKinds` and so into
+    // the builder's palette. Neither is seeded into a build preset any more, so a pipeline that
+    // wants a spec increment or a map refresh can only get one by being built with it — and the
+    // spec-writer additionally has to be placeable for its `spec-companion` toggle to have a
+    // producer to attach to.
+    for (const kind of [BLUEPRINTS_AGENT_KIND, SPEC_WRITER_AGENT_KIND]) {
+      expect(registry.presentation(kind)?.category).toBe('design')
+      expect(registry.presentation(kind)?.label).toEqual(expect.any(String))
+    }
   })
 
   it('applies the surface directives centrally, exactly once each (no hand-restated directive)', () => {

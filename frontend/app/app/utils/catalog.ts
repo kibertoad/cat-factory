@@ -137,6 +137,21 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     resultView: 'brainstorm',
   },
   {
+    // Authors the service's in-repo specification from the clarified requirements, so it sits
+    // beside the design kinds and ahead of the architect that reads what it wrote. Registered on
+    // the backend so it also arrives via the workspace manifest, and modelled statically here for
+    // the same reason `pr-reviewer` is: a `pl_bugfix` / `pl_spec` timeline must name the step
+    // before the manifest hydrates. Mirrors the backend `presentation` in `spec-blueprints.ts`.
+    kind: 'spec-writer',
+    tier: 'intermediate',
+    label: 'Spec Writer',
+    icon: 'i-lucide-clipboard-list',
+    color: '#c084fc',
+    category: 'design',
+    description:
+      "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
+  },
+  {
     kind: 'architect',
     tier: 'basic',
     label: 'Architect',
@@ -144,6 +159,18 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#a78bfa',
     category: 'design',
     description: 'Designs the shape of the solution and breaks down the work.',
+  },
+  {
+    // Refreshes the service → modules map the board projects. Statically modelled beside its
+    // backend `presentation` for the same reason the Spec Writer is: `pl_blueprint` timelines
+    // render before the manifest hydrates.
+    kind: 'blueprints',
+    tier: 'intermediate',
+    label: 'Blueprinter',
+    icon: 'i-lucide-map',
+    color: '#22d3ee',
+    category: 'design',
+    description: 'Maps the repository into the service → modules blueprint.',
   },
   {
     kind: 'researcher',
@@ -180,6 +207,21 @@ export const AGENT_ARCHETYPES: AgentArchetype[] = [
     color: '#fb7185',
     category: 'build',
     description: 'Builds WireMock mocks for external services and wires them into local/CI runs.',
+  },
+  {
+    // Provisions the ephemeral environment the tester / human-test / playwright steps read, which
+    // is why it leads the testing group. A palette block for the same reason `disposer` is one:
+    // `assertDeployerBeforeConsumer` REFUSES a run whose chain reaches an env consumer with no
+    // Deployer in front of it on a deployable service, and a hand-built pipeline that hits that
+    // refusal has no reseed to fall back on.
+    kind: 'deployer',
+    tier: 'intermediate',
+    label: 'Deployer',
+    icon: 'i-lucide-cloud-upload',
+    color: '#34d399',
+    category: 'test',
+    description:
+      'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless. Place it before the first step that needs the environment.',
   },
   {
     kind: 'tester-api',
@@ -491,29 +533,22 @@ export function isTesterKind(kind: string): boolean {
 
 /**
  * Display metadata for the engine-driven "system" kinds — the gate/automation
- * steps (blueprint mapper, conflicts gate + resolver, CI gate + fixer, merger)
- * that appear in seeded pipelines and run timelines but are NOT user-addable
- * palette archetypes, so they're intentionally absent from {@link AGENT_ARCHETYPES}
+ * steps (conflicts gate + resolver, CI gate + fixer, merger) that appear in
+ * seeded pipelines and run timelines but are NOT user-addable palette
+ * archetypes, so they're intentionally absent from {@link AGENT_ARCHETYPES}
  * / {@link AGENT_BY_KIND}. Looked up through {@link agentKindMeta}.
+ *
+ * An entry here also SHADOWS the backend's own catalog: the agents store drops any
+ * registered kind whose id appears in this map (see `customArchetypes`), so listing a
+ * kind that declares `presentation` silently overrides the deployment's decision to
+ * offer it. That is how `spec-writer` and `blueprints` stayed out of the palette while
+ * both collapse docs promised them as opt-in builder steps, and it took
+ * `spec-companion` with them: a companion renders as a toggle on its producer, so a
+ * shadowed producer removes both. Add a kind here only when the ENGINE decides the
+ * step exists — a gate it inserts, a helper it escalates to — and never when the
+ * backend registers it as a palette block.
  */
 export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
-  'spec-writer': {
-    kind: 'spec-writer',
-    tier: 'intermediate',
-    label: 'Spec Writer',
-    icon: 'i-lucide-clipboard-list',
-    color: '#c084fc',
-    description:
-      "Aggregates every task's clarified requirements into the service's in-repo specification (spec.json) with full acceptance-scenario coverage, derived into Gherkin.",
-  },
-  blueprints: {
-    kind: 'blueprints',
-    tier: 'intermediate',
-    label: 'Blueprinter',
-    icon: 'i-lucide-map',
-    color: '#22d3ee',
-    description: 'Maps the repository into the service → modules blueprint.',
-  },
   // The read-only Challenge Investigator: dispatched off a parked `pr-reviewer` step when a human
   // challenges a finding, it re-examines that ONE finding against the full source and upholds
   // (strengthening) or retracts it. Never a palette block; modelled here purely so it is a
@@ -528,19 +563,6 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Re-examines a single challenged PR-review finding against the full source, then upholds ' +
       '(strengthening it) or retracts it with a justification. Configurable separately from the reviewer.',
-  },
-  // The single environment provisioner: an operational (non-LLM) step that stands up the ephemeral
-  // environment the tester / human-test gate run against for a kubernetes/custom service, and is a
-  // fast no-op for docker-compose / infraless. Seeded before the first tester/human-test step in the
-  // built-in pipelines, so it needs display metadata (else it renders as a generic gray "Agent").
-  deployer: {
-    kind: 'deployer',
-    tier: 'intermediate',
-    label: 'Deployer',
-    icon: 'i-lucide-cloud-upload',
-    color: '#34d399',
-    description:
-      'Provisions the ephemeral environment the tester and human-test gate run against (kubernetes / custom services); a no-op for docker-compose / infraless.',
   },
   // The Initiative Planning pipeline's steps. Only runnable on an initiative
   // block (pl_initiative — enforced by the engine), so they are display-metadata
@@ -766,8 +788,6 @@ export const OBSERVABILITY_GATE_ARCHETYPE: AgentArchetype =
  */
 export const MODEL_CONFIGURABLE_SYSTEM_KINDS: AgentArchetype[] = [
   ...[
-    'spec-writer',
-    'blueprints',
     'initiative-planner',
     'conflict-resolver',
     'ci-fixer',
@@ -798,7 +818,7 @@ const FALLBACK_AGENT_META: Omit<AgentArchetype, 'kind'> = {
  * {@link customAgentKindMeta} by the agents store), or an unknown one — ALWAYS
  * returning a usable icon/label/color. This is the single lookup every pipeline
  * / run renderer should use so a kind missing from the archetype map (e.g.
- * `ci`/`merger`/`blueprints` in a seeded pipeline) can never blow up a component
+ * `ci`/`merger` in a seeded pipeline) can never blow up a component
  * with an undefined access. Reading `customAgentKindMeta` reactively means a
  * component computed re-runs when the custom catalog changes.
  */
