@@ -349,7 +349,12 @@ export class InitiativeLoopService {
       status: 'done',
       progress: 1,
     })
-    await this.deps.events.boardChanged(workspaceId, 'initiative-complete', done.blockId)
+    // No payload: the initiative block's own row is only half of what finished, since each item's
+    // spawned task settled separately and the board reads their rollup.
+    await this.deps.events.boardChanged(workspaceId, {
+      reason: 'initiative-complete',
+      blockId: done.blockId,
+    })
     await runBestEffort(
       this.log,
       'initiative.recommitTracker',
@@ -458,13 +463,27 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      await this.deps.events.boardChanged(workspaceId, 'block-added', block.id)
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
       await this.deps.executionService.start(workspaceId, block.id, pipelineId, {
         gatesOverride: item.spawn?.gates,
       })
+      // Announced only once the run has actually started, because the rollback below deletes the
+      // block and emits nothing. A coarse signal would have healed itself (the refresh it triggers
+      // re-reads a board the row is no longer on); a targeted upsert would not, leaving a task
+      // that does not exist rendered on every open board until an unrelated event or a reconnect
+      // happens to re-hydrate. The payload is the whole point here, so the ORDER carries the fix.
+      //
+      // Best-effort for the same reason it moved: past the start there is nothing left to roll
+      // back, so a fan-out read that fails must not fall into the catch below and delete a block
+      // whose run is live. The board reconciles a missed push on its next snapshot.
+      await runBestEffort(
+        this.log,
+        'initiative.announceSpawnedBlock',
+        () => this.deps.events.boardChanged(workspaceId, { reason: 'block-added', block }),
+        { workspaceId, blockId: block.id, itemId: item.id },
+      )
       return { outcome: 'spawned', entity: claimed }
     } catch (error) {
       // Roll back the block, then decide on the item. A per-service task-limit ConflictError is

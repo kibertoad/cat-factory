@@ -1,6 +1,6 @@
 # Initiative: performance optimizations (prioritized)
 
-**Status:** in progress; items 1, 2, 3, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice) · **Owner:** core · **Started:** 2026-07-09
+**Status:** in progress; items 1, 2, 3, 4, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 21, 23 landed (emit metrics rollup · gate-poll GitHub reads · live-run projection · parallel dispatch waves · targeted board events · spend/workspace-settings/account-settings cache slices · GitHub-sync + fan-out-publisher parallelism · reuse-the-loaded-list batch across autoStart/initiative-spawn/blueprint-reconcile/block-delete · agent-context single frame-walk + parallel wave · password-reset-token expiry index · risk-policy merge-preset cache slice) · **Owner:** core · **Started:** 2026-07-09
 
 > This is the durable source of truth for a multi-PR initiative. Read it first before
 > picking up the next slice; update the checklist at the end of each PR.
@@ -54,7 +54,7 @@ symmetric" (CLAUDE.md).
 | 3   | P1  | persistence  | Execution lists `SELECT *` (incl. `detail` JSON) + JS status filter on dispatch guard; missing `(workspace_id, kind, status)` index | ✅ done | [#996](https://github.com/kibertoad/cat-factory/pull/996) |
 | 4   | P1  | dispatch     | `buildJobBody` serializes ~6 independent I/O steps per dispatch                                                                     | ✅ done | branch `claude/perf-tracker-next-phase-3wg1gq`            |
 | 5   | P1  | frontend     | Board snapshot embeds full step outputs the board never reads                                                                       | ⬜ todo |                                                           |
-| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ⬜ todo |                                                           |
+| 6   | P1  | frontend     | Coarse `board` event forces full-snapshot refresh; payload already carries `blockId`                                                | ✅ done | branch `feat/targeted-board-events`                       |
 | 7   | P2  | caching      | `SpendService` three banned TTL `Map`s (pricing / account / user limits)                                                            | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
 | 8   | P2  | caching      | `AccountSettingsService` legacy 30s `Map` (the named anti-pattern)                                                                  | ✅ done | branch `claude/performance-initiative-next-phase-i3mtxw`  |
 | 9   | P2  | caching      | `WorkspaceSettingsService.get` uncached; read per recorded LLM call                                                                 | ✅ done | branch `claude/performance-tracker-next-phase-hcdba4`     |
@@ -216,7 +216,7 @@ the by-id endpoint the overlays already use. This is a wire-shape change: pre-1.
 back-compat shim (CLAUDE.md); land contracts + backend projection + SPA consumption
 together. Couples naturally with item 3's `detail`-free list projection.
 
-### 6. Coarse `board` events force full refreshes the payload could avoid (P1)
+### 6. Coarse `board` events force full refreshes the payload could avoid (P1) — LANDED
 
 `useWorkspaceStream.ts:92-93`: every `board`-type event collapses to
 `debouncedBoardRefresh()` → full `workspace.refresh()` (REPLACE-style hydrate of ~20
@@ -234,6 +234,49 @@ single-block reasons (`block-added`, `block-updated`, `dependency-toggled`,
 CLAUDE.md ("Real-time store coherence"): keep the monotonic refresh guard, never let a
 targeted upsert be clobbered by a stale refresh, and pin the new path with a store-level
 unit test.
+
+**As landed.** The kernel port takes a `BoardChange` value (`reason` / `blockId` / `block` /
+`originConnectionId`) instead of four positionals, so adding a field does not grow a signature
+and every call site reads as the decision it is making. The wire event gained `block`; the SPA
+upserts a carried block through the SAME `board.upsert` the `execution` branch uses, which is what
+keeps the monotonic live-upsert stamp in play, and falls back to the old debounced refresh when
+none is carried.
+
+`blockId` stays on the BoardChange and off the wire. It is how the backend resolves which
+workspaces to publish to (`boardChangeSubject` → `FanOutEventPublisher.targets`), spent before the
+event exists; a client has nothing to do with it the payload does not already say, and an id
+riding along for no reader is the kind of inert surface the next person assumes is load-bearing.
+
+Three things the original finding did not anticipate, all learned while implementing:
+
+- **Two blocks can never be CARRIED**, so the reason-by-reason list above is not the whole rule.
+  A service FRAME: one payload is published for every board that mounts the affected service, and
+  a frame's position and size live on the per-workspace `WorkspaceMount`, so whichever mount the
+  publisher projected through would be wrong on every other board and would jump the frame there,
+  the exact failure `applyMountLayout` exists to prevent, arriving by a different door. And a
+  headless `internal` anchor block (a public-API run's own "task"), which `composeBoard` filters
+  out of every snapshot and which would therefore render as a card no later read can remove.
+  Kernel's `deliverableBoardBlock` enforces both at the WIRE rather than at each call site, and
+  both facades assemble every block-carrying event through it (`boardWireEvent` /
+  `bootstrapWireEvent`), so a future emitter cannot reintroduce either. `cancel` therefore CAN
+  carry its block for an ordinary task, even though the finding grouped it with the structural
+  reasons, and degrades to coarse for the internal one.
+- **Withholding the PAYLOAD is not withholding the SUBJECT.** A coarse change that also drops
+  `blockId` resolves no service, so `FanOutEventPublisher` collapses it to the acting board and
+  every other mount of a shared service learns nothing. Resize is the case that bites: children
+  shift with the container, so the payload must go, but the block still has to be named.
+- **`block-updated` and `epic-assigned`/`dependency-toggled` re-read the block anyway** to build
+  their REST response, so carrying it cost a reorder rather than a query. Emitting before the
+  re-read would have shipped the pre-write value, which is worse than carrying nothing.
+
+A targeted upsert also does not self-heal the way the coarse signal did, so ORDER became load
+bearing where a payload rides: the initiative loop announces a spawned task only once
+`executionService.start` has resolved, because the failure path deletes the block and emits
+nothing, and the refresh a coarse event triggered used to reconcile that away by itself.
+
+Still coarse, and deliberately: removal (cascades over descendants and prunes edges on blocks the
+event never names), reparent (moves a subtree between parents), resize (children shift too),
+blueprint reconcile, bootstrap frame transitions, `module`, and every frame change.
 
 ### 7. `SpendService` homebrew TTL Maps → AppCaches slices (P2)
 

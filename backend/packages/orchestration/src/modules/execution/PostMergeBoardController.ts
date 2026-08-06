@@ -170,9 +170,9 @@ export class PostMergeBoardController {
         position: { x: 16 + (n % 2) * 190, y: 40 + Math.floor(n / 2) * 130 },
       })
     }
-    // A module node appeared and/or a task changed parent — the per-block event
-    // can't express that hierarchy change, so signal a coarse board refresh. Name the moved
-    // task so the refresh fans out to every board mounting its shared service.
-    await this.host.events.boardChanged(workspaceId, 'module', taskId)
+    // A module node appeared and/or a task changed parent: a hierarchy change spanning two
+    // blocks, which no single payload can state, so this stays a coarse refresh. Name the moved
+    // task so it fans out to every board mounting its shared service.
+    await this.host.events.boardChanged(workspaceId, { reason: 'module', blockId: taskId })
   }
 }

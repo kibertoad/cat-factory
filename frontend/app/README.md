@@ -552,11 +552,26 @@ The recurring product bug behind most e2e flakes: a stale full-snapshot refresh 
 live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
 event left to restore it.
 
-- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced
-  full `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block
-  reaches the browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry
-  the entity and `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that
-  must appear reliably.
+- **Know how your entity is delivered.** Targeted events (`execution`/`bootstrap`/`initiative`)
+  carry the entity and `upsert` it, so they don't clobber. A `board` event is delivered EITHER
+  way and the backend decides per change: it carries `block` when the change is fully described
+  by one (a spawned task, a field edit, a dependency toggle, a move), and carries none when it is
+  not (a removal, a reparent, a resize, a blueprint reconcile). A payload-less `board` event still
+  means a debounced full `workspace.refresh()`, where `hydrate` REPLACES whole lists. Routing
+  lives in `composables/workspaceStream/applyWorkspaceEvent.ts`, whose `switch` carries a `never`
+  guard: a new `WorkspaceEvent` member fails the BUILD rather than falling through to nothing. The
+  emit-site decision lives in `BoardService.emitBoardChanged`'s doc comment. Prefer a targeted
+  upsert for anything that must appear reliably.
+- **Two blocks are refused a payload at the wire, on EVERY event that carries one.** Kernel's
+  `deliverableBoardBlock` is the single gate (both facades' `boardChanged` AND `bootstrapChanged`
+  assemble through it, via `boardWireEvent`/`bootstrapWireEvent`), so a new emitter cannot
+  reintroduce either by forgetting: a service FRAME, whose position and size are a per-board
+  `WorkspaceMount` override that one shared payload cannot state correctly on the several boards a
+  fan-out reaches; and a headless `internal` anchor block, which `composeBoard` filters out of
+  every snapshot and which would therefore render as a card no later read can remove. Both degrade
+  to the coarse signal, so nothing is lost but the refresh. A bootstrap's frame is always the first
+  case, which is why the `bootstrap` event's job rides live while the frame's own transitions
+  arrive as coarse `board` events beside it.
 - **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
   resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
   reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced

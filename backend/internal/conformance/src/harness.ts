@@ -9,6 +9,7 @@ import type { TesterQualityReviewer } from '@cat-factory/orchestration'
 import type {
   AgentRunRepository,
   BlockRepository,
+  BoardChange,
   DocInterviewRepository,
   AccountSettingsRepository,
   DocumentRepository,
@@ -42,6 +43,7 @@ import type {
   WorkspaceRepository,
   WorkspaceSnapshot,
 } from '@cat-factory/kernel'
+import { boardChangeSubject } from '@cat-factory/kernel'
 import type { FakeAgentOptions } from './FakeAgentExecutor.js'
 import type { OnboardingProbe } from './onboarding.js'
 
@@ -58,19 +60,32 @@ export class RecordingEventPublisher implements ExecutionEventPublisher {
   /** Every compact `llmCall` activity the proxy pushed (via `llmCallObserved`), in order. */
   readonly llmCalls: LlmCallActivity[] = []
   /**
-   * Every coarse `boardChanged` the engine/board service pushed, in order — so the suite can
-   * assert a human board mutation (add/rename/move/reparent/delete) emits a real-time signal on
-   * every runtime, not just returns over REST.
+   * Every `boardChanged` the engine/board service pushed, in order, so the suite can assert a
+   * human board mutation (add/rename/move/reparent/delete) emits a real-time signal on every
+   * runtime, not just returns over REST. `hasBlock` records whether the change carried its block
+   * as a PAYLOAD (the targeted shape) or only named one (the coarse shape).
    */
-  readonly boardEvents: { workspaceId: string; reason: string; blockId: string | null }[] = []
+  readonly boardEvents: {
+    workspaceId: string
+    reason: string
+    blockId: string | null
+    hasBlock: boolean
+  }[] = []
 
   async executionChanged(_workspaceId: string, instance: ExecutionInstance): Promise<void> {
     // Clone so the engine's later in-place mutations don't rewrite recorded history.
     this.emits.push(structuredClone(instance))
   }
 
-  async boardChanged(workspaceId: string, reason: string, blockId?: string | null): Promise<void> {
-    this.boardEvents.push({ workspaceId, reason, blockId: blockId ?? null })
+  async boardChanged(workspaceId: string, change: BoardChange): Promise<void> {
+    this.boardEvents.push({
+      workspaceId,
+      reason: change.reason,
+      // The same subject rule the real fan-out decorator resolves its targets through, so a
+      // suite asserting a change reached a mount is asserting the production rule.
+      blockId: boardChangeSubject(change),
+      hasBlock: change.block != null,
+    })
   }
   async bootstrapChanged(): Promise<void> {}
   async notificationChanged(): Promise<void> {}
@@ -190,11 +205,21 @@ export interface ConformanceApp {
    */
   executionEmits(blockId?: string): ExecutionInstance[]
   /**
-   * Every coarse `boardChanged` the board service pushed (via `boardChanged`), in order —
-   * so the suite can assert a human board mutation emits a real-time signal on every runtime.
-   * Optionally filtered to events naming a specific block.
+   * Every `boardChanged` the board service pushed, in order, so the suite can assert a human board
+   * mutation emits a real-time signal on every runtime. Optionally filtered to events naming a
+   * specific block.
+   *
+   * `hasBlock` is the targeted-vs-coarse decision: `true` when the change carried the changed block
+   * as a PAYLOAD subscribers upsert, `false` when it only named one and every board must re-read.
+   * That decision is what turns a busy board's live updates from a snapshot each into a small patch
+   * each, so it is asserted rather than left to whichever facade happens to be exercised.
    */
-  boardEmits(blockId?: string): { workspaceId: string; reason: string; blockId: string | null }[]
+  boardEmits(blockId?: string): {
+    workspaceId: string
+    reason: string
+    blockId: string | null
+    hasBlock: boolean
+  }[]
   /**
    * Seed an already-"incorporated" requirements review for a block straight into the
    * facade's real review store, so the suite can assert the engine substitutes the

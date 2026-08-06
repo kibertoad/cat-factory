@@ -23,3 +23,7 @@ export function applyMountLayout(
   if (layout.size) next.size = { w: layout.size.w, h: layout.size.h }
   return next
 }
+
+// The other half of this rule (which blocks a real-time event may CARRY, given that a frame's
+// geometry is per-board) is `deliverableBoardBlock` in `./board-events.ts`, beside the wire-event
+// assembly that is its only caller.
