@@ -3,10 +3,10 @@
 The user-facing app, packaged as a **reusable Nuxt 4 layer**: a single-page app
 that runs entirely in the browser and renders the architecture board, drives agent
 pipelines, and reflects live execution. A deployment consumes it via
-`extends: ['@cat-factory/app']` (see [`deploy/frontend`](../../deploy/frontend)).
-It talks to the [backend Worker](../../backend/README.md) over REST and a single
+`extends: ['@cat-factory/app']` (see [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend)).
+It talks to the [backend Worker](https://github.com/kibertoad/cat-factory/blob/main/backend/README.md) over REST and a single
 WebSocket, sharing wire types from
-[`@cat-factory/contracts`](../../backend/packages/contracts).
+[`@cat-factory/contracts`](https://github.com/kibertoad/cat-factory/tree/main/backend/packages/contracts).
 
 The SPA source lives under `app/` (the Nuxt srcDir).
 
@@ -364,7 +364,7 @@ is SUPPRESSED rather than unmounted, because it holds the running tour's resolve
 remount would re-resolve it against gates that may have flipped since the tour started.
 
 The decisions behind this surface, and why each alternative was rejected, are recorded in
-[ADR 0036](../../backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
+[ADR 0036](https://github.com/kibertoad/cat-factory/blob/main/backend/docs/adr/0036-in-app-tutorials.md). This section is the authority on how
 the thing WORKS.
 
 A tour is **data, not components**: an ordered list of steps, each pointing at an on-screen
@@ -552,11 +552,26 @@ The recurring product bug behind most e2e flakes: a stale full-snapshot refresh 
 live state. The SPA has two delivery shapes and mixing them wrong drops live-added state with NO
 event left to restore it.
 
-- **Know how your entity is delivered.** A `board` event is COARSE: no payload, only a debounced
-  full `workspace.refresh()`, and `hydrate` REPLACES whole lists. A spawned task/module block
-  reaches the browser ONLY this way. Targeted events (`execution`/`bootstrap`/`initiative`) carry
-  the entity and `upsert` it, so they don't clobber. Prefer a targeted upsert for anything that
-  must appear reliably.
+- **Know how your entity is delivered.** Targeted events (`execution`/`bootstrap`/`initiative`)
+  carry the entity and `upsert` it, so they don't clobber. A `board` event is delivered EITHER
+  way and the backend decides per change: it carries `block` when the change is fully described
+  by one (a spawned task, a field edit, a dependency toggle, a move), and carries none when it is
+  not (a removal, a reparent, a resize, a blueprint reconcile). A payload-less `board` event still
+  means a debounced full `workspace.refresh()`, where `hydrate` REPLACES whole lists. Routing
+  lives in `composables/workspaceStream/applyWorkspaceEvent.ts`, whose `switch` carries a `never`
+  guard: a new `WorkspaceEvent` member fails the BUILD rather than falling through to nothing. The
+  emit-site decision lives in `BoardService.emitBoardChanged`'s doc comment. Prefer a targeted
+  upsert for anything that must appear reliably.
+- **Two blocks are refused a payload at the wire, on EVERY event that carries one.** Kernel's
+  `deliverableBoardBlock` is the single gate (both facades' `boardChanged` AND `bootstrapChanged`
+  assemble through it, via `boardWireEvent`/`bootstrapWireEvent`), so a new emitter cannot
+  reintroduce either by forgetting: a service FRAME, whose position and size are a per-board
+  `WorkspaceMount` override that one shared payload cannot state correctly on the several boards a
+  fan-out reaches; and a headless `internal` anchor block, which `composeBoard` filters out of
+  every snapshot and which would therefore render as a card no later read can remove. Both degrade
+  to the coarse signal, so nothing is lost but the refresh. A bootstrap's frame is always the first
+  case, which is why the `bootstrap` event's job rides live while the frame's own transitions
+  arrive as coarse `board` events beside it.
 - **Full refreshes MUST be monotonic.** Two `refresh()` calls can be in flight; a staler one
   resolving later overwrites the newer. `workspace.refresh()` guards this with a sequence. Do not
   reintroduce an unguarded `hydrate(await fetch())`, and apply the guard to any new coalesced
@@ -583,7 +598,7 @@ event left to restore it.
 All user-facing SPA copy goes through `@nuxtjs/i18n`; never hard-code a display string. This
 layer ships the base `en` locale, and a downstream deployment overrides by dropping its own files
 (the per-layer deep-merge is the override seam, consumer wins key by key). Migration status:
-[`docs/internal/localization.md`](../../docs/internal/localization.md).
+[`docs/internal/localization.md`](https://github.com/kibertoad/cat-factory/blob/main/docs/internal/localization.md).
 
 - `i18n/locales/<locale>.json`: the catalogs (the v9+ `i18n/` convention, NOT `app/locales/`).
 - `i18n/i18n.config.ts`: runtime vue-i18n behaviour only (fallback locale, the plural
@@ -688,7 +703,7 @@ auto-imported
 (`ResultWindowShell`, the `StepRunMeta` run-metadata block, `useResultView`, …), and the
 namespacing / degradation rules are in
 [`app/docs/consumer-extensions.md`](./app/docs/consumer-extensions.md); a full worked
-example ships in [`deploy/frontend`](../../deploy/frontend) (the `acme:security` module).
+example ships in [`deploy/frontend`](https://github.com/kibertoad/cat-factory/tree/main/deploy/frontend) (the `acme:security` module).
 
 ## Key UI surfaces
 
@@ -795,5 +810,5 @@ pnpm lint         # oxlint + oxfmt --check
 ```
 
 > Building/deploying the static site is covered in the deployment docs: see the
-> [top-level README → Deployment](../../README.md#deployment) and
-> [`deploy/frontend/README.md`](../../deploy/frontend/README.md).
+> [top-level README → Deployment](https://github.com/kibertoad/cat-factory/blob/main/README.md#deployment) and
+> [`deploy/frontend/README.md`](https://github.com/kibertoad/cat-factory/blob/main/deploy/frontend/README.md).

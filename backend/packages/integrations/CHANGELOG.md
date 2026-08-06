@@ -1,5 +1,267 @@
 # @cat-factory/integrations
 
+## 0.137.1
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+
+## 0.137.0
+
+### Minor Changes
+
+- 5202fb9: An agent now builds against the current design, and is told how to read it
+
+  A linked document was frozen at import time. `probeVersion` existed on every provider and had exactly
+  one caller (the fragment-library body cache); nothing on the run path ever looked at the source again.
+  So a Figma frame edited after import fed every later run the old markdown, with the run reading as
+  perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+  it means the agent routinely builds the previous revision.
+
+  The linked-context resolution path now re-confirms each document at dispatch, through the kernel
+  `LinkedDocumentRefresher` port. The cost model is the design, because that path runs per STEP: probe
+  the source's version, compare it against the token the stored body came from, and re-import only what
+  actually moved. That comparison needed something to compare to, which the row did not have, so
+  `documents.source_version` is new. It is part of the idempotent-reimport comparison even though no
+  agent reads it: a Figma file version bumps on any edit anywhere in the file, so leaving a stale token
+  on an unchanged body would re-download the whole design on every dispatch, forever. NULL covers three
+  cases that all mean "cannot be proven current" and all self-heal on one re-import: an upload, a
+  source exposing no version, a row predating the column.
+
+  Three things bound the cost, each a different half of it. The new short-TTL `linkedDocumentVersion`
+  cache holds the OUTCOME of the whole ladder rather than the body or just the probe, so a burst of step
+  dispatches costs one round trip per document, concurrent dispatches of one document dedupe onto a
+  single download, and a source that is DOWN is remembered as down instead of being re-asked by every
+  dispatch for as long as the outage lasts (a cache loader that throws caches nothing, which is why the
+  failure is a value). It has no refresh window, since the load already is the check. The workspace's
+  connection is resolved ONCE per pass for the whole corpus through a new batched
+  `resolveConnections`, not per document and again inside each probe. And the per-document fan-out is
+  bounded, because a task can attach a corpus budget's worth of Figma frames and each miss expands into
+  chunked per-frame node reads. Coherence is invalidation plus the TTL: connect/disconnect drops the
+  workspace group, a manual import drops that document's entry. The entry stays enabled on the Worker's
+  isolate-safe profile, since an external version token is neither our own mutable state nor in need of
+  a bus to heal.
+
+  The ladder also has to CONVERGE, which took one non-obvious hop: `reimport` records the caller's
+  probed token when the source's own fetch exposes none. A provider may resolve its version best-effort
+  inside `fetchDocument` (GitHub docs' commit sha degrades to null on a rate-limited request) while its
+  cheap probe still answers, so the row was left holding null, mismatched the probe on every future
+  dispatch, and re-downloaded the whole document forever while reporting "this source has no revision"
+  about a source that plainly has one.
+
+  Freshness reaches the agent as a header line, and it is a three-way verdict rather than a boolean.
+  `confirmed` contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. `not-applicable` renders nothing: an upload has no source to
+  trail, so a staleness warning there would invent a problem. `unconfirmed` warns and names which of
+  four gaps applies, because "reconnect the source", "wait out the outage", "this source has no revision
+  to compare" and "this deployment cannot read the credential" are four different fixes and one merged
+  "unknown" sends the reader at the wrong one. The last of those is mothership mode, not a defensive
+  branch: a node with no main database cannot read a connection sealed with the mothership's key, so the
+  read fails permanently and by design, and calling that an outage would send an operator hunting a
+  Figma incident that does not exist. One renderer serves both surfaces a document reaches (the
+  materialised `.cat-context/` file and the in-prompt injection an INLINE kind gets instead of a
+  checkout), because a judge or reviewer scoring against a stale design is the same failure as a
+  container agent building from one, and an omitted note reads exactly like a copy that was checked.
+  Every gap also increments the new `document.freshness_gap` counter, dimensioned by reason and source:
+  each of these conditions repeats per dispatch while it lasts, so the log line answers "what happened
+  to this run" and only a rate answers "is this spreading". The refresh still never throws, so a source
+  outage costs the run a stale body and a stated warning rather than the run, and the readability
+  refusal now runs on the refreshed records, since a page emptied since import is the case most worth
+  refusing. That
+  includes the REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs
+  off on, which resolves its attachments through the same refresher rather than reviewing the
+  import-time copy while the coder two steps later builds from the current one. A deployment with no
+  refresher wired gets no verdict at all rather than a synthesised one: it did not conclude these bodies
+  are unverifiable, it never asked.
+
+  Separately, the one fragment that tells an agent how to consume design context was selected by nothing.
+  Its `appliesTo` selector is a management-surface hint the run path never drove, it is in no seed pin
+  set, and basic mode hides the per-task fragment picker — so the standard case, a designer links a frame
+  and starts a run, executed with a design context file on disk and no instruction anywhere to honour it.
+  The engine now folds it whenever the run's resolved context carries a design-origin document. The
+  trigger is the document rather than the block type, which the retired selector got wrong in both
+  directions (it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design), and that selector is DELETED rather than left beside the new rule: the deterministic
+  selector and the management surface still read it, so leaving it would keep labelling the fragment
+  frontend-only while the engine folded it for anything carrying a design. It rides the normal fold, so
+  a workspace override still wins and the two-tier brief/full verbosity still applies. The flag settles
+  off the corpus read rather than off the finished linked context, so the fragment fold (an LLM call,
+  when a standard needs condensing) is not serialised behind a live source probe on every dispatch.
+
+  Two hygiene fixes ride along, both about a claim over a pasted URL. `makeDocumentUrlResolver` now
+  consults host-pinned parsers before host-blind ones instead of in registration order: Notion's
+  `parseRef` claims any UUID-shaped run anywhere, so registered first it stole a Figma URL whose file key
+  carried one, and the point lookup then searched the wrong key space and found nothing — a linked design
+  reaching the agent as no context at all. And the two source traits that decide these things
+  (`isDesignSource`, `isHostPinnedSource`) live in contracts off one exhaustive `Record`, because the SPA
+  has to label a design source too and the run path reads them where no provider is reachable.
+
+  Reviewing: the refresh sits on the hot path of every dispatch, so the thing to check is the ladder's
+  short-circuits (an unchanged design must cost one cached round trip and no download, a failed one must
+  not be retried per dispatch, and the second dispatch after a re-import must do nothing at all) rather
+  than the verdicts. The re-import running INSIDE the cache loader is the deliberate part: it is what
+  lets one entry bound the expensive half and dedupe concurrent dispatches, and its consequence is that
+  a caller which deduped onto someone else's outcome re-reads the row rather than labelling the body it
+  already holds with a revision it does not carry. The `sourceVersion` column is nullable on purpose and
+  a backfill would be wrong: an empty string cannot be told apart from a source that genuinely has no
+  version, and the two get different treatment.
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+
+## 0.136.2
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+
+## 0.136.1
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+
+## 0.136.0
+
+### Minor Changes
+
+- c9adc67: Refuse a blind run: the harness now tells the backend which job-body capabilities it parses
+
+  An image older than a body capability does not reject the field, it ignores it. For most of the
+  job body that degrades honestly, but a CAPABILITY is different: the backend composes the PROMPT,
+  so a dropped `mcpServers` leaves the agent reading "you have these tools, prefer them over
+  guessing" with no client wired, and a dropped `skills` leaves a claude-code run told a playbook
+  "is installed for this step" that was never written. The harness CHANGELOG has documented this
+  twice as an operator hazard, both times ending at the same wall: the backend has no way to know
+  what image a self-hosted runner pool pins, so it could not be gated server-side. A blind run
+  rather than a failed one, and the run that most needs a signal produced none.
+
+  The handshake is a list of body field names the image reports on `/health` and on its job
+  ACCEPTANCE. The acceptance is where it matters: the dispatch site is the only place the body it
+  just sent is still in scope, and the last moment before the agent starts working from a prompt the
+  body cannot back up. `RunnerTransport.dispatch` therefore returns an optional ack, forwarded by
+  every transport that can see the harness's own response.
+
+  The answer is deliberately THREE-STATE, and the middle state is the whole design. An image that
+  reported nothing is not an image that reported "not this": every image between the capability
+  landing and the handshake landing serves it perfectly and reports no list, so folding the two
+  would refuse those runs on no evidence. So `unsupported` (the image said it cannot) refuses the
+  dispatch and stops the job the harness already started, as an `UnavailableError` whose
+  `runner_image_capability` reason makes the step a `preflight` fault rather than a container that
+  died; `unknown` proceeds and is REPORTED as the deployment's own blind spot, on a warn line and a
+  `container.capability_unknown` counter that should decay to zero as pools update. A body carrying
+  no capability says nothing at all, which is most dispatches.
+
+  Refusing the step is only half of it: the harness begins work on acceptance, so a refusal that
+  merely throws leaves a full agent pass running against the repository, free to push a branch and
+  open a pull request for a step the engine already failed. The refusal therefore STOPS the job,
+  through a new `RunnerTransport.stopJob` and a new harness `DELETE /jobs/{id}` that aborts one job
+  and waits for it to settle before answering. Never through `release`, which is a reclaim and means
+  something different on every backend: on a per-run container it happens to kill the job, on a warm
+  pool member it hands the container BACK with the agent still working in it, and on a self-hosted
+  pool with no `release` template it does nothing at all.
+
+  Not every backend can PROVE the job died, so the outcome is reported rather than assumed and the
+  failure message says which of four it was: `stopped` (nothing is still running), `requested` (a
+  pool cancel was accepted but cannot be verified), `unsupported` (no cancel path exists), `failed`.
+  The last three also increment `container.blind_job_not_stopped`, dimensioned by the outcome,
+  because each is a different operator fix. A backend that owns the container always reaches
+  `stopped`, since a graceful abort that fails escalates to destroying it; on the local warm pool
+  that escalation is also what keeps a member whose job could not be aborted off the idle list, where
+  it still answers `/health` and the next run would lease a container with a live agent and a live
+  checkout in it.
+
+  A runner pool gets the handshake only when its manifest MAPS it: `response.dispatchCapabilitiesPath`,
+  one line for a pool that proxies `POST /jobs` verbatim. Deliberately not read by name, because
+  `capabilities` is an ordinary word for a scheduler to use about its own runners (`["gpu","docker"]`)
+  and reading one of those as the harness's answer would narrow to an empty list and hard-refuse every
+  capability dispatch against a perfectly current image. Unmapped lands in `unknown`, which is honest
+  about a control plane this backend knows nothing about.
+
+  OPERATORS: this bumps the runner image to `1.93.0`. A pool on an older image keeps working exactly
+  as before; it simply reports no handshake, so tool-server and skill dispatches there are counted as
+  unverifiable instead of confirmed. To get the check on a self-hosted pool, map
+  `response.dispatchCapabilitiesPath` to `capabilities` and declare a `release` template so a refused
+  run can actually be cancelled.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+
+## 0.135.0
+
+### Minor Changes
+
+- 6ccc104: A linked design now reaches the agent as a design, not as a list of frame names
+
+  Four fidelity holes made the Figma context file thinner than the design it described, and the
+  worst of them was silent.
+
+  A whole-file link fetched `/files/:key?depth=2`, which returns the pages and their top-level frames
+  with NO children. The renderer builds each frame's layout from those children, so a whole-file
+  import degenerated to frame names and sizes: no layout, no text, nothing an implementer could
+  build from. Only a node link (one frame) ever produced real content. The file endpoint cannot fix
+  this by asking for more depth, because it jumps from "no children" straight to "the entire
+  document", which blows the response cap on any real file. So the `depth=2` read became an OUTLINE
+  read and the frames it names are fetched as subtrees, chunked so an oversize response costs its own
+  frames rather than every frame. A frame whose chunk fails still renders from the outline, and both
+  the frame cap and the failed reads are named in a new `### Notes` section: a bounded import must
+  not read as the whole design. The per-frame node cap now sits under an import-wide budget, because
+  a per-frame cap alone bounds nothing about an import that fans out over a dozen frames.
+
+  Each cap gets its OWN note, because they are not interchangeable. A DEPTH cut is local to one
+  branch and the walk must carry on; a node or text budget is exhaustion and must stop. Conflating
+  the two is what made a branch nested past the cap drop every later sibling of every ancestor, so a
+  frame whose first branch was deep rendered as that branch alone (auto-layout nests past six levels
+  routinely, so this hit ordinary frames). The caps also ask the reader for different things: link a
+  sub-frame, or import fewer frames. A depth cut now names how many nodes it left below, so it cannot
+  read as a leaf, and one cut leaves ONE marker instead of one per unwinding ancestor.
+
+  Text caps are stated too, in the section as well as the notes. The renderer DROPS an empty section,
+  so a frame whose text the import budget refused was byte-for-byte a frame that contains no text:
+  the exact silence the rest of this change exists to break. Components and tokens are bounded as
+  well, since both grow with the design SYSTEM rather than with the frames imported and the layout
+  budget says nothing about them. The component cap ranks by instance count, computed from what was
+  observed, so what survives is what the design leans on; the token cap sorts by the rendered order
+  first, so "N not listed" points at the tail the reader can actually see is missing.
+
+  The layout tree carried name, type and size only, so every colour, type ramp, radius and stack
+  direction was left for the model to invent. Each node's line now carries those facts in brackets,
+  bounded by the tree's own caps because they are the same lines.
+
+  Tokens came only from the variables API, which is Enterprise-gated. On every other plan the 403 was
+  swallowed and the section simply vanished, which reads exactly like a design that defines no
+  tokens. The published styles the file already ships (the `styles` map joined to the fills and text
+  styles of the nodes referencing them) are now the fallback, and `DesignContext.tokenOrigin` states
+  which source produced the section. The two are never merged: a merged section could not say where a
+  value came from, and the plan gate itself is now stated even when neither source produced anything.
+  Zeplin's own best-effort token read reports its failures the same way, for the same reason.
+
+  Components were a bare list of names. An instance is now named by its component SET, since a
+  variant's own component name is its property assignment ("Size=Large") and identifies nothing on
+  its own, and every variant and property the design uses folds onto that component's note. That is
+  the signal "reuse the existing component" needs to match against repo code.
+
+  Zeplin's screens read asks for one more screen than it renders, so that a project with more screens
+  than we import is detectable at all: asking for exactly the render cap makes a full page and a
+  truncated one identical, which silently dropped the cap note in the one case it exists for.
+
+  Watch the corpus budget when reviewing: richer renders mean larger bodies, and linked-context
+  delivery is load-bearing (`context_documents_over_budget`). The cap constants carry the arithmetic
+  that sizes them against it, so raising one means redoing that arithmetic rather than picking a
+  bigger number. Every cap states what it dropped rather than shortening in silence.
+
 ## 0.134.1
 
 ### Patch Changes

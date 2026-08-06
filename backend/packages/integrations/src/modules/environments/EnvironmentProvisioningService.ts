@@ -148,13 +148,19 @@ export interface EnvironmentProvisioningServiceDependencies {
  * runtime-neutral; the facade passes its `RunnerJobClient`, which is structurally compatible.
  */
 export interface DeployJobClient {
+  /**
+   * The harness's dispatch acknowledgement is accepted but ignored here: a deploy job runs no
+   * agent, so it carries none of the body capabilities the handshake covers and has nothing to
+   * verify. Widened to `unknown` rather than `void` so the server's `RunnerJobClient` (which
+   * forwards the ack for the agent path) stays structurally compatible.
+   */
   dispatch(
     workspaceId: string | undefined,
     ref: RunnerJobRef,
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind,
     options?: RunnerDispatchOptions,
-  ): Promise<void>
+  ): Promise<unknown>
   poll(workspaceId: string | undefined, ref: RunnerJobRef): Promise<RunnerJobView>
   release(workspaceId: string | undefined, ref: RunnerJobRef): Promise<void>
 }

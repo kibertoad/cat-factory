@@ -305,6 +305,14 @@ function toView<TResult extends JobResultBase>(entry: JobEntry<TResult>): JobVie
 }
 
 /**
+ * How long {@link JobRegistry.abort} waits for an aborted job to actually settle before answering
+ * with whatever state it is in. Sized like the graceful-shutdown window (and for the same reason):
+ * the agent CLI normally honours SIGTERM in milliseconds, and this covers one that had to be
+ * force-killed through the 5s SIGTERM→SIGKILL escalation, with a margin.
+ */
+const ABORT_SETTLE_MS = 6_000
+
+/**
  * Tracks background jobs by id. Keyed by the backend-supplied job id (the per-step
  * job id) so a re-dispatched start re-attaches to the running job rather than starting
  * a duplicate — which keeps the durable driver's retries idempotent and avoids redoing
@@ -392,6 +400,44 @@ export class JobRegistry<TJob = unknown, TResult extends JobResultBase = JobResu
       }
     }
     return aborted
+  }
+
+  /**
+   * Abort ONE job and answer with the state it actually reached.
+   *
+   * The caller is a backend that has decided this job must not run: it refused the dispatch as
+   * blind, and the harness starts work on acceptance, so without this the agent runs to completion
+   * and can push a branch and open a pull request for a step the engine already failed. Aborting
+   * every job ({@link abortAll}) is not an option: a pooled container serves other runs.
+   *
+   * Waits for the job to SETTLE rather than returning the moment the signal is fired, because a
+   * fired signal is not a stopped agent and the caller's whole problem is telling those apart: it
+   * reports "stopped" to a human only on the strength of this answer. The window matches the
+   * graceful-shutdown one for the same reason (the CLI usually honours SIGTERM in milliseconds; the
+   * cap covers one that had to be force-killed through the 5s escalation in `killChildProcess`),
+   * and a job still `running` when it expires is reported as such rather than assumed dead.
+   *
+   * Returns undefined when no job of that id exists here, which the caller must NOT read as a stop.
+   */
+  async abort(id: string, reason: string): Promise<JobState | undefined> {
+    const entry = this.jobs.get(id)
+    if (!entry) return undefined
+    // Already terminal: nothing to stop, and re-firing a cleared abort would be a no-op anyway.
+    // This is what makes the call idempotent for a caller that retries.
+    if (entry.state !== 'running') return entry.state
+    entry.abort?.(reason)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        entry.promise,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, ABORT_SETTLE_MS)
+        }),
+      ])
+    } finally {
+      clearTimeout(timer)
+    }
+    return entry.state
   }
 
   /**

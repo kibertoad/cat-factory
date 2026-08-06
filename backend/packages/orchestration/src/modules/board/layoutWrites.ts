@@ -2,6 +2,7 @@ import type { Position, ResizeBlockInput } from '@cat-factory/contracts'
 import type {
   Block,
   BlockRepository,
+  BoardChange,
   WorkspaceMount,
   WorkspaceMountRepository,
 } from '@cat-factory/kernel'
@@ -35,9 +36,7 @@ export interface BoardLayoutDeps {
   projectForWorkspace: (workspaceId: string, block: Block) => Promise<Block>
   emitBoardChanged: (
     originWorkspaceId: string,
-    reason: BoardChangeReason,
-    blockId: string | null,
-    originConnectionId?: string | null,
+    change: BoardChange & { reason: BoardChangeReason },
   ) => Promise<void>
 }
 
@@ -58,9 +57,10 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
     if (mount) {
       // `frameMount` only resolves a mount when the mount repository is wired.
       await deps.workspaceMountRepository?.update(workspaceId, mount.serviceId, { position })
-      // The frame's position is this workspace's private layout override — other boards
-      // mounting the service keep their own spot, so this signal is origin-only.
-      await deps.emitBoardChanged(workspaceId, 'block-moved', null, originConnectionId)
+      // The frame's position is this workspace's private layout override: other boards mounting
+      // the service keep their own spot, so this signal is origin-only, and carries no payload
+      // for the same reason (the new coordinates are true of THIS board alone).
+      await deps.emitBoardChanged(workspaceId, { reason: 'block-moved', originConnectionId })
       // Project the mount's SIZE override on too: a response carrying the block's own size would
       // resize the frame the moment the user finishes dragging it.
       return applyMountLayout(block, { position, size: mount.size })
@@ -68,8 +68,15 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
     // A non-frame block, or a legacy frame with no mount: move the shared block at its home.
     await deps.blockRepository.update(homeWorkspaceId, id, { position })
     // Origin = the block's HOME so moving a shared block fans the new position out to all mounts.
-    await deps.emitBoardChanged(homeWorkspaceId, 'block-moved', id, originConnectionId)
-    return assertFound(await deps.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+    // The moved block states the whole change (its position lives on the row, which is why this
+    // branch was taken at all), so it rides along and other boards patch it without a refresh.
+    const moved = assertFound(await deps.blockRepository.get(homeWorkspaceId, id), 'Block', id)
+    await deps.emitBoardChanged(homeWorkspaceId, {
+      reason: 'block-moved',
+      block: moved,
+      originConnectionId,
+    })
+    return moved
   }
 
   /**
@@ -120,10 +127,17 @@ export function createBoardLayoutWrites(deps: BoardLayoutDeps) {
         position: bounds.position,
       })
     }
-    // Coarse, because the children moved too: a `block-updated` signal carrying one id would let
-    // every other board re-render the container at its new size with its contents still at the
-    // old offsets. Origin = the block's HOME so a shared service fans out to every mount.
-    await deps.emitBoardChanged(homeWorkspaceId, 'block-updated', null, originConnectionId)
+    // Coarse, because the children moved too: a `block-updated` signal carrying the container
+    // alone would let every other board re-render it at its new size with its contents still at
+    // the old offsets. Origin = the block's HOME, and the block is NAMED (payload withheld, not
+    // subject withheld) so a shared service still fans the refresh out to every mount. A coarse
+    // change that names nobody resolves no service and collapses to this one board, which is how
+    // a resized module reached its own board and no other.
+    await deps.emitBoardChanged(homeWorkspaceId, {
+      reason: 'block-updated',
+      blockId: id,
+      originConnectionId,
+    })
     return deps.projectForWorkspace(
       workspaceId,
       assertFound(await deps.blockRepository.get(homeWorkspaceId, id), 'Block', id),

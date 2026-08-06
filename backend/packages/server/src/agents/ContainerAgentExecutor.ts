@@ -56,6 +56,7 @@ import { resolveBinaryGeneratorSecrets } from './binaryGenerators.js'
 import { buildFailureMeta, buildRunningUpdate, toRunResult } from './containerAgentResult.js'
 import { buildKindBody } from './jobBody.js'
 import { containerJobLog } from './containerAgentLogging.js'
+import { acceptContainerJob } from './containerAgentDispatch.js'
 import { buildAgentContextRecord } from './agentContextRecord.js'
 import { type RecordToolCalls, drainToolCalls } from './toolTrajectory.js'
 import {
@@ -499,13 +500,11 @@ export class ContainerAgentExecutor implements AsyncAgentExecutor {
       { workspaceId, executionId, jobId, agentKind: context.agentKind },
       this.deps.operationalMetrics,
     )
-    try {
-      await this.jobs.dispatch(workspaceId, ref, body, kind, this.dispatchOptions(context))
-    } catch (error) {
-      jobLog.dispatchFailed(error, { model, provider, kind })
-      throw error
-    }
-    jobLog.dispatched({ model, provider, kind })
+    // Dispatch, log the transition, and refuse a run whose body carries a capability this runner
+    // image told us it cannot serve. See `containerAgentDispatch.ts`.
+    const options = this.dispatchOptions(context)
+    const fields = { model, provider, kind }
+    await acceptContainerJob(this.jobs, { workspaceId, ref, body, kind, options, jobLog, fields })
     // Capture the complete provided context for observability (best-effort, gated inside
     // the recorder). This is the only place the fully composed prompts + the injected
     // file bodies exist as one unit; proxy telemetry never sees the `.cat-context` files.

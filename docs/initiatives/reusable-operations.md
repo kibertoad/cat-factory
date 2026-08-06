@@ -1,8 +1,10 @@
 # Initiative: Reusable operations; org-registered, parameterized canned units of work
 
-**Status:** slices 1-5 landed (the fold + the bundle; the shared field vocabulary; the grouped
-picker; the canned-pipeline lifecycle + adoption on start; the developer doc); slices 6-8
-pending · **Owner:** orchestration · **Started:** 2026-08-04
+**Status:** slices 1-8 landed (the fold + the bundle; the shared field vocabulary; the grouped
+picker; the canned-pipeline lifecycle + adoption on start; the developer doc; the mothership
+position; per-workspace suppression; the public API), plus the two carried nits. Only the DEFERRED
+probe (slice 9) is open, so the committed scope is complete: this tracker is ready to convert to an
+ADR. · **Owner:** orchestration · **Started:** 2026-08-04
 
 > **The reference doc is now [`backend/docs/reusable-operations.md`](../../backend/docs/reusable-operations.md).**
 > It is the authority for how the shipped mechanism behaves; this tracker stays the design
@@ -162,6 +164,14 @@ Two additions, both optional so every existing registration is untouched:
 The module-global `registerTaskTypeDefaultFragments` stays, scoped to its remaining
 legitimate use (attaching defaults to BUILT-IN types, which have no descriptor); the
 developer doc stops recommending it for custom types.
+
+> **Superseded (#1755).** Both module globals are gone. The built-in-type default set is now
+> `PromptFragmentRegistry.registerTaskTypeDefaults()` on the app-owned registry, injected by
+> reference like every other seam, because a module global is correct only while every reader
+> resolves the same physical copy of the package and a consumer floating a `workspace:*` range
+> gets two. Wherever this tracker says `registerPromptFragments` / `registerTaskTypeDefaultFragments`,
+> read `promptFragmentRegistry.registerAll()` / `.registerTaskTypeDefaults()`. Authority:
+> [`prompt-fragments/README.md`](../../backend/packages/prompt-fragments/README.md).
 
 Deliberately NOT added: `promptAdditions` (D5), `detect` (D6), human-review knobs (an
 operation OWNS its registered pipeline, so approval pauses are that pipeline's own `gates`
@@ -474,9 +484,9 @@ else could offer the way back). Mechanics:
 | 4   | **Canned-pipeline lifecycle (D10)**: example pipeline registered `builtin: true, version`; conformance lifecycle assertion (advisory → reseed insert → version bump → retire)                                                                                                                                                                                                                                                                                                                                  | SYSTEM | 1          | ✅ done | [#1691](https://github.com/kibertoad/cat-factory/pull/1691) |
 | 4b  | **Adoption on start (D10b)**: `PipelineRepository.insertIfAbsent` (both runtimes); `pipelineAdoption` collaborator (`adoptForRun` / `resolveDefinition` / `adoptableCatalog`); run resolution, the personal-credential gate, both public-API start admissions and the post-merge auto-start read through it; `reseed`'s absent branch shares the row builder + the idempotent insert; the `pipeline.adopted` counter; conformance (adopt once under concurrent starts; decide-scope on an un-adopted pipeline) | SYSTEM | 4          | ✅ done | [#1691](https://github.com/kibertoad/cat-factory/pull/1691) |
 | 5   | **Developer doc (D14)**: `backend/docs/reusable-operations.md`; cross-links; CLAUDE.md one-liner; README row; AGENTS.md sweeps                                                                                                                                                                                                                                                                                                                                                                                 | DOCS   | 2          | ✅ done |                                                             |
-| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                                                                                                                                                                         | DOCS   | 1          | ⬜ todo |                                                             |
-| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ⬜ todo |                                                             |
-| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ⬜ todo |                                                             |
+| 6   | **Mothership position (D11)**: classification/tracker entry, docs only                                                                                                                                                                                                                                                                                                                                                                                                                                         | DOCS   | 1          | ✅ done |                                                             |
+| 7   | **Workspace suppression (D12)**: table (both runtimes) + conformance; snapshot filtering; addTask refusal; RBAC + settings UI; `remote` allow-list entry + RPC tests                                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ✅ done |                                                             |
+| 8   | **Public API (D9)**: `GET /api/v1/task-types`; `createPublicTaskSchema.fields` (custom + built-in); `task_type_fields_invalid`; surface.mjs; OpenAPI minor; SDK regen; public-api.md                                                                                                                                                                                                                                                                                                                           | SYSTEM | 2          | ✅ done |                                                             |
 | 9   | (deferred) **Prefill probe (D6)**: the preset `detect` mirror                                                                                                                                                                                                                                                                                                                                                                                                                                                  | SYSTEM | warrant    | ⬜ todo |                                                             |
 
 Pilot ordering: slice 1 establishes the fold and the bundle with the smallest blast radius
@@ -794,6 +804,85 @@ final so neither ships a shape that changes a slice later.
   by the `board/` catch-all since slice 1. It is where three registry reads land, and the three
   deliberate validation pass-throughs are exactly the kind of thing that reads as a bug when found
   without the note.
+
+### What slices 6-8 surfaced (the last committed slice)
+
+Landed together because they turned out to depend on each other in a way the plan did not show: the
+public catalog has to honour suppression (a type it lists and creation refuses is worse than one it
+omits), and both of them read the registry through the same projection the snapshot does.
+
+- **Slice 6 needed no code, and writing it down changed slice 7's design.** Stating "the descriptor
+  is inseparable from the code registered beside it" makes the complement obvious: the per-workspace
+  CHOICE about a descriptor is pure data with no co-registered code, so the suppression rows are
+  `remote` while the catalog stays node-local. The two halves of one feature sit in different
+  mothership buckets, and that is the correct answer rather than an inconsistency.
+- **The three readers of the suppression set disagree about failure ON PURPOSE, and the asymmetry is
+  the interesting part.** The snapshot projection and the public catalog are BEST-EFFORT (a picker
+  must never take a board load or a startup discovery down over a cosmetic preference); the creation
+  check PROPAGATES, because it decides whether a row is written and it hits the same database the
+  insert on the next line goes to, so there is no outage for it to ride out. A single posture would
+  have been wrong in one direction or the other.
+- **Absence had to be the default, and the opposite shape is the tempting one.** A stored
+  `visible` row per workspace per type reads as more explicit and would withhold every newly
+  registered operation from every existing board until somebody noticed. Tombstones make "nobody has
+  said anything" mean "offered", which is the only direction whose silent failure is a surplus.
+- **`GET /api/v1/task-types` gave the BUILT-IN types real descriptors, which D9 did not plan.** The
+  sketch was descriptors for custom types and a hand-written OpenAPI shape for the built-ins, i.e.
+  two statements of one fact with only one of them checked. `BUILTIN_PUBLIC_TASK_FIELDS` states them
+  once, so discovery and validation are the same table and the built-in half runs through the same
+  `validateDescriptorFields` everything else does. It is a deliberate SUBSET of
+  `taskTypeFieldsSchema` (the per-`DocKind` prose sections stay internal); widening it later is
+  additive, which is what makes the subset safe.
+- **Slice 2's flagged fork resolved toward "defaults at the door".** `withDescriptorFieldDefaults`
+  now runs server-side at BOTH descriptor doors before validate + sanitize, so a `required` field
+  carrying a `default` is no longer accepted from the SPA and refused from a script. That promoted a
+  latent authoring bug to a boot ERROR: a default outside a `select`'s options used to be a form
+  that opened oddly, and is now a type whose every creation is refused for a value the caller never
+  sent, so `descriptorFormProblems` names it.
+- **The `builtinPipelineName` nit is fixed, and the fix was a snapshot field, not a better
+  humaniser** (slice 4's note predicted exactly this). `pipelineCatalogNames` rides beside
+  `pipelineCatalogVersions`, built from the same `seedPipelines()` read so the two cannot list
+  different ids; the humanised id survives only as the fallback for a facade that ships no map.
+- **The Go SDK client's accessor list is HAND-written, and it was three groups stale.** `me`,
+  `evidence` and `keys` generated services that nothing constructed, so those endpoints were
+  uncallable from Go while every drift check passed: the exact hole `surface.mjs` exists to prevent,
+  moved one file along. `check-sdks.mjs` now fails on a group Go never constructs. The Python
+  emitter had the sibling latent bug: group names are camelCase in the surface table and every group
+  was a single word until `taskTypes`, so it would have shipped `client.taskTypes` in Python. Both
+  are worth remembering as a rule: a NEW resource GROUP (not merely a new operation) touches
+  hand-written code in one SDK and exercises spelling paths in another. The MCP facade had the
+  same latent bug in a third place, and there it is not cosmetic: the group is half the TOOL NAME
+  a host allow-lists and a model calls, so `taskTypes_list` failed the host-safe naming rule
+  outright. The Python SDK's keyword suffixing was the fourth: `type` on a descriptor field
+  becomes `type_`, which only the first multi-word/reserved-name member ever exercises.
+- **The OpenAPI version moved twice, and the second time BOTH sides wrote the same number.** This
+  branch reserved 1.17.0 after the multi-repo report took 1.16.0; the tool-call `?outcome=` change
+  then reserved 1.17.0 too, on the same reasoning, and landed first. The VERSION line auto-merged
+  byte-identically and only the comment beside it conflicted, which is precisely the failure the
+  note at the top of that block describes and the only reason it surfaced. 1.18.0 now. The rule
+  the block states is the whole defence: re-read the line against `origin/main` after every merge
+  rather than trusting that it merged clean.
+- **A `pathResolver` serves TWO callers, and only one of them passes real values.** The suppression
+  pair resolved its path param through `encodeURIComponent`, which is right for the client building
+  a URL and wrong for route REGISTRATION, which calls the same resolver with the literal
+  placeholder `:taskType`. The routes registered as `%3AtaskType`, so every hide and every restore
+  404'd while the paramless list beside them answered normally. Nothing failed to compile, and the
+  RBAC suite's own case for those routes read the 404 as the refusal it was checking for, so three
+  conformance tests and one RBAC test agreed the feature worked. Every other contract in the
+  directory interpolates raw; these two were the only `encodeURIComponent` in it, which is the
+  shape of the tell. `routes/path-resolvers.test.ts` now asserts the registered PATTERN of every
+  contract (no percent-encoding, every declared param placed), so the class is covered by existing
+  rather than by remembering.
+- **A conformance test can address a route that does not exist and read the 404 as data.** The
+  public-API test verified its created task through `GET /workspaces/:ws/blocks/:id`, which this
+  API has never had; Hono's plain-text `404 Not Found` then failed the JSON parse rather than any
+  assertion, so the step that proves values LAND on the task was dead from the day it was written.
+  Reading a block back through the workspace snapshot is what the rest of that file already does.
+- **`WorkspaceController.snapshotRegistryProjections` is no longer workspace-independent**, and its
+  own doc comment said five times that it was. It now takes an optional workspace id, absent at
+  CREATE (a board that does not exist cannot have hidden anything, so the read could only answer
+  empty). A later projection that needs board state should join it there rather than growing a
+  second per-workspace read beside it.
 
 ## Consumer walkthrough: assembling "Introduce API" org-side
 

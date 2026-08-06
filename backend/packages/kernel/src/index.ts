@@ -295,6 +295,23 @@ export {
   registryBuiltinSource,
 } from './ports/foundational-builtins.js'
 
+// The app-owned registry a DEPLOYMENT registers its best-practice PROMPT FRAGMENTS (and the
+// per-task-type default sets that select them) on. Replaces the two module globals in
+// `@cat-factory/prompt-fragments`, which were correct only while every reader resolved the same
+// physical copy of that package. The shipped catalog installs onto one through the same public
+// seam (`promptFragmentRegistryWithBuiltins()`).
+export {
+  PromptFragmentRegistry,
+  defaultPromptFragmentRegistry,
+} from './domain/prompt-fragment-registry.js'
+
+// Where that pool is READ from: the in-process registry by default, the MOTHERSHIP's over
+// `/internal/prompt-fragments` on a mothership-mode node. See `ports/prompt-fragments.ts`.
+export {
+  type PromptFragmentSource,
+  registryPromptFragmentSource,
+} from './ports/prompt-fragments.js'
+
 // Binary-output steps: pure validation/parsing/rendering for a kind that generates binary
 // artifacts and stores them through a selected foundational service, scoped by further
 // selected context services. See `domain/binary-outputs.ts` and
@@ -467,6 +484,22 @@ export {
   failureKindFromHarnessCause,
 } from './domain/harness-failure.js'
 
+// The job-body capability handshake: which optional body fields the running image parses, and
+// the three-state answer a dispatch draws from that. See `domain/harness-capabilities.ts`.
+export {
+  HARNESS_BODY_CAPABILITIES,
+  type BlindJobStopOutcome,
+  type HarnessBodyCapability,
+  type HarnessCapabilitySupport,
+  describeHarnessBodyCapability,
+  harnessCapabilityUnsupportedMessage,
+  isHarnessBodyCapability,
+  parseHarnessBodyCapabilities,
+  readRunnerDispatchAck,
+  requiredHarnessCapabilities,
+  resolveHarnessCapabilitySupport,
+} from './domain/harness-capabilities.js'
+
 // Pure gate logic + gate/helper agent-kind constants, shared by the built-in gate suite
 // (`@cat-factory/gates`) and the engine. See `domain/gate-logic.ts`.
 export {
@@ -565,6 +598,14 @@ export {
   assertContextReferencesFit,
 } from './domain/context-references.js'
 
+// What the dispatch-time refresh concluded about a linked document's currency, plus the one renderer
+// that states it in the materialised context file. See `domain/document-freshness.ts`.
+export {
+  type DocumentFreshness,
+  type DocumentFreshnessGap,
+  freshnessHeaderLines,
+} from './domain/document-freshness.js'
+
 // Tiered consensus selection: which of a step's candidate model groups a task's estimate earns.
 export {
   clearsConsensusBar,
@@ -644,6 +685,13 @@ export {
 } from './domain/service-registration.js'
 
 export { applyMountLayout } from './domain/mount-layout.js'
+export {
+  type BoardChange,
+  boardChangeSubject,
+  boardWireEvent,
+  bootstrapWireEvent,
+  deliverableBoardBlock,
+} from './domain/board-events.js'
 export { normalizeWorkspaceMetadata } from './domain/workspace-metadata.js'
 
 export { MapSourceRegistry } from './shared/source-registry.logic.js'

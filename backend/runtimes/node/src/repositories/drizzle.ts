@@ -59,6 +59,7 @@ import type {
   TutorialProgressRepository,
   UserSettingsRepository,
   ValidationConfigRepository,
+  TaskTypeSuppressionRepository,
   WorkspaceAgentSettingsRepository,
   WorkspaceMemberRepository,
   WorkspaceMountRepository,
@@ -113,6 +114,7 @@ import { DrizzleTokenUsageRepository } from './drizzle/tokenUsage.js'
 import {
   DrizzleAccountSettingsRepository,
   DrizzleAgentPromptRepository,
+  DrizzleTaskTypeSuppressionRepository,
   DrizzleWorkspaceAgentSettingsRepository,
   DrizzleModelPresetRepository,
   DrizzleTrackerSettingsRepository,
@@ -183,6 +185,7 @@ export interface CoreRepositories {
   modelPresetRepository: ModelPresetRepository
   agentPromptRepository: AgentPromptRepository
   workspaceAgentSettingsRepository: WorkspaceAgentSettingsRepository
+  taskTypeSuppressionRepository: TaskTypeSuppressionRepository
   serviceFragmentDefaultsRepository: ServiceFragmentDefaultsRepository
   pipelineScheduleRepository: PipelineScheduleRepository
   trackerSettingsRepository: TrackerSettingsRepository
@@ -246,6 +249,7 @@ export function createDrizzleRepositories(db: DrizzleDb, clock: Clock): CoreRepo
     modelPresetRepository: new DrizzleModelPresetRepository(db),
     agentPromptRepository: new DrizzleAgentPromptRepository(db),
     workspaceAgentSettingsRepository: new DrizzleWorkspaceAgentSettingsRepository(db),
+    taskTypeSuppressionRepository: new DrizzleTaskTypeSuppressionRepository(db),
     serviceFragmentDefaultsRepository: new DrizzleServiceFragmentDefaultsRepository(db),
     pipelineScheduleRepository: new DrizzlePipelineScheduleRepository(db),
     trackerSettingsRepository: new DrizzleTrackerSettingsRepository(db),

@@ -14,6 +14,24 @@ export type LogFields = Record<string, unknown>
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 /**
+ * What a level GATE may be set to: any emit level, or `silent` to drop everything.
+ *
+ * Deliberately a separate type from `LogLevel` rather than a fifth member of it. A gate and a
+ * line are different things: every emitted line carries one of the four `LogLevel`s, and
+ * `silent` is not a level a line can have, so widening `LogLevel` would make `emit('silent')`
+ * and a `Record<LogLevel, …>` row for a severity that never reaches a sink both typecheck.
+ * Keeping them apart is what lets the OTLP severity maps stay exhaustive over the four real
+ * levels while the threshold still has a way to say "nothing".
+ *
+ * `silent` is a HARNESS affordance, reachable through `setLogLevel` but NOT through the
+ * `LOG_LEVEL` env var, which still falls back to `info` for an unrecognised value. A
+ * deployment that emits no lines at all is indistinguishable from one that has stopped
+ * serving, so silence is something a test suite opts into in code, never something an
+ * operator can switch on by typo.
+ */
+export type LogThreshold = LogLevel | 'silent'
+
+/**
  * The logging surface: four levels plus `child` to bind correlation fields once.
  *
  * Every method is fire-and-forget and MUST NOT throw — a logger that can fail turns

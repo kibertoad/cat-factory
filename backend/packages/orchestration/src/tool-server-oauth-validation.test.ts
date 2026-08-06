@@ -25,7 +25,9 @@ describe('agent-capability validation: tool-server OAuth', () => {
       agent: { surface: 'container-explore' },
       toolServers: [server],
     })
-    return collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates })
+    return collectRegistrationProblems({
+      registries: { agentKindRegistry: registry, gateRegistry: gates },
+    })
   }
 
   it('rejects oauth on a stdio server, which has no request to authorise', () => {

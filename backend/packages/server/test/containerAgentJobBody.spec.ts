@@ -328,6 +328,7 @@ describe('ContainerAgentExecutor.buildJobBody (per-kind body shapes)', () => {
             {
               title: 'Platform PRD',
               url: 'https://wiki.test/prd',
+              origin: 'confluence' as const,
               excerpt: 'x',
               summary: 'x',
               body: 'x'.repeat(300_000),

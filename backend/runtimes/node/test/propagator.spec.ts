@@ -105,7 +105,11 @@ describe('LayeredEventPropagator', () => {
     const adapter = new RecordingPropagator()
     const publisher = new NodeEventPublisher(new LayeredEventPropagator(hub, [adapter]))
 
-    void publisher.boardChanged('ws_a', 'block-moved', 'blk_1', 'cid-1')
+    void publisher.boardChanged('ws_a', {
+      reason: 'block-moved',
+      blockId: 'blk_1',
+      originConnectionId: 'cid-1',
+    })
 
     expect(adapter.published).toHaveLength(1)
     const event = JSON.parse(adapter.published[0]!.payload)

@@ -1,5 +1,90 @@
 # @cat-factory/conformance
 
+## 0.31.12
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/prompt-fragments@1.0.0
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+  - @cat-factory/orchestration@0.221.0
+  - @cat-factory/agents@0.115.0
+  - @cat-factory/server@0.233.0
+  - @cat-factory/gates@0.9.16
+  - @cat-factory/integrations@0.137.1
+
+## 0.31.11
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/integrations@0.137.0
+  - @cat-factory/orchestration@0.220.0
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+  - @cat-factory/prompt-fragments@0.16.0
+  - @cat-factory/server@0.232.0
+  - @cat-factory/agents@0.114.7
+  - @cat-factory/gates@0.9.15
+
+## 0.31.10
+
+### Patch Changes
+
+- Updated dependencies [b8b6888]
+  - @cat-factory/gates@0.9.14
+
+## 0.31.9
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/server@0.231.0
+  - @cat-factory/agents@0.114.6
+  - @cat-factory/gates@0.9.13
+  - @cat-factory/integrations@0.136.2
+  - @cat-factory/orchestration@0.219.1
+
+## 0.31.8
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/orchestration@0.219.0
+  - @cat-factory/server@0.230.0
+  - @cat-factory/agents@0.114.5
+  - @cat-factory/gates@0.9.12
+  - @cat-factory/integrations@0.136.1
+  - @cat-factory/prompt-fragments@0.15.78
+
+## 0.31.7
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/orchestration@0.218.0
+  - @cat-factory/server@0.229.0
+  - @cat-factory/integrations@0.136.0
+  - @cat-factory/agents@0.114.4
+  - @cat-factory/gates@0.9.11
+  - @cat-factory/prompt-fragments@0.15.77
+
+## 0.31.6
+
+### Patch Changes
+
+- Updated dependencies [6ccc104]
+  - @cat-factory/integrations@0.135.0
+  - @cat-factory/orchestration@0.217.1
+  - @cat-factory/server@0.228.1
+
 ## 0.31.5
 
 ### Patch Changes

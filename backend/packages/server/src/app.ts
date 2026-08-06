@@ -45,6 +45,7 @@ import { previewController } from './modules/preview/PreviewController.js'
 import { incidentEnrichmentController } from './modules/incidentEnrichment/IncidentEnrichmentController.js'
 import { agentPromptController } from './modules/agentPrompts/AgentPromptController.js'
 import { workspaceAgentSettingsController } from './modules/agentSettings/WorkspaceAgentSettingsController.js'
+import { taskTypeSuppressionController } from './modules/taskTypes/TaskTypeSuppressionController.js'
 import { modelPresetController } from './modules/modelPresets/ModelPresetController.js'
 import { serviceFragmentDefaultsController } from './modules/serviceFragmentDefaults/ServiceFragmentDefaultsController.js'
 import { modelController } from './modules/models/ModelController.js'
@@ -100,6 +101,7 @@ import { persistenceController } from './modules/persistence/PersistenceControll
 import { githubDelegationController } from './modules/persistence/GitHubDelegationController.js'
 import { foundationalBuiltinsController } from './modules/foundationalServices/FoundationalBuiltinsController.js'
 import { binaryGeneratorsController } from './modules/binaryGenerators/BinaryGeneratorsController.js'
+import { promptFragmentsInternalController } from './modules/promptFragments/PromptFragmentsInternalController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
 import { publicApiKeyController } from './modules/publicApi/PublicApiKeyController.js'
 import { publicDecisionController } from './modules/publicApi/PublicDecisionController.js'
@@ -171,6 +173,13 @@ function registerRootControllers<E extends AppEnv>(app: Hono<E>): void {
   // never 503s (a deployment registering none is legitimately empty). Mounted on both facades so
   // either can be a mothership. See docs/initiatives/binary-output-foundational-storage.md.
   app.route('/', binaryGeneratorsController())
+  // Mothership-mode PROMPT-FRAGMENT pool (`GET /internal/prompt-fragments`): the third registry of
+  // the same family. The deployment's best-practice standards, and the per-task-type default sets
+  // that select them, are CODE a RUN resolves, so a node reading its own copy folds different
+  // guidance than the mothership's build has. Both projections ride one response. Machine-token
+  // gated; never 503s (a deployment registering none is legitimately empty). Mounted on both
+  // facades so either can be a mothership.
+  app.route('/', promptFragmentsInternalController())
   // Mothership-mode real-time upstream (`/internal/events/publish`): a mothership-mode local node
   // POSTs its engine events here so the mothership's own realtime fan-out (hosted teammates on the
   // shared board) sees the local node's activity live. Machine-token gated like the persistence
@@ -380,6 +389,11 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
     name: 'workspaceAgentSettings',
     mount: WORKSPACE_MOUNT,
     build: () => workspaceAgentSettingsController(),
+  },
+  {
+    name: 'taskTypeSuppression',
+    mount: WORKSPACE_MOUNT,
+    build: () => taskTypeSuppressionController(),
   },
   {
     name: 'serviceFragmentDefaults',

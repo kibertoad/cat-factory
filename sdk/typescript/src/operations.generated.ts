@@ -24,10 +24,11 @@ import type {
   ListDebugLogsResponse,
   ListDebugRunsResponse,
   ListDebugSearchQueriesResponse,
-  ListDebugToolCallsOk,
   ListDebugToolCallsOrder,
+  ListDebugToolCallsOutcome,
   ListDebugToolCallsResponse,
   ListPublicJobsResponse,
+  ListPublicTaskTypesResponse,
   LlmCallOutcome,
   Notification,
   NotificationWebhook,
@@ -128,7 +129,7 @@ export type DebugListToolCallsQuery = {
   cursor?: string
   jobId?: string
   order?: ListDebugToolCallsOrder
-  ok?: ListDebugToolCallsOk
+  outcome?: ListDebugToolCallsOutcome
 }
 
 /** Query parameters for `client.jobs.list()`. */
@@ -436,6 +437,28 @@ export class PipelinesResource {
     return this.#transport.request<PublicPipelineList>({
       method: 'GET',
       path: `/api/v1/pipelines`,
+      options,
+    })
+  }
+}
+
+/** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
+export class TaskTypesResource {
+  readonly #transport: Transport
+
+  constructor(transport: Transport) {
+    this.#transport = transport
+  }
+
+  /**
+   * List the task types this workspace may create
+   * List the task types a task can be created as in the key’s workspace (the built-in ones plus any the deployment registered), each with the fields it accepts. Fill those fields through `fields` on task creation; the descriptors here are what that call validates against, so a caller reads the form rather than guessing it. A type a workspace admin has hidden is absent.
+   * `GET /api/v1/task-types` — operation `listPublicTaskTypes`.
+   */
+  list(options: RequestOptions = {}): Promise<ListPublicTaskTypesResponse> {
+    return this.#transport.request<ListPublicTaskTypesResponse>({
+      method: 'GET',
+      path: `/api/v1/task-types`,
       options,
     })
   }
@@ -1494,6 +1517,8 @@ export abstract class CatFactoryResources {
   readonly tasks: TasksResource
   /** The pipelines a task can be started with, and whether each is headless-startable. */
   readonly pipelines: PipelinesResource
+  /** What a task can be created AS in this workspace (the built-in kinds plus the operations the deployment registered), and the fields each one accepts. */
+  readonly taskTypes: TaskTypesResource
   /** The workspace's human-actionable inbox: list, act on, or dismiss a run tail. */
   readonly notifications: NotificationsResource
   /** The workspace's one outbound endpoint: register, inspect or remove the receiver that notifications, run-lifecycle events and health alerts are pushed to. */
@@ -1516,6 +1541,7 @@ export abstract class CatFactoryResources {
     this.services = new ServicesResource(transport)
     this.tasks = new TasksResource(transport)
     this.pipelines = new PipelinesResource(transport)
+    this.taskTypes = new TaskTypesResource(transport)
     this.notifications = new NotificationsResource(transport)
     this.webhook = new WebhookResource(transport)
     this.usage = new UsageResource(transport)

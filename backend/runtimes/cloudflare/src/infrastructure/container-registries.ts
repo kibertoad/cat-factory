@@ -7,6 +7,7 @@ import {
 import { defaultAgentKindRegistry, defaultInitiativePresetRegistry } from '@cat-factory/agents'
 import { createBackendRegistries } from '@cat-factory/integrations'
 import { gateRegistryWithBuiltins } from '@cat-factory/gates'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import { eksEnvironmentBackend, eksRunnerBackend } from '@cat-factory/eks'
 import type { CoreDependencies } from '@cat-factory/orchestration'
 
@@ -25,6 +26,7 @@ export type WorkerRegistries = Required<
     | 'initiativePresetRegistry'
     | 'vcsRegistry'
     | 'providerRegistry'
+    | 'promptFragmentRegistry'
   >
 >
 
@@ -68,6 +70,14 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
   // The app-owned provider registry the built-in gates probe through: a fresh instance per build
   // (the injected one via `overrides`, else empty), wired by the caller when a gate is configured.
   const providerRegistry = overrides.providerRegistry ?? defaultProviderRegistry()
+  // The app-owned best-practice standards pool: the injected instance, else a fresh one carrying
+  // the shipped `@cat-factory/prompt-fragments` catalog and its per-task-type default sets. The
+  // default belongs HERE for the same reason the gate registry's does: the engine's own default is
+  // deliberately empty, and a container built directly (a cron sweep, a Workflow step, a Durable
+  // Object) takes no overrides, so defaulting only at the `createWorker` entry point would fold no
+  // standards into exactly the runs nobody is watching.
+  const promptFragmentRegistry =
+    overrides.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins()
 
   // Register the opt-in AWS EKS backends by reference (symmetric with the Node facade; a
   // pass-through until a workspace connects an `eks` backend). `register` is idempotent (keyed
@@ -87,5 +97,6 @@ export function resolveWorkerRegistries(overrides: Partial<CoreDependencies>): W
     initiativePresetRegistry,
     vcsRegistry,
     providerRegistry,
+    promptFragmentRegistry,
   }
 }

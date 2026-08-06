@@ -33,6 +33,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'consensusGroupRepository'
   | 'documentRepository'
   | 'documentUrlResolver'
+  | 'documentRefresher'
   | 'taskRepository'
   | 'requirementReviewRepository'
   | 'docInterviewRepository'
@@ -77,6 +78,7 @@ export function buildRunContextAndAdmission(deps: RunContextAdmissionDeps): {
     consensusGroups: deps.consensusGroupRepository,
     documents: deps.documentRepository,
     documentUrlResolver: deps.documentUrlResolver,
+    documentRefresher: deps.documentRefresher,
     tasks: deps.taskRepository,
     requirementReviews: deps.requirementReviewRepository,
     docInterviews: deps.docInterviewRepository,

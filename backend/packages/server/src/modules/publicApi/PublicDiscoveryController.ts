@@ -1,9 +1,11 @@
-import { getPublicIdentityContract } from '@cat-factory/contracts'
+import { getPublicIdentityContract, listPublicTaskTypesContract } from '@cat-factory/contracts'
+import { suppressedTaskTypeIds } from '@cat-factory/orchestration'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import type { AppEnv } from '../../http/env.js'
 import { OPENAPI_JSON } from './openapiDocument.generated.js'
 import { authorize, refuse } from './publicApiAuth.js'
+import { publicTaskTypeCatalog } from './taskTypeFields.js'
 
 // DISCOVERY: the two calls an integration makes before it does anything — what am I, and what is
 // this API? Both were holes a caller worked around by guessing:
@@ -31,6 +33,24 @@ export function publicDiscoveryController(): Hono<AppEnv> {
     // Straight off the auth result: `authenticate` already loaded the row, so self-description
     // costs no read of its own.
     return c.json({ keyId, accountId, workspaceId, scope, label, createdAt }, 200)
+  })
+
+  buildHonoRoute(app, listPublicTaskTypesContract, async (c) => {
+    // `read`, like every other discovery call: knowing what may be created is not creating it, and
+    // an integration's startup check must work on whatever rung it holds.
+    const gate = await authorize(c, 'read')
+    if ('fail' in gate) return refuse(c, gate.fail)
+    const container = c.get('container')
+    // The board's own hide-list applies, so this answers "what may I create HERE" rather than "what
+    // does this deployment register". Best-effort like the snapshot's projection of the same rows:
+    // an unreadable preference must not take a caller's startup discovery down, and the surplus it
+    // can produce (one hidden type listed) is answered by the creation refusal either way.
+    const suppressed = await suppressedTaskTypeIds(
+      container.taskTypeSuppressions?.service,
+      gate.auth.workspaceId,
+      container.logger,
+    )
+    return c.json({ taskTypes: publicTaskTypeCatalog(container.taskTypeRegistry, suppressed) }, 200)
   })
 
   // Hand-mounted rather than contract-driven, for the reason the hosted MCP endpoint is: it has no

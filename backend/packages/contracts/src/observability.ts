@@ -83,6 +83,61 @@ export const llmCallMetricSchema = v.object({
 export type LlmCallMetric = v.InferOutput<typeof llmCallMetricSchema>
 
 /**
+ * Upstream finish reasons that are not failures but warrant a warning: the model was cut short
+ * by the output limit, or filtered.
+ *
+ * Lives HERE rather than in kernel (which re-exports it, so its SQL aggregations and the debug
+ * surface's `?outcome=` predicate are unaffected) because the SPA has to make the same
+ * judgement: the observability panel badges a call's outcome AND now filters the list by it, and
+ * the SPA cannot see kernel. A hand-copied list on the frontend was already there, and the
+ * moment the copy decides which rows a filter HIDES, drift stops being a wrong badge colour and
+ * becomes calls the operator is told do not exist.
+ */
+export const LLM_WARNING_FINISH_REASONS = ['length', 'content_filter'] as const
+
+/**
+ * How one recorded model call turned out: THE outcome vocabulary, in the one place every layer
+ * can see it.
+ *
+ * Four copies of this picklist existed before it landed here: kernel's `LlmCallOutcomeFilter`
+ * (what a page may narrow to), the orchestration classifier's own union, `debugCallOutcomeSchema`
+ * on the wire, and a hand-written list in the SPA. All four now derive from this one, because
+ * the members are not merely a shared spelling: each store turns them into a SQL predicate and
+ * the panel turns them into a filter, so a member that exists in one copy and not another is
+ * rows an operator is told do not exist.
+ */
+export const llmCallOutcomeSchema = v.picklist(['ok', 'warning', 'error'])
+export type LlmCallOutcome = v.InferOutput<typeof llmCallOutcomeSchema>
+
+/**
+ * Classify one call: `error` is a call that failed outright, `warning` a call that SUCCEEDED but
+ * came back cut short or filtered, `ok` the rest.
+ *
+ * The two are kept apart because they need different fixes (a failed call is transport, proxy
+ * or spend-gate trouble, while a truncated one is an output-limit or task-size conversation),
+ * and collapsing them into one "not ok" bucket is what made the truncated calls invisible in the
+ * summary they were already counted in.
+ *
+ * This is the ONLY implementation of the rule. The backend classified through its own copy in
+ * `observability.logic.ts` and the SPA through a third, which is the arrangement that decides a
+ * badge colour harmlessly right up to the day it decides which rows a filter hides.
+ */
+export function classifyLlmCallOutcome(call: {
+  ok: boolean
+  finishReason: string | null
+}): LlmCallOutcome {
+  if (!call.ok) return 'error'
+  return isLlmWarningFinishReason(call.finishReason) ? 'warning' : 'ok'
+}
+
+/** Whether a finish reason is one of {@link LLM_WARNING_FINISH_REASONS}. */
+export function isLlmWarningFinishReason(finishReason: string | null | undefined): boolean {
+  return (
+    finishReason != null && (LLM_WARNING_FINISH_REASONS as readonly string[]).includes(finishReason)
+  )
+}
+
+/**
  * The compact per-call summary pushed live over the workspace event stream (the
  * `llmCall` {@link WorkspaceEvent}). It is {@link llmCallMetricSchema} WITHOUT the
  * heavy text bodies (`promptText`/`responseText`) and the delta bookkeeping
@@ -423,6 +478,23 @@ export type AgentSearchQuery = v.InferOutput<typeof agentSearchQuerySchema>
  */
 export const toolCallBodiesStateSchema = v.picklist(['stored', 'withheld'])
 export type ToolCallBodiesState = v.InferOutput<typeof toolCallBodiesStateSchema>
+
+/**
+ * Which tool calls a trajectory read is narrowed to.
+ *
+ * Two members rather than the model call's three ({@link debugCallOutcomeSchema} in
+ * `debug-api.ts` also has `warning`): a tool either reported success or it did not, and there
+ * is no finish reason in between. Kept a picklist rather than a boolean because it rides a
+ * QUERY STRING, where `ok=false` and `ok=` and an absent `ok` are three spellings a reader has
+ * to hold apart, and only the absent one means "no filter".
+ *
+ * A tool-EXECUTION error is the failure class no LLM rollup can see: the model call that asked
+ * for it still reports `ok` with a clean finish reason, so a run whose edit loop is stuck on a
+ * failing tool reads as perfectly healthy telemetry right up to the moment it dies. Narrowing
+ * to `error` is what turns that from a walk of the whole trajectory into one request.
+ */
+export const toolCallOutcomeSchema = v.picklist(['ok', 'error'])
+export type ToolCallOutcome = v.InferOutput<typeof toolCallOutcomeSchema>
 
 /** One tool invocation an agent made during a run, in trajectory order. */
 export const agentToolCallSchema = v.object({

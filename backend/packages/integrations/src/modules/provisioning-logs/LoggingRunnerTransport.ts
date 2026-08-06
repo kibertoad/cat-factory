@@ -1,8 +1,10 @@
 import type {
   ProvisioningSubsystem,
+  RunnerDispatchAck,
   RunnerDispatchKind,
   RunnerDispatchOptions,
   RunnerJobRef,
+  RunnerJobStopOutcome,
   RunnerJobView,
   RunnerTransport,
 } from '@cat-factory/kernel'
@@ -51,10 +53,11 @@ export class LoggingRunnerTransport implements RunnerTransport {
     spec: Record<string, unknown>,
     kind: RunnerDispatchKind = 'agent',
     options?: RunnerDispatchOptions,
-  ): Promise<void> {
+  ): Promise<RunnerDispatchAck | undefined> {
     try {
-      await this.opts.inner.dispatch(ref, spec, kind, options)
+      const ack = (await this.opts.inner.dispatch(ref, spec, kind, options)) ?? undefined
       await this.log('dispatch', ref, 'success', null, { kind, ...options })
+      return ack
     } catch (error) {
       // The verbatim transport error ("… dispatch failed (HTTP X): body") IS the
       // diagnostic the operator needs — log it, then rethrow so the engine still
@@ -86,6 +89,30 @@ export class LoggingRunnerTransport implements RunnerTransport {
     } catch (error) {
       await this.log('release', ref, 'failure', messageOf(error), null)
       throw error
+    }
+  }
+
+  /**
+   * Stopping one job is a spin-down of exactly the kind this log exists to record, and it is the
+   * one an operator is most likely to go looking for: it happens on a REFUSED run, where the
+   * question afterwards is whether an agent is still working against the repository. The outcome
+   * rides the detail, so a `requested`/`unsupported` row is distinguishable from a real stop.
+   *
+   * Absent on the wrapped transport ⇒ absent here, so the decorator cannot make a backend look
+   * capable of something it is not.
+   */
+  get stopJob(): RunnerTransport['stopJob'] {
+    const inner = this.opts.inner.stopJob
+    if (!inner) return undefined
+    return async (ref: RunnerJobRef): Promise<RunnerJobStopOutcome> => {
+      try {
+        const outcome = await inner.call(this.opts.inner, ref)
+        await this.log('release', ref, 'success', null, { stopJob: outcome })
+        return outcome
+      } catch (error) {
+        await this.log('release', ref, 'failure', messageOf(error), { stopJob: 'failed' })
+        throw error
+      }
     }
   }
 

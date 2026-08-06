@@ -50,9 +50,9 @@ saturate every core.
 
 | Package               | Mutated                          | Mutants | Score (total / covered) | Floor |
 | --------------------- | -------------------------------- | ------- | ----------------------- | ----- |
-| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 5,805   | 54.63% / 74.65%         | 52%   |
-| `@cat-factory/gates`  | all of `src/`                    | 654     | 38.84% / 57.34%         | 36%   |
-| `@cat-factory/spend`  | all of `src/`                    | 400     | 54.75% / 69.75%         | 52%   |
+| `@cat-factory/kernel` | `src/domain/**`, `src/shared/**` | 5,956   | 66.03% / 77.57%         | 66%   |
+| `@cat-factory/gates`  | all of `src/`                    | 654     | 76.91% / 84.68%         | 76%   |
+| `@cat-factory/spend`  | all of `src/`                    | 400     | 89.50% / 89.95%         | 89%   |
 
 These three are pure logic with fast, database-free unit suites, which is the only shape mutation
 testing can afford: the suite runs once per surviving mutant, so a package whose tests need
@@ -79,10 +79,13 @@ Two scores, both in the summary table and in Stryker's own output:
 - **covered-code score** = detected / (detected + survived), over the mutants a test actually ran.
 
 where detected = `Killed` + `Timeout` and undetected = `Survived` + `NoCoverage`. The gap between
-the two is untested code inside the scope, not weak assertions: kernel sits at ~55% total and ~75%
-covered because `domain/` holds modules with no tests at all beside modules tested thoroughly. The
-covered-code score is the fair read on the tests that exist; the total is the honest read on the
-scope.
+the two is untested code inside the scope, not weak assertions: kernel sits at ~66% total against
+~78% covered because `domain/` still holds modules with no tests at all beside modules tested
+thoroughly. The covered-code score is the fair read on the tests that exist; the total is the
+honest read on the scope. Closing the gap is therefore mostly a question of which module gets its
+first test, which is why the biggest single move so far was writing one for the untested ones
+(`ip-host.logic`, `llm-output`, `subtasks.logic`, `errors`) rather than sharpening assertions in
+the tested ones.
 
 `Ignored`, `CompileError` and `RuntimeError` are excluded from both denominators.
 
@@ -91,10 +94,12 @@ scope.
 `minimumScore` in each package's config becomes Stryker's `thresholds.break`: below it, `stryker
 run` exits non-zero and the nightly job goes red.
 
-The floors above are the measured scores (kernel 54.63, gates 38.84, spend 54.75) less a two-point
-margin, because those numbers were measured on a developer machine and the first nightly is the
-first Linux baseline. **Raise each floor to its measured value once that baseline exists**: the
-margin exists to keep day one from failing over a platform difference, not as permanent slack.
+The floors above ARE the measured scores, truncated to a whole percent (kernel 66.03 → 66, gates
+76.91 → 76, spend 89.50 → 89). The two-point margin the first floors carried is gone: it existed
+only because the opening numbers came off a developer machine before any Linux baseline existed,
+and these were measured on Linux, idle, one package at a time. Truncation is the whole remaining
+slack, and it is there because a `Timeout` counts as DETECTED: a slower runner can only score the
+same or higher, so the idle-machine number is the honest lower bound.
 
 **Measure on an idle machine, one package at a time.** A `Timeout` counts as DETECTED, and a test
 process starved of CPU trips the timeout exactly like a mutant that hangs, so a saturated machine

@@ -85,6 +85,17 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
       const frame = snap.body.blocks.find((b) => b.id === frameId)
       expect(frame?.level).toBe('frame')
       expect(frame?.status).not.toBe('blocked')
+
+      // The frame's own transitions (materialised, then ready) reach the board as coarse events
+      // NAMING it, never as a payload: a frame's position and size are a per-board mount override,
+      // so the one payload published for every board mounting the service would be wrong on all
+      // but one of them. Each board re-reads its own projection instead. The progress ticks in
+      // between ride the `bootstrap` event alone and cost no refresh at all, which is the whole
+      // reason the two are split.
+      const frameSignals = app.boardEmits(frameId)
+      expect(frameSignals.length).toBeGreaterThan(0)
+      expect(frameSignals.every((e) => !e.hasBlock)).toBe(true)
+      expect(frameSignals.some((e) => e.reason === 'bootstrap-succeeded')).toBe(true)
     })
 
     it('reads a stopped run’s structured failure back off the store', async () => {
@@ -128,6 +139,7 @@ export function defineSourcesConformance(harness: ConformanceHarness): void {
   registerTaskSourceTests(harness)
   registerDocumentSourceTests(harness)
   registerDocumentPersistenceTests(harness)
+  registerDocumentFreshnessTests(harness)
 }
 
 /**
@@ -650,6 +662,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: '',
         body,
         contentHash: '',
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -728,6 +741,8 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: 'Support split payments.',
         body: '# Checkout PRD\n\nSupport split payments.',
         contentHash: 'abc123',
+        // An upload has no source, hence no version: nothing can ever re-probe it.
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -766,6 +781,7 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
         excerpt: 'x',
         body: 'x',
         contentHash: 'h',
+        sourceVersion: null,
         linkedBlockId: null,
         role: null,
         docKind: null,
@@ -1014,6 +1030,61 @@ function registerDocumentPersistenceTests(harness: ConformanceHarness): void {
       expect((await repo.get(ws, 'jira', 'PROJ-11'))?.title).toBe('Issue PROJ-11')
       // Which is the whole point: a filing of it now succeeds instead of losing the claim.
       expect(await repo.claimBlockLink(ws, 'jira', 'PROJ-11', 'task_refiled')).toBe(true)
+    })
+  })
+}
+
+/**
+ * Dispatch-time document FRESHNESS, at the persistence layer: the `source_version` column the refresh
+ * compares a cheap `probeVersion` against.
+ *
+ * Its own function rather than another test inside `registerDocumentPersistenceTests`, which is at its
+ * per-function line budget. Its own `describe` for the same reason, and because what it covers is one
+ * cohesive column rather than the link/role surface the others drive.
+ */
+function registerDocumentFreshnessTests(harness: ConformanceHarness): void {
+  describe('document freshness persistence', () => {
+    it('round-trips the source version a document body was imported at, and its absence', async () => {
+      // The token the dispatch-time refresh COMPARES: a facade that dropped it on the upsert, or read
+      // an absent one back as `''`, would make every linked document look permanently unconfirmable
+      // and re-download the whole design on every step dispatch — a silent cost, not an error. The
+      // two cases have to stay distinguishable, which is why the column is nullable rather than
+      // defaulted: a recorded version means "this body is provably that revision", NULL means
+      // "cannot be proven, re-import once".
+      const app = harness.makeApp()
+      const { workspace } = await app.createWorkspace()
+      const ws = workspace.id
+      const repo = app.documentRepository()
+      const base = {
+        workspaceId: ws,
+        source: 'figma' as const,
+        title: 'Checkout flow',
+        url: 'https://figma.com/design/file1',
+        excerpt: 'Checkout',
+        body: '## Checkout',
+        contentHash: 'h',
+        linkedBlockId: null,
+        role: null,
+        docKind: null,
+        syncedAt: 4_000,
+        deletedAt: null,
+      }
+      await repo.upsert({ ...base, externalId: 'file1:1-2', sourceVersion: '2317456' })
+      await repo.upsert({ ...base, externalId: 'file2:3-4', sourceVersion: null })
+
+      expect((await repo.get(ws, 'figma', 'file1:1-2'))?.sourceVersion).toBe('2317456')
+      expect((await repo.get(ws, 'figma', 'file2:3-4'))?.sourceVersion).toBeNull()
+
+      // A re-import overwrites it — the write that makes an un-versioned row self-heal exactly once.
+      await repo.upsert({ ...base, externalId: 'file2:3-4', sourceVersion: '99' })
+      expect((await repo.get(ws, 'figma', 'file2:3-4'))?.sourceVersion).toBe('99')
+
+      // And it survives the batch + block-scoped reads the dispatch path actually uses, not just the
+      // point read: the refresher receives its records from `listByBlock`/`listByRefs`.
+      await repo.linkBlock(ws, 'figma', 'file1:1-2', 'task_fresh')
+      expect((await repo.listByBlock(ws, 'task_fresh'))[0]?.sourceVersion).toBe('2317456')
+      const batched = await repo.listByRefs(ws, [{ source: 'figma', externalId: 'file1:1-2' }])
+      expect(batched[0]?.sourceVersion).toBe('2317456')
     })
   })
 }

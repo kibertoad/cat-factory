@@ -27,6 +27,7 @@ import {
   DEFAULT_MODEL_PRESET_ID,
 } from '@cat-factory/kernel'
 import { type CoreDependencies } from '@cat-factory/orchestration'
+import { promptFragmentRegistryWithBuiltins } from '@cat-factory/prompt-fragments'
 import {
   type AppConfig,
   bedrockAllowListFromEnv,
@@ -314,6 +315,13 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // …and where those integrations are READ from when it is not the registry above (mothership
     // mode), for the same reason its foundational sibling exists.
     binaryGeneratorSource: options.binaryGeneratorSource,
+    // The app-owned prompt-fragment registry: the SHIPPED best-practice catalog plus whatever the
+    // deployment registered onto the same instance. Defaulted here rather than in `createCore`,
+    // because the engine's default is deliberately EMPTY: a facade must SAY it wants the platform's
+    // standards, through the same public seam a consumer registers on.
+    promptFragmentRegistry: options.promptFragmentRegistry ?? promptFragmentRegistryWithBuiltins(),
+    // …and where that pool is READ from when it is not the registry above (mothership mode).
+    promptFragmentSource: options.promptFragmentSource,
     // The app-owned initiative-preset registry; the initiative services read it and it is
     // re-exposed on Core for the snapshot descriptors + preset probe.
     initiativePresetRegistry,
@@ -372,6 +380,10 @@ function buildNodeStoreDeps(bundle: NodeCoreDepsBundle) {
     // Per-agent-kind generation settings (the output-token ceiling). Read by the settings
     // controller AND on the run path (per-dispatch ceiling resolution).
     workspaceAgentSettingsRepository: repos.workspaceAgentSettingsRepository,
+    // Which registered reusable operations this board HIDES. Read by the settings controller, by
+    // the board snapshot's catalog projection, and on the CREATION path (the refusal that keeps
+    // every non-picker door in step with the picker).
+    taskTypeSuppressionRepository: repos.taskTypeSuppressionRepository,
     // A fresh workspace's model-preset library is seeded with this built-in as the default
     // (Node deploy → Kimi K2.7, the Cloudflare-runnable baseline; the local facade injects
     // Claude). Applied only at first seed, so a user's later manual default choice wins.

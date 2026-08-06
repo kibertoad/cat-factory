@@ -1,5 +1,437 @@
 # @cat-factory/node-server
 
+## 0.182.0
+
+### Minor Changes
+
+- 16576d6: Close the deployment extension-seam gaps a consumer build hit: every app-owned registry is now
+  reachable from the documented boot entry point, and the prompt-fragment pool is injected rather than
+  a module global.
+
+  An org package outside this repo built a proprietary reusable operation against the PUBLISHED
+  `@cat-factory/*` packages and reported nine gaps. Each seam it hit typechecks, boots, passes CI, and
+  is either unreachable from the supported entry point or silently inert once reached. None showed up
+  in our own tests because the worked example lives INSIDE this repo, where the composition root calls
+  `buildNodeContainer` directly and every package resolves to one copy on disk.
+
+  **Breaking, `@cat-factory/prompt-fragments`.** `registerPromptFragment(s)`,
+  `clearRegisteredPromptFragments`, `universalFragments`, `registerTaskTypeDefaultFragments`,
+  `clearRegisteredTaskTypeDefaultFragments` and `defaultFragmentIdsForTaskType` are REMOVED. They were
+  two module globals, correct only while every reader resolved the same physical copy of the package;
+  a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+  newer patch got two copies, the registration landed in one, the server read the other, and every
+  task of the operation was seeded with fragment ids that folded nothing. Replaced by the app-owned
+  `PromptFragmentRegistry` (kernel), injected by reference:
+  `promptFragmentRegistryWithBuiltins()` news one carrying the shipped catalog, and it is an option on
+  `start()` / `startLocal()` / the Worker overrides. `getFragment` remains, narrowed to the shipped
+  catalog. One behaviour change rides along: `registerTaskTypeDefaults` REPLACES a built-in per-type
+  set instead of silently unioning with it, so a deployment can now remove a shipped default; spread
+  `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` to keep both.
+
+  **Also breaking (internal surfaces, pre-1.0, no shims).** `validateRegistrations` /
+  `collectRegistrationProblems` take their registries as ONE `registries` object (a facade passes its
+  container) instead of seven hand-listed optional fields; that hand-list is why the local mothership
+  boot validated five registries while its own comment claimed parity with `start()`, so a custom task
+  type naming an unregistered pipeline booted clean on a laptop and failed on the Postgres path.
+  `FragmentLibraryService` takes a `promptFragmentSource` and no longer falls back to the module pool.
+  `TaskTypeCreationDefaults.fragmentIdsFor` is async. `PromptFragmentSource` gains a required
+  `inProcess` flag, read by boot validation to tell "this deployment registered nothing" from "the
+  pool lives on the mothership", which are the same empty list and opposite facts.
+
+  **What is new rather than moved.** `start()` and `startLocal()` gain `pipelineRegistry`,
+  `gateRegistry`, `judgeRegistry`, `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry`;
+  the seam drift guard now asserts against those ENTRY POINTS rather than only the container builder
+  behind them, which is how `pipelineRegistry` sat on `NodeContainerOptions` (documented, guarded,
+  green) while no boot path forwarded it and local deployments had no escape hatch at all. A registered
+  task type may declare `conditionalFragmentIds`, standing context selected by a `showWhen` condition
+  over the answers a case supplied, evaluated once at creation by the same evaluator the form's own
+  field visibility uses. A code-registered fragment carrying a `documentRef` now FAILS boot rather than
+  being carried through the catalog, rendered as a live source in the library UI, and ignored at run
+  time. An unresolvable standing-context id is reported on the run that dropped it instead of only as
+  one boot warning that cannot be told apart from a typo, and is COUNTED on the new
+  `fragments.dropped_from_run` operational counter, because a run going without its standards still
+  succeeds and only a rate says a deployment is doing it every time. And a mothership-mode node reads
+  the pool from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering
+  with an empty pool.
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/prompt-fragments@1.0.0
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+  - @cat-factory/orchestration@0.221.0
+  - @cat-factory/agents@0.115.0
+  - @cat-factory/server@0.233.0
+  - @cat-factory/observability-otel@0.16.0
+  - @cat-factory/caching@0.16.1
+  - @cat-factory/consensus@0.14.36
+  - @cat-factory/eks@0.1.248
+  - @cat-factory/gates@0.9.16
+  - @cat-factory/gitlab@0.16.7
+  - @cat-factory/integrations@0.137.1
+  - @cat-factory/observability-langfuse@0.10.20
+  - @cat-factory/provider-bedrock@0.7.397
+  - @cat-factory/provider-cloudflare@0.7.398
+  - @cat-factory/provider-s3@0.2.317
+  - @cat-factory/spend@0.15.18
+
+## 0.181.0
+
+### Minor Changes
+
+- 5202fb9: An agent now builds against the current design, and is told how to read it
+
+  A linked document was frozen at import time. `probeVersion` existed on every provider and had exactly
+  one caller (the fragment-library body cache); nothing on the run path ever looked at the source again.
+  So a Figma frame edited after import fed every later run the old markdown, with the run reading as
+  perfectly healthy. For a requirements page that is an annoyance; for a design under active iteration
+  it means the agent routinely builds the previous revision.
+
+  The linked-context resolution path now re-confirms each document at dispatch, through the kernel
+  `LinkedDocumentRefresher` port. The cost model is the design, because that path runs per STEP: probe
+  the source's version, compare it against the token the stored body came from, and re-import only what
+  actually moved. That comparison needed something to compare to, which the row did not have, so
+  `documents.source_version` is new. It is part of the idempotent-reimport comparison even though no
+  agent reads it: a Figma file version bumps on any edit anywhere in the file, so leaving a stale token
+  on an unchanged body would re-download the whole design on every dispatch, forever. NULL covers three
+  cases that all mean "cannot be proven current" and all self-heal on one re-import: an upload, a
+  source exposing no version, a row predating the column.
+
+  Three things bound the cost, each a different half of it. The new short-TTL `linkedDocumentVersion`
+  cache holds the OUTCOME of the whole ladder rather than the body or just the probe, so a burst of step
+  dispatches costs one round trip per document, concurrent dispatches of one document dedupe onto a
+  single download, and a source that is DOWN is remembered as down instead of being re-asked by every
+  dispatch for as long as the outage lasts (a cache loader that throws caches nothing, which is why the
+  failure is a value). It has no refresh window, since the load already is the check. The workspace's
+  connection is resolved ONCE per pass for the whole corpus through a new batched
+  `resolveConnections`, not per document and again inside each probe. And the per-document fan-out is
+  bounded, because a task can attach a corpus budget's worth of Figma frames and each miss expands into
+  chunked per-frame node reads. Coherence is invalidation plus the TTL: connect/disconnect drops the
+  workspace group, a manual import drops that document's entry. The entry stays enabled on the Worker's
+  isolate-safe profile, since an external version token is neither our own mutable state nor in need of
+  a bus to heal.
+
+  The ladder also has to CONVERGE, which took one non-obvious hop: `reimport` records the caller's
+  probed token when the source's own fetch exposes none. A provider may resolve its version best-effort
+  inside `fetchDocument` (GitHub docs' commit sha degrades to null on a rate-limited request) while its
+  cheap probe still answers, so the row was left holding null, mismatched the probe on every future
+  dispatch, and re-downloaded the whole document forever while reporting "this source has no revision"
+  about a source that plainly has one.
+
+  Freshness reaches the agent as a header line, and it is a three-way verdict rather than a boolean.
+  `confirmed` contributes `Revision: <token>`, so "which revision did this run build against" is
+  answerable from the checkout afterwards. `not-applicable` renders nothing: an upload has no source to
+  trail, so a staleness warning there would invent a problem. `unconfirmed` warns and names which of
+  four gaps applies, because "reconnect the source", "wait out the outage", "this source has no revision
+  to compare" and "this deployment cannot read the credential" are four different fixes and one merged
+  "unknown" sends the reader at the wrong one. The last of those is mothership mode, not a defensive
+  branch: a node with no main database cannot read a connection sealed with the mothership's key, so the
+  read fails permanently and by design, and calling that an outage would send an operator hunting a
+  Figma incident that does not exist. One renderer serves both surfaces a document reaches (the
+  materialised `.cat-context/` file and the in-prompt injection an INLINE kind gets instead of a
+  checkout), because a judge or reviewer scoring against a stale design is the same failure as a
+  container agent building from one, and an omitted note reads exactly like a copy that was checked.
+  Every gap also increments the new `document.freshness_gap` counter, dimensioned by reason and source:
+  each of these conditions repeats per dispatch while it lasts, so the log line answers "what happened
+  to this run" and only a rate answers "is this spreading". The refresh still never throws, so a source
+  outage costs the run a stale body and a stated warning rather than the run, and the readability
+  refusal now runs on the refreshed records, since a page emptied since import is the case most worth
+  refusing. That
+  includes the REQUIREMENTS REVIEW, the first step of the default pipelines and the one a human signs
+  off on, which resolves its attachments through the same refresher rather than reviewing the
+  import-time copy while the coder two steps later builds from the current one. A deployment with no
+  refresher wired gets no verdict at all rather than a synthesised one: it did not conclude these bodies
+  are unverifiable, it never asked.
+
+  Separately, the one fragment that tells an agent how to consume design context was selected by nothing.
+  Its `appliesTo` selector is a management-surface hint the run path never drove, it is in no seed pin
+  set, and basic mode hides the per-task fragment picker — so the standard case, a designer links a frame
+  and starts a run, executed with a design context file on disk and no instruction anywhere to honour it.
+  The engine now folds it whenever the run's resolved context carries a design-origin document. The
+  trigger is the document rather than the block type, which the retired selector got wrong in both
+  directions (it missed a design linked to an unlabelled task and fired on a frontend task with no
+  design), and that selector is DELETED rather than left beside the new rule: the deterministic
+  selector and the management surface still read it, so leaving it would keep labelling the fragment
+  frontend-only while the engine folded it for anything carrying a design. It rides the normal fold, so
+  a workspace override still wins and the two-tier brief/full verbosity still applies. The flag settles
+  off the corpus read rather than off the finished linked context, so the fragment fold (an LLM call,
+  when a standard needs condensing) is not serialised behind a live source probe on every dispatch.
+
+  Two hygiene fixes ride along, both about a claim over a pasted URL. `makeDocumentUrlResolver` now
+  consults host-pinned parsers before host-blind ones instead of in registration order: Notion's
+  `parseRef` claims any UUID-shaped run anywhere, so registered first it stole a Figma URL whose file key
+  carried one, and the point lookup then searched the wrong key space and found nothing — a linked design
+  reaching the agent as no context at all. And the two source traits that decide these things
+  (`isDesignSource`, `isHostPinnedSource`) live in contracts off one exhaustive `Record`, because the SPA
+  has to label a design source too and the run path reads them where no provider is reachable.
+
+  Reviewing: the refresh sits on the hot path of every dispatch, so the thing to check is the ladder's
+  short-circuits (an unchanged design must cost one cached round trip and no download, a failed one must
+  not be retried per dispatch, and the second dispatch after a re-import must do nothing at all) rather
+  than the verdicts. The re-import running INSIDE the cache loader is the deliberate part: it is what
+  lets one entry bound the expensive half and dedupe concurrent dispatches, and its consequence is that
+  a caller which deduped onto someone else's outcome re-reads the row rather than labelling the body it
+  already holds with a revision it does not carry. The `sourceVersion` column is nullable on purpose and
+  a backfill would be wrong: an empty string cannot be told apart from a source that genuinely has no
+  version, and the two get different treatment.
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/integrations@0.137.0
+  - @cat-factory/orchestration@0.220.0
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+  - @cat-factory/caching@0.16.0
+  - @cat-factory/observability-otel@0.15.0
+  - @cat-factory/prompt-fragments@0.16.0
+  - @cat-factory/server@0.232.0
+  - @cat-factory/eks@0.1.247
+  - @cat-factory/agents@0.114.7
+  - @cat-factory/consensus@0.14.35
+  - @cat-factory/gates@0.9.15
+  - @cat-factory/gitlab@0.16.6
+  - @cat-factory/observability-langfuse@0.10.19
+  - @cat-factory/provider-bedrock@0.7.396
+  - @cat-factory/provider-cloudflare@0.7.397
+  - @cat-factory/provider-s3@0.2.316
+  - @cat-factory/spend@0.15.17
+
+## 0.180.2
+
+### Patch Changes
+
+- Updated dependencies [b8b6888]
+  - @cat-factory/gates@0.9.14
+
+## 0.180.1
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/server@0.231.0
+  - @cat-factory/agents@0.114.6
+  - @cat-factory/caching@0.15.6
+  - @cat-factory/consensus@0.14.34
+  - @cat-factory/eks@0.1.246
+  - @cat-factory/gates@0.9.13
+  - @cat-factory/gitlab@0.16.5
+  - @cat-factory/integrations@0.136.2
+  - @cat-factory/observability-langfuse@0.10.18
+  - @cat-factory/observability-otel@0.14.2
+  - @cat-factory/orchestration@0.219.1
+  - @cat-factory/provider-bedrock@0.7.395
+  - @cat-factory/provider-cloudflare@0.7.396
+  - @cat-factory/provider-s3@0.2.315
+  - @cat-factory/spend@0.15.16
+
+## 0.180.0
+
+### Minor Changes
+
+- 4c071ec: Close the last committed gaps in reusable operations: hide one per board, invoke one headlessly.
+
+  Five changes, landed together because the last two turned out to depend on each other: the public
+  task-type catalog has to honour suppression (a type it lists and creation then refuses is worse than
+  one it omits), and both read the registry through the same projection the board snapshot does.
+
+  - **Per-workspace suppression.** An org registers its operations process-wide, so twenty of them
+    flood the picker of a team that runs three. A workspace admin (`settings.manage`) now hides the
+    ones that board does not use. Tombstones in a new `task_type_suppressions` table (D1 ⇄ Drizzle,
+    with conformance), so ABSENCE is the default and a newly registered operation reaches every board
+    until somebody hides it: the only direction whose silent failure is a surplus rather than a
+    withheld capability. Three readers, and their failure postures differ on purpose: the board
+    snapshot and the public catalog are best-effort (a picker must not take a board load down over a
+    cosmetic preference), while `BoardService.addTask` PROPAGATES, because it decides whether a row is
+    written and hits the same database as the insert. The creation refusal is what makes the hiding
+    real: the internal API, the public API, an initiative spawn and a tracker import all reach
+    `addTask` without ever seeing a picker. Built-in types stay unsuppressible (they carry hardcoded
+    creation affordances). Mothership bucket: `remote`, because the catalog is code and the hide-list
+    is data.
+
+  - **Public API: discover a form, then fill it.** `/api/v1` could always NAME a task type and fill
+    none of it, so a headless caller filed an operation and every agent in the run worked from a blank
+    form. `GET /api/v1/task-types` (`read`) serves the built-in types plus this workspace's registered,
+    non-suppressed ones with the fields each accepts; `fields` on task creation fills them, landing in
+    `taskTypeFields.custom` for a custom type and on the schema-typed top-level keys for a built-in
+    one, so existing creation machinery runs unchanged. Additive per ADR 0034: OpenAPI `info.version`
+    → 1.18.0, SDKs regenerated. One table (`contracts/src/public-task-types.ts`) backs BOTH directions
+    rather than the descriptors-plus-hand-written-OpenAPI-shape the design sketched, so what discovery
+    advertises is exactly what creation validates, through the shared `validateDescriptorFields` the
+    app's own form runs. Refusal is a 422 with `details.reason: 'task_type_fields_invalid'` carrying
+    every problem at once.
+
+  - **Descriptor defaults apply at the door, not in the form.** `withDescriptorFieldDefaults` runs
+    server-side at both descriptor doors (a custom type's creation bag and an initiative preset's
+    inputs) before validate + sanitize. A field that is both `required` and defaulted was accepted
+    from the SPA (which had already seeded it) and refused for every other caller, which had no way
+    to know it must restate a value the deployment already declared. The SPA now seeds from the same
+    shared helper rather than its own copy. Consequence worth naming: because defaults are
+    authoritative, a `select` default outside its own options is now a boot ERROR
+    (`task_type_field_default_outside_options`) instead of a form that merely opened oddly.
+
+  - **The new-pipeline advisory names a pipeline instead of humanising its id.** `pipelineCatalogNames`
+    rides beside `pipelineCatalogVersions`, built from the same `seedPipelines()` read so the two
+    cannot list different ids. Humanising was fine for shipped built-ins and wrong the moment a
+    deployment registered its own: `pl_org_introduce_api` was offered as "org introduce api", on
+    exactly the boards that predate an operation and therefore see this advisory.
+
+  - **The Go SDK client's accessor list was three groups stale.** `me`, `evidence` and `keys`
+    generated services that nothing constructed, so those endpoints were uncallable from Go while
+    every drift check passed. All are wired, and `check-sdks.mjs` now fails on a resource group Go's
+    hand-written client never constructs. Two emitters had the sibling latent bug: group names are
+    camelCase in the surface table and every group was one word until `taskTypes`, so Python now
+    snake-cases them (`client.task_types`) and so does the MCP facade, whose tool name and group are
+    the strings a HOST allow-lists and a model calls (`task_types_list`, and `task_types` in
+    `CAT_FACTORY_MCP_GROUPS`). A NEW resource group, as opposed to a new operation, is what exercises
+    those paths.
+
+  Breaks, all internal and unreleased: `CoreDependencies` and `BoardServiceDependencies` gain an
+  optional `taskTypeSuppressionRepository`; `snapshotRegistryProjections` takes an optional workspace
+  id (absent at workspace-create, which cannot have hidden anything); `PublicTaskCreationDeps` gains
+  `taskTypeRegistry`; the snapshot gains `suppressedTaskTypes`; the Python SDK's and the MCP
+  facade's multi-word resource names are now snake_case.
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/orchestration@0.219.0
+  - @cat-factory/server@0.230.0
+  - @cat-factory/agents@0.114.5
+  - @cat-factory/consensus@0.14.33
+  - @cat-factory/eks@0.1.245
+  - @cat-factory/gates@0.9.12
+  - @cat-factory/gitlab@0.16.4
+  - @cat-factory/integrations@0.136.1
+  - @cat-factory/observability-otel@0.14.1
+  - @cat-factory/prompt-fragments@0.15.78
+  - @cat-factory/spend@0.15.15
+  - @cat-factory/caching@0.15.5
+  - @cat-factory/observability-langfuse@0.10.17
+  - @cat-factory/provider-bedrock@0.7.394
+  - @cat-factory/provider-cloudflare@0.7.395
+  - @cat-factory/provider-s3@0.2.314
+
+## 0.179.0
+
+### Minor Changes
+
+- 3fbc87e: Failing-call-first debugging: pin what broke, and let both drill-downs narrow to it
+
+  The observability panel already held everything needed to diagnose a run, and asked an operator to
+  find it by scrolling. Worse, one whole failure class had nowhere to be found from: a tool that
+  errors executes INSIDE the container, so the model call that requested it still records `ok` with a
+  clean finish reason. Every LLM number on the panel, and every rollup on the debug overview, reads
+  healthy right up to the moment the run dies. The remote-debugging doc named this as a known
+  limitation ("tool-execution errors are rows, but no rollup counts them"); this closes it on both
+  surfaces.
+
+  **The panel opens with the failure.** A pinned section above the lists carries the run's structured
+  `failure` record (kind, message, hint, the step it died on) beside the last model call that failed
+  and the last tool call that failed, each with a count of the earlier ones and a jump into the list.
+  It appears whenever there is something to pin rather than only on `status === 'failed'`: a run still
+  in flight whose calls are already erroring is exactly the one worth interrupting.
+
+  The two evidence rows are shown in a fixed order and are deliberately NOT ranked against each other.
+  They come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
+  `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
+  wrong ordering is worse than none in a section whose whole job is to be believed.
+
+  **When nothing failing can be pinned, it says which of four things that means.** A sink's read
+  FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+  failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+  before any agent work); or one answered with rows and the other did not. A single "no failures
+  found" would render a clean bill of health over a run that died with no telemetry at all, which is
+  the same false picture in the opposite direction. A read still in flight is none of the four: the
+  section withholds every verdict until both sinks have answered.
+
+  **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
+  with live counts, split that way because a failed call and a truncated one need different fixes
+  (transport, proxy or spend-gate trouble versus an output-limit conversation). The tool-call
+  trajectory is a new panel view with `All / Failed / OK`, keeping trajectory order under every
+  filter: reading the failures in sequence is what tells one tool that failed and was worked around
+  from an edit loop stuck repeating the same failing call.
+
+  On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+  `?outcome=ok|error`, composing with both orders and with `?jobId=`.
+  `failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+  it unconditionally.
+
+  **That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+  change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+  two drill-downs answering the same question under two spellings is the wart this change exists to
+  remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+  the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+  refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+  have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+  The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+  onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+  could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+  published.
+
+  The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
+  than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
+  the read would report no failures on any run whose failures came after its opening moves. Internal
+  break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+  folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+  own.
+
+  **The panel obeys the same prefix rule the stores do.** It reads the sink through two
+  workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+  run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+  SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+  every captured argument and result the run produced. Folding them into one read would either make
+  the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+  the run's name, and the second is the same false all-clear from the other direction. The trajectory
+  now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+  everything the run did.
+
+  **One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+  vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+  existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+  `debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+  one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+  Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+  as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/orchestration@0.218.0
+  - @cat-factory/server@0.229.0
+  - @cat-factory/integrations@0.136.0
+  - @cat-factory/observability-otel@0.14.0
+  - @cat-factory/agents@0.114.4
+  - @cat-factory/consensus@0.14.32
+  - @cat-factory/eks@0.1.244
+  - @cat-factory/gates@0.9.11
+  - @cat-factory/gitlab@0.16.3
+  - @cat-factory/prompt-fragments@0.15.77
+  - @cat-factory/spend@0.15.14
+  - @cat-factory/caching@0.15.4
+  - @cat-factory/observability-langfuse@0.10.16
+  - @cat-factory/provider-bedrock@0.7.393
+  - @cat-factory/provider-cloudflare@0.7.394
+  - @cat-factory/provider-s3@0.2.313
+
+## 0.178.1
+
+### Patch Changes
+
+- Updated dependencies [6ccc104]
+  - @cat-factory/integrations@0.135.0
+  - @cat-factory/eks@0.1.243
+  - @cat-factory/orchestration@0.217.1
+  - @cat-factory/server@0.228.1
+
 ## 0.178.0
 
 ### Minor Changes

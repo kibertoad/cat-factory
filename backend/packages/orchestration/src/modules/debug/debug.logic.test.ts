@@ -68,7 +68,7 @@ const EMPTY_SINKS = {
   llmCalls: { available: true, count: 1 },
   agentContext: { available: true, count: 1 },
   searchQueries: { available: true, count: 0 },
-  toolCalls: { available: true, count: 0 },
+  toolCalls: { available: true, count: 0, failed: 0 },
   provisioningLog: { available: true, count: 0 },
 }
 
@@ -492,7 +492,7 @@ describe('deriveSignals', () => {
     const pointer = signals.find((s) => s.code === 'failure_outside_model_calls')
     expect(pointer).toMatchObject({ severity: 'warning', count: 40 })
     // Failing tool calls exist, so the pointer says so and sends the reader at the rows.
-    expect(pointer!.message).toContain('tool-calls?ok=false')
+    expect(pointer!.message).toContain('tool-calls?outcome=error')
 
     // Any model-side anomaly claims the diagnosis instead: the pointer must not fire beside
     // a failed call…
@@ -539,7 +539,7 @@ describe('deriveSignals', () => {
     })
     const cleanMessage = clean.find((s) => s.code === 'failure_outside_model_calls')!.message
     expect(cleanMessage).toContain('points at the engine')
-    expect(cleanMessage).not.toContain('ok=false')
+    expect(cleanMessage).not.toContain('outcome=error')
 
     const unwired = deriveSignals({
       ...failedRun,
@@ -574,7 +574,7 @@ describe('deriveSignals', () => {
     // context; `tool_retry_loop` is the diagnosis.
     expect(failed).toMatchObject({ severity: 'info', count: 4 })
     expect(failed!.message).toContain('10%')
-    expect(failed!.message).toContain('ok=false')
+    expect(failed!.message).toContain('outcome=error')
     // Scattered failures are NOT a retry loop: no cell is mostly-failing, so the sharper
     // finding must not fire on a shape that does not have it.
     expect(signals.map((s) => s.code)).not.toContain('tool_retry_loop')

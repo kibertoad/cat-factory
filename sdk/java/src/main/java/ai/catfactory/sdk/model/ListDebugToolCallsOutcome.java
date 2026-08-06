@@ -8,14 +8,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListDebugToolCallsOk} vocabulary.
+ * The {@code ListDebugToolCallsOutcome} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum ListDebugToolCallsOk {
-    TRUE("true"),
-    FALSE("false"),
+public enum ListDebugToolCallsOutcome {
+    OK("ok"),
+    ERROR("error"),
 
     /**
      * A value this SDK release does not know.
@@ -29,7 +29,7 @@ public enum ListDebugToolCallsOk {
 
     private final String wire;
 
-    ListDebugToolCallsOk(String wire) {
+    ListDebugToolCallsOutcome(String wire) {
         this.wire = wire;
     }
 
@@ -41,8 +41,8 @@ public enum ListDebugToolCallsOk {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static ListDebugToolCallsOk fromWire(@Nullable String wire) {
-        for (ListDebugToolCallsOk candidate : values()) {
+    public static ListDebugToolCallsOutcome fromWire(@Nullable String wire) {
+        for (ListDebugToolCallsOutcome candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

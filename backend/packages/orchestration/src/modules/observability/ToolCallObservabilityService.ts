@@ -9,7 +9,8 @@ import type {
   Logger,
   RecordAgentToolCallInput,
 } from '@cat-factory/kernel'
-import { noopLogger } from '@cat-factory/kernel'
+import { foldToolCallTotals, noopLogger } from '@cat-factory/kernel'
+import type { RunToolCallFailures, RunToolCallTrajectory } from '@cat-factory/contracts'
 
 /**
  * Backstop cap (characters) the service applies to a stored `args`/`result`.
@@ -39,6 +40,29 @@ export const MAX_TOOL_BODY_CHARS = 8 * 1024
  * what a job's inactivity and duration ceilings allow it to reach.
  */
 const SEQ_ID_WIDTH = 6
+
+/**
+ * Cap on the trajectory a RENDERING surface (the observability panel) is handed.
+ *
+ * Sized against the panel's job rather than the store's: a tool loop fires several calls per
+ * model turn, so it sits well above the LLM call list's own 1,000-row cap, and a run past it is
+ * long enough that the browser, not the query, is the binding constraint. Applied to the OLDEST
+ * end like every trajectory read, so a truncated one is a genuine prefix of the run — and
+ * REPORTED as one, because a prefix a reader cannot recognise is a run's opening moves presented
+ * as everything it did.
+ */
+const DEFAULT_TRAJECTORY_LIMIT = 2_000
+
+/**
+ * Cap on the FAILING calls the panel pins, read separately from the trajectory above.
+ *
+ * Two orders of magnitude smaller because it is bounding a different population: failures are a
+ * handful among thousands, so this is a runaway guard rather than a working limit, and the
+ * narrowing that makes it affordable is the one the debug API added
+ * ({@link AgentToolCallTrajectoryQuery.outcome}, applied in SQL). Sizing it small is what lets
+ * the panel's headline answer arrive without the trajectory's bodies behind it.
+ */
+const MAX_PINNED_FAILURES = 200
 
 /** Clamp one body, reporting what it dropped rather than silently shortening. */
 function clamp(text: string, alreadyDropped: number): { text: string; dropped: number } {
@@ -99,6 +123,71 @@ export class ToolCallObservabilityService implements AgentToolCallRecorder {
     query: AgentToolCallTrajectoryQuery,
   ): Promise<AgentToolCall[]> {
     return this.repository.listByExecution(workspaceId, query)
+  }
+
+  /**
+   * A run's trajectory for a RENDERING surface: oldest first, capped at
+   * {@link DEFAULT_TRAJECTORY_LIMIT}, and SAYING whether the cap bit.
+   *
+   * It is the whole prefix rather than the failing rows alone because an operator reading a
+   * failure needs what led up to it. What it is NOT is the panel's source of truth about
+   * failures: those come from {@link failuresForRun}, whose numbers are SQL aggregates over the
+   * whole run. Deriving them here instead would make every headline on a long run a statement
+   * about the run's first two thousand calls wearing the words "this run".
+   *
+   * Fetches one row past the cap so `truncated` is a fact rather than a guess — the same reason
+   * `exportForExecution` does it, and `length === limit` guesses wrong on the run whose call
+   * count lands exactly on the cap.
+   */
+  async listForRun(workspaceId: string, executionId: string): Promise<RunToolCallTrajectory> {
+    const fetched = await this.repository.listByExecution(workspaceId, {
+      executionId,
+      limit: DEFAULT_TRAJECTORY_LIMIT + 1,
+    })
+    const truncated = fetched.length > DEFAULT_TRAJECTORY_LIMIT
+    return {
+      toolCalls: truncated ? fetched.slice(0, DEFAULT_TRAJECTORY_LIMIT) : fetched,
+      truncated,
+    }
+  }
+
+  /**
+   * What the panel PINS: the run's failing tool calls, plus the exact counts behind them.
+   *
+   * The counts come from the store's one aggregate pass rather than from the returned rows,
+   * which is the whole point of the split. `failed` is a number about the RUN; `failures` is a
+   * bounded list about the same run. When they disagree, `failuresTruncated` says so and
+   * `failed` stays the honest one — the alternative is a panel that counts what it happens to
+   * be holding and calls it the run's failure count, which is precisely the false all-clear the
+   * failing-call surface exists to prevent.
+   *
+   * Both numbers are FOLDED from the same `(agentKind, tool)` rollup the debug overview reads,
+   * not counted by a query of their own: two aggregates over one index range can be read at
+   * different instants mid-run and report more failures than calls.
+   *
+   * Both reads are issued together: they hit the same `(workspace_id, execution_id)` index range
+   * and the caller wants both or neither, exactly like the debug overview's five aggregates.
+   */
+  async failuresForRun(workspaceId: string, executionId: string): Promise<RunToolCallFailures> {
+    const [cells, fetched] = await Promise.all([
+      this.repository.summarizeByExecution(workspaceId, executionId),
+      this.repository.listByExecution(workspaceId, {
+        executionId,
+        limit: MAX_PINNED_FAILURES + 1,
+        // Narrowed in SQL, not after the read: the failing calls of a long run sit past any
+        // prefix of it, so a post-filter here would answer "nothing failed" on exactly the runs
+        // this surface exists for.
+        ok: false,
+      }),
+    ])
+    const totals = foldToolCallTotals(cells)
+    const failuresTruncated = fetched.length > MAX_PINNED_FAILURES
+    return {
+      total: totals.calls,
+      failed: totals.failures,
+      failures: failuresTruncated ? fetched.slice(0, MAX_PINNED_FAILURES) : fetched,
+      failuresTruncated,
+    }
   }
 
   /** One bounded page of a run's trajectory, newest first on the `(createdAt, id)` keyset. */

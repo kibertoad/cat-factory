@@ -36,6 +36,39 @@ export type OperationalCounter =
   | 'container.dispatch_failed'
   /** A container job settled as evicted/crashed. Dimensioned by the eviction kind. */
   | 'container.evicted'
+  /**
+   * A container dispatch was REFUSED because the runner image told us it does not parse a
+   * capability field the job body carried (`domain/harness-capabilities.ts`). Dimensioned by
+   * `capability`, which is a closed union, so the cardinality is the vocabulary's size.
+   *
+   * The refusal is per RUN and the cause is per POOL, so a single lagging runner pool produces
+   * one of these for every dispatch until someone updates it. That standing rate is the point:
+   * the log line names the run, and only the rate says the deployment has a fleet problem.
+   */
+  | 'container.capability_unsupported'
+  /**
+   * A container dispatch carried a capability and the backend could not tell whether the image
+   * serves it: an image older than the handshake, or a transport that does not forward the
+   * harness's own dispatch response. The run proceeds, because refusing on an absent answer
+   * would fail every dispatch on every image predating the handshake.
+   *
+   * Counted rather than only logged because it is the BLIND SPOT's own metric: it should decay
+   * to zero as pools update, and a rate that does not is how an operator learns the handshake is
+   * not actually reaching them. Dimensioned by `capability`, same closed union as above.
+   */
+  | 'container.capability_unknown'
+  /**
+   * A container dispatch was refused as blind AND the backend could not confirm the job it had
+   * already started was stopped. Dimensioned by `outcome` (`requested` | `unsupported` |
+   * `failed`), a closed union of three, each naming a different operator action: verify at the
+   * pool, give the backend a cancel path, investigate a fault.
+   *
+   * Counted separately from the refusal itself because they are different severities. A refusal
+   * that stopped its job cost one step; one that did not left an agent running unsupervised
+   * against a repository, able to push a branch and open a pull request for a step the engine
+   * already failed, and nothing else in the system will notice.
+   */
+  | 'container.blind_job_not_stopped'
   /** An observability export was dropped (a trace sink, a metrics POST). */
   | 'telemetry.export_dropped'
   /** An outbound notification delivery failed after its retries. */
@@ -100,6 +133,38 @@ export type OperationalCounter =
    * ids and the run ride the log line at the increment site.
    */
   | 'dispatch.token_scope_widened'
+  /**
+   * A run's standing-context fragment ids resolved against nothing, so the guidance they name
+   * never reached the agent (`FragmentLibraryService.resolveBodiesForRun`).
+   *
+   * Counted because the failure is invisible per run and only visible as a rate: the run still
+   * succeeds, the agent still answers, and a reviewer's adherence report reads exactly like a
+   * deployment that never wrote the standard down. The shapes that produce it are all standing
+   * conditions rather than incidents (a deployment resolving two physical copies of the fragment
+   * package, so the whole registered pool is empty; a task type pinning a typo'd id; a node
+   * whose mothership build moved underneath it), which is precisely what a log line cannot say
+   * and a rate can.
+   *
+   * UNDIMENSIONED: the split worth having is the CAUSE, and the drop site cannot tell a typo
+   * from a deliberate tier suppression without a read it does not have (see the comment there).
+   * A dimension carrying the fragment id would be unbounded, being whatever a deployment named
+   * its own standards. The ids and the workspace ride the log line at the increment site.
+   */
+  | 'fragments.dropped_from_run'
+  /**
+   * A linked context document could NOT be confirmed against its source at dispatch, so the run
+   * read the copy stored at import time. Dimensioned by `reason` (the `DocumentFreshnessGap`
+   * union) and `source` (the `DocumentSourceKind` union), both closed, so the cardinality is the
+   * product of two small vocabularies.
+   *
+   * Counted because the log line structurally cannot answer the operator's question. Every one of
+   * these conditions is per-DISPATCH and most of them are PERMANENT while they last (a revoked
+   * credential, a mothership node that cannot read the connection at all, a source returning 403),
+   * so the individual line repeats with no remedy anyone intends to apply and gets tuned out. Only
+   * a rate says whether agents across the deployment are being handed stale designs more than they
+   * were, and the `reason` split is what separates the three different fixes.
+   */
+  | 'document.freshness_gap'
 
 // Deliberately NOT a counter here: "jobs sitting in a dead-letter queue". It is a LEVEL, and
 // the only thing that can read it is a periodic `SELECT` over the queue tables — which returns

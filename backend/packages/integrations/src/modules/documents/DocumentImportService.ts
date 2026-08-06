@@ -1,12 +1,13 @@
 import type { Clock, IdGenerator } from '@cat-factory/kernel'
 import type { DocumentSourceRegistry } from '@cat-factory/kernel'
 import type { DocumentRecord, DocumentRepository } from '@cat-factory/kernel'
+import type { GroupCacheHandle, LinkedDocumentRefreshOutcome } from '@cat-factory/kernel'
 import type { SourceDocument, DocumentSearchResult, DocumentSourceKind } from '@cat-factory/kernel'
 import { contentHash, ValidationError } from '@cat-factory/kernel'
 import { requireWorkspace } from '@cat-factory/kernel'
 import type { WorkspaceRepository } from '@cat-factory/kernel'
 import type { DocumentConnectionService } from './DocumentConnectionService.js'
-import { buildExcerpt } from './documents.logic.js'
+import { buildExcerpt, probeCacheKey } from './documents.logic.js'
 
 // DocumentImportService: gets a document's text into the workspace's local projection, from
 // either direction. `import` FETCHES a page from a connected source (ref parsing and fetching
@@ -23,6 +24,13 @@ export interface DocumentImportServiceDependencies {
   clock: Clock
   /** Mints the external id an `ingest`ed document is keyed by (it has no source id of its own). */
   idGenerator: IdGenerator
+  /**
+   * The dispatch-time freshness cache, so a MANUAL re-import drops the document's cached verdict.
+   * Deliberately invalidated by {@link DocumentImportService.import} and not by `reimport`: the
+   * refresher calls `reimport` from INSIDE that cache's loader, where the entry about to be stored
+   * is the fresh one and an invalidation would race the store it precedes.
+   */
+  versionCache?: GroupCacheHandle<LinkedDocumentRefreshOutcome>
 }
 
 /** A document body supplied directly by a caller rather than fetched from a connected source. */
@@ -84,20 +92,64 @@ export class DocumentImportService {
   /**
    * Fetch a page (by id or URL) and upsert its projection; returns the document. The
    * provider authenticates with the workspace's stored credential.
+   *
+   * The workspace guard is {@link reimport}'s, which this delegates to: one guard on the write
+   * itself rather than one per entry point, so a caller cannot reach the upsert around it. What
+   * runs first here is only the PURE validation (is the source wired, does the ref yield an id),
+   * which touches nothing.
    */
   async import(
     workspaceId: string,
     source: DocumentSourceKind,
     ref: string,
   ): Promise<SourceDocument> {
-    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
     const provider = this.requireProvider(source)
     const externalId = provider.parseRef(ref)
     if (!externalId) {
       throw new ValidationError(`Could not resolve a ${source} page id from '${ref}'`)
     }
+    const record = await this.reimport(workspaceId, source, externalId)
+    // A human just pulled this page fresh. The cached freshness verdict was reached against the
+    // token the row carried BEFORE this write, so leaving it would make the next dispatch compare a
+    // fresh row against a stale answer: either a needless re-download or a `confirmed` naming the
+    // wrong revision.
+    await this.deps.versionCache?.invalidate(probeCacheKey(source, record.externalId), workspaceId)
+    return toSourceDocument(record)
+  }
+
+  /**
+   * Re-fetch an ALREADY-resolved page id and upsert its projection, returning the stored record.
+   *
+   * The body of {@link import} minus the ref parsing, split out for the dispatch-time refresh
+   * (`LinkedDocumentRefreshService`), which starts from a stored row and therefore already holds the
+   * canonical external id. Round-tripping that id back through `parseRef` to reach `import` would
+   * put the ONE hop that can legitimately fail — turning user input into an id — on a path where
+   * there is no user input, so a provider whose bare-id branch is stricter than its URL branch would
+   * refuse to refresh a document it had happily imported.
+   *
+   * `fallbackVersion` is the token to record when the source's own fetch exposes none, and it is
+   * what makes the dispatch-time ladder CONVERGE. A provider may resolve its version best-effort
+   * inside `fetchDocument` (GitHub docs' commit sha degrades to `null` on a rate-limited request)
+   * while its cheap `probeVersion` still answers, and the refresh compares the two: a row left
+   * holding `null` mismatches the probe on every future dispatch, so the whole document is
+   * re-downloaded forever and the freshness note reports `unversioned` about a source that plainly
+   * exposes a version. Recording what the caller just probed is also the CONSERVATIVE direction:
+   * the body is at least as new as that token, so a later edit still moves the probe past it.
+   */
+  async reimport(
+    workspaceId: string,
+    source: DocumentSourceKind,
+    externalId: string,
+    opts: { fallbackVersion?: string } = {},
+  ): Promise<DocumentRecord> {
+    // The class invariant every other write on this service holds: no `documents` row is ever
+    // written for a workspace that does not exist. It sits on the method that WRITES rather than on
+    // each entry point, so a caller cannot reach the upsert around it.
+    await requireWorkspace(this.deps.workspaceRepository, workspaceId)
+    const provider = this.requireProvider(source)
     const connection = await this.deps.connectionService.requireConnection(workspaceId, source)
     const content = await provider.fetchDocument(connection.credentials, externalId, workspaceId)
+    const version = content.version || opts.fallbackVersion || null
 
     // Preserve any existing block link across a re-import.
     const existing = await this.deps.documentRepository.get(workspaceId, source, content.externalId)
@@ -106,14 +158,21 @@ export class DocumentImportService {
     // changed — the body (by hash) AND the title/url metadata (which feed the prompt's
     // summary index and the materialised file's `Source:` header). A renamed/moved page
     // whose body is unchanged still re-projects so the stale title/url don't linger.
+    //
+    // `sourceVersion` is part of that comparison even though no agent reads it, because it is what
+    // the refresh COMPARES: a page whose version bumped without changing a byte of its Markdown (a
+    // Figma file version moves on any edit in the file, including a frame this document doesn't
+    // cover) would otherwise keep the old token on the row and be re-fetched on every single
+    // dispatch forever, which is the cost the version probe exists to avoid.
     if (
       existing &&
       existing.deletedAt === null &&
       existing.contentHash === hash &&
       existing.title === content.title &&
-      existing.url === content.url
+      existing.url === content.url &&
+      existing.sourceVersion === version
     ) {
-      return toSourceDocument(existing)
+      return existing
     }
     const record: DocumentRecord = {
       workspaceId,
@@ -124,6 +183,9 @@ export class DocumentImportService {
       excerpt: buildExcerpt(content.body),
       body: content.body,
       contentHash: hash,
+      // NULL rather than `''` for a source that exposes no version, so "not versioned" is one value
+      // everywhere instead of two the refresh would have to test for separately.
+      sourceVersion: version,
       linkedBlockId: existing?.linkedBlockId ?? null,
       // Role links (template/exemplar) are owned by the link write path, not import — preserve
       // any existing tag across a re-import (the repo's upsert also leaves these columns alone).
@@ -133,7 +195,7 @@ export class DocumentImportService {
       deletedAt: null,
     }
     await this.deps.documentRepository.upsert(record)
-    return toSourceDocument(record)
+    return record
   }
 
   /**
@@ -169,6 +231,9 @@ export class DocumentImportService {
       excerpt,
       body: input.content,
       contentHash: contentHash(input.content),
+      // No source, so no version: nothing can ever re-probe this body, which is the same fact
+      // `source: 'upload'` states one field over.
+      sourceVersion: null,
       linkedBlockId: null,
       role: null,
       docKind: null,

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -6,24 +6,17 @@ import {
   userPromptFor,
 } from '@cat-factory/agents'
 import {
-  clearRegisteredPromptFragments,
-  registerPromptFragment,
-} from '@cat-factory/prompt-fragments'
-import {
   collectRegistrationProblems,
   validateRegistrations,
 } from './validation/validateRegistrations.js'
-import type { AgentRunContext, CustomTaskType, GateRegistry } from '@cat-factory/kernel'
-import type { InitiativePresetDescriptor, InitiativePresetField } from '@cat-factory/contracts'
+import type { AgentRunContext, GateRegistry } from '@cat-factory/kernel'
 import {
-  InitiativePresetRegistry,
   TOOL_SERVER_BUDGET,
   defaultBinaryGeneratorRegistry,
   defaultFoundationalServiceRegistry,
   defaultGateRegistry,
   defaultPipelineRegistry,
   defaultStepResolverRegistry,
-  defaultTaskTypeRegistry,
   seedPipelines,
   stubGateContext,
   stubResolverContext,
@@ -293,31 +286,39 @@ describe('validateRegistrations', () => {
     })
     gates.register('license-check', goodGate('license-fixer'))
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).toEqual([])
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
   it('accepts a built-in helper kind (ci-fixer) without a registered kind', () => {
     gates.register('license-check', goodGate('ci-fixer'))
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).filter(
-        (p) => p.severity === 'error',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).filter((p) => p.severity === 'error'),
     ).toEqual([])
   })
 
   it('throws when a gate helperKind resolves to nothing', () => {
     gates.register('license-check', goodGate('does-not-exist'))
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'gate_helper_unresolved')).toBe(true)
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).toThrow(/gate_helper_unresolved/)
   })
 
@@ -325,9 +326,9 @@ describe('validateRegistrations', () => {
     registry.register({ kind: 'inline-helper', systemPrompt: 'x', agent: { surface: 'inline' } })
     gates.register('license-check', goodGate('inline-helper'))
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'gate_helper_unresolved',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'gate_helper_unresolved'),
     ).toBe(true)
   })
 
@@ -346,9 +347,9 @@ describe('validateRegistrations', () => {
       },
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'unknown_result_view',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'unknown_result_view'),
     ).toBe(true)
   })
 
@@ -366,9 +367,9 @@ describe('validateRegistrations', () => {
       },
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'unknown_result_view',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'unknown_result_view'),
     ).toBe(false)
   })
 
@@ -380,12 +381,16 @@ describe('validateRegistrations', () => {
       postOps: [async () => {}],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'postops_without_structured_output')).toBe(true)
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
@@ -397,18 +402,22 @@ describe('validateRegistrations', () => {
     const pipelines = defaultPipelineRegistry()
     pipelines.retire('pl_full')
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
-      pipelineRegistry: pipelines,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      },
     })
     const problem = problems.find((p) => p.code === 'retirement_of_live_pipeline')
     expect(problem?.severity).toBe('error')
     expect(problem?.message).toContain('pl_full')
     expect(() =>
       validateRegistrations({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+          pipelineRegistry: pipelines,
+        },
       }),
     ).toThrow()
   })
@@ -421,9 +430,11 @@ describe('validateRegistrations', () => {
     pipelines.retire('pl_org_flow_v1', { replacedBy: 'pl_full' })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+          pipelineRegistry: pipelines,
+        },
       }).some((p) => p.code === 'retirement_of_live_pipeline'),
     ).toBe(false)
   })
@@ -435,9 +446,11 @@ describe('validateRegistrations', () => {
     pipelines.retire('pl_org_flow')
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+          pipelineRegistry: pipelines,
+        },
       }).some((p) => p.code === 'retirement_of_live_pipeline'),
     ).toBe(false)
   })
@@ -470,8 +483,10 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: ['also-never-registered'],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'unknown_bundled_skill')).toBe(true)
     expect(problems.some((p) => p.code === 'unknown_tool_server')).toBe(true)
@@ -487,9 +502,9 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: [{ id: 'Bad Id', transport: { kind: 'stdio', command: 'x' } }],
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'invalid_tool_server_id',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'invalid_tool_server_id'),
     ).toBe(true)
   })
 
@@ -503,12 +518,16 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: [{ id: 'issues', transport: { kind: 'stdio', command: 'x' } }],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.find((p) => p.code === 'tool_servers_without_container')?.severity).toBe('warn')
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
@@ -525,12 +544,16 @@ describe('agent-capability validation: reach and scoping', () => {
       skills: [{ catalogSkillId: 'src:acme:house-style' }],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.find((p) => p.code === 'skills_without_container')?.severity).toBe('warn')
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
@@ -550,7 +573,9 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: ['issues', { id: 'docs', transport: { kind: 'http', url: 'https://x/mcp' } }],
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).toEqual([])
   })
 
@@ -569,8 +594,10 @@ describe('agent-capability validation: reach and scoping', () => {
         },
       ])
       const problems = collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
       })
       expect(problems.some((p) => p.code === 'insecure_tool_server_url')).toBe(true)
       expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(true)
@@ -580,8 +607,10 @@ describe('agent-capability validation: reach and scoping', () => {
       registry.assignToolServers('ci-fixer', ['never-registered'])
       registry.assignSkills('merger', ['also-never-registered'])
       const problems = collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
       })
       expect(problems.some((p) => p.code === 'unknown_tool_server')).toBe(true)
       expect(problems.some((p) => p.code === 'unknown_bundled_skill')).toBe(true)
@@ -597,8 +626,10 @@ describe('agent-capability validation: reach and scoping', () => {
       registry.assignToolServers('coder', ['issues'])
       registry.assignSkills('coder', ['house'])
       const problems = collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
       })
       expect(problems).toEqual([])
     })
@@ -609,8 +640,10 @@ describe('agent-capability validation: reach and scoping', () => {
         { id: 'issues', transport: { kind: 'stdio', command: 'x' } },
       ])
       const problems = collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
       })
       expect(problems.find((p) => p.code === 'tool_servers_without_container')?.severity).toBe(
         'warn',
@@ -626,7 +659,9 @@ describe('agent-capability validation: reach and scoping', () => {
         agent: { surface: 'container-explore' },
         toolServers: [server],
       })
-      return collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates })
+      return collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      })
     }
 
     it('warns about an http server narrowed to codex, whose client is stdio-only', () => {
@@ -680,12 +715,16 @@ describe('agent-capability validation: reach and scoping', () => {
       ],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'invalid_tool_server_tool_name')).toBe(true)
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).toThrow(/invalid_tool_server_tool_name/)
   })
 
@@ -704,14 +743,18 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: servers,
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     const warning = problems.find((p) => p.code === 'too_many_tool_servers')
     expect(warning?.severity).toBe('warn')
     expect(warning?.message).toContain('over_budget')
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
@@ -731,8 +774,10 @@ describe('agent-capability validation: reach and scoping', () => {
       toolServers: [fat(0), fat(1), fat(2)],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     const warning = problems.find((p) => p.code === 'tool_servers_over_byte_budget')
     expect(warning?.severity).toBe('warn')
@@ -741,7 +786,9 @@ describe('agent-capability validation: reach and scoping', () => {
     // for one fault would send the author looking for a server to delete.
     expect(problems.some((p) => p.code === 'too_many_tool_servers')).toBe(false)
     expect(() =>
-      validateRegistrations({ agentKindRegistry: registry, gateRegistry: gates }),
+      validateRegistrations({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).not.toThrow()
   })
 
@@ -756,7 +803,9 @@ describe('agent-capability validation: reach and scoping', () => {
       ],
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }),
     ).toEqual([])
   })
 })
@@ -783,9 +832,9 @@ describe('agent-capability validation: credentials', () => {
       toolServers: [{ id: 'docs', transport: { kind: 'http', url: 'http://mcp.example.com/sse' } }],
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'insecure_tool_server_url',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'insecure_tool_server_url'),
     ).toBe(true)
   })
 
@@ -808,8 +857,10 @@ describe('agent-capability validation: credentials', () => {
       ],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(true)
   })
@@ -831,8 +882,10 @@ describe('agent-capability validation: credentials', () => {
       ],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'reserved_credential_key')).toBe(false)
     expect(problems.some((p) => p.code === 'toolchain_credential_env_name')).toBe(false)
@@ -852,8 +905,10 @@ describe('agent-capability validation: credentials', () => {
       ],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     expect(problems.some((p) => p.code === 'toolchain_credential_env_name')).toBe(true)
   })
@@ -874,8 +929,10 @@ describe('agent-capability validation: credentials', () => {
       ],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: registry,
-      gateRegistry: gates,
+      registries: {
+        agentKindRegistry: registry,
+        gateRegistry: gates,
+      },
     })
     const warning = problems.find((p) => p.code === 'unused_credential_env_name')
     expect(warning?.severity).toBe('warn')
@@ -893,9 +950,9 @@ describe('agent-capability validation: credentials', () => {
       ],
     })
     expect(
-      collectRegistrationProblems({ agentKindRegistry: registry, gateRegistry: gates }).some(
-        (p) => p.code === 'insecure_tool_server_url',
-      ),
+      collectRegistrationProblems({
+        registries: { agentKindRegistry: registry, gateRegistry: gates },
+      }).some((p) => p.code === 'insecure_tool_server_url'),
     ).toBe(false)
   })
 })
@@ -935,8 +992,10 @@ describe('agent-kind variant validation', () => {
   it('accepts a variant of a known built-in kind', () => {
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: withCoderVariant(),
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: withCoderVariant(),
+          gateRegistry: gates,
+        },
         knownAgentKinds: new Set(['coder']),
       }),
     ).toEqual([])
@@ -947,8 +1006,10 @@ describe('agent-kind variant validation', () => {
     registry.registerVariant({ id: 'org:tdd', baseKind: 'ghost', promptAddition: 'x' })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
         knownAgentKinds: new Set(['coder']),
       }).some((p) => p.code === 'variant_unknown_base_kind'),
     ).toBe(true)
@@ -959,8 +1020,10 @@ describe('agent-kind variant validation', () => {
     registry.registerVariant({ id: 'org:noop', baseKind: 'coder' })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
         knownAgentKinds: new Set(['coder']),
       }).some((p) => p.code === 'variant_changes_nothing'),
     ).toBe(true)
@@ -977,8 +1040,10 @@ describe('agent-kind variant validation', () => {
     })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
         knownAgentKinds: new Set(['coder', 'requirements-review']),
       }).some((p) => p.code === 'variant_inline_engine_kind'),
     ).toBe(true)
@@ -993,8 +1058,10 @@ describe('agent-kind variant validation', () => {
     })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: registry,
-        gateRegistry: gates,
+        registries: {
+          agentKindRegistry: registry,
+          gateRegistry: gates,
+        },
         knownAgentKinds: new Set(['coder', 'merger']),
       }),
     ).toEqual([])
@@ -1009,9 +1076,11 @@ describe('agent-kind variant validation', () => {
       stepOptions: [{ agentVariantId: 'org:tdd' }, null],
     })
     const problems = collectRegistrationProblems({
-      agentKindRegistry: withCoderVariant(),
-      gateRegistry: gates,
-      pipelineRegistry: pipelines,
+      registries: {
+        agentKindRegistry: withCoderVariant(),
+        gateRegistry: gates,
+        pipelineRegistry: pipelines,
+      },
       knownAgentKinds: new Set(['architect', 'coder']),
     })
     expect(problems.some((p) => p.code === 'pipeline_variant_unresolved')).toBe(true)
@@ -1031,9 +1100,11 @@ describe('agent-kind variant validation', () => {
     })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: withCoderVariant(),
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
+        registries: {
+          agentKindRegistry: withCoderVariant(),
+          gateRegistry: gates,
+          pipelineRegistry: pipelines,
+        },
         knownAgentKinds: new Set(['architect', 'coder']),
       }),
     ).toEqual([])
@@ -1049,9 +1120,11 @@ describe('agent-kind variant validation', () => {
     })
     expect(
       collectRegistrationProblems({
-        agentKindRegistry: withCoderVariant(),
-        gateRegistry: gates,
-        pipelineRegistry: pipelines,
+        registries: {
+          agentKindRegistry: withCoderVariant(),
+          gateRegistry: gates,
+          pipelineRegistry: pipelines,
+        },
         knownAgentKinds: new Set(['architect', 'coder']),
       }),
     ).toEqual([])
@@ -1067,9 +1140,11 @@ describe('foundational-service registry validation', () => {
     const foundationalServiceRegistry = defaultFoundationalServiceRegistry()
     foundationalServiceRegistry.registerAll(definitions)
     return collectRegistrationProblems({
-      agentKindRegistry: kinds,
-      gateRegistry: gates,
-      foundationalServiceRegistry,
+      registries: {
+        agentKindRegistry: kinds,
+        gateRegistry: gates,
+        foundationalServiceRegistry,
+      },
     }).filter((p) => p.code === 'foundational_service_invalid')
   }
 
@@ -1131,9 +1206,11 @@ describe('generative binary integration registry validation', () => {
     const binaryGeneratorRegistry = defaultBinaryGeneratorRegistry()
     binaryGeneratorRegistry.registerAll(definitions)
     return collectRegistrationProblems({
-      agentKindRegistry: kinds,
-      gateRegistry: gates,
-      binaryGeneratorRegistry,
+      registries: {
+        agentKindRegistry: kinds,
+        gateRegistry: gates,
+        binaryGeneratorRegistry,
+      },
     }).filter((p) => p.code.startsWith('binary_generator') || p.code.endsWith('generator_endpoint'))
   }
 
@@ -1212,217 +1289,5 @@ describe('generative binary integration registry validation', () => {
 
   it('requires at least one content type — a generator that produces nothing is not one', () => {
     expect(problemsFor([{ ...valid, modalities: [] }])).toHaveLength(1)
-  })
-})
-
-describe('custom task types (reusable operations)', () => {
-  const base = {
-    presentation: {
-      label: 'Introduce API',
-      icon: 'i-lucide-plug',
-      color: '#0ea5e9',
-      description: 'Expose functionality over HTTP.',
-    },
-  }
-  const problemsFor = (taskType: CustomTaskType) => {
-    const taskTypeRegistry = defaultTaskTypeRegistry()
-    taskTypeRegistry.register(taskType)
-    return collectRegistrationProblems({
-      agentKindRegistry: defaultAgentKindRegistry(),
-      gateRegistry: defaultGateRegistry(),
-      taskTypeRegistry,
-    })
-  }
-
-  afterEach(() => clearRegisteredPromptFragments())
-
-  it('resolves defaultFragmentIds against the code pool without complaint', () => {
-    registerPromptFragment({
-      id: 'org.api-guidelines',
-      version: '1.0.0',
-      title: 'Org API guidelines',
-      category: 'Org',
-      summary: 'How this org shapes APIs.',
-      body: 'Plural nouns.',
-    })
-    expect(
-      problemsFor({
-        ...base,
-        taskType: 'org:introduce-api',
-        defaultFragmentIds: ['org.api-guidelines'],
-      }),
-    ).toEqual([])
-  })
-
-  it('WARNS on an unresolvable fragment id, naming both causes it cannot tell apart', () => {
-    // A workspace/account-tier fragment merges per workspace at RUN time, so boot structurally
-    // cannot see one: refusing would reject a legitimate tenant-tier reference, and staying
-    // silent leaves a typo'd id folding nothing for the life of the deployment.
-    const problems = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      defaultFragmentIds: ['org.api-guidelnes'],
-    })
-    expect(problems).toHaveLength(1)
-    expect(problems[0]?.severity).toBe('warn')
-    expect(problems[0]?.code).toBe('task_type_unknown_fragment')
-    expect(problems[0]?.message).toContain('org.api-guidelnes')
-    expect(problems[0]?.message).toContain('account/workspace-tier')
-    // A warn never aborts boot; it is reported through `onWarn`.
-    const warned: string[] = []
-    const taskTypeRegistry = defaultTaskTypeRegistry()
-    taskTypeRegistry.register({
-      ...base,
-      taskType: 'org:introduce-api',
-      defaultFragmentIds: ['org.api-guidelnes'],
-    })
-    expect(() =>
-      validateRegistrations({
-        agentKindRegistry: defaultAgentKindRegistry(),
-        gateRegistry: defaultGateRegistry(),
-        taskTypeRegistry,
-        onWarn: (p) => warned.push(p.code),
-      }),
-    ).not.toThrow()
-    expect(warned).toContain('task_type_unknown_fragment')
-  })
-
-  it('ERRORS on a create form that structurally cannot be filled', () => {
-    // The three ways the richer field vocabulary lets a descriptor break itself, each of which
-    // fails silently in the form rather than anywhere a test or a user could name.
-    const optionless = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      fields: [{ key: 'style', label: 'Style', type: 'select' }],
-    })
-    expect(optionless[0]?.severity).toBe('error')
-    expect(optionless[0]?.code).toBe('task_type_field_no_options')
-
-    const danglingCondition = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      fields: [
-        {
-          key: 'verb',
-          label: 'Verb',
-          type: 'text',
-          showWhen: { key: 'resourceStyle', equals: 'a' },
-        },
-      ],
-    })
-    expect(danglingCondition[0]?.code).toBe('task_type_field_unknown_condition')
-
-    const duplicate = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      fields: [
-        { key: 'entity', label: 'Entity', type: 'text' },
-        { key: 'entity', label: 'Entity again', type: 'textarea' },
-      ],
-    })
-    expect(duplicate[0]?.code).toBe('task_type_field_duplicate')
-
-    // A well-formed form, including a condition on a field it does declare, is silent.
-    expect(
-      problemsFor({
-        ...base,
-        taskType: 'org:introduce-api',
-        fields: [
-          {
-            key: 'style',
-            label: 'Style',
-            type: 'select',
-            options: [{ value: 'action', label: 'Action' }],
-          },
-          {
-            key: 'verb',
-            label: 'Verb',
-            type: 'text',
-            showWhen: { key: 'style', equals: 'action' },
-          },
-        ],
-      }),
-    ).toEqual([])
-  })
-
-  it('still ERRORS on a defaultPipelineId that resolves to nothing', () => {
-    // The pipeline reference is a different bar from the fragment one: an unknown id means the
-    // created task silently falls back to the workspace's positional default pipeline, and
-    // nothing at run time can tell that apart from a deliberate choice.
-    const problems = problemsFor({
-      ...base,
-      taskType: 'org:introduce-api',
-      defaultPipelineId: 'pl_nope',
-    })
-    expect(problems[0]?.severity).toBe('error')
-    expect(problems[0]?.code).toBe('task_type_unknown_pipeline')
-  })
-})
-
-describe('initiative presets: the OTHER descriptor-driven form', () => {
-  // Both surfaces declare their form over one vocabulary (`contracts/src/form-fields.ts`), so both
-  // break the same three ways and both are held to the same bar by the SAME checker. Without this,
-  // the fillability check would cover whichever surface happened to get it first.
-  const descriptorFor = (fields: InitiativePresetField[]): InitiativePresetDescriptor => ({
-    id: 'preset_org_audit',
-    presentation: {
-      label: 'Org audit',
-      icon: 'i-lucide-search-check',
-      color: '#6366f1',
-      description: 'Audit the estate against the org standards.',
-    },
-    fields,
-    planningPipelineId: 'pl_initiative',
-    interview: 'skip',
-    humanReviewDefault: true,
-    defaultFragmentIds: [],
-  })
-
-  const problemsFor = (fields: InitiativePresetField[]) => {
-    const initiativePresetRegistry = new InitiativePresetRegistry()
-    initiativePresetRegistry.register({ descriptor: descriptorFor(fields) })
-    return collectRegistrationProblems({
-      agentKindRegistry: defaultAgentKindRegistry(),
-      gateRegistry: defaultGateRegistry(),
-      initiativePresetRegistry,
-    }).filter((problem) => problem.code.startsWith('initiative_preset_'))
-  }
-
-  it('ERRORS on a preset create form that structurally cannot be filled', () => {
-    const optionless = problemsFor([{ key: 'style', label: 'Style', type: 'select' }])
-    expect(optionless[0]?.severity).toBe('error')
-    expect(optionless[0]?.code).toBe('initiative_preset_field_no_options')
-    expect(optionless[0]?.message).toContain('preset_org_audit')
-
-    expect(
-      problemsFor([
-        { key: 'verb', label: 'Verb', type: 'text', showWhen: { key: 'nope', equals: 'a' } },
-      ])[0]?.code,
-    ).toBe('initiative_preset_field_unknown_condition')
-
-    expect(
-      problemsFor([
-        { key: 'root', label: 'Root', type: 'path' },
-        { key: 'root', label: 'Root again', type: 'text' },
-      ])[0]?.code,
-    ).toBe('initiative_preset_field_duplicate')
-  })
-
-  it('is silent on a well-formed form, and on the built-in presets that ride along', () => {
-    // `all()` includes the baked-in generic preset, so an empty registry still gets checked: the
-    // shipped descriptors are registrations like any other and are not exempted.
-    expect(
-      problemsFor([
-        { key: 'style', label: 'Style', type: 'select', options: [{ value: 'a', label: 'A' }] },
-        { key: 'verb', label: 'Verb', type: 'text', showWhen: { key: 'style', equals: 'a' } },
-      ]),
-    ).toEqual([])
-    expect(
-      collectRegistrationProblems({
-        agentKindRegistry: defaultAgentKindRegistry(),
-        gateRegistry: defaultGateRegistry(),
-        initiativePresetRegistry: new InitiativePresetRegistry(),
-      }).filter((problem) => problem.code.startsWith('initiative_preset_')),
-    ).toEqual([])
   })
 })

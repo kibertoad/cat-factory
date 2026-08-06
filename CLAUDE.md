@@ -23,8 +23,12 @@ Default to the well-factored design, not the fastest thing that passes.
   magic constant standing in for a real fix.
 - **Respect the existing seams.** Extend through the app-owned registries (`AgentKindRegistry`,
   `GateRegistry`, `JudgeRegistry`, `PipelineRegistry`, `TaskTypeRegistry`, `VcsProviderRegistry`,
-  `StepResolverRegistry`, `FoundationalServiceRegistry`), the kernel ports, and the runtime
-  `gateways`. Copy the nearest good citizen instead of inventing a one-off.
+  `StepResolverRegistry`, `FoundationalServiceRegistry`, `PromptFragmentRegistry`), the kernel
+  ports, and the runtime `gateways`. Copy the nearest good citizen, never a one-off. **Injected BY
+  REFERENCE, never a module global** (a `workspace:*` dep publishes as an EXACT version, so a
+  consumer floating the range gets two copies and the registration lands in the one nothing reads),
+  and an option on BOTH `start()` and `startLocal()`, asserted at those ENTRY POINTS rather than at
+  the container builder (`runtimes/node/test/registry-seams.spec.ts` + its local sibling).
 - **No shortcuts that create debt.** Don't hard-code what should be configured, widen a type to `any` to
   dodge a modelling problem, or leave a half-wired feature behind a TODO. If the clean solution needs a
   new port/method/table, add it (mirrored across runtimes).
@@ -152,6 +156,9 @@ messages, code comments, UI copy.
   `git commit -F - <<'EOF'`; `git commit --amend -F -` fixes a mangled message before pushing.
 - **Worker tests fail on Windows** (`config wrangler validation failed`), a pre-existing wrangler issue.
   Verify pure-logic changes from `backend/packages/orchestration` with `pnpm test:run`.
+- **The Postgres-backed suites need a reachable server AND `--env-mode=loose`** (Turbo declares no env
+  for `test:run`, so strict mode DROPS `DATABASE_URL`); a bare `[ELIFECYCLE] Command failed` with no
+  vitest summary is a task a sibling CANCELLED. Recipe: [`running-tests.md`](./docs/internal/running-tests.md).
 - **ALWAYS format/lint-fix the ENTIRE tree, never a subset.** `pnpm lint:fix` from the root (or
   `pnpm exec oxfmt .`); the only correct argument to `oxfmt`/`oxlint` is `.`, for any reason. On
   Windows the whole-tree run rewrites line endings across hundreds of files: expected, and git's
@@ -567,9 +574,8 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
 ### Run the CI guard scripts locally before committing
 
 > **Do NOT run locally: `pnpm lint:knip`, `node scripts/check-package-catalog.mjs`** (slow; CI's
-> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (Stryker: minutes of CPU per
-> package, so it runs ONLY in its own nightly non-blocking workflow, never in `pnpm test:run`; scope,
-> floors and how to read a survivor: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
+> `Build & typecheck` is authoritative) **or `turbo run test:mutation`** (nightly non-blocking
+> workflow only: [`mutation-testing.md`](./docs/internal/mutation-testing.md)).
 
 - `node scripts/check-file-size.mjs`: the file-size ratchet (split, don't raise).
 - `node scripts/check-silent-catch.mjs`: bans `.catch(() => {})` in backend non-test source.
@@ -577,16 +583,16 @@ folder is not wired up by existing): [`docs/internal/releases.md`](./docs/intern
   imported by path ([`frontend/app/README.md`](./frontend/app/README.md#always-import-a-layer-component-explicitly)).
 - `node scripts/check-reserved-env-keys.mjs`: every variable in `docs/environment-variables.md` is
   RESERVED, so it can never be named as a capability credential.
-- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through
-  `buildStepApproval`.
-- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs all five).
+- `node scripts/check-gate-approval-raise.mjs`: every human-gate raise goes through `buildStepApproval`.
+- `node scripts/check-shipped-doc-links.mjs`: a markdown file shipped in a published tarball may not
+  link OUT of its package (dead for the consumer who installed it); use an absolute repo URL.
+- `node scripts/check-test-lane-parity.mjs`: `pnpm test:quick` excludes what CI's no-DB lane does.
+- `node --test 'scripts/*.test.mjs'` runs each guard's own fixtures (CI runs them all).
 - `pnpm exec changeset status --since=origin/main`: after committing locally.
 - `pnpm lint:monorepo` (sherif): cross-package dependency-version consistency.
 - `pnpm check:publish` (after `pnpm build`): publish-artifact integrity.
-- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting
-  changed.
-- `pnpm lint:fix` (whole tree) and `pnpm exec turbo run typecheck --filter=<touched package>` (typecheck
-  covers tests, which the build configs exclude).
+- `node scripts/check-runner-image-tag.mjs --since origin/main`: whenever anything image-affecting changed.
+- `pnpm exec turbo run typecheck --filter=<touched package>` (it covers tests, which build excludes).
 
 ## Execution flow (the canonical async + observable pattern)
 
@@ -802,28 +808,24 @@ the tier is chosen by the ENGINE at dispatch, deterministically. Doc:
 - **`ci` (polling gate)**, auto-inserted second-to-last: green/none advances with nothing spun up,
   pending sleeps, failure dispatches `ci-fixer` (which pushes back onto the SAME branch) up to
   `ciMaxAttempts` then raises `ci_failed`.
-- **`merger`** (last standard step) scores the diff and returns ONLY a JSON assessment;
-  `resolveMergerStep` compares it to the task's merge threshold preset and either merges for real or
-  raises `merge_review`. A pipeline with no merger raises `pipeline_complete` instead of auto-`done`.
-- **Merge threshold presets**: a per-workspace library selected via `Block.mergePresetId`, carrying the
-  auto-merge ceilings, `ciMaxAttempts`, the requirements-review knobs and the per-class `classRules` map.
-- **Who started the run is part of the merge policy** (`classRulesByRole`, `dryRunRoles`,
-  `submissionClassesByRole`), and a bar on LANDING is refused at BOTH exits (auto-merge AND
-  `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin PERSISTS
-  through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads as
-  a run with no policy rather than as an error. Docs:
+- **`merger`** (last standard step) returns ONLY a JSON assessment; `resolveMergerStep` scores it against
+  the task's merge threshold preset (a per-workspace library on `Block.mergePresetId`, carrying the
+  auto-merge ceilings, `ciMaxAttempts` and the per-class `classRules`) and either merges for real or raises
+  `merge_review`. A pipeline with no merger raises `pipeline_complete`, never auto-`done`.
+- **Who started the run is part of the merge policy**, and a bar on LANDING is refused at BOTH exits
+  (auto-merge AND `mergePr`). Deadliest trap: the role and mode PIN at admission and count only if the pin
+  PERSISTS through `executionToDetail` / `rowToExecution` / `buildResumedInstance`, so a dropped pin reads
+  as a run with no policy rather than as an error.
   [ADR 0037](./backend/docs/adr/0037-role-scoped-merge-policy.md),
   [ADR 0039](./backend/docs/adr/0039-role-scoped-submission-allowlists.md).
-- **Merge track record**: a best-effort side channel persisting each decision. Trap: an unreadable diff
-  yields `unknown`, which never matches a rule, so a VCS outage cannot change policy.
+- **Merge track record** persists each decision best-effort. Trap: an unreadable diff yields `unknown`,
+  which never matches a rule, so a VCS outage cannot change policy.
   [`merge-track-record.md`](./docs/initiatives/merge-track-record.md).
-- **Notifications** are a human-actionable surface behind the `NotificationChannel` port; the same
-  registered webhook endpoint also carries run-lifecycle events through the `RunLifecycleSink` port,
-  built beside the channel by `buildNotificationWebhookSupport` and driven through the ONE
-  `signedDelivery.ts` retry/SSRF/signature core. Traps: the started edge is exactly-once via
-  `handOffLiveRun` (announced LAST, after the claim and the local write); the terminal edges are
-  at-least-once with a `<runId>:<event>` dedupe id a receiver dedupes on, never on the body. Doc:
-  [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
+- **Notifications** (`NotificationChannel`) and run-lifecycle events (`RunLifecycleSink`) are built together
+  by `buildNotificationWebhookSupport` onto ONE registered endpoint and the ONE `signedDelivery.ts`
+  retry/SSRF/signature core. Traps: the started edge is exactly-once via `handOffLiveRun` (announced LAST,
+  after the claim and the local write); the terminal edges are at-least-once with a `<runId>:<event>` dedupe
+  id a receiver dedupes on, never on the body. [ADR 0030](./backend/docs/adr/0030-public-api-surface.md).
 
 **PR verification report**: the ENGINE keeps a report of captured facts on EVERY pull request a run
 opened (own-service plus each peer repo's) as a managed marker-delimited section of the body
@@ -856,35 +858,29 @@ LLM-over-a-checkout runner and all deterministic work is backend TypeScript. Ful
 [ADR 0029](./backend/docs/adr/0029-agent-kind-capabilities.md).
 
 - **Three stages**, of which the container runs only the middle: `preOps` (backend TS committing a
-  targeted subset via the `RepoFiles` port; a per-run, checkout-free HTTP facade, so runtime-symmetric) →
-  `agent` → `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing). Registration
-  is by reference on the app-owned registries; unwired means the hooks skip.
+  targeted subset via the `RepoFiles` port, a per-run checkout-free HTTP facade) → `agent` →
+  `postOps` (backend TS parsing `result.custom`, rendering artifacts, committing). Unwired means
+  the hooks skip.
 - **Capabilities are `skills` and `toolServers`**, registered on the SAME `AgentKindRegistry` and
   attachable to a built-in kind via `assignSkills` / `assignToolServers`. **Skills resolve in the
   ENGINE**; **tool servers resolve in the container EXECUTOR**, because what is servable depends on the
   resolved harness and the facade-wired credential resolver.
 - **A capability credential is declared BY NAME** and resolved through the kernel `ToolSecretResolver`
-  port; the VALUE rides the job body only, and its primary home is the per-workspace
-  capability-credential store composed in FRONT of the env resolver PER KEY. **A credential has TWO
-  names and only one of them is a boundary**: the LOOKUP key may never be a variable the platform reads
-  (`isReservedPlatformEnvKey`, refused at declaration AND at dispatch AND at the call site), while
-  `envName` carries only the narrower `isToolchainEnvName` rule, because vendors' own SDKs fix what they
-  look for. `{ allowKeys }` is the deployment-set bound for everything else, registered PROCESS-WIDE on
-  the Worker (`registerToolSecretPolicy`). The chain is a REQUIRED dependency of both executor builders,
-  and the fallback description is a tri-state read off what was COMPOSED, never asserted. Full model:
-  [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
-- **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must ALWAYS
-  carry the CLI's built-in tool names too (an allow-list is whole-session, not MCP-scoped). An `http`
+  port; the VALUE rides the job body only. Deadliest trap: **a credential has TWO names and only one
+  of them is a boundary** (the LOOKUP key may never be a variable the platform reads; `envName`
+  carries only the narrower toolchain rule, because vendors' SDKs fix what they look for). Full
+  model: [`capability-credential-store.md`](./docs/initiatives/capability-credential-store.md).
+- **`allowedTools` is SCOPING, never a security boundary**, and claude-code's `--allowedTools` must
+  ALWAYS carry the CLI's built-in tool names too (it is whole-session, not MCP-scoped). An `http`
   server must be `https` or loopback, refused at registration AND at the job boundary.
-- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no MCP
-  client; an ambient Codex run has no per-run config home; a required secret didn't resolve), so it plans
-  around the gap instead of discovering it mid-run.
-- **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the checkout.
-  Changing what it writes means an image bump.
-- **A deployment's own TASK TYPES ride the same kind of seam**, and one bundling a per-case form, its
+- **A capability that can't be honoured is STATED to the agent, never silently dropped** (Pi has no
+  MCP client; an ambient Codex run has no per-run config home; a required secret didn't resolve).
+- **The harness MATERIALISES, never decides**, into PER-JOB paths: never HOME-global, never the
+  checkout. Changing what it writes means an image bump.
+- **A deployment's own TASK TYPES ride the same kind of seam**; one bundling a per-case form, its
   standing context and its own canned pipeline is a REUSABLE OPERATION: [`reusable-operations.md`](./backend/docs/reusable-operations.md).
-- **NOT yet done**: the built-in agents aren't migrated to this model; their rendering still lives in the
-  harness. Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
+- **NOT yet done**: the built-in agents aren't migrated; their rendering still lives in the harness.
+  Converting them one at a time (parity-gated, image-bumped) is the remaining strangler work.
 
 ## Per-workspace agent prompt overrides
 
@@ -1080,7 +1076,9 @@ AND that a gated controller leaves no route of its own uncovered.
   [`frontend-extension-mechanism.md`](./docs/initiatives/frontend-extension-mechanism.md); adoption:
   [`modular-vue-adoption.md`](./docs/initiatives/modular-vue-adoption.md).
 - **Tests**: Worker integration tests use real `workerd` + real local D1; Node tests use real Postgres
-  (`DATABASE_URL`). Only the LLM is faked. Run the full suite with `pnpm test:run` from the root.
+  (`DATABASE_URL`). Only the LLM is faked. **Iterate on `pnpm test:changed`** (changed packages plus dependents)
+  or `pnpm test:quick` (nothing needing Postgres/`workerd`); `pnpm test:run` is the whole tree and needs a DB up.
+  A green run printing the app's OWN log lines is a SUITE bug: silence the gate, or inject a silent logger.
 - **Count what the test OWNS; assert a RELATION over what it does not.** Seed two rows and assert two:
   the test made that population, so the count is a local fact. A total over a population it does NOT
   control (a generated table, a registry, a catalog, the spec) is the opposite: `toBe(42)` fails on
@@ -1090,8 +1088,7 @@ AND that a gated controller leaves no route of its own uncovered.
   EXACTLY its table). Check what already refuses the case first: the assertion worth writing is the one
   existing guards structurally CANNOT make, e.g. a regenerate-and-diff check passes an emitter whose
   bug is consistent in both halves.
-- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw
-  script from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces
-  as spurious `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`:
-  `pnpm exec turbo run typecheck --filter=@cat-factory/app`. (The exception is a task with no build deps,
-  e.g. the i18n check.)
+- **Always run `typecheck`/`test:run`/`build` through Turbo from the repo root**, never a package's raw script
+  from inside its directory. Turbo's `^build` edge only fires through Turbo; bypassing it surfaces as spurious
+  `TS2307 Cannot find module '@cat-factory/contracts'`. To scope, filter instead of `cd`: `--filter=@cat-factory/app`,
+  or `--filter='...[origin/main]'` for what you changed plus its dependents. (Exception: a task with no build deps.)

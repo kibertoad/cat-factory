@@ -10,14 +10,15 @@
  * environments (a recipe's `prerequisites` re-run through it), and documents before the fragment
  * library (a document-backed fragment re-resolves through the document module's reader).
  *
- * Returns only what the engine downstream consumes; `documents`, `preflight`, `sharedStacks` and
- * the provisioning-log recorder are internal to this slice.
+ * Returns only what the engine downstream consumes; `preflight`, `sharedStacks` and the
+ * provisioning-log recorder are internal to this slice.
  */
 
 import { LlmObservabilityService } from '../modules/observability/LlmObservabilityService.js'
 import { PlatformObservabilityService } from '../modules/observability/PlatformObservabilityService.js'
 import { ReportsService } from '../modules/reports/ReportsService.js'
 import { RunDebugService } from '../modules/debug/RunDebugService.js'
+import { ToolCallObservabilityService } from '../modules/observability/ToolCallObservabilityService.js'
 import {
   ProvisioningLogRecorder,
   ProvisioningLogService,
@@ -43,7 +44,7 @@ import type {
 } from '../container-content-libraries.js'
 import type { ModuleRegistry } from './module-registry.js'
 import type { BoardService } from '../modules/board/BoardService.js'
-import type { CoreDependencies } from '../container.js'
+import type { CoreDependencies, DocumentsModule } from '../container.js'
 import type { EnvironmentHandlerSeeder, SharedStackSeeder } from '@cat-factory/kernel'
 import type { resolveCoreRuntime } from './runtime.js'
 
@@ -61,10 +62,18 @@ export interface PlatformModulesInput {
    * `resolveCoreRuntime`.
    */
   foundationalBuiltins: CoreRuntime['foundationalBuiltins']
+  /** The RESOLVED prompt-fragment pool source (own registry, or the mothership's). */
+  promptFragments: CoreRuntime['promptFragments']
 }
 
 export interface PlatformModules {
   llmObservability: LlmObservabilityService | undefined
+  /**
+   * Returned (not just registered) because the ENGINE reads one of its seams: the dispatch-time
+   * linked-document refresher threads into `AgentContextBuilder`. Undefined when no document source
+   * is configured, in which case there is nothing to refresh either.
+   */
+  documents: DocumentsModule | undefined
   environments: ReturnType<typeof createEnvironmentsModule> | undefined
   environmentHandlerSeeder: EnvironmentHandlerSeeder | undefined
   sharedStackSeeder: SharedStackSeeder | undefined
@@ -81,6 +90,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
     executionEventPublisher,
     boardService,
     foundationalBuiltins,
+    promptFragments,
   } = input
   // The price table the run-telemetry rollups are costed against: the DEPLOYMENT base table,
   // deliberately, and its own currency. A workspace may override the budget's currency without
@@ -145,6 +155,20 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
             repository: dependencies.provisioningLogRepository,
           }),
         }
+      : undefined,
+  )
+  // The tool-call trajectory READ the observability panel drills into. Built from the repository
+  // rather than passed down from the facade like the two sibling sinks, for the reason stated on
+  // `CoreDependencies.agentToolCallRepository`: those are WRITE services carrying a capture gate
+  // and a redaction pass, and a read needs neither. The facades' own recorder instances stay
+  // where the write path builds them; a second stateless reader over the same rows cannot
+  // disagree with them, where a second CAPTURE GATE could.
+  modules.build('toolCallObservability', () =>
+    dependencies.agentToolCallRepository
+      ? new ToolCallObservabilityService({
+          agentToolCallRepository: dependencies.agentToolCallRepository,
+          clock: dependencies.clock,
+        })
       : undefined,
   )
   // The remote debugging reader (`/api/v1/debug/*`). Built UNCONDITIONALLY, unlike every other
@@ -226,10 +250,10 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   // Built before the fragment library so a document-backed fragment can re-resolve
   // its linked Confluence/Notion/GitHub page through the document module's reader.
   const documents = modules.build('documents', () =>
-    createDocumentsModule(dependencies, boardService),
+    createDocumentsModule(dependencies, boardService, caches),
   )
   const fragmentLibrary = modules.build('fragmentLibrary', () =>
-    createFragmentLibraryModule(dependencies, documents?.contentResolver, caches),
+    createFragmentLibraryModule(dependencies, documents?.contentResolver, caches, promptFragments),
   )
   const skillLibrary = modules.build('skillLibrary', () =>
     createSkillLibraryModule(dependencies, caches),
@@ -239,6 +263,7 @@ export function createPlatformModules(input: PlatformModulesInput): PlatformModu
   )
   return {
     llmObservability,
+    documents,
     environments,
     environmentHandlerSeeder,
     sharedStackSeeder,

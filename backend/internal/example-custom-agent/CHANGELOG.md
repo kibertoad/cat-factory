@@ -1,5 +1,50 @@
 # @cat-factory/example-custom-agent
 
+## 0.4.28
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/prompt-fragments@1.0.0
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/agents@0.115.0
+
+## 0.4.27
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/prompt-fragments@0.16.0
+  - @cat-factory/agents@0.114.7
+
+## 0.4.26
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/agents@0.114.6
+
+## 0.4.25
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/agents@0.114.5
+  - @cat-factory/prompt-fragments@0.15.78
+
+## 0.4.24
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/agents@0.114.4
+  - @cat-factory/prompt-fragments@0.15.77
+
 ## 0.4.23
 
 ### Patch Changes

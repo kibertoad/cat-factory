@@ -576,9 +576,9 @@ export class BootstrapService {
       'ready',
       `Service bootstrapped from ${outcome.owner}/${outcome.name}. Drop tasks here to implement against it.`,
     )
+    // `emitBootstrap` pairs the frame it was handed with the coarse board signal that carries the
+    // ready flip to every board mounting this service.
     await this.emitBootstrap(workspaceId, toBootstrapJob({ ...record, ...patch }), block)
-    // Name the service frame so the refresh fans out to every board mounting this service.
-    await this.deps.eventPublisher?.boardChanged(workspaceId, 'bootstrap-succeeded', record.blockId)
 
     // Kick off the initial blueprint run for the new repo (best-effort): it maps
     // the bootstrapped code into the in-repo `blueprints/` folder and reconciles
@@ -735,13 +735,30 @@ export class BootstrapService {
     }
   }
 
-  /** Best-effort push of a bootstrap transition to subscribed clients. */
+  /**
+   * Best-effort push of a bootstrap transition to subscribed clients.
+   *
+   * A `block` is given exactly on the passes where the run's service FRAME changed on the board:
+   * it was materialised, flipped to ready, or flipped to blocked. The frame cannot ride as a
+   * payload (`deliverableBoardBlock` refuses it, because a frame's geometry is a per-board mount
+   * override and one published payload has to be correct on every board the fan-out reaches), so
+   * the frame transition is announced as a coarse board signal NAMING it and each board re-reads
+   * its own projection. Naming it is also what fans the signal out past the origin workspace.
+   *
+   * A plain progress tick passes no block and so costs no refresh anywhere: that split is the
+   * point, since the poll loop ticks far more often than the frame changes.
+   */
   private async emitBootstrap(
     workspaceId: string,
     job: BootstrapJob,
     block: Block | null,
   ): Promise<void> {
     await this.deps.eventPublisher?.bootstrapChanged?.(workspaceId, job, block)
+    if (!block) return
+    await this.deps.eventPublisher?.boardChanged(workspaceId, {
+      reason: `bootstrap-${job.status}`,
+      blockId: block.id,
+    })
   }
 }
 

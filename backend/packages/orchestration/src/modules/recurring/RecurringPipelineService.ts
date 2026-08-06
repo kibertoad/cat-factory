@@ -320,7 +320,7 @@ export class RecurringPipelineService {
     // like every other block creation (BoardService.addTask). Best-effort: the schedule is
     // already persisted, so an event-bus hiccup must not fail the create.
     try {
-      await this.events?.boardChanged(workspaceId, 'block-added', block.id)
+      await this.events?.boardChanged(workspaceId, { reason: 'block-added', block })
     } catch {
       // best-effort; the REST response already carried the created schedule + block
     }

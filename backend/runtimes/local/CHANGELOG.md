@@ -1,5 +1,290 @@
 # @cat-factory/local-server
 
+## 0.114.0
+
+### Minor Changes
+
+- 16576d6: Close the deployment extension-seam gaps a consumer build hit: every app-owned registry is now
+  reachable from the documented boot entry point, and the prompt-fragment pool is injected rather than
+  a module global.
+
+  An org package outside this repo built a proprietary reusable operation against the PUBLISHED
+  `@cat-factory/*` packages and reported nine gaps. Each seam it hit typechecks, boots, passes CI, and
+  is either unreachable from the supported entry point or silently inert once reached. None showed up
+  in our own tests because the worked example lives INSIDE this repo, where the composition root calls
+  `buildNodeContainer` directly and every package resolves to one copy on disk.
+
+  **Breaking, `@cat-factory/prompt-fragments`.** `registerPromptFragment(s)`,
+  `clearRegisteredPromptFragments`, `universalFragments`, `registerTaskTypeDefaultFragments`,
+  `clearRegisteredTaskTypeDefaultFragments` and `defaultFragmentIdsForTaskType` are REMOVED. They were
+  two module globals, correct only while every reader resolved the same physical copy of the package;
+  a `workspace:*` dependency publishes as an EXACT version, so a consumer floating the range onto a
+  newer patch got two copies, the registration landed in one, the server read the other, and every
+  task of the operation was seeded with fragment ids that folded nothing. Replaced by the app-owned
+  `PromptFragmentRegistry` (kernel), injected by reference:
+  `promptFragmentRegistryWithBuiltins()` news one carrying the shipped catalog, and it is an option on
+  `start()` / `startLocal()` / the Worker overrides. `getFragment` remains, narrowed to the shipped
+  catalog. One behaviour change rides along: `registerTaskTypeDefaults` REPLACES a built-in per-type
+  set instead of silently unioning with it, so a deployment can now remove a shipped default; spread
+  `DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS` to keep both.
+
+  **Also breaking (internal surfaces, pre-1.0, no shims).** `validateRegistrations` /
+  `collectRegistrationProblems` take their registries as ONE `registries` object (a facade passes its
+  container) instead of seven hand-listed optional fields; that hand-list is why the local mothership
+  boot validated five registries while its own comment claimed parity with `start()`, so a custom task
+  type naming an unregistered pipeline booted clean on a laptop and failed on the Postgres path.
+  `FragmentLibraryService` takes a `promptFragmentSource` and no longer falls back to the module pool.
+  `TaskTypeCreationDefaults.fragmentIdsFor` is async. `PromptFragmentSource` gains a required
+  `inProcess` flag, read by boot validation to tell "this deployment registered nothing" from "the
+  pool lives on the mothership", which are the same empty list and opposite facts.
+
+  **What is new rather than moved.** `start()` and `startLocal()` gain `pipelineRegistry`,
+  `gateRegistry`, `judgeRegistry`, `stepResolverRegistry`, `vcsRegistry` and `promptFragmentRegistry`;
+  the seam drift guard now asserts against those ENTRY POINTS rather than only the container builder
+  behind them, which is how `pipelineRegistry` sat on `NodeContainerOptions` (documented, guarded,
+  green) while no boot path forwarded it and local deployments had no escape hatch at all. A registered
+  task type may declare `conditionalFragmentIds`, standing context selected by a `showWhen` condition
+  over the answers a case supplied, evaluated once at creation by the same evaluator the form's own
+  field visibility uses. A code-registered fragment carrying a `documentRef` now FAILS boot rather than
+  being carried through the catalog, rendered as a live source in the library UI, and ignored at run
+  time. An unresolvable standing-context id is reported on the run that dropped it instead of only as
+  one boot warning that cannot be told apart from a typo, and is COUNTED on the new
+  `fragments.dropped_from_run` operational counter, because a run going without its standards still
+  succeeds and only a rate says a deployment is doing it every time. And a mothership-mode node reads
+  the pool from the mothership over `GET /internal/prompt-fragments`, throwing rather than answering
+  with an empty pool.
+
+### Patch Changes
+
+- Updated dependencies [16576d6]
+  - @cat-factory/prompt-fragments@1.0.0
+  - @cat-factory/kernel@0.253.0
+  - @cat-factory/contracts@0.254.0
+  - @cat-factory/orchestration@0.221.0
+  - @cat-factory/agents@0.115.0
+  - @cat-factory/server@0.233.0
+  - @cat-factory/node-server@0.182.0
+  - @cat-factory/executor-harness@1.94.0
+  - @cat-factory/gitlab@0.16.7
+  - @cat-factory/integrations@0.137.1
+
+## 0.113.4
+
+### Patch Changes
+
+- Updated dependencies [5202fb9]
+  - @cat-factory/integrations@0.137.0
+  - @cat-factory/orchestration@0.220.0
+  - @cat-factory/kernel@0.252.0
+  - @cat-factory/contracts@0.253.0
+  - @cat-factory/server@0.232.0
+  - @cat-factory/node-server@0.181.0
+  - @cat-factory/executor-harness@1.94.0
+  - @cat-factory/agents@0.114.7
+  - @cat-factory/gitlab@0.16.6
+
+## 0.113.3
+
+### Patch Changes
+
+- @cat-factory/node-server@0.180.2
+
+## 0.113.2
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/server@0.231.0
+  - @cat-factory/executor-harness@1.94.0
+  - @cat-factory/agents@0.114.6
+  - @cat-factory/gitlab@0.16.5
+  - @cat-factory/integrations@0.136.2
+  - @cat-factory/orchestration@0.219.1
+  - @cat-factory/node-server@0.180.1
+
+## 0.113.1
+
+### Patch Changes
+
+- Updated dependencies [4c071ec]
+  - @cat-factory/contracts@0.252.0
+  - @cat-factory/kernel@0.250.0
+  - @cat-factory/orchestration@0.219.0
+  - @cat-factory/server@0.230.0
+  - @cat-factory/node-server@0.180.0
+  - @cat-factory/agents@0.114.5
+  - @cat-factory/gitlab@0.16.4
+  - @cat-factory/integrations@0.136.1
+  - @cat-factory/executor-harness@1.94.0
+
+## 0.113.0
+
+### Minor Changes
+
+- 3fbc87e: Failing-call-first debugging: pin what broke, and let both drill-downs narrow to it
+
+  The observability panel already held everything needed to diagnose a run, and asked an operator to
+  find it by scrolling. Worse, one whole failure class had nowhere to be found from: a tool that
+  errors executes INSIDE the container, so the model call that requested it still records `ok` with a
+  clean finish reason. Every LLM number on the panel, and every rollup on the debug overview, reads
+  healthy right up to the moment the run dies. The remote-debugging doc named this as a known
+  limitation ("tool-execution errors are rows, but no rollup counts them"); this closes it on both
+  surfaces.
+
+  **The panel opens with the failure.** A pinned section above the lists carries the run's structured
+  `failure` record (kind, message, hint, the step it died on) beside the last model call that failed
+  and the last tool call that failed, each with a count of the earlier ones and a jump into the list.
+  It appears whenever there is something to pin rather than only on `status === 'failed'`: a run still
+  in flight whose calls are already erroring is exactly the one worth interrupting.
+
+  The two evidence rows are shown in a fixed order and are deliberately NOT ranked against each other.
+  They come from different clocks (a call's recorded `createdAt`, a tool span's harness-stamped
+  `startedAt`), so "which happened last" is not a comparison this can make honestly, and a confident
+  wrong ordering is worse than none in a section whose whole job is to be believed.
+
+  **When nothing failing can be pinned, it says which of four things that means.** A sink's read
+  FAILED (nothing can be concluded, and this outranks the rest); both sinks answered and nothing
+  failed (the cause left no row: look at the engine); neither sink recorded anything (the run died
+  before any agent work); or one answered with rows and the other did not. A single "no failures
+  found" would render a clean bill of health over a run that died with no telemetry at all, which is
+  the same false picture in the opposite direction. A read still in flight is none of the four: the
+  section withholds every verdict until both sinks have answered.
+
+  **Both drill-downs narrow by outcome.** The model-call list gets `All / Failed / Cut short / OK`
+  with live counts, split that way because a failed call and a truncated one need different fixes
+  (transport, proxy or spend-gate trouble versus an output-limit conversation). The tool-call
+  trajectory is a new panel view with `All / Failed / OK`, keeping trajectory order under every
+  filter: reading the failures in sequence is what tells one tool that failed and was worked around
+  from an edit loop stuck repeating the same failing call.
+
+  On the public API (OpenAPI `1.14.0`): `GET /api/v1/debug/runs/:runId/tool-calls` takes
+  `?outcome=ok|error`, composing with both orders and with `?jobId=`.
+  `failure_outside_model_calls` now states what the trajectory actually holds instead of pointing at
+  it unconditionally.
+
+  **That parameter REPLACES the `?ok=true|false` filter published in `1.13.0`, which is a breaking
+  change taken deliberately as a minor.** `?ok=` shipped one release ago, has no known consumer, and
+  two drill-downs answering the same question under two spellings is the wart this change exists to
+  remove: an operator who learned `?outcome=` on the model-call list should not have to discover that
+  the tool-call list spells it differently. A picklist also lets the set gain a member (a timeout, a
+  refusal) where `true|false` could only be retyped. Had there been an adopter, the honest shape would
+  have been `?ok=` served beside `?outcome=` for a release window, not a rename.
+
+  The run's failure count stays on the `toolCalls` rollup (`totals.failures`) rather than being copied
+  onto `sinks.toolCalls`: both come out of ONE `(agentKind, tool)` aggregate pass, and a second copy
+  could only be a second read of the same rows, which is how a `failed` above its own `count` gets
+  published.
+
+  The narrowing is applied IN SQL on all three stores, which is the part that makes it correct rather
+  than convenient: the trajectory read is bounded to a PREFIX of the run, so a filter applied after
+  the read would report no failures on any run whose failures came after its opening moves. Internal
+  break: the trajectory/page queries gain an `ok?: boolean` field, and the panel's per-run counts are
+  folded from `AgentToolCallRepository.summarizeByExecution` rather than counted by a query of their
+  own.
+
+  **The panel obeys the same prefix rule the stores do.** It reads the sink through two
+  workspace-scoped routes rather than one. `tool-call-failures` is the headline, made on open: the
+  run's exact `{ total, failed }` from the store's aggregate pass, plus the failing rows narrowed in
+  SQL. `tool-calls` is the browse view, loaded only when the trajectory is opened, because it carries
+  every captured argument and result the run produced. Folding them into one read would either make
+  the headline wait on megabytes or make its counts a statement about the run's opening moves wearing
+  the run's name, and the second is the same false all-clear from the other direction. The trajectory
+  now reports `truncated`, and a bounded view says so on screen instead of presenting a prefix as
+  everything the run did.
+
+  **One classification, in one place.** `LLM_WARNING_FINISH_REASONS`, the `ok | warning | error`
+  vocabulary and the rule that produces it now live once in `@cat-factory/contracts`. Four copies
+  existed: kernel's `LlmCallOutcomeFilter`, orchestration's `classifyCall`, the debug wire's
+  `debugCallOutcomeSchema`, and a hand-written list in the SPA. All four now alias or re-export the
+  one definition, so a member added to the vocabulary cannot exist in the badge and not in the filter.
+  Internal break: `classifyCall`/`isWarningFinishReason` are exported from `@cat-factory/orchestration`
+  as `classifyLlmCallOutcome`/`isLlmWarningFinishReason`.
+
+- c9adc67: Refuse a blind run: the harness now tells the backend which job-body capabilities it parses
+
+  An image older than a body capability does not reject the field, it ignores it. For most of the
+  job body that degrades honestly, but a CAPABILITY is different: the backend composes the PROMPT,
+  so a dropped `mcpServers` leaves the agent reading "you have these tools, prefer them over
+  guessing" with no client wired, and a dropped `skills` leaves a claude-code run told a playbook
+  "is installed for this step" that was never written. The harness CHANGELOG has documented this
+  twice as an operator hazard, both times ending at the same wall: the backend has no way to know
+  what image a self-hosted runner pool pins, so it could not be gated server-side. A blind run
+  rather than a failed one, and the run that most needs a signal produced none.
+
+  The handshake is a list of body field names the image reports on `/health` and on its job
+  ACCEPTANCE. The acceptance is where it matters: the dispatch site is the only place the body it
+  just sent is still in scope, and the last moment before the agent starts working from a prompt the
+  body cannot back up. `RunnerTransport.dispatch` therefore returns an optional ack, forwarded by
+  every transport that can see the harness's own response.
+
+  The answer is deliberately THREE-STATE, and the middle state is the whole design. An image that
+  reported nothing is not an image that reported "not this": every image between the capability
+  landing and the handshake landing serves it perfectly and reports no list, so folding the two
+  would refuse those runs on no evidence. So `unsupported` (the image said it cannot) refuses the
+  dispatch and stops the job the harness already started, as an `UnavailableError` whose
+  `runner_image_capability` reason makes the step a `preflight` fault rather than a container that
+  died; `unknown` proceeds and is REPORTED as the deployment's own blind spot, on a warn line and a
+  `container.capability_unknown` counter that should decay to zero as pools update. A body carrying
+  no capability says nothing at all, which is most dispatches.
+
+  Refusing the step is only half of it: the harness begins work on acceptance, so a refusal that
+  merely throws leaves a full agent pass running against the repository, free to push a branch and
+  open a pull request for a step the engine already failed. The refusal therefore STOPS the job,
+  through a new `RunnerTransport.stopJob` and a new harness `DELETE /jobs/{id}` that aborts one job
+  and waits for it to settle before answering. Never through `release`, which is a reclaim and means
+  something different on every backend: on a per-run container it happens to kill the job, on a warm
+  pool member it hands the container BACK with the agent still working in it, and on a self-hosted
+  pool with no `release` template it does nothing at all.
+
+  Not every backend can PROVE the job died, so the outcome is reported rather than assumed and the
+  failure message says which of four it was: `stopped` (nothing is still running), `requested` (a
+  pool cancel was accepted but cannot be verified), `unsupported` (no cancel path exists), `failed`.
+  The last three also increment `container.blind_job_not_stopped`, dimensioned by the outcome,
+  because each is a different operator fix. A backend that owns the container always reaches
+  `stopped`, since a graceful abort that fails escalates to destroying it; on the local warm pool
+  that escalation is also what keeps a member whose job could not be aborted off the idle list, where
+  it still answers `/health` and the next run would lease a container with a live agent and a live
+  checkout in it.
+
+  A runner pool gets the handshake only when its manifest MAPS it: `response.dispatchCapabilitiesPath`,
+  one line for a pool that proxies `POST /jobs` verbatim. Deliberately not read by name, because
+  `capabilities` is an ordinary word for a scheduler to use about its own runners (`["gpu","docker"]`)
+  and reading one of those as the harness's answer would narrow to an empty list and hard-refuse every
+  capability dispatch against a perfectly current image. Unmapped lands in `unknown`, which is honest
+  about a control plane this backend knows nothing about.
+
+  OPERATORS: this bumps the runner image to `1.93.0`. A pool on an older image keeps working exactly
+  as before; it simply reports no handshake, so tool-server and skill dispatches there are counted as
+  unverifiable instead of confirmed. To get the check on a self-hosted pool, map
+  `response.dispatchCapabilitiesPath` to `capabilities` and declare a `release` template so a refused
+  run can actually be cancelled.
+
+### Patch Changes
+
+- Updated dependencies [3fbc87e]
+- Updated dependencies [c9adc67]
+  - @cat-factory/contracts@0.251.0
+  - @cat-factory/kernel@0.249.0
+  - @cat-factory/orchestration@0.218.0
+  - @cat-factory/server@0.229.0
+  - @cat-factory/node-server@0.179.0
+  - @cat-factory/executor-harness@1.94.0
+  - @cat-factory/integrations@0.136.0
+  - @cat-factory/agents@0.114.4
+  - @cat-factory/gitlab@0.16.3
+
+## 0.112.1
+
+### Patch Changes
+
+- Updated dependencies [6ccc104]
+  - @cat-factory/integrations@0.135.0
+  - @cat-factory/orchestration@0.217.1
+  - @cat-factory/server@0.228.1
+  - @cat-factory/node-server@0.178.1
+  - @cat-factory/executor-harness@1.92.2
+
 ## 0.112.0
 
 ### Minor Changes
