@@ -1,5 +1,23 @@
 # @cat-factory/server
 
+## 0.231.0
+
+### Minor Changes
+
+- e845d65: Add `LogThreshold` (`LogLevel | 'silent'`) and widen the level gate to accept it, so a package's
+  vitest `setupFiles` can silence the process-wide logger for a suite. `LogLevel` stays the four emit
+  levels, keeping the OTLP severity maps exhaustive; `parseLogLevel` deliberately does not honour
+  `silent`, so no `LOG_LEVEL` value can mute a deployment.
+
+### Patch Changes
+
+- Updated dependencies [e845d65]
+  - @cat-factory/kernel@0.251.0
+  - @cat-factory/agents@0.114.6
+  - @cat-factory/integrations@0.136.2
+  - @cat-factory/orchestration@0.219.1
+  - @cat-factory/spend@0.15.16
+
 ## 0.230.0
 
 ### Minor Changes
